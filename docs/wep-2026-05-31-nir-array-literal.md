@@ -2,12 +2,16 @@
 
 ## Context
 
-This WEP designs the `NirExprKind::ArrayLiteral` node proposed, but left
+This WEP realizes the `NirExprKind::ArrayLiteral` node proposed, but left
 unspecified, in the "Additions" section of
-[Normalized IR (NIR) Layer](./wep-2026-05-11-nir.md). It is a design WEP:
-it fixes the node shape, the pass that materializes it, the downstream
-consumers, and the migration of the existing WIR-level collapse. It does
-not freeze an implementation; the node lands with its first consumer.
+[Normalized IR (NIR) Layer](./wep-2026-05-11-nir.md). It fixes the node
+shape, the pass that materializes it, the downstream consumers, and the
+migration of the existing WIR-level collapse.
+
+Status: landed. `NirExprKind::ArrayLiteral` is materialized by
+`optimize::array_literal`, lowered by `wir_build` to `array.new_fixed`, and
+the WIR-level `collapse_array_push_sequences` it subsumes has been retired.
+Full e2e suite green at O0/O2 with the WIR pass removed.
 
 ### Why NIR cannot see array literals today
 
@@ -176,21 +180,30 @@ workaround the project's design rules reject; a "two options, decide by
 measurement" hedge here is the same overcaution the parent NIR WEP flagged
 and corrected in its own migration plan.
 
-Sequencing (each step with a green checkpoint):
+Sequencing (each step with a green checkpoint), as landed:
 
-- [ ] Land the NIR `ArrayLiteral` pass (before `inline`, mirroring
-      `string_push`) and the `wir_build` → `ArrayNewFixed` lowering.
-- [ ] Verify WIR output is bit-identical to today across the e2e suite at
-      every `-Ox` (the `wir_expect`/`wir_not_expect` fixtures already
-      assert `array.new_fixed<...>` shapes, so the equivalence is testable).
-- [ ] Delete `collapse_array_push_sequences`.
+- [x] Land the NIR `ArrayLiteral` pass (before `inline`, mirroring
+      `string_push`) and the `wir_build` → `ArrayNewFixed` lowering. The
+      pass is gated on the result type being `Array<T>`, because
+      `SequenceLiteralBuilder` is user-implementable and its other builder
+      targets share the `__seq_lit:` shape but not the `Array<T>` `{ repr,
+      used }` layout.
+- [x] Verify WIR output is equivalent across the e2e suite. The array
+      fixtures (`array_bounds_elim_const_wir`, `array_append_collapse`,
+      `opt_crossmod_array`, `wir_optimize_dce_orphan_push`, …) still assert
+      `array.new_fixed<...>` and the bounds-check-free `array_get` shapes,
+      now produced solely by the NIR path. One fixture
+      (`array_bounds_elim_const_wir`) was updated to the cleaner output: the
+      literal binds directly to the user local (`arr.repr`) instead of the
+      builder temp (`__b_0.repr`) the WIR collapse left behind.
+- [x] Delete `collapse_array_push_sequences` and its helpers; keep
+      `forward_struct_field_constants` (bounds-check elimination now keys on
+      the `StructNew Array<T>` that `wir_build` emits directly).
 
-Coexistence, if it exists at all, is strictly transitional — the window
-between step 1 and step 3, not a maintained fallback. If a builder
-sequence is found that only becomes a literal after `wir_build` and the
-NIR pass therefore misses it, that is a gap in the NIR matcher to fix at
-NIR (a P0 correctness concern: fix the root, do not preserve the WIR
-duplicate), not a reason to keep the WIR pass alive.
+No coexistence reached the branch: land, verify, and delete were sequenced
+within it. The `Array<T>` gate is the one refinement the implementation
+added over the original design — a real correctness fix, since matching the
+builder trait alone would have mis-materialized custom builder targets.
 
 What is **not** retired: the downstream WIR passes that consume
 `ArrayNewFixed` — `promote_constant_arrays_to_data` (→ `ArrayNewData`),
@@ -220,22 +233,26 @@ rather than for one. Each consumer is additive and can land after the node:
 ## Touch Points
 
 A new `NirExprKind` variant is exhaustively matched across the NIR
-machinery. The variant must be handled in:
+machinery. As landed, the variant is handled in:
 
-- [ ] `nir.rs` — the variant definition (beside `TupleLiteral`).
-- [ ] `nir_visitor.rs` — visit each element expression (mirror the
-      `TupleLiteral` arm).
-- [ ] `nir_unparse.rs` — render as `[e0, e1, …]` for `wado dump --nir`.
-- [ ] `wir_build/expr.rs` — lower to `ArrayNewFixed`.
-- [ ] `niri.rs` — interpret to an array value.
-- [ ] `optimize/array_literal.rs` — the new materializing pass (and its
-      registration in `optimize.rs`: `mod array_literal;` +
-      `run_pass("nir/array_literal", …)`).
-- [ ] Aggregate-aware passes that currently special-case
-      `TupleLiteral` / `StructLiteral`: `cse`, `const_folding`,
-      `container_sroa`, `const_global_promotion` — extend or, where the
-      arm is "aggregates are opaque", confirm the conservative default
-      remains correct until the corresponding consumer is implemented.
+- [x] `nir.rs` — the variant definition (beside `TupleLiteral`).
+- [x] `nir_visitor.rs` — visits each element expression, joined to the
+      `TupleLiteral` arm (identical aggregate shape).
+- [x] `nir_unparse.rs` — renders as `[e0, e1, …]`, joined to `TupleLiteral`.
+- [x] `wir_build/translate.rs` — `build_array_literal` lowers to the
+      `Array<T>` `{ repr: array.new_fixed, used: N }` struct.
+- [x] `optimize/array_literal.rs` — the materializing pass, registered in
+      `optimize.rs` (`mod array_literal;` + `step!("nir/array_literal", …)`).
+- [x] Every other NIR exhaustive match (~30 optimize passes) — joined to
+      the `TupleLiteral` arm, since `ArrayLiteral` is the same fresh
+      aggregate of sub-expressions. The aggregate-opaque defaults in `cse` /
+      `const_folding` / `container_sroa` / `const_global_promotion` remain
+      conservatively correct; turning them into the consumers below is
+      additive follow-up.
+
+`niri` needs no dedicated arm yet: nothing evaluates an `ArrayLiteral`
+through the interpreter on the landed paths. An `Index(ArrayLiteral, k)`
+const-fold consumer would add one.
 
 The discipline from the NIR WEP applies: because `ArrayLiteral` is
 optimizer-materialized and never produced by `lower`, no pre-`optimize`

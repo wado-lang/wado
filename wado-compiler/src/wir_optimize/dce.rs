@@ -131,12 +131,12 @@ fn remap_func_ids(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
 /// (0-based indices) by reading the offset from
 /// [`WirPackage::defined_func_base`].
 ///
-/// Catches functions orphaned by earlier WIR passes whose only call
-/// sites were eliminated — most notably
-/// `collapse_array_push_sequences` (Phase 3), which rewrites a
-/// single-element array literal `[v]` from `Array<T>::push(self, v)` to
-/// `array.new_fixed`, leaving the monomorphic `Array<T>::push` and its
-/// `Array<T>::grow` callee with no callers.
+/// Catches functions whose only call sites never materialized — most
+/// notably the monomorphic `Array<T>::push` (and its `Array<T>::grow`
+/// callee) for a single-element array literal `[v]`. NIR
+/// `optimize::array_literal` rewrites `[v]` to `NirExprKind::ArrayLiteral`,
+/// which `wir_build` lowers to `array.new_fixed`, so the `push` chain is
+/// never emitted and these instantiations have no callers.
 ///
 /// This pass only sets dead flags; the actual removal + reindexing
 /// happens in [`compact_dead_items`].
