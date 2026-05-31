@@ -1,14 +1,16 @@
-//! [`TypeAnnotations`] — per-[`crate::ast::AstId`] type annotations and
-//! dispatch decisions recorded during the body walk.
+//! [`TypeAnnotations`] — per-[`crate::symbol::SymbolKey`] type annotations
+//! and dispatch decisions recorded during the body walk.
 //!
 //! # Membership rule
 //!
-//! Add a field here when it stores a fact keyed by an [`crate::ast::AstId`]
-//! (or [`crate::symbol::SymbolKey`]) produced as a *decision* by the
-//! body-level elaborator: the resolved type of an expression, the chosen
-//! method dispatch target, the chosen coercion, the desugar kind of a
-//! TIR-direct rewrite. This is what [`super::super::reify`] (Stage 5) will
-//! read in lieu of re-running inference.
+//! Add a field here when it stores a fact keyed by a
+//! [`crate::symbol::SymbolKey`] (`(ModuleSource, AstId)`) produced as a
+//! *decision* by the body-level elaborator: the resolved type of an
+//! expression, the chosen method dispatch target, the chosen coercion, the
+//! desugar kind of a TIR-direct rewrite. `SymbolKey` rather than a bare
+//! `AstId` because reify inlines cross-module AST and `AstId`s are only
+//! unique within a module. This is what [`super::super::reify`] (Stage 5)
+//! reads in lieu of re-running inference.
 //!
 //! Facts that derive purely from the AST (spans, position lookup) belong
 //! on [`crate::ast_index::AstIndex`], not here. Decl-level facts (function
@@ -141,7 +143,7 @@ pub(crate) struct CoercionChoice {
     pub(crate) target_type: TypeId,
 }
 
-/// Per-`AstId` type annotations recorded by the body walk.
+/// Per-`SymbolKey` type annotations recorded by the body walk.
 #[derive(Default, Clone)]
 pub(crate) struct TypeAnnotations {
     /// Resolved [`TypeId`] for each local binding, keyed by the binding's
@@ -314,24 +316,24 @@ pub(crate) struct TypeAnnotations {
     pub(crate) index_assign_dispatch: IndexMap<SymbolKey, OperatorDispatch>,
     /// Per-element annotation overlays for compile-time-unrolled tuple
     /// `for-of` loops (Stage 5). Keyed by the [`crate::ast::ForOfStmt`]'s
-    /// [`AstId`]; the outer `Vec` holds one entry per *instantiation* of
+    /// [`SymbolKey`]; the outer `Vec` holds one entry per *instantiation* of
     /// that for-of in deterministic walk order (a nested inner for-of is
     /// instantiated once per outer element, hence multiple entries), and
     /// the inner `Vec` holds one [`ElementOverlay`] per tuple element.
     ///
-    /// A tuple for-of's body is a single source sub-tree (fixed `AstId`s)
+    /// A tuple for-of's body is a single source sub-tree (fixed `SymbolKey`s)
     /// that annotate resolves once per element in a *different* type
-    /// context. Every `AstId`-keyed map below would otherwise be
-    /// overwritten so only the last element's facts survive. Annotate
-    /// captures each element's body facts here (only when reify is the
-    /// consumer — see `Elaborator::capture_tuple_overlays`) and reify
-    /// replays them per element. Empty in the production/LSP path.
+    /// context. Every per-element map below would otherwise be overwritten
+    /// so only the last element's facts survive. Annotate captures each
+    /// element's body facts here (only when reify is the consumer — see
+    /// `Elaborator::capture_tuple_overlays`) and reify replays them per
+    /// element. Empty in the production/LSP path.
     pub(crate) tuple_overlays: IndexMap<SymbolKey, Vec<Vec<ElementOverlay>>>,
 }
 
 /// One tuple-`for-of` element's slice of the body-level annotation maps.
 ///
-/// Holds exactly the `AstId`-keyed maps that can appear inside a for-of
+/// Holds exactly the `SymbolKey`-keyed maps that can appear inside a for-of
 /// body and vary per element. Decl-level maps (`impl_facts`,
 /// `function_effects`, `function_task_returns`, `handler_bindings`)
 /// cannot occur inside an expression body and are excluded. Captured by

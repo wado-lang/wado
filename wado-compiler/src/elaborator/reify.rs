@@ -79,10 +79,10 @@ use super::types::{FunctionContext, TypeLookup};
 use super::tysys::TypeSystem;
 
 /// Generate the `ann_*` annotation accessors on [`Reify`]. Each expands to
-/// a method that walks `self.tuple_overlay_stack` innermost-first looking
-/// for `<map>[id]`, then falls back to `self.sem.types.<map>[id]`,
-/// returning a clone. See the accessor doc comment on the `impl` block for
-/// why this exists.
+/// a method that builds the canonical `SymbolKey` for `id` in the current
+/// module, walks `self.tuple_overlay_stack` innermost-first looking for that
+/// key, then falls back to `self.sem.types.<map>`, returning a clone. See
+/// the accessor doc comment on the `impl` block for why this exists.
 macro_rules! reify_annotation_accessors {
     ($($name:ident => $map:ident : $val:ty),+ $(,)?) => {
         $(
@@ -7831,11 +7831,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// / `current_module_items` / `sem`) swapped to `module` when it is a
     /// different, loaded module, restoring the originals afterward. Used to
     /// reify an AST fragment that belongs to another module (e.g. an
-    /// associated constant's body) so its `AstId`-keyed annotation lookups
-    /// hit that module's `ModuleSemantics` rather than the use site's.
-    /// Same mechanism the default-argument path uses inline (Gap: cross-
-    /// module AST reify). A no-op when `module` is the current module or is
-    /// not loaded.
+    /// associated constant's body): the `ann_*` accessors key on
+    /// `current_module_source`, so swapping it makes their `SymbolKey`
+    /// lookups hit that module's `ModuleSemantics` rather than the use
+    /// site's. Same mechanism the default-argument path uses inline
+    /// (cross-module AST reify). A no-op when `module` is the current module
+    /// or is not loaded.
     fn with_const_module_perspective<R>(
         &mut self,
         module: &ModuleSource,
