@@ -390,6 +390,110 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
+        // Newtype pre-pass: resolve every module's concrete newtypes (and
+        // record generic-newtype defs) BEFORE any struct field is resolved.
+        //
+        // Newtypes are not name-registered in the first pass (unlike structs
+        // / variants / enums), so a struct field that references a newtype
+        // defined in another module would otherwise resolve to `unknown`
+        // whenever that module is processed later in `modules` order — e.g. a
+        // user `struct Color { v: f32x4 }` resolved before `core:simd`'s
+        // `pub type f32x4 = v128` is registered. Resolving all newtypes up
+        // front removes the ordering dependency. Newtype bases reference
+        // primitives or structs (name-registered above); newtype→newtype
+        // chains across modules are resolved in dependency order by repeating
+        // to a fixpoint.
+        loop {
+            let mut newly_resolved = false;
+            for (module_source, module) in modules {
+                if stdlib_set.contains(module_source) {
+                    continue;
+                }
+                let (imported_type_sources, import_original_names) =
+                    Self::build_imported_type_sources(
+                        &mut interner.borrow_mut(),
+                        module,
+                        module_source,
+                        Some(entry_module_source),
+                        &invocations,
+                    );
+                let empty_struct: IndexMap<String, StructFieldInfo> = IndexMap::default();
+                let empty_newtype: IndexMap<String, TypeId> = IndexMap::default();
+                let empty_enum: IndexMap<String, EnumInfo> = IndexMap::default();
+                let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
+                let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
+                let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
+                for item in &module.items {
+                    let Item::Newtype(newtype_decl) = item else {
+                        continue;
+                    };
+                    if newtype_decl.type_params.is_empty() {
+                        // Skip if already resolved (fixpoint convergence).
+                        if all_newtypes
+                            .get(module_source)
+                            .is_some_and(|m| m.contains_key(&newtype_decl.name))
+                        {
+                            continue;
+                        }
+                        let lookup = TypeLookup {
+                            current_module_source: module_source,
+                            imported_type_sources: &imported_type_sources,
+                            import_original_names: &import_original_names,
+                            all_newtypes: &all_newtypes,
+                            all_struct_fields: &all_struct_fields,
+                            all_variant_cases: &all_variant_cases,
+                            all_enum_cases: &all_enum_cases,
+                            all_flags_cases: &all_flags_cases,
+                            all_resource_types: &all_resource_types,
+                            all_generic_newtypes: &all_generic_newtypes,
+                            local_struct_fields: &empty_struct,
+                            local_newtypes: &empty_newtype,
+                            local_enum_cases: &empty_enum,
+                            local_flags_cases: &empty_flags,
+                            local_generic_newtypes: &empty_gnt,
+                            local_variant_cases: &empty_variant,
+                        };
+                        let base_type_id = Self::resolve_type_static(
+                            &newtype_decl.ty,
+                            &mut type_table.borrow_mut(),
+                            &lookup,
+                        );
+                        let newtype_id = type_table.borrow_mut().make_newtype(
+                            newtype_decl.name.clone(),
+                            module_source.clone(),
+                            base_type_id,
+                        );
+                        all_newtypes
+                            .entry(module_source.clone())
+                            .or_default()
+                            .insert(newtype_decl.name.clone(), newtype_id);
+                        newly_resolved = true;
+                    } else if !all_generic_newtypes
+                        .get(module_source)
+                        .is_some_and(|m| m.contains_key(&newtype_decl.name))
+                    {
+                        let type_params = newtype_decl
+                            .type_params
+                            .iter()
+                            .map(|p| p.name.clone())
+                            .collect();
+                        all_generic_newtypes.entry(module_source.clone()).or_default().insert(
+                            newtype_decl.name.clone(),
+                            GenericNewtypeInfo {
+                                module_source: module_source.clone(),
+                                type_params,
+                                base_type_ast: newtype_decl.ty.clone(),
+                            },
+                        );
+                        newly_resolved = true;
+                    }
+                }
+            }
+            if !newly_resolved {
+                break;
+            }
+        }
+
         // Second sub-pass: resolve struct fields and newtypes.
         // Each module's lookup goes directly through the in-progress shared
         // tables (`all_*`) via [`TypeLookup`] — no per-module flat-map cloning.
