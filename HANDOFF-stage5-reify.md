@@ -428,3 +428,100 @@ closely.
   at `reify.rs:3152 reify_block(&for_of.body, …)`.
 - reify dispatch consumer: `reify.rs:7246` (reads method_dispatch[method_call.id]).
 - precedent for per-instance counter: `FunctionContext.next_assert_id` (Gap 7).
+
+## CORRECT FIX DESIGN — tuple_for_of (ready to implement; needs a stable channel)
+
+Root cause (proven from WAT): a compile-time-unrolled tuple `for-of` elaborates
+ONE source body (fixed AstIds) in N type contexts. All AstId-keyed annotation
+maps are overwritten, so only the LAST element's facts survive; reify reads
+those → every unrolled element dispatches to the last element's methods.
+
+There are ~10 AstId-keyed annotation maps in `sem/types.rs` that can vary
+per element and that reify reads (≈45 read sites in reify.rs):
+`method_dispatch` (≈9 reads), `expression_types` (≈8), `generic_instantiations`
+(≈2), `coercions`, `key_value_coercions` (≈3), `desugars`, `operator_dispatch`,
+`static_method_dispatch`, `closure_captures`, `for_of_iterator` (≈1). A correct
+fix must give reify the PER-ELEMENT value of ALL of them inside the body — not
+just method_dispatch (e.g. `{w}` template formats i32/String/bool via different
+Display dispatch; `v`'s expression_type differs per element; a generic call on
+`v` instantiates differently).
+
+### Chosen design: per-element annotation OVERLAY (mirrors Gap 5/7 per-instance counter)
+
+Annotate captures, per tuple-for-of element, the body's annotation entries;
+reify shadows its lookups with element i's overlay while reifying element i.
+This keeps reify building the TIR (so all of reify's own counters — locals,
+labels, assert ids — stay self-consistent, unlike splicing annotate's TIR) and
+only borrows the per-element FACTS. This is the architecturally correct fit for
+the WEP (annotate provides facts; reify emits TIR).
+
+Capture (annotate, `resolve_tuple_for_of` stmt.rs:2333):
+- The body's AST nodes are walked for the first time here, so before the element
+  loop their AstIds are absent from every map. IndexMap preserves insertion
+  order and overwrites update in place (position stable). So: snapshot each
+  map's `.len()` as `len_before` right before the element loop. After resolving
+  element i's body, the body's entries are exactly `map.iter().skip(len_before)`
+  (same key set every element — overwritten in place, so the tail slice is
+  stable). Clone that tail slice for each of the 10 maps into an
+  `ElementOverlay { method_dispatch: IndexMap<AstId,_>, expression_types: …, … }`.
+- Push overlays into a new field
+  `sem.types.tuple_for_of_overlays: IndexMap<AstId /*for_of.id*/, Vec<ElementOverlay>>`.
+- Implement capture as ONE helper `ElementOverlay::capture(&TypeAnnotations,
+  len_before_per_map)` that enumerates all 10 maps in a single place
+  (maintainable — new maps get added here once).
+
+Consume (reify, `reify_tuple_for_of` reify.rs:3016):
+- Read `self.sem.types.tuple_for_of_overlays.get(&for_of.id)` → `&Vec<ElementOverlay>`.
+- Reify holds a new field `tuple_overlay_stack: Vec<ElementOverlay>` (a STACK to
+  support nested tuple-for-ofs). Before `reify_block(&for_of.body…)` for element
+  i, push `overlays[i].clone()`; after, pop.
+- Route reify's reads of the 10 maps through accessor methods that check the
+  top-of-stack overlay first, then fall back to `self.sem.types.<map>`:
+  e.g. `fn ann_method_dispatch(&self, id: AstId) -> Option<MethodDispatch>`.
+  Replace the ≈45 `self.sem.types.<map>.get(&id)` sites with the accessors.
+  (Body AstIds hit the overlay; everything else falls through to sem unchanged.)
+
+Why other designs were rejected:
+- Splicing annotate's per-element TIR blocks (M3): violates the WEP "reify
+  rebuilds TIR" principle and couples annotate/reify local+label+assert counters
+  for the body — fragile.
+- Reify re-deriving dispatch by method lookup (M2): re-introduces method-lookup
+  logic into reify, explicitly rejected by Stage 5 (Gap 2).
+- Cloning the body AST with fresh per-element AstIds: requires a deterministic
+  fresh-AstId scheme both passes agree on; AstIds are bind-phase-dense and
+  inventing reproducible ones mid-elaboration is fragile.
+
+### Implementation checklist (do on a STABLE channel, build+test after each step)
+1. `sem/types.rs`: add `pub(crate) struct ElementOverlay { …10 IndexMap fields… }`
+   with `capture(types, &lens)->Self`; add field
+   `tuple_for_of_overlays: IndexMap<AstId, Vec<ElementOverlay>>` to TypeAnnotations
+   (+ Default). Also thread it through `semantics.rs` merge (the per-module →
+   global SymbolKey remap at semantics.rs:994+ — decide whether overlays need
+   remapping or stay per-module; tuple-for-of is always within one function/module
+   so per-module AstId keying is fine, but verify the merge doesn't drop the new map).
+2. `stmt.rs resolve_tuple_for_of`: snapshot the 10 lens before the loop; after
+   each element capture+push; store the Vec under for_of.id.
+3. `reify.rs`: add `tuple_overlay_stack: Vec<ElementOverlay>` to Reify::new;
+   add the 10 `ann_*` accessor methods; replace the ≈45 read sites; in
+   `reify_tuple_for_of` push/pop the element overlay around `reify_block`.
+4. Verify: `cmp <(wado compile --world test --no-validate -O0 --wat-to-stdout F)`
+   reify-vs-prod byte-identical; then `WADO_REIFY=1 cargo test -p wado-compiler
+   --test e2e -- tuple_for_of` green; then full suite → 2678/2678; update WEP
+   landing #53 + count; `mise run format`; commit; push.
+
+### Verified facts to anchor the work
+- prod WAT: `i32^/String^/bool^Describe::describe` for the 3 elements;
+  reify WAT: `bool^Describe::describe` for all 3 (the bug, lines ~2050/2061/2072).
+- Only symbol unique to prod: `$<file>/i32^Describe::describe` (never emitted by
+  reify because never called). Missing func-type `(ref 2)->(ref 5)` =
+  `(boxed-i32)->String` is that function's signature.
+- Correct repro flag is `--world test` (NOT `-w`). Use `wado test F` to see the
+  validation panic; compare raw `.wasm` or `--wat-to-stdout` (both with
+  `--world test`).
+
+### Process note (this session)
+The remote channel degraded to corrupting/injecting text into stdout, base64,
+AND file reads, which makes the 45-site edit→build→byte-verify loop unsafe. The
+diagnosis and design above are complete and verified; implementation deferred to
+a stable channel so the result meets the "only correct code on a correct design"
+bar rather than a blind large refactor.
