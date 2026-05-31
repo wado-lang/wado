@@ -120,8 +120,16 @@ fn print_version() {
 }
 
 fn main() {
+    // The compiler is recursive-descent end to end (parser, type resolution,
+    // TIR/NIR/WIR walks), so compiling a large generated source — e.g. a Gale
+    // parser for a deeply nested grammar — recurses deeply. The default 2 MiB
+    // tokio worker/blocking-thread stack overflows on such inputs (observed
+    // compiling `package-gale`'s driver tests). Raise the per-thread stack so
+    // these legitimately-deep compiles complete. `RUST_MIN_STACK` only governs
+    // the main thread, not tokio's pool, so set it on the builder explicitly.
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
+        .thread_stack_size(64 * 1024 * 1024)
         .build()
         .unwrap_or_else(|e| {
             eprintln!("Error: failed to create tokio runtime: {e}");
