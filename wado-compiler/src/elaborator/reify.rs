@@ -1737,19 +1737,54 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let len = block.stmts.len();
         let mut stmts = Vec::new();
         for (i, s) in block.stmts.iter().enumerate() {
-            // Propagate expected type to the last expression-form
-            // statement for coercion, mirroring
-            // `Elaborator::resolve_block` (stmt.rs:31–69).
-            if expected_type.is_some()
-                && i == len - 1
-                && let ast::Stmt::Expr(expr_stmt) = s
-            {
-                let expr = self.reify_expr(&expr_stmt.expr, ctx, expected_type);
-                stmts.push(TirStmt::new(
-                    crate::tir::TirStmtKind::Expr(expr),
-                    expr_stmt.span,
-                ));
-                continue;
+            // Propagate expected type to the last expression/statement
+            // for coercion, mirroring `Elaborator::resolve_block`
+            // (stmt.rs:40–66): a trailing `Expr` / `If` / `Match` /
+            // `LabeledBlock` in value position keeps its result flowing
+            // out as the block's value rather than being dropped at
+            // statement position.
+            if expected_type.is_some() && i == len - 1 {
+                if let ast::Stmt::Expr(expr_stmt) = s {
+                    let expr = self.reify_expr(&expr_stmt.expr, ctx, expected_type);
+                    stmts.push(TirStmt::new(
+                        crate::tir::TirStmtKind::Expr(expr),
+                        expr_stmt.span,
+                    ));
+                    continue;
+                }
+                if let ast::Stmt::If(if_stmt) = s {
+                    stmts.extend(self.reify_if_stmt_with_expected(if_stmt, ctx, expected_type));
+                    continue;
+                }
+                if let ast::Stmt::Match(match_expr) = s {
+                    let recorded = self
+                        .sem
+                        .types
+                        .expression_types
+                        .get(&match_expr.id)
+                        .copied()
+                        .or(expected_type)
+                        .unwrap_or(crate::tir::TypeTable::UNKNOWN);
+                    let tir = self.reify_match_expr(match_expr, ctx, expected_type, recorded);
+                    stmts.push(TirStmt::new(
+                        crate::tir::TirStmtKind::Expr(tir),
+                        match_expr.span,
+                    ));
+                    continue;
+                }
+                if let ast::Stmt::LabeledBlock(labeled_block) = s {
+                    ctx.active_labels.push(labeled_block.label.clone());
+                    let block = self.reify_block(&labeled_block.block, ctx, expected_type);
+                    ctx.active_labels.pop();
+                    stmts.push(TirStmt::new(
+                        crate::tir::TirStmtKind::LabeledBlock {
+                            label: labeled_block.label.clone(),
+                            block,
+                        },
+                        labeled_block.span,
+                    ));
+                    continue;
+                }
             }
             stmts.extend(self.reify_stmt(s, ctx));
         }
@@ -3509,6 +3544,66 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     },
                     span,
                 )]
+            }
+        }
+    }
+
+    /// Reify a trailing stmt-position `if` whose value flows out as the
+    /// enclosing block's result. Mirrors
+    /// `Elaborator::resolve_if_stmt_with_expected` (stmt.rs:1042): the
+    /// `LetChain` arm reuses the let-chain lowering with `expected_type`
+    /// threaded through so the chain's then/else blocks stay
+    /// value-producing; the `Expr` arm emits an `If` *expression*
+    /// statement (not a value-dropping stmt `If`) so the branch values
+    /// become the block result.
+    fn reify_if_stmt_with_expected(
+        &mut self,
+        if_stmt: &ast::IfStmt,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> Vec<TirStmt> {
+        use crate::tir::{TirExprKind, TirStmtKind, TypeTable};
+        match &if_stmt.condition {
+            ast::Condition::LetChain { elements, .. } => {
+                let else_block = if_stmt
+                    .else_block
+                    .as_ref()
+                    .map(|b| self.reify_block(b, ctx, expected_type));
+                ctx.enter_scope();
+                let stmts = self.reify_let_chain_stmts(
+                    elements,
+                    &if_stmt.then_block,
+                    else_block.as_ref(),
+                    ctx,
+                    expected_type,
+                    if_stmt.span,
+                );
+                ctx.exit_scope();
+                stmts
+            }
+            ast::Condition::Expr(cond_expr) => {
+                let condition = self.reify_expr(cond_expr, ctx, Some(TypeTable::BOOL));
+                let then_branch = self.reify_block(&if_stmt.then_block, ctx, expected_type);
+                let else_branch = if_stmt
+                    .else_block
+                    .as_ref()
+                    .map(|b| self.reify_block(b, ctx, expected_type));
+                let then_type = crate::tir::block_result_type(&then_branch);
+                let else_type = else_branch
+                    .as_ref()
+                    .map_or(TypeTable::UNIT, crate::tir::block_result_type);
+                let result_type =
+                    crate::tir::agree_branch_types(then_type, else_type).unwrap_or(TypeTable::UNIT);
+                let if_expr = TirExpr::new(
+                    TirExprKind::If {
+                        condition: Box::new(condition),
+                        then_branch,
+                        else_branch,
+                    },
+                    result_type,
+                    if_stmt.span,
+                );
+                vec![TirStmt::new(TirStmtKind::Expr(if_expr), if_stmt.span)]
             }
         }
     }
