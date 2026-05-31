@@ -1120,6 +1120,25 @@ impl<'a> DceWalker<'a> {
             (func_name, None)
         };
 
+        // Mark the *resolved* method target reachable directly from
+        // `func.method_info`. That info was captured before newtype erasure
+        // (Phase 9b), so it carries the real struct name; the receiver-type
+        // dispatch below cannot recover it once the type is erased — e.g. an
+        // `f32x4` struct field erases to its `v128` base, so `self.v.max(..)`
+        // would be recorded as `v128::max` and the real `f32x4::max` dropped
+        // as unreachable, failing WIR build. This is additive: DCE only adds
+        // callees here, so trusting the resolved target cannot remove a real
+        // function — it only guarantees the actual call target is kept.
+        if let Some(info) = func.method_info.as_ref() {
+            let resolved_id = FunctionId::Method(MethodName::new(
+                func.module_source.clone(),
+                info.struct_name.clone(),
+                info.trait_name.clone(),
+                info.method_name.clone(),
+            ));
+            self.analysis.callees.insert(resolved_id);
+        }
+
         // If the receiver was a newtype (e.g., flags type), also mark
         // the newtype's own methods as reachable (e.g., Perms^Inspect::inspect).
         if let Some((newtype_name, newtype_module)) = newtype_info {
