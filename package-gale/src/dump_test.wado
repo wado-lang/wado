@@ -1,0 +1,149 @@
+//! Tests for `render_dump(LoweredGrammar) -> String`.
+//!
+//! Each test builds a minimal `Grammar` via struct-literal syntax (no
+//! g4 parser), lowers it with `lower`, and asserts on substrings of the
+//! rendered report. The point is the report's MECE structure, not exact
+//! byte layout — substring checks keep the tests robust to spacing.
+
+use {
+    Grammar,
+    GrammarKind,
+    ParserRule,
+    Alternative,
+    Element,
+    RuleRefElement,
+    TokenRefElement,
+    Visibility,
+} from "./ir.wado";
+use { LitToken } from "./lexer_gen.wado";
+use { lower } from "./lower.wado";
+use { render_dump } from "./dump.wado";
+
+fn empty_grammar(name: &String) -> Grammar {
+    return Grammar {
+        name: *name,
+        kind: GrammarKind::Combined,
+        parser_rules: [],
+        lexer_rules: [],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
+        pending_refs: [],
+        source_files: [],
+    };
+}
+
+fn no_lit_tokens() -> Array<LitToken> {
+    return [];
+}
+
+fn str_contains(haystack: &String, needle: &String) -> bool {
+    let h_len = haystack.len();
+    let n_len = needle.len();
+    if n_len > h_len {
+        return false;
+    }
+    for let mut i = 0; i <= h_len - n_len; i += 1 {
+        let mut found = true;
+        for let mut j = 0; j < n_len; j += 1 {
+            if haystack.get_byte_unchecked(i + j) != needle.get_byte_unchecked(j) {
+                found = false;
+                break;
+            }
+        }
+        if found {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn alt_of(elements: Array<Element>) -> Alternative {
+    return Alternative {
+        label: null,
+        options: [],
+        elements,
+    };
+}
+
+test "render_dump shows simple rule name and shape" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "value",
+            Visibility::Default,
+            [],
+            [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    let report = render_dump(&lowered);
+
+    assert str_contains(&report, &"value"), report;
+    assert str_contains(&report, &"Simple"), report;
+    // No diagnostics: the summary reports none.
+    assert str_contains(&report, &"warnings: none"), report;
+}
+
+test "render_dump shows Direct dispatch for disjoint multi-alt" {
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "expr",
+            Visibility::Default,
+            [],
+            [
+                alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+                alt_of([Element::TokenRef(TokenRefElement::new("STRING"))]),
+            ],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    let report = render_dump(&lowered);
+
+    assert str_contains(&report, &"expr"), report;
+    assert str_contains(&report, &"Direct"), report;
+    // Each disjoint alt's first set appears.
+    assert str_contains(&report, &"TK_INT"), report;
+    assert str_contains(&report, &"TK_STRING"), report;
+    assert str_contains(&report, &"warnings: none"), report;
+}
+
+test "render_dump shows Tournament and overlap warning" {
+    // `r : ID INT | ID STRING ;` — both alts start with ID, so lowering
+    // resolves the overlap with a scan tournament and raises an
+    // OverlapTournament diagnostic.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [
+                alt_of([
+                    Element::TokenRef(TokenRefElement::new("ID")),
+                    Element::TokenRef(TokenRefElement::new("INT")),
+                ]),
+                alt_of([
+                    Element::TokenRef(TokenRefElement::new("ID")),
+                    Element::TokenRef(TokenRefElement::new("STRING")),
+                ]),
+            ],
+        ),
+    ];
+
+    let lowered = lower(&g, &no_lit_tokens());
+    let report = render_dump(&lowered);
+
+    assert str_contains(&report, &"Tournament"), report;
+    // The diagnostic is inlined on the rule and listed in the summary.
+    assert str_contains(&report, &"warning"), report;
+    // The diagnostic names the rule and the shared lookahead token.
+    assert str_contains(&report, &"'r'"), report;
+    assert str_contains(&report, &"TK_ID"), report;
+    // Summary shows a non-empty warnings section.
+    assert str_contains(&report, &"warnings ("), report;
+}

@@ -10,20 +10,35 @@ This file lists what is **not yet done**. Closed work belongs in commit history.
 ## Diagnostics & introspection ([#1246](https://github.com/wado-lang/wado/issues/1246))
 
 Grammar-authoring DX gaps surfaced while writing a new `.g4` against Gale.
+Parts 1–4 have landed; the items below are follow-ups left on the table.
 
-- **Runtime traps on valid input (part 2).** A generated scanner that traps
-  (e.g. an out-of-bounds) only shows a wasm backtrace of synthetic function
-  names. Unscannable shapes should be caught at codegen time (or degraded to
-  a `ParseError`), never surfaced as a runtime trap.
-- **Grammar-bug vs Gale-bug warnings (part 3).** Gale has no warning surface
-  for prediction limits. Surface prediction-strategy decisions ("fell back to
-  first-success-wins", "could not use shape-lookahead, using scan-guard",
-  "alts share a prefix and may not be longest-match") as warnings so grammar
-  authors can question their own grammar.
-- **Lowering/prediction introspection (part 4).** `gale dump` stops at the
-  surface `Grammar` IR. Add a dump of the lowered GIR and the per-rule/per-alt
-  prediction strategy actually chosen (shape-lookahead vs scan-guard,
-  first-success vs tournament).
+- **More prediction-strategy warnings (part 3 follow-up).** Lowering raises
+  `OverlapTournament` today. The obvious next kind is an
+  `OptionalScanGuardFallback` — warn when an `e?` resolves to
+  `OptionalScanGuard` (a live case: `attribute` in `example/Wado.g4`). It
+  needs the enclosing rule name threaded through `pick_optional_specialised`
+  (lower.wado), which is why it was deferred; add the `DiagnosticKind`
+  variant back together with the warn site and a fixture.
+- **Structured diagnostic-to-rule identity (part 3/4 follow-up).** A
+  `Diagnostic.rule` is the human label `build_overlap_dispatch` was called
+  with (`rule 'r'`, `LR rule 'expr' atom`, `General group exprGroup0`,
+  `SimpleCst group`). `dump.wado`'s `render_rule_diagnostics` re-associates a
+  diagnostic with its rule by substring-matching `'<name>'`, so group-scoped
+  warnings (no quoted rule name) never inline under their owning rule — they
+  appear only in the summary with a label that can't be mapped back to a .g4
+  rule. Carry a structured owner (rule name/index) on `Diagnostic`, set it at
+  the warn site, and compare by equality; keep the label display-only. The
+  same change lets `build_overlap_dispatch` take an explicit `is_scan_pass`
+  flag instead of recovering the pass from the `" (scan)"` suffix via
+  `ends_with_scan` (today the warn-once invariant is backstopped by the
+  `(rule, message)` dedup in `GenContext::warn`, but the suffix heuristic is
+  fragile on its own).
+- **Single lowering on `gale gen` (part 3 follow-up).** `cmd_gen` lowers once
+  to read diagnostics for stderr, then `generate` lowers again internally and
+  discards its `LoweredGrammar.diagnostics`. Have `generate` return (or expose)
+  the diagnostics so `gale gen` lowers once. Same site should run
+  `normalize_caches` before the diagnostic lower to match `generate` /
+  `cmd_dump` (benign for parser-built IR today, but inconsistent).
 
 ## LL prediction — remaining gaps
 

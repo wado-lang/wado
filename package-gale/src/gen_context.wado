@@ -7,6 +7,7 @@ use {
     single_alt_group_type_name,
     count_general_groups,
 } from "./gen_util.wado";
+use { Diagnostic, DiagnosticKind } from "./gir.wado";
 use { TreeMap } from "core:collections";
 
 /// A token-kind set interned during parser codegen. Multi-element
@@ -99,6 +100,11 @@ pub struct GenContext {
     /// across runs. Each key directly indexes
     /// `follow_variant_registry`, giving an O(n) walk.
     follow_variant_order: Array<String>,
+    /// Prediction-strategy diagnostics raised during lowering, in the
+    /// order lowering walked the rules. Drained into
+    /// `LoweredGrammar.diagnostics` by `lower_with_ctx`. See
+    /// `Diagnostic` in `gir.wado`.
+    diagnostics: Array<Diagnostic>,
 }
 
 impl GenContext {
@@ -122,7 +128,35 @@ impl GenContext {
             tail_greedy_k_prefix_cache: [],
             follow_variant_registry: TreeMap::<String, FollowVariantEntry>::new(),
             follow_variant_order: [],
+            diagnostics: [],
         };
+    }
+
+    /// Record a prediction-strategy diagnostic for `rule`, deduped on
+    /// `(rule, message)`. A single decision site can be revisited: lower
+    /// re-lowers a rule once per registered follow-variant
+    /// (`lower_variant_rules`), and parse/scan passes lower the same
+    /// alts twice — both re-enter the same warn site with an identical
+    /// `(rule, message)`. Collapsing here keeps each prediction warning
+    /// reported once regardless of how many times lowering revisits the
+    /// decision, so the dedup does not depend on a display-string
+    /// heuristic. `message` already encodes everything `kind` does, so
+    /// the pair is a sufficient key without an `Eq` on `DiagnosticKind`.
+    pub fn warn(&mut self, rule: &String, kind: DiagnosticKind, message: String) {
+        for let d of &self.diagnostics {
+            if d.rule == *rule && d.message == message {
+                return;
+            }
+        }
+        self.diagnostics.push(Diagnostic { rule: *rule, kind, message });
+    }
+
+    /// Return the collected diagnostics (a value copy under Wado value
+    /// semantics; `self` keeps its own). `lower_with_ctx` reads them
+    /// exactly once into `LoweredGrammar.diagnostics`, so the copy is
+    /// harmless.
+    pub fn take_diagnostics(&self) -> Array<Diagnostic> {
+        return self.diagnostics;
     }
 
     pub fn find_rule(&self, name: &String) -> Option<&ParserRule> {

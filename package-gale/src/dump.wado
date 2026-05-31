@@ -1,0 +1,388 @@
+//! `gale dump` rendering — a readable, per-rule report derived from
+//! the lowered grammar (GIR), i.e. the actual prediction decisions
+//! parser emission consumes.
+//!
+//! The output is plain text and stable across runs: every collection
+//! is iterated in its stored (deterministic) order. Each rule appears
+//! once, with non-overlapping sections (shape, alts, repeats,
+//! follow-variants, diagnostics). The trailing summary lists every
+//! diagnostic — including the group-scoped ones whose label carries no
+//! quoted rule name and so are not inlined under a rule (see
+//! `render_rule_diagnostics`; a structured owner id would let them
+//! inline, tracked in TODO.md).
+//!
+//! This module only reads `LoweredGrammar`; it never consults the
+//! surface `Grammar`. That keeps `gale dump` honest: what it prints
+//! is exactly what emit sees.
+
+use {
+    LoweredGrammar,
+    Diagnostic,
+    DiagnosticKind,
+    Rule,
+    RuleHeader,
+    SimpleRule,
+    MultiAltRule,
+    LeftRecursiveRule,
+    LrAlt,
+    AltBody,
+    Op,
+    RepeatOp,
+    RepeatStrategy,
+    GroupOp,
+    GroupShape,
+    MultiAltDispatch,
+    DirectDispatch,
+    TournamentDispatch,
+    FollowVariant,
+    rule_header,
+} from "./gir.wado";
+use { RepeatKind } from "./ir.wado";
+
+/// Render the full per-rule dump report for a lowered grammar.
+pub fn render_dump(lowered: &LoweredGrammar) -> String {
+    // Pre-size: ~256 bytes of header / per-rule scaffolding plus a
+    // generous per-alt allowance keeps the bulk of `push_str` calls
+    // off the `String::grow` doubling path for typical grammars.
+    let estimated = 256 + 512 * lowered.parser_rules.len();
+    let mut out = String::with_capacity(estimated);
+
+    out.push_str(&"grammar ");
+    out.push_str(&lowered.name);
+    out.push('\n');
+    out.push('\n');
+
+    for let rule of &lowered.parser_rules {
+        render_rule(&mut out, rule, lowered);
+        out.push('\n');
+    }
+
+    render_summary(&mut out, lowered);
+    return out;
+}
+
+fn render_rule(out: &mut String, rule: &Rule, lowered: &LoweredGrammar) {
+    let header = rule_header(rule);
+
+    out.push_str(&"rule ");
+    out.push_str(&header.name);
+    out.push_str(&" — ");
+    out.push_str(&rule_shape_label(rule));
+    out.push('\n');
+
+    match rule {
+        Simple(s) => render_simple(out, s),
+        MultiAlt(m) => render_multi_alt(out, m),
+        LeftRecursive(l) => render_left_recursive(out, l),
+    }
+
+    render_repeats(out, rule);
+    render_follow_variants(out, &header.name, lowered);
+    render_rule_diagnostics(out, &header.name, lowered);
+}
+
+/// One-line shape label for a rule's header.
+fn rule_shape_label(rule: &Rule) -> String {
+    return match rule {
+        Simple(_) => "Simple",
+        MultiAlt(m) => match m.dispatch {
+            Direct(_) => "MultiAlt: Direct",
+            Tournament(_) => "MultiAlt: Tournament",
+        },
+        LeftRecursive(_) => "LeftRecursive",
+    };
+}
+
+fn render_simple(out: &mut String, s: &SimpleRule) {
+    // Simple rules carry a single body; the per-alt breakdown is
+    // covered by the repeats section below. Nothing alt-shaped to list.
+    out.push_str(&"  single alternative\n");
+}
+
+fn render_multi_alt(out: &mut String, m: &MultiAltRule) {
+    match m.dispatch {
+        Direct(d) => {
+            out.push_str(&"  dispatch: Direct (token-led)\n");
+            for let branch of &d.branches {
+                out.push_str(&"  alt ");
+                out.push_str(&`{branch.alt_index}`);
+                out.push_str(&" first=");
+                push_token_set(out, &branch.tokens);
+                out.push('\n');
+            }
+        },
+        Tournament(t) => {
+            out.push_str(&"  dispatch: Tournament (longest-match scan)\n");
+            for let mut i = 0; i < t.alts.len(); i += 1 {
+                out.push_str(&"  alt ");
+                out.push_str(&`{t.alts[i]}`);
+                out.push_str(&" (tournament order ");
+                out.push_str(&`{i}`);
+                out.push_str(&")\n");
+            }
+        },
+    }
+}
+
+fn render_left_recursive(out: &mut String, l: &LeftRecursiveRule) {
+    // Atom alts: the non-LR alternatives, lowered as a multi-alt body.
+    out.push_str(&"  atom alts:\n");
+    match l.atom.dispatch {
+        Direct(d) => {
+            for let branch of &d.branches {
+                out.push_str(&"    alt ");
+                out.push_str(&`{branch.alt_index}`);
+                out.push_str(&" first=");
+                push_token_set(out, &branch.tokens);
+                out.push('\n');
+            }
+        },
+        Tournament(t) => {
+            for let mut i = 0; i < t.alts.len(); i += 1 {
+                out.push_str(&"    alt ");
+                out.push_str(&`{t.alts[i]}`);
+                out.push_str(&" (tournament order ");
+                out.push_str(&`{i}`);
+                out.push_str(&")\n");
+            }
+        },
+    }
+
+    // LR alts: each carries precedence and associativity.
+    out.push_str(&"  lr alts:\n");
+    for let lr of &l.lr_alts {
+        out.push_str(&"    alt ");
+        out.push_str(&`{lr.alt_index}`);
+        out.push_str(&" (");
+        out.push_str(&lr.case_name);
+        out.push_str(&") prec=");
+        out.push_str(&`{lr.own_prec}`);
+        out.push(' ');
+        if lr.right_associative {
+            out.push_str(&"right-assoc");
+        } else {
+            out.push_str(&"left-assoc");
+        }
+        out.push_str(&" suffix-first=");
+        push_token_set(out, &lr.suffix_first);
+        out.push('\n');
+    }
+}
+
+// ==========================================================================
+// Repeat strategies
+// ==========================================================================
+
+/// Walk every alt body in the rule and report each Repeat's strategy.
+/// Recurses into Group alts and Repeat bodies so nested repeats are
+/// surfaced too.
+fn render_repeats(out: &mut String, rule: &Rule) {
+    let mut lines: Array<String> = [];
+    match rule {
+        Simple(s) => collect_repeats_in_alt(&s.body, &mut lines),
+        MultiAlt(m) => {
+            for let alt of &m.alts {
+                collect_repeats_in_alt(alt, &mut lines);
+            }
+        },
+        LeftRecursive(l) => {
+            for let alt of &l.atom.alts {
+                collect_repeats_in_alt(alt, &mut lines);
+            }
+            for let lr of &l.lr_alts {
+                collect_repeats_in_alt(&lr.suffix, &mut lines);
+            }
+        },
+    }
+
+    if lines.is_empty() {
+        return;
+    }
+    out.push_str(&"  repeats:\n");
+    for let line of &lines {
+        out.push_str(&"    ");
+        out.push_str(line);
+        out.push('\n');
+    }
+}
+
+fn collect_repeats_in_alt(alt: &AltBody, lines: &mut Array<String>) {
+    for let op of &alt.ops {
+        collect_repeats_in_op(op, lines);
+    }
+}
+
+fn collect_repeats_in_op(op: &Op, lines: &mut Array<String>) {
+    match op {
+        Repeat(rep) => {
+            lines.push(repeat_line(rep));
+            // Recurse into the repeat body for nested repeats.
+            collect_repeats_in_op(&rep.body, lines);
+        },
+        Group(g) => {
+            for let alt of &g.alts {
+                collect_repeats_in_alt(alt, lines);
+            }
+        },
+        ListLabel(ll) => collect_repeats_in_op(&ll.inner, lines),
+        Token(_) => {
+        },
+        Literal(_) => {
+        },
+        RuleCall(_) => {
+        },
+        Wildcard(_) => {
+        },
+        Excluded(_) => {
+        },
+    }
+}
+
+fn repeat_line(rep: &RepeatOp) -> String {
+    let kind = repeat_kind_label(&rep.kind);
+    let strategy = repeat_strategy_label(&rep.strategy);
+    return `{kind} → {strategy}`;
+}
+
+fn repeat_kind_label(kind: &RepeatKind) -> String {
+    return match *kind {
+        Star => "*",
+        Plus => "+",
+        Optional => "?",
+    };
+}
+
+fn repeat_strategy_label(strategy: &RepeatStrategy) -> String {
+    return match strategy {
+        Plain => "Plain",
+        WithFollowSubtraction(_) => "WithFollowSubtraction",
+        NonGreedy(_) => "NonGreedy",
+        OptionalLookahead(_) => "OptionalLookahead",
+        OptionalShapeLookahead(_) => "OptionalShapeLookahead",
+        OptionalScanGuard => "OptionalScanGuard",
+        Suppressed => "Suppressed",
+    };
+}
+
+// ==========================================================================
+// Follow-variants
+// ==========================================================================
+
+/// List the follow-aware variants registered for this rule. A variant
+/// is owned by `rule_name` when its header name matches OR its
+/// `variant_of` names the rule.
+fn render_follow_variants(out: &mut String, rule_name: &String, lowered: &LoweredGrammar) {
+    let mut printed_header = false;
+    for let vrule of &lowered.variant_rules {
+        let vheader = rule_header(vrule);
+        let owns = vheader.name == *rule_name || variant_of_matches(&vheader.variant_of, rule_name);
+        if !owns {
+            continue;
+        }
+        if !printed_header {
+            out.push_str(&"  follow-variants:\n");
+            printed_header = true;
+        }
+        out.push_str(&"    variant");
+        if let Some(v) = &vheader.variant_of {
+            out.push_str(&" #");
+            out.push_str(&`{v.id}`);
+            out.push_str(&" mask=");
+            push_token_set(out, &v.mask);
+        }
+        out.push('\n');
+    }
+}
+
+fn variant_of_matches(variant_of: &Option<FollowVariant>, rule_name: &String) -> bool {
+    if let Some(v) = variant_of {
+        return v.rule_name == *rule_name;
+    }
+    return false;
+}
+
+// ==========================================================================
+// Diagnostics
+// ==========================================================================
+
+/// Inline any diagnostics whose `rule` label refers to this rule. The
+/// diagnostic's `rule` is a human label like `rule 'r'` / `LR rule
+/// 'expr' atom`, so match by the quoted rule name. Group-scoped labels
+/// (`General group rGroup0`, `SimpleCst group`) carry no quoted name and
+/// so never match here — they surface in the summary only. A structured
+/// owner id on `Diagnostic` would let them inline (TODO.md).
+fn render_rule_diagnostics(out: &mut String, rule_name: &String, lowered: &LoweredGrammar) {
+    let needle = `'{*rule_name}'`;
+    for let d of &lowered.diagnostics {
+        if !contains(&d.rule, &needle) {
+            continue;
+        }
+        out.push_str(&"  ! warning: ");
+        out.push_str(&diagnostic_kind_label(&d.kind));
+        out.push_str(&": ");
+        out.push_str(&d.message);
+        out.push('\n');
+    }
+}
+
+fn diagnostic_kind_label(kind: &DiagnosticKind) -> String {
+    return match *kind { OverlapTournament => "overlap-tournament" };
+}
+
+fn render_summary(out: &mut String, lowered: &LoweredGrammar) {
+    if lowered.diagnostics.is_empty() {
+        out.push_str(&"warnings: none\n");
+        return;
+    }
+    out.push_str(&"warnings (");
+    out.push_str(&`{lowered.diagnostics.len()}`);
+    out.push_str(&"):\n");
+    for let d of &lowered.diagnostics {
+        out.push_str(&"  ");
+        out.push_str(&d.rule);
+        out.push_str(&": ");
+        out.push_str(&d.message);
+        out.push('\n');
+    }
+}
+
+// ==========================================================================
+// Small helpers
+// ==========================================================================
+
+/// Render a token-kind set as `[A, B, C]`.
+fn push_token_set(out: &mut String, tokens: &Array<String>) {
+    out.push('[');
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if i > 0 {
+            out.push_str(&", ");
+        }
+        out.push_str(&tokens[i]);
+    }
+    out.push(']');
+}
+
+/// Substring test (no dependency on the test-only `str_contains`).
+fn contains(haystack: &String, needle: &String) -> bool {
+    let h_len = haystack.len();
+    let n_len = needle.len();
+    if n_len == 0 {
+        return true;
+    }
+    if n_len > h_len {
+        return false;
+    }
+    for let mut i = 0; i <= h_len - n_len; i += 1 {
+        let mut found = true;
+        for let mut j = 0; j < n_len; j += 1 {
+            if haystack.get_byte_unchecked(i + j) != needle.get_byte_unchecked(j) {
+                found = false;
+                break;
+            }
+        }
+        if found {
+            return true;
+        }
+    }
+    return false;
+}
