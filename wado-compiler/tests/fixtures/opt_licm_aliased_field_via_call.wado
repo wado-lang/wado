@@ -1,0 +1,40 @@
+// Soundness regression: LICM must not hoist a reference field read across a
+// loop body that mutates the same field through an aliasing reference via a
+// method/function call. `a` and `b` point at the same Node; `a.bump()` mutates
+// `a.value` (== `b.value`) each iteration, so `b.value` is not loop-invariant.
+//
+// A direct `a.value = ...` write is caught by type-keyed write tracking; this
+// covers the call case, where the mutation is opaque and recorded by the
+// `&mut`-clobbers-pointee rule.
+
+use { println } from "core:cli";
+
+struct Node { value: i32, tag: i32 }
+
+impl Node {
+    #[inline("never")]
+    fn bump(&mut self) {
+        self.value = self.value + 1;
+    }
+}
+
+#[inline("never")]
+fn f(a: &mut Node, b: &mut Node) -> i32 {
+    let mut sum = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        a.bump();             // mutates *a == *b
+        sum = sum + b.value;  // must observe each increment
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let mut n = Node { value: 0, tag: 0 };
+    // value: 1,2,3,4,5 -> sum = 15
+    println(`{f(&mut n, &mut n)}`);
+}
+
+__DATA__
+{
+    "stdout": "15\n"
+}

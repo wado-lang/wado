@@ -78,6 +78,7 @@ pub(super) fn build_value_copy_helpers(
 ///   `dst.field = …` drops the same field on every alias.
 pub(super) fn build_alias_info(
     body: &NirBlock,
+    locals: &[crate::nir::NirLocal],
     address_taken_locals: &IndexSet<u32>,
     stores_aliased_locals: &IndexSet<u32>,
     type_table: &TypeTable,
@@ -91,7 +92,17 @@ pub(super) fn build_alias_info(
         let mut collector = AliasCollector { out: &mut aliased };
         collector.visit_block(body);
     }
-    let alias_groups = collect_alias_groups(body, type_table);
+    // Reference parameters/locals pointing at the same struct may alias the
+    // same heap object (Wado references alias, no borrow checker), so a write
+    // through one must invalidate field knowledge of the others. Treat them as
+    // a mutual alias group, and mark them `aliased` so a call boundary (opaque
+    // mutation through any handle) drops their fields too.
+    let same_pointee_edges = same_pointee_reference_edges(locals, type_table);
+    for &(a, b) in &same_pointee_edges {
+        aliased.insert(a);
+        aliased.insert(b);
+    }
+    let alias_groups = collect_alias_groups(body, type_table, &same_pointee_edges);
     AliasInfo {
         aliased,
         untrackable,
@@ -132,8 +143,56 @@ pub(super) fn recognize_value_copy<'a>(
 ///
 /// The group is used to widen field-assignment invalidation: writing
 /// `dst.field = ...` invalidates the same field of every alias.
-fn collect_alias_groups(body: &NirBlock, type_table: &TypeTable) -> IndexMap<u32, IndexSet<u32>> {
-    let mut edges: Vec<(u32, u32)> = Vec::new();
+/// The struct identity a reference type points at, stripping `Ref`/`MutRef`.
+/// `None` for non-reference types or references to non-struct pointees
+/// (primitives, boxed primitives) whose fields const-fold never tracks.
+fn reference_pointee_struct_key(
+    type_id: TypeId,
+    type_table: &TypeTable,
+) -> Option<(String, ModuleSource)> {
+    match type_table.get(type_id) {
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+            reference_pointee_struct_key(*inner, type_table)
+        }
+        ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } => Some((name.clone(), module_source.clone())),
+        _ => None,
+    }
+}
+
+/// Edges connecting reference locals (`func.locals` is indexed by local index,
+/// params included) that point at the same struct. Two such references may
+/// alias the same heap object, so a write through one must widen invalidation
+/// to the others. Connected as a star to each pointee's first-seen local.
+fn same_pointee_reference_edges(
+    locals: &[crate::nir::NirLocal],
+    type_table: &TypeTable,
+) -> Vec<(u32, u32)> {
+    let mut rep: IndexMap<(String, ModuleSource), u32> = IndexMap::default();
+    let mut edges = Vec::new();
+    for (i, l) in locals.iter().enumerate() {
+        let Some(key) = reference_pointee_struct_key(l.type_id, type_table) else {
+            continue;
+        };
+        match rep.get(&key) {
+            Some(&r) => edges.push((r, i as u32)),
+            None => {
+                rep.insert(key, i as u32);
+            }
+        }
+    }
+    edges
+}
+
+fn collect_alias_groups(
+    body: &NirBlock,
+    type_table: &TypeTable,
+    extra_edges: &[(u32, u32)],
+) -> IndexMap<u32, IndexSet<u32>> {
+    let mut edges: Vec<(u32, u32)> = extra_edges.to_vec();
     {
         let mut collector = AliasEdgeCollector {
             type_table,

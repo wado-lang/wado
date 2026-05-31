@@ -35,6 +35,9 @@ struct ModifiedVars {
     /// the `(local, field)` tracking above misses writes via a different alias.
     /// Used by `is_reference_field_aliasing_written`.
     written_field_types: IndexSet<(TypeId, u32)>,
+    /// Pointee struct types passed by `&mut` to a call/method in the loop: the
+    /// callee may write *any* field, so no field of that type is invariant.
+    clobbered_pointee_types: IndexSet<TypeId>,
 }
 
 impl ModifiedVars {
@@ -50,9 +53,14 @@ impl ModifiedVars {
         self.written_field_types.insert((pointee, field_idx));
     }
 
+    fn insert_clobbered_pointee_type(&mut self, pointee: TypeId) {
+        self.clobbered_pointee_types.insert(pointee);
+    }
+
     /// True when hoisting `x.field_idx` is unsound: `x` is a reference whose
-    /// pointee's `field_idx` is written in the loop, possibly via an alias.
-    /// By-value roots are covered by the `fully`/`fields`/alias machinery.
+    /// pointee's `field_idx` is written in the loop — directly via an alias, or
+    /// opaquely by a call that received the pointee by `&mut`. By-value roots
+    /// are covered by the `fully`/`fields`/alias machinery.
     fn is_reference_field_aliasing_written(
         &self,
         root_type: TypeId,
@@ -62,7 +70,8 @@ impl ModifiedVars {
         match type_table.get(root_type) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 let pointee = strip_references(*inner, type_table);
-                self.written_field_types.contains(&(pointee, field_idx))
+                self.clobbered_pointee_types.contains(&pointee)
+                    || self.written_field_types.contains(&(pointee, field_idx))
             }
             _ => false,
         }
@@ -520,6 +529,30 @@ fn strip_references(type_id: TypeId, type_table: &TypeTable) -> TypeId {
     }
 }
 
+/// If `expr` is a `&mut`-reference to a struct passed to a call, record its
+/// pointee as clobbered: the callee may write any field of it, so no field of
+/// that struct type is loop-invariant. Immutable `&T` args cannot mutate, and
+/// by-value struct args are independent copies, so neither is recorded.
+fn record_mut_ref_clobber(expr: &NirExpr, modified: &mut ModifiedVars, type_table: &TypeTable) {
+    let mut ty = expr.type_id;
+    // Peel `Ref(MutRef(..))` etc.; a `&mut` anywhere in the wrapper chain means
+    // the callee can reach a mutable handle to the inner struct.
+    let mut saw_mut = false;
+    loop {
+        match type_table.get(ty) {
+            ResolvedType::MutRef(inner) => {
+                saw_mut = true;
+                ty = *inner;
+            }
+            ResolvedType::Ref(inner) => ty = *inner,
+            _ => break,
+        }
+    }
+    if saw_mut && matches!(type_table.get(ty), ResolvedType::Struct { .. }) {
+        modified.insert_clobbered_pointee_type(ty);
+    }
+}
+
 /// Record a field-access write into `written_field_types`, keyed by the pointee
 /// type of the assigned object (`a.f`, `a.b.c`, `arr[i].c`, `(*p).c`).
 fn record_written_field_type(
@@ -718,14 +751,17 @@ fn collect_modified_vars_in_expr(
         NirExprKind::Call { args, .. } => {
             for arg in args {
                 mark_gc_local_as_fully_modified(&arg.expr, modified, type_table);
+                record_mut_ref_clobber(&arg.expr, modified, type_table);
                 collect_modified_vars_in_expr(&arg.expr, modified, type_table);
             }
         }
         NirExprKind::MethodCall { receiver, args, .. } => {
             mark_gc_local_as_fully_modified(receiver, modified, type_table);
+            record_mut_ref_clobber(receiver, modified, type_table);
             collect_modified_vars_in_expr(receiver, modified, type_table);
             for arg in args {
                 mark_gc_local_as_fully_modified(&arg.expr, modified, type_table);
+                record_mut_ref_clobber(&arg.expr, modified, type_table);
                 collect_modified_vars_in_expr(&arg.expr, modified, type_table);
             }
         }
