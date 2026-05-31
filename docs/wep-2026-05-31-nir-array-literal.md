@@ -50,8 +50,8 @@ each pass re-deriving the fact from a statement window.
 
 There is direct precedent. `optimize::string_push` is the string analog:
 it collapses the `String::with_capacity` + `push_str_literal` builder
-window at the NIR level *specifically so that later NIR passes (cse,
-const_folding) see the normalized form* — its module doc says so, and that
+window at the NIR level _specifically so that later NIR passes (cse,
+const_folding) see the normalized form_ — its module doc says so, and that
 it mirrors the WIR `collapse_array_push_sequences` but runs earlier on
 purpose. `ArrayLiteral` is the same move for `Array<T>`. And
 `match_to_switch` is the precedent for the category: a node that `lower`
@@ -88,7 +88,7 @@ Rationale for the minimal shape:
   collapse preserves the pushed expressions verbatim; an `ArrayLiteral`
   evaluates them left-to-right at construction, the same observable order
   as the push sequence it replaces. Const-ness is what unlocks the
-  *consumers* (§Consumers), not a precondition of the *node*. This matches
+  _consumers_ (§Consumers), not a precondition of the _node_. This matches
   the WIR pass, which already collapses arbitrary push values, not only
   constants.
 
@@ -124,7 +124,7 @@ On a match it replaces the `n + 1` statements with a single
 preserving the binding's `local_index`, `type_id`, `is_mut`, and
 `skip_value_copy`. The local stays an `Array<T>`; later mutation of it
 (further `push`es elsewhere) remains valid — the node only describes the
-*initial* value, exactly as the WIR collapse does.
+_initial_ value, exactly as the WIR collapse does.
 
 Placement: in the `run_optimization_passes` fixed-point loop, registered
 as `run_pass("nir/array_literal", …)`, adjacent to `nir/string_push` and
