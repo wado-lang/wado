@@ -107,7 +107,7 @@ struct WriteBatch {
 
 struct EmitOutput {
     emit_index: usize,
-    output_path: String,
+    output_path: PathBuf,
     content: Result<String, String>,
 }
 
@@ -123,19 +123,6 @@ pub enum Phase {
 pub struct Emit {
     pub phase: Phase,
     pub out_template: String,
-}
-
-/// Split an output template `prefix{name}suffix` into its prefix and suffix.
-fn split_template(out_template: &str) -> (&str, &str) {
-    let prefix = out_template
-        .split("{name}")
-        .next()
-        .expect("output template must contain {name}");
-    let suffix = out_template
-        .split("{name}")
-        .nth(1)
-        .expect("output template must contain {name}");
-    (prefix, suffix)
 }
 
 /// Golden files that exist on disk but were not (re)written in this run.
@@ -203,14 +190,12 @@ pub fn run_pipeline(in_template: &str, emits: &[Emit], opt_level: OptLevel, skip
         }
     }
 
-    // Emit specs shared with every worker: (phase, prefix, suffix).
-    let emit_specs: std::sync::Arc<Vec<(Phase, String, String)>> = std::sync::Arc::new(
+    // Output templates shared with every worker, parsed once and reused for
+    // both per-fixture path building and the end-of-run stale prune.
+    let emit_templates: std::sync::Arc<Vec<(Phase, Template)>> = std::sync::Arc::new(
         emits
             .iter()
-            .map(|e| {
-                let (prefix, suffix) = split_template(&e.out_template);
-                (e.phase, prefix.to_string(), suffix.to_string())
-            })
+            .map(|e| (e.phase, Template::parse(&e.out_template)))
             .collect(),
     );
     let distinct_phases = std::sync::Arc::new(distinct_phases);
@@ -237,7 +222,7 @@ pub fn run_pipeline(in_template: &str, emits: &[Emit], opt_level: OptLevel, skip
     for worker_id in 0..num_workers {
         let rx = read_rx.clone();
         let tx = write_tx.clone();
-        let emit_specs = emit_specs.clone();
+        let emit_templates = emit_templates.clone();
         let distinct_phases = distinct_phases.clone();
 
         workers.push(
@@ -299,11 +284,11 @@ pub fn run_pipeline(in_template: &str, emits: &[Emit], opt_level: OptLevel, skip
                             *slot.lock().unwrap() = None;
                         }
 
-                        let outputs = emit_specs
+                        let outputs = emit_templates
                             .iter()
                             .enumerate()
-                            .map(|(emit_index, (phase, prefix, suffix))| {
-                                let output_path = format!("{prefix}{}{suffix}", item.name);
+                            .map(|(emit_index, (phase, tmpl))| {
+                                let output_path = tmpl.output_path(&item.name);
                                 let content = rendered.get(phase).cloned().unwrap_or_else(|| {
                                     Err("internal error: phase not rendered".to_string())
                                 });
@@ -356,34 +341,35 @@ pub fn run_pipeline(in_template: &str, emits: &[Emit], opt_level: OptLevel, skip
                 output_path,
                 content,
             } = output;
+            let display = output_path.display();
             match content {
                 Ok(text) if text.is_empty() => {
                     if skip_empty {
-                        eprintln!("  Skipped {output_path} (empty output)");
+                        eprintln!("  Skipped {display} (empty output)");
                         skipped += 1;
                         continue;
                     }
                     panic!(
-                        "Golden fixture generation failed: Empty output for {output_path}\n\
+                        "Golden fixture generation failed: Empty output for {display}\n\
                          If this test is expected to fail at compile time, add \
                          \"compile_error\" or \"TODO\" to its __DATA__ section."
                     );
                 }
                 Ok(text) => {
-                    if let Some(parent) = Path::new(&output_path).parent()
+                    if let Some(parent) = output_path.parent()
                         && !parent.as_os_str().is_empty()
                     {
                         let _ = fs::create_dir_all(parent);
                     }
                     fs::write(&output_path, &text)
-                        .unwrap_or_else(|e| panic!("Failed to write {output_path}: {e}"));
-                    eprintln!("  Generated {output_path}");
+                        .unwrap_or_else(|e| panic!("Failed to write {display}: {e}"));
+                    eprintln!("  Generated {display}");
                     written[emit_index].insert(batch.name.clone());
                     generated += 1;
                 }
                 Err(e) => {
                     if skip_empty {
-                        eprintln!("  Skipped {output_path} ({e})");
+                        eprintln!("  Skipped {display} ({e})");
                         skipped += 1;
                         continue;
                     }
@@ -406,8 +392,7 @@ pub fn run_pipeline(in_template: &str, emits: &[Emit], opt_level: OptLevel, skip
     // `{name}` we did not just write. This runs only after every output has
     // been regenerated, so the workspace never shows a mass deletion mid-run.
     let mut pruned = 0u32;
-    for (emit, written) in emits.iter().zip(written.iter()) {
-        let tmpl = Template::parse(&emit.out_template);
+    for ((_, tmpl), written) in emit_templates.iter().zip(written.iter()) {
         for path in collect_stale(tmpl.discover(), written) {
             match fs::remove_file(&path) {
                 Ok(()) => {
@@ -477,6 +462,16 @@ fn print_stats(stats: &PipelineStats) {
     );
 }
 
+/// The three-line banner prepended to dumped WIR/NIR golden files, identifying
+/// the phase, the source fixture, and how to regenerate it.
+fn golden_header(title: &str, input_path: &str) -> String {
+    format!(
+        "// Golden file: {title}\n\
+         // Source: {input_path}\n\
+         // Generated by: mise run update-golden-fixtures\n\n"
+    )
+}
+
 /// Compile a single fixture and render every requested phase. The compiler is
 /// invoked at most twice — once for the dump phases (WIR/NIR/lowered NIR) and
 /// once for WAT — regardless of how many emits share those phases.
@@ -533,10 +528,7 @@ async fn render_phases(
                                         "dump produced no WIR (resolve or a later phase returned Bail)",
                                     ));
                                 };
-                                let mut s = String::new();
-                                s.push_str("// Golden file: WIR with -O2 optimization\n");
-                                s.push_str(&format!("// Source: {input_path}\n"));
-                                s.push_str("// Generated by: mise run update-golden-fixtures\n\n");
+                                let mut s = golden_header("WIR with -O2 optimization", input_path);
                                 s.push_str(&wado_compiler::wir_unparse::unparse_wir(
                                     wir_package,
                                     Some(input_path),
@@ -561,10 +553,8 @@ async fn render_phases(
                                 } else {
                                     &unparsed
                                 };
-                                let mut s = String::new();
-                                s.push_str("// Golden file: Optimized NIR with -O2 optimization\n");
-                                s.push_str(&format!("// Source: {input_path}\n"));
-                                s.push_str("// Generated by: mise run update-golden-fixtures\n\n");
+                                let mut s =
+                                    golden_header("Optimized NIR with -O2 optimization", input_path);
                                 s.push_str(content);
                                 Ok(s)
                             });
@@ -683,12 +673,5 @@ mod tests {
 
         let stale = collect_stale(existing, &written);
         assert_eq!(stale, vec![PathBuf::from("a"), PathBuf::from("b")]);
-    }
-
-    #[test]
-    fn split_template_extracts_prefix_and_suffix() {
-        let (prefix, suffix) = split_template("dir/{name}.wir.wado");
-        assert_eq!(prefix, "dir/");
-        assert_eq!(suffix, ".wir.wado");
     }
 }

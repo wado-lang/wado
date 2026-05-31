@@ -32,4 +32,24 @@ impl Template {
         results.sort_by(|a, b| a.0.cmp(&b.0));
         results
     }
+
+    /// The path this template maps `name` to: `prefix` + `name` + `suffix`.
+    /// Inverse of the `{name}` capture in `discover`.
+    pub fn output_path(&self, name: &str) -> PathBuf {
+        PathBuf::from(format!("{}{name}{}", self.prefix, self.suffix))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn output_path_is_inverse_of_capture() {
+        let tmpl = Template::parse("dir/{name}.wir.wado");
+        assert_eq!(
+            tmpl.output_path("loop_basic"),
+            PathBuf::from("dir/loop_basic.wir.wado")
+        );
+    }
 }

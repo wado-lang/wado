@@ -19,9 +19,11 @@ WADO="./target/debug/wado"
 DUMP="./target/debug/wado-dev-tools"
 
 # Generate formatted (clean) versions, collecting the live fixture names.
+# Handwritten inputs use a `-dirty.wado` suffix (hyphen, not dot) so they are
+# visually distinct from the dot-suffixed machine-generated golden files.
 declare -A live_names=()
-for f in "$FIXTURES_DIR"/*.dirty.wado; do
-  name=$(basename "$f" .dirty.wado)
+for f in "$FIXTURES_DIR"/*-dirty.wado; do
+  name=$(basename "$f" -dirty.wado)
   clean="$GOLDEN_DIR/$name.clean.wado"
   cp "$f" "$clean"
   "$WADO" format -w "$clean"
@@ -45,7 +47,7 @@ done
 # each fixture is compiled once, all phases are emitted, and stale per-suffix
 # outputs are pruned at the end.
 # --skip-empty handles no_prelude files that produce empty output.
-IN="$FIXTURES_DIR/{name}.dirty.wado"
+IN="$FIXTURES_DIR/{name}-dirty.wado"
 $DUMP golden-dump --in "$IN" --skip-empty -O2 \
   --emit nir:"$GOLDEN_DIR/{name}.nir.wado" \
   --emit nir-lowered:"$GOLDEN_DIR/{name}.lower.wado" \
