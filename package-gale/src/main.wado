@@ -1,8 +1,11 @@
 use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { parse } from "./g4/parser.wado";
-use { Grammar, merge_grammars, check_references, synthesize_implicit_tokens } from "./ir.wado";
+use { Grammar, merge_grammars, check_references, synthesize_implicit_tokens, normalize_caches } from "./ir.wado";
 use { generate, GenerateOptions } from "./codegen.wado";
+use { lower } from "./lower.wado";
+use { collect_literal_tokens } from "./lexer_gen.wado";
+use { render_dump } from "./dump.wado";
 
 export fn run() with Stdout, Stderr, Environment, Preopens {
     let arguments = args();
@@ -23,30 +26,15 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
 
     if arguments.len() >= 2 && arguments[0] == "dump" {
         let mut paths: Array<String> = [];
-        let mut rule_filter: Option<String> = null;
-        let mut i = 1;
-        while i < arguments.len() {
-            let arg = arguments[i];
-            if arg == "--ir" {
-                // Default mode; accepted as a no-op for explicitness.
-            } else if arg == "--rule" {
-                i += 1;
-                if i >= arguments.len() {
-                    eprintln("gale dump: --rule requires a rule name");
-                    return;
-                }
-                rule_filter = Option::<String>::Some(arguments[i]);
-            } else {
-                paths.push(arg);
-            }
-            i += 1;
+        for let mut i = 1; i < arguments.len(); i += 1 {
+            paths.push(arguments[i]);
         }
-        cmd_dump(paths, &rule_filter);
+        cmd_dump(paths);
         return;
     }
 
     eprintln("Usage: gale gen [--highlight] <grammar.g4> [grammar2.g4 ...]");
-    eprintln("       gale dump [--ir] [--rule NAME] <grammar.g4> [grammar2.g4 ...]");
+    eprintln("       gale dump <grammar.g4> [grammar2.g4 ...]");
 }
 
 fn cmd_gen(paths: Array<String>, options: &GenerateOptions) with Stdout, Stderr, Preopens {
@@ -100,10 +88,21 @@ fn cmd_gen(paths: Array<String>, options: &GenerateOptions) with Stdout, Stderr,
         eprintln(`gale: {e.message}`);
         return;
     }
+
+    // Surface prediction-strategy diagnostics on stderr before
+    // generation. `generate` lowers internally; we lower once more here
+    // to read the diagnostics (cmd_gen is not a hot path). Warnings are
+    // advisory — generation still proceeds and must succeed.
+    let lit_tokens = collect_literal_tokens(&merged.parser_rules);
+    let diag_lowered = lower(&merged, &lit_tokens);
+    for let d of &diag_lowered.diagnostics {
+        eprintln(`gale: warning: {d.rule}: {d.message}`);
+    }
+
     print(generate(&mut merged, options));
 }
 
-fn cmd_dump(paths: Array<String>, rule_filter: &Option<String>) with Stdout, Stderr, Preopens {
+fn cmd_dump(paths: Array<String>) with Stdout, Stderr, Preopens {
     if paths.len() == 0 {
         eprintln("gale dump: no grammar files given");
         return;
@@ -141,26 +140,22 @@ fn cmd_dump(paths: Array<String>, rule_filter: &Option<String>) with Stdout, Std
         grammars.push(grammar);
     }
 
-    let merged = merge_grammars(grammars);
-
-    if let Some(name) = rule_filter {
-        for let rule of &merged.parser_rules {
-            if rule.name == *name {
-                print(`{*rule:#?}\n`);
-                return;
-            }
-        }
-        for let rule of &merged.lexer_rules {
-            if rule.name == *name {
-                print(`{*rule:#?}\n`);
-                return;
-            }
-        }
-        eprintln(`gale dump: rule not found: {*name}`);
+    // Mirror cmd_gen's front-end so lowering sees a valid grammar:
+    // merge the split halves, synthesize implicit tokens, then run the
+    // ANTLR4-compatible reference check before lowering to GIR.
+    let mut merged = merge_grammars(grammars);
+    synthesize_implicit_tokens(&mut merged);
+    if let Err(e) = check_references(&merged) {
+        eprintln(`gale: {e.message}`);
         return;
     }
 
-    print(`{merged:#?}\n`);
+    // Lower to GIR and render the per-rule report derived from the
+    // actual prediction decisions (not the raw surface IR).
+    normalize_caches(&mut merged);
+    let lit_tokens = collect_literal_tokens(&merged.parser_rules);
+    let lowered = lower(&merged, &lit_tokens);
+    print(render_dump(&lowered));
 }
 
 fn read_all(file: &Descriptor) -> Array<u8> {
