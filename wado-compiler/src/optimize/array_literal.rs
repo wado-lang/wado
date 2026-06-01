@@ -146,6 +146,9 @@ impl Collapser<'_> {
         // values }`), and inlining `push_literal` leaves single-use temp
         // bindings (`let v = <element>; place.push(v)`) between the pushes —
         // these are resolved to their value and consumed with the window.
+        // Collect each target's push elements *unresolved* (bare `Local(temp)`
+        // for inlining's element temps); resolution happens after the window so
+        // multi-use temps can be detected first.
         let mut pushes_per_target: Vec<Vec<NirExpr>> = vec![Vec::new(); targets.len()];
         let mut bindings: Vec<(u32, NirExpr)> = Vec::new();
         let mut consumed = 0;
@@ -161,7 +164,7 @@ impl Collapser<'_> {
                 let Some(idx) = targets.iter().position(|t| t.path == path) else {
                     break;
                 };
-                pushes_per_target[idx].push(resolve_binding(element, &bindings));
+                pushes_per_target[idx].push(element.clone());
                 consumed += 1;
                 all_done = pushes_per_target
                     .iter()
@@ -187,12 +190,32 @@ impl Collapser<'_> {
             return 0;
         }
 
+        // Resolve each single-use temp binding into the one element that reads
+        // it as a bare `Local`. A temp referenced by more than one element is
+        // left unresolved: substituting it would clone its initializer into
+        // every slot, duplicating evaluation of an impure value — so it is
+        // caught by the read guard below and aborts the collapse.
+        for (idx, value) in &bindings {
+            let uses = pushes_per_target
+                .iter()
+                .flatten()
+                .filter(|e| is_local(e, *idx))
+                .count();
+            if uses == 1 {
+                for element in pushes_per_target.iter_mut().flatten() {
+                    if is_local(element, *idx) {
+                        *element = value.clone();
+                    }
+                }
+            }
+        }
+
         // Consuming the window drops the temp bindings whose values moved into
         // the literal. That is only sound if no dropped temp is still read —
-        // neither after the window, nor inside an element that referenced the
-        // temp through a sub-expression rather than a bare `Local` (which
-        // `resolve_binding` substitutes). Either residual read would dangle the
-        // dropped binding, so bail.
+        // neither after the window, nor inside an element (a temp left
+        // unresolved above because it is multi-use, or referenced through a
+        // sub-expression rather than a bare `Local`). Either residual read
+        // would dangle the dropped binding, so bail.
         let rest = &stmts[start + 1 + consumed..];
         let reads_after = |idx: u32| rest.iter().any(|s| stmt_reads_local(s, idx));
         let reads_in_element = |idx: u32| {
@@ -306,16 +329,9 @@ fn expr_reads_local(expr: &NirExpr, local: u32) -> bool {
     v.found
 }
 
-/// Resolve a push-argument expression through the window's temp bindings: a
-/// bare `Local(temp)` whose `temp` was just bound to `value` resolves to
-/// `value`. Otherwise the element is cloned as-is.
-fn resolve_binding(element: &NirExpr, bindings: &[(u32, NirExpr)]) -> NirExpr {
-    if let NirExprKind::Local { index, .. } = &element.kind
-        && let Some((_, value)) = bindings.iter().rev().find(|(i, _)| i == index)
-    {
-        return value.clone();
-    }
-    element.clone()
+/// Whether `expr` is a bare `Local(index)` reference.
+fn is_local(expr: &NirExpr, index: u32) -> bool {
+    matches!(&expr.kind, NirExprKind::Local { index: i, .. } if *i == index)
 }
 
 /// A detected `Array<T> { repr: array_new(N), used: 0 }` struct, with the
