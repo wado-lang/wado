@@ -175,7 +175,10 @@ impl Benchmark {
                 s = `{s}: {self.iterations} iter`;
             }
         } else if self.iterations == 0 {
-            s = `{s} (~{self.target_ms} ms/phase)`;
+            // Show the same clamped budget `run` uses, so a stray negative
+            // `target_ms` doesn't print a misleading `~-100 ms/phase`.
+            let budget = if self.target_ms > 0 { self.target_ms } else { 0 };
+            s = `{s} (~{budget} ms/phase)`;
         }
         // `warmup` only applies in fixed mode; auto mode warms up once
         // implicitly during calibration.
