@@ -1,0 +1,32 @@
+// Regression: an array literal whose elements have side effects (mutating a
+// local through `&mut`) must preserve evaluation order and local mutation
+// across the optimizers that materialize and consume `ArrayLiteral`.
+//
+// `optimize::array_literal` lifts the `push_literal` arguments into the
+// `ArrayLiteral { elements }` node, so passes that walk aggregate elements to
+// build safety sets — store/load forwarding's modified-locals set,
+// const-folding's aliased-field invalidation, value_copy_demote's self-taint —
+// must descend into `ArrayLiteral` elements exactly as they do for
+// `TupleLiteral`. If they fall into a catch-all instead, a mutation buried in
+// an element is missed and a stale value can be forwarded.
+use { println, Stdout } from "core:cli";
+
+fn bump(r: &mut i32, by: i32) -> i32 {
+    *r = *r + by;
+    return *r;
+}
+
+export fn run() with Stdout {
+    let mut x = 1;
+    let before = x;
+    // Each element mutates `x` in order: x becomes 11, then 111.
+    let arr: Array<i32> = [bump(&mut x, 10), bump(&mut x, 100)];
+    let after = x;
+    // before=1 (pre-literal), arr=[11, 111], after=111 (both mutations applied).
+    println(`{before},{arr[0]},{arr[1]},{after}`);
+}
+
+__DATA__
+{
+    "stdout": "1,11,111,111\n"
+}

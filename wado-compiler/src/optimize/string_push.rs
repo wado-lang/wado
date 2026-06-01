@@ -202,6 +202,7 @@ fn is_duplicable_receiver(e: &NirExpr) -> bool {
         | NirExprKind::Switch { .. }
         | NirExprKind::StructLiteral { .. }
         | NirExprKind::TupleLiteral { .. }
+        | NirExprKind::ArrayLiteral { .. }
         | NirExprKind::VariantConstruct { .. }
         | NirExprKind::VariantTag { .. }
         | NirExprKind::VariantTest { .. }

@@ -1081,7 +1081,7 @@ fn is_self_derived(expr: &NirExpr, tainted: &IndexSet<u32>, tt: &Rc<RefCell<Type
         NirExprKind::StructLiteral { fields, .. } => fields
             .iter()
             .any(|f| is_self_derived(&f.value, tainted, tt)),
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             elements.iter().any(|e| is_self_derived(e, tainted, tt))
         }
         NirExprKind::VariantConstruct { payload, .. } => payload
@@ -1098,7 +1098,7 @@ fn is_self_derived(expr: &NirExpr, tainted: &IndexSet<u32>, tt: &Rc<RefCell<Type
 
 fn expr_children(expr: &NirExpr) -> Box<dyn Iterator<Item = &NirExpr> + '_> {
     use NirExprKind::{
-        Assign, Binary, Block, BoolLiteral, BytesLiteral, Call, Cast, CharLiteral,
+        ArrayLiteral, Assign, Binary, Block, BoolLiteral, BytesLiteral, Call, Cast, CharLiteral,
         ClosureToCanonical, CmRawCall, EnumConstruct, FieldAccess, FloatLiteral, GlobalVarGet,
         GlobalVarSet, If, Index, IndirectCall, IntLiteral, LabeledBlock, Local, Match, MethodCall,
         Null, StringLiteral, StructLiteral, Switch, TupleLiteral, Unary, Unit, VariantConstruct,
@@ -1141,7 +1141,7 @@ fn expr_children(expr: &NirExpr) -> Box<dyn Iterator<Item = &NirExpr> + '_> {
             ),
         ),
         StructLiteral { fields, .. } => Box::new(fields.iter().map(|f| &f.value)),
-        TupleLiteral { elements } => Box::new(elements.iter()),
+        TupleLiteral { elements } | ArrayLiteral { elements } => Box::new(elements.iter()),
         VariantConstruct { payload, .. } => {
             Box::new(payload.iter().map(std::convert::AsRef::as_ref))
         }
@@ -1197,7 +1197,7 @@ fn stmt_exprs(stmt: &NirStmt) -> Box<dyn Iterator<Item = &NirExpr> + '_> {
 
 fn expr_children_mut(expr: &mut NirExpr) -> Vec<&mut NirExpr> {
     use NirExprKind::{
-        Assign, Binary, Block, BoolLiteral, BytesLiteral, Call, Cast, CharLiteral,
+        ArrayLiteral, Assign, Binary, Block, BoolLiteral, BytesLiteral, Call, Cast, CharLiteral,
         ClosureToCanonical, CmRawCall, EnumConstruct, FieldAccess, FloatLiteral, GlobalVarGet,
         GlobalVarSet, If, Index, IndirectCall, IntLiteral, LabeledBlock, Local, Match, MethodCall,
         Null, StringLiteral, StructLiteral, Switch, TupleLiteral, Unary, Unit, VariantConstruct,
@@ -1253,7 +1253,7 @@ fn expr_children_mut(expr: &mut NirExpr) -> Vec<&mut NirExpr> {
             v
         }
         StructLiteral { fields, .. } => fields.iter_mut().map(|f| &mut f.value).collect(),
-        TupleLiteral { elements } => elements.iter_mut().collect(),
+        TupleLiteral { elements } | ArrayLiteral { elements } => elements.iter_mut().collect(),
         VariantConstruct { payload, .. } => payload
             .iter_mut()
             .map(std::convert::AsMut::as_mut)

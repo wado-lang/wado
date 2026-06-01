@@ -840,7 +840,7 @@ fn recurse_children(
                 walk_expr_for_uses(&field.value, candidate_names, candidates, invalid, tracked);
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 walk_expr_for_uses(elem, candidate_names, candidates, invalid, tracked);
             }

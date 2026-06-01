@@ -320,7 +320,7 @@ impl ModRef {
                     self.accumulate_expr(&f.value, scope);
                 }
             }
-            NirExprKind::TupleLiteral { elements } => {
+            NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
                 self.allocates = true;
                 for e in elements {
                     self.accumulate_expr(e, scope);

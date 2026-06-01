@@ -189,7 +189,9 @@ pub(super) fn is_pure_expr(expr: &NirExpr) -> bool {
         | NirExprKind::VariantPayload { expr: inner, .. } => is_pure_expr(inner),
         NirExprKind::Index { expr: e, index: i } => is_pure_expr(e) && is_pure_expr(i),
         NirExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| is_pure_expr(&f.value)),
-        NirExprKind::TupleLiteral { elements } => elements.iter().all(is_pure_expr),
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
+            elements.iter().all(is_pure_expr)
+        }
         NirExprKind::VariantConstruct { payload, .. } => {
             payload.as_ref().is_none_or(|p| is_pure_expr(p))
         }

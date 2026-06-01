@@ -497,7 +497,7 @@ fn walk_expr_for_leftmost(expr: &NirExpr, candidate: u32, field_name: &str) -> L
         NirExprKind::StructLiteral { fields, .. } => {
             walk_children_pure(fields.iter().map(|f| &f.value), candidate, field_name)
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             walk_children_pure(elements.iter(), candidate, field_name)
         }
         NirExprKind::VariantConstruct { payload, .. } => match payload {

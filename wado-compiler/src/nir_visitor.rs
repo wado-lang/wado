@@ -197,7 +197,7 @@ pub trait NirMutVisitor {
                     self.visit_expr(&mut field.value);
                 }
             }
-            NirExprKind::TupleLiteral { elements } => {
+            NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
                 for elem in elements {
                     self.visit_expr(elem);
                 }
@@ -416,7 +416,7 @@ pub trait NirRefVisitor {
                     self.visit_expr(&field.value);
                 }
             }
-            NirExprKind::TupleLiteral { elements } => {
+            NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
                 for elem in elements {
                     self.visit_expr(elem);
                 }
@@ -643,7 +643,7 @@ pub fn opt_walk_expr(visitor: &mut impl NirOptVisitor, expr: &mut NirExpr) -> bo
                 changed |= visitor.visit_expr(&mut field.value);
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 changed |= visitor.visit_expr(elem);
             }
@@ -779,7 +779,7 @@ pub fn expr_has_break_to(label: &str, expr: &NirExpr) -> bool {
         NirExprKind::VariantConstruct { payload, .. } => payload
             .as_ref()
             .is_some_and(|p| expr_has_break_to(label, p)),
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             elements.iter().any(|e| expr_has_break_to(label, e))
         }
         NirExprKind::StructLiteral { fields, .. } => {

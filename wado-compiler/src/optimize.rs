@@ -43,6 +43,7 @@
 //! `value_copy_elide` (full strip) and `value_copy_demote` (deep → shallow).
 
 mod alias;
+mod array_literal;
 mod condition_implication;
 mod const_branch_prune;
 mod const_folding;
@@ -72,6 +73,7 @@ mod tmpl_hoist;
 mod value_copy_demote;
 mod value_copy_elide;
 
+use array_literal::collapse_array_literals;
 use condition_implication::eliminate_implied_conditions;
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
 use const_folding::fold_constants;
@@ -532,6 +534,14 @@ fn run_optimization_passes(
         // `optimize/sroa_param.rs`.
         step!("nir/sroa_param", sroa_single_field_parameters);
         step!("nir/inline", |p| inline_functions(p, threshold));
+        // Materialize `ArrayLiteral` from the `Array<T> { array_new(N) } +
+        // N × Array::push` builder window. Runs *after* inline: the
+        // `SequenceLiteralBuilder` methods (and, for wrapper builders such
+        // as `SeqVec { items: Array<T> }`, the `push_literal → self.field.push`
+        // delegation) must be inlined first so the raw `array_new + push`
+        // window — direct or field-rooted — is exposed. Later `cse` /
+        // `const_fold` in this same loop then see the normalized literal.
+        step!("nir/array_literal", collapse_array_literals);
         // Adjacent-use Box-local elision. After `sroa_param` reshapes
         // `Box<T>` parameters into scalars and `inline` propagates the
         // resulting `FieldAccess(Local(x), "value")` shape into call

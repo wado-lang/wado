@@ -362,7 +362,7 @@ fn mark_ref_fields_in_expr(
                 mark_ref_fields_in_expr(&field.value, decomposed, stores_aliased);
             }
         }
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 mark_ref_fields_in_expr(elem, decomposed, stores_aliased);
             }
@@ -1465,7 +1465,7 @@ fn rewrite_expr(
                 );
             }
         }
-        NirExprKind::TupleLiteral { elements, .. } => {
+        NirExprKind::TupleLiteral { elements, .. } | NirExprKind::ArrayLiteral { elements, .. } => {
             for elem in elements {
                 rewrite_expr(
                     elem,

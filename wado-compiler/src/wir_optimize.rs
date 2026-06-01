@@ -56,9 +56,7 @@ use crate::wir::WirPackage;
 
 pub use dce::{compact_dead_items, dce_unreachable_types, mark_unreachable_defined_functions};
 
-use array::{
-    collapse_array_push_sequences, promote_constant_arrays_to_data, split_large_array_literals,
-};
+use array::{promote_constant_arrays_to_data, split_large_array_literals};
 use cleanup::cleanup;
 use const_forward::forward_struct_field_constants;
 use elide_local::elide_write_only_locals;
@@ -143,19 +141,13 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
 
     // Phase 3: Data flow
     //
-    // Collapse inlined push sequences and forward constants.
-    // Order matters: push collapse exposes StructNew nodes that field
-    // forwarding then uses for constant index bounds check elimination.
-    // Loop-guarded bounds checks are eliminated at TIR level by the
+    // Forward constant struct fields. Array literals already arrive as
+    // `StructNew Array<T> { repr: array.new_fixed, used: N }` (the NIR
+    // `optimize::array_literal` pass materializes the literal and `wir_build`
+    // lowers it), so the bounds-check-elimination path keys on that shape
+    // directly. Loop-guarded bounds checks are eliminated at TIR level by the
     // condition_implication pass.
     profiler.span_start("wir/phase3_data_flow");
-    collapse_array_push_sequences(module);
-    // Struct-field constant forwarding. Recovers the
-    // bounds-check-elimination path that ran on `array_push_collapse`'s
-    // output (a fresh `StructNew Array<T> { used: N, ... }` literal).
-    // The TIR-level `field_forward` pass cannot see through the
-    // `__seq_lit:` block + push() chain, so this WIR-level pass remains
-    // for that pattern.
     forward_struct_field_constants(module);
     profiler.span_end("wir/phase3_data_flow");
 
@@ -221,11 +213,11 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
 
     // Phase 8: Final DCE & compaction
     //
-    // Mark functions orphaned by earlier WIR passes as dead (notably
-    // `collapse_array_push_sequences` deleting the only call site of a
-    // single-element array literal's `Array<T>::push` instantiation),
-    // then mark unreachable types as dead and compact all dead items
-    // out of the module.
+    // Mark functions orphaned by earlier WIR passes as dead (notably a
+    // single-element array literal's `Array<T>::push` instantiation, whose
+    // only call site never existed once NIR `optimize::array_literal`
+    // materialized the literal), then mark unreachable types as dead and
+    // compact all dead items out of the module.
     profiler.span_start("wir/phase8_dce_compact");
     dce::mark_unreachable_defined_functions(module);
     dce_unreachable_types(module);

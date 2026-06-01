@@ -757,7 +757,7 @@ impl<'a> NirUnparser<'a> {
                 });
                 self.output.push_str(" }");
             }
-            NirExprKind::TupleLiteral { elements } => {
+            NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
                 self.delimited("[", "]", elements, NirUnparser::unparse_expr);
             }
             NirExprKind::IndirectCall { callee, args } => {

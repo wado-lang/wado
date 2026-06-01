@@ -138,6 +138,7 @@ impl UsageAnalyzer<'_> {
             | NirExprKind::Index { .. }
             | NirExprKind::StructLiteral { .. }
             | NirExprKind::TupleLiteral { .. }
+            | NirExprKind::ArrayLiteral { .. }
             | NirExprKind::Block(_)
             | NirExprKind::LabeledBlock { .. }
             | NirExprKind::If { .. }
@@ -220,6 +221,7 @@ impl NirRefVisitor for UsageAnalyzer<'_> {
             | NirExprKind::Switch { .. }
             | NirExprKind::StructLiteral { .. }
             | NirExprKind::TupleLiteral { .. }
+            | NirExprKind::ArrayLiteral { .. }
             | NirExprKind::VariantConstruct { .. }
             | NirExprKind::VariantTag { .. }
             | NirExprKind::VariantTest { .. }
@@ -293,6 +295,7 @@ fn arg_source_root(expr: &NirExpr) -> Option<u32> {
         | NirExprKind::GlobalVarSet { .. }
         | NirExprKind::StructLiteral { .. }
         | NirExprKind::TupleLiteral { .. }
+        | NirExprKind::ArrayLiteral { .. }
         | NirExprKind::Block(_)
         | NirExprKind::LabeledBlock { .. }
         | NirExprKind::If { .. }

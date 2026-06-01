@@ -37,22 +37,23 @@ The optimizer runs after lowering and before Wasm emission. `optimize.rs` orches
    5. Short `push_str` Simplification
    6. Single-Field Parameter SROA
    7. Function Inlining
-   8. Adjacent-Use Box-Local Elision
-   9. LabeledBlock Fusion
-   10. Reference Elimination
-   11. SROA
-   12. Copy Propagation
-   13. Dead Argument Elimination
-   14. Dead Return Value Elimination
-   15. Write-Only Local Elimination
-   16. Common Subexpression Elimination
-   17. Store-to-Load Forwarding
-   18. Constant Folding
-   19. Constant Global Promotion
-   20. Constant Branch Pruning
-   21. Loop-Invariant Code Motion
-   22. Condition Implication
-   23. Template String Buffer Hoisting
+   8. Array-Literal Materialization
+   9. Adjacent-Use Box-Local Elision
+   10. LabeledBlock Fusion
+   11. Reference Elimination
+   12. SROA
+   13. Copy Propagation
+   14. Dead Argument Elimination
+   15. Dead Return Value Elimination
+   16. Write-Only Local Elimination
+   17. Common Subexpression Elimination
+   18. Store-to-Load Forwarding
+   19. Constant Folding
+   20. Constant Global Promotion
+   21. Constant Branch Pruning
+   22. Loop-Invariant Code Motion
+   23. Condition Implication
+   24. Template String Buffer Hoisting
 3. Hot Field Scalarization — runs once after the loop converges.
 4. Final DCE — clean up code made dead by optimizations.
 5. Select Lowering — post-optimization rewrite (all levels).
@@ -68,6 +69,12 @@ All NIR passes live in `wado-compiler/src/optimize/`. The optimizer module-level
 Replaces small pure-function calls with their body, sized by an expression-count threshold. Eligible callees are pure, non-recursive, non-generic, take/return no references, are not from the core library, and fit under the threshold. `#[inline]` multiplies the threshold 5×, `#[inline(always)]` forces, `#[inline(never)]` blocks.
 
 E2E: [opt_inline.wado](../wado-compiler/tests/fixtures/opt_inline.wado), [opt_inline_backtrack_miscompile.wado](../wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado).
+
+### Array-Literal Materialization (`array_literal.rs`)
+
+Rewrites the `Array<T>` builder window — an `Array<T> { repr: array_new(N), used: 0 }` struct followed by `N` `Array::push` calls — into `NirExprKind::ArrayLiteral { elements }`, giving a constant array the same first-class, analyzable value shape `StructLiteral` / `TupleLiteral` already have (`wir_build` lowers it to `array.new_fixed`). Runs after `inline`, which expands the `SequenceLiteralBuilder` `new_literal` / `push_literal` / `build` methods to expose the raw window. The push place may be the bound local (a direct `[…] as Array<T>` literal) or a field of it (a custom `SequenceLiteralBuilder` that wraps an `Array<T>`, e.g. `SeqVec { items: Array<T> }`, `Bag { keys, values }` with interleaved per-field pushes). `Array::push` is matched by its `CompilerItem::ArrayPush` marker. Single-use pure element temps that inlining leaves between pushes are resolved and dropped, guarded so a temp read elsewhere is never dangled. Empty literals (`array_new(0)`) are left growable. Subsumes the retired WIR `collapse_array_push_sequences`; see [WEP 2026-05-31](./wep-2026-05-31-nir-array-literal.md).
+
+E2E: [array_literal_nir_materialize.wado](../wado-compiler/tests/fixtures/array_literal_nir_materialize.wado), [array_literal_side_effect_element.wado](../wado-compiler/tests/fixtures/array_literal_side_effect_element.wado), [array_append_collapse.wado](../wado-compiler/tests/fixtures/array_append_collapse.wado).
 
 ### Single-Field Parameter SROA (`sroa_param.rs`)
 
@@ -336,7 +343,8 @@ Two complementary variants run in sequence:
 
 ### Phase 3: Data Flow
 
-- Collapse array append sequences — merges consecutive `append` calls into `array.new_fixed`. E2E: [array_append_collapse.wado](../wado-compiler/tests/fixtures/array_append_collapse.wado).
+Array literals arrive as `array.new_fixed` directly (the NIR [Array-Literal Materialization](#array-literal-materialization-array_literalrs) pass + `wir_build` lowering); the WIR-level collapse that used to reconstruct them here is retired.
+
 - Forward struct field constants — tracks known field values (constants and `LocalGet` references) through `StructGet` for constant-index bounds-check elimination. Resolves block-result `StructNew` patterns for single-exit blocks. Uses `stores`-aware alias analysis: locals passed to functions without `stores` declarations are not marked aliased, enabling field forwarding across calls. E2E: [array_bounds_elim_const_wir.wado](../wado-compiler/tests/fixtures/array_bounds_elim_const_wir.wado).
 
 ### Phase 4: Library-Specific Rewrites
@@ -368,7 +376,7 @@ Trivial init-guard removal — removes compiler-generated module-initialization 
 
 ### Phase 8: Final DCE and Compaction
 
-- Dead defined-function elimination — `mark_unreachable_defined_functions` walks `module.exports` + `module.elements` and BFSes the WIR call graph, marking unreachable defined-function indices as dead. Catches functions orphaned by Phase 3 `collapse_array_push_sequences` (e.g. `Array<T>::push` / `::grow` instantiations whose only call site was a single-element array literal). Marks via `module.dead_func_indices`; the actual removal + reindexing happens in compaction. The pass reads the `WirFuncId` ↔ array-index offset from `WirPackage::defined_func_base`, so the same implementation handles both the GC module (`DEFINED_FUNC_BASE`) and the linear-memory module (`0`); the latter is invoked from `codegen/component.rs::lower_core_module` where `dead_type_indices` is also populated to mirror the mem module's 1:1 function/type correspondence. E2E: [wir_optimize_dce_orphan_push.wado](../wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado).
+- Dead defined-function elimination — `mark_unreachable_defined_functions` walks `module.exports` + `module.elements` and BFSes the WIR call graph, marking unreachable defined-function indices as dead. Catches functions whose only call site never materialized (e.g. `Array<T>::push` / `::grow` instantiations for a single-element array literal, whose `push` chain the NIR [Array-Literal Materialization](#array-literal-materialization-array_literalrs) pass turns into `array.new_fixed`). Marks via `module.dead_func_indices`; the actual removal + reindexing happens in compaction. The pass reads the `WirFuncId` ↔ array-index offset from `WirPackage::defined_func_base`, so the same implementation handles both the GC module (`DEFINED_FUNC_BASE`) and the linear-memory module (`0`); the latter is invoked from `codegen/component.rs::lower_core_module` where `dead_type_indices` is also populated to mirror the mem module's 1:1 function/type correspondence. E2E: [wir_optimize_dce_orphan_push.wado](../wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado).
 - Dead type elimination — removes GC type definitions not referenced by any live code (transitive).
 - Compact dead items — removes all items marked dead from the module.
 

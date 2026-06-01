@@ -1,0 +1,18 @@
+// `optimize::array_literal` materializes a constant array literal into a
+// `NirExprKind::ArrayLiteral`, which `wir_build` lowers to `array.new_fixed`.
+// The NIR-level literal also lets later passes see the static length: the
+// indexed reads below are bounds-check-free and the values are visible to
+// const-folding.
+export fn run() {
+    let a: Array<i32> = [10, 20, 30];
+    assert a[0] == 10;
+    assert a[1] == 20;
+    assert a[2] == 30;
+    assert a.len() == 3;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["array.new_fixed<i32>(10, 20, 30)"]
+}
