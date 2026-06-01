@@ -310,26 +310,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.sem.types.method_impl_type_params.get(&key).cloned()
     }
 
-    /// Resolved parameter types (declaration order, incl. receiver) recorded
-    /// by `Elaborator::resolve_method`.
-    fn ann_method_param_types(&self, id: crate::ast::AstId) -> Option<Vec<crate::tir::TypeId>> {
+    /// Resolved parameter types (declaration order, incl. receiver for impl
+    /// methods) recorded by `resolve_function` / `resolve_method`.
+    fn ann_fn_param_types(&self, id: crate::ast::AstId) -> Option<Vec<crate::tir::TypeId>> {
         let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
-        self.sem.types.method_param_types.get(&key).cloned()
+        self.sem.types.fn_param_types.get(&key).cloned()
     }
 
-    /// Resolved return type recorded by `Elaborator::resolve_method`.
-    fn ann_method_return_type(&self, id: crate::ast::AstId) -> Option<crate::tir::TypeId> {
+    /// Resolved (post-async-erasure) return type recorded by
+    /// `resolve_function` / `resolve_method`.
+    fn ann_fn_return_type(&self, id: crate::ast::AstId) -> Option<crate::tir::TypeId> {
         let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
-        self.sem.types.method_return_types.get(&key).copied()
+        self.sem.types.fn_return_types.get(&key).copied()
     }
 
-    /// Method-level TIR type params recorded by `Elaborator::resolve_method`.
-    fn ann_method_type_params(
-        &self,
-        id: crate::ast::AstId,
-    ) -> Option<Vec<crate::tir::TirTypeParam>> {
+    /// TIR type params recorded by `resolve_function` / `resolve_method`.
+    fn ann_fn_type_params(&self, id: crate::ast::AstId) -> Option<Vec<crate::tir::TirTypeParam>> {
         let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
-        self.sem.types.method_type_params.get(&key).cloned()
+        self.sem.types.fn_type_params.get(&key).cloned()
     }
 
     /// Build a [`TypeLookup`] view over the current module's import
@@ -1148,13 +1146,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// are pure projections that don't depend on the body walk, but
     /// would duplicate `Elaborator` helpers and balloon this file.
     fn reify_function(&mut self, func: &ast::Function) -> Option<TirFunction> {
+        // Single source of truth: read the (post-async-erasure) return type
+        // `resolve_function` resolved, rather than re-reading the fragile
+        // name-keyed `function_return_types` map (shared with call sites and
+        // overwritable by later registrations).
         let return_type = self
-            .sem
-            .decls
-            .function_return_types
-            .get(&func.name)
-            .copied()
-            .unwrap_or(crate::tir::TypeTable::UNIT);
+            .ann_fn_return_type(func.id)
+            .expect("resolve_function records the return type for every function reify emits");
 
         let mut ctx = FunctionContext::new(return_type, func.name.clone());
         if func.is_async {
@@ -1183,28 +1181,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let saved_effect_param_names =
             std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
 
-        // `<F: fn(...)>` bounds → the bound's resolved function type,
-        // realised eagerly (item.rs:1569). The signature references the
-        // real type params, so resolve it in their scope.
-        let fn_bound_map: crate::hashmap::IndexMap<String, TypeId> = func
-            .type_params
-            .iter()
-            .filter_map(|p| {
-                let sig = p.bounds.iter().find_map(|b| b.fn_signature.as_ref())?;
-                let ty = self
-                    .resolve_type_in_scope(&ast::Type::Function(sig.clone()), &type_param_names);
-                Some((p.name.clone(), ty))
-            })
-            .collect();
-
         // Publish the body's type-param scope (see `reify_method`).
         let saved_type_param_names =
             std::mem::replace(&mut self.current_type_param_names, type_param_names.clone());
 
+        // Single source of truth: read the resolved param types
+        // `resolve_function` recorded (in `func.params` order, with `<F: fn>`
+        // bounds already realised), rather than re-resolving each here.
+        let param_types = self
+            .ann_fn_param_types(func.id)
+            .expect("resolve_function records param types for every function reify emits");
         let mut params = Vec::with_capacity(func.params.len());
-        for param in &func.params {
-            let type_id =
-                self.resolve_type_with_fn_bounds(&param.ty, &type_param_names, &fn_bound_map);
+        for (p_idx, param) in func.params.iter().enumerate() {
+            let type_id = param_types[p_idx];
             let default_expr = param
                 .default
                 .as_ref()
@@ -1228,30 +1217,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.current_type_param_names = saved_type_param_names;
         self.current_effect_param_names = saved_effect_param_names;
 
-        let mut non_effect_non_fn_idx: u32 = 0;
-        let type_params: Vec<crate::tir::TirTypeParam> = func
-            .type_params
-            .iter()
-            .filter_map(|p| {
-                if p.is_effect {
-                    return None;
-                }
-                if p.bounds.iter().any(|b| b.fn_signature.is_some()) {
-                    return None;
-                }
-                let idx = non_effect_non_fn_idx;
-                non_effect_non_fn_idx += 1;
-                let default = p.default.as_ref().map(|ty| self.resolve_type(ty));
-                Some(crate::tir::TirTypeParam {
-                    name: p.name.clone(),
-                    is_effect: p.is_effect,
-                    is_pack: p.is_pack,
-                    bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                    default,
-                    index: idx,
-                })
-            })
-            .collect();
+        // Single source of truth: read the TIR type params `resolve_function`
+        // projected (effect / `fn`-bound params filtered, dense indices,
+        // defaults resolved with the type-param scope alive), rather than
+        // re-projecting them here after the scope is torn down.
+        let type_params = self
+            .ann_fn_type_params(func.id)
+            .expect("resolve_function records the type params for every function reify emits");
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1508,7 +1480,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Single source of truth: read the return type `resolve_method`
         // resolved, rather than re-resolving the return annotation.
         let return_type = self
-            .ann_method_return_type(func.id)
+            .ann_fn_return_type(func.id)
             .expect("resolve_method records the return type for every impl method reify emits");
 
         let mut ctx = FunctionContext::new(return_type, func.name.clone());
@@ -1528,7 +1500,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `resolve_method` recorded (in `func.params` order, receiver
         // included), rather than re-resolving each here.
         let param_types = self
-            .ann_method_param_types(func.id)
+            .ann_fn_param_types(func.id)
             .expect("resolve_method records param types for every impl method reify emits");
         let mut params = Vec::with_capacity(func.params.len());
         for (p_idx, p) in func.params.iter().enumerate() {
@@ -1566,7 +1538,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // dense indices, defaults resolved with the type-param scope alive),
         // rather than re-projecting them here after the scope is torn down.
         let type_params = self
-            .ann_method_type_params(func.id)
+            .ann_fn_type_params(func.id)
             .expect("resolve_method records the method type params for every impl method reify emits");
 
         Some(TirFunction {

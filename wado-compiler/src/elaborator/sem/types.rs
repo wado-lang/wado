@@ -337,18 +337,19 @@ pub(crate) struct TypeAnnotations {
     /// explicitly-written methods (unique key); default-method bodies land
     /// under their owning module.
     pub(crate) method_impl_type_params: IndexMap<SymbolKey, Vec<crate::tir::TirTypeParam>>,
-    /// Resolved parameter types per impl-method `AstId`, in declaration order
-    /// including the receiver (`&self` → `&Self`), as `resolve_method`
-    /// resolved them. Reify reads these instead of re-resolving each param.
-    pub(crate) method_param_types: IndexMap<SymbolKey, Vec<crate::tir::TypeId>>,
-    /// Resolved return type per impl-method `AstId`. Reify reads it instead of
-    /// re-resolving the return annotation.
-    pub(crate) method_return_types: IndexMap<SymbolKey, crate::tir::TypeId>,
-    /// Method-level TIR type params per impl-method `AstId` (effect / `fn`-bound
-    /// params filtered out, dense indices, defaults resolved with the method's
-    /// type-param scope in place). Reify reads these instead of re-projecting
-    /// them after its own scope has been torn down.
-    pub(crate) method_type_params: IndexMap<SymbolKey, Vec<crate::tir::TirTypeParam>>,
+    /// Resolved parameter types per function/method `AstId`, in declaration
+    /// order (for impl methods, including the receiver `&self` → `&Self`), as
+    /// `resolve_function` / `resolve_method` resolved them. Reify reads these
+    /// instead of re-resolving each param.
+    pub(crate) fn_param_types: IndexMap<SymbolKey, Vec<crate::tir::TypeId>>,
+    /// Resolved (post-async-erasure) return type per function/method `AstId`.
+    /// Reify reads it instead of re-resolving the return annotation.
+    pub(crate) fn_return_types: IndexMap<SymbolKey, crate::tir::TypeId>,
+    /// TIR type params per function/method `AstId` (effect / `fn`-bound params
+    /// filtered out, dense indices, defaults resolved with the type-param scope
+    /// in place). Reify reads these instead of re-projecting them after its own
+    /// scope has been torn down.
+    pub(crate) fn_type_params: IndexMap<SymbolKey, Vec<crate::tir::TirTypeParam>>,
 }
 
 /// One tuple-`for-of` element's slice of the body-level annotation maps.

@@ -1212,6 +1212,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.current_effect_param_decls = old_effect_param_decls;
         drop(scope);
 
+        // Record the resolved signature for reify to read back (single source
+        // of truth = this path): param types in declaration order, the
+        // (post-async-erasure) return type, and the projected TIR type params
+        // (defaults resolved with the type-param scope alive, above).
+        let sig_key = self.ann_key(func.id);
+        self.sem
+            .types
+            .fn_param_types
+            .insert(sig_key.clone(), params.iter().map(|p| p.type_id).collect());
+        self.sem
+            .types
+            .fn_return_types
+            .insert(sig_key.clone(), return_type);
+        self.sem
+            .types
+            .fn_type_params
+            .insert(sig_key, type_params.clone());
+
         Some(TirFunction {
             module_source: ModuleSource::default(),
             name: func.name.clone(),
@@ -1822,20 +1840,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (single source of truth = this path); `params` is in `func.params`
         // order including the receiver.
         let sig_key = self.ann_key(func.id);
-        self.sem.types.method_param_types.insert(
+        self.sem.types.fn_param_types.insert(
             sig_key.clone(),
             params.iter().map(|p| p.type_id).collect(),
         );
         self.sem
             .types
-            .method_return_types
+            .fn_return_types
             .insert(sig_key, return_type);
         // Record the method-level TIR type params (with defaults resolved while
         // the type-param scope was still alive, above) for reify to read back
         // rather than re-projecting them after its scope is torn down.
         self.sem
             .types
-            .method_type_params
+            .fn_type_params
             .insert(self.ann_key(func.id), type_params.clone());
 
         // Store type parameters for generic methods (for call site substitution)
