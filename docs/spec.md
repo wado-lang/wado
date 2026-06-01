@@ -2148,7 +2148,7 @@ pub struct Config {
 }
 ```
 
-Within the defining module, all fields (including private ones) are accessible for construction, reading, and mutation. From other modules, accessing or constructing with a private field produces a compile error.
+Within the defining module, all fields (including private ones) are accessible for construction, reading, and mutation. From other modules, reading or setting a private field produces a compile error — including naming it in a struct literal. A private field may still be *omitted* from a struct literal in another module when it has a default expression (`f: T = expr`): the default is evaluated in the defining module, so the field is never read or set across the boundary and encapsulation is preserved. A private field without a default cannot be satisfied from another module, so such a struct can only be constructed by a function in its own module.
 
 **Struct Construction:**
 

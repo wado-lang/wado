@@ -1,0 +1,15 @@
+// Test: another module may construct a struct that has a private field when
+// that field has a default and is omitted. The default is evaluated in the
+// defining module, so the private field is never read or written across the
+// boundary — encapsulation is preserved.
+use { println, Stdout } from "core:cli";
+use { Counter, counter_count } from "./sub/pub_struct_field_module.wado";
+
+export fn run() with Stdout {
+    let c = Counter { name: "hits" };  // private `count` omitted → default 0
+    println(c.name);
+    println(`{counter_count(c)}`);
+}
+
+__DATA__
+{ "stdout": "hits\n0\n" }

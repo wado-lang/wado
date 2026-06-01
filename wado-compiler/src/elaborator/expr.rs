@@ -3405,8 +3405,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|info| info.field_defaults.clone())
             .unwrap_or_default();
         let mut fields = fields;
+        // Field names the user actually wrote in the literal, captured before
+        // default synthesis below so an omitted-but-defaulted field is not
+        // mistaken for an explicitly-provided one (matters for the visibility
+        // check further down).
+        let provided_names: IndexSet<String> = fields.iter().map(|f| f.name.clone()).collect();
         if !struct_field_types.is_empty() {
-            let provided_names: IndexSet<String> = fields.iter().map(|f| f.name.clone()).collect();
             for (idx, (expected_name, expected_type_id)) in struct_field_types.iter().enumerate() {
                 if provided_names.contains(expected_name) {
                     continue;
@@ -3431,13 +3435,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             fields.sort_by_key(|f| f.field_index);
         }
 
-        // Check field visibility: non-pub fields cannot be set from other modules
+        // Check field visibility: a non-pub field may not be *set* from another
+        // module. Omitting a private field is allowed when it has a default —
+        // the default is evaluated in the defining module, so encapsulation is
+        // preserved — so only flag fields the user explicitly provided, not the
+        // defaults synthesized above.
         if struct_module_source != self.current_module_source
             && let Some(struct_info) =
                 self.lookup_struct_fields_in(&struct_name, &struct_module_source)
         {
             for (fname, _, is_pub) in &struct_info.fields {
-                if !is_pub && fields.iter().any(|f| f.name == *fname) {
+                if !is_pub && provided_names.contains(fname) {
                     let _ = self.logger.error(TypeError::PrivateFieldAccess {
                         struct_name: struct_name.clone(),
                         field_name: fname.clone(),

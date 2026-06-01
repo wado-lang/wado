@@ -1,0 +1,10 @@
+// Test: explicitly setting a private field from another module is still an
+// error, even when the field has a default. Only omitting it is allowed.
+use { Counter } from "./sub/pub_struct_field_module.wado";
+
+export fn run() {
+    let c = Counter { name: "hits", count: 5 };
+}
+
+__DATA__
+{ "compile_error": "field `count` of struct `Counter` is private" }
