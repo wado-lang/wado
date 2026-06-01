@@ -2238,7 +2238,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_tuple_literal(tuple_lit, ctx, span)
             }
             ast::Expr::Cast(cast) => {
-                let target_type = self.resolve_type(&cast.target_type);
+                // 7-A (E2-thin): resolving `cast.target_type` is a
+                // scope-sensitive decision annotate already makes and records
+                // as the cast expression's type. Read it instead of
+                // re-resolving; re-resolution remains only as a fallback for
+                // any node annotate did not type, and is dropped once the
+                // contract is proven complete.
+                let target_type = self
+                    .ann_expression_types(cast.id)
+                    .unwrap_or_else(|| self.resolve_type(&cast.target_type));
                 // `expr as i128/u128` lowers to a `from_u64` / `from_i64`
                 // / `from_pair` constructor call rather than a bare cast,
                 // since the 128-bit types are prelude structs. Mirrors
