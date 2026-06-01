@@ -330,6 +330,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.sem.types.fn_type_params.get(&key).cloned()
     }
 
+    /// Resolved effect/resource op signatures recorded by
+    /// `resolve_effect_decl` / `resolve_resource_decl`.
+    fn ann_effect_ops(&self, id: crate::ast::AstId) -> Option<Vec<crate::tir::TirEffectOp>> {
+        let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
+        self.sem.types.effect_ops.get(&key).cloned()
+    }
+
     /// Build a [`TypeLookup`] view over the current module's import
     /// context and the shared `all_*` tables. Used by `reify_*` helpers
     /// that need to resolve AST `Type` nodes (e.g. type-param defaults,
@@ -1005,7 +1012,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `Self` type — `&self` / `&mut self` on an effect method is a
     /// surface error annotate already diagnosed.
     fn reify_effect_decl(&mut self, decl: &ast::InterfaceDecl) -> tir::TirEffect {
-        let operations = self.reify_effect_ops(&[], &decl.methods, None);
+        // Single source of truth: the combined walk resolved the op
+        // signatures with the decl's type-param / `Self` scope in place and
+        // recorded them; reify reads them back rather than re-resolving.
+        let operations = self
+            .ann_effect_ops(decl.id)
+            .expect("resolve_effect_decl records op signatures for every effect reify emits");
         tir::TirEffect {
             name: decl.name.clone(),
             is_pub: decl.is_pub,
@@ -1017,116 +1029,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify a `resource R<T> { … }` declaration. Resource methods take
     /// a synthesised `self` parameter (`&Self` or `&mut Self`) at index
     /// 0; for generic resources `Self = GenericResource<…>` with the
-    /// decl's own `TypeParam`s as type args.
+    /// decl's own `TypeParam`s as type args. The op signatures are read
+    /// from the facts the combined walk recorded.
     fn reify_resource_decl(&mut self, decl: &ast::ResourceDecl) -> tir::TirResource {
-        let module_source = self.current_module_source.clone();
-        let operations = self.reify_effect_ops(
-            &decl.type_params,
-            &decl.methods,
-            Some((decl.name.as_str(), module_source)),
-        );
+        let operations = self
+            .ann_effect_ops(decl.id)
+            .expect("resolve_resource_decl records op signatures for every resource reify emits");
         tir::TirResource {
             name: decl.name.clone(),
             is_pub: decl.is_pub,
             operations,
             span: decl.span,
         }
-    }
-
-    /// Translation of `Elaborator::resolve_effect_ops` (item.rs:554–672).
-    /// Decl-level method-list resolution — no body walk, no
-    /// `TypeAnnotations` consumption. Type-param scope is established
-    /// per call; the optional `resource_self` adds a synthesised
-    /// receiver parameter for resource methods.
-    fn reify_effect_ops(
-        &mut self,
-        type_params: &[ast::GenericParam],
-        methods: &[ast::InterfaceMethod],
-        resource_self: Option<(&str, ModuleSource)>,
-    ) -> Vec<tir::TirEffectOp> {
-        use crate::ast::SelfKind;
-
-        let param_names: Vec<String> = type_params.iter().map(|p| p.name.clone()).collect();
-
-        // Construct the resource's `Self` type after the param-name list
-        // is known so a generic resource's `GenericResource` instance
-        // references its own `TypeParam`s.
-        let self_type: Option<TypeId> = resource_self.map(|(name, module)| {
-            if type_params.iter().any(|p| !p.is_effect) {
-                let type_arg_ids: Vec<TypeId> = type_params
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, p)| !p.is_effect)
-                    .map(|(i, p)| {
-                        self.tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_type_param(p.name.clone(), i as u32)
-                    })
-                    .collect();
-                self.tysys.type_table.borrow_mut().intern(
-                    crate::tir::ResolvedType::GenericResource {
-                        name: name.to_string(),
-                        module_source: module,
-                        type_args: type_arg_ids,
-                    },
-                )
-            } else {
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_resource(name.to_string(), module)
-            }
-        });
-
-        let mut ops = Vec::with_capacity(methods.len());
-        for method in methods {
-            let mut params = Vec::with_capacity(method.params.len());
-            let mut next_local: u32 = 0;
-            for p in &method.params {
-                let type_id = match (p.self_kind, self_type) {
-                    (SelfKind::None, _) => self.resolve_type_in_scope(&p.ty, &param_names),
-                    (SelfKind::Ref, Some(self_t)) => {
-                        self.tysys.type_table.borrow_mut().make_ref(self_t)
-                    }
-                    (SelfKind::MutRef, Some(self_t)) => {
-                        self.tysys.type_table.borrow_mut().make_mut_ref(self_t)
-                    }
-                    _ => continue,
-                };
-                let name = if matches!(p.self_kind, SelfKind::None) {
-                    p.name.clone()
-                } else {
-                    "self".to_string()
-                };
-                params.push(tir::TirParam {
-                    name,
-                    type_id,
-                    local_index: next_local,
-                    is_mut: p.is_mut,
-                    default_expr: None,
-                    span: p.span,
-                });
-                next_local += 1;
-            }
-            let return_type = method
-                .return_type
-                .as_ref()
-                .map(|ty| self.resolve_type_in_scope(ty, &param_names))
-                .unwrap_or(crate::tir::TypeTable::UNIT);
-            let cm_name = method
-                .attrs
-                .iter()
-                .find_map(crate::ast::Attribute::cm_identifier);
-            ops.push(tir::TirEffectOp {
-                name: method.name.clone(),
-                params,
-                return_type,
-                span: method.span,
-                cm_name,
-            });
-        }
-        ops
     }
 
     // ─────────────────────────────────────────────────────────────────

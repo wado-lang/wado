@@ -673,6 +673,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     pub(super) fn resolve_effect_decl(&mut self, decl: &ast::InterfaceDecl) -> TirEffect {
         let operations = self.resolve_effect_ops(&[], &decl.methods, None);
+        // Record the resolved op signatures for reify to read back (single
+        // source of truth = this path) instead of re-resolving them.
+        self.sem
+            .types
+            .effect_ops
+            .insert(self.ann_key(decl.id), operations.clone());
         TirEffect {
             name: decl.name.clone(),
             is_pub: decl.is_pub,
@@ -688,6 +694,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &decl.methods,
             Some((decl.name.as_str(), module_source)),
         );
+        // Record the resolved op signatures for reify to read back (single
+        // source of truth = this path) instead of re-resolving them.
+        self.sem
+            .types
+            .effect_ops
+            .insert(self.ann_key(decl.id), operations.clone());
         TirResource {
             name: decl.name.clone(),
             is_pub: decl.is_pub,

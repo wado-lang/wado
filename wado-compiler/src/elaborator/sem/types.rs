@@ -350,6 +350,11 @@ pub(crate) struct TypeAnnotations {
     /// in place). Reify reads these instead of re-projecting them after its own
     /// scope has been torn down.
     pub(crate) fn_type_params: IndexMap<SymbolKey, Vec<crate::tir::TirTypeParam>>,
+    /// Resolved operation signatures per effect / resource decl `AstId`
+    /// (params, return type, `cm` name), as the combined walk resolved them
+    /// with the decl's type-param / `Self` scope in place. Reify reads these
+    /// instead of re-resolving the op signatures itself.
+    pub(crate) effect_ops: IndexMap<SymbolKey, Vec<crate::tir::TirEffectOp>>,
 }
 
 /// One tuple-`for-of` element's slice of the body-level annotation maps.
