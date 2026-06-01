@@ -1,16 +1,58 @@
-use { Benchmark } from "core:benchmark";
+use { Benchmark, format_rate } from "core:benchmark";
 
 test "Benchmark::new defaults" {
     let b = Benchmark::new("smoke");
-    assert b.iterations == 1;
+    assert b.iterations == 0;
+    assert b.target_ms == 1000;
     assert b.warmup == -1;
     assert b.input_size matches { None };
+    assert b.work_per_iter matches { None };
+    assert b.unit == "ops";
+}
+
+test "format_rate falls back to ops/s" {
+    // 10 ops over 2 s → 5 ops/s.
+    assert format_rate(10.0, 2_000_000_000, "ops") == "5.00 ops/s";
+}
+
+test "format_rate scales custom units with SI prefixes" {
+    // 3,000,000 numbers over 1 s → 3.00 M numbers/s.
+    assert format_rate(3_000_000.0, 1_000_000_000, "numbers") == "3.00 M numbers/s";
+    // 6,000 conversions over 1 s → 6.00 k conversions/s.
+    assert format_rate(6_000.0, 1_000_000_000, "conversions") == "6.00 k conversions/s";
+    // 2,000,000,000 px over 1 s → 2.00 G px/s.
+    assert format_rate(2_000_000_000.0, 1_000_000_000, "px") == "2.00 G px/s";
+}
+
+test "format_rate scales the byte unit as KB/MB/GB" {
+    assert format_rate(500.0, 1_000_000_000, "B") == "500.00 B/s";
+    assert format_rate(50_000.0, 1_000_000_000, "B") == "50.00 KB/s";
+    assert format_rate(7_000_000.0, 1_000_000_000, "B") == "7.00 MB/s";
+    assert format_rate(4_000_000_000.0, 1_000_000_000, "B") == "4.00 GB/s";
+}
+
+test "format_rate guards against zero elapsed" {
+    assert format_rate(1_000.0, 0, "ops") == "0.00 ops/s";
 }
 
 test "run returns the closure's value" {
     let mut b = Benchmark::new("returns-value");
+    b.target_ms = 0;  // one calibration iteration, keeps the test fast
     let answer = b.run("", || 42);
     assert answer == 42;
+}
+
+test "auto mode runs a warmup plus at least one measured iteration" {
+    let mut calls = 0;
+    let mut b = Benchmark::new("auto");
+    b.target_ms = 0;  // exactly one measured iteration after warmup
+    let last = b.run("", || {
+        calls += 1;
+        return calls;
+    });
+    // 1 warmup + 1 measured = 2 invocations; the returned value is the last.
+    assert calls == 2;
+    assert last == 2;
 }
 
 test "iterations runs the closure N times and returns the last value" {
@@ -40,15 +82,17 @@ test "input_size and explicit warmup do not affect the return value" {
 
 test "println does not affect benchmark state" {
     let mut b = Benchmark::new("with-note");
+    b.target_ms = 0;
     b.println("note before run");
     let v = b.run("", || 99);
     b.println(`v = {v}`);
     assert v == 99;
 }
 
-test "warmup auto-derives to 0 for single iteration" {
-    let b = Benchmark::new("auto-warmup-single");
-    // iterations=1 (default), warmup=-1 (auto) → effective warmup is 0;
+test "warmup auto-derives to 0 for fixed single iteration" {
+    let mut b = Benchmark::new("auto-warmup-single");
+    b.iterations = 1;  // fixed mode, single iteration
+    // warmup=-1 (auto) → effective warmup is 0 because iterations < 2;
     // surface this through the field invariants the API guarantees.
     assert b.iterations == 1;
     assert b.warmup == -1;

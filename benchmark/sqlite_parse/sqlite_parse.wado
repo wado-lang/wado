@@ -43,7 +43,6 @@ test "smoke" {
 export fn run() with Stdout, MonotonicClock, Preopens {
     let sql = read_file("sqlite_parse/queries.sql");
     let mut b = Benchmark::new("sqlite-parse (Gale)");
-    b.iterations = 100;
     b.input_size = Option::Some(sql.len());
 
     b.run("", || {

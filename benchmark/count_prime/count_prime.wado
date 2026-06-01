@@ -46,6 +46,8 @@ test "smoke" {
 export fn run() with Stdout, MonotonicClock {
     let limit = 10000000;
     let mut b = Benchmark::new(`count-prime up to {limit}`);
+    b.work_per_iter = Option::Some(limit as f64);
+    b.unit = "numbers";
     let count = b.run("", || count_primes(limit));
     b.println(`count = {count}`);
 }
