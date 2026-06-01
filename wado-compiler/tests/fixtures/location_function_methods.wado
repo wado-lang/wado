@@ -1,0 +1,57 @@
+// `#function` in every function/method kind. Regression guard: reify must
+// name methods `Struct::method` (matching the elaborator's `display_name`),
+// not the bare AST `func.name`. `#function` and `assert`/`panic` messages
+// share `FunctionContext::function_name`, so this also locks the assert path.
+// Exact `stdout` (not `stdout_contains`) so a dropped qualifier is caught.
+
+use { println, Stdout } from "core:cli";
+
+struct Foo {}
+
+trait Greet {
+    fn hello(&self) -> String with Stdout;
+}
+
+trait Defaulted {
+    // Provided default method: the name resolves against the implementing
+    // struct (`Foo::who`), not the trait.
+    fn who(&self) -> String with Stdout {
+        return #function;
+    }
+}
+
+impl Foo {
+    fn bar(&self) -> String with Stdout {
+        return #function;
+    }
+    fn echo<T>(&self, _x: T) -> String with Stdout {
+        // Generic method: no type arguments in the name.
+        return #function;
+    }
+}
+
+impl Greet for Foo {
+    // Trait-impl method: the trait is omitted, only `Foo::hello`.
+    fn hello(&self) -> String with Stdout {
+        return #function;
+    }
+}
+
+impl Defaulted for Foo {}
+
+fn free_fn() -> String with Stdout {
+    // Free function: bare name, no qualifier.
+    return #function;
+}
+
+export fn run() with Stdout {
+    println(free_fn());
+    let f = Foo {};
+    println(f.bar());
+    println(f.echo(1));
+    println(f.hello());
+    println(f.who());
+}
+
+__DATA__
+{"stdout": "free_fn\nFoo::bar\nFoo::echo\nFoo::hello\nFoo::who\n"}

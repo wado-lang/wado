@@ -123,9 +123,7 @@ macro_rules! reify_annotation_accessors {
 
 /// One reify-side power-assert capture slot. Independent from
 /// [`super::assert::Capture`] so the two walks don't share state.
-#[allow(dead_code)]
 pub(super) struct ReifyAssertSlot {
-    pub(super) ast_id: AstId,
     /// `__v0`, `__v1`, … — the local the panic template references.
     pub(super) name: String,
     pub(super) label: String,
@@ -162,11 +160,9 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// private to the callee module).
     pub(crate) all_module_semantics: &'a IndexMap<ModuleSource, ModuleSemantics>,
     /// Symbol table from analyzer (cross-module).
-    #[allow(dead_code)]
     pub(crate) symbols: &'a SymbolTable,
     /// All loaded modules. Used by cross-module lookups (e.g. resolving
     /// the AST of a function referenced by a `FunctionRef`).
-    #[allow(dead_code)]
     pub(crate) loaded_modules: &'a IndexMap<ModuleSource, Module>,
     /// Diagnostics logger.
     pub(crate) logger: &'a Logger<'a, H>,
@@ -176,15 +172,7 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     pub(crate) current_module_items: &'a [Item],
     /// `ModuleSource` interner. Shared with annotate so cross-pass
     /// references resolve to the same `ModuleSource` identity.
-    #[allow(dead_code)]
     pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
-    /// Kiln invocation redirects. Consulted by `use`-resolution paths
-    /// the same way annotate consults them.
-    #[allow(dead_code)]
-    pub(crate) invocations: Rc<crate::kiln::InvocationIndex>,
-    /// Entry module, used for cross-module import dedup.
-    #[allow(dead_code)]
-    pub(crate) entry_module_source: ModuleSource,
     /// Type-parameter names in scope for the function/method body
     /// currently being reified (impl params first, then method-level
     /// params, matching the index layout reify builds in
@@ -219,7 +207,6 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     pub(crate) tuple_overlay_visits: IndexMap<crate::symbol::SymbolKey, usize>,
 }
 
-#[allow(dead_code)]
 impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Construct a per-module `Reify` for the orchestration driver.
     /// The `tysys` clone is the shallow Rc/Arc copy
@@ -241,9 +228,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         symbols: &'a SymbolTable,
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
         logger: &'a Logger<'a, H>,
-        entry_module_source: ModuleSource,
         interner: Rc<RefCell<ModuleSourceInterner>>,
-        invocations: Rc<crate::kiln::InvocationIndex>,
     ) -> Self {
         Self {
             tysys,
@@ -255,8 +240,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             current_module_source: ModuleSource::entry_point_uninitialized(),
             current_module_items: &[],
             interner,
-            invocations,
-            entry_module_source,
             current_type_param_names: Vec::new(),
             current_effect_param_names: Vec::new(),
             tuple_overlay_stack: Vec::new(),
@@ -1182,6 +1165,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .to_string()
             }
         };
+        // `#function` display name `Struct::method` (trait omitted), matching
+        // `resolve_method`'s `display_name`; the bare `func.name` would regress
+        // assert / panic messages to drop the type qualifier
+        // (`String::remove` → `remove`).
+        let display_name = MethodName::format_local(&base_struct_name, None, &func.name);
         let mangled_name = MethodName::format_local(
             &base_struct_name,
             facts.trait_name_mangled.as_deref(),
@@ -1214,7 +1202,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_fn_return_type(func.id)
             .expect("resolve_method records the return type for every impl method reify emits");
 
-        let mut ctx = FunctionContext::new(return_type, func.name.clone());
+        let mut ctx = FunctionContext::new(return_type, display_name);
         ctx.in_handler_method = facts.is_handler_method;
         if func.is_async {
             ctx.is_async = true;
@@ -2410,15 +2398,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Always install the context: an empty `ast_id_to_slot` map
         // intercepts nothing, and the hook is a single Option check.
         let info = self.ann_assert_captures(assert_stmt.id);
-        let (slot_meta, ast_id_to_slot): (Vec<(AstId, String)>, IndexMap<AstId, usize>) =
+        let (slot_labels, ast_id_to_slot): (Vec<String>, IndexMap<AstId, usize>) =
             if let Some(info) = info.as_ref() {
-                let mut meta: Vec<(AstId, String)> = Vec::with_capacity(info.slots.len());
+                let mut labels: Vec<String> = Vec::with_capacity(info.slots.len());
                 let mut map: IndexMap<AstId, usize> = IndexMap::default();
                 for (i, s) in info.slots.iter().enumerate() {
-                    meta.push((s.ast_id, s.capture_label.clone()));
+                    labels.push(s.capture_label.clone());
                     map.insert(s.ast_id, i);
                 }
-                (meta, map)
+                (labels, map)
             } else {
                 (Vec::new(), IndexMap::default())
             };
@@ -2426,11 +2414,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx.enter_scope();
 
         ctx.reify_assert_capture_ctx = Some(ReifyAssertCaptureContext {
-            slots: slot_meta
+            slots: slot_labels
                 .iter()
                 .enumerate()
-                .map(|(i, (ast_id, label))| ReifyAssertSlot {
-                    ast_id: *ast_id,
+                .map(|(i, label)| ReifyAssertSlot {
                     name: format!("__v{i}"),
                     label: label.clone(),
                     emitted: false,
@@ -5868,34 +5855,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             TypeTable::UNIT,
             with_expr.span,
         )
-    }
-
-    /// Reify-side canonicalisation of a decl name through the
-    /// current module's import context. Mirrors
-    /// `Elaborator::canonical_decl_key`. Used by `reify_with_handler`
-    /// to canonicalise an effect reference's `(module, name)` key.
-    fn canonical_decl_key(&self, name: &str) -> (ModuleSource, String) {
-        if let Some(src) = self.sem.imports.effect_sources.get(name) {
-            let original = self
-                .sem
-                .imports
-                .import_original_names
-                .get(name)
-                .cloned()
-                .unwrap_or_else(|| name.to_string());
-            return (src.clone(), original);
-        }
-        if let Some(src) = self.sem.imports.imported_type_sources.get(name) {
-            let original = self
-                .sem
-                .imports
-                .import_original_names
-                .get(name)
-                .cloned()
-                .unwrap_or_else(|| name.to_string());
-            return (src.clone(), original);
-        }
-        (self.current_module_source.clone(), name.to_string())
     }
 
     /// Reify a `matches!`-style expression: `scrutinee matches { PAT

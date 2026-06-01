@@ -1236,9 +1236,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     symbols,
                     modules,
                     logger,
-                    entry_module_source.clone(),
                     Rc::clone(&state.interner),
-                    Rc::clone(&state.invocations),
                 );
                 if let Ok(reified) = reify.reify_module(module, module_source.clone()) {
                     result.insert(module_source.clone(), reified);
