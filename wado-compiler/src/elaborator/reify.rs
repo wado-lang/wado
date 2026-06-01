@@ -121,18 +121,6 @@ macro_rules! reify_annotation_accessors {
     };
 }
 
-/// Per-module reify pass. One instance per loaded module the batch driver
-/// emits TIR for.
-///
-/// Construction is via [`Reify::new`]; the driver hands in the shared
-/// `TypeSystem` (cloned by shallow Rc/Arc copy), the read-only
-/// `ModuleSemantics` for this module, and the per-compile context the
-/// elaborator already threads through.
-///
-/// `#[allow(dead_code)]` on the struct + every method is intentional
-/// until [`crate::elaborator::orchestration`] wires the
-/// `annotate_bodies → reify_modules` pipeline split (the second half of
-/// Stage 5). The skeleton lands first so the membership contract is
 /// One reify-side power-assert capture slot. Independent from
 /// [`super::assert::Capture`] so the two walks don't share state.
 #[allow(dead_code)]
@@ -157,6 +145,9 @@ pub(super) struct ReifyAssertCaptureContext {
     pub(super) emitted_lets: Vec<TirStmt>,
 }
 
+/// Per-module reify pass: emits a [`TirModule`] from the AST plus the
+/// `ModuleSemantics` that `annotate` populated. One instance per module the
+/// batch driver emits TIR for; constructed via [`Reify::new`].
 pub(crate) struct Reify<'a, H: CompilerHost> {
     /// Pipeline-wide type knowledge. `&mut` only because reify may
     /// intern new monomorphic instances; the trait/impl tables are
@@ -1120,10 +1111,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
         let mut next_idx = impl_type_params.len();
         for p in &func.type_params {
-            // Skip `<F: fn(...)>` bounds: like the elaborator they are
-            // realised eagerly to the bound's function type (built into
-            // `fn_bound_map` below) and must not consume a positional
-            // type-param slot, or the real method params shift index.
+            // Skip `<F: fn(...)>` bounds: the elaborator realises them
+            // eagerly to the bound's function type (already baked into the
+            // recorded param/return types), so they must not consume a
+            // positional type-param slot or the real method params shift index.
             if p.is_effect
                 || p.bounds.iter().any(|b| b.fn_signature.is_some())
                 || type_param_names.iter().any(|n| n == &p.name)

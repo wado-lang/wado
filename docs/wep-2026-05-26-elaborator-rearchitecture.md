@@ -330,46 +330,22 @@ here.
 
 ## Migration Plan
 
-The change touches every file under `elaborator/`. It must land
-incrementally with the test suite (E2E fixtures, WIR golden
-fixtures, LSP query tests) green at every step. The migration
-proceeds in seven stages, in dependency order. Stages are guidelines,
-not commitments to specific PR boundaries.
+The change touches every file under `elaborator/` and lands incrementally,
+with the suite (E2E, WIR golden, LSP query) green at every step, in
+dependency order. Stages are guidelines, not PR boundaries.
 
-**Stage 1 — Skeleton.** Introduce `TypeSystem`, `ModuleSemantics`,
-and the four sub-structs as empty types alongside the existing
-`Elaborator`. No method moves; the existing fields are annotated
-with their future destination. The goal is to fix the physical
-target before any logic moves.
+Stages 1–5 and 7a are DONE:
 
-**Stage 2 — Move pure type-system operations to `TypeSystem`.**
-Coercion, inference, type checking, trait queries, and the
-type-only portion of method lookup migrate. The remaining
-`Elaborator` delegates through a `tysys: TypeSystem` field. The
-borrow checker enforces the boundary: methods on `TypeSystem`
-cannot reach `current_module_source` or `imported_type_sources`,
-which mechanically classifies each moved method.
+- **Stages 1–4** — extract `TypeSystem`, `ModuleSemantics`, and per-`AstId`
+  `TypeAnnotations` from the `Elaborator` God Object.
+- **Stage 5** — split `reify` out as a second walk reading
+  `ModuleSemantics.types`; it is the sole TIR source for every module. It
+  landed still re-deriving some decisions (types, mangled names); Stage 7
+  cleans that.
+- **Stage 7a** — routing removed (`module_uses_reify`, the snapshot bypass,
+  the combined walk's TIR-output branch).
 
-**Stage 3 — Move per-module state to `ModuleSemantics`.** The
-import context, decls, and `use → def` maps migrate into
-`ModuleSemantics`. The `Elaborator` becomes a thin wrapper holding
-`&mut TypeSystem` and the current `&mut ModuleSemantics`.
-`Rc<RefCell<…>>` plumbing that existed only to share these maps
-with `AnnotateState` is removed.
-
-**Stage 4 — Introduce explicit per-`AstId` annotation storage.**
-`ModuleSemantics.types` (`TypeAnnotations`) is populated by the
-existing body walk. TIR emission stays in the same walk for this
-stage. The objective is to make the data the future `reify` will
-read available, while preserving today's single-pass behaviour.
-
-**Stage 5 — Split `annotate_bodies` from `reify`.** Reify is built as
-a second walk that reads `ModuleSemantics.types` and emits TIR; it
-became the sole TIR source for every module at **2692 / 2692** E2E.
-DONE — but it landed re-deriving the decisions it should read (types,
-mangled names), so the split is functional, not yet _clean_; Stage 7
-finishes it. (Routing cleanup — `module_uses_reify` removal — is the
-already-landed Stage 7a; see the Landing log.)
+Remaining:
 
 **Stage 6 — Liveness and DCE.** `liveness::compute(&Semantics)` is
 added, its result stored on `Semantics`, and reify gates item emission
@@ -412,107 +388,36 @@ Trade-offs.
 
 ## Status
 
-- [x] **Stages 1–4 — Skeleton → `TypeSystem` → `ModuleSemantics` →
-      per-`AstId` `TypeAnnotations`.** The God Object is decomposed; the
-      20-map fact store exists and is `SymbolKey`-keyed. See the Landing
-      log.
-- [x] **Stage 5 — `annotate_bodies` / `reify` split.** Reify is the sole
-      TIR source for every module (user / stdlib / snapshot) at **2692 /
-      2692** E2E with no env var. Functionally complete; reify still
-      re-derives types and mangled names (closed in Stage 7). See the
-      Landing log.
-- [x] **Stage 7a — Routing.** `module_uses_reify` and its stdlib/snapshot
-      bypass, `stdlib_snapshot::is_building`, and the combined walk's
-      TIR-output branch are removed; reify produces the final TIR for
-      every module. The combined walk survives only as the (still
-      TIR-building) `annotate` fact-recorder.
-- [ ] **Stage 6 — Liveness and DCE.** Not started. Independent of
-      Stage 7.
-- [ ] **Stage 7 — Mechanical reify, then TIR-free `annotate`.** 7-A
-      (reify reads recorded types / mangled names instead of re-deriving)
-      → 7-B (`annotate` stops building TIR; LSP runs `annotate` only;
-      `Elaborator` / `AnnotateState` TIR halves deleted). See the
-      Migration Plan. 7-A progress so far:
-  - [x] Function/method signatures. The combined walk records each
-        function/method's resolved signature per `AstId`
-        (`TypeAnnotations::{fn_param_types, fn_return_types,
-        fn_type_params}`, plus `method_impl_type_params` for the impl
-        type-param scheme), and `reify_function` / `reify_method` read
-        them instead of re-running `resolve_type` /
-        `resolve_type_with_self`. This removed reify's self-type and
-        `fn`-bound re-resolution, its param/return re-resolution, and its
-        type-param re-projection (whose default `resolve_type` had run
-        after reify's type-param scope was torn down — a latent
-        divergence). The `is_known_type_name` impl-param exclusion (the
-        reify-only divergence behind the `TreeMap<String, V>` class) is
-        gone. 2692/2692 at each step.
-  - [x] Effect/resource op signatures. The combined walk records the
-        resolved `Vec<TirEffectOp>` per effect/resource decl `AstId`
-        (`TypeAnnotations::effect_ops`); `reify_effect_decl` /
-        `reify_resource_decl` read it and the parallel `reify_effect_ops`
-        re-resolver (its `resolve_type_in_scope` + duplicated `Self` /
-        receiver synthesis) is deleted.
-  - [x] Decl-level type-param defaults. `resolve_struct` /
-        `resolve_variant_decl` record their projected `Vec<TirTypeParam>`
-        per decl `AstId` (`TypeAnnotations::decl_type_params`); reify reads
-        them instead of re-resolving each default. (Enums carry no type
-        params; resources do not emit them.) Closes the same
-        scope-teardown class as the function type-param fix.
-  - [ ] Remaining: body-level annotation reads still carrying a
-        `resolve_type` fallback (simple `let`/cast already read facts),
-        method-call explicit type args, struct field re-export recovery,
-        const types, and the mangled-name class (impl identity / struct +
-        method names).
+- [x] **Stages 1–4** — God Object decomposed; `TypeAnnotations` is the
+      per-`AstId` fact store, `SymbolKey`-keyed.
+- [x] **Stage 5** — reify is the sole TIR source for every module (user /
+      stdlib / snapshot), 2692/2692 E2E. It still re-derived some types /
+      mangled names; Stage 7 cleans that.
+- [x] **Stage 7a** — routing removed; the combined walk survives only as the
+      (still TIR-building) `annotate` fact-recorder.
+- [ ] **Stage 6** — Liveness / DCE. Not started; independent of Stage 7.
+- [ ] **Stage 7** — mechanical reify (7-A) → TIR-free `annotate` (7-B). 7-A in
+      progress:
+  - [x] Function / method signatures — params, return, type params, impl
+        type-param scheme, self type — read from recorded facts.
+  - [x] Effect / resource op signatures — read from `effect_ops`.
+  - [x] Struct / variant type-param defaults — read from `decl_type_params`.
+  - [x] Fixed a latent bug the reads exposed: a method generic on an impl that
+        binds a concrete trait arg started at the wrong type-param index and
+        reached codegen unsubstituted (`trait_method_generic_concrete_trait_arg`).
+  - [ ] Remaining: body-level method-call type args, struct-field re-export
+        recovery, const types, and the mangled-name class (impl identity /
+        struct + method names).
 
-### Landing log (Stages 1–5, 7a — DONE)
+### Landing log
 
-Stages 1–4 (skeleton → `TypeSystem` → `ModuleSemantics` → per-`AstId`
-`TypeAnnotations`) landed as designed; see git history for the field-by-field
-moves. Net result: `Elaborator` is no longer a God Object — pipeline-wide type
-knowledge lives on `TypeSystem`, per-module facts on `ModuleSemantics`'s four
-sub-structs (`bindings` / `imports` / `types` / `decls`), and `TypeAnnotations`
-carries 20 per-`AstId` fact maps (`expression_types`, `method_dispatch`,
-`operator_dispatch`, `static_method_dispatch`, `index_assign_dispatch`,
-`coercions`, `sequence_coercions`, `key_value_coercions`, `desugars`,
-`generic_instantiations`, `for_of_iterator`, `closure_captures`,
-`assert_captures`, `impl_facts`, `handler_bindings`, `function_effects`,
-`function_task_returns`, `call_param_types`, `local_types`, `tuple_overlays`).
+The per-map detail and the gap-by-gap parity history (user 1765 → 2692, then
+stdlib) live in git. The one load-bearing rule that remains:
 
-Stage 5 (annotate/reify split) reached **2692 / 2692 E2E** with reify the sole
-TIR source for every module — user, stdlib, and the stdlib snapshot — with no
-env var (`WADO_FORCE_REIFY=1` and the live path are now identical).
-
-Canonical invariant: annotation maps are keyed by `SymbolKey`
-(`(ModuleSource, AstId)`). Inlined foreign AST (assoc-const bodies,
-callee-module default args, trait default-method bodies) is keyed to its
-_owning_ module, so a colliding dense `AstId` in the consumer never overwrites
-its facts.
-
-Recurring gap shapes cleared during user-module parity (1765 → 2692): per-`AstId`
-collisions (template interpolation continuing the parent id space; then
-`SymbolKey` keying); reify reading recorded facts it had ignored (i128/u128
-coercions, comparison operator-trait wrapping, `Self::Assoc` projection via
-`ImplFacts`, generic-instantiation args, closure captures, IndexMut / effect
-bindings); pattern & dispatch disambiguation; compile-time tuple-for-of
-per-element overlays; trailing-value control flow; method-call result typing
-from the recorded return type.
-
-Stdlib parity (this track) cleared the remaining stdlib-shaped gaps, each a case
-of reify re-deriving a decision instead of reading it:
-
-- foreign-AST facts keyed to the owning module (const / default-method bodies);
-- reference impls mangled by base struct `&` / `&mut` (blanket `&T: Inspect`);
-- operator-overloaded compound-assignment dispatch (`u128 /= …`);
-- impl-method self type resolved under reify's positional impl-param indexing,
-  including the leading ref of a reference impl (`TreeMap<String, V>`, `&T`);
-- tuple-binding destructuring in variadic for-of (`Eq for [..T]`).
-
-Stage 7a (routing): `module_uses_reify` and its stdlib/snapshot bypass, the
-`stdlib_snapshot::is_building` predicate, and the combined walk's TIR-output
-branch are removed. The combined walk's returned `TirModule` is now discarded
-for every module; reify produces the final TIR. The combined walk survives only
-as the (still TIR-building) `annotate` fact-recorder reify reads from — which is
-exactly what Stage 7 (below) finishes removing.
+Annotation maps are keyed by `SymbolKey` (`(ModuleSource, AstId)`). Inlined
+foreign AST (assoc-const bodies, callee-module default args, trait
+default-method bodies) is keyed to its _owning_ module, so a colliding dense
+`AstId` in the consumer never overwrites its facts.
 
 ## Consequences
 
