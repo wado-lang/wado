@@ -3398,7 +3398,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         for_of: &ast::ForOfStmt,
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
-        use crate::tir::{ResolvedType, TirStmtKind, TypeTable};
+        use crate::tir::{ResolvedType, TirExprKind, TirStmtKind, TypeTable};
 
         let span = for_of.span;
         let iterable = self.reify_expr(&for_of.iterable, ctx, None);
@@ -3433,8 +3433,64 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let is_mut = for_of.is_mut;
         ctx.enter_scope();
         let binding_local = ctx.add_local(binding_name.clone(), binding_type, is_mut, binding_id);
-        let body = self.reify_block(&for_of.body, ctx, None);
+
+        // Destructured binding (`for let [a, b] of …`): bind each inner
+        // pattern variable to its element type and prepend a field-access
+        // `Let` reading it from the synthetic pair temp, mirroring
+        // `resolve_variadic_for_of` (stmt.rs:2259+). Without this the inner
+        // names (`a`, `b`) never enter scope, so the body resolves them to
+        // `Unknown` — e.g. `a != b` in the variadic `Eq for [..T]` impl
+        // dispatches to a nonexistent `unknown^Eq::eq`.
+        let mut destruct_stmts: Vec<TirStmt> = Vec::new();
+        if let ast::Pattern::Tuple(tp, _) = &for_of.binding {
+            let inner_elems = self
+                .tysys
+                .type_table
+                .borrow()
+                .as_tuple(binding_type)
+                .unwrap_or_else(|| vec![binding_type]);
+            for (i, pat_elem) in tp.iter().enumerate() {
+                if let ast::Pattern::Ident { id, name, .. } = pat_elem {
+                    let elem_type = inner_elems.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
+                    let local_idx = ctx.add_local(name.clone(), elem_type, is_mut, Some(*id));
+                    let field_access = TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(TirExpr::new(
+                                TirExprKind::Local {
+                                    index: binding_local,
+                                    name: binding_name.clone(),
+                                },
+                                binding_type,
+                                span,
+                            )),
+                            field_index: i as u32,
+                            field_name: i.to_string(),
+                        },
+                        elem_type,
+                        span,
+                    );
+                    destruct_stmts.push(TirStmt::new(
+                        TirStmtKind::Let {
+                            name: name.clone(),
+                            local_index: local_idx,
+                            is_mut,
+                            is_reactive: false,
+                            type_id: elem_type,
+                            value: field_access,
+                            skip_value_copy: false,
+                        },
+                        span,
+                    ));
+                }
+            }
+        }
+
+        let mut body = self.reify_block(&for_of.body, ctx, None);
         ctx.exit_scope();
+        if !destruct_stmts.is_empty() {
+            destruct_stmts.extend(body.stmts);
+            body.stmts = destruct_stmts;
+        }
 
         vec![TirStmt::new(
             TirStmtKind::VariadicForOf {
