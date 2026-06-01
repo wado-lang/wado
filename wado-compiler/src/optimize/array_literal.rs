@@ -150,6 +150,11 @@ impl Collapser<'_> {
         let mut bindings: Vec<(u32, NirExpr)> = Vec::new();
         let mut consumed = 0;
         let mut all_done = false;
+        // A single target keeps materialized elements in push order, so an
+        // impure element temp can be moved into the literal without reordering
+        // its side effect; multiple interleaved targets cannot (see
+        // `temp_binding`).
+        let allow_impure = targets.len() == 1;
         while start + 1 + consumed < stmts.len() && !all_done {
             let stmt = &stmts[start + 1 + consumed];
             if let Some((path, element)) = self.match_push(&stmt.kind, local) {
@@ -162,7 +167,7 @@ impl Collapser<'_> {
                     .iter()
                     .zip(&targets)
                     .all(|(p, t)| p.len() == t.capacity);
-            } else if let Some((local_index, value)) = pure_temp_binding(&stmt.kind) {
+            } else if let Some((local_index, value)) = temp_binding(&stmt.kind, allow_impure) {
                 // A `let temp = value` for a fresh element temp; remember it so
                 // a following push that reads `temp` resolves to `value`.
                 bindings.push((local_index, value.clone()));
@@ -240,18 +245,24 @@ impl Collapser<'_> {
     }
 }
 
-/// If `kind` is `let temp = value` binding a *pure* value, return the local
-/// index and the bound value. Used to see through the element temps that
-/// inlining `push_literal(value)` introduces (`let v = <element>;
-/// place.push(v)`). Purity is required because the value is cloned into the
-/// literal and the binding dropped: a side-effecting value could otherwise be
-/// duplicated or elided if it feeds more than one push. That the temp is in
-/// fact single-use (safe to drop) is verified by the caller's read guards.
-fn pure_temp_binding(kind: &NirStmtKind) -> Option<(u32, &NirExpr)> {
+/// If `kind` is `let temp = value`, return the local index and the bound
+/// value. Used to see through the element temps that inlining
+/// `push_literal(value)` introduces (`let v = <element>; place.push(v)`).
+///
+/// `allow_impure` is set only when the window has a single array target. With
+/// one target the materialized elements keep their original push order, so
+/// moving an impure value into its element slot preserves both evaluation
+/// count (the caller's read guards enforce single use) and order. With
+/// multiple interleaved targets (e.g. `Bag { keys, values }`) the per-field
+/// arrays materialize one after another, which would reorder side effects
+/// across fields, so only pure temps may be resolved there.
+fn temp_binding(kind: &NirStmtKind, allow_impure: bool) -> Option<(u32, &NirExpr)> {
     match kind {
         NirStmtKind::Let {
             local_index, value, ..
-        } if crate::optimize::elide_local::is_pure_expr(value) => Some((*local_index, value)),
+        } if allow_impure || crate::optimize::elide_local::is_pure_expr(value) => {
+            Some((*local_index, value))
+        }
         _ => None,
     }
 }
