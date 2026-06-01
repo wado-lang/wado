@@ -1352,9 +1352,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // rehydrated from the snapshot's already-reified TIR), so the fact is
         // always present — a missing entry is a contract violation, not a
         // fallback case.
-        let impl_type_params: Vec<crate::tir::TirTypeParam> = self
-            .ann_method_impl_type_params(func.id)
-            .expect(
+        let impl_type_params: Vec<crate::tir::TirTypeParam> =
+            self.ann_method_impl_type_params(func.id).expect(
                 "resolve_method records the impl-type-param scheme for every \
                  impl method reify emits",
             );
@@ -1407,7 +1406,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect();
         let saved_effect_param_names =
             std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
-
 
         // Derive the mangler's base-struct-name input from the
         // resolved `Self` type. The mangler wants the bare name
@@ -1537,9 +1535,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `resolve_method` projected (effect / `fn`-bound params filtered,
         // dense indices, defaults resolved with the type-param scope alive),
         // rather than re-projecting them here after the scope is torn down.
-        let type_params = self
-            .ann_fn_type_params(func.id)
-            .expect("resolve_method records the method type params for every impl method reify emits");
+        let type_params = self.ann_fn_type_params(func.id).expect(
+            "resolve_method records the method type params for every impl method reify emits",
+        );
 
         Some(TirFunction {
             module_source: ModuleSource::default(),

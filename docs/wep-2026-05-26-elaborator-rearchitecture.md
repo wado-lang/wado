@@ -432,7 +432,25 @@ Trade-offs.
       (reify reads recorded types / mangled names instead of re-deriving)
       → 7-B (`annotate` stops building TIR; LSP runs `annotate` only;
       `Elaborator` / `AnnotateState` TIR halves deleted). See the
-      Migration Plan.
+      Migration Plan. 7-A progress so far:
+  - [x] Function/method signatures. The combined walk records each
+        function/method's resolved signature per `AstId`
+        (`TypeAnnotations::{fn_param_types, fn_return_types,
+        fn_type_params}`, plus `method_impl_type_params` for the impl
+        type-param scheme), and `reify_function` / `reify_method` read
+        them instead of re-running `resolve_type` /
+        `resolve_type_with_self`. This removed reify's self-type and
+        `fn`-bound re-resolution, its param/return re-resolution, and its
+        type-param re-projection (whose default `resolve_type` had run
+        after reify's type-param scope was torn down — a latent
+        divergence). The `is_known_type_name` impl-param exclusion (the
+        reify-only divergence behind the `TreeMap<String, V>` class) is
+        gone. 2692/2692 at each step.
+  - [ ] Effect/resource op signatures (`reify_effect_ops`), decl-level
+        type-param defaults (struct / variant / enum), body-level
+        annotation reads still carrying a `resolve_type` fallback,
+        method-call explicit type args, and the mangled-name class (impl
+        identity / struct + method names).
 
 ### Landing log (Stages 1–5, 7a — DONE)
 

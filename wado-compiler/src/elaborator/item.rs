@@ -1840,14 +1840,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (single source of truth = this path); `params` is in `func.params`
         // order including the receiver.
         let sig_key = self.ann_key(func.id);
-        self.sem.types.fn_param_types.insert(
-            sig_key.clone(),
-            params.iter().map(|p| p.type_id).collect(),
-        );
         self.sem
             .types
-            .fn_return_types
-            .insert(sig_key, return_type);
+            .fn_param_types
+            .insert(sig_key.clone(), params.iter().map(|p| p.type_id).collect());
+        self.sem.types.fn_return_types.insert(sig_key, return_type);
         // Record the method-level TIR type params (with defaults resolved while
         // the type-param scope was still alive, above) for reify to read back
         // rather than re-projecting them after its scope is torn down.
