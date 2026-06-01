@@ -65,16 +65,18 @@ zlib compression of twitter.json (631514 bytes).
 | Implementation        |  Throughput |   ms/iter | vs best |
 | --------------------- | ----------: | --------: | ------: |
 | zlib-rs (Rust native) | 222.67 MB/s |  2.836 ms |   1.00x |
+| JavaScript (Node)     | 149.52 MB/s |  4.224 ms |   1.49x |
 | **Wado** core:zlib    |  31.37 MB/s | 20.128 ms |   7.10x |
 
 ## Compression: decompress
 
 zlib decompression of twitter.json (631514 bytes).
 
-| Implementation        | Throughput |   ms/iter | vs best |
-| --------------------- | ---------: | --------: | ------: |
-| zlib-rs (Rust native) |  2.03 GB/s |  0.311 ms |   1.00x |
-| **Wado** core:zlib    | 56.90 MB/s | 11.099 ms |  35.69x |
+| Implementation        |  Throughput |   ms/iter | vs best |
+| --------------------- | ----------: | --------: | ------: |
+| zlib-rs (Rust native) |   2.03 GB/s |  0.311 ms |   1.00x |
+| JavaScript (Node)     | 931.43 MB/s |  0.678 ms |   2.18x |
+| **Wado** core:zlib    |  56.90 MB/s | 11.099 ms |  35.69x |
 
 ## JSON: twitter
 
