@@ -922,7 +922,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Publish the body's type-param scope (see `reify_method`).
         let saved_type_param_names =
-            std::mem::replace(&mut self.current_type_param_names, type_param_names.clone());
+            std::mem::replace(&mut self.current_type_param_names, type_param_names);
 
         // Single source of truth: read the resolved param types
         // `resolve_function` recorded (in `func.params` order, with `<F: fn>`

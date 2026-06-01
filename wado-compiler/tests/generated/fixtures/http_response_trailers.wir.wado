@@ -316,9 +316,9 @@ type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(r
 
 type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(74)
 
-type "functype//core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//Array<u8>";  // TypeId(75)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(75)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(76)
+type "functype//core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//Array<u8>";  // TypeId(76)
 
 type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(77)
 
@@ -1212,31 +1212,6 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     self.used = new_used;
 }
 
-fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
-    let __b: ref "core:prelude//Array<u8>";
-    let byte: u8;
-    let _licm_used_10: i32;
-    let _licm_repr_11: ref builtin::array<u8>;
-    let __hfs_index_12: i32;
-    __b = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-    _licm_used_10 = self.used;
-    _licm_repr_11 = self.repr;
-    __hfs_index_12 = self.index;
-    b94: block {
-        l95: loop {
-            if __hfs_index_12 >= _licm_used_10 {
-                break b94;
-            }
-            byte = builtin::array_get_u8(_licm_repr_11, __hfs_index_12);
-            __hfs_index_12 = __hfs_index_12 + 1;
-            "core:prelude/array.wado/Array<u8>::push"(__b, byte);
-            self.index = __hfs_index_12;
-            continue l95;
-        };
-    };
-    return __b;
-}
-
 fn "core:prelude/string.wado/String::push"(self, c) {
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -1260,6 +1235,31 @@ fn "core:prelude/string.wado/String::push"(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
         self.used = self.used + 4;
     }
+}
+
+fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
+    let __b: ref "core:prelude//Array<u8>";
+    let byte: u8;
+    let _licm_used_10: i32;
+    let _licm_repr_11: ref builtin::array<u8>;
+    let __hfs_index_12: i32;
+    __b = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+    _licm_used_10 = self.used;
+    _licm_repr_11 = self.repr;
+    __hfs_index_12 = self.index;
+    b98: block {
+        l99: loop {
+            if __hfs_index_12 >= _licm_used_10 {
+                break b98;
+            }
+            byte = builtin::array_get_u8(_licm_repr_11, __hfs_index_12);
+            __hfs_index_12 = __hfs_index_12 + 1;
+            "core:prelude/array.wado/Array<u8>::push"(__b, byte);
+            self.index = __hfs_index_12;
+            continue l99;
+        };
+    };
+    return __b;
 }
 
 fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {

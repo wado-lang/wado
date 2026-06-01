@@ -88,9 +88,9 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(31)
 
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::collect" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude//Array<char>";  // TypeId(32)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(32)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(33)
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::collect" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude//Array<char>";  // TypeId(33)
 
 type "functype//wado-compiler/tests/fixtures/opt_hfs_immut_ref_method_reread.wado/Lexer::read_char_class" = fn(ref "wado-compiler/tests/fixtures/opt_hfs_immut_ref_method_reread.wado//Lexer") -> ref "core:prelude/string.wado//String";  // TypeId(34)
 
@@ -429,25 +429,6 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
     return 0, code_10;
 }
 
-fn "core:prelude/string.wado/StrCharIter^Iterator::collect"(self) {
-    let __b: ref "core:prelude//Array<char>";
-    __b = struct.new "core:prelude//Array<char>" { repr: builtin::array_new<char>(0), used: 0 };
-    b29: block {
-        l30: loop {
-            let __sroa___match_4_discriminant: i32;
-            let __sroa___match_4_payload_0: char;
-            multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(self);
-            if __sroa___match_4_discriminant == 0 {
-                "core:prelude/array.wado/Array<char>::push"(__b, __sroa___match_4_payload_0);
-            } else {
-                break b29;
-            }
-            continue l30;
-        };
-    };
-    return __b;
-}
-
 fn "core:prelude/string.wado/String::push"(self, c) {
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
@@ -471,6 +452,25 @@ fn "core:prelude/string.wado/String::push"(self, c) {
         builtin::array_set_u8(self.repr, self.used + 3, (128 | (c & 63)) & 255);
         self.used = self.used + 4;
     }
+}
+
+fn "core:prelude/string.wado/StrCharIter^Iterator::collect"(self) {
+    let __b: ref "core:prelude//Array<char>";
+    __b = struct.new "core:prelude//Array<char>" { repr: builtin::array_new<char>(0), used: 0 };
+    b33: block {
+        l34: loop {
+            let __sroa___match_4_discriminant: i32;
+            let __sroa___match_4_payload_0: char;
+            multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(self);
+            if __sroa___match_4_discriminant == 0 {
+                "core:prelude/array.wado/Array<char>::push"(__b, __sroa___match_4_payload_0);
+            } else {
+                break b33;
+            }
+            continue l34;
+        };
+    };
+    return __b;
 }
 
 fn "wado-compiler/tests/fixtures/opt_hfs_immut_ref_method_reread.wado/Lexer::read_char_class"(self) {
