@@ -8177,7 +8177,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 _ => None,
             })
         {
-            let ty = self.resolve_type(&global_decl.ty);
+            // 7-A: the global's declared type was resolved by `annotate_decls`
+            // and lives on `current_module_globals`; read it back (same source
+            // as `reify_global`), re-resolving only if unrecorded.
+            let ty = self
+                .sem
+                .decls
+                .current_module_globals
+                .get(&ident.name)
+                .map(|(t, _)| *t)
+                .unwrap_or_else(|| self.resolve_type(&global_decl.ty));
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
                     module_source: self.current_module_source.clone(),
