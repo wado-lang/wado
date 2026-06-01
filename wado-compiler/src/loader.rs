@@ -829,7 +829,7 @@ mod tests {
 ///
 /// Each module is parsed and bound at most once per process. The slot
 /// table (path → slot) is built eagerly on first access — that walk is
-/// just `HashMap` inserts of empty [`OnceLock`]s, no parsing — and then
+/// just map inserts of empty [`OnceLock`]s, no parsing — and then
 /// each module's actual parse runs only when [`cached_stdlib_module`]
 /// is called for that import path.
 ///
