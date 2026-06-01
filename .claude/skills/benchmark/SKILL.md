@@ -30,8 +30,8 @@ mise run on-task-started
    `SLICE=4 ROUNDS=5 CONNECTIONS=50 mise run benchmark-http-routing`. It keeps
    the per-(server, request) max internally, so one invocation suffices.
 3. Refresh the README Environment line versions: `mise exec -- node --version`,
-   `mise exec -- zig version`, `wasmtime --version`, `rustc --version`,
-   `cc --version | head -1`.
+   `mise exec -- bun --version`, `rustc --version`, `cc --version | head -1`
+   (wasmtime version is the vendored `vendor/wasmtime` workspace version).
 4. Update the tables, following README.md's existing layout. http-routing is
    req/s (higher is better) and lists a curated subset of the measured requests.
 5. wasm-size, when asked: `mise run report-wasm-size`, then update
@@ -39,24 +39,30 @@ mise run on-task-started
 
 ## Reading output
 
-Each program prints `Elapsed: … ms` (zlib also `Compress:`/`Decompress:`).
-Round Wado's fractional ms to whole; report the total for looped benchmarks.
+Each program prints a throughput line — `<rate> <unit>/s   (<ms> ms/iter,
+<n> iter)` — per phase (zlib prints two phases, `Compress:`/`Decompress:`).
+Read the rate and the ms/iter straight off; the iteration count auto-calibrates
+to ~1s, so there is no total to report. Units: numbers/s (count-prime, sieve),
+px/s (mandelbrot), conversions/s (fts), MB/s (zlib, json-\*, sqlite-parse,
+syntax-highlight), req/s (http-routing). `vs best` = fastest rate / this rate.
 Implementations per benchmark:
 
 - count-prime / mandelbrot / sieve: C, JavaScript, Wado
-- fts: Zig, Rust, C, Wado
+- fts: Rust, C, Wado
 - zlib: zlib-rs, Wado
 - json-\*: serde_json, JSON.parse, Wado (catalog also Wado v2)
 - sqlite-parse: sqlparser-rs, Wado
 - syntax-highlight: Prism, Lezer, tree-sitter, Shiki, Wado
 - http-routing: wado serve, Hono (Node/Bun), Axum
 
-## Denomination
+## Workload sizing
 
-Light workloads are scaled in-program so results land in whole ms — just run
-and report. sieve → 100M, fts → 5M (problem size); JSON → ×10, zlib → ×100
-(`iterations` / `b.iterations`). JSON/zlib totals are warm steady-state. To
-retune, change the factor across every language implementation of that benchmark.
+Benchmarks auto-calibrate their iteration count to run ~1s, so no manual
+denomination is needed. Keep each single iteration well under 1s: count-prime
+(limit) and fts (conversion count) are sized so one run is ~100ms, giving ~10
+calibrated iterations. If a workload's one-shot cost exceeds ~1s it will report
+a single iteration — shrink its problem size across every language
+implementation of that benchmark to fix it.
 
 ## Notes
 
