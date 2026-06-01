@@ -1,0 +1,51 @@
+diff --git a/crates/wasmtime/src/runtime/component/concurrent/futures_and_streams.rs b/crates/wasmtime/src/runtime/component/concurrent/futures_and_streams.rs
+index d1b5510..e1b28b7 100644
+--- a/crates/wasmtime/src/runtime/component/concurrent/futures_and_streams.rs
++++ b/crates/wasmtime/src/runtime/component/concurrent/futures_and_streams.rs
+@@ -2471,7 +2471,17 @@ impl StoreOpaque {
+                 )?;
+             }
+ 
+-            WriteState::HostReady { .. } => {}
++            WriteState::HostReady { .. } => {
++                // ROOT-CAUSE PROBE (#1230): symmetric to the stream case in
++                // `host_drop_writer`. The host future producer (e.g. the
++                // `write-via-stream` result future) sits in WriteState::HostReady
++                // and is never finalized when the guest drops the read end,
++                // leaking the future transmit. The reader is now dropped, so the
++                // produced value can never be consumed: drop the producer (held
++                // by the matched HostReady value) and reclaim the transmit.
++                log::trace!("host_drop_reader finalize HostReady writer, delete {transmit_id:?}");
++                state.delete_transmit(transmit_id)?;
++            }
+ 
+             WriteState::Open => {
+                 state.update_event(
+@@ -2570,7 +2580,26 @@ impl StoreOpaque {
+                 )?;
+             }
+ 
+-            ReadState::HostReady { .. } | ReadState::HostToHost { .. } => {}
++            ReadState::HostReady { .. } | ReadState::HostToHost { .. } => {
++                // ROOT-CAUSE PROBE (#1230): a host consumer registered via
++                // `pipe` (e.g. cli stdout `write-via-stream`) is only driven
++                // reactively on guest writes. When the guest drops the writer
++                // it is never re-polled, so it never observes the close, its
++                // `result_tx` is never released, and the dependent
++                // `write-via-stream` future never resolves — leaking both the
++                // stream and the future transmit. If the writer is now fully
++                // dropped, finalize the read side: dropping the consumer (held
++                // by the matched HostReady value) releases its result channel,
++                // and deleting the transmit reclaims the table slots.
++                if matches!(
++                    self.concurrent_state_mut().get_mut(transmit_id)?.write,
++                    WriteState::Dropped
++                ) {
++                    self.concurrent_state_mut().get_mut(transmit_id)?.read = ReadState::Dropped;
++                    log::trace!("host_drop_writer finalize HostReady reader, delete {transmit_id:?}");
++                    self.concurrent_state_mut().delete_transmit(transmit_id)?;
++                }
++            }
+ 
+             // If the read state is open, then there are no registered readers of the stream/future
+             ReadState::Open => {

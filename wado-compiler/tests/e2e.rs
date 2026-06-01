@@ -438,6 +438,10 @@ async fn run_http_request_async(
          resource must be dropped before the handler returns.",
         store.data().table,
     );
+    // The host `ResourceTable` check above only covers host resources (wasi-http
+    // Request/Response/Fields/streams). Component Model `future`/`stream`
+    // waitables live in a separate concurrent-state table, so check that too.
+    common::assert_no_resource_leak(&mut store, "wasi:http/service handler");
 
     match handle_result {
         Ok(res) => {
@@ -609,7 +613,11 @@ fn run_test_world(
                             "[{test_id}] test '{test_name}' was expected to trap but returned Ok(())"
                         );
                     }
-                    // passed
+                    // passed — a clean test run must leak no Component Model resources.
+                    common::assert_no_resource_leak(
+                        &mut store,
+                        &format!("test world '{test_name}'"),
+                    );
                 }
                 Ok((Err(()),)) => {
                     let stderr_text = String::from_utf8_lossy(&stderr_clone.contents()).to_string();

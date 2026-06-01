@@ -1,0 +1,26 @@
+// Minimal reproduction for wasmtime concurrent-state (waitable) leak.
+//
+// `wasi:cli/stdout.write-via-stream(data: stream<u8>) -> future<result>`:
+//   1. guest creates a stream, hands the readable end to the host import
+//      (the host registers a consumer via `StreamReader::pipe`);
+//   2. guest writes to the writable end and drops it;
+//   3. guest drops the readable end of the returned future without reading it.
+//
+// After `run` returns, 6 entries remain in the component concurrent-state
+// table: the stream transmit (TransmitState + 2 handles) and the future
+// transmit (TransmitState + 2 handles). Neither is reclaimed because the host
+// consumer (ReadState::HostReady) and the host future producer
+// (WriteState::HostReady) are never finalized when the guest drops its end.
+use { Stdout } from "wasi:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+    let handle = Stdout::write_via_stream(rx);
+    let data: Array<u8> = [104, 105, 10]; // "hi\n"
+    tx.write(data);
+    tx.drop();
+    handle.drop();
+}
+
+__DATA__
+{"stdout": "hi\n"}
