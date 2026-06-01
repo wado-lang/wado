@@ -1830,6 +1830,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .types
             .method_return_types
             .insert(sig_key, return_type);
+        // Record the method-level TIR type params (with defaults resolved while
+        // the type-param scope was still alive, above) for reify to read back
+        // rather than re-projecting them after its scope is torn down.
+        self.sem
+            .types
+            .method_type_params
+            .insert(self.ann_key(func.id), type_params.clone());
 
         // Store type parameters for generic methods (for call site substitution)
         if !func.type_params.is_empty() {

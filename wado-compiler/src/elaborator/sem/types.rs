@@ -344,6 +344,11 @@ pub(crate) struct TypeAnnotations {
     /// Resolved return type per impl-method `AstId`. Reify reads it instead of
     /// re-resolving the return annotation.
     pub(crate) method_return_types: IndexMap<SymbolKey, crate::tir::TypeId>,
+    /// Method-level TIR type params per impl-method `AstId` (effect / `fn`-bound
+    /// params filtered out, dense indices, defaults resolved with the method's
+    /// type-param scope in place). Reify reads these instead of re-projecting
+    /// them after its own scope has been torn down.
+    pub(crate) method_type_params: IndexMap<SymbolKey, Vec<crate::tir::TirTypeParam>>,
 }
 
 /// One tuple-`for-of` element's slice of the body-level annotation maps.

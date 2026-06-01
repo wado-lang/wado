@@ -323,6 +323,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.sem.types.method_return_types.get(&key).copied()
     }
 
+    /// Method-level TIR type params recorded by `Elaborator::resolve_method`.
+    fn ann_method_type_params(
+        &self,
+        id: crate::ast::AstId,
+    ) -> Option<Vec<crate::tir::TirTypeParam>> {
+        let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
+        self.sem.types.method_type_params.get(&key).cloned()
+    }
+
     /// Build a [`TypeLookup`] view over the current module's import
     /// context and the shared `all_*` tables. Used by `reify_*` helpers
     /// that need to resolve AST `Type` nodes (e.g. type-param defaults,
@@ -1552,32 +1561,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.current_type_param_names = saved_type_param_names;
         self.current_effect_param_names = saved_effect_param_names;
 
-        // Method-level type-param projection: same filter as
-        // `reify_function`'s (skip effect params and `<F: fn(...)>`
-        // bounds, which are realised eagerly).
-        let mut non_effect_non_fn_idx: u32 = 0;
-        let type_params: Vec<crate::tir::TirTypeParam> = func
-            .type_params
-            .iter()
-            .filter_map(|p| {
-                if p.is_effect {
-                    return None;
-                }
-                if p.bounds.iter().any(|b| b.fn_signature.is_some()) {
-                    return None;
-                }
-                let idx = non_effect_non_fn_idx;
-                non_effect_non_fn_idx += 1;
-                Some(crate::tir::TirTypeParam {
-                    name: p.name.clone(),
-                    is_effect: p.is_effect,
-                    is_pack: p.is_pack,
-                    bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                    default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
-                    index: idx,
-                })
-            })
-            .collect();
+        // Single source of truth: read the method-level type params
+        // `resolve_method` projected (effect / `fn`-bound params filtered,
+        // dense indices, defaults resolved with the type-param scope alive),
+        // rather than re-projecting them here after the scope is torn down.
+        let type_params = self
+            .ann_method_type_params(func.id)
+            .expect("resolve_method records the method type params for every impl method reify emits");
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
