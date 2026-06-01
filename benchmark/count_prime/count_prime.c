@@ -83,7 +83,7 @@ int count_primes(int limit) {
 }
 
 int main() {
-    volatile int limit = 10000000;  // volatile to prevent constant folding
+    volatile int limit = 1000000;  // volatile to prevent constant folding
 
     // Warmup.
     int count = count_primes(limit);

@@ -1,5 +1,5 @@
 // Float-to-string benchmark
-// Converts 5M random f64 values to decimal strings using %.6f format.
+// Converts 1M random f64 values to decimal strings using %.6f format.
 // Uses a linear congruential generator for deterministic float sequence.
 //
 // Reports throughput (conversions per second). The iteration count
@@ -75,7 +75,7 @@ long total_bytes_run(int n) {
 }
 
 int main(void) {
-    const int n = 5000000;
+    const int n = 1000000;
 
     // Warmup.
     long total_bytes = total_bytes_run(n);

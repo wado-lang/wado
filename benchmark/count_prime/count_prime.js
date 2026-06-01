@@ -74,7 +74,7 @@ function countPrimes(limit) {
   return count;
 }
 
-const limit = 10000000;
+const limit = 1000000;
 
 // Warmup.
 let count = countPrimes(limit);

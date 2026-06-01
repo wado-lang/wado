@@ -1,5 +1,5 @@
 // Float-to-string benchmark
-// Converts 5M random f64 values to decimal strings using {:.6} format.
+// Converts 1M random f64 values to decimal strings using {:.6} format.
 // Uses a linear congruential generator for deterministic float sequence.
 //
 // Reports throughput (conversions per second). The iteration count
@@ -82,7 +82,7 @@ fn fts_run(n: u32) -> (u64, u64) {
 }
 
 fn main() {
-    let n = 5_000_000u32;
+    let n = 1_000_000u32;
 
     // Warmup.
     let (mut total_bytes, mut byte_sum) = fts_run(n);

@@ -1,5 +1,5 @@
 // Float-to-string benchmark
-// Converts 5M random f64 values to decimal strings using :0.6f format.
+// Converts 1M random f64 values to decimal strings using :0.6f format.
 // Uses a linear congruential generator for deterministic float sequence.
 //
 // How to run:
@@ -38,7 +38,7 @@ test "smoke" {
 }
 
 export fn run() with Stdout, MonotonicClock {
-    let n = 5000000;
+    let n = 1000000;
     let mut b = Benchmark::new(`fts: {n} f64 conversions (%.6f)`);
     b.work_per_iter = Option::Some(n as f64);
     b.unit = "conversions";
