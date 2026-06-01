@@ -58,18 +58,23 @@ traffic, which keeps run-to-run spread within ~1-2%.
 | **Wado**       |  8.96 M conv/s | 111.550 ms |   1.42x |
 | C (gcc -O3)    |  7.36 M conv/s | 135.818 ms |   1.73x |
 
-## Compression
+## Compression: compress
 
-zlib compress/decompress of twitter.json (631514 bytes). Compression and
-decompression are independent phases (their throughputs are not summed).
+zlib compression of twitter.json (631514 bytes).
 
-| Implementation        |    Compress | Decompress |
-| --------------------- | ----------: | ---------: |
-| zlib-rs (Rust native) | 222.67 MB/s |  2.03 GB/s |
-| **Wado** core:zlib    |  31.37 MB/s | 56.90 MB/s |
+| Implementation        |  Throughput |   ms/iter | vs best |
+| --------------------- | ----------: | --------: | ------: |
+| zlib-rs (Rust native) | 222.67 MB/s |  2.836 ms |   1.00x |
+| **Wado** core:zlib    |  31.37 MB/s | 20.128 ms |   7.10x |
 
-Per-iteration times: zlib-rs 2.836 ms compress / 0.311 ms decompress; Wado
-20.128 ms / 11.099 ms. Wado trails by ~7x on compress and ~36x on decompress.
+## Compression: decompress
+
+zlib decompression of twitter.json (631514 bytes).
+
+| Implementation        | Throughput |   ms/iter | vs best |
+| --------------------- | ---------: | --------: | ------: |
+| zlib-rs (Rust native) |  2.03 GB/s |  0.311 ms |   1.00x |
+| **Wado** core:zlib    | 56.90 MB/s | 11.099 ms |  35.69x |
 
 ## JSON: twitter
 
