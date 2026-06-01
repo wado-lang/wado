@@ -4457,15 +4457,62 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let read = self.reify_expr(&compound.target, ctx, None);
         let rhs = self.reify_expr(&compound.value, ctx, Some(read.type_id));
         let combined_type = read.type_id;
-        let combined = TirExpr::new(
-            TirExprKind::Binary {
-                left: Box::new(read),
-                op,
-                right: Box::new(rhs),
-            },
-            combined_type,
-            compound.span,
-        );
+        // Operator-overloaded operands (`u128 /= u128`, …): the combined
+        // value dispatches through the trait method (`Div::div`), recorded by
+        // `resolve_compound_assign` under the compound's AstId. Replay that
+        // MethodCall — a raw `Binary` with a primitive `/` on struct operands
+        // would lower to invalid Wasm. Mirrors the `reify_binary` dispatch
+        // path (keyed on `binary.id`).
+        let combined = if let Some(dispatch) = self.ann_operator_dispatch(compound.id) {
+            let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                read,
+                dispatch.self_kind,
+                /* is_ref_impl */ false,
+                compound.span,
+                &self.tysys.type_table,
+            );
+            let call_args: Vec<crate::tir::CallArg> = std::iter::once(rhs)
+                .zip(dispatch.arg_ref_wraps.iter().copied())
+                .map(|(arg, wrap)| {
+                    let arg_expr = if wrap {
+                        let arg_ref_type = self
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .intern(crate::tir::ResolvedType::Ref(arg.type_id));
+                        TirExpr::new(
+                            TirExprKind::Unary {
+                                op: crate::tir::TirUnaryOp::Ref,
+                                expr: Box::new(arg),
+                            },
+                            arg_ref_type,
+                            compound.span,
+                        )
+                    } else {
+                        arg
+                    };
+                    crate::tir::CallArg::new(arg_expr, false)
+                })
+                .collect();
+            super::Elaborator::<H>::build_tir_method_call(
+                receiver,
+                dispatch.function_ref,
+                vec![],
+                call_args,
+                dispatch.return_type,
+                compound.span,
+            )
+        } else {
+            TirExpr::new(
+                TirExprKind::Binary {
+                    left: Box::new(read),
+                    op,
+                    right: Box::new(rhs),
+                },
+                combined_type,
+                compound.span,
+            )
+        };
 
         // IndexAssign rewrite for `arr[i] OP= v`: dispatch the
         // assignment side through `index_assign_dispatch` so reify

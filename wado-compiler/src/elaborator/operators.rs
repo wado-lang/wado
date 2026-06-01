@@ -1333,7 +1333,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let read = self.resolve_expr(&compound.target, ctx, None);
         let rhs = self.resolve_expr(&compound.value, ctx, Some(read.type_id));
+        // Stage 5 (Gap 11 / WEP 2026-05-26): when the operands are
+        // operator-overloaded (non-primitive, e.g. `u128 /= u128`),
+        // `build_binary_op_tir` dispatches the combined value through the
+        // trait method (`Div::div` → `div_rem`). Tag the record with the
+        // compound's AstId so reify replays that MethodCall instead of a raw
+        // `Binary` (a primitive `/` on struct operands is invalid Wasm).
+        // Cleared unconditionally so a primitive op — which never reaches the
+        // dispatch-record path — leaves no stale id behind.
+        self.pending_operator_ast_id = Some(compound.id);
         let combined = self.build_binary_op_tir(read, op, rhs, compound.span);
+        self.pending_operator_ast_id = None;
         self.assign_to_target(
             &compound.target,
             AssignValue::Resolved(Box::new(combined)),
