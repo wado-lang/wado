@@ -110,7 +110,10 @@ impl Benchmark {
             report(label, (end - start) as u64, self.iterations, work, unit);
             return result;
         }
-        let target_ns = (self.target_ms as u64) * 1_000_000;
+        // Clamp a negative budget to 0 (one iteration) so a stray negative
+        // `target_ms` cannot wrap to an enormous `u64` and spin the loop.
+        let target_ms = if self.target_ms > 0 { self.target_ms } else { 0 };
+        let target_ns = (target_ms as u64) * 1_000_000;
         let mut result = f();
         let mut n = 1;
         let mut elapsed = 0 as u64;

@@ -55,6 +55,20 @@ test "auto mode runs a warmup plus at least one measured iteration" {
     assert last == 2;
 }
 
+test "negative target_ms is clamped to a single iteration" {
+    // A stray negative budget must not wrap to a huge u64 and spin the loop;
+    // it is clamped to 0, behaving like a single measured iteration.
+    let mut calls = 0;
+    let mut b = Benchmark::new("neg-budget");
+    b.target_ms = -100;
+    let last = b.run("", || {
+        calls += 1;
+        return calls;
+    });
+    assert calls == 2;
+    assert last == 2;
+}
+
 test "iterations runs the closure N times and returns the last value" {
     let mut b = Benchmark::new("iter-last");
     b.iterations = 5;
