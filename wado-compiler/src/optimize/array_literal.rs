@@ -177,12 +177,22 @@ impl Collapser<'_> {
         }
 
         // Consuming the window drops the temp bindings whose values moved into
-        // the literal. That is only sound if no dropped temp is read after the
-        // window; bail otherwise (the binding is not a single-use element temp).
+        // the literal. That is only sound if no dropped temp is still read —
+        // neither after the window, nor inside an element that referenced the
+        // temp through a sub-expression rather than a bare `Local` (which
+        // `resolve_binding` substitutes). Either residual read would dangle the
+        // dropped binding, so bail.
         let rest = &stmts[start + 1 + consumed..];
+        let reads_after = |idx: u32| rest.iter().any(|s| stmt_reads_local(s, idx));
+        let reads_in_element = |idx: u32| {
+            pushes_per_target
+                .iter()
+                .flatten()
+                .any(|e| expr_reads_local(e, idx))
+        };
         if bindings
             .iter()
-            .any(|(idx, _)| rest.iter().any(|s| stmt_reads_local(s, *idx)))
+            .any(|(idx, _)| reads_after(*idx) || reads_in_element(*idx))
         {
             return 0;
         }
@@ -239,28 +249,42 @@ fn single_use_temp_binding(kind: &NirStmtKind) -> Option<(u32, &NirExpr)> {
     }
 }
 
+/// Visitor that records whether a given local is read anywhere in a subtree.
+struct LocalReads {
+    local: u32,
+    found: bool,
+}
+
+impl crate::nir_visitor::NirRefVisitor for LocalReads {
+    fn visit_expr(&mut self, expr: &NirExpr) {
+        if let NirExprKind::Local { index, .. } = &expr.kind
+            && *index == self.local
+        {
+            self.found = true;
+        }
+        self.walk_expr(expr);
+    }
+}
+
 /// Whether `stmt` reads `local` anywhere in its subtree.
 fn stmt_reads_local(stmt: &NirStmt, local: u32) -> bool {
     use crate::nir_visitor::NirRefVisitor;
-    struct Reads {
-        local: u32,
-        found: bool,
-    }
-    impl NirRefVisitor for Reads {
-        fn visit_expr(&mut self, expr: &NirExpr) {
-            if let NirExprKind::Local { index, .. } = &expr.kind
-                && *index == self.local
-            {
-                self.found = true;
-            }
-            self.walk_expr(expr);
-        }
-    }
-    let mut v = Reads {
+    let mut v = LocalReads {
         local,
         found: false,
     };
     v.visit_stmt(stmt);
+    v.found
+}
+
+/// Whether `expr` reads `local` anywhere in its subtree.
+fn expr_reads_local(expr: &NirExpr, local: u32) -> bool {
+    use crate::nir_visitor::NirRefVisitor;
+    let mut v = LocalReads {
+        local,
+        found: false,
+    };
+    v.visit_expr(expr);
     v.found
 }
 
