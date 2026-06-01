@@ -168,8 +168,7 @@ Rust. The route and request set is Hono's own official router benchmark
 Servers and the load generator run on disjoint pinned cores; each
 request is measured in rotating slices and the fastest is kept.
 
-Throughput (requests/sec, higher is better; figures from a prior reference
-run — this pass did not re-measure HTTP routing):
+Throughput (requests/sec, higher is better):
 
 | Request                         | `wado serve` | Hono (Node) | Hono (Bun) | Axum (native) |
 | ------------------------------- | -----------: | ----------: | ---------: | ------------: |
@@ -185,10 +184,10 @@ markedly faster than Node's. Native-Rust Axum is the ceiling; its
 figure here is load-generator-limited (`oha` saturates before Axum
 does, staying flat at ~98k–100k). `wado serve` runs a
 `wasi:http/service` component on wasmtime, dispatching through
-`core:router`, with pooled instance reuse + periodic recycling. A
-cross-runtime comparison (Wasm component on
-wasmtime vs JS on Node.js/Bun vs native Rust). See
-`http_routing/README.md` for the full table and methodology.
+`core:router`, with pooled instance reuse + periodic recycling — a
+cross-runtime comparison of a Wasm component on wasmtime vs JS on
+Node.js/Bun vs native Rust. See `http_routing/README.md` for the full
+table and methodology.
 
 ## Running
 
@@ -208,7 +207,8 @@ mise run benchmark-syntax-highlight # syntax highlighting
 mise run benchmark-http-routing     # HTTP routing (wado serve vs Hono vs Axum)
 ```
 
-Prerequisites: `cc`, `cargo`, `node` (managed by `mise install`).
+Prerequisites: `cc` and `cargo` (system); `node` and `bun` (managed by
+`mise install`).
 
 ## Profiling
 
