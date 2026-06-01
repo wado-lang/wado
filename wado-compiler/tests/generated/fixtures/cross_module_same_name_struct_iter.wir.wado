@@ -92,15 +92,11 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(34)
 
-type "functype//core:prelude/array.wado/Array<./sub/cross_module_same_name_struct_iter_b.wado/Pair>::push" = fn(ref "core:prelude//Array<./sub/cross_module_same_name_struct_iter_b.wado/Pair>", ref "./sub/cross_module_same_name_struct_iter_b.wado//Pair");  // TypeId(35)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
 
-type "functype//core:prelude/array.wado/Array<./sub/cross_module_same_name_struct_iter_b.wado/Pair>::grow" = fn(ref "core:prelude//Array<./sub/cross_module_same_name_struct_iter_b.wado/Pair>");  // TypeId(36)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(36)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(37)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(38)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(39)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(37)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -126,16 +122,13 @@ fn "wado-compiler/tests/fixtures/cross_module_same_name_struct_iter.wado/__test_
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/format.wado//Formatter";
-    let value_14: ref "./sub/cross_module_same_name_struct_iter_b.wado//Pair";
     let f_27: ref "core:prelude/format.wado//Formatter";
     let f_32: ref "core:prelude/format.wado//Formatter";
     let self_35: ref "core:prelude//Array<i32>";
     let f_41: ref "core:prelude/format.wado//Formatter";
     let f_46: ref "core:prelude/format.wado//Formatter";
-    __b_0 = struct.new "core:prelude//Array<./sub/cross_module_same_name_struct_iter_b.wado/Pair>" { repr: builtin::array_new<ref "./sub/cross_module_same_name_struct_iter_b.wado//Pair">(1), used: 0 };
-    value_14 = struct.new "./sub/cross_module_same_name_struct_iter_b.wado//Pair" { indices: ref.as_non_null(__b_1 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(0, 1), used: 2 }; __b_1) };
-    "core:prelude/array.wado/Array<./sub/cross_module_same_name_struct_iter_b.wado/Pair>::push"(__b_0, value_14);
-    __v0_3 = __b_0.used;
+    __b_0 = struct.new "core:prelude//Array<./sub/cross_module_same_name_struct_iter_b.wado/Pair>" { repr: array.new_fixed<ref "./sub/cross_module_same_name_struct_iter_b.wado//Pair">(struct.new "./sub/cross_module_same_name_struct_iter_b.wado//Pair" { indices: ref.as_non_null(__b_1 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(0, 1), used: 2 }; __b_1) }), used: 1 };
+    __v0_3 = 1;
     __cond_4 = __v0_3 == 1;
     if __cond_4 == 0 {
         "core:internal/panic"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(136), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_construct_same_name_struct_from_other_module_while_a_sibling_iterates"), used: 78 }); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push"(__local_7, 97); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/cross_module_same_name_struct_iter.wado"), used: 68 }); "core:prelude/string.wado/String::push"(__local_7, 58); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; f_27 = __local_8; "core:prelude/primitive.wado/i32::fmt_decimal"(28, f_27); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -143,7 +136,7 @@ condition: o.items.len() == 1
 "), used: 31 }); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("o.items.len(): "), used: 15 }); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; f_32 = __local_8; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_3, f_32); "core:prelude/string.wado/String::push"(__local_7, 10); __local_7);
         unreachable;
     }
-    self_35 = if builtin::unlikely(0 >= __b_0.used) {
+    self_35 = if builtin::unlikely(0) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "./sub/cross_module_same_name_struct_iter_b.wado//Pair">(__b_0.repr, 0).indices;
@@ -468,29 +461,6 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
         }
         return "core:prelude/string.wado/String::internal_reserve_uninit"(self.buf, digit_count);
     }
-}
-
-fn "core:prelude/array.wado/Array<./sub/cross_module_same_name_struct_iter_b.wado/Pair>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<./sub/cross_module_same_name_struct_iter_b.wado/Pair>::grow"(self);
-    }
-    builtin::array_set<ref "./sub/cross_module_same_name_struct_iter_b.wado//Pair">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<./sub/cross_module_same_name_struct_iter_b.wado/Pair>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref "builtin::array<./sub/cross_module_same_name_struct_iter_b.wado/Pair>";
-    let a: i32;
-    capacity = builtin::array_len(self.repr);
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "./sub/cross_module_same_name_struct_iter_b.wado//Pair">(new_capacity);
-    builtin::array_copy<ref "./sub/cross_module_same_name_struct_iter_b.wado//Pair">(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/cross_module_same_name_struct_iter.wado/__cm_export____test_0_construct_same_name_struct_from_other_module_while_a_sibling_iterates" as "__test_0_construct_same_name_struct_from_other_module_while_a_sibling_iterates"

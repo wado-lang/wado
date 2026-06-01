@@ -335,27 +335,15 @@ type "functype//wado-compiler/tests/fixtures/inspect_2.wado/InspBox<i32>^Inspect
 
 type "functype//core:prelude/types.wado/Option<core:prelude/string.wado/String>^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<Option<core:prelude/string.wado/String>>", ref "core:prelude/format.wado//Formatter");  // TypeId(119)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>::push" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>", ref "core:prelude//Array<i32>");  // TypeId(120)
+type "functype//core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String>^Inspect::inspect" = fn(ref "tuple//[i32, String]", ref "core:prelude/format.wado//Formatter");  // TypeId(120)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>>::push" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>>", ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>");  // TypeId(121)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(121)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/array.wado/Array<core:prelude/string.wado/String>>::push" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<core:prelude/string.wado/String>>", ref "core:prelude//Array<core:prelude/string.wado/String>");  // TypeId(122)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(122)
 
-type "functype//core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String>^Inspect::inspect" = fn(ref "tuple//[i32, String]", ref "core:prelude/format.wado//Formatter");  // TypeId(123)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(123)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/array.wado/Array<core:prelude/string.wado/String>>::grow" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<core:prelude/string.wado/String>>");  // TypeId(124)
-
-type "functype//core:prelude/array.wado/Array<core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>>::grow" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>>");  // TypeId(125)
-
-type "functype//core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>::grow" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>");  // TypeId(126)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(127)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(128)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(129)
-
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(130)
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(124)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -1090,11 +1078,7 @@ fn "wado-compiler/tests/fixtures/inspect_2.wado/__test_11_nested_arrays"() {
     let other_147: ref "core:prelude/string.wado//String";
     let len_a_148: i32;
     let limit_153: i32;
-    __b_0 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<i32>>" { repr: builtin::array_new<ref "core:prelude//Array<i32>">(2), used: 0 };
-    __b_1 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
-    "core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>::push"(__b_0, __b_1);
-    __b_2 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 };
-    "core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>::push"(__b_0, __b_2);
+    __b_0 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<i32>>" { repr: array.new_fixed<ref "core:prelude//Array<i32>">(__b_1 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }; __b_1, __b_2 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 }; __b_2), used: 2 };
     __cond_4 = __inline_String_Eq__eq_15: block -> bool {
         __local_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_18 };
@@ -1117,17 +1101,7 @@ condition: `{matrix:?}` == \"[[1, 2], [3, 4]]\"
 "), used: 47 }); __local_20);
         unreachable;
     }
-    __b_5 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>>" { repr: builtin::array_new<ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>">(2), used: 0 };
-    __b_6 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<i32>>" { repr: builtin::array_new<ref "core:prelude//Array<i32>">(2), used: 0 };
-    __b_7 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
-    "core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>::push"(__b_6, __b_7);
-    __b_8 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(3), used: 1 };
-    "core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>::push"(__b_6, __b_8);
-    "core:prelude/array.wado/Array<core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>>::push"(__b_5, __b_6);
-    __b_9 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<i32>>" { repr: builtin::array_new<ref "core:prelude//Array<i32>">(1), used: 0 };
-    __b_10 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(4, 5, 6), used: 3 };
-    "core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>::push"(__b_9, __b_10);
-    "core:prelude/array.wado/Array<core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>>::push"(__b_5, __b_9);
+    __b_5 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>>" { repr: array.new_fixed<ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>">(__b_6 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<i32>>" { repr: array.new_fixed<ref "core:prelude//Array<i32>">(__b_7 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }; __b_7, __b_8 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(3), used: 1 }; __b_8), used: 2 }; __b_6, __b_9 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<i32>>" { repr: array.new_fixed<ref "core:prelude//Array<i32>">(__b_10 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(4, 5, 6), used: 3 }; __b_10), used: 1 }; __b_9), used: 2 };
     __cond_12 = __inline_String_Eq__eq_56: block -> bool {
         __local_22 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_23 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_22 };
@@ -1150,11 +1124,7 @@ condition: `{deep:?}` == \"[[[1, 2], [3]], [[4, 5, 6]]]\"
 "), used: 57 }); __local_24);
         unreachable;
     }
-    __b_13 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "core:prelude//Array<core:prelude/string.wado/String>">(2), used: 0 };
-    __b_14 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("b"), used: 1 }), used: 2 };
-    "core:prelude/array.wado/Array<core:prelude/array.wado/Array<core:prelude/string.wado/String>>::push"(__b_13, __b_14);
-    __b_15 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("c"), used: 1 }), used: 1 };
-    "core:prelude/array.wado/Array<core:prelude/array.wado/Array<core:prelude/string.wado/String>>::push"(__b_13, __b_15);
+    __b_13 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<core:prelude/string.wado/String>>" { repr: array.new_fixed<ref "core:prelude//Array<core:prelude/string.wado/String>">(__b_14 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("b"), used: 1 }), used: 2 }; __b_14, __b_15 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("c"), used: 1 }), used: 1 }; __b_15), used: 2 };
     __cond_17 = __inline_String_Eq__eq_82: block -> bool {
         __local_26 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_27 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_26 };
@@ -1191,11 +1161,7 @@ fn "wado-compiler/tests/fixtures/inspect_2.wado/__test_12_nested_array_struct"()
     let __local_9: ref "core:prelude/format.wado//Formatter";
     let other: ref "core:prelude/string.wado//String";
     let len_a: i32;
-    __b_0 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<i32>>" { repr: builtin::array_new<ref "core:prelude//Array<i32>">(2), used: 0 };
-    __b_1 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
-    "core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>::push"(__b_0, __b_1);
-    __b_2 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 };
-    "core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>::push"(__b_0, __b_2);
+    __b_0 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<i32>>" { repr: array.new_fixed<ref "core:prelude//Array<i32>">(__b_1 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }; __b_1, __b_2 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 }; __b_2), used: 2 };
     m = struct.new "wado-compiler/tests/fixtures/inspect_2.wado//InspMatrix" { data: __b_0, rows: 2 };
     __cond = __inline_String_Eq__eq_15: block -> bool {
         __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -2597,36 +2563,6 @@ fn "core:prelude/types.wado/Option<core:prelude/string.wado/String>^Inspect::ins
     }
 }
 
-fn "core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>::grow"(self);
-    }
-    builtin::array_set<ref "core:prelude//Array<i32>">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>>::grow"(self);
-    }
-    builtin::array_set<ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<core:prelude/array.wado/Array<core:prelude/string.wado/String>>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<core:prelude/array.wado/Array<core:prelude/string.wado/String>>::grow"(self);
-    }
-    builtin::array_set<ref "core:prelude//Array<core:prelude/string.wado/String>">(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn "core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String>^Inspect::inspect"(self, f) {
     let v_5: i32;
     let v_6: ref "core:prelude/string.wado//String";
@@ -2643,45 +2579,6 @@ fn "core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String>^Inspect::
     "core:prelude/format.wado/String^Inspect::inspect"(v_6, f);
     s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("]"), used: 1 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_18);
-}
-
-fn "core:prelude/array.wado/Array<core:prelude/array.wado/Array<core:prelude/string.wado/String>>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref "builtin::array<core:prelude/array.wado/Array<core:prelude/string.wado/String>>";
-    let a: i32;
-    capacity = builtin::array_len(self.repr);
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "core:prelude//Array<core:prelude/string.wado/String>">(new_capacity);
-    builtin::array_copy<ref "core:prelude//Array<core:prelude/string.wado/String>">(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
-fn "core:prelude/array.wado/Array<core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref "builtin::array<core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>>";
-    let a: i32;
-    capacity = builtin::array_len(self.repr);
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>">(new_capacity);
-    builtin::array_copy<ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>">(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
-fn "core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref "builtin::array<core:prelude/array.wado/Array<i32>>";
-    let a: i32;
-    capacity = builtin::array_len(self.repr);
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "core:prelude//Array<i32>">(new_capacity);
-    builtin::array_copy<ref "core:prelude//Array<i32>">(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
 }
 
 export fn "wado-compiler/tests/fixtures/inspect_2.wado/__cm_export____test_0_struct" as "__test_0_struct"

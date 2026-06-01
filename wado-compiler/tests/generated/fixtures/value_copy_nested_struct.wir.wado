@@ -102,15 +102,11 @@ type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude
 
 type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(38)
 
-type "functype//core:prelude/array.wado/Array<wado-compiler/tests/fixtures/value_copy_nested_struct.wado/Inner>::push" = fn(ref "core:prelude//Array<wado-compiler/tests/fixtures/value_copy_nested_struct.wado/Inner>", ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner");  // TypeId(39)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
-type "functype//core:prelude/array.wado/Array<wado-compiler/tests/fixtures/value_copy_nested_struct.wado/Inner>::grow" = fn(ref "core:prelude//Array<wado-compiler/tests/fixtures/value_copy_nested_struct.wado/Inner>");  // TypeId(40)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(41)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -162,7 +158,6 @@ fn "wado-compiler/tests/fixtures/value_copy_nested_struct.wado/run"() {
     let f_78: ref "core:prelude/format.wado//Formatter";
     let f_85: ref "core:prelude/format.wado//Formatter";
     let f_90: ref "core:prelude/format.wado//Formatter";
-    let value_96: ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner";
     let self_107: ref "core:prelude//Array<i32>";
     let f_113: ref "core:prelude/format.wado//Formatter";
     let f_118: ref "core:prelude/format.wado//Formatter";
@@ -214,23 +209,13 @@ condition: o2.mid.inner.len() == 2
 "), used: 36 }); "core:prelude/string.wado/String::push_str"(__local_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("o2.mid.inner.len(): "), used: 20 }); __local_29 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_28 }; f_90 = __local_29; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_12, f_90); "core:prelude/string.wado/String::push"(__local_28, 10); __local_28);
         unreachable;
     }
-<<<<<<< HEAD
-    __b_14 = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/value_copy_nested_struct.wado/Inner>" { repr: builtin::array_new<ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner">(1), used: 0 };
-    value_96 = struct.new "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner" { boxed: ref.as_non_null(__b_15 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(100), used: 1 }; __b_15) };
-    "core:prelude/array.wado/Array<wado-compiler/tests/fixtures/value_copy_nested_struct.wado/Inner>::push"(__b_14, value_96);
-    __sroa_h2_cells = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/value_copy_nested_struct.wado/Inner>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner">(/*via $value_copy$T20*/ __b_14.repr)), used: __b_14.used };
-||||||| 93ef4162
-    __b_14 = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/value_copy_nested_struct.wado/Inner>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner">(struct.new "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner" { boxed: ref.as_non_null(__b_15 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(100), used: 1 }; __b_15) }), used: 1 };
-    __sroa_h2_cells = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/value_copy_nested_struct.wado/Inner>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner">(/*via $value_copy$T20*/ __b_14.repr)), used: 1 };
-=======
     __b_14 = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/value_copy_nested_struct.wado/Inner>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner">(struct.new "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner" { boxed: ref.as_non_null(__b_15 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(100), used: 1 }; __b_15) }), used: 1 };
     __sroa_h2_cells = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/value_copy_nested_struct.wado/Inner>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner">(/*via $value_copy$T21*/ __b_14.repr)), used: 1 };
->>>>>>> origin/main
     "core:prelude/array.wado/Array<i32>::push"(if builtin::unlikely(0 >= __sroa_h2_cells.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner">(__sroa_h2_cells.repr, 0).boxed, 200);
-    self_107 = if builtin::unlikely(0 >= __b_14.used) {
+    self_107 = if builtin::unlikely(0) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner">(__b_14.repr, 0).boxed;
@@ -594,29 +579,6 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     new_capacity = select i32(a > 4, a, 4);
     new_repr = builtin::array_new<i32>(new_capacity);
     builtin::array_copy<i32>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
-fn "core:prelude/array.wado/Array<wado-compiler/tests/fixtures/value_copy_nested_struct.wado/Inner>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<wado-compiler/tests/fixtures/value_copy_nested_struct.wado/Inner>::grow"(self);
-    }
-    builtin::array_set<ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner">(self.repr, used, value);
-    self.used = used + 1;
-}
-
-fn "core:prelude/array.wado/Array<wado-compiler/tests/fixtures/value_copy_nested_struct.wado/Inner>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref "builtin::array<wado-compiler/tests/fixtures/value_copy_nested_struct.wado/Inner>";
-    let a: i32;
-    capacity = builtin::array_len(self.repr);
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner">(new_capacity);
-    builtin::array_copy<ref "wado-compiler/tests/fixtures/value_copy_nested_struct.wado//Inner">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
