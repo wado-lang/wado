@@ -1057,7 +1057,8 @@ impl FunctionTranslator<'_, '_> {
         };
         let element_instrs: Vec<WirInstr> =
             elements.iter().map(|e| self.translate_expr(e)).collect();
-        let used = i32::try_from(element_instrs.len()).unwrap_or(0);
+        let used = i32::try_from(element_instrs.len())
+            .unwrap_or_else(|_| panic!("[WIR] array literal has more than i32::MAX elements"));
         self.struct_new(
             type_id,
             vec![

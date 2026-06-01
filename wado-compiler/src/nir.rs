@@ -325,7 +325,8 @@ pub enum NirExprKind {
     /// optimizer-materialized normalization, like `Switch`. The `Array<T>`
     /// struct type is carried by the enclosing `NirExpr::type_id`, exactly
     /// as `TupleLiteral` relies on `type_id` for the tuple's struct type.
-    /// `wir_build` lowers it to `WirInstr::ArrayNewFixed`.
+    /// `wir_build` lowers it to the `Array<T>` `{ repr, used }` `StructNew`
+    /// whose `repr` field is a `WirInstr::ArrayNewFixed` of the elements.
     ArrayLiteral {
         elements: Vec<NirExpr>,
     },
