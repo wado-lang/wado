@@ -1623,16 +1623,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Set up Self type for the impl block
         // This allows `&Self` to resolve correctly in method parameters
         let old_self_type = scope.trait_ctx.self_type;
-        let resolved_self_type = scope.resolve_type(impl_type);
-        // Record the resolved self type for reify to read back (single source
-        // of truth = this path), keyed like `method_impl_type_params`.
-        let self_type_key = scope.ann_key(func.id);
-        scope
-            .sem
-            .types
-            .method_self_types
-            .insert(self_type_key, resolved_self_type);
-        scope.trait_ctx.self_type = Some(resolved_self_type);
+        scope.trait_ctx.self_type = Some(scope.resolve_type(impl_type));
 
         // Concrete `TypeId`s of the trait/resource type arguments at this
         // impl site (e.g. `[u8]` for `impl Stream<u8> for MockCM`). Resolved
@@ -1826,6 +1817,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.current_effect_param_decls = old_effect_param_decls;
         scope.trait_ctx.self_type = old_self_type;
         drop(scope);
+
+        // Record the resolved param/return types for reify to read back
+        // (single source of truth = this path); `params` is in `func.params`
+        // order including the receiver.
+        let sig_key = self.ann_key(func.id);
+        self.sem.types.method_param_types.insert(
+            sig_key.clone(),
+            params.iter().map(|p| p.type_id).collect(),
+        );
+        self.sem
+            .types
+            .method_return_types
+            .insert(sig_key, return_type);
 
         // Store type parameters for generic methods (for call site substitution)
         if !func.type_params.is_empty() {

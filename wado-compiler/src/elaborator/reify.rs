@@ -310,11 +310,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.sem.types.method_impl_type_params.get(&key).cloned()
     }
 
-    /// The resolved `Self` type `Elaborator::resolve_method` recorded for an
-    /// impl method. Reify reads this as the single source of truth.
-    fn ann_method_self_type(&self, id: crate::ast::AstId) -> Option<crate::tir::TypeId> {
+    /// Resolved parameter types (declaration order, incl. receiver) recorded
+    /// by `Elaborator::resolve_method`.
+    fn ann_method_param_types(&self, id: crate::ast::AstId) -> Option<Vec<crate::tir::TypeId>> {
         let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
-        self.sem.types.method_self_types.get(&key).copied()
+        self.sem.types.method_param_types.get(&key).cloned()
+    }
+
+    /// Resolved return type recorded by `Elaborator::resolve_method`.
+    fn ann_method_return_type(&self, id: crate::ast::AstId) -> Option<crate::tir::TypeId> {
+        let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
+        self.sem.types.method_return_types.get(&key).copied()
     }
 
     /// Build a [`TypeLookup`] view over the current module's import
@@ -1421,32 +1427,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let saved_effect_param_names =
             std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
 
-        // `<F: fn(...)>` method-level bounds → their resolved function
-        // type (resolved with `Self` / assoc bindings in scope).
-        let fn_bound_map: crate::hashmap::IndexMap<String, TypeId> = func
-            .type_params
-            .iter()
-            .filter_map(|p| {
-                let sig = p.bounds.iter().find_map(|b| b.fn_signature.as_ref())?;
-                let ty = self.resolve_type_with_self(
-                    &ast::Type::Function(sig.clone()),
-                    &type_param_names,
-                    facts.self_type,
-                    &facts.assoc_type_bindings,
-                );
-                Some((p.name.clone(), ty))
-            })
-            .collect();
-
-        // Single source of truth: the resolved `Self` type is what
-        // `Elaborator::resolve_method` computed (the impl target incl. any
-        // leading reference) — read it rather than re-resolving. (`facts.self_type`
-        // uses the impl-clause declaration-order indexing and must not be used
-        // for the `self` parameter; the recorded `method_self_types` carries the
-        // positional indexing the body agrees on.)
-        let method_self_type = self
-            .ann_method_self_type(func.id)
-            .expect("resolve_method records the self type for every impl method reify emits");
 
         // Derive the mangler's base-struct-name input from the
         // resolved `Self` type. The mangler wants the bare name
@@ -1516,18 +1496,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             info
         };
 
-        let return_type = func
-            .return_type
-            .as_ref()
-            .map(|t| {
-                self.resolve_type_with_self(
-                    t,
-                    &type_param_names,
-                    method_self_type,
-                    &facts.assoc_type_bindings,
-                )
-            })
-            .unwrap_or(TypeTable::UNIT);
+        // Single source of truth: read the return type `resolve_method`
+        // resolved, rather than re-resolving the return annotation.
+        let return_type = self
+            .ann_method_return_type(func.id)
+            .expect("resolve_method records the return type for every impl method reify emits");
 
         let mut ctx = FunctionContext::new(return_type, func.name.clone());
         ctx.in_handler_method = facts.is_handler_method;
@@ -1542,35 +1515,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let saved_type_param_names =
             std::mem::replace(&mut self.current_type_param_names, type_param_names.clone());
 
+        // Single source of truth: read the resolved param types
+        // `resolve_method` recorded (in `func.params` order, receiver
+        // included), rather than re-resolving each here.
+        let param_types = self
+            .ann_method_param_types(func.id)
+            .expect("resolve_method records param types for every impl method reify emits");
         let mut params = Vec::with_capacity(func.params.len());
-        for p in &func.params {
-            let type_id = match p.self_kind {
-                // A param naming a `<F: fn(...)>` bound resolves to the
-                // realised function type; otherwise resolve with `Self`.
-                SelfKind::None if matches!(&p.ty, ast::Type::Named(n) if fn_bound_map.contains_key(&n.name)) =>
-                {
-                    let ast::Type::Named(n) = &p.ty else {
-                        unreachable!()
-                    };
-                    fn_bound_map[&n.name]
-                }
-                SelfKind::None => self.resolve_type_with_self(
-                    &p.ty,
-                    &type_param_names,
-                    method_self_type,
-                    &facts.assoc_type_bindings,
-                ),
-                SelfKind::Ref => self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_ref(method_self_type),
-                SelfKind::MutRef => self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_mut_ref(method_self_type),
-            };
+        for (p_idx, p) in func.params.iter().enumerate() {
+            let type_id = param_types[p_idx];
             let name = if matches!(p.self_kind, SelfKind::None) {
                 p.name.clone()
             } else {
