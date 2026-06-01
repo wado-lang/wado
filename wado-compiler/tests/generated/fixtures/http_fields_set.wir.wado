@@ -337,23 +337,19 @@ type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude/
 
 type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(85)
 
-type "functype//core:prelude/array.wado/Array<wasi:http/types.wado/FieldValue>::push" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>", ref "core:prelude//Array<u8>");  // TypeId(86)
+type "functype//core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::grow" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>");  // TypeId(86)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::grow" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>");  // TypeId(87)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(87)
 
-type "functype//core:prelude/array.wado/Array<wasi:http/types.wado/FieldValue>::grow" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>");  // TypeId(88)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(88)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(89)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(89)
 
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(90)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(90)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(91)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(91)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(92)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(93)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(94)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(92)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -546,8 +542,7 @@ condition: fields.has(\"x-test\" as FieldName)
         unreachable;
     }
     __b_6 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(110, 101, 119), used: 3 };
-    __b_8 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<u8>>" { repr: builtin::array_new<ref "core:prelude//Array<u8>">(1), used: 0 };
-    "core:prelude/array.wado/Array<wasi:http/types.wado/FieldValue>::push"(__b_8, __b_6);
+    __b_8 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<u8>>" { repr: array.new_fixed<ref "core:prelude//Array<u8>">(__b_6), used: 1 };
     set_result = "wado-compiler/tests/fixtures/http_fields_set.wado/__cm_binding__Fields_set"(fields, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-test"), used: 6 }, __b_8);
     if ref.is_null(set_result) == 0 {
         drop(ref.as_non_null(set_result));
@@ -1529,30 +1524,7 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/array.wado/Array<wasi:http/types.wado/FieldValue>::push"(self, value) {
-    let used: i32;
-    used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<wasi:http/types.wado/FieldValue>::grow"(self);
-    }
-    builtin::array_set<ref "core:prelude//Array<u8>">(self.repr, used, value);
-    self.used = used + 1;
-}
-
 fn "core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::grow"(self) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref "builtin::array<core:prelude/array.wado/Array<u8>>";
-    let a: i32;
-    capacity = builtin::array_len(self.repr);
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "core:prelude//Array<u8>">(new_capacity);
-    builtin::array_copy<ref "core:prelude//Array<u8>">(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
-fn "core:prelude/array.wado/Array<wasi:http/types.wado/FieldValue>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "builtin::array<core:prelude/array.wado/Array<u8>>";
