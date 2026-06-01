@@ -2,97 +2,105 @@
 
 Performance comparison of Wado (Wasm/wasmtime) against native compilers.
 
-Environment: Wado 2026-05-29, wasmtime 44.0.0, gcc 13.3.0, rustc 1.95.0, Zig 0.15.2, Node.js v24.14.1, Linux x86_64.
+Environment: Wado 2026-06-01, wasmtime 46.0.0, gcc 13.3.0, rustc 1.95.0,
+Node.js v24.14.1, Bun 1.3.11, Linux x86_64.
 
-All figures are the **best of three runs** per implementation. To keep
-every result in whole milliseconds, the lightest workloads are scaled up:
-float-to-string to 5M conversions, sieve ×10, the JSON parsers ×10, and
-zlib ×100. Sieve/JSON/zlib figures are totals over those iterations (warm
-steady-state, not a single cold parse).
+All figures report **throughput** (work per second; higher is better) with
+the per-iteration time in parentheses. Each phase warms up once, then
+auto-calibrates its iteration count so the timed loop runs for about a
+second — so the total wall time is ~constant and is omitted, and each figure
+is the mean over the calibrated iterations. Throughput uses each workload's
+natural unit: numbers/s (prime counting, sieve), px/s (mandelbrot),
+conversions/s (float-to-string), and MB/s for the byte-oriented workloads
+(JSON, zlib, SQL parsing, syntax highlighting). `vs best` is the ratio of the
+fastest row's throughput to this row's (1.00x = fastest).
 
 ## Prime Counting
 
-Count primes up to 10M (integer arithmetic).
+Count primes up to 1M (integer arithmetic, trial division).
 
-| Implementation    |     Time | vs best |
-| ----------------- | -------: | ------: |
-| C (gcc -O3)       | 3,208 ms |   1.00x |
-| **Wado**          | 3,245 ms |   1.01x |
-| JavaScript (Node) | 3,288 ms |   1.02x |
+| Implementation    |    Throughput |    ms/iter | vs best |
+| ----------------- | ------------: | ---------: | ------: |
+| C (gcc -O3)       | 7.91 M nums/s | 126.497 ms |   1.00x |
+| **Wado**          | 7.65 M nums/s | 130.791 ms |   1.03x |
+| JavaScript (Node) | 7.42 M nums/s | 134.861 ms |   1.07x |
 
 ## Mandelbrot
 
 1024x768 fractal, max 256 iterations (float arithmetic).
 
-| Implementation    |   Time | vs best |
-| ----------------- | -----: | ------: |
-| **Wado**          | 194 ms |   1.00x |
-| JavaScript (Node) | 194 ms |   1.00x |
-| C (gcc -O3)       | 197 ms |   1.02x |
+| Implementation    |  Throughput |    ms/iter | vs best |
+| ----------------- | ----------: | ---------: | ------: |
+| **Wado**          | 4.05 M px/s | 194.294 ms |   1.00x |
+| JavaScript (Node) | 4.03 M px/s | 194.982 ms |   1.00x |
+| C (gcc -O3)       | 3.93 M px/s | 200.158 ms |   1.03x |
 
 ## Sieve
 
-Sieve of Eratosthenes up to 10M (array operations), ×10. The sieve buffer
-is allocated once and reset each iteration, so allocation and first-touch
-page faults stay out of the timed region — the loop measures steady-state
-array traffic, which keeps run-to-run spread within ~1-2%.
+Sieve of Eratosthenes up to 10M (array operations). The sieve buffer is
+allocated once and reset each iteration, so allocation and first-touch page
+faults stay out of the timed region — the loop measures steady-state array
+traffic, which keeps run-to-run spread within ~1-2%.
 
-| Implementation    |   Time | vs best |
-| ----------------- | -----: | ------: |
-| C (gcc -O3)       | 382 ms |   1.00x |
-| JavaScript (Node) | 505 ms |   1.32x |
-| **Wado**          | 941 ms |   2.46x |
+| Implementation    |      Throughput |   ms/iter | vs best |
+| ----------------- | --------------: | --------: | ------: |
+| C (gcc -O3)       | 245.05 M nums/s | 40.808 ms |   1.00x |
+| JavaScript (Node) | 177.08 M nums/s | 56.471 ms |   1.38x |
+| **Wado**          | 107.12 M nums/s | 93.353 ms |   2.29x |
 
 ## Float-to-String
 
-5M f64 conversions to fixed-point string.
+1M f64 conversions to fixed-point string (`%.6f`).
 
-| Implementation |   Time | vs best |
-| -------------- | -----: | ------: |
-| Zig (RelFast)  | 334 ms |   1.00x |
-| Rust (native)  | 497 ms |   1.49x |
-| **Wado**       | 702 ms |   2.10x |
-| C (gcc -O3)    | 877 ms |   2.63x |
+| Implementation |     Throughput |    ms/iter | vs best |
+| -------------- | -------------: | ---------: | ------: |
+| Rust (native)  | 12.75 M conv/s |  78.411 ms |   1.00x |
+| **Wado**       |  8.96 M conv/s | 111.550 ms |   1.42x |
+| C (gcc -O3)    |  7.36 M conv/s | 135.818 ms |   1.73x |
 
 ## Compression
 
-zlib compress/decompress of twitter.json (631 KB) x 100 iterations.
+zlib compress/decompress of twitter.json (631514 bytes). Compression and
+decompression are independent phases (their throughputs are not summed).
 
-| Implementation        | Compress | Decompress |    Total | vs best |
-| --------------------- | -------: | ---------: | -------: | ------: |
-| zlib-rs (Rust native) |   402 ms |      44 ms |   446 ms |   1.00x |
-| **Wado** core:zlib    | 2,568 ms |   1,560 ms | 4,128 ms |   9.26x |
+| Implementation        |    Compress | Decompress |
+| --------------------- | ----------: | ---------: |
+| zlib-rs (Rust native) | 222.67 MB/s |  2.03 GB/s |
+| **Wado** core:zlib    |  31.37 MB/s | 56.90 MB/s |
+
+Per-iteration times: zlib-rs 2.836 ms compress / 0.311 ms decompress; Wado
+20.128 ms / 11.099 ms. Wado trails by ~7x on compress and ~36x on decompress.
 
 ## JSON: twitter
 
-Deserialize twitter.json (631 KB), ×10.
+Deserialize twitter.json (631514 bytes).
 
-| Implementation           |  Time | vs best |
-| ------------------------ | ----: | ------: |
-| serde_json (Rust native) |  7 ms |   1.00x |
-| JSON.parse (Node)        | 18 ms |   2.57x |
-| **Wado** core:json       | 34 ms |   4.86x |
+| Implementation           |  Throughput |  ms/iter | vs best |
+| ------------------------ | ----------: | -------: | ------: |
+| serde_json (Rust native) | 964.76 MB/s | 0.655 ms |   1.00x |
+| JSON.parse (Node)        | 426.93 MB/s | 1.330 ms |   2.26x |
+| **Wado** core:json       | 190.72 MB/s | 3.311 ms |   5.06x |
 
 ## JSON: canada
 
-Deserialize canada.json (2.3 MB, geographic coordinates), ×10.
+Deserialize canada.json (2251051 bytes, geographic coordinates).
 
-| Implementation           |   Time | vs best |
-| ------------------------ | -----: | ------: |
-| serde_json (Rust native) |  77 ms |   1.00x |
-| JSON.parse (Node)        | 106 ms |   1.38x |
-| **Wado** core:json       | 314 ms |   4.08x |
+| Implementation           |  Throughput |   ms/iter | vs best |
+| ------------------------ | ----------: | --------: | ------: |
+| serde_json (Rust native) | 277.82 MB/s |  8.102 ms |   1.00x |
+| JSON.parse (Node)        | 253.62 MB/s |  8.876 ms |   1.10x |
+| **Wado** core:json       |  56.74 MB/s | 39.675 ms |   4.90x |
 
 ## JSON: catalog
 
-Deserialize citm_catalog.json (1.7 MB, event catalog), ×10.
+Deserialize citm_catalog.json (1727204 bytes, event catalog).
 
-| Implementation             |   Time | vs best |
-| -------------------------- | -----: | ------: |
-| serde_json (Rust native)   |  22 ms |   1.00x |
-| JSON.parse (Node)          |  37 ms |   1.68x |
-| **Wado** v2 (hand-rolled¹) |  67 ms |   3.05x |
-| **Wado** core:json         | 131 ms |   5.95x |
+| Implementation             |  Throughput |   ms/iter | vs best |
+| -------------------------- | ----------: | --------: | ------: |
+| serde_json (Rust native)   | 728.03 MB/s |  2.372 ms |   1.00x |
+| JavaScript (JSON.parse)    | 541.16 MB/s |  3.191 ms |   1.35x |
+| **Wado** v2 (hand-rolled¹) | 227.23 MB/s |  7.601 ms |   3.20x |
+| **Wado** core:json         | 118.20 MB/s | 14.612 ms |   6.16x |
 
 ¹ `json_catalog/json_catalog_v2.wado` is a hand-rolled CitmCatalog parser
 PoC (no `core:json` / `core:serde`). Kept as a marker of the upper bound
@@ -101,17 +109,17 @@ sub-access-struct architecture. See its source for design notes.
 
 ## SQL Parse
 
-Parse 81 SQL statements (13 KB) x 100 iterations. Gale-generated parser vs sqlparser-rs.
+Parse 81 SQL statements (13366 bytes). Gale-generated parser vs sqlparser-rs.
 
-| Implementation             |   Time | vs best |
-| -------------------------- | -----: | ------: |
-| sqlparser-rs (Rust native) | 175 ms |   1.00x |
-| **Wado** (Gale)            | 190 ms |   1.08x |
+| Implementation             | Throughput |  ms/iter | vs best |
+| -------------------------- | ---------: | -------: | ------: |
+| sqlparser-rs (Rust native) |  7.35 MB/s | 1.819 ms |   1.00x |
+| **Wado** (Gale)            |  5.27 MB/s | 2.536 ms |   1.39x |
 
 ## Syntax Highlight
 
-Highlight 81 SQL statements (13 KB) x 100 iterations. Gale-generated
-highlighter vs four reference SQL highlighters:
+Highlight 81 SQL statements (13366 bytes). Gale-generated highlighter vs
+four reference SQL highlighters:
 
 - **Prism.js** — regex-based, the speed reference (ultimate goal)
 - **tree-sitter (Rust native)** — same `tree-sitter-sequel` grammar
@@ -122,25 +130,23 @@ highlighter vs four reference SQL highlighters:
   `@derekstride/tree-sitter-sql` grammar as the Rust row
 - **Shiki (JS engine)** — TextMate grammars, VSCode-quality output
 
-| Implementation            |     Time | vs best |
-| ------------------------- | -------: | ------: |
-| Prism.js                  |   171 ms |   1.00x |
-| **Wado** (Gale)           |   410 ms |   2.40x |
-| tree-sitter (Rust native) |   500 ms |   2.92x |
-| Lezer (CodeMirror)        |   525 ms |   3.07x |
-| tree-sitter (JS / WASM)   |   874 ms |   5.11x |
-| Shiki (JS engine)         | 2,126 ms |  12.43x |
+| Implementation            |  Throughput |   ms/iter | vs best |
+| ------------------------- | ----------: | --------: | ------: |
+| Prism.js                  |   8.22 MB/s |  1.627 ms |   1.00x |
+| tree-sitter (Rust native) |   2.55 MB/s |  5.243 ms |   3.22x |
+| Lezer (CodeMirror)        |   2.50 MB/s |  5.348 ms |   3.29x |
+| **Wado** (Gale)           |   2.22 MB/s |  6.012 ms |   3.70x |
+| tree-sitter (JS / WASM)   |   1.45 MB/s |  9.244 ms |   5.67x |
+| Shiki (JS engine)         | 577.35 KB/s | 23.151 ms |  14.25x |
 
 Notes:
 
 - Regex-based Prism.js wins on raw speed for a token-poor language
   like SQL.
-- The Wado (Gale) highlighter now lands second overall, ahead of the
-  tree-sitter Rust native parser and Lezer — only the regex-based
-  Prism.js is faster.
-- Pure-JS Lezer is essentially on par with tree-sitter's Rust native
-  parser, and clearly beats the same tree-sitter grammar accessed
-  through its JS WASM binding — V8 optimises plain JS more aggressively
+- The Wado (Gale) highlighter lands essentially on par with the
+  tree-sitter Rust native parser and pure-JS Lezer (all within ~15% of
+  each other) and clearly ahead of the same grammar accessed through
+  tree-sitter's JS WASM binding — V8 optimises plain JS more aggressively
   than the WASM↔JS boundary crossings cost.
 - Shiki (JS engine) is the slowest but produces the richest output
   (identifier-level coloring, VSCode-quality themes). The Oniguruma
@@ -157,7 +163,8 @@ Rust. The route and request set is Hono's own official router benchmark
 Servers and the load generator run on disjoint pinned cores; each
 request is measured in rotating slices and the fastest is kept.
 
-Throughput (requests/sec, higher is better):
+Throughput (requests/sec, higher is better; figures from a prior reference
+run — this pass did not re-measure HTTP routing):
 
 | Request                         | `wado serve` | Hono (Node) | Hono (Bun) | Axum (native) |
 | ------------------------------- | -----------: | ----------: | ---------: | ------------: |
@@ -196,7 +203,7 @@ mise run benchmark-syntax-highlight # syntax highlighting
 mise run benchmark-http-routing     # HTTP routing (wado serve vs Hono vs Axum)
 ```
 
-Prerequisites: `cc`, `cargo`, `zig`, `node` (managed by `mise install`).
+Prerequisites: `cc`, `cargo`, `node` (managed by `mise install`).
 
 ## Profiling
 
