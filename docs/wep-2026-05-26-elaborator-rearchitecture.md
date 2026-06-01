@@ -410,33 +410,41 @@ migration; see Trade-offs.
       `coercion_view`, `desugar_view`) for tests and the future LSP
       hover path. The stdlib snapshot seeds every map back into
       per-module storage so cached stdlib modules stay consistent.
-- [ ] **Stage 5 — `annotate_bodies` / `reify` split.** _User modules
-      done; stdlib parity remaining._ Reify covers every decl / `Stmt`
-      / `Pattern` / `Expr` shape, all Gaps (1–6, 9, 11, 12, 13) wired
-      end-to-end. It is the **default** path for user modules (the
-      `WADO_REIFY` gate is gone); the E2E suite is **2692 / 2692**
-      with no env var, full parity with the production walk for
-      user-module code. The annotation maps are canonically keyed by
-      `SymbolKey` (`(ModuleSource, AstId)`) so cross-module inlined
-      AST (assoc-const bodies, callee-module default args) reads the
-      right module's facts. See `### Stage 5 progress (user-module
-      parity — DONE)` for the landing log.
+- [x] **Stage 5 — `annotate_bodies` / `reify` split.** Reify covers
+      every decl / `Stmt` / `Pattern` / `Expr` shape, all Gaps (1–6, 9,
+      11, 12, 13) wired end-to-end. It is the **sole** TIR source for
+      *every* module — user, stdlib (`Core` / `Wasi` / `Wasm`), and the
+      stdlib snapshot — with **no env var**: the E2E suite is **2692 /
+      2692** on both the live path and `WADO_FORCE_REIFY=1` (now
+      identical). The annotation maps are canonically keyed by
+      `SymbolKey` (`(ModuleSource, AstId)`) so cross-module inlined AST
+      (assoc-const bodies, callee-module default args, trait
+      default-method bodies) reads the right module's facts. See
+      `### Stage 5 progress (user-module parity — DONE)` for the
+      user-module landing log.
 
-      **Remaining: stdlib parity.** `module_uses_reify` still bypasses
-      reify for `Core` / `Wasi` / `Wasm` modules and snapshot
-      construction. Forcing reify on for *all* modules currently fails
-      **1610 / 2692** E2E fixtures (allocator / anon-struct / array /
-      … clusters) — reify does not yet reach parity on stdlib-shaped
-      constructs. (Individual gaps are closing: `builtin::array^Eq::eq`,
-      which used to panic, now compiles.) Clearing the 1610-failure set
-      is the rest of Stage 5 and the sole prerequisite for the Stage 7
-      combined-walk removal. Tracked in a separate PR.
+      **Stdlib parity — DONE.** The remaining stdlib-shaped gaps were
+      closed by keying inlined foreign-AST facts to their owning module,
+      mangling reference impls by base struct `&` / `&mut`, dispatching
+      operator-overloaded compound assignment, resolving impl-method
+      self types under reify's positional impl-param indexing (incl. the
+      leading ref of a reference impl), and destructuring tuple bindings
+      in variadic for-of. `module_uses_reify` and its stdlib/snapshot
+      bypass are removed.
 - [ ] **Stage 6 — Liveness and DCE.** Not started. Independent of
       Stage 7 — see the roadmap note above.
-- [ ] **Stage 7 — Cleanup.** The `WADO_REIFY` gate is already removed
-      (reify is the user-module default). The remaining work — deleting
-      the old `Elaborator` / `AnnotateState` and the combined walk's
-      TIR-emission half — is gated **only** on Stage 5 stdlib parity
+- [~] **Stage 7 — Cleanup.** _Combined walk demoted to annotate-only
+      output (done); `Elaborator` / `AnnotateState` deletion pending._
+      Reify is now the sole TIR source for every module: the
+      `module_uses_reify` switch, its stdlib/snapshot bypass, the
+      `stdlib_snapshot::is_building` predicate, and the combined walk's
+      TIR-output branch are all deleted — the combined walk's returned
+      `TirModule` is discarded for every module and reify produces the
+      final TIR. The combined walk survives only as the `annotate`
+      fact-recorder reify reads from; stripping its TIR-construction
+      half (turning `resolve_*` into a pure annotate pass) and deleting
+      the old `Elaborator` / `AnnotateState` is the remaining cleanup,
+      gated **only** on Stage 5 stdlib parity
       (so nothing still routes through the combined walk), _not_ on
       Stage 6.
 

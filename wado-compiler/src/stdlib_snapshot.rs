@@ -120,19 +120,6 @@ pub fn prewarm() {
     let _ = get_or_init_snapshot();
 }
 
-/// True while the current thread is inside [`build_snapshot`].
-///
-/// Reify is the default for user-module compilation, but snapshot
-/// building stays on the production path: the snapshot is the
-/// rehydration target the per-compile pipeline depends on, and reify does
-/// not yet reach parity on the stdlib-shaped constructs the snapshot's
-/// foundation TIR is built from (putting stdlib on reify is the remainder
-/// of Stage 5). `module_uses_reify` consults this predicate to bypass
-/// reify while a snapshot is under construction.
-pub(crate) fn is_building() -> bool {
-    BUILDING.with(Cell::get)
-}
-
 /// Drive the full loader + `semantics_with_logger` pipeline on an empty
 /// entry source.  The loader's implicit-modules pass pulls in
 /// `core:prelude` and its transitive closure, matching the stdlib

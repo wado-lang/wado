@@ -1594,7 +1594,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     method_self_type,
                     &facts.assoc_type_bindings,
                 ),
-                SelfKind::Ref => self.tysys.type_table.borrow_mut().make_ref(method_self_type),
+                SelfKind::Ref => self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_ref(method_self_type),
                 SelfKind::MutRef => self
                     .tysys
                     .type_table
