@@ -520,12 +520,6 @@ fn run_optimization_passes(
             demote_value_copies(p);
             false
         });
-        // Materialize `ArrayLiteral` from the `__seq_lit:` builder block
-        // *before* inline, for the same reason as `string_push`: once the
-        // inliner expands `new_literal` / `push_literal` / `build`, the
-        // trait-method-keyed rewrite can no longer match. Running early also
-        // lets `cse` / `const_fold` in this loop see the normalized literal.
-        step!("nir/array_literal", collapse_array_literals);
         // Run short-`push_str` simplification *before* inline. Once the
         // inliner expands `String::push_str`'s body the `MethodCall` node is
         // gone and the literal-recognising rewrite can no longer match,
@@ -540,6 +534,14 @@ fn run_optimization_passes(
         // `optimize/sroa_param.rs`.
         step!("nir/sroa_param", sroa_single_field_parameters);
         step!("nir/inline", |p| inline_functions(p, threshold));
+        // Materialize `ArrayLiteral` from the `Array<T> { array_new(N) } +
+        // N × Array::push` builder window. Runs *after* inline: the
+        // `SequenceLiteralBuilder` methods (and, for wrapper builders such
+        // as `SeqVec { items: Array<T> }`, the `push_literal → self.field.push`
+        // delegation) must be inlined first so the raw `array_new + push`
+        // window — direct or field-rooted — is exposed. Later `cse` /
+        // `const_fold` in this same loop then see the normalized literal.
+        step!("nir/array_literal", collapse_array_literals);
         // Adjacent-use Box-local elision. After `sroa_param` reshapes
         // `Box<T>` parameters into scalars and `inline` propagates the
         // resulting `FieldAccess(Local(x), "value")` shape into call
