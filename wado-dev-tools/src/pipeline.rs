@@ -1,8 +1,8 @@
-use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
+use wado_compiler::hashmap::{IndexMap, IndexSet};
 
 use wado_compiler::OptLevel;
 
@@ -132,7 +132,7 @@ pub struct Emit {
 /// wrote. Any pre-existing file whose `{name}` we did not write — because its
 /// fixture was deleted, marked `compile_error`/`TODO`, or produced empty output
 /// under `--skip-empty` — is stale and returned here for deletion.
-fn collect_stale(existing: Vec<(String, PathBuf)>, written: &HashSet<String>) -> Vec<PathBuf> {
+fn collect_stale(existing: Vec<(String, PathBuf)>, written: &IndexSet<String>) -> Vec<PathBuf> {
     existing
         .into_iter()
         .filter(|(name, _)| !written.contains(name))
@@ -255,7 +255,7 @@ pub fn run_pipeline(in_template: &str, emits: &[Emit], opt_level: OptLevel, skip
                             *slot.lock().unwrap() = Some((input_path.clone(), t0));
                         }
 
-                        let rendered: HashMap<Phase, Result<String, String>> =
+                        let rendered: IndexMap<Phase, Result<String, String>> =
                             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                                 rt.block_on(render_phases(
                                     &item.source,
@@ -321,7 +321,7 @@ pub fn run_pipeline(in_template: &str, emits: &[Emit], opt_level: OptLevel, skip
     // Collect results, writing each output in place. No file is removed here:
     // every golden file is overwritten where it already lives, so there is no
     // moment at which the golden set is empty or partially deleted.
-    let mut written: Vec<HashSet<String>> = vec![HashSet::new(); emits.len()];
+    let mut written: Vec<IndexSet<String>> = vec![IndexSet::default(); emits.len()];
     let mut generated = 0u32;
     let mut skipped = 0u32;
     let mut total_compile_time = Duration::ZERO;
@@ -480,8 +480,8 @@ async fn render_phases(
     input_path: &str,
     phases: &[Phase],
     opt_level: OptLevel,
-) -> HashMap<Phase, Result<String, String>> {
-    let mut out: HashMap<Phase, Result<String, String>> = HashMap::new();
+) -> IndexMap<Phase, Result<String, String>> {
+    let mut out: IndexMap<Phase, Result<String, String>> = IndexMap::default();
 
     let needs_dump = phases
         .iter()
@@ -643,7 +643,7 @@ mod tests {
             ("b".to_string(), PathBuf::from("b.wir.wado")),
             ("c".to_string(), PathBuf::from("c.wir.wado")),
         ];
-        let mut written = HashSet::new();
+        let mut written = IndexSet::default();
         written.insert("a".to_string());
         written.insert("c".to_string());
 
@@ -657,7 +657,7 @@ mod tests {
             ("a".to_string(), PathBuf::from("a")),
             ("b".to_string(), PathBuf::from("b")),
         ];
-        let mut written = HashSet::new();
+        let mut written = IndexSet::default();
         written.insert("a".to_string());
         written.insert("b".to_string());
 
@@ -670,7 +670,7 @@ mod tests {
             ("a".to_string(), PathBuf::from("a")),
             ("b".to_string(), PathBuf::from("b")),
         ];
-        let written = HashSet::new();
+        let written = IndexSet::default();
 
         let stale = collect_stale(existing, &written);
         assert_eq!(stale, vec![PathBuf::from("a"), PathBuf::from("b")]);

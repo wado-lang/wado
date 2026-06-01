@@ -906,7 +906,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .expect("resolve_function records param types for every function reify emits");
         let mut params = Vec::with_capacity(func.params.len());
         for (p_idx, param) in func.params.iter().enumerate() {
-            let type_id = param_types[p_idx];
+            let type_id = *param_types
+                .get(p_idx)
+                .expect("resolve_function records one param type per func.params entry");
             let default_expr = param
                 .default
                 .as_ref()
@@ -1090,7 +1092,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             if type_param_names.len() <= idx {
                 type_param_names.resize(idx + 1, String::new());
             }
-            type_param_names[idx] = p.name.clone();
+            type_param_names[idx].clone_from(&p.name);
         }
         let mut next_idx = impl_type_params.len();
         for p in &func.type_params {
@@ -1107,7 +1109,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             if type_param_names.len() <= next_idx {
                 type_param_names.resize(next_idx + 1, String::new());
             }
-            type_param_names[next_idx] = p.name.clone();
+            type_param_names[next_idx].clone_from(&p.name);
             next_idx += 1;
         }
 
@@ -1188,7 +1190,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // (effect_dispatch.rs:2984); without the args a generic-effect
             // handler is keyed `Future<>` and the `Future<i32>` binding
             // finds no `DispatchPlan`.
-            info.trait_type_args = facts.trait_type_args.clone();
+            info.trait_type_args.clone_from(&facts.trait_type_args);
             if let Some((module, base)) = facts.trait_canonical.clone() {
                 info.base_trait_module = Some(module);
                 info.base_trait_name = Some(base);
@@ -1223,7 +1225,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .expect("resolve_method records param types for every impl method reify emits");
         let mut params = Vec::with_capacity(func.params.len());
         for (p_idx, p) in func.params.iter().enumerate() {
-            let type_id = param_types[p_idx];
+            let type_id = *param_types
+                .get(p_idx)
+                .expect("resolve_method records one param type per func.params entry");
             let name = if matches!(p.self_kind, SelfKind::None) {
                 p.name.clone()
             } else {
@@ -9076,7 +9080,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let indices: Vec<u32> = (0..variant_info.type_param_type_ids.len() as u32).collect();
             (case_data.payload, indices)
         };
-        drop(lookup);
         if type_args.is_empty() {
             return payload;
         }

@@ -1,0 +1,56 @@
+// `#function` in every function/method kind, asserted exactly in the test
+// world. Regression guard: reify must name methods `Struct::method` (matching
+// the elaborator's `display_name`), not the bare AST `func.name`. `#function`
+// and `assert` / `panic` messages share `FunctionContext::function_name`, so
+// this also pins the assert-location path. The single home for `#function`
+// coverage (`location_merged` covers `#data` / `#file` / `#line`).
+
+struct Foo {}
+
+trait Greet {
+    fn hello(&self) -> String;
+}
+
+trait Defaulted {
+    // Provided default method: the name resolves against the implementing
+    // struct (`Foo::who`), not the trait.
+    fn who(&self) -> String {
+        return #function;
+    }
+}
+
+impl Foo {
+    fn bar(&self) -> String {
+        return #function;
+    }
+    fn echo<T>(&self, _x: T) -> String {
+        // Generic method: no type arguments in the name.
+        return #function;
+    }
+}
+
+impl Greet for Foo {
+    // Trait-impl method: the trait is omitted, only `Foo::hello`.
+    fn hello(&self) -> String {
+        return #function;
+    }
+}
+
+impl Defaulted for Foo {}
+
+fn free_fn() -> String {
+    // Free function: bare name, no qualifier.
+    return #function;
+}
+
+test "#function names every function/method kind" {
+    let f = Foo {};
+    assert free_fn() == "free_fn";
+    assert f.bar() == "Foo::bar";
+    assert f.echo(1) == "Foo::echo";
+    assert f.hello() == "Foo::hello";
+    assert f.who() == "Foo::who";
+}
+
+__DATA__
+{"test": {}}

@@ -1,13 +1,8 @@
+// `#data` / `#file` / `#line` compile-time location literals. `#function` is
+// covered exhaustively (all function/method kinds, exact match) in the test
+// world by `location_function`.
+
 use { println, Stdout } from "core:cli";
-
-struct LocFoo {
-}
-
-impl LocFoo {
-    fn bar(&self) -> String with Stdout {
-        return #function;
-    }
-}
 
 fn test_data() with Stdout {
     println(#data);
@@ -22,10 +17,6 @@ fn test_file() with Stdout {
     println(#file);
 }
 
-fn test_function() with Stdout {
-    println(#function);
-}
-
 fn test_line() with Stdout {
     println(#line.to_string());
 }
@@ -34,20 +25,13 @@ fn test_line_template() with Stdout {
     println(`line: {#line}`);
 }
 
-fn test_method() with Stdout {
-    let foo = LocFoo {  };
-    println(foo.bar());
-}
-
 export fn run() with Stdout {
     test_data();
     test_data_template();
     test_file();
-    test_function();
     test_line();
     test_line_template();
-    test_method();
 }
 
 __DATA__
-{"stdout_contains": ["LOCATION_DATA_MARKER", "data: ", "LOCATION_DATA_MARKER", "location_merged.wado", "test_function", "LocFoo::bar"]}
+{"stdout_contains": ["LOCATION_DATA_MARKER", "data: ", "LOCATION_DATA_MARKER", "location_merged.wado"]}
