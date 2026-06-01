@@ -98,58 +98,59 @@ Rationale for the minimal shape:
 
 ### The pass that materializes it: `optimize::array_literal`
 
-A new NIR optimizer pass, modeled directly on `optimize::string_push`:
+A new NIR optimizer pass that recognizes the canonical `Array<T>`
+construction window and rewrites it to `ArrayLiteral`. It runs **after**
+`nir/inline` in the fixed-point loop: the `SequenceLiteralBuilder`
+`new_literal` / `push_literal` / `build` methods — and, for custom builders
+that wrap an `Array<T>`, the `push_literal → self.field.push` delegation —
+must be inlined first so the raw `Array<T> { array_new(N) } + Array::push`
+window is exposed. Later `cse` / `const_fold` in the same loop then see the
+normalized literal.
 
-```rust
-pub fn run(project: &mut NirProject, profiler: …) -> bool;
-fn collapse_block(block: &mut NirBlock) -> bool;
-fn try_match_array_build(stmts: &[NirStmt], start: usize) -> Option<ArrayBuild>;
-fn recurse_into_children(…);
-```
+The matched window, on a block's statement list, is:
 
-`collapse_block` walks each `NirBlock`'s statement vector with a sliding
-window, calling `try_match_array_build` at each position, and
-`recurse_into_children` descends into nested blocks and into block-valued
-expressions, so literals built inside `if` / `match` / `LabeledBlock`
-arms are also normalized.
+1. An init statement (`Let` or `Assign`-to-local) whose value embeds one or
+   more `Array<T> { repr: array_new(N), used: 0 }` structs. The struct may be
+   the bound value directly (a direct `Array<T>` literal) or a field of a
+   wrapper struct (`SeqVec { items: Array<T> }`, `Bag { keys, values }`),
+   reached by a field-index **path** from the bound local. The matcher also
+   descends the `{ …; *__b }` block tail that direct literals carry.
+2. The following statements, until each target array has received exactly its
+   `array_new` capacity in `Array::push` calls rooted at the bound local
+   (`place.push(e)` or `place.field.push(e)`, peeling the `&mut`). Pushes to
+   different array fields may interleave (`Bag`). Inlining `push_literal`
+   leaves single-use, _pure_ element temps (`let v = e; place.push(v)`)
+   between the pushes; these are resolved to their value and consumed with
+   the window.
 
-`try_match_array_build` recognizes the canonical window:
+On a match, each `Array<T> { array_new(N), used: 0 }` struct is rewritten in
+place to `ArrayLiteral { elements }`, and the consumed push (and resolved
+temp) statements are removed. The enclosing init keeps its shape, so a
+wrapper builder's output struct is preserved with its array field now a
+literal.
 
-1. `NirStmtKind::Let { local_index, value, .. }` whose `value` is a
-   `with_capacity` call (free `Call` or `MethodCall`) on `Array<T>`, with
-   a constant `i32` capacity `n`.
-2. Exactly `n` immediately-following `NirStmtKind::Expr(MethodCall …)`
-   statements, each a `push_literal` (or monomorphized `push`) whose
-   receiver is `Local(local_index)` and whose single argument is the
-   element expression.
+`Array::push` is matched by membership in the set of its
+`CompilerItem::ArrayPush` monomorphizations (each element type is a distinct
+`NirFunction`), not by canonical path — mirroring how `string_push`
+identifies its methods. `array_new` is matched by its builtin generic name.
 
-On a match it replaces the `n + 1` statements with a single
-`Let { local_index, value: NirExpr { kind: ArrayLiteral { elements }, type_id: <Array<T>>, .. }, .. }`,
-preserving the binding's `local_index`, `type_id`, `is_mut`, and
-`skip_value_copy`. The local stays an `Array<T>`; later mutation of it
-(further `push`es elsewhere) remains valid — the node only describes the
-_initial_ value, exactly as the WIR collapse does.
+Safety conditions:
 
-Placement: in the `run_optimization_passes` fixed-point loop, registered
-as `run_pass("nir/array_literal", …)`, adjacent to `nir/string_push` and
-early enough that `cse` / `const_folding` in the same loop see the
-normalized form on the same or next iteration. Like every loop pass it
-returns `bool` (changed), so the fixed point reconverges if a later pass
-(e.g. `inline`) plants a fresh builder window.
+- Each target must receive exactly its `array_new(N)` capacity in pushes;
+  otherwise the array is genuinely growable, not a literal.
+- Only non-empty literals collapse. A capacity-0 `array_new(0)` is
+  indistinguishable from a growable-array init (`let mut v = []; v.push(…)`);
+  collapsing it to a fixed-length `array.new_fixed()` would break subsequent
+  growth (and traps for reference element types — caught by
+  `opt_container_sroa_edge`). Empty literals stay in the growable form.
+- A temp binding is consumed (resolved + dropped) only if its value is pure
+  and the temp is not read after the window. Purity guarantees that cloning
+  the value into the literal — or eliding the binding — is observationally
+  neutral even if the temp feeds more than one push.
 
-Window-matching safety conditions (mirroring the WIR matcher, lifted to
-NIR statements):
-
-- The push statements are consecutive and immediately follow the `let`;
-  any intervening statement aborts the match for that window.
-- Capacity equals the push count; a mismatch aborts (the local is then a
-  genuinely-growable array, not a literal).
-- The empty case (`with_capacity(0)` with zero pushes) is matchable at
-  NIR because the element type lives on `type_id`, not on the elements —
-  unlike the WIR matcher, which bails on `expected == 0`. Whether to
-  collapse empty literals is gated on whether `wir_build` (§Lowering)
-  emits a valid zero-length array for the target; the conservative
-  initial landing may leave empty arrays to the existing path.
+Placement is `step!("nir/array_literal", …)` immediately after
+`step!("nir/inline", …)`. Like every loop pass it returns `bool` (changed),
+so the fixed point reconverges if a later pass plants a fresh window.
 
 ### Lowering: `ArrayLiteral` → `ArrayNewFixed`
 
@@ -182,28 +183,36 @@ and corrected in its own migration plan.
 
 Sequencing (each step with a green checkpoint), as landed:
 
-- [x] Land the NIR `ArrayLiteral` pass (before `inline`, mirroring
-      `string_push`) and the `wir_build` → `ArrayNewFixed` lowering. The
-      pass is gated on the result type being `Array<T>`, because
-      `SequenceLiteralBuilder` is user-implementable and its other builder
-      targets share the `__seq_lit:` shape but not the `Array<T>` `{ repr,
-      used }` layout.
+- [x] Land the NIR `ArrayLiteral` pass and the `wir_build` → `ArrayNewFixed`
+      lowering, then delete `collapse_array_push_sequences` and its helpers,
+      keeping `forward_struct_field_constants` (bounds-check elimination now
+      keys on the `StructNew Array<T>` that `wir_build` emits directly).
 - [x] Verify WIR output is equivalent across the e2e suite. The array
       fixtures (`array_bounds_elim_const_wir`, `array_append_collapse`,
-      `opt_crossmod_array`, `wir_optimize_dce_orphan_push`, …) still assert
+      `opt_crossmod_array`, `wir_optimize_dce_orphan_push`, …) assert
       `array.new_fixed<...>` and the bounds-check-free `array_get` shapes,
-      now produced solely by the NIR path. One fixture
-      (`array_bounds_elim_const_wir`) was updated to the cleaner output: the
-      literal binds directly to the user local (`arr.repr`) instead of the
-      builder temp (`__b_0.repr`) the WIR collapse left behind.
-- [x] Delete `collapse_array_push_sequences` and its helpers; keep
-      `forward_struct_field_constants` (bounds-check elimination now keys on
-      the `StructNew Array<T>` that `wir_build` emits directly).
+      now produced solely by the NIR path.
 
-No coexistence reached the branch: land, verify, and delete were sequenced
-within it. The `Array<T>` gate is the one refinement the implementation
-added over the original design — a real correctness fix, since matching the
-builder trait alone would have mis-materialized custom builder targets.
+The implementation went through two designs; the second is what landed:
+
+- A first cut matched the _pre-inline_ `__seq_lit:` `SequenceLiteralBuilder`
+  block and gated on the result type being `Array<T>`. That gate was needed
+  because the pre-inline block shape is identical for every builder, so the
+  type was the only discriminator — but it also _excluded_ custom builders
+  that wrap an `Array<T>` (`SeqVec`, `FrozenVec`), whose inner array the old
+  WIR pass collapsed (its `ArrayAccessPath::Field` case). Retiring the WIR
+  pass under that design was a silent performance regression: those wrappers
+  reverted to imperative `Array::push` chains, a gap the existing fixtures
+  did not assert against.
+- The landed design matches the _post-inline_ `Array<T> { array_new(N) } +
+Array::push` window at any place (direct local or `local.field`), so direct
+  and wrapper arrays collapse uniformly to `array.new_fixed` — reproducing
+  the old WIR pass's full coverage, including its field case, without a type
+  gate. `array_append_collapse` gains
+  `array.new_fixed<i32>(5, 10, 15)` plus a `wir_not_expect` on the wrapper's
+  inner `Array<i32>::push` to lock the wrapper case in;
+  `array_bounds_elim_const_wir` is unchanged from `main` (the post-inline
+  pass reproduces the old `__b_0` output exactly).
 
 What is **not** retired: the downstream WIR passes that consume
 `ArrayNewFixed` — `promote_constant_arrays_to_data` (→ `ArrayNewData`),
@@ -253,6 +262,16 @@ machinery. As landed, the variant is handled in:
 `niri` needs no dedicated arm yet: nothing evaluates an `ArrayLiteral`
 through the interpreter on the landed paths. An `Index(ArrayLiteral, k)`
 const-fold consumer would add one.
+
+Five aggregate walkers handled `TupleLiteral` by recursing into its elements
+but let `ArrayLiteral` fall into a `_ =>` catch-all — silent under-
+approximation, because the catch-all suppressed the non-exhaustive-match
+error that flagged the other sites. Each now descends into `ArrayLiteral`
+elements identically: `store_load_forward`'s two modified-locals walkers,
+`const_folding`'s aliased-field invalidation, `value_copy_demote`'s
+self-taint, and `labeled_block_fusion`'s free-loop-exit check. (`elide_local`
+and `cse` keep their conservative `_ => false` / `None` defaults — a missed
+optimization for arrays, not a bug.)
 
 The discipline from the NIR WEP applies: because `ArrayLiteral` is
 optimizer-materialized and never produced by `lower`, no pre-`optimize`
