@@ -1602,7 +1602,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // function type and do NOT consume a `TypeParam` index slot, so the
         // index space stays dense for real type params. Effect params have
         // their own channel (`current_effect_param_decls`, installed above).
-        let offset = scope.trait_ctx.type_params.len();
+        // Method-level type params start after the impl block's own type
+        // params (`impl_type_params`) — the SAME base the monomorphizer uses
+        // when substituting (`impl_type_params.len() + param.index` in
+        // `func_inst::instantiate_function`). It must NOT count the bound trait
+        // args that `bind_trait_type_params_from_impl` just inserted into
+        // `trait_ctx.type_params` (e.g. the `T` of `impl Maker<i32> for X`):
+        // those are name-resolution bindings, not positional TypeParam slots
+        // the monomorphizer knows about, so counting them would place the
+        // method's `<U>` at an index the substitution map never fills, leaving
+        // an unsubstituted `TypeParam` to reach codegen.
+        let offset = impl_type_params.len();
         let mut next_idx = offset as u32;
         for param in &func.type_params {
             if param.is_effect {

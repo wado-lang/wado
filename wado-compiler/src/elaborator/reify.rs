@@ -1268,7 +1268,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // battle-tested original path; the elaborator treats such an arg as a
         // positional param and monomorph substitutes it back to the concrete
         // type by identity. Method-level params continue after the impl param
-        // count, matching `resolve_method`'s `next_idx = type_params.len()`.
+        // count, matching `resolve_method`'s `next_idx = impl_type_params.len()`
+        // — the same base the monomorphizer uses
+        // (`impl_type_params.len() + param.index` in
+        // `func_inst::instantiate_function`).
         let mut type_param_names: Vec<String> = Vec::new();
         for p in &impl_type_params {
             let idx = p.index as usize;
