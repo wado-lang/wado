@@ -345,20 +345,18 @@ pub(crate) struct TypeAnnotations {
     /// Resolved (post-async-erasure) return type per function/method `AstId`.
     /// Reify reads it instead of re-resolving the return annotation.
     pub(crate) fn_return_types: IndexMap<SymbolKey, crate::tir::TypeId>,
-    /// TIR type params per function/method `AstId` (effect / `fn`-bound params
-    /// filtered out, dense indices, defaults resolved with the type-param scope
-    /// in place). Reify reads these instead of re-projecting them after its own
-    /// scope has been torn down.
-    pub(crate) fn_type_params: IndexMap<SymbolKey, Vec<crate::tir::TirTypeParam>>,
     /// Resolved operation signatures per effect / resource decl `AstId`
     /// (params, return type, `cm` name), as the combined walk resolved them
     /// with the decl's type-param / `Self` scope in place. Reify reads these
     /// instead of re-resolving the op signatures itself.
     pub(crate) effect_ops: IndexMap<SymbolKey, Vec<crate::tir::TirEffectOp>>,
-    /// TIR type params per struct / variant decl `AstId`, with each `default`
-    /// resolved while the decl's type-param scope was alive (so a default
-    /// referencing an earlier param resolves correctly). Reify reads these
-    /// instead of re-resolving the defaults after its scope is torn down.
+    /// TIR type params per declaration `AstId` (function, method, struct,
+    /// variant), with each `default` resolved while the decl's type-param scope
+    /// was alive (so a default referencing an earlier param resolves
+    /// correctly). Effect / `fn`-bound params are filtered out and indices are
+    /// dense. Reify reads these instead of re-projecting / re-resolving them
+    /// after its own scope is torn down. `AstId` is dense per module across all
+    /// item kinds, so function and decl entries never collide.
     pub(crate) decl_type_params: IndexMap<SymbolKey, Vec<crate::tir::TirTypeParam>>,
 }
 

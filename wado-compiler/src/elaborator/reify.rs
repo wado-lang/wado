@@ -104,6 +104,21 @@ macro_rules! reify_annotation_accessors {
             }
         )+
     };
+    // `base { … }`: decl/signature facts that are recorded once per decl and
+    // are NOT part of the per-element tuple-for-of overlay (param/return types,
+    // type params, effect-op signatures). Same canonical keying, no overlay
+    // walk — reify reads them straight from `sem.types`.
+    (base { $($name:ident => $map:ident : $val:ty),+ $(,)? }) => {
+        $(
+            fn $name(&self, id: crate::ast::AstId) -> Option<$val> {
+                let key = crate::symbol::SymbolKey::new(
+                    self.current_module_source.clone(),
+                    id,
+                );
+                self.sem.types.$map.get(&key).cloned()
+            }
+        )+
+    };
 }
 
 /// Per-module reify pass. One instance per loaded module the batch driver
@@ -299,49 +314,25 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.sem.types.local_types.get(&key).copied()
     }
 
-    /// The impl-type-param scheme `Elaborator::resolve_method` recorded for an
-    /// impl method (keyed by the method's def `AstId`). Reify reads this as
-    /// the single source of truth instead of recomputing it.
-    fn ann_method_impl_type_params(
-        &self,
-        id: crate::ast::AstId,
-    ) -> Option<Vec<crate::tir::TirTypeParam>> {
-        let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
-        self.sem.types.method_impl_type_params.get(&key).cloned()
-    }
-
-    /// Resolved parameter types (declaration order, incl. receiver for impl
-    /// methods) recorded by `resolve_function` / `resolve_method`.
-    fn ann_fn_param_types(&self, id: crate::ast::AstId) -> Option<Vec<crate::tir::TypeId>> {
-        let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
-        self.sem.types.fn_param_types.get(&key).cloned()
-    }
-
-    /// Resolved (post-async-erasure) return type recorded by
-    /// `resolve_function` / `resolve_method`.
-    fn ann_fn_return_type(&self, id: crate::ast::AstId) -> Option<crate::tir::TypeId> {
-        let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
-        self.sem.types.fn_return_types.get(&key).copied()
-    }
-
-    /// TIR type params recorded by `resolve_function` / `resolve_method`.
-    fn ann_fn_type_params(&self, id: crate::ast::AstId) -> Option<Vec<crate::tir::TirTypeParam>> {
-        let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
-        self.sem.types.fn_type_params.get(&key).cloned()
-    }
-
-    /// Resolved effect/resource op signatures recorded by
-    /// `resolve_effect_decl` / `resolve_resource_decl`.
-    fn ann_effect_ops(&self, id: crate::ast::AstId) -> Option<Vec<crate::tir::TirEffectOp>> {
-        let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
-        self.sem.types.effect_ops.get(&key).cloned()
-    }
-
-    /// TIR type params (defaults resolved in scope) recorded by
-    /// `resolve_struct` / `resolve_variant_decl`.
-    fn ann_decl_type_params(&self, id: crate::ast::AstId) -> Option<Vec<crate::tir::TirTypeParam>> {
-        let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
-        self.sem.types.decl_type_params.get(&key).cloned()
+    // Decl/signature facts the combined walk records once per decl (the
+    // single source of truth), read straight from `sem.types` with no overlay
+    // walk:
+    //   - `method_impl_type_params`: the impl-type-param scheme
+    //     `resolve_method` recorded per impl-method `AstId`.
+    //   - `fn_param_types` / `fn_return_types`: a function/method's resolved
+    //     param types (declaration order, receiver included) and
+    //     post-async-erasure return type.
+    //   - `effect_ops`: an effect/resource decl's resolved op signatures.
+    //   - `decl_type_params`: TIR type params per decl (function, method,
+    //     struct, variant), defaults resolved with the scope alive.
+    reify_annotation_accessors! {
+        base {
+            ann_method_impl_type_params => method_impl_type_params: Vec<crate::tir::TirTypeParam>,
+            ann_fn_param_types => fn_param_types: Vec<crate::tir::TypeId>,
+            ann_fn_return_type => fn_return_types: crate::tir::TypeId,
+            ann_effect_ops => effect_ops: Vec<crate::tir::TirEffectOp>,
+            ann_decl_type_params => decl_type_params: Vec<crate::tir::TirTypeParam>,
+        }
     }
 
     /// Build a [`TypeLookup`] view over the current module's import
@@ -492,159 +483,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.tysys.type_table.borrow_mut().intern(rebuilt)
             }
             _ => resolved,
-        }
-    }
-
-    /// Resolve a parameter / return type where some type-param names are
-    /// `<F: fn(...)>` bounds, which the elaborator realises eagerly to the
-    /// bound's function type rather than a `TypeParam` slot (item.rs:1569).
-    /// `fn_bounds` maps each such name to its already-resolved function
-    /// `TypeId`; everything else resolves through the normal scope. Without
-    /// this a param typed `F` reifies to `TypeParam(F)` and reaches codegen
-    /// unsubstituted (monomorph only fills real type-param slots).
-    fn resolve_type_with_fn_bounds(
-        &mut self,
-        ty: &ast::Type,
-        type_params: &[String],
-        fn_bounds: &crate::hashmap::IndexMap<String, TypeId>,
-    ) -> TypeId {
-        match ty {
-            ast::Type::Named(n) if fn_bounds.contains_key(&n.name) => fn_bounds[&n.name],
-            ast::Type::Reference(inner) => {
-                let inner_id = self.resolve_type_with_fn_bounds(inner, type_params, fn_bounds);
-                self.tysys.type_table.borrow_mut().make_ref(inner_id)
-            }
-            ast::Type::MutReference(inner) => {
-                let inner_id = self.resolve_type_with_fn_bounds(inner, type_params, fn_bounds);
-                self.tysys.type_table.borrow_mut().make_mut_ref(inner_id)
-            }
-            _ => self.resolve_type_in_scope(ty, type_params),
-        }
-    }
-
-    /// Like [`Self::resolve_type`] but with an explicit type-parameter
-    /// scope so `T`/`U` in a generic decl's method signature resolve to
-    /// the right `TypeParam` slot. Used by `reify_effect_decl` /
-    /// `reify_resource_decl` for method params and return types, and by
-    /// `reify_variant_decl` for the (unused-here) payload path.
-    fn resolve_type_in_scope(&mut self, ty: &ast::Type, type_params: &[String]) -> TypeId {
-        let lookup = self.type_lookup();
-        let resolved = super::Elaborator::<H>::resolve_type_static_with_params(
-            ty,
-            &mut self.tysys.type_table.borrow_mut(),
-            &lookup,
-            type_params,
-        );
-        self.apply_function_type_effects(ty, resolved)
-    }
-
-    /// Like [`Self::resolve_type_in_scope`] but resolves bare `Self`
-    /// (anywhere in the type tree) to `self_type` and `Self::AssocType`
-    /// to the impl's recorded associated-type binding. Reify has no
-    /// `trait_ctx` equivalent (production: `type_resolution.rs:127`), so
-    /// impl-method param/return types substitute both explicitly.
-    fn resolve_type_with_self(
-        &mut self,
-        ty: &ast::Type,
-        type_params: &[String],
-        self_type: TypeId,
-        assoc_type_bindings: &crate::hashmap::IndexMap<String, TypeId>,
-    ) -> TypeId {
-        match ty {
-            ast::Type::Named(named) if named.name == "Self" => self_type,
-            // `Self::Output` — the impl's `type Output = …;` binding,
-            // resolved by annotate and recorded on `ImplFacts`.
-            ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" => assoc_type_bindings
-                .get(&ns.name)
-                .copied()
-                .unwrap_or_else(|| self.resolve_type_in_scope(ty, type_params)),
-            ast::Type::Reference(inner) => {
-                let inner_id =
-                    self.resolve_type_with_self(inner, type_params, self_type, assoc_type_bindings);
-                self.tysys.type_table.borrow_mut().make_ref(inner_id)
-            }
-            ast::Type::MutReference(inner) => {
-                let inner_id =
-                    self.resolve_type_with_self(inner, type_params, self_type, assoc_type_bindings);
-                self.tysys.type_table.borrow_mut().make_mut_ref(inner_id)
-            }
-            // A generic application (`Option<Self::Item>`,
-            // `Result<T, Self::Error>`) or tuple (`[Self::Item, bool]`)
-            // can mention `Self` / `Self::Assoc` inside its arguments. The
-            // static resolver below has no self / assoc context, so it
-            // would resolve the nested projection to `unknown`. When an
-            // argument mentions `Self`, rebuild the instance from
-            // self-substituted argument ids (mirroring the static
-            // resolver's `Type::Generic` base handling: `Option` special
-            // case, else struct / variant / enum lookup). Self-free types
-            // keep the proven static path unchanged.
-            ast::Type::Generic(generic) if Self::type_mentions_self(ty) => {
-                let arg_ids: Vec<TypeId> = generic
-                    .args
-                    .iter()
-                    .map(|a| {
-                        self.resolve_type_with_self(a, type_params, self_type, assoc_type_bindings)
-                    })
-                    .collect();
-                if generic.name == "Option" && arg_ids.len() == 1 {
-                    return self.tysys.type_table.borrow_mut().make_option(arg_ids[0]);
-                }
-                let module_source = {
-                    let lookup = self.type_lookup();
-                    lookup
-                        .struct_fields(&generic.name)
-                        .map(|i| i.module_source.clone())
-                        .or_else(|| {
-                            lookup
-                                .variant_case(&generic.name)
-                                .map(|i| i.module_source.clone())
-                        })
-                        .or_else(|| {
-                            lookup
-                                .enum_case(&generic.name)
-                                .map(|i| i.module_source.clone())
-                        })
-                };
-                match module_source {
-                    Some(m) => self.tysys.type_table.borrow_mut().make_generic_instance(
-                        generic.name.clone(),
-                        m,
-                        arg_ids,
-                    ),
-                    None => crate::tir::TypeTable::UNKNOWN,
-                }
-            }
-            ast::Type::Tuple(elems) if Self::type_mentions_self(ty) => {
-                let elem_ids: Vec<TypeId> = elems
-                    .iter()
-                    .map(|e| {
-                        self.resolve_type_with_self(e, type_params, self_type, assoc_type_bindings)
-                    })
-                    .collect();
-                self.tysys.type_table.borrow_mut().make_tuple(elem_ids)
-            }
-            _ => self.resolve_type_in_scope(ty, type_params),
-        }
-    }
-
-    /// Syntactic check: does `ty` mention `Self` (bare or as a
-    /// `Self::Assoc` projection) anywhere in its tree? Gates the
-    /// self-substituting reconstruction in [`Self::resolve_type_with_self`]
-    /// so self-free types keep the proven static-resolver path.
-    fn type_mentions_self(ty: &ast::Type) -> bool {
-        match ty {
-            ast::Type::Named(n) => n.name == "Self",
-            ast::Type::NamespacedGeneric(ns) => {
-                ns.namespace == "Self" || ns.args.iter().any(Self::type_mentions_self)
-            }
-            ast::Type::Generic(g) => g.args.iter().any(Self::type_mentions_self),
-            ast::Type::Tuple(elems) => elems.iter().any(Self::type_mentions_self),
-            ast::Type::Reference(i) | ast::Type::MutReference(i) => Self::type_mentions_self(i),
-            ast::Type::Function(f) => {
-                f.params.iter().any(Self::type_mentions_self)
-                    || Self::type_mentions_self(&f.return_type)
-            }
-            ast::Type::TypePackSpread(..) => false,
         }
     }
 
@@ -1123,7 +961,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // defaults resolved with the type-param scope alive), rather than
         // re-projecting them here after the scope is torn down.
         let type_params = self
-            .ann_fn_type_params(func.id)
+            .ann_decl_type_params(func.id)
             .expect("resolve_function records the type params for every function reify emits");
 
         Some(TirFunction {
@@ -1439,7 +1277,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `resolve_method` projected (effect / `fn`-bound params filtered,
         // dense indices, defaults resolved with the type-param scope alive),
         // rather than re-projecting them here after the scope is torn down.
-        let type_params = self.ann_fn_type_params(func.id).expect(
+        let type_params = self.ann_decl_type_params(func.id).expect(
             "resolve_method records the method type params for every impl method reify emits",
         );
 

@@ -1253,7 +1253,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .insert(sig_key.clone(), return_type);
         self.sem
             .types
-            .fn_type_params
+            .decl_type_params
             .insert(sig_key, type_params.clone());
 
         Some(TirFunction {
@@ -1886,7 +1886,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // rather than re-projecting them after its scope is torn down.
         self.sem
             .types
-            .fn_type_params
+            .decl_type_params
             .insert(self.ann_key(func.id), type_params.clone());
 
         // Store type parameters for generic methods (for call site substitution)
