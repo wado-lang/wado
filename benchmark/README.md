@@ -55,11 +55,11 @@ traffic, which keeps run-to-run spread within ~1-2%.
 
 1M f64 conversions to fixed-point string (`%.6f`).
 
-| Implementation |     Throughput |    ms/iter | vs best |
-| -------------- | -------------: | ---------: | ------: |
-| Rust           | 12.75 M conv/s |  78.411 ms |   1.00x |
-| **Wado**       |  8.96 M conv/s | 111.550 ms |   1.42x |
-| C              |  7.36 M conv/s | 135.818 ms |   1.73x |
+| Implementation   |     Throughput |    ms/iter | vs best |
+| ---------------- | -------------: | ---------: | ------: |
+| Rust (core::fmt) | 12.75 M conv/s |  78.411 ms |   1.00x |
+| **Wado** (fpfmt) |  8.96 M conv/s | 111.550 ms |   1.42x |
+| C (printf)       |  7.36 M conv/s | 135.818 ms |   1.73x |
 
 ## Compression: compress
 
