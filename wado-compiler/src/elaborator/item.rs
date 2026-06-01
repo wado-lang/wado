@@ -1623,7 +1623,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Set up Self type for the impl block
         // This allows `&Self` to resolve correctly in method parameters
         let old_self_type = scope.trait_ctx.self_type;
-        scope.trait_ctx.self_type = Some(scope.resolve_type(impl_type));
+        let resolved_self_type = scope.resolve_type(impl_type);
+        // Record the resolved self type for reify to read back (single source
+        // of truth = this path), keyed like `method_impl_type_params`.
+        let self_type_key = scope.ann_key(func.id);
+        scope
+            .sem
+            .types
+            .method_self_types
+            .insert(self_type_key, resolved_self_type);
+        scope.trait_ctx.self_type = Some(resolved_self_type);
 
         // Concrete `TypeId`s of the trait/resource type arguments at this
         // impl site (e.g. `[u8]` for `impl Stream<u8> for MockCM`). Resolved

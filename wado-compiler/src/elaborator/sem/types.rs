@@ -337,6 +337,12 @@ pub(crate) struct TypeAnnotations {
     /// explicitly-written methods (unique key); default-method bodies land
     /// under their owning module.
     pub(crate) method_impl_type_params: IndexMap<SymbolKey, Vec<crate::tir::TirTypeParam>>,
+    /// Resolved `Self` type per impl-method `AstId`, as
+    /// `Elaborator::resolve_method` resolved the impl target (including any
+    /// leading reference). Reify reads it instead of re-resolving the self
+    /// type with its own logic. Same keying / source-of-truth rationale as
+    /// [`Self::method_impl_type_params`].
+    pub(crate) method_self_types: IndexMap<SymbolKey, crate::tir::TypeId>,
 }
 
 /// One tuple-`for-of` element's slice of the body-level annotation maps.
