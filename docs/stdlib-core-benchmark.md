@@ -3,7 +3,18 @@
 
 # core:benchmark
 
-Benchmark utilities: lazy headers, timed phases, per-iteration reports.
+Benchmark utilities: lazy headers, timed phases, throughput reports.
+
+Every phase reports a **throughput** figure (work done per second, higher
+is better) with the elapsed time retained alongside it. The throughput
+unit is chosen so the number is meaningful for the workload:
+
+- Set `work_per_iter` + `unit` for a custom work-rate (e.g. `conversions`,
+  `px`, `numbers`). This is the preferred form whenever the workload has a
+  natural unit of work.
+- Otherwise, if `input_size` is set, throughput is reported as a byte rate
+  (`MB/s`).
+- Otherwise, throughput falls back to iterations per second (`ops/s`).
 
 Used by files in `benchmark/`. A benchmark typically looks like:
 
@@ -14,52 +25,95 @@ test "benchmark" { run(); }
 
 export fn run() with Stdout, MonotonicClock {
     let mut b = Benchmark::new("count-prime");
+    b.work_per_iter = Option::Some(10_000_000.0);  // numbers screened
+    b.unit = "numbers";
     let count = b.run("", || count_primes(10_000_000));
     b.println(`count = {count}`);
 }
 ```
 
-For multi-phase or iteration-driven benchmarks, configure via field
-assignment after `new`:
+For multi-phase benchmarks, call `run` once per phase. A byte-sized input
+reports `MB/s` automatically:
 
 ```wado
 let mut b = Benchmark::new("zlib");
-b.iterations = 10;
-b.input_size = Option::Some(data.len());
+b.input_size = Option::Some(data.len());  // → MB/s
 let compressed = b.run("compress", || zlib_compress(&data));
 let _ = b.run("decompress", || inflate_zlib(&compressed).unwrap());
 ```
+
+## Functions
+
+### `pub fn format_rate(total_work: f64, elapsed_ns: u64, unit: String) -> String`
+
+Format a throughput figure: `total_work` units done over `elapsed_ns`
+nanoseconds, as a per-second rate. The byte unit (`"B"`) renders with
+`KB`/`MB`/`GB` scaling; any other unit uses SI `k`/`M`/`G` prefixes.
+A zero elapsed time yields a `0.00` rate instead of dividing by zero.
 
 ## Structs
 
 ### `pub struct Benchmark`
 
 A benchmark run. The driver prints a header on the first measurement,
-then a labeled line per `run()` phase reporting elapsed time (and
-per-iteration time when `iterations > 1`).
+then a labeled line per `run()` phase reporting throughput (work per
+second) with the per-iteration time retained alongside it.
 
 #### `name: String`
 
 #### `iterations: i32`
 
+Number of timed iterations. `0` (the default) auto-calibrates the
+iteration count so the timed loop runs for about `target_ms`
+milliseconds; the total elapsed time is then meaningless (~`target_ms`)
+so only the per-iteration figure and throughput are reported. Set a
+positive value to run a fixed iteration count instead.
+
+#### `target_ms: i32`
+
+Wall-clock budget in milliseconds for auto-calibration (used when
+`iterations == 0`). The loop grows the iteration count until the timed
+region reaches this duration. `0` runs exactly one iteration.
+
 #### `warmup: i32`
 
-Number of unmeasured warmup runs. `-1` (the default) means "auto":
-1 warmup if `iterations >= 2`, otherwise 0.
+Number of unmeasured warmup runs for fixed mode. `-1` (the default)
+means "auto": 1 warmup if `iterations >= 2`, otherwise 0. Auto mode
+always performs one warmup before calibration.
 
 #### `input_size: Option<i32>`
 
-Optional input size, shown in the header (e.g. `"631044 bytes"`).
+Optional input size in bytes, shown in the header (e.g.
+`"631044 bytes"`). When set and `work_per_iter` is unset, throughput
+is reported as a byte rate (`MB/s`).
+
+#### `work_per_iter: Option<f64>`
+
+Units of work performed per iteration, for the throughput figure.
+`null` (the default) means "auto": byte rate from `input_size` if it is
+set, otherwise iterations per second. Set this to report a custom
+work-rate (e.g. `5_000_000.0` conversions per iteration).
+
+#### `unit: String`
+
+Unit label for the throughput figure when `work_per_iter` is set
+(e.g. `"conversions"`, `"px"`, `"numbers"`). Ignored when throughput
+falls back to a byte rate or to `ops/s`.
 
 #### `pub fn new(name: String) -> Benchmark`
 
-Create a benchmark with default settings (single iteration, no input size).
+Create a benchmark with default settings (auto-calibrated to ~1s,
+no input size).
 
 #### `pub fn run<T>(&mut self, label: String, f: fn mut() -> T) -> T with Stdout, MonotonicClock`
 
-Run a single phase. Performs warmup (if any) then `iterations` timed
-runs of `f`. Prints the header on first call. Returns the final
-timed iteration's value.
+Run a single phase and report its throughput.
+
+In auto mode (`iterations == 0`) the iteration count is calibrated so
+the timed loop runs for about `target_ms` milliseconds. In fixed mode
+(`iterations > 0`) it performs `warmup` unmeasured runs then exactly
+`iterations` timed runs. Prints the header on first call. Returns the
+final timed iteration's value.
 
 `label` may be empty for an unlabeled single-phase benchmark.
 
