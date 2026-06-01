@@ -1351,69 +1351,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::name::{LocalMethodName, MethodName};
         use crate::tir::TypeTable;
 
-        // Impl type params, rebuilt from the AST self type to mirror the
-        // elaborator's method emission (`item.rs:1370-1462`): every
-        // `Named` arg of a generic self type is a positional impl type
-        // param (`TagMap<Tag, V>` → `Tag@0`, `V@1`), so monomorph's
-        // positional substitution against the recorded `type_arg_ids`
-        // lines up — including the newtype-aliased / concrete args.
-        // Bounds come from the explicit `impl<…>` clause (recorded in
-        // `facts.impl_type_params`) by name. Self-type shapes this does
-        // not model (variadic tuple `[..T]`, …) fall back to the
-        // recorded projection so their behaviour is preserved.
-        let impl_self_inner = match impl_self_ty {
-            ast::Type::Reference(i) | ast::Type::MutReference(i) => i.as_ref(),
-            other => other,
-        };
-        let bounds_for = |name: &str| -> Vec<String> {
-            facts
-                .impl_type_params
-                .iter()
-                .find(|p| p.name == name)
-                .map(|p| p.bounds.clone())
-                .unwrap_or_default()
-        };
-        // Single source of truth: read the impl-type-param scheme the
-        // elaborator's `resolve_method` recorded. The local recompute below is
-        // kept only as a fallback for methods whose fact is not present (e.g.
-        // stdlib not yet snapshot-seeded); it mirrors the elaborator's logic.
+        // Single source of truth: the impl-type-param scheme is computed once
+        // by `Elaborator::resolve_method` and recorded; reify reads it. reify
+        // runs only for the current module's explicitly-written methods in the
+        // same `build_tir_from_state` pass that recorded them (stdlib is
+        // rehydrated from the snapshot's already-reified TIR), so the fact is
+        // always present — a missing entry is a contract violation, not a
+        // fallback case.
         let impl_type_params: Vec<crate::tir::TirTypeParam> = self
             .ann_method_impl_type_params(func.id)
-            .unwrap_or_else(|| match impl_self_inner {
-            ast::Type::Generic(generic) => generic
-                .args
-                .iter()
-                .enumerate()
-                .map(|(i, arg)| {
-                    // Every self-type arg occupies a positional impl
-                    // type-param slot so monomorph's positional
-                    // substitution against `type_arg_ids` stays aligned.
-                    // A non-`Named` arg (`Array<String>` in
-                    // `NestedMap<Array<String>, V>`) is concrete in the
-                    // body, so its slot just holds the position with a
-                    // synthesized name that the body never references.
-                    let name = match arg {
-                        ast::Type::Named(named) => named.name.clone(),
-                        _ => format!("__impl_arg{i}"),
-                    };
-                    crate::tir::TirTypeParam {
-                        name: name.clone(),
-                        is_effect: false,
-                        is_pack: false,
-                        bounds: bounds_for(&name),
-                        default: None,
-                        index: i as u32,
-                    }
-                })
-                .collect(),
-            ast::Type::Named(named)
-                if facts.impl_type_params.iter().any(|p| p.name == named.name) =>
-            {
-                // Blanket impl `impl<I: Bound> Trait for I`.
-                facts.impl_type_params.clone()
-            }
-            _ => facts.impl_type_params.clone(),
-            });
+            .expect(
+                "resolve_method records the impl-type-param scheme for every \
+                 impl method reify emits",
+            );
 
         // Type-param scope for resolving the method's own param/return
         // types. Every impl-self-type arg occupies its positional slot —
