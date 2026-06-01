@@ -355,6 +355,11 @@ pub(crate) struct TypeAnnotations {
     /// with the decl's type-param / `Self` scope in place. Reify reads these
     /// instead of re-resolving the op signatures itself.
     pub(crate) effect_ops: IndexMap<SymbolKey, Vec<crate::tir::TirEffectOp>>,
+    /// TIR type params per struct / variant decl `AstId`, with each `default`
+    /// resolved while the decl's type-param scope was alive (so a default
+    /// referencing an earlier param resolves correctly). Reify reads these
+    /// instead of re-resolving the defaults after its scope is torn down.
+    pub(crate) decl_type_params: IndexMap<SymbolKey, Vec<crate::tir::TirTypeParam>>,
 }
 
 /// One tuple-`for-of` element's slice of the body-level annotation maps.

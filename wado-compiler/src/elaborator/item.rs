@@ -513,6 +513,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         drop(scope);
 
+        // Record the projected type params (defaults resolved with the scope
+        // alive, above) for reify to read back instead of re-resolving them.
+        self.sem
+            .types
+            .decl_type_params
+            .insert(self.ann_key(struct_decl.id), type_params.clone());
+
         let serde_rename_all = struct_decl.attrs.iter().find_map(|a| {
             if a.name == "serde" {
                 a.kv_value("rename_all").map(str::to_string)
@@ -790,6 +797,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
 
         drop(scope);
+
+        // Record the projected type params (defaults resolved with the scope
+        // alive, above) for reify to read back instead of re-resolving them.
+        self.sem
+            .types
+            .decl_type_params
+            .insert(self.ann_key(variant_decl.id), type_params.clone());
 
         register_variant_compiler_item(
             &self.tysys.type_table,

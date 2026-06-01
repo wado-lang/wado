@@ -337,6 +337,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.sem.types.effect_ops.get(&key).cloned()
     }
 
+    /// TIR type params (defaults resolved in scope) recorded by
+    /// `resolve_struct` / `resolve_variant_decl`.
+    fn ann_decl_type_params(
+        &self,
+        id: crate::ast::AstId,
+    ) -> Option<Vec<crate::tir::TirTypeParam>> {
+        let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
+        self.sem.types.decl_type_params.get(&key).cloned()
+    }
+
     /// Build a [`TypeLookup`] view over the current module's import
     /// context and the shared `all_*` tables. Used by `reify_*` helpers
     /// that need to resolve AST `Type` nodes (e.g. type-param defaults,
@@ -917,25 +927,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             });
         }
 
-        // Type-param defaults are AST `Type`s — resolve via the
-        // import-aware [`TypeLookup`] view (no use→def re-recording).
-        // The base type-param `TypeId`s themselves were interned at
-        // annotate time and are cached on `field_info.type_param_type_ids`,
-        // but `TirTypeParam` only needs the `default: Option<TypeId>`,
-        // so resolve_type each default directly.
-        let type_params: Vec<crate::tir::TirTypeParam> = struct_decl
-            .type_params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| crate::tir::TirTypeParam {
-                name: p.name.clone(),
-                is_effect: p.is_effect,
-                is_pack: p.is_pack,
-                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
-                index: i as u32,
-            })
-            .collect();
+        // Single source of truth: the combined walk projected these type
+        // params with each default resolved while the decl's type-param scope
+        // was alive; read them back rather than re-resolving the defaults.
+        let type_params = self
+            .ann_decl_type_params(struct_decl.id)
+            .expect("resolve_struct records the type params for every struct reify emits");
 
         let serde_rename_all = struct_decl.attrs.iter().find_map(|a| {
             if a.name == "serde" {
@@ -984,19 +981,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
 
-        let type_params: Vec<crate::tir::TirTypeParam> = variant_decl
-            .type_params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| crate::tir::TirTypeParam {
-                name: p.name.clone(),
-                is_effect: p.is_effect,
-                is_pack: p.is_pack,
-                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
-                index: i as u32,
-            })
-            .collect();
+        // Single source of truth: read the type params the combined walk
+        // projected (defaults resolved with the decl's scope alive) rather
+        // than re-resolving the defaults here.
+        let type_params = self
+            .ann_decl_type_params(variant_decl.id)
+            .expect("resolve_variant_decl records the type params for every variant reify emits");
 
         TirVariantDecl {
             name: variant_decl.name.clone(),
