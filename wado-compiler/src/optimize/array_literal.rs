@@ -72,13 +72,15 @@ impl NirOptVisitor for ArrayLiteralVisitor<'_> {
         // Recurse first so a literal nested inside another literal's element
         // (e.g. `[[1, 2], [3, 4]]`) collapses bottom-up.
         let mut changed = opt_walk_expr(self, expr);
-        // `SequenceLiteralBuilder` is user-implementable, so the `__seq_lit:`
-        // shape also covers custom builder targets. `ArrayLiteral` is the
-        // canonical form for `Array<T>` only — `wir_build` lowers it to the
-        // `Array<T>` `{ repr, used }` struct — so gate on the result type
-        // being `Array<T>`. Other builder targets keep their imperative form.
-        if self.type_table.as_array(expr.type_id).is_some()
-            && let Some(elements) = try_match_seq_lit_block(&expr.kind)
+        // Match the cheap structural shape first (an enum-discriminant + label
+        // compare in `try_match_seq_lit_block`); only then pay for the
+        // `as_array` type-table lookup. `SequenceLiteralBuilder` is
+        // user-implementable, so the `__seq_lit:` shape also covers custom
+        // builder targets. `ArrayLiteral` is the canonical form for `Array<T>`
+        // only — `wir_build` lowers it to the `Array<T>` `{ repr, used }`
+        // struct — so the type gate keeps other builder targets imperative.
+        if let Some(elements) = try_match_seq_lit_block(&expr.kind)
+            && self.type_table.as_array(expr.type_id).is_some()
         {
             expr.kind = NirExprKind::ArrayLiteral { elements };
             changed = true;

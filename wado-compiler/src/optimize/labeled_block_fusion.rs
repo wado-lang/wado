@@ -2250,7 +2250,7 @@ fn expr_has_free_unlabeled_loop_exit(expr: &NirExpr, loop_depth: u32) -> bool {
         NirExprKind::StructLiteral { fields, .. } => fields
             .iter()
             .any(|f| expr_has_free_unlabeled_loop_exit(&f.value, loop_depth)),
-        NirExprKind::TupleLiteral { elements } => elements
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => elements
             .iter()
             .any(|e| expr_has_free_unlabeled_loop_exit(e, loop_depth)),
         NirExprKind::VariantConstruct { payload, .. } => payload

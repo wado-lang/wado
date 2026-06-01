@@ -169,7 +169,7 @@ fn precompute_modified_expr(
                 precompute_modified_expr(&field.value, modified, cache);
             }
         }
-        NirExprKind::TupleLiteral { elements, .. } => {
+        NirExprKind::TupleLiteral { elements, .. } | NirExprKind::ArrayLiteral { elements, .. } => {
             for elem in elements {
                 precompute_modified_expr(elem, modified, cache);
             }
@@ -407,7 +407,7 @@ fn collect_modified_in_expr(expr: &NirExpr, modified: &mut IndexSet<u32>) {
                 collect_modified_in_expr(&field.value, modified);
             }
         }
-        NirExprKind::TupleLiteral { elements, .. } => {
+        NirExprKind::TupleLiteral { elements, .. } | NirExprKind::ArrayLiteral { elements, .. } => {
             for elem in elements {
                 collect_modified_in_expr(elem, modified);
             }

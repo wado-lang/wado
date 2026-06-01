@@ -1081,7 +1081,7 @@ fn is_self_derived(expr: &NirExpr, tainted: &IndexSet<u32>, tt: &Rc<RefCell<Type
         NirExprKind::StructLiteral { fields, .. } => fields
             .iter()
             .any(|f| is_self_derived(&f.value, tainted, tt)),
-        NirExprKind::TupleLiteral { elements } => {
+        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             elements.iter().any(|e| is_self_derived(e, tainted, tt))
         }
         NirExprKind::VariantConstruct { payload, .. } => payload

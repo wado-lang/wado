@@ -451,7 +451,8 @@ impl ConstFoldVisitor<'_> {
                     self.interpreter.invalidate_aliased_fields();
                 }
             }
-            NirExprKind::TupleLiteral { elements, .. } => {
+            NirExprKind::TupleLiteral { elements, .. }
+            | NirExprKind::ArrayLiteral { elements, .. } => {
                 let aliased = self.interpreter.aliased_locals();
                 if elements
                     .iter()
