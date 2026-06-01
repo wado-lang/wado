@@ -288,6 +288,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ann_index_assign_dispatch => index_assign_dispatch: super::sem::types::OperatorDispatch,
     }
 
+    /// Read the recorded type of a local binding (keyed by the binding's
+    /// def `AstId`). Unlike the `ann_*` accessors above, `local_types` is not
+    /// part of the per-element tuple-for-of overlay — but reify only consults
+    /// it for *annotated* `let` types, which are written in source and so are
+    /// element-invariant (a for-of binds a value, not a type), making the
+    /// base map's last-write value correct for every unrolled element.
+    fn ann_local_type(&self, id: crate::ast::AstId) -> Option<crate::tir::TypeId> {
+        let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
+        self.sem.types.local_types.get(&key).copied()
+    }
+
     /// Build a [`TypeLookup`] view over the current module's import
     /// context and the shared `all_*` tables. Used by `reify_*` helpers
     /// that need to resolve AST `Type` nodes (e.g. type-param defaults,
@@ -2059,10 +2070,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // recovery path emits an Expr-Unit placeholder to mirror.
         let Some(ast_value) = let_stmt.value.as_ref() else {
             use crate::tir::{TirExprKind, TirStmtKind, TypeTable};
+            // 7-A: same as the initialised case — read the binding's recorded
+            // type (this path always binds a simple `Ident` / `MutIdent`).
+            let binding_id = match &let_stmt.pattern {
+                ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => Some(*id),
+                _ => None,
+            };
             let type_id = let_stmt
                 .ty
                 .as_ref()
-                .map(|t| self.resolve_type(t))
+                .map(|t| {
+                    binding_id
+                        .and_then(|id| self.ann_local_type(id))
+                        .unwrap_or_else(|| self.resolve_type(t))
+                })
                 .unwrap_or(TypeTable::UNKNOWN);
             return match &let_stmt.pattern {
                 ast::Pattern::Ident { id, name, span: _ }
@@ -2096,7 +2117,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             };
         };
 
-        let annotated_type = let_stmt.ty.as_ref().map(|t| self.resolve_type(t));
+        // 7-A (E2-thin): a simple binding's annotated type is the
+        // scope-sensitive type annotate recorded as the local's type; read it
+        // instead of re-resolving the annotation. Destructuring patterns bind
+        // per-element, so they keep re-resolving the whole-pattern annotation.
+        let simple_binding_id = match &let_stmt.pattern {
+            ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => Some(*id),
+            _ => None,
+        };
+        let annotated_type = let_stmt.ty.as_ref().map(|t| {
+            simple_binding_id
+                .and_then(|id| self.ann_local_type(id))
+                .unwrap_or_else(|| self.resolve_type(t))
+        });
         let value = self.reify_expr(ast_value, ctx, annotated_type);
         let type_id = annotated_type.unwrap_or(value.type_id);
 
