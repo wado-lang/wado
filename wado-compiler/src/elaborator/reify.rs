@@ -339,10 +339,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// TIR type params (defaults resolved in scope) recorded by
     /// `resolve_struct` / `resolve_variant_decl`.
-    fn ann_decl_type_params(
-        &self,
-        id: crate::ast::AstId,
-    ) -> Option<Vec<crate::tir::TirTypeParam>> {
+    fn ann_decl_type_params(&self, id: crate::ast::AstId) -> Option<Vec<crate::tir::TirTypeParam>> {
         let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
         self.sem.types.decl_type_params.get(&key).cloned()
     }

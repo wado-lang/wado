@@ -446,11 +446,23 @@ Trade-offs.
         divergence). The `is_known_type_name` impl-param exclusion (the
         reify-only divergence behind the `TreeMap<String, V>` class) is
         gone. 2692/2692 at each step.
-  - [ ] Effect/resource op signatures (`reify_effect_ops`), decl-level
-        type-param defaults (struct / variant / enum), body-level
-        annotation reads still carrying a `resolve_type` fallback,
-        method-call explicit type args, and the mangled-name class (impl
-        identity / struct + method names).
+  - [x] Effect/resource op signatures. The combined walk records the
+        resolved `Vec<TirEffectOp>` per effect/resource decl `AstId`
+        (`TypeAnnotations::effect_ops`); `reify_effect_decl` /
+        `reify_resource_decl` read it and the parallel `reify_effect_ops`
+        re-resolver (its `resolve_type_in_scope` + duplicated `Self` /
+        receiver synthesis) is deleted.
+  - [x] Decl-level type-param defaults. `resolve_struct` /
+        `resolve_variant_decl` record their projected `Vec<TirTypeParam>`
+        per decl `AstId` (`TypeAnnotations::decl_type_params`); reify reads
+        them instead of re-resolving each default. (Enums carry no type
+        params; resources do not emit them.) Closes the same
+        scope-teardown class as the function type-param fix.
+  - [ ] Remaining: body-level annotation reads still carrying a
+        `resolve_type` fallback (simple `let`/cast already read facts),
+        method-call explicit type args, struct field re-export recovery,
+        const types, and the mangled-name class (impl identity / struct +
+        method names).
 
 ### Landing log (Stages 1–5, 7a — DONE)
 
