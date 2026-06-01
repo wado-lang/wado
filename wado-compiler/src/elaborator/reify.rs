@@ -299,6 +299,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.sem.types.local_types.get(&key).copied()
     }
 
+    /// The impl-type-param scheme `Elaborator::resolve_method` recorded for an
+    /// impl method (keyed by the method's def `AstId`). Reify reads this as
+    /// the single source of truth instead of recomputing it.
+    fn ann_method_impl_type_params(
+        &self,
+        id: crate::ast::AstId,
+    ) -> Option<Vec<crate::tir::TirTypeParam>> {
+        let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
+        self.sem.types.method_impl_type_params.get(&key).cloned()
+    }
+
     /// Build a [`TypeLookup`] view over the current module's import
     /// context and the shared `all_*` tables. Used by `reify_*` helpers
     /// that need to resolve AST `Type` nodes (e.g. type-param defaults,
@@ -1362,7 +1373,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .map(|p| p.bounds.clone())
                 .unwrap_or_default()
         };
-        let impl_type_params: Vec<crate::tir::TirTypeParam> = match impl_self_inner {
+        // Single source of truth: read the impl-type-param scheme the
+        // elaborator's `resolve_method` recorded. The local recompute below is
+        // kept only as a fallback for methods whose fact is not present (e.g.
+        // stdlib not yet snapshot-seeded); it mirrors the elaborator's logic.
+        let impl_type_params: Vec<crate::tir::TirTypeParam> = self
+            .ann_method_impl_type_params(func.id)
+            .unwrap_or_else(|| match impl_self_inner {
             ast::Type::Generic(generic) => generic
                 .args
                 .iter()
@@ -1396,7 +1413,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 facts.impl_type_params.clone()
             }
             _ => facts.impl_type_params.clone(),
-        };
+            });
 
         // Type-param scope for resolving the method's own param/return
         // types. Every impl-self-type arg occupies its positional slot —

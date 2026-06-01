@@ -329,6 +329,14 @@ pub(crate) struct TypeAnnotations {
     /// `Elaborator::capture_tuple_overlays`) and reify replays them per
     /// element. Empty in the production/LSP path.
     pub(crate) tuple_overlays: IndexMap<SymbolKey, Vec<Vec<ElementOverlay>>>,
+    /// Impl-level type parameters as `Elaborator::resolve_method` (the
+    /// battle-tested original path) computed them, keyed per impl-method
+    /// `AstId` via `ann_key`. Reify reads this instead of recomputing the
+    /// impl-type-param scheme with its own logic — the single source of truth
+    /// for the scheme is the elaborator. Reify reads it only for
+    /// explicitly-written methods (unique key); default-method bodies land
+    /// under their owning module.
+    pub(crate) method_impl_type_params: IndexMap<SymbolKey, Vec<crate::tir::TirTypeParam>>,
 }
 
 /// One tuple-`for-of` element's slice of the body-level annotation maps.

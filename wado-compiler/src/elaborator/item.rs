@@ -1507,6 +1507,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // Record the impl-type-param scheme for reify to read back instead of
+        // recomputing it (single source of truth = this original path). Keyed
+        // via `ann_key` so a default-method body synthesised for several impls
+        // lands under its owning module.
+        let method_key = scope.ann_key(func.id);
+        scope
+            .sem
+            .types
+            .method_impl_type_params
+            .insert(method_key, impl_type_params.clone());
+
         // Populate bounds from the impl block's type_params
         // (inherited from outer scope - second-pass sets these up).
         // The caller sets up bounds BEFORE calling resolve_method, so the saved
