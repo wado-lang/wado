@@ -1399,18 +1399,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
 
         // Type-param scope for resolving the method's own param/return
-        // types. Impl params are placed at their declaration index (so
-        // `resolve_type_static_with_params`, which keys by position,
-        // reproduces those indices); concrete / known names (e.g. a
-        // newtype-aliased `Tag`) are left out so they resolve to their
-        // alias, which monomorph then maps to the same concrete type.
-        // Method-level params continue after the impl param count,
-        // matching the elaborator's `next_idx = type_params.len()`.
+        // types. Every impl-self-type arg occupies its positional slot —
+        // including concrete / known-named args (`String` in
+        // `TreeMap<String, V>`) — exactly as the elaborator's
+        // `resolve_method` registers them (item.rs). They are NOT excluded:
+        // doing so was a reify-only divergence that disagreed with the
+        // battle-tested original path; the elaborator treats such an arg as a
+        // positional param and monomorph substitutes it back to the concrete
+        // type by identity. Method-level params continue after the impl param
+        // count, matching `resolve_method`'s `next_idx = type_params.len()`.
         let mut type_param_names: Vec<String> = Vec::new();
         for p in &impl_type_params {
-            if self.tysys.is_known_type_name(&p.name) {
-                continue;
-            }
             let idx = p.index as usize;
             if type_param_names.len() <= idx {
                 type_param_names.resize(idx + 1, String::new());
