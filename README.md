@@ -324,7 +324,7 @@ mise run bump-version --check 0.2.0   # CI guard: fail unless versions match
 
 Per-commit performance tracking is published to GitHub Pages. Every push to `main` records runtime and binary size metrics.
 
-- [Runtime Performance](https://wado-lang.github.io/wado/benchmarks/runtime/) — execution time for integer, float, array, string, and compression workloads (compiled at `-O2`, run on wasmtime)
+- [Runtime Performance](https://wado-lang.github.io/wado/benchmarks/runtime-throughput/) — throughput (work per second, higher is better) for integer, float, array, string, and compression workloads (run on wasmtime at `-O1`/`-O2`/`-O3`)
 - [Wasm Binary Size](https://wado-lang.github.io/wado/benchmarks/wasm-size/) — `.wasm` output size for representative programs (compiled at `-Os`)
 
 See [benchmark/README.md](benchmark/README.md) and [wasm-size/README.md](wasm-size/README.md) for local benchmark instructions and comparison results against other programming languages.
