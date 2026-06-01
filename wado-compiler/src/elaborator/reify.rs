@@ -1454,6 +1454,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
 
+        // `impl_type_params` / `type_param_names` index the impl params by
+        // their *self-type position* (`V`@1 in `TreeMap<String, V>`), matching
+        // the monomorphizer's positional substitution against the receiver's
+        // struct type args. But `facts.self_type` was resolved by annotate
+        // under the impl-clause declaration order (`V`@0 — the only declared
+        // param of `impl<V> Serialize for TreeMap<String, V>`). Using it
+        // directly for the `self` parameter desyncs the receiver type from the
+        // body's type params: the monomorphizer then binds `V` from the wrong
+        // receiver arg, e.g. `self` becomes `TreeMap<String, String>` (V←the
+        // String key) while body locals resolved under `type_param_names` stay
+        // `…<…, i32>` — a split that lowers to invalid core Wasm. Re-resolve
+        // the self type under reify's positional `type_param_names` so the
+        // `self` parameter and the body agree on every impl param's index.
+        // (Index-free uses — the tuple check and base-struct mangling below —
+        // keep reading `facts.self_type`.)
+        let method_self_type = self.resolve_type_with_self(
+            impl_self_inner,
+            &type_param_names,
+            facts.self_type,
+            &facts.assoc_type_bindings,
+        );
+
         // Derive the mangler's base-struct-name input from the
         // resolved `Self` type. The mangler wants the bare name
         // (`Box`, not `Box<T>`); the type table's
@@ -1529,7 +1551,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.resolve_type_with_self(
                     t,
                     &type_param_names,
-                    facts.self_type,
+                    method_self_type,
                     &facts.assoc_type_bindings,
                 )
             })
@@ -1563,15 +1585,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 SelfKind::None => self.resolve_type_with_self(
                     &p.ty,
                     &type_param_names,
-                    facts.self_type,
+                    method_self_type,
                     &facts.assoc_type_bindings,
                 ),
-                SelfKind::Ref => self.tysys.type_table.borrow_mut().make_ref(facts.self_type),
+                SelfKind::Ref => self.tysys.type_table.borrow_mut().make_ref(method_self_type),
                 SelfKind::MutRef => self
                     .tysys
                     .type_table
                     .borrow_mut()
-                    .make_mut_ref(facts.self_type),
+                    .make_mut_ref(method_self_type),
             };
             let name = if matches!(p.self_kind, SelfKind::None) {
                 p.name.clone()
