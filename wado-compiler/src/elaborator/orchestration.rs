@@ -1214,6 +1214,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 trait_check_stack: RefCell::new(Vec::new()),
                 method_info_cache: IndexMap::default(),
                 default_scope_module: None,
+                ann_module_override: None,
                 invocations: Rc::clone(&state.invocations),
                 interner: Rc::clone(&state.interner),
                 pending_method_dispatch: None,

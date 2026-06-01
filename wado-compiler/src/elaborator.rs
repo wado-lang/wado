@@ -174,6 +174,25 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// module-private items (see WEP 2026-04-11).
     // MIGRATION: transient annotate-time scope (per-call-site override).
     pub(super) default_scope_module: Option<ModuleSource>,
+    /// Module that *owns* the AST nodes currently being walked, when that
+    /// differs from `current_module_source`. Set while the combined walk
+    /// inline-resolves *foreign* AST — an associated-const body whose nodes
+    /// belong to the const's defining module rather than the consumer that
+    /// references it.
+    ///
+    /// `ann_key` keys per-`AstId` annotation facts under this module (falling
+    /// back to `current_module_source` when unset), so the facts land under
+    /// `(owning_module, ast_id)` — the same key reify reads after it swaps to
+    /// the owning module via `with_const_module_perspective`. Without this a
+    /// foreign-body node and a consumer node sharing the same dense `AstId`
+    /// collide (e.g. `primitive.wado`'s `INFINITY = 1.0 / 0.0`, resolved while
+    /// compiling `core:json`, overwrites a `core:json` `i32` literal's type
+    /// with `f64`).
+    ///
+    /// Only the fact *key* is overridden; `current_module_source` (and thus
+    /// name resolution / the emitted TIR) is unchanged, so the combined walk's
+    /// output is byte-identical to before.
+    pub(super) ann_module_override: Option<ModuleSource>,
     /// Kiln invocation redirects consulted by `use` resolution sites. Shared
     /// by `Rc` so per-module Elaborator instances can read the single
     /// compilation-unit-wide redirect map cheaply.
@@ -509,7 +528,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// (reify swaps `current_module_source` while walking foreign AST)
     /// makes the lookup unambiguous.
     pub(super) fn ann_key(&self, ast_id: crate::ast::AstId) -> SymbolKey {
-        SymbolKey::new(self.current_module_source.clone(), ast_id)
+        let module = self
+            .ann_module_override
+            .as_ref()
+            .unwrap_or(&self.current_module_source);
+        SymbolKey::new(module.clone(), ast_id)
     }
 
     /// Record the resolved [`TypeId`] for the expression at `ast_id` —
@@ -1543,14 +1566,36 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         (trait_name.as_ref(), impl_block.trait_type.as_ref())
                     {
                         let trait_decl_name = self.get_type_name(trait_ast);
-                        let default_methods: Vec<ast::Function> = self
-                            .find_trait_decl_methods(&trait_decl_name)
+                        let (trait_methods, trait_module) = self
+                            .find_trait_decl_methods_with_module(&trait_decl_name)
+                            .unzip();
+                        let default_methods: Vec<ast::Function> = trait_methods
                             .unwrap_or_default()
                             .into_iter()
                             .filter(|m| {
                                 m.body.is_some() && !provided_method_names.contains(&m.name)
                             })
                             .collect();
+
+                        // A default method's body is *foreign* AST owned by the
+                        // trait module. The combined walk resolves it under the
+                        // impl module's perspective (to emit the synthesised
+                        // TIR), but the per-`AstId` facts it records are keyed
+                        // under the trait module via `ann_module_override`:
+                        // otherwise a trait-body node and an impl-module node
+                        // sharing the same dense `AstId` collide, overwriting
+                        // the impl module's own facts (e.g. a unit
+                        // `builtin::array_copy` call in `String::push_str`
+                        // mistyped as `Iterator::last`'s `Option<T>`, making
+                        // reify emit a spurious `drop` of a value-less call →
+                        // Wasm stack underflow). Reify never reads these facts —
+                        // it emits default methods from the pre-synthesised
+                        // `pending_default_methods` TIR — so keying them off the
+                        // impl module is all that matters; the same trait body
+                        // walked for multiple impls harmlessly overwrites its
+                        // own entries under the trait-module key.
+                        let prev_override =
+                            std::mem::replace(&mut self.ann_module_override, trait_module);
 
                         for default_method in &default_methods {
                             if let Some(mut tir_func) = self.resolve_method(
@@ -1569,18 +1614,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 // in the AST, but they should be treated as pub since they are
                                 // part of a trait implementation
                                 tir_func.is_pub = true;
-                                // Stage 5 / Gap 12: record the
-                                // synthesised default-method
-                                // function so reify_module reads
-                                // it from `sem.decls.pending_default_methods`
-                                // when the orchestration switch
-                                // flips. Until then, the existing
-                                // `tir_module.add_function` keeps
-                                // the combined walk's behaviour.
+                                // Stage 5 / Gap 12: record the synthesised
+                                // default-method function so `reify_module`
+                                // reads it from
+                                // `sem.decls.pending_default_methods`.
                                 self.record_pending_default_method(tir_func.clone());
                                 tir_module.add_function(tir_func);
                             }
                         }
+
+                        self.ann_module_override = prev_override;
                     }
 
                     // Restore trait context

@@ -18,6 +18,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Find a trait declaration by name across all modules.
     /// Returns the trait's methods (cloned) if found.
     pub(super) fn find_trait_decl_methods(&self, trait_name: &str) -> Option<Vec<ast::Function>> {
+        self.find_trait_decl_methods_with_module(trait_name)
+            .map(|(methods, _)| methods)
+    }
+
+    /// Like [`Self::find_trait_decl_methods`] but also returns the module that
+    /// owns the trait declaration. Callers that resolve a trait *default*
+    /// method body need the owning module: the body's AST nodes belong to it,
+    /// so the per-`AstId` facts the walk records must be keyed under that
+    /// module (via `ann_module_override`), not the impl module that triggered
+    /// the synthesis.
+    pub(super) fn find_trait_decl_methods_with_module(
+        &self,
+        trait_name: &str,
+    ) -> Option<(Vec<ast::Function>, ModuleSource)> {
         // Fast O(1) lookup via pre-built index instead of scanning all modules.
         // `decl_index` is keyed by canonical `(decl_module, name)`; canonicalise
         // the bare reference through the current module's import context so
@@ -27,7 +41,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some((module_src, item_idx)) = self.tysys.trait_env.decl_index.get(&canonical_key) {
             let module = &self.loaded_modules[module_src];
             if let Item::Trait(trait_decl) = &module.items[*item_idx] {
-                return Some(trait_decl.methods.clone());
+                return Some((trait_decl.methods.clone(), module_src.clone()));
             }
         }
         // Check current module items (not covered by the index).
@@ -35,7 +49,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Item::Trait(trait_decl) = item
                 && trait_decl.name == trait_name
             {
-                return Some(trait_decl.methods.clone());
+                return Some((
+                    trait_decl.methods.clone(),
+                    self.current_module_source.clone(),
+                ));
             }
         }
         None
