@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780272514934,
+  "lastUpdate": 1780298777559,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -28569,6 +28569,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/21eab62ad7deb9a137f2918a40bb742521aaea21"
         },
         "date": 1780272514508,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17104,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3adb4e72c7f4b83e7a780b0e99ddf1648ff3bd0d",
+          "message": "Merge pull request #1262 from wado-lang/claude/nir-array-literal-EFusu\n\nfeat(nir): materialize NirExprKind::ArrayLiteral and retire the WIR collapse",
+          "timestamp": "2026-06-01T16:17:25+09:00",
+          "tree_id": "b990f7cf6e8f709025f517965c12768a21eab32b",
+          "url": "https://github.com/wado-lang/wado/commit/3adb4e72c7f4b83e7a780b0e99ddf1648ff3bd0d"
+        },
+        "date": 1780298777061,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
