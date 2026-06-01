@@ -1470,16 +1470,31 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // the monomorphizer's tuple-variadic instantiation path
         // (func_inst.rs:888, gated on `struct_name == TUPLE_TYPE_NAME`)
         // both find the template. Match that here.
-        let base_struct_name = if self.tysys.type_table.borrow().is_tuple(facts.self_type) {
-            TypeTable::TUPLE_TYPE_NAME.to_string()
-        } else {
-            let struct_name_for_mangle: String =
-                self.tysys.type_table.borrow().type_name(facts.self_type);
-            struct_name_for_mangle
-                .split('<')
-                .next()
-                .unwrap_or(&struct_name_for_mangle)
-                .to_string()
+        // A reference impl (`impl<T: Bound> Trait for &T` /
+        // `impl<…> Trait for &Array<T>`) mangles to base struct `&` / `&mut`,
+        // independent of the inner type — production's `get_type_name`
+        // (module.rs:581) returns exactly `"&"` / `"&mut"` for any reference
+        // target, and the monomorphizer / template synthesis look up the
+        // blanket template by that bare name (`&^Inspect::inspect`), keyed off
+        // the inner type via `impl_type_args`. Deriving the name from the
+        // *resolved* self type instead would mangle `&T` → `&T^…`, a name the
+        // monomorphizer never queries, leaving every `&T`-blanket method call
+        // (e.g. `&i32^Inspect::inspect` from `{x:?}` on a reference) unresolved.
+        let base_struct_name = match impl_self_ty {
+            ast::Type::Reference(_) => "&".to_string(),
+            ast::Type::MutReference(_) => "&mut".to_string(),
+            _ if self.tysys.type_table.borrow().is_tuple(facts.self_type) => {
+                TypeTable::TUPLE_TYPE_NAME.to_string()
+            }
+            _ => {
+                let struct_name_for_mangle: String =
+                    self.tysys.type_table.borrow().type_name(facts.self_type);
+                struct_name_for_mangle
+                    .split('<')
+                    .next()
+                    .unwrap_or(&struct_name_for_mangle)
+                    .to_string()
+            }
         };
         let mangled_name = MethodName::format_local(
             &base_struct_name,
