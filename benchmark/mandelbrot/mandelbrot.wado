@@ -72,6 +72,8 @@ export fn run() with Stdout, MonotonicClock {
     let max_iter = 256;
 
     let mut b = Benchmark::new(`mandelbrot {width}x{height}, max_iter={max_iter}`);
+    b.work_per_iter = Option::Some((width * height) as f64);
+    b.unit = "px";
     let total = b.run("", || mandelbrot_total(width, height, max_iter));
     b.println(`total iterations = {total}`);
 }

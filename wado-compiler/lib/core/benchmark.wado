@@ -1,5 +1,16 @@
 #![stdlib("core:benchmark")]
-//! Benchmark utilities: lazy headers, timed phases, per-iteration reports.
+//! Benchmark utilities: lazy headers, timed phases, throughput reports.
+//!
+//! Every phase reports a **throughput** figure (work done per second, higher
+//! is better) with the elapsed time retained alongside it. The throughput
+//! unit is chosen so the number is meaningful for the workload:
+//!
+//! - Set `work_per_iter` + `unit` for a custom work-rate (e.g. `conversions`,
+//!   `px`, `numbers`). This is the preferred form whenever the workload has a
+//!   natural unit of work.
+//! - Otherwise, if `input_size` is set, throughput is reported as a byte rate
+//!   (`MB/s`).
+//! - Otherwise, throughput falls back to iterations per second (`ops/s`).
 //!
 //! Used by files in `benchmark/`. A benchmark typically looks like:
 //!
@@ -10,18 +21,19 @@
 //!
 //! export fn run() with Stdout, MonotonicClock {
 //!     let mut b = Benchmark::new("count-prime");
+//!     b.work_per_iter = Option::Some(10_000_000.0);  // numbers screened
+//!     b.unit = "numbers";
 //!     let count = b.run("", || count_primes(10_000_000));
 //!     b.println(`count = {count}`);
 //! }
 //! ```
 //!
-//! For multi-phase or iteration-driven benchmarks, configure via field
-//! assignment after `new`:
+//! For multi-phase benchmarks, call `run` once per phase. A byte-sized input
+//! reports `MB/s` automatically:
 //!
 //! ```wado
 //! let mut b = Benchmark::new("zlib");
-//! b.iterations = 10;
-//! b.input_size = Option::Some(data.len());
+//! b.input_size = Option::Some(data.len());  // → MB/s
 //! let compressed = b.run("compress", || zlib_compress(&data));
 //! let _ = b.run("decompress", || inflate_zlib(&compressed).unwrap());
 //! ```
@@ -31,44 +43,111 @@ use { println, Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 
 /// A benchmark run. The driver prints a header on the first measurement,
-/// then a labeled line per `run()` phase reporting elapsed time (and
-/// per-iteration time when `iterations > 1`).
+/// then a labeled line per `run()` phase reporting throughput (work per
+/// second) with the per-iteration time retained alongside it.
 pub struct Benchmark {
     pub name: String,
-    pub iterations: i32 = 1,
-    /// Number of unmeasured warmup runs. `-1` (the default) means "auto":
-    /// 1 warmup if `iterations >= 2`, otherwise 0.
+    /// Number of timed iterations. `0` (the default) auto-calibrates the
+    /// iteration count so the timed loop runs for about `target_ms`
+    /// milliseconds; the total elapsed time is then meaningless (~`target_ms`)
+    /// so only the per-iteration figure and throughput are reported. Set a
+    /// positive value to run a fixed iteration count instead.
+    pub iterations: i32 = 0,
+    /// Wall-clock budget in milliseconds for auto-calibration (used when
+    /// `iterations == 0`). The loop grows the iteration count until the timed
+    /// region reaches this duration. `0` runs exactly one iteration.
+    pub target_ms: i32 = 1000,
+    /// Number of unmeasured warmup runs for fixed mode. `-1` (the default)
+    /// means "auto": 1 warmup if `iterations >= 2`, otherwise 0. Auto mode
+    /// always performs one warmup before calibration.
     pub warmup: i32 = -1,
-    /// Optional input size, shown in the header (e.g. `"631044 bytes"`).
+    /// Optional input size in bytes, shown in the header (e.g.
+    /// `"631044 bytes"`). When set and `work_per_iter` is unset, throughput
+    /// is reported as a byte rate (`MB/s`).
     pub input_size: Option<i32> = null,
+    /// Units of work performed per iteration, for the throughput figure.
+    /// `null` (the default) means "auto": byte rate from `input_size` if it is
+    /// set, otherwise iterations per second. Set this to report a custom
+    /// work-rate (e.g. `5_000_000.0` conversions per iteration).
+    pub work_per_iter: Option<f64> = null,
+    /// Unit label for the throughput figure when `work_per_iter` is set
+    /// (e.g. `"conversions"`, `"px"`, `"numbers"`). Ignored when throughput
+    /// falls back to a byte rate or to `ops/s`.
+    pub unit: String = "ops",
     header_printed: bool = false,
 }
 
 impl Benchmark {
-    /// Create a benchmark with default settings (single iteration, no input size).
+    /// Create a benchmark with default settings (auto-calibrated to ~1s,
+    /// no input size).
     pub fn new(name: String) -> Benchmark {
         return Benchmark { name };
     }
 
-    /// Run a single phase. Performs warmup (if any) then `iterations` timed
-    /// runs of `f`. Prints the header on first call. Returns the final
-    /// timed iteration's value.
+    /// Run a single phase and report its throughput.
+    ///
+    /// In auto mode (`iterations == 0`) the iteration count is calibrated so
+    /// the timed loop runs for about `target_ms` milliseconds. In fixed mode
+    /// (`iterations > 0`) it performs `warmup` unmeasured runs then exactly
+    /// `iterations` timed runs. Prints the header on first call. Returns the
+    /// final timed iteration's value.
     ///
     /// `label` may be empty for an unlabeled single-phase benchmark.
     pub fn run<T>(&mut self, label: String, mut f: fn mut() -> T) -> T with Stdout, MonotonicClock {
         self.ensure_header();
-        let warmup_n = self.effective_warmup();
-        for let mut w = 0; w < warmup_n; w += 1 {
-            f();
+        let [work, unit] = self.resolve_work();
+        if self.iterations > 0 {
+            let warmup_n = self.effective_warmup();
+            for let mut w = 0; w < warmup_n; w += 1 {
+                f();
+            }
+            let start = MonotonicClock::now();
+            let mut result = f();
+            for let mut i = 1; i < self.iterations; i += 1 {
+                result = f();
+            }
+            let end = MonotonicClock::now();
+            report(label, (end - start) as u64, self.iterations, work, unit);
+            return result;
         }
-        let start = MonotonicClock::now();
+        // Clamp a negative budget to 0 (one iteration) so a stray negative
+        // `target_ms` cannot wrap to an enormous `u64` and spin the loop.
+        let target_ms = if self.target_ms > 0 { self.target_ms } else { 0 };
+        let target_ns = (target_ms as u64) * 1_000_000;
         let mut result = f();
-        for let mut i = 1; i < self.iterations; i += 1 {
+        let mut n = 1;
+        let mut elapsed = 0 as u64;
+        loop {
+            let start = MonotonicClock::now();
             result = f();
+            for let mut i = 1; i < n; i += 1 {
+                result = f();
+            }
+            elapsed = (MonotonicClock::now() - start) as u64;
+            if elapsed >= target_ns {
+                break;
+            }
+            let next = next_iterations(n, elapsed, target_ns);
+            if next <= n {
+                break;
+            }
+            n = next;
         }
-        let end = MonotonicClock::now();
-        report(label, (end - start) as u64, self.iterations);
+        report(label, elapsed, n, work, unit);
         return result;
+    }
+
+    /// Resolve the per-iteration work amount and its unit for the throughput
+    /// figure: an explicit `work_per_iter`/`unit`, else a byte rate from
+    /// `input_size`, else iterations per second (`ops`).
+    fn resolve_work(&self) -> [f64, String] {
+        if let Some(w) = self.work_per_iter {
+            return [w, self.unit];
+        }
+        if let Some(n) = self.input_size {
+            return [n as f64, "B"];
+        }
+        return [1.0, "ops"];
     }
 
     /// Print an indented note line. Useful for accumulator values or final
@@ -95,10 +174,19 @@ impl Benchmark {
             } else {
                 s = `{s}: {self.iterations} iter`;
             }
+        } else if self.iterations == 0 {
+            // Show the same clamped budget `run` uses, so a stray negative
+            // `target_ms` doesn't print a misleading `~-100 ms/phase`.
+            let budget = if self.target_ms > 0 { self.target_ms } else { 0 };
+            s = `{s} (~{budget} ms/phase)`;
         }
-        let warmup_n = self.effective_warmup();
-        if warmup_n > 0 {
-            s = `{s} (warmup {warmup_n})`;
+        // `warmup` only applies in fixed mode; auto mode warms up once
+        // implicitly during calibration.
+        if self.iterations > 0 {
+            let warmup_n = self.effective_warmup();
+            if warmup_n > 0 {
+                s = `{s} (warmup {warmup_n})`;
+            }
         }
         println(s);
     }
@@ -114,20 +202,68 @@ impl Benchmark {
     }
 }
 
-fn report(label: String, elapsed_ns: u64, iterations: i32) with Stdout {
-    let total_str = format_ms(elapsed_ns);
-    if iterations > 1 {
-        let per_str = format_ms(elapsed_ns / iterations as u64);
-        if label.len() > 0 {
-            println(`  {label}: {total_str} ms total   {per_str} ms/iter`);
-        } else {
-            println(`  Elapsed: {total_str} ms total   {per_str} ms/iter`);
-        }
-    } else if label.len() > 0 {
-        println(`  {label}: {total_str} ms`);
+fn report(label: String, elapsed_ns: u64, iterations: i32, work_per_iter: f64, unit: String) with Stdout {
+    let rate = format_rate(work_per_iter * iterations as f64, elapsed_ns, unit);
+    let per_str = format_ms(elapsed_ns / iterations as u64);
+    if label.len() > 0 {
+        println(`  {label}: {rate}   ({per_str} ms/iter, {iterations} iter)`);
     } else {
-        println(`  Elapsed: {total_str} ms`);
+        println(`  {rate}   ({per_str} ms/iter, {iterations} iter)`);
     }
+}
+
+/// Estimate the iteration count for the next calibration batch: scale the
+/// current count `n` by `target_ns / elapsed_ns` so the timed region lands
+/// near `target_ns`. Capped at 100x growth per step (so a noisy near-zero
+/// first measurement cannot jump straight to the ceiling) and at a hard
+/// ceiling. When the estimate does not exceed `n` the loop has converged and
+/// the caller stops with the current measurement.
+fn next_iterations(n: i32, elapsed_ns: u64, target_ns: u64) -> i32 {
+    let e = if elapsed_ns == 0 { 1 as u64 } else { elapsed_ns };
+    let mut est = n as u64 * target_ns / e;
+    let hi = n as u64 * 100;
+    if est > hi {
+        est = hi;
+    }
+    let ceiling = 1_000_000_000 as u64;
+    if est > ceiling {
+        est = ceiling;
+    }
+    if est < 1 {
+        est = 1;
+    }
+    return est as i32;
+}
+
+/// Format a throughput figure: `total_work` units done over `elapsed_ns`
+/// nanoseconds, as a per-second rate. The byte unit (`"B"`) renders with
+/// `KB`/`MB`/`GB` scaling; any other unit uses SI `k`/`M`/`G` prefixes.
+/// A zero elapsed time yields a `0.00` rate instead of dividing by zero.
+pub fn format_rate(total_work: f64, elapsed_ns: u64, unit: String) -> String {
+    let secs = elapsed_ns as f64 / 1_000_000_000.0;
+    let rate = if secs > 0.0 { total_work / secs } else { 0.0 };
+    if unit == "B" {
+        if rate >= 1_000_000_000.0 {
+            return `{rate / 1_000_000_000.0:0.2f} GB/s`;
+        }
+        if rate >= 1_000_000.0 {
+            return `{rate / 1_000_000.0:0.2f} MB/s`;
+        }
+        if rate >= 1_000.0 {
+            return `{rate / 1_000.0:0.2f} KB/s`;
+        }
+        return `{rate:0.2f} B/s`;
+    }
+    if rate >= 1_000_000_000.0 {
+        return `{rate / 1_000_000_000.0:0.2f} G {unit}/s`;
+    }
+    if rate >= 1_000_000.0 {
+        return `{rate / 1_000_000.0:0.2f} M {unit}/s`;
+    }
+    if rate >= 1_000.0 {
+        return `{rate / 1_000.0:0.2f} k {unit}/s`;
+    }
+    return `{rate:0.2f} {unit}/s`;
 }
 
 /// Format nanoseconds as `MS.FFF` (3 decimal digits = microseconds).

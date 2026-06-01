@@ -47,14 +47,14 @@ jobs:
         if: github.event_name == 'push'
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          tool: customSmallerIsBetter
+          tool: customBiggerIsBetter
           output-file-path: runtime-benchmark.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
           comment-on-alert: false
           fail-on-alert: false
           gh-pages-branch: gh-pages
-          benchmark-data-dir-path: benchmarks/runtime
+          benchmark-data-dir-path: benchmarks/runtime-throughput
           skip-fetch-gh-pages: true
 
       - name: Store wasm-size benchmark data
@@ -75,11 +75,12 @@ jobs:
         if: github.event_name == 'push'
         run: |
           git worktree add /tmp/gh-pages gh-pages
-          cp .github/pages/runtime-index.html /tmp/gh-pages/benchmarks/runtime/index.html
+          mkdir -p /tmp/gh-pages/benchmarks/runtime-throughput
+          cp .github/pages/runtime-index.html /tmp/gh-pages/benchmarks/runtime-throughput/index.html
           cd /tmp/gh-pages
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add benchmarks/runtime/index.html
+          git add benchmarks/runtime-throughput/index.html
           git diff --cached --quiet || {
             git commit -m "Deploy combined benchmark graphs"
             git push origin gh-pages
@@ -93,7 +94,7 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          tool: customSmallerIsBetter
+          tool: customBiggerIsBetter
           output-file-path: runtime-benchmark.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: false
@@ -104,7 +105,7 @@ jobs:
           fail-threshold: '200%'
           alert-comment-cc-users: ''
           gh-pages-branch: gh-pages
-          benchmark-data-dir-path: benchmarks/runtime
+          benchmark-data-dir-path: benchmarks/runtime-throughput
           skip-fetch-gh-pages: true
 
       - name: Compare wasm-size benchmarks

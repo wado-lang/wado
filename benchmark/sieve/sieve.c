@@ -7,19 +7,58 @@
 // page faults out of the measurement so the timed loop reflects steady-state
 // array traffic only, which is what makes the result stable across runs.
 //
+// Reports throughput (numbers sieved per second). The iteration count
+// auto-calibrates so the timed loop runs for about a second.
+//
 // How to run:
 //   mise run benchmark-sieve
 //
 // Or manually:
-//   clang -O3 -o benchmark/sieve/sieve_c benchmark/sieve/sieve.c
+//   cc -O3 -o benchmark/sieve/sieve_c benchmark/sieve/sieve.c
 //   ./benchmark/sieve/sieve_c
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
 #include <time.h>
 
-#define ITERATIONS 10
+#define TARGET_NS 1000000000LL  // ~1s budget
+
+static long long now_ns(void) {
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (long long)t.tv_sec * 1000000000LL + t.tv_nsec;
+}
+
+static long long next_iters(long long n, long long elapsed, long long target) {
+    long long e = elapsed > 0 ? elapsed : 1;
+    long long est = n * target / e;
+    long long hi = n * 100;
+    if (est > hi) est = hi;
+    if (est > 1000000000LL) est = 1000000000LL;
+    if (est < 1) est = 1;
+    return est;
+}
+
+static void print_throughput(double work_per_iter, long long n, long long elapsed_ns, const char *unit) {
+    double secs = (double)elapsed_ns / 1e9;
+    double rate = secs > 0.0 ? (work_per_iter * (double)n) / secs : 0.0;
+    double per_ms = (double)elapsed_ns / (double)n / 1e6;
+    char rbuf[64];
+    if (strcmp(unit, "B") == 0) {
+        if (rate >= 1e9) snprintf(rbuf, sizeof rbuf, "%.2f GB/s", rate / 1e9);
+        else if (rate >= 1e6) snprintf(rbuf, sizeof rbuf, "%.2f MB/s", rate / 1e6);
+        else if (rate >= 1e3) snprintf(rbuf, sizeof rbuf, "%.2f KB/s", rate / 1e3);
+        else snprintf(rbuf, sizeof rbuf, "%.2f B/s", rate);
+    } else {
+        if (rate >= 1e9) snprintf(rbuf, sizeof rbuf, "%.2f G %s/s", rate / 1e9, unit);
+        else if (rate >= 1e6) snprintf(rbuf, sizeof rbuf, "%.2f M %s/s", rate / 1e6, unit);
+        else if (rate >= 1e3) snprintf(rbuf, sizeof rbuf, "%.2f k %s/s", rate / 1e3, unit);
+        else snprintf(rbuf, sizeof rbuf, "%.2f %s/s", rate, unit);
+    }
+    printf("Throughput: %s   (%.3f ms/iter, %lld iter)\n", rbuf, per_ms, n);
+}
 
 // Sieve over a caller-owned buffer, reused across iterations. Resets is_prime
 // to all-true, then marks composites and counts primes.
@@ -67,23 +106,23 @@ int main() {
     // Warmup run: also first-touches every page so the timed loop is steady-state.
     int count = sieve_count(is_prime, limit);
 
-    struct timespec start, end;
-    clock_gettime(CLOCK_MONOTONIC, &start);
-
-    for (int i = 0; i < ITERATIONS; i++) {
-        count = sieve_count(is_prime, limit);
+    long long n = 1, elapsed = 0;
+    for (;;) {
+        long long start = now_ns();
+        for (long long i = 0; i < n; i++) {
+            count = sieve_count(is_prime, limit);
+        }
+        elapsed = now_ns() - start;
+        if (elapsed >= TARGET_NS) break;
+        long long nx = next_iters(n, elapsed, TARGET_NS);
+        if (nx <= n) break;
+        n = nx;
     }
-
-    clock_gettime(CLOCK_MONOTONIC, &end);
-
-    long elapsed_ns = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);
-    long elapsed_ms = elapsed_ns / 1000000;
 
     free(is_prime);
 
     printf("Sieve prime count up to %d: %d\n", limit, count);
-    printf("Elapsed: %ld ms total (%d iterations, %ld ms/iter)\n",
-           elapsed_ms, ITERATIONS, elapsed_ms / ITERATIONS);
+    print_throughput((double)limit, n, elapsed, "numbers");
 
     return 0;
 }

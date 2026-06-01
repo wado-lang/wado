@@ -11,3 +11,15 @@ pub fn make_config(name: String, secret: i32) -> Config {
 pub fn get_secret(c: Config) -> i32 {
     return c.secret;
 }
+
+// Struct whose private field has a default. Another module may construct it
+// by omitting `count` (the default is applied here, in the defining module),
+// but may not set `count` explicitly.
+pub struct Counter {
+    pub name: String,
+    count: i32 = 0,
+}
+
+pub fn counter_count(c: Counter) -> i32 {
+    return c.count;
+}

@@ -20,7 +20,6 @@ lockfile = true
 [tools]
 node = "latest"
 bun = "latest"
-zig = "latest"
 # "github:WebAssembly/wasi-sdk" = "latest" # clang + wasm-ld + wasi-sysroot for C zlib Wasm (disabled: GH rate limit)
 
 [tasks.count-prime]
@@ -136,6 +135,9 @@ if [ "$HAVE_C_WASM" -eq 1 ]; then
     wasmtime --dir .::. zlib/zlib_c.wasm
 fi
 
+echo "=== JavaScript (Node) ==="
+node zlib/zlib.js
+
 echo "=== Wado ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 zlib/zlib_bench.wado
 """
@@ -152,19 +154,11 @@ cc -O3 -o fts/fts_c fts/fts.c
 echo "=== Compiling Rust benchmark ==="
 rustc -O -o fts/fts_rs fts/fts.rs
 
-echo "=== Compiling Zig benchmark ==="
-zig build-exe fts/fts.zig -OReleaseFast --name fts_zig 2>/dev/null
-mv fts_zig fts/fts_zig
-rm -f fts_zig.o
-
 echo "=== C ==="
 ./fts/fts_c
 
 echo "=== Rust ==="
 ./fts/fts_rs
-
-echo "=== Zig ==="
-./fts/fts_zig
 
 echo "=== Wado ==="
 cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 fts/fts.wado
@@ -294,7 +288,7 @@ description = "Clean benchmark artifacts"
 run = """
 rm -f count_prime/*.wasm mandelbrot/*.wasm sieve/*.wasm zlib/zlib_c.wasm
 rm -f count_prime/count_prime_c mandelbrot/mandelbrot_c sieve/sieve_c
-rm -f fts/fts_c fts/fts_rs fts/fts_zig fts/fts_zig.o
+rm -f fts/fts_c fts/fts_rs
 rm -rf zlib/target json_twitter/target json_canada/target json_catalog/target syntax_highlight/target
 rm -rf syntax_highlight/node_modules syntax_highlight/package-lock.json
 rm -rf http_routing/node_modules http_routing/package-lock.json http_routing/target

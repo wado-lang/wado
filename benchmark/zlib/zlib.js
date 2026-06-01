@@ -1,16 +1,15 @@
-// Node.js JSON.parse benchmark for canada.json
-// Comparison baseline for Wado's core:json deserialization.
+// Node.js zlib benchmark for comparison with Wado's core:zlib.
 //
-// Reports deserialization throughput (MB/s). The iteration count
-// auto-calibrates so the timed loop runs for about a second.
-//
-// JSON data source: https://github.com/miloyip/nativejson-benchmark
-// License: MIT
+// Compresses and decompresses twitter.json (~631KB) using Node's built-in
+// zlib (deflate level 6, matching zlib-rs and core:zlib). Reports compression
+// and decompression throughput (MB/s of the original data). Each phase
+// auto-calibrates its iteration count to run for about a second.
 
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
+const zlib = require("node:zlib");
 
-const TARGET_NS = 1_000_000_000; // ~1s budget
+const TARGET_NS = 1_000_000_000; // ~1s budget per phase
 
 function nowNs() {
   return Math.round(performance.now() * 1e6);
@@ -65,21 +64,15 @@ function bench(label, workPerIter, unit, f) {
   return result;
 }
 
-const jsonData = fs.readFileSync(path.join(__dirname, "canada.json"), "utf-8");
-const size = jsonData.length;
+const data = fs.readFileSync(path.join(__dirname, "..", "json_twitter", "twitter.json"));
+const size = data.length;
 
-console.log(`json-canada: ${size} bytes`);
+console.log(`zlib ${size} bytes`);
 
-const totalPoints = bench("Throughput", size, "B", () => {
-  const fc = JSON.parse(jsonData);
-  let points = 0;
-  for (const feat of fc.features) {
-    for (const ring of feat.geometry.coordinates) {
-      points += ring.length;
-    }
-  }
-  return points;
-});
+const compressed = bench("Compress", size, "B", () => zlib.deflateSync(data, { level: 6 }));
 
-if (totalPoints !== 55563) throw new Error("assertion failed");
-console.log(`Parsed ${totalPoints} coordinate points per iteration`);
+console.log(`Compressed: ${size} -> ${compressed.length} bytes`);
+
+const decompressed = bench("Decompress", size, "B", () => zlib.inflateSync(compressed));
+
+if (decompressed.length !== size) throw new Error("decompressed size mismatch");
