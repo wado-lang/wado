@@ -591,8 +591,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Check for associated constants (e.g., f64::PI, i32::MAX)
-        if let Some((const_ty, const_expr)) = self
+        // Check for associated constants (e.g., f64::PI, i32::MAX). The
+        // body re-runs inference here, so the defining module is not needed
+        // on this path (reify does need it — see `reify_ident`).
+        if let Some((_const_module, const_ty, const_expr)) = self
             .sem
             .decls
             .associated_constants
@@ -1244,8 +1246,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if type_args.is_empty() {
             return;
         }
+        let key = self.ann_key(ident_id);
         self.sem.types.generic_instantiations.insert(
-            ident_id,
+            key,
             super::sem::types::GenericInstantiation {
                 type_args: type_args.to_vec(),
                 instance_type,
@@ -1819,6 +1822,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self_kind: trait_info.self_kind,
                         arg_ref_wraps: vec![false],
                         return_type: ref_output_type,
+                        needs_deref: true,
                     },
                 );
 
@@ -1888,6 +1892,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self_kind: trait_info.self_kind,
                         arg_ref_wraps: vec![false],
                         return_type: trait_info.output_type,
+                        needs_deref: false,
                     },
                 );
 

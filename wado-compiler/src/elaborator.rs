@@ -213,6 +213,14 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// channel `None`, and the recording is skipped — those calls have
     /// no source AST id reify could key on.
     pub(super) pending_operator_ast_id: Option<crate::ast::AstId>,
+    /// When `true`, [`Self::resolve_tuple_for_of`] captures each unrolled
+    /// element's body annotations into
+    /// [`super::sem::types::TypeAnnotations::tuple_overlays`] and
+    /// truncates the per-element maps back to their pre-loop length so
+    /// each element starts from a clean slate. Set only when reify will
+    /// consume the result (Stage 5); `false` for the production / LSP
+    /// path so their annotation maps are left exactly as before.
+    pub(super) capture_tuple_overlays: bool,
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
@@ -490,6 +498,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         None
     }
 
+    /// Build the canonical [`SymbolKey`] for an `AstId` in the module
+    /// currently being walked. The body-level annotation maps
+    /// ([`sem::types::TypeAnnotations`]) are keyed by `SymbolKey`
+    /// (`(ModuleSource, AstId)`) because `AstId`s are only unique within a
+    /// module: reify inlines cross-module AST (associated-const bodies,
+    /// callee-module default arguments) and would otherwise read a
+    /// colliding `AstId`'s record from the wrong module. Recording under
+    /// `(current_module_source, ast_id)` and reading under the same pair
+    /// (reify swaps `current_module_source` while walking foreign AST)
+    /// makes the lookup unambiguous.
+    pub(super) fn ann_key(&self, ast_id: crate::ast::AstId) -> SymbolKey {
+        SymbolKey::new(self.current_module_source.clone(), ast_id)
+    }
+
     /// Record the resolved [`TypeId`] for the expression at `ast_id` —
     /// the per-`AstId` annotation the future `reify` pass (Stage 5 of WEP
     /// 2026-05-26) reads to set `TirExpr::type_id` without re-running
@@ -510,7 +532,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if self.tysys.type_table.borrow().contains_unknown(type_id) {
             return;
         }
-        self.sem.types.expression_types.insert(ast_id, type_id);
+        self.sem
+            .types
+            .expression_types
+            .insert(self.ann_key(ast_id), type_id);
     }
 
     /// Record a method-dispatch decision for the [`crate::ast::MethodCallExpr`]
@@ -537,10 +562,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         param_is_mut: Vec<bool>,
         param_names: Vec<String>,
         param_defaults: Vec<Option<ast::Expr>>,
+        return_type: TypeId,
     ) {
         let Some(ast_id) = ast_id else { return };
+        let key = self.ann_key(ast_id);
         self.sem.types.method_dispatch.insert(
-            ast_id,
+            key,
             sem::types::MethodDispatch {
                 function_ref: function_ref.clone(),
                 self_kind,
@@ -548,6 +575,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 param_is_mut,
                 param_names,
                 param_defaults,
+                return_type,
             },
         );
     }
@@ -575,8 +603,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if type_args.is_empty() {
             return;
         }
+        let key = self.ann_key(ast_id);
         self.sem.types.generic_instantiations.insert(
-            ast_id,
+            key,
             sem::types::GenericInstantiation {
                 type_args,
                 instance_type,
@@ -591,7 +620,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         param_types: Vec<TypeId>,
     ) {
-        self.sem.types.call_param_types.insert(ast_id, param_types);
+        let key = self.ann_key(ast_id);
+        self.sem.types.call_param_types.insert(key, param_types);
     }
 
     /// Record the capture-analysis result for the closure expression at
@@ -601,7 +631,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::ClosureCaptureInfo,
     ) {
-        self.sem.types.closure_captures.insert(ast_id, info);
+        let key = self.ann_key(ast_id);
+        self.sem.types.closure_captures.insert(key, info);
     }
 
     /// Record the power-assert capture-slot table for the assert
@@ -612,7 +643,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::AssertCaptureInfo,
     ) {
-        self.sem.types.assert_captures.insert(ast_id, info);
+        let key = self.ann_key(ast_id);
+        self.sem.types.assert_captures.insert(key, info);
     }
 
     /// Record the iterator-path dispatch decision for the for-of
@@ -624,7 +656,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::ForOfIteratorInfo,
     ) {
-        self.sem.types.for_of_iterator.insert(ast_id, info);
+        let key = self.ann_key(ast_id);
+        self.sem.types.for_of_iterator.insert(key, info);
     }
 
     /// Record the operator-dispatch decision for a binary / index
@@ -638,7 +671,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::OperatorDispatch,
     ) {
-        self.sem.types.operator_dispatch.insert(ast_id, info);
+        let key = self.ann_key(ast_id);
+        self.sem.types.operator_dispatch.insert(key, info);
     }
 
     /// Record the resolved `IndexAssign` trait dispatch keyed by the
@@ -653,7 +687,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::OperatorDispatch,
     ) {
-        self.sem.types.index_assign_dispatch.insert(ast_id, info);
+        let key = self.ann_key(ast_id);
+        self.sem.types.index_assign_dispatch.insert(key, info);
     }
 
     /// Record the handler-binding resolution facts (Gap 13 of
@@ -673,7 +708,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::HandlerBindingFacts,
     ) {
-        self.sem.types.handler_bindings.insert(ast_id, info);
+        let key = self.ann_key(ast_id);
+        self.sem.types.handler_bindings.insert(key, info);
     }
 
     /// Record the impl-block resolution facts (Gap 12 of Stage 5)
@@ -692,7 +728,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         info: sem::types::ImplFacts,
     ) {
-        self.sem.types.impl_facts.insert(ast_id, info);
+        let key = self.ann_key(ast_id);
+        self.sem.types.impl_facts.insert(key, info);
     }
 
     /// Record an `impl Trait for Type;` synthesis request (Gap 12 /
@@ -736,10 +773,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         kind: sem::types::CoercionKind,
         target_type: TypeId,
     ) {
+        let key = self.ann_key(ast_id);
         self.sem
             .types
             .coercions
-            .insert(ast_id, sem::types::CoercionChoice { kind, target_type });
+            .insert(key, sem::types::CoercionChoice { kind, target_type });
     }
 
     /// Record a TIR-direct desugar tag for the AST node at `ast_id`.
@@ -752,7 +790,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ast_id: crate::ast::AstId,
         kind: sem::types::DesugarKind,
     ) {
-        self.sem.types.desugars.insert(ast_id, kind);
+        let key = self.ann_key(ast_id);
+        self.sem.types.desugars.insert(key, kind);
     }
 
     /// Record a local binding's [`Symbol`] and resolved [`TypeId`] so that
@@ -1186,23 +1225,30 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        // Collect associated constants from loaded modules and current module
+        // Collect associated constants from loaded modules and current
+        // module, tagging each with its defining `ModuleSource` so reify can
+        // reify the body under the right module perspective (the body's
+        // `AstId`s are only unique within that module).
         self.sem.decls.associated_constants.clear();
-        for module_items in self
+        let const_sources = self
             .loaded_modules
-            .values()
-            .map(|m| &m.items)
-            .chain(std::iter::once(&module.items))
-        {
+            .iter()
+            .map(|(src, m)| (src.clone(), &m.items))
+            .chain(std::iter::once((module_source.clone(), &module.items)));
+        for (src, module_items) in const_sources {
             for item in module_items {
                 if let Item::Impl(impl_block) = item {
                     let type_name = self.get_type_name(&impl_block.ty);
                     for assoc_const in &impl_block.constants {
                         let key = MethodName::format_local(&type_name, None, &assoc_const.name);
-                        self.sem
-                            .decls
-                            .associated_constants
-                            .insert(key, (assoc_const.ty.clone(), assoc_const.value.clone()));
+                        self.sem.decls.associated_constants.insert(
+                            key,
+                            (
+                                src.clone(),
+                                assoc_const.ty.clone(),
+                                assoc_const.value.clone(),
+                            ),
+                        );
                     }
                 }
             }
@@ -1640,7 +1686,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         // Anonymous structs created during expression resolution.
-        // Clone (not drain) so reify still sees them under WADO_REIFY=1.
+        // Clone (not drain) so reify still sees them on its pass.
         for anon_struct in &self.sem.decls.pending_anonymous_structs {
             tir_module.add_struct(anon_struct.clone());
         }

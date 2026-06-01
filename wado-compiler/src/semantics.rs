@@ -997,32 +997,17 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         IndexMap::default();
     let mut desugars: IndexMap<SymbolKey, crate::elaborator::sem::types::DesugarKind> =
         IndexMap::default();
-    for (module_source, sem) in &mut state.module_semantics {
+    for (_module_source, sem) in &mut state.module_semantics {
         references.extend(std::mem::take(&mut sem.bindings.references));
         locals.extend(std::mem::take(&mut sem.bindings.local_symbols));
         local_types.extend(std::mem::take(&mut sem.types.local_types));
-        expression_types.extend(
-            std::mem::take(&mut sem.types.expression_types)
-                .into_iter()
-                .map(|(ast_id, type_id)| (SymbolKey::new(module_source.clone(), ast_id), type_id)),
-        );
-        method_dispatch.extend(
-            std::mem::take(&mut sem.types.method_dispatch)
-                .into_iter()
-                .map(|(ast_id, dispatch)| {
-                    (SymbolKey::new(module_source.clone(), ast_id), dispatch)
-                }),
-        );
-        coercions.extend(
-            std::mem::take(&mut sem.types.coercions)
-                .into_iter()
-                .map(|(ast_id, choice)| (SymbolKey::new(module_source.clone(), ast_id), choice)),
-        );
-        desugars.extend(
-            std::mem::take(&mut sem.types.desugars)
-                .into_iter()
-                .map(|(ast_id, kind)| (SymbolKey::new(module_source.clone(), ast_id), kind)),
-        );
+        // The body-level annotation maps are already keyed by `SymbolKey`
+        // (`(ModuleSource, AstId)`), so the per-module maps merge directly
+        // into the flat Semantics maps without re-keying.
+        expression_types.extend(std::mem::take(&mut sem.types.expression_types));
+        method_dispatch.extend(std::mem::take(&mut sem.types.method_dispatch));
+        coercions.extend(std::mem::take(&mut sem.types.coercions));
+        desugars.extend(std::mem::take(&mut sem.types.desugars));
     }
 
     // A recovered syntax error anywhere in the loaded set means the parse was

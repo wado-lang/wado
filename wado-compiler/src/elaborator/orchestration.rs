@@ -110,6 +110,25 @@ pub(crate) struct AnnotateState {
     pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
 }
 
+/// Whether reify (Stage 5) produces the final TIR for `module_source`.
+/// Reify is the default for user modules now that it has full parity with
+/// the production walk (2678/2678 e2e). Stdlib modules
+/// (`Core` / `Wasi` / `Wasm`) and stdlib-snapshot construction still take
+/// the production path: reify does not yet reach parity on stdlib-shaped
+/// constructs (forcing it on panics at WIR, e.g. an unresolved
+/// `builtin::array<u8>^Eq::eq`), so closing that gap is the remainder of
+/// Stage 5. The combined walk survives only for stdlib/snapshot until then;
+/// removing it is Stage 7's cleanup, also gated on Stage 6's liveness pass.
+/// Drives both the orchestration switch and the annotate-time
+/// `capture_tuple_overlays` flag so the two never disagree.
+fn module_uses_reify(module_source: &ModuleSource) -> bool {
+    let is_stdlib = matches!(
+        module_source,
+        ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. }
+    );
+    !crate::stdlib_snapshot::is_building() && !is_stdlib
+}
+
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Run the full resolve pipeline: annotate, then lower to TIR.
     ///
@@ -368,6 +387,113 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     _ => {}
                 }
+            }
+        }
+
+        // Newtype pre-pass: resolve every module's concrete newtypes (and
+        // record generic-newtype defs) BEFORE any struct field is resolved.
+        //
+        // Newtypes are not name-registered in the first pass (unlike structs
+        // / variants / enums), so a struct field that references a newtype
+        // defined in another module would otherwise resolve to `unknown`
+        // whenever that module is processed later in `modules` order — e.g. a
+        // user `struct Color { v: f32x4 }` resolved before `core:simd`'s
+        // `pub type f32x4 = v128` is registered. Resolving all newtypes up
+        // front removes the ordering dependency. Newtype bases reference
+        // primitives or structs (name-registered above); newtype→newtype
+        // chains across modules are resolved in dependency order by repeating
+        // to a fixpoint.
+        loop {
+            let mut newly_resolved = false;
+            for (module_source, module) in modules {
+                if stdlib_set.contains(module_source) {
+                    continue;
+                }
+                let (imported_type_sources, import_original_names) =
+                    Self::build_imported_type_sources(
+                        &mut interner.borrow_mut(),
+                        module,
+                        module_source,
+                        Some(entry_module_source),
+                        &invocations,
+                    );
+                let empty_struct: IndexMap<String, StructFieldInfo> = IndexMap::default();
+                let empty_newtype: IndexMap<String, TypeId> = IndexMap::default();
+                let empty_enum: IndexMap<String, EnumInfo> = IndexMap::default();
+                let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
+                let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
+                let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
+                for item in &module.items {
+                    let Item::Newtype(newtype_decl) = item else {
+                        continue;
+                    };
+                    if newtype_decl.type_params.is_empty() {
+                        // Skip if already resolved (fixpoint convergence).
+                        if all_newtypes
+                            .get(module_source)
+                            .is_some_and(|m| m.contains_key(&newtype_decl.name))
+                        {
+                            continue;
+                        }
+                        let lookup = TypeLookup {
+                            current_module_source: module_source,
+                            imported_type_sources: &imported_type_sources,
+                            import_original_names: &import_original_names,
+                            all_newtypes: &all_newtypes,
+                            all_struct_fields: &all_struct_fields,
+                            all_variant_cases: &all_variant_cases,
+                            all_enum_cases: &all_enum_cases,
+                            all_flags_cases: &all_flags_cases,
+                            all_resource_types: &all_resource_types,
+                            all_generic_newtypes: &all_generic_newtypes,
+                            local_struct_fields: &empty_struct,
+                            local_newtypes: &empty_newtype,
+                            local_enum_cases: &empty_enum,
+                            local_flags_cases: &empty_flags,
+                            local_generic_newtypes: &empty_gnt,
+                            local_variant_cases: &empty_variant,
+                        };
+                        let base_type_id = Self::resolve_type_static(
+                            &newtype_decl.ty,
+                            &mut type_table.borrow_mut(),
+                            &lookup,
+                        );
+                        let newtype_id = type_table.borrow_mut().make_newtype(
+                            newtype_decl.name.clone(),
+                            module_source.clone(),
+                            base_type_id,
+                        );
+                        all_newtypes
+                            .entry(module_source.clone())
+                            .or_default()
+                            .insert(newtype_decl.name.clone(), newtype_id);
+                        newly_resolved = true;
+                    } else if !all_generic_newtypes
+                        .get(module_source)
+                        .is_some_and(|m| m.contains_key(&newtype_decl.name))
+                    {
+                        let type_params = newtype_decl
+                            .type_params
+                            .iter()
+                            .map(|p| p.name.clone())
+                            .collect();
+                        all_generic_newtypes
+                            .entry(module_source.clone())
+                            .or_default()
+                            .insert(
+                                newtype_decl.name.clone(),
+                                GenericNewtypeInfo {
+                                    module_source: module_source.clone(),
+                                    type_params,
+                                    base_type_ast: newtype_decl.ty.clone(),
+                                },
+                            );
+                        newly_resolved = true;
+                    }
+                }
+            }
+            if !newly_resolved {
+                break;
             }
         }
 
@@ -841,7 +967,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
                     continue;
                 };
-                sem.types.expression_types.insert(key.ast_id, *type_id);
+                sem.types.expression_types.insert(key.clone(), *type_id);
             }
             for (key, dispatch) in &snap.method_dispatch {
                 let Some(sem) = module_semantics.get_mut(&key.module) else {
@@ -850,21 +976,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 };
                 sem.types
                     .method_dispatch
-                    .insert(key.ast_id, dispatch.clone());
+                    .insert(key.clone(), dispatch.clone());
             }
             for (key, choice) in &snap.coercions {
                 let Some(sem) = module_semantics.get_mut(&key.module) else {
                     debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
                     continue;
                 };
-                sem.types.coercions.insert(key.ast_id, choice.clone());
+                sem.types.coercions.insert(key.clone(), choice.clone());
             }
             for (key, kind) in &snap.desugars {
                 let Some(sem) = module_semantics.get_mut(&key.module) else {
                     debug_assert!(false, "{snapshot_invariant}: {:?}", key.module);
                     continue;
                 };
-                sem.types.desugars.insert(key.ast_id, *kind);
+                sem.types.desugars.insert(key.clone(), *kind);
             }
         }
 
@@ -1092,24 +1218,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 interner: Rc::clone(&state.interner),
                 pending_method_dispatch: None,
                 pending_operator_ast_id: None,
+                // Capture per-element tuple-for-of overlays only when reify
+                // will consume them. The production / LSP path leaves this
+                // `false` so its annotation maps are untouched.
+                capture_tuple_overlays: module_uses_reify(module_source),
             };
 
             // Set file context so diagnostics emitted during resolution
             // carry the correct module filename (not the entry module).
             logger.set_file(module_source.diagnostic_filename());
 
-            // Phase 1 — `annotate_bodies`: run the existing body
-            // walk to populate `ModuleSemantics`. The TIR it
-            // produces is discarded; reify produces the final
-            // TIR from the recorded annotations.
-            //
-            // Stage 5 / WEP 2026-05-26: the `WADO_REIFY` env var
-            // gates the orchestration switch — when unset, the
-            // annotate-half's TIR is used directly (preserving
-            // the pre-Stage-5 behaviour for the residual cases
-            // reify's body-walk has not yet ported). When set,
-            // reify is the source of truth and any reach into a
-            // `todo!` panics loudly so the gap surfaces.
+            // Phase 1 — `annotate_bodies`: run the body walk to
+            // populate `ModuleSemantics`. For reify modules the TIR it
+            // produces is discarded and reify produces the final TIR
+            // from the recorded annotations; for stdlib / snapshot
+            // modules (see `module_uses_reify`) the annotate-half's TIR
+            // is used directly until Stage 6/7 removes the combined walk.
             let resolve_result = elaborator.resolve_module(module, module_source.clone());
             let saved_sem = elaborator.sem;
             // Re-install the (now-populated) `ModuleSemantics` even on bail
@@ -1119,25 +1243,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .module_semantics
                 .insert(module_source.clone(), saved_sem);
 
-            // Stage 5 / WEP 2026-05-26: WADO_REIFY enables reify for
-            // user-module compilation only. Stdlib modules
-            // (`Core` / `Wasi` / `Wasm`) — whether in the snapshot
-            // cache or live-loaded — go through the production path
-            // until reify reaches feature parity for every
-            // stdlib-shaped construct. See the Stage 5 follow-up list
-            // in `docs/wep-2026-05-26-elaborator-rearchitecture.md`.
-            // The snapshot bypass also applies during snapshot
-            // construction (`is_building == true`) so the snapshot's
-            // foundation TIR never depends on reify.
-            let is_stdlib = matches!(
-                module_source,
-                ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. }
-            );
-            let use_reify = !crate::stdlib_snapshot::is_building()
-                && !is_stdlib
-                && std::env::var("WADO_REIFY")
-                    .map(|v| v == "1" || v == "true")
-                    .unwrap_or(false);
+            // Reify is the default for user modules; stdlib modules and
+            // snapshot construction stay on the production path (see
+            // `module_uses_reify`).
+            let use_reify = module_uses_reify(module_source);
 
             if let Ok(tir_module) = resolve_result {
                 if use_reify {
@@ -1152,6 +1261,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     let mut reify = super::reify::Reify::new(
                         state.tysys.clone(),
                         sem_ref,
+                        &state.module_semantics,
                         symbols,
                         modules,
                         logger,
@@ -2710,7 +2820,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     stores: vec![],
                 })
             }
-            _ => TypeTable::UNKNOWN,
+            // A variadic type-pack spread `..T` resolves to a `TypePack`
+            // keyed by the param's positional index, mirroring the instance
+            // resolver's `trait_ctx.type_params` lookup (type_resolution.rs:103).
+            // Without this arm a `[..T]` parameter resolves its element to
+            // `UNKNOWN`, so a generic tuple method (`Tuple<..T>^Eq::eq`)
+            // monomorphizes against `Tuple<unknown>` and never registers at
+            // WIR build.
+            Type::TypePackSpread(name, _span) => {
+                if let Some(index) = type_params.iter().position(|p| p == name) {
+                    type_table.make_type_pack(name.clone(), index as u32)
+                } else {
+                    TypeTable::UNKNOWN
+                }
+            }
         }
     }
 

@@ -120,11 +120,11 @@ type "functype//wado-compiler/tests/fixtures/trait_default.wado/Person^Greet::gr
 
 type "functype//wado-compiler/tests/fixtures/trait_default.wado/Robot^Greet::name" = fn(ref "wado-compiler/tests/fixtures/trait_default.wado//Robot") -> ref "core:prelude/string.wado//String";  // TypeId(40)
 
-type "functype//wado-compiler/tests/fixtures/trait_default.wado/Robot^Greet::greet" = fn(ref "wado-compiler/tests/fixtures/trait_default.wado//Robot") -> ref "core:prelude/string.wado//String";  // TypeId(41)
+type "functype//wado-compiler/tests/fixtures/trait_default.wado/Article^Summary::summary" = fn(ref "wado-compiler/tests/fixtures/trait_default.wado//Article") -> ref "core:prelude/string.wado//String";  // TypeId(41)
 
-type "functype//wado-compiler/tests/fixtures/trait_default.wado/Item^Describable::short_desc" = fn(ref "wado-compiler/tests/fixtures/trait_default.wado//Item") -> ref "core:prelude/string.wado//String";  // TypeId(42)
+type "functype//wado-compiler/tests/fixtures/trait_default.wado/Robot^Greet::greet" = fn(ref "wado-compiler/tests/fixtures/trait_default.wado//Robot") -> ref "core:prelude/string.wado//String";  // TypeId(42)
 
-type "functype//wado-compiler/tests/fixtures/trait_default.wado/Article^Summary::summary" = fn(ref "wado-compiler/tests/fixtures/trait_default.wado//Article") -> ref "core:prelude/string.wado//String";  // TypeId(43)
+type "functype//wado-compiler/tests/fixtures/trait_default.wado/Item^Describable::short_desc" = fn(ref "wado-compiler/tests/fixtures/trait_default.wado//Item") -> ref "core:prelude/string.wado//String";  // TypeId(43)
 
 type "functype//wado-compiler/tests/fixtures/trait_default.wado/Tweet^Summary::summary" = fn(ref "wado-compiler/tests/fixtures/trait_default.wado//Tweet") -> ref "core:prelude/string.wado//String";  // TypeId(44)
 
@@ -429,6 +429,11 @@ fn "wado-compiler/tests/fixtures/trait_default.wado/Robot^Greet::name"(self) {
     return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }, "core:prelude/string.wado/String::push"(__local_1, 82), "core:prelude/string.wado/String::push"(__local_1, 111), "core:prelude/string.wado/String::push"(__local_1, 98), "core:prelude/string.wado/String::push"(__local_1, 111), "core:prelude/string.wado/String::push"(__local_1, 116), "core:prelude/string.wado/String::push"(__local_1, 45), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, __sroa_self_value = self.id, "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value, __local_2), __local_1;
 }
 
+fn "wado-compiler/tests/fixtures/trait_default.wado/Article^Summary::summary"(self) {
+    let __local_1: ref "core:prelude/string.wado//String";
+    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_1, self.headline), "core:prelude/string.wado/String::push"(__local_1, 32), "core:prelude/string.wado/String::push"(__local_1, 45), "core:prelude/string.wado/String::push"(__local_1, 32), "core:prelude/string.wado/String::push_str"(__local_1, self.content), __local_1;
+}
+
 fn "wado-compiler/tests/fixtures/trait_default.wado/Robot^Greet::greet"(self) {
     let __local_1: ref "core:prelude/string.wado//String";
     return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }, "core:prelude/string.wado/String::push"(__local_1, 72), "core:prelude/string.wado/String::push"(__local_1, 101), "core:prelude/string.wado/String::push"(__local_1, 108), "core:prelude/string.wado/String::push"(__local_1, 108), "core:prelude/string.wado/String::push"(__local_1, 111), "core:prelude/string.wado/String::push"(__local_1, 44), "core:prelude/string.wado/String::push"(__local_1, 32), "core:prelude/string.wado/String::push_str"(__local_1, "wado-compiler/tests/fixtures/trait_default.wado/Robot^Greet::name"(self)), "core:prelude/string.wado/String::push"(__local_1, 33), __local_1;
@@ -437,11 +442,6 @@ fn "wado-compiler/tests/fixtures/trait_default.wado/Robot^Greet::greet"(self) {
 fn "wado-compiler/tests/fixtures/trait_default.wado/Item^Describable::short_desc"(self) {
     let __local_1: ref "core:prelude/string.wado//String";
     return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }, "core:prelude/string.wado/String::push"(__local_1, 91), "core:prelude/string.wado/String::push_str"(__local_1, self.name), "core:prelude/string.wado/String::push"(__local_1, 93), __local_1;
-}
-
-fn "wado-compiler/tests/fixtures/trait_default.wado/Article^Summary::summary"(self) {
-    let __local_1: ref "core:prelude/string.wado//String";
-    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_1, self.headline), "core:prelude/string.wado/String::push"(__local_1, 32), "core:prelude/string.wado/String::push"(__local_1, 45), "core:prelude/string.wado/String::push"(__local_1, 32), "core:prelude/string.wado/String::push_str"(__local_1, self.content), __local_1;
 }
 
 fn "wado-compiler/tests/fixtures/trait_default.wado/Tweet^Summary::summary"(self) {

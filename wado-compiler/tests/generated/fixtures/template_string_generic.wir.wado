@@ -100,7 +100,7 @@ type "functype//wado-compiler/tests/fixtures/template_string_generic.wado/__cm_e
 
 type "functype//wado-compiler/tests/fixtures/template_string_generic.wado/__cm_export____test_10_turbofish_on_generic_constructor" = fn();  // TypeId(37)
 
-type "functype//wado-compiler/tests/fixtures/template_string_generic.wado/$value_copy$T26$shallow" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(38)
+type "functype//wado-compiler/tests/fixtures/template_string_generic.wado/$value_copy$T27$shallow" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(38)
 
 type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(39)
 
@@ -606,7 +606,7 @@ fn "wado-compiler/tests/fixtures/template_string_generic.wado/__cm_export____tes
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/template_string_generic.wado/$value_copy$T26$shallow"(v) {
+fn "wado-compiler/tests/fixtures/template_string_generic.wado/$value_copy$T27$shallow"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
 }
 
@@ -1121,7 +1121,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "core:prelude/format.wado/String^Display::fmt"(self, f) {
     let capped: ref "core:prelude/string.wado//String";
     if f.precision >= 0 {
-        capped = "wado-compiler/tests/fixtures/template_string_generic.wado/$value_copy$T26$shallow"(self);
+        capped = "wado-compiler/tests/fixtures/template_string_generic.wado/$value_copy$T27$shallow"(self);
         "core:prelude/string.wado/String::truncate_chars"(capped, f.precision);
         "core:prelude/format.wado/Formatter::pad"(f, capped);
     } else {

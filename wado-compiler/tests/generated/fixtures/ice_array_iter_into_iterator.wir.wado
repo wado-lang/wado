@@ -83,11 +83,13 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/ice_array_iter_into_iterator.wado/run"() with Stdout {
     let __b_0: ref "core:prelude//Array<u8>";
+    let arr: ref "core:prelude//Array<u8>";
     let s: ref "core:prelude/string.wado//String";
     __b_0 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
+    arr = struct.new "core:prelude//Array<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(__b_0.repr)), used: 5 };
     let __sroa___match_3_discriminant: i32;
     let __sroa___match_3_payload_0: ref null "core:prelude/string.wado//String";
-    multivalue_bind [__sroa___match_3_discriminant, __sroa___match_3_payload_0] = "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/ArrayIter<u8>>"(struct.new "core:prelude/array.wado//ArrayIter<u8>" { repr: __b_0.repr, used: __b_0.used, index: 0 });
+    multivalue_bind [__sroa___match_3_discriminant, __sroa___match_3_payload_0] = "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/ArrayIter<u8>>"(struct.new "core:prelude/array.wado//ArrayIter<u8>" { repr: arr.repr, used: arr.used, index: 0 });
     if __sroa___match_3_discriminant == 0 {
         s = ref.as_non_null(__sroa___match_3_payload_0);
         "core:cli/println"(s);
