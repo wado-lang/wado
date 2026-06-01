@@ -5,7 +5,7 @@ Performance benchmarks comparing Wado against C and JavaScript.
 ## Setup
 
 ```sh
-mise install  # node, zig
+mise install  # node, bun
 ```
 
 C compiler (`cc`) and Rust (`cargo`) are expected from the system.
