@@ -1469,8 +1469,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `self` parameter and the body agree on every impl param's index.
         // (Index-free uses — the tuple check and base-struct mangling below —
         // keep reading `facts.self_type`.)
+        // Resolve the *full* impl self type (`impl_self_ty`, not the
+        // ref-stripped `impl_self_inner`): for a reference impl
+        // (`impl<T: Inspect> Inspect for &T`) the Self type is `&T`, so a
+        // `&self` receiver is `&&T`. Resolving the inner `T` here would type
+        // the receiver as `&T`, desyncing the blanket `&T` Inspect/Eq impls
+        // (invalid core Wasm). `facts.self_type` likewise carries the ref.
         let method_self_type = self.resolve_type_with_self(
-            impl_self_inner,
+            impl_self_ty,
             &type_param_names,
             facts.self_type,
             &facts.assoc_type_bindings,
