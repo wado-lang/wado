@@ -5,9 +5,9 @@
 // and decompression throughput (MB/s of the original data). Each phase
 // auto-calibrates its iteration count to run for about a second.
 
-const fs = require("fs");
-const path = require("path");
-const zlib = require("zlib");
+const fs = require("node:fs");
+const path = require("node:path");
+const zlib = require("node:zlib");
 
 const TARGET_NS = 1_000_000_000; // ~1s budget per phase
 
