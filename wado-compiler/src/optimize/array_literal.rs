@@ -1,28 +1,31 @@
 //! Materialize `NirExprKind::ArrayLiteral` from an `Array<T>` builder
-//! sequence — a `with_capacity` allocation immediately followed by a run of
-//! `Array::push` calls.
+//! sequence — an `array_new(N)` allocation followed by `N` `Array::push`
+//! calls.
 //!
 //! An array literal `[e0, …, eN-1] as Array<T>` is lowered (via the
 //! `SequenceLiteralBuilder` coercion and inlining) to:
 //!
 //! ```text
-//! let mut __b = <PLACE-init containing> Array<T> { repr: array_new(N), used: 0 };
+//! let mut __b = <init binding> Array<T> { repr: array_new(N), used: 0 };
 //! PLACE.push(e0);
 //! PLACE.push(e1);
 //! …
 //! PLACE.push(eN-1);
 //! ```
 //!
-//! `PLACE` is the local `__b` itself for a direct `Array<T>` literal, or a
+//! `PLACE` is the bound local itself for a direct `Array<T>` literal, or a
 //! field of it for a custom `SequenceLiteralBuilder` whose builder wraps an
 //! `Array<T>` (e.g. `SeqVec { items: Array<T> }`, `Bag { keys, values }`).
 //! This pass recognizes that window — the `Array<T> { repr: array_new(N),
 //! used: 0 }` struct plus its `N` trailing `Array::push` calls — and rewrites
-//! the struct to `NirExprKind::ArrayLiteral { elements }`, dropping the pushes.
+//! the struct to `NirExprKind::ArrayLiteral { elements }`, dropping the
+//! pushes. The pushes need not be contiguous: inlining `push_literal` leaves
+//! single-use element temps between them (see `pure_temp_binding`), and
+//! pushes to distinct array fields may interleave (see `try_collapse_at`).
 //!
 //! `Array::push` is identified by its [`CompilerItem::ArrayPush`] marker, not
 //! by a canonical path, mirroring `string_push`. `array_new` is identified by
-//! its builtin generic name.
+//! its builtin name.
 //!
 //! Runs *after* `inline` in the fixpoint loop: the `SequenceLiteralBuilder`
 //! `new_literal` / `push_literal` / `build` methods (and, for wrapper builders,
@@ -102,10 +105,12 @@ impl Collapser<'_> {
         while i < stmts.len() {
             // The window is an init statement whose value embeds one or more
             // `Array<T> { array_new(N), used: 0 }` structs, each consumed by a
-            // run of `push` calls in the immediately-following statements.
+            // run of `push` calls in the following statements.
             let consumed = self.try_collapse_at(stmts, i);
             if consumed > 0 {
-                // Remove the `consumed` push statements that followed the init.
+                // Drop the window statements (pushes and resolved element
+                // temps) that followed the init; their data moved into the
+                // literal.
                 stmts.drain(i + 1..i + 1 + consumed);
                 changed = true;
             }
@@ -115,9 +120,10 @@ impl Collapser<'_> {
     }
 
     /// Try to collapse the builder window starting at `stmts[start]` (the init
-    /// statement). Returns the number of trailing push statements consumed (0
-    /// if no window matched). On success, the init statement's embedded
-    /// `Array<T>` structs are rewritten to `ArrayLiteral` in place.
+    /// statement). Returns the number of following statements the window
+    /// consumed — pushes plus any interleaved element temps — or 0 if no
+    /// window matched. On success, the init statement's embedded `Array<T>`
+    /// structs are rewritten to `ArrayLiteral` in place.
     fn try_collapse_at(&self, stmts: &mut [NirStmt], start: usize) -> usize {
         // Identify the local bound/assigned by the init statement.
         let Some(local) = init_local(&stmts[start].kind) else {
@@ -156,10 +162,10 @@ impl Collapser<'_> {
                     .iter()
                     .zip(&targets)
                     .all(|(p, t)| p.len() == t.capacity);
-            } else if let Some((idx, value)) = single_use_temp_binding(&stmt.kind) {
+            } else if let Some((local_index, value)) = pure_temp_binding(&stmt.kind) {
                 // A `let temp = value` for a fresh element temp; remember it so
-                // the following push that reads `temp` resolves to `value`.
-                bindings.push((idx, value.clone()));
+                // a following push that reads `temp` resolves to `value`.
+                bindings.push((local_index, value.clone()));
                 consumed += 1;
             } else {
                 break;
@@ -235,12 +241,13 @@ impl Collapser<'_> {
 }
 
 /// If `kind` is `let temp = value` binding a *pure* value, return the local
-/// index and the bound value. Used to see through the single-use temps that
+/// index and the bound value. Used to see through the element temps that
 /// inlining `push_literal(value)` introduces (`let v = <element>;
 /// place.push(v)`). Purity is required because the value is cloned into the
-/// literal (and the binding dropped): a side-effecting value could otherwise
-/// be duplicated or elided if it feeds more than one push.
-fn single_use_temp_binding(kind: &NirStmtKind) -> Option<(u32, &NirExpr)> {
+/// literal and the binding dropped: a side-effecting value could otherwise be
+/// duplicated or elided if it feeds more than one push. That the temp is in
+/// fact single-use (safe to drop) is verified by the caller's read guards.
+fn pure_temp_binding(kind: &NirStmtKind) -> Option<(u32, &NirExpr)> {
     match kind {
         NirStmtKind::Let {
             local_index, value, ..
@@ -404,11 +411,10 @@ fn array_new_capacity(expr: &NirExpr) -> Option<usize> {
     let NirExprKind::Call { func, args, .. } = &expr.kind else {
         return None;
     };
-    // The builtin appears either as a bare `array_new` name (direct
-    // monomorphic call) or mangled (`…/array_new<u8>`) with the generic name
-    // on `monomorph_info`; accept both.
+    // The builtin reaches NIR either as a bare `array_new` (non-generic call)
+    // or mangled (`…/array_new<u8>`) carrying its generic name on
+    // `monomorph_info`; match the exact name in each form.
     let is_array_new = func.name == ARRAY_NEW
-        || func.name.contains(ARRAY_NEW)
         || func
             .monomorph_info
             .as_ref()
