@@ -93,6 +93,23 @@ impl FunctionRef {
         }
     }
 
+    /// True when this reference resolves to one of the `builtin::likely`
+    /// / `builtin::unlikely` branch-hint intrinsics. Used by
+    /// optimization passes that need to peer through the wrapper to
+    /// reason about the underlying condition.
+    ///
+    /// Funnelled through [`Self::builtin_name`] so the inclusion
+    /// criterion (non-monomorphized, source is `core:builtin` or a
+    /// wasm asset) stays in sync with the WIR builder's
+    /// `BranchHint` lowering at `wir_build/calls.rs`.
+    #[must_use]
+    pub fn is_branch_hint_call(&self) -> bool {
+        matches!(
+            self.builtin_name().as_deref(),
+            Some("builtin::likely" | "builtin::unlikely")
+        )
+    }
+
     /// Get the monomorphized builtin name if this is a monomorphized builtin function.
     pub fn monomorphized_builtin_name(&self) -> Option<String> {
         let generic_name = self

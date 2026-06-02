@@ -1151,11 +1151,15 @@ fn is_implied_false(condition: &NirExpr, guard: &LoopGuard, defs: &DefMap) -> bo
 /// without changing the condition's value, so a guarded bounds check written as
 /// `if builtin::unlikely(i >= len) { panic }` must be seen through to reach the
 /// `i >= len` comparison.
+///
+/// Inclusion criteria are funnelled through
+/// [`FunctionRef::is_branch_hint_call`] so this matcher, niri's
+/// `try_fold` peel, and the WIR builder's `BranchHint` lowering stay
+/// in sync.
 fn peel_branch_hint(condition: &NirExpr) -> &NirExpr {
     if let NirExprKind::Call { func, args, .. } = &condition.kind
         && args.len() == 1
-        && func.module_source.is_core_builtin()
-        && (func.name == "likely" || func.name == "unlikely")
+        && func.is_branch_hint_call()
     {
         return peel_branch_hint(&args[0].expr);
     }

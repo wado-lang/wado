@@ -706,20 +706,28 @@ fn single_producing_tail(expr: &NirExpr) -> Option<&NirExpr> {
             if expr_has_break_to(label, value) {
                 return None;
             }
-            // Nested labeled blocks that re-use the same label name
-            // would shadow ours; the helpers above already account
-            // for that, but assert the outer block isn't reachable
-            // via a break from itself either.
-            if block_has_break_to(label, block) && !stmt_has_break_to(label, last) {
-                // `stmt_has_break_to` counts the trailing break too;
-                // if the only break to `label` in `block` IS the
-                // trailing one, this branch is unreachable. Defensive.
-                return None;
-            }
             Some(value)
         }
         _ => None,
     }
+}
+
+/// True when a `Call`'s callee is a compiler builtin that cannot
+/// mutate any user-level struct field tracked by `niri`'s `field_env`.
+/// Every builtin in `core:builtin` and `wasm-asset` (whether emitted
+/// directly or via monomorphization) operates below the struct layer:
+/// `array_set` writes an array element, `memory_grow` resizes linear
+/// memory, `store_u8` writes a memory cell, etc. None of these touch
+/// the `(local, field) → Value` entries `field_env` records, so a
+/// loop that contains only such calls has no `external` field-env
+/// effects.
+///
+/// Used by [`LoopWriteCollector`] to keep `has_external_writes`
+/// cleared for builtin-only loops so a pre-loop binding like
+/// `arr.used = 16` survives the loop's pre-walk
+/// `invalidate_aliased_fields` when `arr` is aliased.
+fn is_field_env_pure_call(func: &FunctionRef) -> bool {
+    func.builtin_name().is_some() || func.monomorphized_builtin_name().is_some()
 }
 
 /// True when an expression appearing as a struct / tuple / variant
@@ -803,8 +811,21 @@ impl NirRefVisitor for LoopWriteCollector {
                         self.effects.has_external_writes = true;
                     }
                 },
+                NirExprKind::Index { .. } => {
+                    // `arr[i] = …` mutates an array element, not any
+                    // entry in `field_env` (which records `(local,
+                    // fieldname) → Value`, not element-level state).
+                    // Mirror `visit_assign`'s opaque-write treatment:
+                    // mark `has_external_writes` so an aliased-local
+                    // invalidation fires only when the receiver could
+                    // be reachable through an external alias. If a
+                    // future pass starts tracking element values, the
+                    // explicit arm here is the place to add a
+                    // finer-grained invalidation.
+                    self.effects.has_external_writes = true;
+                }
                 _ => {
-                    // Index / Deref / other lvalue shape.
+                    // Deref / other lvalue shape.
                     self.effects.has_external_writes = true;
                 }
             },
@@ -816,7 +837,7 @@ impl NirRefVisitor for LoopWriteCollector {
                     self.effects.mut_borrowed.insert(*index);
                 }
             }
-            NirExprKind::Call { args, .. } => {
+            NirExprKind::Call { func, args, .. } => {
                 for arg in args {
                     if arg.is_mut
                         && let NirExprKind::Local { index, .. } = &arg.expr.kind
@@ -824,7 +845,19 @@ impl NirRefVisitor for LoopWriteCollector {
                         self.effects.mut_borrowed.insert(*index);
                     }
                 }
-                self.effects.has_external_writes = true;
+                // Builtin intrinsics (`array_*`, `select`, `likely` /
+                // `unlikely`, `memory_*`, `store_*`, `load_*`,
+                // `copy_value`, the i64-128 helpers, …) never mutate
+                // user-level struct fields tracked by `field_env`:
+                // `array_set` writes an array element, `memory_grow`
+                // resizes linear memory, and so on. Skipping
+                // `has_external_writes` for them lets a `.used` /
+                // `.repr` binding made before the loop survive past
+                // the loop boundary, even when the body reads /
+                // writes the underlying buffer.
+                if !is_field_env_pure_call(func) {
+                    self.effects.has_external_writes = true;
+                }
             }
             NirExprKind::MethodCall { receiver, args, .. } => {
                 // Auto-ref hides `&mut self`: receiver may be mutated.

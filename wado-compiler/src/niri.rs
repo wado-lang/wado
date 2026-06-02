@@ -1600,11 +1600,13 @@ impl<'a> Interpreter<'a> {
             // this, the inner Binary folds to `false` but the wrapper
             // keeps the panic branch alive all the way through WIR
             // (seen in hot `core:zlib` bounds checks at -O2).
+            //
+            // Inclusion criteria are funnelled through
+            // [`FunctionRef::is_branch_hint_call`] so this matcher,
+            // `condition_implication::peel_branch_hint`, and the WIR
+            // builder's `BranchHint` lowering stay in sync.
             NirExprKind::Call { func, args, .. }
-                if args.len() == 1
-                    && func.monomorph_info.is_none()
-                    && func.module_source.is_core_builtin()
-                    && (func.name == "likely" || func.name == "unlikely") =>
+                if args.len() == 1 && func.is_branch_hint_call() =>
             {
                 self.expr_to_lattice(&args[0].expr)
             }
