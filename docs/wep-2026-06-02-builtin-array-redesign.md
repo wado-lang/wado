@@ -60,9 +60,9 @@ public, with two changes:
   parameter passing, and return is synthesized exactly as it is today for any
   struct that embeds a raw GC array: `copy_value` already lowers an embedded GC
   array to an `array_clone` call. No new copy machinery is required.
-- It carries an **`impl Array<T>` surface and trait impls**. The only new
-  compiler plumbing is allowing `impl` / trait-impl blocks to attach to the
-  intrinsic type (see Implementation).
+- It carries an **`impl Array<T>` surface and trait impls** (see Method
+  surface). These attach to its declaration site in the prelude (see
+  Declaration).
 
 There is no separate "internal intrinsic" name anymore: `Array<T>` is both the
 user-facing type and the lowering target. The `array.new` / `array.get` /
@@ -71,6 +71,36 @@ by `Array<T>`'s methods.
 
 The only type with reference semantics is now the reference itself (`&T` /
 `&mut T`). The hidden "value type that is secretly a reference" is gone.
+
+#### Declaration
+
+`Array<T>` is a builtin type: its storage and instructions live in the compiler,
+not in Wado source. It is bound to the compiler with a **definition-less `type`
+declaration carrying `#[compiler_item("array")]`**, exactly like the tuple type
+family (`#[compiler_item("tuple")] pub type [..T];`), which "establishes
+`core:prelude` as the owner of all tuple types":
+
+```wado
+/// Fixed-length GC array — the builtin storage primitive.
+#[compiler_item("array")]
+pub type Array<T>;
+```
+
+This is what binds the builtin to its owning `module_source` (`core:prelude`),
+gives it a real declaration site for LSP, and provides the named type that
+`impl Array<T>` / trait-impl blocks attach to. No separate "allow impls on an
+intrinsic" mechanism is needed: the type is declared, so impls attach the same
+way they do for any prelude type.
+
+Two pieces of plumbing follow from this:
+
+- The parser currently accepts a definition-less `type` declaration only for the
+  tuple form `type [..T];`; it must be generalized to accept a named
+  definition-less `type Name<...>;` (resolved to the builtin by its
+  `compiler_item`).
+- The `compiler_item("array")` key is reassigned: it now denotes the raw GC
+  array (this declaration) rather than the growable vector. The growable vector
+  gets a new key, `compiler_item("list")` (see §2).
 
 #### Method surface
 
@@ -100,9 +130,12 @@ exactly as for `List<T>`.
 
 ### 2. `List<T>` is the growable vector
 
-`List<T>` is today's `Array<T>`, unchanged in behavior:
+`List<T>` is today's `Array<T>`, unchanged in behavior. It is an ordinary
+prelude struct (it has a definition), so it keeps a `#[compiler_item]` — but
+under the new key `"list"`, since `"array"` now names the raw GC array (§1):
 
 ```wado
+#[compiler_item("list")]
 pub struct List<T> {
     repr: Array<T>,   // value-typed; deep-copied with the List
     used: i32,
@@ -231,15 +264,21 @@ the same change, since the new view API depends on `stores` being real.
 
 ## Implementation TODOs
 
-- [ ] Allow `impl` / trait-impl blocks to attach to the `Array<T>` intrinsic
-      type (the one piece of genuinely new compiler plumbing).
+- [ ] Declare `Array<T>` in the prelude as a definition-less
+      `#[compiler_item("array")] pub type Array<T>;`, binding the builtin to
+      `core:prelude` and giving it a declaration site for impls and LSP.
+- [ ] Generalize the parser: accept a named definition-less `type Name<...>;`
+      declaration, not only the tuple form `type [..T];`.
+- [ ] Reassign the `compiler_item` keys: `"array"` → raw GC array (above), new
+      `"list"` → growable vector. Add `CompilerItem::List` (enum variant, `ALL`,
+      `attr_name`, `expected_kind`) in `compiler_item.rs`.
 - [ ] Give `Array<T>` value semantics end to end (it already deep-copies when
       embedded; make it copy as a standalone value too).
 - [ ] Port the `builtin::array_*()` free functions to `Array<T>` methods
       (`new`, `filled`, `len`, `get`, `set`, `fill`, `copy_from`); keep the
       `array.*` WIR lowering.
-- [ ] Rename the growable vector `Array<T>` → `List<T>` (type, `compiler_item`,
-      stdlib, fixtures, grammar, docs).
+- [ ] Rename the growable vector `Array<T>` → `List<T>` (type, stdlib, fixtures,
+      grammar, docs).
 - [ ] Introduce `Slice<T>` and re-base `ArrayIter` / `WindowsIter` / `ChunksIter`
       onto `&Array<T>` borrows with `stores[self]`.
 - [ ] Audit stdlib call sites to take `&Array<T>` / `&List<T>` where appropriate.
@@ -248,5 +287,5 @@ the same change, since the new view API depends on `stores` being real.
 - [ ] Fix the stale "stores not yet implemented" statements in `docs/spec.md`.
 - [ ] Update `docs/cheatsheet.md`, `docs/spec.md`, and the generated
       `docs/stdlib-core-prelude.md`.
-- [ ] Add the WEP to the index in `docs/CLAUDE.md`.
+- [x] Add the WEP to the index in `docs/CLAUDE.md`.
 - [ ] `mise run format`.
