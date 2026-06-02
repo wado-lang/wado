@@ -6761,16 +6761,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         self.sem.imports.namespace_imports.get(ns_prefix).cloned()
                         && !rest.contains("::")
                     {
-                        let type_args: Vec<TypeId> = if call.type_args.is_empty() {
-                            self.ann_generic_instantiations(call.id)
-                                .map(|gi| gi.type_args)
-                                .unwrap_or_default()
-                        } else {
-                            call.type_args
-                                .iter()
-                                .map(|ty| self.resolve_type(ty))
-                                .collect()
-                        };
+                        // `resolve_call`'s free-function path records the
+                        // final `type_args` (turbofish + inferred) on
+                        // `generic_instantiations`; reify reads it.
+                        let type_args: Vec<TypeId> = self
+                            .ann_generic_instantiations(call.id)
+                            .map(|gi| gi.type_args)
+                            .unwrap_or_default();
                         let arg_calls: Vec<CallArg> = call
                             .args
                             .iter()
@@ -6797,18 +6794,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 return TirExpr::new(TirExprKind::Unit, crate::tir::TypeTable::ERROR, span);
             };
 
-            // Type args: explicit turbofish on the call expression,
-            // else the inference recorded by Gap 1.
-            let type_args: Vec<TypeId> = if call.type_args.is_empty() {
-                self.ann_generic_instantiations(call.id)
-                    .map(|gi| gi.type_args)
-                    .unwrap_or_default()
-            } else {
-                call.type_args
-                    .iter()
-                    .map(|ty| self.resolve_type(ty))
-                    .collect()
-            };
+            // Type args: `resolve_call` records the final `type_args`
+            // (turbofish + inferred) on `generic_instantiations`; reify
+            // reads it. Non-generic calls leave no entry and reify gets
+            // the empty vector, matching the production builder.
+            let type_args: Vec<TypeId> = self
+                .ann_generic_instantiations(call.id)
+                .map(|gi| gi.type_args)
+                .unwrap_or_default();
 
             // Per-argument expected types come from the recorded resolved
             // param types. They are required for unannotated-param closure
