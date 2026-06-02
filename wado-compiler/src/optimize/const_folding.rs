@@ -214,10 +214,8 @@ impl NirOptVisitor for ConstFoldVisitor<'_> {
             } => {
                 let mut changed = self.visit_expr(condition);
                 let snap_pre = self.interpreter.snapshot_fields();
-                // Capture fall-through BEFORE the walk: visit_block can
-                // rewrite the trailing expression and its `type_id`,
-                // which would make a post-walk read of `is_never_type`
-                // unreliable.
+                // Capture reachability BEFORE the walk: see
+                // `block_falls_through`'s doc.
                 let then_reachable = block_falls_through(then_block, self.type_table);
                 changed |= self.visit_block(then_block);
                 let snap_then = self.interpreter.snapshot_fields();
@@ -235,8 +233,7 @@ impl NirOptVisitor for ConstFoldVisitor<'_> {
                         post_state: snap_else,
                     });
                 } else {
-                    // No `else`: model the implicit fall-through arm
-                    // as reachable and carrying the pre-if state.
+                    // Implicit else: reachable, no field writes.
                     arms.push(Arm {
                         reachable: true,
                         post_state: snap_pre.clone(),
@@ -778,28 +775,20 @@ fn single_producing_tail(expr: &NirExpr) -> Option<&NirExpr> {
     }
 }
 
-/// True when control reaching the bottom of `block` is possible.
+/// True when control can reach the bottom of `block`.
 ///
-/// Returns `false` when the block ends in a terminator stmt
-/// (`Return`, `Break`, `Continue`) or in an expression whose type is
-/// `!` (a `panic(…)` / `unreachable()` call, or any call returning
-/// `Never`). Used by the if-stmt handler to recognise an
-/// "if-with-trapping-then" pattern (`if cond { panic("…"); }`,
-/// `if cond { return … }`) so the then-branch's field-env mutations
-/// don't poison the post-if state — only the implicit-else path
-/// (pre-if state) reaches past the if.
+/// Used by the if-handlers to detect a trapping arm
+/// (`if cond { panic("…"); }`, `if cond { return … }`) so the
+/// arm's field-env mutations are excluded from the post-if join.
 ///
-/// An empty block falls through trivially. Recurses into the last
-/// stmt: a `Let { value: Never-typed }`, a `LabeledBlock` whose body
-/// doesn't fall through, or an `If` whose both arms don't fall
-/// through all terminate control. `Loop` is conservatively reported
-/// as falling through — proving the loop doesn't break out would
-/// require body analysis the visitor doesn't run here.
+/// Reads the last stmt only — see [`stmt_falls_through`] for the
+/// per-kind decisions. An empty block falls through trivially;
+/// `Loop` is reported as falling through (we don't analyse breaks).
 ///
-/// Callers MUST invoke this BEFORE the body walk: `visit_block` can
-/// rewrite the trailing expression's `type_id` (e.g. via
-/// `reduce_local` reconstructing a wrapper expression), making a
-/// post-walk read of `is_never_type` unreliable.
+/// Callers MUST invoke this BEFORE walking the block: the walker
+/// can rewrite the trailing expression's `type_id` (e.g. via
+/// `reduce_local` reconstructing a wrapper), making a post-walk
+/// read of `is_never_type` unreliable.
 fn block_falls_through(block: &NirBlock, type_table: &TypeTable) -> bool {
     let Some(last) = block.stmts.last() else {
         return true;
@@ -820,9 +809,8 @@ fn stmt_falls_through(stmt: &NirStmt, type_table: &TypeTable) -> bool {
             else_block,
             ..
         } => {
-            // Both arms must terminate for the if to terminate. A
-            // missing `else` always falls through via the implicit
-            // empty arm.
+            // Falls through iff some reachable arm falls through.
+            // No `else` ⇒ the implicit (empty) else falls through.
             block_falls_through(then_block, type_table)
                 || else_block
                     .as_ref()

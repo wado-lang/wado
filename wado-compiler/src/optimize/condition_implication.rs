@@ -94,21 +94,20 @@ fn process_function(func: &mut NirFunction) -> bool {
 }
 
 /// Per-function summary of locals and `(local, field_index)` pairs
-/// whose values may change anywhere in the function body. The
-/// [`DefMap`] recording layer consults this set to skip captures
-/// that would otherwise go stale — the Stage 1.5 / Stage 2
-/// literal-mixed bound comparison numerically reads these defs.
+/// whose values may change anywhere in the function body.
+/// [`record_def_from_stmt`] and [`record_struct_lit_def`] skip
+/// captures that would go stale, so the literal-mixed path in
+/// [`check_bound_implied_false`] (via [`bound_to_constant`]) never
+/// reads a `Def` whose underlying storage was later mutated.
 #[derive(Default)]
 struct Taints {
-    /// Locals whose whole value may change: direct `local = expr`
-    /// reassignments, `&mut local` escapes, `is_mut` call args, and
-    /// method-call receivers (auto-`&mut self` is opaque here).
+    /// Locals whose whole value may change: direct `local = expr`,
+    /// `&mut local` escapes, `is_mut` call args, and method-call
+    /// receivers (auto-`&mut self` is opaque here).
     locals: IndexSet<u32>,
-    /// `(local, field_index)` pairs assigned by `local.field = expr`
-    /// (with `field_index` known from the elaborator's resolved
-    /// `FieldAccess`). Lets `record_struct_lit_def` drop just the
-    /// stale field entry while keeping the rest of the struct
-    /// literal's captures.
+    /// `(local, field_index)` pairs assigned by `local.field = expr`.
+    /// [`record_struct_lit_def`] uses this to drop only the stale
+    /// field, keeping the rest of the struct literal's captures.
     fields: IndexSet<(u32, u32)>,
 }
 
@@ -129,8 +128,7 @@ struct TaintCollector {
 
 impl TaintCollector {
     /// Resolve an `Assign`'s target shape into the (local, optional
-    /// `field_index`) it ultimately mutates. Returns the entry to
-    /// insert into `taints`.
+    /// `field_index`) it mutates and record it into `self.taints`.
     fn taint_target(&mut self, target: &NirExpr) {
         match &target.kind {
             // `local = expr`.
@@ -191,8 +189,8 @@ impl NirRefVisitor for TaintCollector {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
             } => {
-                // `&mut local.field` aliases the field; `&mut local`
-                // aliases the whole local. Be precise where we can.
+                // `&mut local.field` aliases the field only;
+                // `&mut local` aliases the whole local.
                 match &inner.kind {
                     NirExprKind::Local { index, .. } => {
                         self.taints.locals.insert(*index);
@@ -408,27 +406,22 @@ fn extract_loop_guard(stmts: &[NirStmt]) -> Option<LoopGuard> {
     })
 }
 
-/// Decode an expression as a [`BoundValue`]: an immediate `Local`,
-/// `IntLiteral`, or a `Cast` around either of those. Anything else
-/// (arithmetic, method calls, …) yields `None` so the caller bails.
+/// Decode an expression as a [`BoundValue`]: an immediate `Local` or
+/// `IntLiteral`. Anything else (arithmetic, casts, method calls, …)
+/// yields `None` so the caller bails — including casts, since a
+/// `Cast` may truncate or sign-flip the inner literal and we don't
+/// inspect the source/target type pair here.
 ///
-/// `IntLiteral.value` is `u64` (bit pattern). Reinterpreting as `i64`
-/// via `as i64` flips the sign of literals in `[2^63, 2^64)`, which
-/// would silently feed a negative bound into the numeric comparisons
-/// in [`check_bound_implied_false`]. Use `i64::try_from` so out-of-
-/// range u64 literals bail rather than fold to negative.
-///
-/// `Cast { expr: <literal-or-local>, .. }` arises naturally when
-/// niri folds a typed-numeric `(N as u32) >= bound`-shaped check.
-/// The bit pattern is unambiguous for sign-extending / zero-extending
-/// casts; we recurse and let the inner extraction succeed.
+/// `IntLiteral.value` is the literal's `u64` bit pattern; use
+/// `i64::try_from` so a payload with bit 63 set bails rather than
+/// silently feed a negative bound into the numeric comparisons in
+/// [`check_bound_implied_false`].
 fn extract_bound_value(expr: &NirExpr) -> Option<BoundValue> {
     match &expr.kind {
         NirExprKind::Local { index, .. } => Some(BoundValue::Local(*index)),
         NirExprKind::IntLiteral { value, .. } => {
             i64::try_from(*value).ok().map(BoundValue::Literal)
         }
-        NirExprKind::Cast { expr: inner, .. } => extract_bound_value(inner),
         _ => None,
     }
 }
@@ -498,19 +491,12 @@ fn record_def_from_stmt(stmt: &NirStmt, defs: &mut DefMap, tainted: &Taints) {
         return;
     };
 
-    // Skip bindings whose let-target itself may be reassigned
-    // (Assign / &mut / mut-arg / method receiver). Without this
-    // gate, the Stage 1.5 / Stage 2 literal-mixed bound comparison
-    // would numerically consult a stale `Def::IntConst(N)` /
-    // `Def::Copy(…)` / `Def::AddConst(…)` chain captured at the
-    // let point and silently eliminate bounds checks the runtime
-    // actually exercises. The identity-only paths (`resolves_to`
-    // between two Locals) remain sound — they compare names only —
-    // but value-extracting paths must not see tainted entries.
-    //
-    // Field-level taint (`local.f = …`) is filtered per-field in
-    // `record_struct_lit_def` instead; the whole-local check here
-    // only triggers when the target itself was reassigned.
+    // Skip when the let-target itself may later be reassigned: the
+    // value-extracting path (`bound_to_constant`) would otherwise
+    // observe a stale snapshot. Identity-only paths (`resolves_to`
+    // between two Locals) compare names and stay sound regardless.
+    // Field-level taint is handled per-field in
+    // `record_struct_lit_def`.
     if tainted.locals.contains(local_index) {
         return;
     }
@@ -1488,31 +1474,18 @@ fn is_implied_by_dominating_guard(
         return false;
     }
 
-    // Domain analysis with offset:
-    //   guard:      var + max_offset < dg.bound
-    //               ⇒ var <= dg.bound - max_offset - 1
-    //   check_var = var + offset
-    //               ⇒ check_var <= dg.bound - max_offset + offset - 1
-    //   check (check_var >= check_bound) is false when
-    //               check_bound > check_var,
-    //               i.e. check_bound >= dg.bound - max_offset + offset.
-    // Define `tighten = max_offset - offset` and the condition is
-    // `check_bound >= dg.bound - tighten`. For two-Local bounds we
-    // fall back to the legacy exact-match (sound but precision-
-    // limited to the `tighten == 0` case); for literal-mixed bounds
-    // we can subtract directly.
+    // `var + max_offset < dg.bound` gives `check_var = var + offset
+    // < dg.bound - (max_offset - offset)`, so the check is implied
+    // false when `check_bound >= dg.bound - (max_offset - offset)`.
+    // Local-only bounds fall back to identity match — the legacy
+    // regime, sound only at `offset == max_offset`.
     let tighten = dg.max_offset - offset;
     match (
         bound_to_constant(check_bound, defs),
         bound_to_constant(dg.bound, defs),
     ) {
         (Some(check_v), Some(guard_v)) => check_v >= guard_v - tighten,
-        _ => {
-            // Local-only path: rely on identity-equal bound (the
-            // legacy soundness regime — see check_bound_implied_false
-            // for the rationale).
-            check_bound_implied_false(check_bound, dg.bound, true, defs)
-        }
+        _ => check_bound_implied_false(check_bound, dg.bound, true, defs),
     }
 }
 

@@ -433,14 +433,10 @@ impl FieldSnapshot {
     }
 }
 
-/// A control-flow arm contributing to the meet at a branch
-/// boundary (an `if`'s then / else, a `match` arm, a `switch` arm,
-/// or any future construct that joins multiple post-states).
-///
-/// `reachable = false` arms terminate (`return` / `break` /
-/// `continue` / `panic(…)` / `unreachable()` / call returning `!`)
-/// and so don't contribute to post-branch state — only reachable
-/// arms participate in the meet. See [`FieldSnapshot::join_arms`].
+/// One arm of a branch (`if` then / else, `match` arm, `switch`
+/// arm) joining into [`FieldSnapshot::join_arms`]. An arm with
+/// `reachable = false` terminates (`return` / `break` / `continue`
+/// / `panic(…)` / call returning `!`) and is excluded from the meet.
 #[derive(Clone, Debug)]
 pub struct Arm {
     pub reachable: bool,
@@ -448,24 +444,14 @@ pub struct Arm {
 }
 
 impl FieldSnapshot {
-    /// Compute the post-branch field-env state from the per-arm
-    /// snapshots and each arm's reachability flag. Implements the
-    /// standard control-flow join semantics:
+    /// Lattice meet of every reachable arm's post-state.
+    /// Unreachable arms (`reachable = false`) are excluded — their
+    /// writes are not observed past the branch. If no arm is
+    /// reachable, the post-branch point is itself dead code and
+    /// `snap_pre` is returned as an arbitrary placeholder.
     ///
-    /// - Arms with `reachable = false` are excluded (their writes
-    ///   are not observed past the branch).
-    /// - If no arm is reachable, the post-branch program point is
-    ///   itself unreachable; `snap_pre` is returned as an arbitrary
-    ///   choice — downstream DCE will eliminate the code, so the
-    ///   specific snapshot does not matter.
-    /// - If exactly one arm is reachable, its post-state IS the
-    ///   post-branch state.
-    /// - Otherwise the post-branch state is the lattice meet of
-    ///   every reachable arm's post-state.
-    ///
-    /// Used by the if-stmt / if-expr / match / switch handlers in
-    /// the const-fold visitor; the implicit no-`else` arm is
-    /// modelled as a reachable arm carrying `snap_pre`.
+    /// Callers model an implicit no-`else` arm as a reachable arm
+    /// carrying `snap_pre`.
     #[must_use]
     pub fn join_arms(snap_pre: FieldSnapshot, arms: impl IntoIterator<Item = Arm>) -> Self {
         let mut accumulator: Option<FieldSnapshot> = None;
