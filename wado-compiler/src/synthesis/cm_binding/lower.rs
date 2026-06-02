@@ -883,7 +883,12 @@ pub(super) fn flatten_cm_record_fields(
         let resolved_field = cm_interface_registry.resolve_type(field_ty);
         let field_type_id = {
             let mut tt = type_table.borrow_mut();
-            cm_type_to_type_id(&resolved_field, &mut tt, cm_interface_registry, wasi_package)
+            cm_type_to_type_id(
+                &resolved_field,
+                &mut tt,
+                cm_interface_registry,
+                wasi_package,
+            )
         };
         let field_expr = field_access(
             local_ref(val_local, val_name, value_type_id),
