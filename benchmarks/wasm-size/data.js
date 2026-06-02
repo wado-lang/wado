@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780437285916,
+  "lastUpdate": 1780444479191,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29156,6 +29156,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 17195,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "87e1faa6ab6a2b1daded9b6bf52c930b4a137eb8",
+          "message": "Merge pull request #1276 from wado-lang/claude/constant-object-globalization-gBQo3\n\nPromote constant struct/array globals to eager Wasm constants",
+          "timestamp": "2026-06-03T08:45:54+09:00",
+          "tree_id": "d06fc9af97471ddb198a8d87a17543e81abe789f",
+          "url": "https://github.com/wado-lang/wado/commit/87e1faa6ab6a2b1daded9b6bf52c930b4a137eb8"
+        },
+        "date": 1780444478674,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9687,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17183,
             "unit": "bytes"
           },
           {
