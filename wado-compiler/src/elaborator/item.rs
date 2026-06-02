@@ -1722,6 +1722,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Display name for #function: StructName::method_name
         let display_name = MethodName::format_local(struct_name, None, &func.name);
+
+        // Stage 5 / mangled-name slice: publish the mangled + display
+        // names for reify to read straight off `MethodNames` instead of
+        // running `format_local` itself against the impl facts.
+        let method_names_key = scope.ann_key(func.id);
+        scope.sem.types.method_names.insert(
+            method_names_key,
+            super::sem::types::MethodNames {
+                display: display_name.clone(),
+                mangled: mangled_name.clone(),
+            },
+        );
+
         let mut ctx = FunctionContext::new(return_type, display_name);
         // Mark this context as a handler method body when the surrounding
         // impl block targets an effect or resource declaration. `resume`

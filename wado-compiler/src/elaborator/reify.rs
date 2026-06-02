@@ -307,6 +307,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ann_effect_ops => effect_ops: Vec<crate::tir::TirEffectOp>,
             ann_decl_type_params => decl_type_params: Vec<crate::tir::TirTypeParam>,
             ann_struct_field_types => struct_field_types: Vec<crate::tir::TypeId>,
+            ann_method_names => method_names: super::sem::types::MethodNames,
         }
     }
 
@@ -1035,7 +1036,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         facts: &super::sem::types::ImplFacts,
     ) -> Option<TirFunction> {
         use crate::ast::SelfKind;
-        use crate::name::{LocalMethodName, MethodName};
+        use crate::name::LocalMethodName;
 
         // Single source of truth: the impl-type-param scheme is computed once
         // by `Elaborator::resolve_method` and recorded; reify reads it. reify
@@ -1110,16 +1111,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `get_type_name` (module.rs:581) already encodes — exactly the
         // parity-bug class WEP 2026-05-26 §"Stage 7 gap" calls out.
         let base_struct_name = facts.struct_name.clone();
-        // `#function` display name `Struct::method` (trait omitted), matching
-        // `resolve_method`'s `display_name`; the bare `func.name` would regress
-        // assert / panic messages to drop the type qualifier
-        // (`String::remove` → `remove`).
-        let display_name = MethodName::format_local(&base_struct_name, None, &func.name);
-        let mangled_name = MethodName::format_local(
-            &base_struct_name,
-            facts.trait_name_mangled.as_deref(),
-            &func.name,
+        // Mangled / display names — read straight off the per-method facts
+        // `resolve_method` already publishes; reify no longer runs
+        // `format_local` itself.
+        let method_names = self.ann_method_names(func.id).expect(
+            "resolve_method records the mangled + display names for every impl method reify emits",
         );
+        let display_name = method_names.display;
+        let mangled_name = method_names.mangled;
         let method_info = {
             let mut info = LocalMethodName::new(
                 base_struct_name,

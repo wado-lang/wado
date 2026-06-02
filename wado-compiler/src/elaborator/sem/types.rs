@@ -383,6 +383,11 @@ pub(crate) struct TypeAnnotations {
     /// after its own scope is torn down. `AstId` is dense per module across all
     /// item kinds, so function and decl entries never collide.
     pub(crate) decl_type_params: IndexMap<SymbolKey, Vec<crate::tir::TirTypeParam>>,
+    /// Per-impl-method mangled / display names as `resolve_method` computed
+    /// them (`MethodName::format_local(struct_name, trait_name, method_name)`
+    /// and the trait-omitted display form). Reify reads these instead of
+    /// re-running `format_local` against the impl facts' `struct_name`.
+    pub(crate) method_names: IndexMap<SymbolKey, MethodNames>,
     /// Resolved field types per struct decl `AstId`, in declaration order, as
     /// `resolve_struct` resolved them with the struct's type-param scope and
     /// the `loaded_modules`-aware resolver in place.
@@ -507,6 +512,17 @@ impl TypeAnnotations {
                 .split_off(base.index_assign_dispatch),
         }
     }
+}
+
+/// Mangled and display names for one impl method, as
+/// `Elaborator::resolve_method` computes them. Display omits the trait
+/// (`Struct::method`); mangled includes it
+/// (`Struct^Trait::method`). See [`TypeAnnotations::method_names`].
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct MethodNames {
+    pub(crate) display: String,
+    pub(crate) mangled: String,
 }
 
 /// Resolved `From<T>::from` call facts recorded at every site that
