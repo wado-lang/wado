@@ -5899,7 +5899,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // diverge from annotate's (evaporated coercion wrappers).
         // Production registers it in expr.rs:3603+.
         let struct_type = recorded_type;
-        let struct_name = self.tysys.type_table.borrow().type_name(struct_type);
+        // Single source of truth: `resolve_anonymous_struct_literal`
+        // recorded the synthesised `__anon_{…}` name on the
+        // `GenericInstantiation` slot. Falls back to `type_name(struct_type)`
+        // for any recovery path where the recording is absent.
+        let struct_name = self
+            .ann_generic_instantiations(struct_lit.id)
+            .and_then(|gi| gi.mangled_name)
+            .unwrap_or_else(|| self.tysys.type_table.borrow().type_name(struct_type));
 
         TirExpr::new(
             TirExprKind::StructLiteral {

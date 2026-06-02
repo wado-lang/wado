@@ -3629,12 +3629,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let module_source = self.current_module_source.clone();
 
         // Check if this anonymous struct type already exists (structural equivalence)
-        if let Some(existing_type) = self
+        let existing_type = self
             .tysys
             .type_table
             .borrow()
-            .find_struct_type(&anon_name, &module_source)
-        {
+            .find_struct_type(&anon_name, &module_source);
+        if let Some(existing_type) = existing_type {
+            self.record_generic_instantiation_with_mangle(
+                struct_lit.id,
+                vec![],
+                existing_type,
+                Some(anon_name.clone()),
+            );
             return TirExpr::new(
                 TirExprKind::StructLiteral {
                     struct_type: existing_type,
@@ -3698,6 +3704,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span: struct_lit.span,
             serde_rename_all: None,
         });
+
+        self.record_generic_instantiation_with_mangle(
+            struct_lit.id,
+            vec![],
+            struct_type,
+            Some(anon_name.clone()),
+        );
 
         TirExpr::new(
             TirExprKind::StructLiteral {
