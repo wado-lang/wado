@@ -11,29 +11,36 @@
 //!
 //! This pass is the single eager/lazy classifier, realizing the "lazy iff
 //! optimize could not simplify it" rule at the point where the value is
-//! already correctly lowered to WIR (variant representation, string data
-//! segments, non-null field wrapping all baked in). For each such global
-//! it moves the constant value into the global's eager `init`, marks the
-//! global immutable, and drops the now-redundant `GlobalSet`. The dead
-//! init temps, emptied `__initialize_module` body, and the
-//! `__modules_initialized` guard are reclaimed by `elide_write_only_locals`
-//! / `init_guard` / `dce` / `cleanup` in the same phase.
+//! already correctly lowered to WIR (variant representation, non-null field
+//! wrapping all baked in). For each such global it moves the constant value
+//! into the global's eager `init`, marks the global immutable, and drops the
+//! now-redundant `GlobalSet`(s). The dead init temps, emptied
+//! `__initialize_module` body, and `__modules_initialized` guard are
+//! reclaimed by `init_guard` / `dce` / `cleanup` in the same phase.
+//!
+//! The init assignment is reached wherever it ends up: a standalone
+//! `__initialize_module` body, or — when that module-init is inlined into
+//! the entry points — nested inside an `__inline___initialize_modules`
+//! guard block and *duplicated* once per entry export. The scan therefore
+//! recurses into nested instructions and treats a global as promotable when
+//! every assignment to it is constant (they are identical copies of one
+//! init, since a user-immutable global is assigned exactly once in source).
 //!
 //! It subsumes the former NIR `const_global_promotion` (scalar-only):
-//! constness is decided once here, via [`WirInstr::is_const_expressible`].
+//! const-ness is decided once here, via [`WirInstr::is_const_expressible`].
+//! Strings stay lazy — a `String`'s `array.new_data<u8>` repr is not a valid
+//! Wasm constant instruction, so it is excluded by that predicate.
 
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage};
 
-/// Per-candidate promotion state while scanning function bodies.
-enum Candidate {
-    /// Exactly one const assignment seen so far, at `(func, stmt)`.
-    Promotable {
-        func_idx: usize,
-        stmt_idx: usize,
-        value: WirInstr,
-    },
-    /// A non-const assignment, or more than one assignment: never eligible.
+/// Per-candidate promotion state accumulated while scanning all assignments.
+enum Consensus {
+    /// Every assignment seen so far is constant; carries the value to
+    /// install (all assignments are identical copies of one source init).
+    Const(WirInstr),
+    /// At least one assignment is non-constant: the global needs runtime
+    /// init and must not be promoted.
     Disqualified,
 }
 
@@ -52,78 +59,96 @@ pub(super) fn promote_const_global_inits(module: &mut WirPackage) {
         return;
     }
 
-    // Locate each candidate's assignment. A user-immutable global is only
-    // ever assigned at init time, so we expect exactly one top-level
-    // `GlobalSet` in an `__initialize_module` body. More than one
-    // assignment, or a non-const value, disqualifies it.
-    let mut state: IndexMap<usize, Candidate> = IndexMap::default();
-    for (func_idx, func) in module.functions.iter().enumerate() {
-        let Some(body) = &func.body else { continue };
-        for (stmt_idx, instr) in body.iter().enumerate() {
-            let WirInstr::GlobalSet { name, value } = instr else {
-                continue;
-            };
-            let Some(&g_idx) = candidate_idx.get(name.fq.as_str()) else {
-                continue;
-            };
-            let resolved = resolve_const(value, &IndexMap::default());
-            let next = match (state.contains_key(&g_idx), resolved) {
-                (false, Some(value)) => Candidate::Promotable {
-                    func_idx,
-                    stmt_idx,
-                    value,
-                },
-                _ => Candidate::Disqualified,
-            };
-            state.insert(g_idx, next);
+    // Collect every assignment to a candidate (recursively, since the init
+    // may be inlined into a nested guard block), folding into a per-global
+    // consensus.
+    let mut state: IndexMap<usize, Consensus> = IndexMap::default();
+    for func in &module.functions {
+        if let Some(body) = &func.body {
+            for instr in body {
+                collect_assignments(instr, &candidate_idx, &mut state);
+            }
         }
     }
 
-    // Apply promotions, recording the `GlobalSet` statements to drop.
-    let mut drops: IndexMap<usize, Vec<usize>> = IndexMap::default();
-    for (g_idx, cand) in state {
-        let Candidate::Promotable {
-            func_idx,
-            stmt_idx,
-            value,
-        } = cand
-        else {
-            continue;
-        };
-        let global = &mut module.globals[g_idx];
-        global.init = value;
-        global.mutable = false;
-        // `lazy_init` and slot nullability are left as `register_globals`
-        // set them: the slot stays nullable (a non-null const init is a
-        // valid subtype) and codegen keeps narrowing reads with
-        // `ref.as_non_null`, which is correct since the eager value is
-        // non-null.
-        drops.entry(func_idx).or_default().push(stmt_idx);
+    // Promote globals whose every assignment is constant; collect their
+    // names so the now-redundant `GlobalSet`s can be dropped.
+    let mut promoted: IndexSet<String> = IndexSet::default();
+    for (g_idx, consensus) in state {
+        if let Consensus::Const(value) = consensus {
+            let global = &mut module.globals[g_idx];
+            global.init = value;
+            global.mutable = false;
+            // `lazy_init` and slot nullability are left as `register_globals`
+            // set them: the slot stays nullable (a non-null const init is a
+            // valid subtype) and codegen keeps narrowing reads with
+            // `ref.as_non_null`, which is correct since the eager value is
+            // non-null.
+            promoted.insert(global.name.fq.clone());
+        }
+    }
+    if promoted.is_empty() {
+        return;
     }
 
-    for (func_idx, stmt_indices) in drops {
-        let Some(body) = &mut module.functions[func_idx].body else {
-            continue;
-        };
-        for stmt_idx in stmt_indices {
-            body[stmt_idx] = WirInstr::Nop;
+    for func in &mut module.functions {
+        if let Some(body) = &mut func.body {
+            for instr in body.iter_mut() {
+                nop_promoted_assignments(instr, &promoted);
+            }
         }
     }
 }
 
+/// Fold a `GlobalSet` to a candidate into its consensus; recurse into
+/// children otherwise. A non-const assignment poisons the candidate.
+fn collect_assignments(
+    instr: &WirInstr,
+    candidate_idx: &IndexMap<String, usize>,
+    state: &mut IndexMap<usize, Consensus>,
+) {
+    if let WirInstr::GlobalSet { name, value } = instr
+        && let Some(&g_idx) = candidate_idx.get(name.fq.as_str())
+    {
+        let next = match (state.get(&g_idx), resolve_const(value)) {
+            (Some(Consensus::Disqualified), _) | (_, None) => Consensus::Disqualified,
+            // First const assignment, or a later (identical) duplicate from
+            // inlining: keep the value.
+            (None | Some(Consensus::Const(_)), Some(value)) => Consensus::Const(value),
+        };
+        state.insert(g_idx, next);
+        return;
+    }
+    instr.for_each_child(&mut |child| collect_assignments(child, candidate_idx, state));
+}
+
+/// Replace every `GlobalSet` to a promoted global with `Nop`, at any depth.
+fn nop_promoted_assignments(instr: &mut WirInstr, promoted: &IndexSet<String>) {
+    if let WirInstr::GlobalSet { name, .. } = instr
+        && promoted.contains(name.fq.as_str())
+    {
+        *instr = WirInstr::Nop;
+        return;
+    }
+    instr.for_each_boxed_child_mut(&mut |child| nop_promoted_assignments(child, promoted));
+}
+
 /// Resolve a `GlobalSet` value to a constant init expression.
 ///
-/// Handles three shapes that the extracted-then-optimized init takes:
-/// a direct const value (scalar / `struct.new` / `array.new_*`), a
-/// `LocalGet` of a const local defined in `local_defs`, and a
+/// Handles the shapes the extracted-then-optimized init takes: a direct
+/// const value (scalar / `struct.new` / `array.new_*`), and a
 /// side-effect-free `Seq` that binds const locals and returns one of them
-/// (`__b = struct.new …; __b`) — the form an array/string literal produces
-/// via its builder temp. A redundant `RefAsNonNull` wrapper is transparent.
-/// Returns `None` for anything else (notably any non-const statement in a
-/// `Seq`, which would make dropping the assignment unsound).
-fn resolve_const(value: &WirInstr, local_defs: &IndexMap<String, WirInstr>) -> Option<WirInstr> {
+/// (`__b = struct.new …; __b`) — the form an array literal produces via its
+/// builder temp. A redundant `RefAsNonNull` wrapper is transparent. Returns
+/// `None` for anything else (notably any non-const statement in a `Seq`,
+/// which would make dropping the assignment unsound).
+fn resolve_const(value: &WirInstr) -> Option<WirInstr> {
+    resolve_with(value, &IndexMap::default())
+}
+
+fn resolve_with(value: &WirInstr, local_defs: &IndexMap<String, WirInstr>) -> Option<WirInstr> {
     match value {
-        WirInstr::RefAsNonNull(inner) => resolve_const(inner, local_defs),
+        WirInstr::RefAsNonNull(inner) => resolve_with(inner, local_defs),
         WirInstr::LocalGet { name, .. } => local_defs.get(name.as_str()).cloned(),
         WirInstr::Seq(items) => {
             let (tail, init) = items.split_last()?;
@@ -132,10 +157,10 @@ fn resolve_const(value: &WirInstr, local_defs: &IndexMap<String, WirInstr>) -> O
                 let WirInstr::LocalSet { name, value } = stmt else {
                     return None; // a non-binding statement has side effects
                 };
-                let resolved = resolve_const(value, &defs)?;
+                let resolved = resolve_with(value, &defs)?;
                 defs.insert(name.clone(), resolved);
             }
-            resolve_const(tail, &defs)
+            resolve_with(tail, &defs)
         }
         _ => value.is_const_expressible().then(|| value.clone()),
     }

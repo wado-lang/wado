@@ -1,0 +1,35 @@
+// Constant Object Globalization, inlined-init case: when a small entry-module
+// `__initialize_module` is inlined into the entry points, the global's init
+// `GlobalSet` ends up nested inside an `__inline___initialize_modules` guard
+// block (and duplicated once per entry export). `wir_optimize::const_global`
+// must still find and promote it — a top-level-only scan would silently leave
+// the global lazy (`global mut … = ref.null`).
+//
+// A single struct global with no lazy globals to keep `__initialize_module`
+// standalone exercises exactly that nested/duplicated shape.
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+global ORIGIN: Point = Point { x: 3, y: 4 };
+
+export fn run() with Stdout {
+    println(`{ORIGIN.x},{ORIGIN.y}`);
+}
+
+__DATA__
+{
+    "stdout": "3,4\n",
+    "wir_expect:O2": [
+        "global global:ORIGIN",
+        "= struct.new",
+        "{ x: 3, y: 4 }"
+    ],
+    "wir_not_expect:O2": [
+        "global mut global:ORIGIN"
+    ]
+}
