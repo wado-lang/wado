@@ -17,7 +17,7 @@ use { normalize_tree } from "../../grammars/LeftRecursion/LabelsOnOpSubrule_3.g4
 test "stage_b: LeftRecursion/LabelsOnOpSubrule_3" {
     let input = "(1/2)*3";
     let expected = "(s (e (e ( (e (e 1) / (e 2)) )) * (e 3)))";
-    let root = t::parse(&input).unwrap();
+    let root = t::parse_s(&input).unwrap();
     let actual = t::to_tree(&root).to_string_tree();
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;

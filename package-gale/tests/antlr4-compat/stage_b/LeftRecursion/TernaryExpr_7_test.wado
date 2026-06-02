@@ -17,7 +17,7 @@ use { normalize_tree } from "../../grammars/LeftRecursion/TernaryExpr_7.g4";
 test "stage_b: LeftRecursion/TernaryExpr_7" {
     let input = "a?b=c:d";
     let expected = "(s (e (e a) ? (e (e b) = (e c)) : (e d)))";
-    let root = t::parse(&input).unwrap();
+    let root = t::parse_s(&input).unwrap();
     let actual = t::to_tree(&root).to_string_tree();
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;
