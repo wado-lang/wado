@@ -268,6 +268,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             })
                             .collect();
 
+                        // Record the implicit struct literal's mangled name
+                        // (the target struct's name as the elaborator picks
+                        // it up) so reify reads it from
+                        // `GenericInstantiation` instead of taking the
+                        // anon-literal path that expects a synthesised
+                        // `__anon_{…}` name.
+                        self.record_generic_instantiation_with_mangle(
+                            struct_lit.id,
+                            vec![],
+                            struct_type,
+                            Some(name.clone()),
+                        );
                         let value = TirExpr::new(
                             TirExprKind::StructLiteral {
                                 struct_type,
