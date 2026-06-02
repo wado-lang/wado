@@ -155,7 +155,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:core::prelude/fpfmt.wado::POW10: ref null "core:prelude//Array<u64>" = ref.null none;
+global global:core::prelude/fpfmt.wado::POW10: ref null "core:prelude//Array<u64>" = struct.new "core:prelude//Array<u64>" { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
 global mut global:COUNTER: i32 = 0;
 global mut global:__modules_initialized: bool = 0;
 
@@ -1139,9 +1139,6 @@ fn "core:prelude/primitive.wado/fmt_float_special"(f, is_neg, kind, zero_repr) {
 }
 
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
-    let __b: ref "core:prelude//Array<u64>";
-    __b = struct.new "core:prelude//Array<u64>" { repr: array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64), used: 20 };
-    global:core::prelude/fpfmt.wado::POW10 = __b;
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {

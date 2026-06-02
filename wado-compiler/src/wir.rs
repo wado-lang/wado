@@ -1799,6 +1799,44 @@ impl WirInstr {
         }
     }
 
+    /// Whether this instruction tree is expressible as a Wasm 3.0 GC
+    /// constant init expression. This is the single authority on
+    /// const-ness for global initializers: `wir_optimize::const_global`
+    /// gates eager-global promotion on it, and `codegen::emit`'s
+    /// `push_const_instrs` mirrors exactly this accepted set (a node
+    /// reaching the emitter that fails this predicate is an ICE).
+    ///
+    /// Accepted, recursively: scalar consts, `ref.null` / `ref.i31` /
+    /// `ref.func`, and `struct.new` / `array.new_fixed` /
+    /// `array.new_default` with const children. Notably excludes
+    /// `global.get` (so a const init never references another global,
+    /// sidestepping the core-Wasm const-expr ordering restriction) and
+    /// `array.new_data` / `array.new_elem` (not valid const instructions —
+    /// they read a segment at runtime, so data-backed values like a
+    /// `String`'s repr stay lazy).
+    pub fn is_const_expressible(&self) -> bool {
+        match self {
+            Self::I32Const(_) | Self::I64Const(_) | Self::F32Const(_) | Self::F64Const(_) => true,
+            Self::RefNull { .. } | Self::RefFunc { .. } => true,
+            Self::RefI31(inner) => inner.is_const_expressible(),
+            // `struct.new` / `array.new_*` wrap non-null ref fields in
+            // `RefAsNonNull`, but those constructors already yield a
+            // non-null ref, so the wrapper is redundant in a const
+            // expression (and `ref.as_non_null` is not const-valid). It is
+            // dropped by the emitter; treat it as transparent here.
+            Self::RefAsNonNull(inner) => inner.is_const_expressible(),
+            Self::StructNew { fields, .. } => fields.iter().all(Self::is_const_expressible),
+            Self::ArrayNewFixed { elements, .. } => elements.iter().all(Self::is_const_expressible),
+            Self::ArrayNewDefault { len, .. } => len.is_const_expressible(),
+            // `array.new_data` / `array.new_elem` are NOT valid Wasm
+            // constant instructions (they read a data/elem segment at
+            // runtime), so a data-backed value — notably a `String`'s
+            // `array.new_data<u8>` repr — cannot be an eager const global
+            // and stays lazy.
+            _ => false,
+        }
+    }
+
     /// Visit all child instructions of this node (non-recursive).
     /// Used by the emitter for pre-scanning (e.g., collecting `DeclareLocal`).
     pub fn for_each_child(&self, f: &mut impl FnMut(&WirInstr)) {
@@ -3007,6 +3045,12 @@ pub struct WirGlobal {
     pub ty: WirType,
     /// Whether the global is mutable.
     pub mutable: bool,
+    /// Whether the user declared this global as `global mut`. A
+    /// user-immutable global (`false`) is currently Wasm-mutable only
+    /// because its initializer was extracted into `__initialize_module`;
+    /// `wir_optimize::const_global` promotes it back to an eager Wasm
+    /// constant when that init folds to a const expression.
+    pub wado_mutable: bool,
     /// Initial value expression.
     pub init: WirInstr,
     /// True for lazy-initialized globals: the Wasm slot starts `null`,

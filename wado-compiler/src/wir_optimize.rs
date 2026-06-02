@@ -41,6 +41,7 @@
 mod array;
 mod cleanup;
 mod const_forward;
+mod const_global;
 mod dce;
 mod elide_local;
 mod elide_struct;
@@ -59,6 +60,7 @@ pub use dce::{compact_dead_items, dce_unreachable_types, mark_unreachable_define
 use array::{promote_constant_arrays_to_data, split_large_array_literals};
 use cleanup::cleanup;
 use const_forward::forward_struct_field_constants;
+use const_global::promote_const_global_inits;
 use elide_local::elide_write_only_locals;
 use elide_struct::{
     elide_multi_field_struct_locals, elide_single_field_struct_locals, flatten_seq_assignments,
@@ -207,6 +209,12 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     // then run the final body cleanup before codegen sees the module: removes
     // Nops, dead `DeclareLocal`s, and dead code after `Unreachable`.
     profiler.span_start("wir/phase7_global_cleanup");
+    // Promote extracted-but-now-constant global initializers to eager Wasm
+    // constants before guard removal, so the emptied `__initialize_module`
+    // body and `__modules_initialized` guard become reclaimable here.
+    wir_pass("wir/promote_const_global_inits", module, profiler, |m| {
+        promote_const_global_inits(m);
+    });
     remove_trivial_init_globals(module);
     cleanup(module);
     profiler.span_end("wir/phase7_global_cleanup");
