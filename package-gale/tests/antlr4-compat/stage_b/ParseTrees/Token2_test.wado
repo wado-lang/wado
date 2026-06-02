@@ -20,7 +20,7 @@ use { normalize_tree } from "../../grammars/ParseTrees/Token2.g4";
 test "stage_b_sub: ParseTrees/Token2" {
     let input = "xy";
     let expected = "(a x y)";
-    let root = t::parse(&input).unwrap();
+    let root = t::parse_s(&input).unwrap();
     let tree = t::to_tree(&root);
     let sub = t::find_first_child_node(&tree, &"a").unwrap();
     let actual = sub.to_string_tree();

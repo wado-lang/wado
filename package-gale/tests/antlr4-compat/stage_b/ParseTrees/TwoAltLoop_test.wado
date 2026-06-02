@@ -20,7 +20,7 @@ use { normalize_tree } from "../../grammars/ParseTrees/TwoAltLoop.g4";
 test "stage_b_sub: ParseTrees/TwoAltLoop" {
     let input = "xyyxyxz";
     let expected = "(a x y y x y x z)";
-    let root = t::parse(&input).unwrap();
+    let root = t::parse_s(&input).unwrap();
     let tree = t::to_tree(&root);
     let sub = t::find_first_child_node(&tree, &"a").unwrap();
     let actual = sub.to_string_tree();

@@ -17,7 +17,7 @@ use { normalize_tree } from "../../grammars/LeftRecursion/PrefixAndOtherAlt_2.g4
 test "stage_b: LeftRecursion/PrefixAndOtherAlt_2" {
     let input = "-1 + -1";
     let expected = "(s (expr (expr (literal - 1)) (op +) (expr (literal - 1))))";
-    let root = t::parse(&input).unwrap();
+    let root = t::parse_s(&input).unwrap();
     let actual = t::to_tree(&root).to_string_tree();
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;

@@ -66,12 +66,24 @@ fixture before the guard is loosened.
 
 ### ATN-class grammars
 
-Grammars whose alt selection requires arbitrary-length lookahead through ambiguous prefixes cannot be decided by static FOLLOW + K-prefix. ANTLR4 handles them with a runtime ATN simulator (closure / predict / DFA cache) — see `vendor/antlr4/runtime/Java/src/org/antlr/v4/runtime/atn/ParserATNSimulator.java`. Gale's static path will always have edges.
+Grammars whose alt selection requires arbitrary-length lookahead through ambiguous prefixes cannot be decided by static FOLLOW + K-prefix. ANTLR4 handles them with a runtime ATN simulator (closure / predict / DFA cache; out of scope to inspect, see License hygiene in `AGENTS.md`). Gale's static path will always have edges.
 
 Two complementary directions, neither scoped yet:
 
 - **Runtime ATN simulator** in Gale. Large investment; matches ANTLR4 semantics one-for-one.
 - **Stage B′ via the JVM ANTLR4 oracle.** Shell out to the vendored `antlr4` JVM tool (already available in the submodule plus `runtime-testsuite/`) to compute oracle parse trees for descriptors whose `[output]` is action-printed (`FullContextParsing/*`, composite descriptors, etc.) and would otherwise be auto-skipped by `normalize_output_for_stage_b`. Cheaper to land; gives us a measurement axis for any future runtime simulator.
+
+Before either direction is scoped, `gale dump` now renders the
+overlap-group prediction tree (the same `build_prediction` tree
+`gen_multi_alt_body_bt` emits in `parser_gen.wado`) so the
+ATN-class edges surface as `Ambiguous([alt N, alt M])` leaves
+under the relevant rule. Example: dumping the Performance
+`DropLoopEntryBranchInLRRule_4` grammar shows `stat`'s overlap
+group resolving to `Ambiguous([alt 0, alt 1])` at depth 0 — both
+`expr ';'` and `expr '.'` share their entire `expr` prefix. The
+remaining halt-reason / LR loop-entry / K-prefix per-site fields
+are still missing from the dump (Phase 1 deferred them); add them
+when a concrete ATN-class fix needs them.
 
 ## LL prediction — architecture cleanup
 
@@ -82,6 +94,32 @@ Reduces coupling between the codegen walk and the analysis layer; no behaviour c
 ## Stage B follow-on — composite descriptors (Stage C dependency)
 
 All 17 `CompositeLexers` / `CompositeParsers` upstream descriptors auto-skip today. The bottleneck is _not_ multi-input plumbing (`extract_antlr4_descriptors.wado`'s `parsed.slave_grammars.len() > 0` short-circuit could be lifted; Kiln already supports multi-input). Every composite descriptor's `[output]` is a host-side artefact — `<writeln(...)>` action-body prints (`S.a`, `M.b`, `T.y`), `Token.toString` dumps (`[@0,0:2='abc',<1>,1:0]`), or empty `[output]`. None survive `normalize_output_for_stage_b`. Re-evaluate this entry once Stage C lands.
+
+## Stage B′ — JVM-oracle integration (ready for first full-corpus run)
+
+Infrastructure complete:
+
+- Design in [`antlr4-compatibility.md`](./antlr4-compatibility.md) "Stage B′ — JVM-oracle-derived expected trees".
+- `scripts/antlr4-oracle.sh` resolves the latest jar, downloads on demand, runs TestRig, and now derives the working file name from the declared grammar identifier (handles descriptor-named inputs).
+- `scripts/strip-grammar.wado` exposes `src/g4/action_strip.wado` as a CLI for shell-side preprocessing. 16 stripper unit tests in `src/g4/action_strip_test.wado`.
+- `scripts/extract_antlr4_descriptors.wado` emits `tests/antlr4-compat/oracle-pending/<C>/<N>.{input,start}` per Stage B′ candidate. A `--finalize-stage-b-oracle` mode drains the manifest plus shell-produced `<N>.expected` files into `tests/antlr4-compat/stage_b_oracle/<C>/<N>_test.wado`.
+- `scripts/extract-antlr4-descriptors.sh` runs all three phases: Wado extract → oracle loop → Wado finalize. Phase 2 is skipped gracefully when `java`/`javac` is not on PATH.
+- `tests/antlr4-compat/status.toml` has `[stage_b_oracle_skip]` (suppress manifest emission) and `[stage_b_oracle_todo]` (emit `#[TODO]`-marked test). Both empty.
+
+Smoke-tested end-to-end on `ParserExec/IfIfElseNonGreedyBinding1`: oracle produces the canonical non-greedy `??` tree (binds `else` to the outer `ifStatement`); the emitted test compiles, runs, and fails the assertion (as expected — Gale's static prediction doesn't yet handle ATN-class non-greedy decisions). Same blocker as the `[stage_a_todo]` entry for the descriptor.
+
+Remaining one-shot tasks for first full-corpus landing:
+
+- **Run `scripts/extract-antlr4-descriptors.sh` on every category.** Expect ~hundreds of Stage B′ candidates total; oracle codegen + javac take seconds per descriptor, so the run is several minutes long.
+- **Triage `[stage_b_oracle_skip]` entries.** A small set of descriptors fail the oracle even after action stripping because they carry StringTemplate directives outside action bodies — e.g. `ParserExec/ReservedWordsEscaping` declares `returns [<IntArg("")> return_]`, where the type slot itself is a directive the stripper cannot remove (it isn't syntactically an action body). The shell wrapper surfaces the failure with descriptor name + the first lines of the javac error; copy those into `[stage_b_oracle_skip]` reasons.
+- **Triage `[stage_b_oracle_todo]` entries.** Descriptors whose oracle tree differs from Gale's `to_string_tree()` output need `#[TODO]` decoration so the test landing doesn't burst CI. The most common cause is ATN-class prediction gaps (e.g. `IfIfElseNonGreedyBinding1`).
+- **Commit `tests/antlr4-compat/stage_b_oracle/` artefacts.** Each pinned tree is then a long-lived regression: a Gale-side prediction fix flips its descriptor from `#[TODO]` to passing on the next regenerate.
+
+Downstream — surfaced but not blocking the wiring:
+
+- **`wado-compiler` codegen panic on some generated parser sources.** Running multiple Stage B′ tests in one `wado test` invocation triggered `wado-compiler/src/codegen.rs:45` ("WIR pipeline generated invalid core Wasm module") on at least some ParserExec descriptors. The individual Stage A `*_parse_test.wado` for the same descriptors compile fine, so the trigger is in the Gale-emitted-from-Stage-B′ output specifically OR in the parallel-test compile pool. Needs a minimal repro before triaging — likely a separate WEP since it's a wado-compiler concern, not a Gale one.
+
+The `IfIfElseNonGreedyBinding1` Stage B′ test sits beside the existing pinned-wrong-shape fixture under `tests/grammars/ll_optional_non_greedy.g4`. Both should flip green simultaneously when a non-greedy `??` fix lands.
 
 ## Descriptor importer — infrastructure gaps
 
@@ -95,7 +133,7 @@ Each is marked `[stage_a_todo]` in `status.toml` and lands a `#[TODO]` test. Rou
 ### Parser codegen
 
 - **LR operator-precedence chain.** `Performance/DropLoopEntryBranchInLRRule_4`: Gale picks the wrong precedence chain for an or-then-and expression. This is ATN-class: the inner `expr` of `'between' expr 'and' expr` is parsed at `min_prec=0` (matching ANTLR4, which gives middle refs precedence 0), and ANTLR4 only resolves the greedy binary-`and` capture via full-context adaptive prediction at the LR loop-entry (the "drop loop entry branch" optimisation the descriptor is named after). Gale's static `scan_expr_lr_*` sees `and X2` matches and commits. See the **ATN-class grammars** section above.
-- **Non-greedy `??` prediction layer.** `ParserExec/IfIfElseNonGreedyBinding1`: the emit shape is `Option<T>` (compile-blocker gone) but the dispatch reuses the greedy first-set predictor, so the dangling `else` binds to the inner `if` instead of the outer one ANTLR4 picks. Needs either a follow-guarded Optional dispatcher or runtime ATN simulation.
+- **Non-greedy `??` prediction layer.** `ParserExec/IfIfElseNonGreedyBinding1`: the emit shape is `Option<T>` (compile-blocker gone) but the dispatch reuses the greedy first-set predictor, so the dangling `else` binds to the inner `if` instead of the outer one ANTLR4 picks. Investigated and deferred: the proper fix requires either runtime ATN simulation or per-call-site follow-variant infrastructure for `??`. The latter sits in the same territory as Failed Approaches LL(\*) variant emit attempts 2–3 (multi-token-inner Repeat in `tail_greedy_first`; suffix-nullable RuleRef sites), so its risk profile is high; a global `rule_follow("ifStatement")`-based skip-set is over-broad — it also yields at the outermost call, breaking the parse. Regression fixture: `tests/grammars/ll_optional_non_greedy.g4` + `tests/driver_optional_non_greedy_test.wado` (pins Gale's _current_ wrong tree shape so the assertion flips the moment a fix lands; the correct ANTLR4-oracle shape is recorded as a comment beside the pinned shape). Tracked here, no design picked yet.
 
 ### Lexer codegen
 

@@ -20,7 +20,7 @@ use { normalize_tree } from "../../grammars/FullContextParsing/ExprAmbiguity_1.g
 test "stage_b_sub: FullContextParsing/ExprAmbiguity_1" {
     let input = "a+b";
     let expected = "(expr a + (expr b))";
-    let root = t::parse(&input).unwrap();
+    let root = t::parse_s(&input).unwrap();
     let tree = t::to_tree(&root);
     let sub = t::find_first_child_node(&tree, &"expr").unwrap();
     let actual = sub.to_string_tree();

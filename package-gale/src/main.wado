@@ -5,6 +5,7 @@ use { Grammar, merge_grammars, check_references, synthesize_implicit_tokens, nor
 use { generate, GenerateOptions } from "./codegen.wado";
 use { lower } from "./lower.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
+use { GenContext } from "./gen_context.wado";
 use { render_dump } from "./dump.wado";
 
 export fn run() with Stdout, Stderr, Environment, Preopens {
@@ -157,7 +158,8 @@ fn cmd_dump(paths: Array<String>) with Stdout, Stderr, Preopens {
     normalize_caches(&mut merged);
     let lit_tokens = collect_literal_tokens(&merged.parser_rules);
     let lowered = lower(&merged, &lit_tokens);
-    print(render_dump(&lowered));
+    let mut ctx = GenContext::new(&merged.parser_rules, &lit_tokens);
+    print(render_dump(&merged, &lowered, &mut ctx));
 }
 
 fn read_all(file: &Descriptor) -> Array<u8> {

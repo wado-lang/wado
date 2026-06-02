@@ -17,7 +17,7 @@ use { normalize_tree } from "../../grammars/LeftRecursion/Expressions_1.g4";
 test "stage_b: LeftRecursion/Expressions_1" {
     let input = "a";
     let expected = "(s (e a))";
-    let root = t::parse(&input).unwrap();
+    let root = t::parse_s(&input).unwrap();
     let actual = t::to_tree(&root).to_string_tree();
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;

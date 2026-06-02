@@ -17,13 +17,12 @@ use t from "../../grammars/ParseTrees/Sync.g4"
     };
 use { normalize_tree } from "../../grammars/ParseTrees/Sync.g4";
 
-
-// triage: sub-tree: expected [output] is ANTLR4's error-recovered sub-tree (synchronisation set fallback). Same error-recovery gap as `ParseTrees/ExtraToken`.
 #[TODO]
+// triage: sub-tree: expected [output] is ANTLR4's error-recovered sub-tree (synchronisation set fallback). Same error-recovery gap as `ParseTrees/ExtraToken`.
 test "stage_b_sub: ParseTrees/Sync" {
     let input = "xzyy!";
     let expected = "(a x z y y !)";
-    let root = t::parse(&input).unwrap();
+    let root = t::parse_s(&input).unwrap();
     let tree = t::to_tree(&root);
     let sub = t::find_first_child_node(&tree, &"a").unwrap();
     let actual = sub.to_string_tree();

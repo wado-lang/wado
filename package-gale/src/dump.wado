@@ -4,16 +4,19 @@
 //!
 //! The output is plain text and stable across runs: every collection
 //! is iterated in its stored (deterministic) order. Each rule appears
-//! once, with non-overlapping sections (shape, alts, repeats,
-//! follow-variants, diagnostics). The trailing summary lists every
-//! diagnostic — including the group-scoped ones whose label carries no
-//! quoted rule name and so are not inlined under a rule (see
-//! `render_rule_diagnostics`; a structured owner id would let them
-//! inline, tracked in TODO.md).
+//! once, with non-overlapping sections (shape, alts, prediction tree,
+//! repeats, follow-variants, diagnostics). The trailing summary lists
+//! every diagnostic — including the group-scoped ones whose label
+//! carries no quoted rule name and so are not inlined under a rule
+//! (see `render_rule_diagnostics`; a structured owner id would let
+//! them inline, tracked in TODO.md).
 //!
-//! This module only reads `LoweredGrammar`; it never consults the
-//! surface `Grammar`. That keeps `gale dump` honest: what it prints
-//! is exactly what emit sees.
+//! GIR carries the lowered shape decisions (Direct vs Tournament,
+//! repeat strategy, follow variants). The prediction-tree section is
+//! re-built from the surface grammar + `GenContext` so it mirrors the
+//! same `build_prediction` call the parser emitter performs — that
+//! tree is computed at emit time, not stored on GIR, so reproducing
+//! it here keeps the dump faithful to "what emit sees".
 
 use {
     LoweredGrammar,
@@ -37,10 +40,30 @@ use {
     FollowVariant,
     rule_header,
 } from "./gir.wado";
-use { RepeatKind } from "./ir.wado";
+use { Grammar, ParserRule, Alternative, Element, RepeatKind } from "./ir.wado";
+use { GenContext } from "./gen_context.wado";
+use {
+    PredictionNode,
+    PredictionDispatch,
+    PredictionBranch,
+    ConsumeNode,
+    build_prediction,
+} from "./prediction.wado";
+use {
+    compute_overlap_groups,
+    sort_group_by_specificity,
+    sort_group_by_element_count,
+} from "./alt_grouping.wado";
+use { literal_const_name } from "./gen_util.wado";
 
 /// Render the full per-rule dump report for a lowered grammar.
-pub fn render_dump(lowered: &LoweredGrammar) -> String {
+///
+/// The surface `Grammar` and `GenContext` are required so the dump
+/// can re-build the same `PredictionNode` trees the parser emitter
+/// computes in `gen_multi_alt_body_bt` (parser_gen.wado). Without
+/// them the per-overlap-group prediction section is unavailable;
+/// the rest of the report would still render from GIR alone.
+pub fn render_dump(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) -> String {
     // Pre-size: ~256 bytes of header / per-rule scaffolding plus a
     // generous per-alt allowance keeps the bulk of `push_str` calls
     // off the `String::grow` doubling path for typical grammars.
@@ -53,7 +76,7 @@ pub fn render_dump(lowered: &LoweredGrammar) -> String {
     out.push('\n');
 
     for let rule of &lowered.parser_rules {
-        render_rule(&mut out, rule, lowered);
+        render_rule(&mut out, rule, grammar, lowered, ctx);
         out.push('\n');
     }
 
@@ -61,7 +84,7 @@ pub fn render_dump(lowered: &LoweredGrammar) -> String {
     return out;
 }
 
-fn render_rule(out: &mut String, rule: &Rule, lowered: &LoweredGrammar) {
+fn render_rule(out: &mut String, rule: &Rule, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
     let header = rule_header(rule);
 
     out.push_str(&"rule ");
@@ -76,6 +99,7 @@ fn render_rule(out: &mut String, rule: &Rule, lowered: &LoweredGrammar) {
         LeftRecursive(l) => render_left_recursive(out, l),
     }
 
+    render_prediction(out, rule, grammar, ctx);
     render_repeats(out, rule);
     render_follow_variants(out, &header.name, lowered);
     render_rule_diagnostics(out, &header.name, lowered);
@@ -166,6 +190,157 @@ fn render_left_recursive(out: &mut String, l: &LeftRecursiveRule) {
         out.push_str(&" suffix-first=");
         push_token_set(out, &lr.suffix_first);
         out.push('\n');
+    }
+}
+
+// ==========================================================================
+// Prediction tree
+// ==========================================================================
+
+/// Mirror `gen_parse_fn_named` (parser_gen.wado): collect the rule's
+/// non-LR alt indices, compute their FIRST sets, partition into
+/// overlap groups, and for each multi-alt group sort by specificity
+/// + element count and run `build_prediction`. Each resulting tree
+/// is rendered inline under the rule.
+fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut GenContext) {
+    let header = rule_header(rule);
+    let surface = find_parser_rule(grammar, &header.name);
+    let surface = match surface {
+        Some(r) => r,
+        None => return,
+    };
+
+    let mut non_lr_indices: Array<i32> = [];
+    match rule {
+        Simple(_) => return,
+        MultiAlt(m) => {
+            for let alt of &m.alts {
+                non_lr_indices.push(alt.alt_index);
+            }
+        },
+        LeftRecursive(l) => {
+            for let alt of &l.atom.alts {
+                non_lr_indices.push(alt.alt_index);
+            }
+        },
+    }
+    if non_lr_indices.len() < 2 {
+        return;
+    }
+
+    let mut first_sets: Array<Array<String>> = [];
+    for let idx of &non_lr_indices {
+        let mut visiting: Array<String> = [];
+        first_sets.push(ctx.first_of_alt(&surface.alternatives[*idx], &mut visiting));
+    }
+    let mut groups = compute_overlap_groups(&first_sets);
+
+    let mut printed_header = false;
+    for let mut g = 0; g < groups.len(); g += 1 {
+        let group = &groups[g];
+        if group.len() < 2 {
+            continue;
+        }
+        let mut sorted_group = group.sorted();
+        sort_group_by_specificity(&mut sorted_group, &first_sets);
+        let mut mapped_alts: Array<Alternative> = [];
+        for let gi of &sorted_group {
+            mapped_alts.push(surface.alternatives[non_lr_indices[*gi]]);
+        }
+        let mut local_indices: Array<i32> = [];
+        for let mut i = 0; i < sorted_group.len(); i += 1 {
+            local_indices.push(i);
+        }
+        sort_group_by_element_count(&mut local_indices, &mapped_alts);
+        let mut reordered: Array<i32> = [];
+        for let li of &local_indices {
+            reordered.push(sorted_group[*li]);
+        }
+
+        let mut pred_indices: Array<i32> = [];
+        let mut pred_elements: Array<Array<Element>> = [];
+        let mut real_indices: Array<i32> = [];
+        for let mut k = 0; k < reordered.len(); k += 1 {
+            let real_idx = non_lr_indices[reordered[k]];
+            pred_indices.push(real_idx);
+            pred_elements.push(surface.alternatives[real_idx].elements);
+            real_indices.push(real_idx);
+        }
+        let tree = build_prediction(&pred_indices, &pred_elements, 5, ctx);
+
+        if !printed_header {
+            out.push_str(&"  prediction:\n");
+            printed_header = true;
+        }
+        out.push_str(&"    overlap group [");
+        for let mut i = 0; i < real_indices.len(); i += 1 {
+            if i > 0 {
+                out.push_str(&", ");
+            }
+            out.push_str(&`alt {real_indices[i]}`);
+        }
+        out.push_str(&"]:\n");
+        render_prediction_node(out, &tree, 6);
+    }
+}
+
+fn render_prediction_node(out: &mut String, node: &PredictionNode, indent: i32) {
+    push_spaces(out, indent);
+    match node {
+        Leaf(idx) => {
+            out.push_str(&`Leaf(alt {*idx})\n`);
+        },
+        Ambiguous(alts) => {
+            out.push_str(&"Ambiguous([");
+            for let mut i = 0; i < alts.len(); i += 1 {
+                if i > 0 {
+                    out.push_str(&", ");
+                }
+                out.push_str(&`alt {alts[i]}`);
+            }
+            out.push_str(&"])\n");
+        },
+        Consume(c) => {
+            out.push_str(&"Consume(");
+            out.push_str(&prediction_element_label(&c.element));
+            out.push_str(&")\n");
+            render_prediction_node(out, &c.child, indent + 2);
+        },
+        Dispatch(d) => {
+            out.push_str(&`Dispatch[d={d.depth}]\n`);
+            for let branch of &d.branches {
+                push_spaces(out, indent + 2);
+                push_token_set(out, &branch.tokens);
+                out.push_str(&" →\n");
+                render_prediction_node(out, &branch.child, indent + 4);
+            }
+        },
+    }
+}
+
+/// Short label for a `Consume`d element. Only `TokenRef` / `Literal`
+/// can appear here because `sll_find_common_terminal` only returns
+/// those shapes, but the match is exhaustive for safety.
+fn prediction_element_label(elem: &Element) -> String {
+    return match elem {
+        TokenRef(t) => `TK_{t.name}`,
+        Literal(l) => literal_const_name(&l.text),
+        _ => "?",
+    };
+}
+
+fn find_parser_rule(grammar: &Grammar, name: &String) -> Option<ParserRule> {
+    for let r of &grammar.parser_rules {
+        if r.name == *name {
+            return Option::<ParserRule>::Some(*r);
+        }
+    }
+    return null;
+}
+
+fn push_spaces(out: &mut String, n: i32) {
+    for let mut i = 0; i < n; i += 1 {
+        out.push(' ');
     }
 }
 
