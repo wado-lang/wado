@@ -4472,13 +4472,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         );
         let converted_err = if need_from_conversion {
-            self.reify_from_call(
-                outer_err_type,
-                inner_err_type,
-                e_expr,
-                span,
-                Some(qm_id),
-            )
+            self.reify_from_call(outer_err_type, inner_err_type, e_expr, span, qm_id)
         } else {
             e_expr
         };
@@ -5614,80 +5608,47 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Synthesise a `From<From>::from(value)` call from the facts the
     /// combined walk's [`super::Elaborator::resolve_from_call`] recorded
-    /// under `caller_id`. When `caller_id` is `None` (synthetic callers
-    /// without a source-level handle) or the lookup misses (a recovery
-    /// path), falls back to the same in-line reconstruction the
-    /// pre-recording path used: re-derive the names from the operand
-    /// types and re-search for the impl's home module.
+    /// under `caller_id`. Every caller has a source-level handle (`?`
+    /// operator, `Type::from(x)` static call, `Type::<…>::from(x)`); the
+    /// recording is unconditional, so reify is a pure read.
     fn reify_from_call(
         &mut self,
         target_type: TypeId,
         from_type: TypeId,
         value: TirExpr,
         span: crate::token::Span,
-        caller_id: Option<AstId>,
+        caller_id: AstId,
     ) -> TirExpr {
-        use crate::name::{LocalMethodName, MethodName};
+        use crate::name::LocalMethodName;
         use crate::tir::{CallArg, FunctionRef, TirExprKind};
 
-        let (module_source, mangled_name, target_name, from_name, from_trait_name) = if let Some(
-            facts,
-        ) =
-            caller_id.and_then(|id| {
-                self.sem
-                    .types
-                    .from_call_facts
-                    .get(&crate::symbol::SymbolKey::new(
-                        self.current_module_source.clone(),
-                        id,
-                    ))
-                    .cloned()
-            }) {
-            (
-                facts.module_source,
-                facts.mangled_name,
-                facts.target_name,
-                facts.from_name,
-                facts.from_trait_name,
-            )
-        } else {
-            let (target_name, from_name, from_trait_name) = {
-                let tt = self.tysys.type_table.borrow();
-                let target = tt.type_name(target_type);
-                let from = tt.type_name(from_type);
-                let trait_n = tt
-                    .compiler_items()
-                    .trait_name(crate::compiler_item::CompilerItem::From)
-                    .to_string();
-                (target, from, trait_n)
-            };
-            let from_trait = format!("{from_trait_name}<{from_name}>");
-            let mangled_name =
-                MethodName::format_local(&target_name, Some(&from_trait), "from");
-            let module_source =
-                self.find_from_impl_module(&target_name, &from_name, &from_trait_name);
-            (
-                module_source,
-                mangled_name,
-                target_name,
-                from_name,
-                from_trait_name,
-            )
-        };
-
-        let from_trait = format!("{from_trait_name}<{from_name}>");
+        let _ = from_type;
+        let facts = self
+            .sem
+            .types
+            .from_call_facts
+            .get(&crate::symbol::SymbolKey::new(
+                self.current_module_source.clone(),
+                caller_id,
+            ))
+            .cloned()
+            .expect(
+                "resolve_from_call records FromCallFacts at every site reify hits — \
+                 ?-op, Type::from(x), and Type::<…>::from(x)",
+            );
+        let from_trait = format!("{}<{}>", facts.from_trait_name, facts.from_name);
 
         TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
-                    module_source,
-                    name: mangled_name,
+                    module_source: facts.module_source,
+                    name: facts.mangled_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName {
-                        struct_name: target_name.clone(),
-                        base_struct_name: target_name,
+                        struct_name: facts.target_name.clone(),
+                        base_struct_name: facts.target_name,
                         trait_name: Some(from_trait),
-                        base_trait_name: Some(from_trait_name),
+                        base_trait_name: Some(facts.from_trait_name),
                         base_trait_module: None,
                         trait_type_args: vec![],
                         method_name: "from".to_string(),
@@ -5703,59 +5664,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             target_type,
             span,
         )
-    }
-
-    /// Find the module that hosts `impl From<From> for Target`.
-    /// Mirrors `Elaborator::find_from_impl_module` (expr.rs:4319+);
-    /// walks current-module items + all loaded modules looking for
-    /// a matching `impl_block`. Falls back to the current module
-    /// when no impl is found (the synthesis path expects a
-    /// late-bound impl; codegen produces the body).
-    fn find_from_impl_module(
-        &self,
-        target_name: &str,
-        from_name: &str,
-        from_trait_name: &str,
-    ) -> ModuleSource {
-        let check_impl = |impl_block: &ast::ImplBlock| -> bool {
-            let impl_target = ast_type_name_static(&impl_block.ty);
-            if impl_target != target_name {
-                return false;
-            }
-            let Some(trait_type) = &impl_block.trait_type else {
-                return false;
-            };
-            let base = ast_type_name_static(trait_type);
-            if base != from_trait_name {
-                return false;
-            }
-            if let ast::Type::Generic(g) = trait_type
-                && let Some(arg) = g.args.first()
-            {
-                return ast_type_name_static(arg) == from_name;
-            }
-            false
-        };
-
-        for item in self.current_module_items {
-            if let ast::Item::Impl(impl_block) = item
-                && check_impl(impl_block)
-            {
-                return self.current_module_source.clone();
-            }
-        }
-
-        for (source, module) in self.loaded_modules {
-            for item in &module.items {
-                if let ast::Item::Impl(impl_block) = item
-                    && check_impl(impl_block)
-                {
-                    return source.clone();
-                }
-            }
-        }
-
-        self.current_module_source.clone()
     }
 
     /// Reify a `with E => h, … do { body }` effect handler block.
@@ -6440,13 +6348,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let from_facts_key =
                 crate::symbol::SymbolKey::new(self.current_module_source.clone(), call.id);
             if self.sem.types.from_call_facts.contains_key(&from_facts_key) {
-                return self.reify_from_call(
-                    recorded_type,
-                    arg_type,
-                    arg,
-                    span,
-                    Some(call.id),
-                );
+                return self.reify_from_call(recorded_type, arg_type, arg, span, call.id);
             }
 
             // Reflexive: `T::from(T_val)` — identity, return the argument.
@@ -8869,31 +8771,6 @@ fn extract_allocator_tag_attr(attrs: &[crate::ast::Attribute]) -> Option<String>
         .map(|a| a.as_str().to_string())
 }
 
-/// Return the base name of an AST [`ast::Type`] for impl-block /
-/// method-name mangling. A free-function variant matching the
-/// elaborator's `Elaborator::get_type_name_static` (module.rs).
-/// Used by `Reify::find_from_impl_module` to recognise an
-/// `impl From<Source> for Target` block by its AST shape.
-fn ast_type_name_static(ty: &ast::Type) -> String {
-    use crate::tir::TypeTable;
-    match ty {
-        ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
-        ast::Type::Named(named) => named.name.clone(),
-        ast::Type::Generic(generic) => generic.name.clone(),
-        ast::Type::Reference(_) => "&".to_string(),
-        ast::Type::MutReference(_) => "&mut".to_string(),
-        ast::Type::Tuple(elems) => {
-            if elems.is_empty() {
-                TypeTable::UNIT_TYPE_NAME.to_string()
-            } else {
-                TypeTable::TUPLE_TYPE_NAME.to_string()
-            }
-        }
-        ast::Type::Function(_)
-        | ast::Type::NamespacedGeneric(_)
-        | ast::Type::TypePackSpread(_, _) => "Unknown".to_string(),
-    }
-}
 
 /// True when `arg` is a closure literal with at least one param that lacks a
 /// type annotation. Reify forwards the recorded callee param type as the

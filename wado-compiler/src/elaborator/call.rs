@@ -778,7 +778,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             from_type,
                             args.into_iter().next().unwrap(),
                             call.span,
-                            Some(call.id),
+                            call.id,
                         );
                     }
                     let _ = self.logger.error(TypeError::UnknownFunction {
