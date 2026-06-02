@@ -193,20 +193,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                     }
                 }
-                let op = if op == BinaryOp::Eq {
-                    TirBinaryOp::RefEq
-                } else {
-                    TirBinaryOp::RefNotEq
-                };
-                return TirExpr::new(
-                    TirExprKind::Binary {
-                        op,
-                        left: Box::new(left),
-                        right: Box::new(right),
-                    },
-                    TypeTable::BOOL,
-                    span,
-                );
+                // Stage 7-B: reify rebuilds the reference `==` / `!=`
+                // (`RefEq` / `RefNotEq`) from the AST; project only the type.
+                return placeholder(TypeTable::BOOL, span);
             } else if both_refs {
                 // All operators other than == and != are invalid on reference types
                 let type_name = self.tysys.type_table.borrow().type_name(left.type_id);
@@ -816,15 +805,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => left.type_id, // Arithmetic ops preserve the type
         };
 
-        TirExpr::new(
-            TirExprKind::Binary {
-                left: Box::new(left),
-                op: tir_op,
-                right: Box::new(right),
-            },
-            type_id,
-            span,
-        )
+        // Stage 7-B: reify rebuilds the native `Binary` from the AST +
+        // recorded operand `expression_types`; the combined walk projects
+        // only the result type. `left` / `right` were resolved by the
+        // caller and typechecked above for their side effects.
+        let _ = (tir_op, left, right);
+        placeholder(type_id, span)
     }
 
     /// Resolve a unary expression
