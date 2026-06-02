@@ -14,6 +14,92 @@ use super::Elaborator;
 use super::callee::CalleeRef;
 use super::types::{MethodInfo, ResolvedTraitMethod, TraitMethodMatch, TypeError};
 
+/// Free-function form of [`Elaborator::canonical_decl_key`], callable from
+/// any module that has the inputs in hand. Reify uses this for trait
+/// default-method synthesis (it has no `Elaborator` instance but does carry
+/// the same `imports` / `symbols` / `trait_env` / `current_module_source`
+/// references).
+pub(crate) fn canonical_decl_key_with(
+    name: &str,
+    current_module_source: &ModuleSource,
+    imports: &super::sem::ModuleImports,
+    symbols: &crate::symbol::SymbolTable,
+    trait_env: &super::trait_env::TraitEnv,
+) -> (ModuleSource, String) {
+    if super::is_primitive_type_name(name) {
+        return (ModuleSource::primitive(), name.to_string());
+    }
+    if let Some(src) = imports.imported_type_sources.get(name) {
+        let original = imports
+            .import_original_names
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| name.to_string());
+        let canonical = symbols
+            .lookup_in_module(src, &original)
+            .map(|sym| sym.defined_at.module.clone())
+            .unwrap_or_else(|| src.clone());
+        return (canonical, original);
+    }
+    if let Some(src) = imports.effect_sources.get(name) {
+        let canonical = symbols
+            .lookup_in_module(src, name)
+            .map(|sym| sym.defined_at.module.clone())
+            .unwrap_or_else(|| src.clone());
+        return (canonical, name.to_string());
+    }
+    if let Some(sym) = symbols.lookup(name) {
+        return (sym.defined_at.module.clone(), name.to_string());
+    }
+    if let Some(key) = trait_env.find_trait_decl_key(name) {
+        return key;
+    }
+    if let Some(key) = trait_env.find_effect_or_resource_decl_key(name) {
+        return key;
+    }
+    if let Some(key) = trait_env.find_static_method_decl_key(name) {
+        return key;
+    }
+    (current_module_source.clone(), name.to_string())
+}
+
+/// Free-function form of
+/// [`Elaborator::find_trait_decl_methods_with_module`], callable from any
+/// module that has the inputs in hand. Used by reify's
+/// `reify_impl_default_methods` to enumerate the trait's default methods
+/// for an impl block.
+pub(crate) fn find_trait_decl_methods_with_module_with(
+    trait_name: &str,
+    current_module_source: &ModuleSource,
+    current_module_items: &[ast::Item],
+    imports: &super::sem::ModuleImports,
+    symbols: &crate::symbol::SymbolTable,
+    trait_env: &super::trait_env::TraitEnv,
+    loaded_modules: &IndexMap<ModuleSource, ast::Module>,
+) -> Option<(Vec<ast::Function>, ModuleSource)> {
+    let canonical_key = canonical_decl_key_with(
+        trait_name,
+        current_module_source,
+        imports,
+        symbols,
+        trait_env,
+    );
+    if let Some((module_src, item_idx)) = trait_env.decl_index.get(&canonical_key)
+        && let Some(module) = loaded_modules.get(module_src)
+        && let Some(Item::Trait(trait_decl)) = module.items.get(*item_idx)
+    {
+        return Some((trait_decl.methods.clone(), module_src.clone()));
+    }
+    for item in current_module_items {
+        if let Item::Trait(trait_decl) = item
+            && trait_decl.name == trait_name
+        {
+            return Some((trait_decl.methods.clone(), current_module_source.clone()));
+        }
+    }
+    None
+}
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Find a trait declaration by name across all modules.
     /// Returns the trait's methods (cloned) if found.
@@ -32,30 +118,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         trait_name: &str,
     ) -> Option<(Vec<ast::Function>, ModuleSource)> {
-        // Fast O(1) lookup via pre-built index instead of scanning all modules.
-        // `decl_index` is keyed by canonical `(decl_module, name)`; canonicalise
-        // the bare reference through the current module's import context so
-        // two modules with same-named traits never collide at the lookup
-        // step.
-        let canonical_key = self.canonical_decl_key(trait_name);
-        if let Some((module_src, item_idx)) = self.tysys.trait_env.decl_index.get(&canonical_key) {
-            let module = &self.loaded_modules[module_src];
-            if let Item::Trait(trait_decl) = &module.items[*item_idx] {
-                return Some((trait_decl.methods.clone(), module_src.clone()));
-            }
-        }
-        // Check current module items (not covered by the index).
-        for item in self.current_module_items {
-            if let Item::Trait(trait_decl) = item
-                && trait_decl.name == trait_name
-            {
-                return Some((
-                    trait_decl.methods.clone(),
-                    self.current_module_source.clone(),
-                ));
-            }
-        }
-        None
+        find_trait_decl_methods_with_module_with(
+            trait_name,
+            &self.current_module_source,
+            self.current_module_items,
+            &self.sem.imports,
+            self.symbols,
+            &self.tysys.trait_env,
+            self.loaded_modules,
+        )
     }
 
     /// Find a trait declaration's type parameters (e.g., `<T, U>` in `trait Foo<T, U>`).

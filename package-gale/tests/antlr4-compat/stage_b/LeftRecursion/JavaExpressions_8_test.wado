@@ -17,7 +17,7 @@ use { normalize_tree } from "../../grammars/LeftRecursion/JavaExpressions_8.g4";
 test "stage_b: LeftRecursion/JavaExpressions_8" {
     let input = "new A().b";
     let expected = "(s (e (e new (typespec A) ( )) . b))";
-    let root = t::parse(&input).unwrap();
+    let root = t::parse_s(&input).unwrap();
     let actual = t::to_tree(&root).to_string_tree();
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;

@@ -106,30 +106,30 @@ enum ComparisonChainGroup {
 }
 
 impl Parser {
+    /// Parse a hand-built token stream. Used by tests and the interpolation
+    /// re-parser; production sites that have a full [`crate::lexer::LexResult`]
+    /// should call [`Parser::from_lex`] instead so shebang / data section /
+    /// comments flow through.
     pub fn new(tokens: Vec<Token>) -> Self {
         Self::build(tokens, None, None, Vec::new())
     }
 
-    /// Creates a new parser with the given tokens, shebang, and data section.
-    pub fn with_metadata(
-        tokens: Vec<Token>,
-        shebang: Option<String>,
-        data_section: Option<String>,
-    ) -> Self {
-        Self::build(tokens, shebang, data_section, Vec::new())
+    /// Parse a complete [`crate::lexer::LexResult`], keeping the comment
+    /// stream so the formatter / doc / dump paths can attach leading comments
+    /// to AST nodes as ids are allocated. The lexer's errors are not consumed
+    /// here — callers route them through [`crate::ParseResult::lex_errors`]
+    /// so the wire format keeps the `lexer error:` prefix distinct from
+    /// `parse error:`.
+    pub fn from_lex(lex: crate::lexer::LexResult) -> Self {
+        Self::build(lex.tokens, lex.shebang, lex.data_section, lex.comments)
     }
 
-    /// Creates a new parser with full lexer output, including the comment
-    /// stream so leading comments can be attached to AST nodes as they are
-    /// allocated. Use this on the formatter path; the comment stream is
-    /// otherwise harmless when omitted.
-    pub fn with_trivia(
-        tokens: Vec<Token>,
-        shebang: Option<String>,
-        data_section: Option<String>,
-        comments: Vec<crate::comment::Comment>,
-    ) -> Self {
-        Self::build(tokens, shebang, data_section, comments)
+    /// Like [`Parser::from_lex`] but drops the comment stream. Used by the
+    /// loader and other non-formatter paths where trivia is allocated then
+    /// thrown away — clearing it up front skips the per-AST-id comment-cursor
+    /// walk and `Comment::clone` into [`crate::comment::TriviaMap`].
+    pub fn from_lex_no_trivia(lex: crate::lexer::LexResult) -> Self {
+        Self::build(lex.tokens, lex.shebang, lex.data_section, Vec::new())
     }
 
     fn build(
@@ -138,6 +138,15 @@ impl Parser {
         data_section: Option<String>,
         comments: Vec<crate::comment::Comment>,
     ) -> Self {
+        // Filter `TokenKind::Error` tokens at construction time so no parser
+        // path can mistake one for an identifier or generate a duplicate
+        // "expected …, found Error(...)" diagnostic. The lex error is already
+        // surfaced through `ParseResult::lex_errors`; the parser has no use
+        // for the recovery sentinel.
+        let tokens: Vec<Token> = tokens
+            .into_iter()
+            .filter(|t| !matches!(t.kind, TokenKind::Error(_)))
+            .collect();
         Self {
             tokens,
             pos: 0,
@@ -5335,18 +5344,24 @@ impl Parser {
             });
         }
 
-        let mut lexer = crate::lexer::Lexer::with_line(expr_str, span.line);
-        let tokens = lexer.tokenize().map_err(|e| ParseError {
-            message: format!("error parsing template interpolation: {}", e.message),
-            span,
-        })?;
+        let lex_result = crate::lexer::lex_with_line(expr_str, span.line);
+        // Lex errors inside the interpolation surface alongside the outer
+        // parser's diagnostics. Use the lex error's own span — carefully
+        // line-shifted by `lex_with_line` — so the editor highlights the
+        // offending byte, not the whole `{…}`.
+        for e in &lex_result.errors {
+            self.errors.push(ParseError {
+                message: format!("error parsing template interpolation: {e}"),
+                span: e.span,
+            });
+        }
 
         // Continue the parent's dense `AstId` space so interpolation
         // sub-expressions get unique ids: a fresh `Parser` restarts at 0,
         // and two interpolations (`{a}` and `{b}`) would then collide on
         // `AstId(0)`, clobbering each other's entries in the per-`AstId`
         // annotation maps (expression types, method/static dispatch).
-        let mut parser = Parser::new(tokens);
+        let mut parser = Parser::new(lex_result.tokens);
         parser.next_ast_id = self.next_ast_id;
         let expr = parser.parse_expr()?;
         self.next_ast_id = parser.next_ast_id;
@@ -5532,26 +5547,32 @@ fn parse_attr_number(repr: &str, negate: bool, span: Span) -> ParseResult<crate:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer::Lexer;
+    use crate::lexer::lex;
 
     /// Parse helper for tests: maps the error-recovering parser back to a
     /// `Result` (first recovered error as `Err`) so existing `.unwrap()` /
     /// `.unwrap_err()` call sites keep working.
     fn parse(source: &str) -> ParseResult<Module> {
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().expect("lexer error");
-        let (data_section, _comments, shebang) = lexer.into_parts();
-        let mut parser = Parser::with_metadata(tokens, shebang, data_section);
+        let r = lex(source);
+        assert!(
+            r.errors.is_empty(),
+            "lexer error in test input: {:?}",
+            r.errors
+        );
+        let mut parser = Parser::from_lex_no_trivia(r);
         parser.parse_strict()
     }
 
     /// Parse helper that exposes the full recovery result: the (always
     /// produced) module plus every recovered syntax error.
     fn parse_recovering(source: &str) -> (Module, Vec<ParseError>) {
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().expect("lexer error");
-        let (data_section, _comments, shebang) = lexer.into_parts();
-        let mut parser = Parser::with_metadata(tokens, shebang, data_section);
+        let r = lex(source);
+        assert!(
+            r.errors.is_empty(),
+            "lexer error in test input: {:?}",
+            r.errors
+        );
+        let mut parser = Parser::from_lex_no_trivia(r);
         let module = parser.parse();
         let errors = parser.take_errors();
         (module, errors)
@@ -7257,10 +7278,13 @@ line 2
         // `#![TODO]` parses fine but the next inner attribute is malformed. The
         // valid `#![TODO]` must not be discarded by recovery, so has_todo() and
         // the module's inner attributes still see it.
-        let mut lexer = Lexer::new("#![TODO]\n#![wasm_module(\n");
-        let tokens = lexer.tokenize().expect("lexer error");
-        let (data_section, _comments, shebang) = lexer.into_parts();
-        let mut parser = Parser::with_metadata(tokens, shebang, data_section);
+        let r = lex("#![TODO]\n#![wasm_module(\n");
+        assert!(
+            r.errors.is_empty(),
+            "lexer error in test input: {:?}",
+            r.errors
+        );
+        let mut parser = Parser::from_lex_no_trivia(r);
         let module = parser.parse();
         assert!(
             !parser.take_errors().is_empty(),

@@ -1,0 +1,62 @@
+//! Regression fixture for non-greedy `(e)??` prefer-skip dispatch
+//! (ANTLR4 `ParserExec/IfIfElseNonGreedyBinding1`).
+//!
+//! Gale currently lowers `??` through the greedy `?` strategy
+//! pipeline (lower.wado:3222 — "the prefer-skip semantics remain
+//! tracked in package-gale/TODO.md"). The single-`if` sanity test
+//! below already passes today; the dangling-`else` test pins Gale's
+//! *current* wrong tree shape so the assertion flips the moment a
+//! prefer-skip fix lands. That flip is the signal to update this
+//! test to the ANTLR4-correct expectation, which is given as a
+//! one-line comment beside the wrong-shape assertion below.
+//!
+//! ANTLR4 oracle output for the same input is captured in the PoC
+//! report referenced in package-gale/TODO.md "ATN-class grammars"
+//! and corresponds to:
+//!   (start (statement (ifStatement
+//!     if y (statement (ifStatement if y (statement x)))
+//!     else (statement x))))
+
+use g from "./grammars/ll_optional_non_greedy.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/ll_optional_non_greedy",
+        },
+    };
+use { normalize_tree } from "./grammars/ll_optional_non_greedy.g4";
+
+fn assert_tree(input: &String, expected: &String) {
+    let root = g::parse(input).unwrap();
+    let tree = g::to_tree(&root);
+    let actual = tree.to_string_tree();
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+// Sanity: when there is no outer `??` to absorb the `else`, the
+// only ifStatement must consume it. Already passes — kept here so
+// any future fix to the dangling-else dispatch doesn't regress this
+// straightforward case (which depends on consume-when-no-other-
+// taker behavior).
+test "tree: single if with trailing else binds" {
+    assert_tree(&"if y x else x", &"
+        (start (statement (ifStatement if y (statement x) else (statement x))))
+    ");
+}
+
+// Dangling-`else` ambiguity, captured as the CURRENT wrong shape
+// (else binds to the INNER if). ANTLR4's `??` is prefer-skip and
+// binds it to the OUTER if instead — when a fix lands this
+// assertion will fail. The correct expected, ready to swap in:
+//   (start (statement (ifStatement
+//     if y (statement (ifStatement if y (statement x)))
+//     else (statement x))))
+test "tree: dangling else — CURRENT WRONG SHAPE pinned for future fix" {
+    assert_tree(&"if y if y x else x", &"
+        (start (statement (ifStatement
+          if y
+          (statement (ifStatement if y (statement x) else (statement x))))))
+    ");
+}

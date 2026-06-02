@@ -1,0 +1,47 @@
+#!/usr/bin/env wado
+//! CLI wrapper for `strip_action_bodies` — preprocesses a `.g4` before
+//! it's handed to `scripts/antlr4-oracle.sh`. Reads the path on argv,
+//! prints the stripped grammar to stdout.
+
+use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { strip_action_bodies } from "../src/g4/action_strip.wado";
+
+export fn run() with Stdout, Stderr, Environment, Preopens {
+    let arguments = args();
+    if arguments.len() != 1 {
+        eprintln("usage: strip-grammar <path/to/Grammar.g4>");
+        return;
+    }
+    let path = arguments[0];
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("strip-grammar: no preopened directories available");
+        return;
+    }
+    let root = dirs[0].0;
+    let open_result = root.open_at(
+        PathFlags::none(),
+        path,
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    ).wait();
+    if let Err(_) = open_result {
+        eprintln(`strip-grammar: cannot open file: {path}`);
+        return;
+    }
+    let file = open_result.unwrap();
+    let [read_stream, _done] = file.read_via_stream(0 as Filesize);
+    let mut bytes: Array<u8> = [];
+    loop {
+        let chunk = read_stream.read(4096);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let b of chunk {
+            bytes.push(b);
+        }
+    }
+    let content = String::from_utf8_unchecked(bytes);
+    print(strip_action_bodies(&content));
+}

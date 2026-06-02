@@ -17,7 +17,7 @@ use { normalize_tree } from "../../grammars/LeftRecursion/JavaExpressions_2.g4";
 test "stage_b: LeftRecursion/JavaExpressions_2" {
     let input = "(a|b)&c";
     let expected = "(s (e (e ( (e (e a) | (e b)) )) & (e c)))";
-    let root = t::parse(&input).unwrap();
+    let root = t::parse_s(&input).unwrap();
     let actual = t::to_tree(&root).to_string_tree();
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;

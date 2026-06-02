@@ -378,9 +378,9 @@ satisfied at the end of 7-B.
   updated to match.
 
 Order is 7-A → 7-B: 7-A is incremental and de-risks 7-B, and while 7-A
-runs the combined walk's TIR stays live as reify's reference. Migration
-guard: a temporary structural diff between the combined walk's TIR and
-reify's TIR detects any drift before 7-B removes the former.
+runs the combined walk's TIR stays live as reify's reference. The E2E
+suite and WIR golden fixtures carry the equivalence guarantee at every
+step.
 
 Each stage keeps `mise run test`, the WIR golden fixtures, and the LSP
 query tests green. Performance is not tracked during migration; see
@@ -392,22 +392,100 @@ Trade-offs.
       per-`AstId` fact store, `SymbolKey`-keyed.
 - [x] **Stage 5** — reify is the sole TIR source for every module (user /
       stdlib / snapshot), 2692/2692 E2E. It still re-derived some types /
-      mangled names; Stage 7 cleans that.
+      mangled names; Stage 7 cleans that. The trait default-method
+      synthesis path (the combined walk pushing pre-built `TirFunction`s
+      onto `pending_default_methods` for reify to drain) was the last
+      hold-out and was resolved by a follow-up: combined walk records a
+      per-impl `ModuleSemantics` snapshot on `default_method_semantics`,
+      and reify's `reify_impl_default_methods` synthesises the
+      `TirFunction` from those snapshots — reify is now the sole producer
+      of every `TirFunction`, including default methods.
 - [x] **Stage 7a** — routing removed; the combined walk survives only as the
       (still TIR-building) `annotate` fact-recorder.
 - [ ] **Stage 6** — Liveness / DCE. Not started; independent of Stage 7.
-- [ ] **Stage 7** — mechanical reify (7-A) → TIR-free `annotate` (7-B). 7-A in
-      progress:
+- [x] **Stage 7-A** — reify is mechanical. Every decision-bearing read goes
+      through a recorded fact:
   - [x] Function / method signatures — params, return, type params, impl
-        type-param scheme, self type — read from recorded facts.
+        type-param scheme, self type, mangled / display names — read from
+        recorded facts.
   - [x] Effect / resource op signatures — read from `effect_ops`.
   - [x] Struct / variant type-param defaults — read from `decl_type_params`.
+  - [x] Struct field types (including `pub use` re-export recovery) — read
+        from `struct_field_types`.
   - [x] Fixed a latent bug the reads exposed: a method generic on an impl that
         binds a concrete trait arg started at the wrong type-param index and
         reached codegen unsubstituted (`trait_method_generic_concrete_trait_arg`).
-  - [ ] Remaining: body-level method-call type args, struct-field re-export
-        recovery, const types, and the mangled-name class (impl identity /
-        struct + method names).
+  - [x] Method-call type args — `MethodDispatch.method_type_args` carries
+        the resolved vector verbatim (covers the IndexMut rewrite too).
+  - [x] Const types — `sem.decls.associated_constants` stores the resolved
+        `TypeId` directly; reify and the combined walk both read it.
+  - [x] Let-statement annotated types — `let_annotated_types` carries the
+        resolved whole-pattern type for destructuring bindings.
+  - [x] Closure param types — read from `local_types` via the binding's
+        `AstId`; the expected-fn-type peel survives only for the body's
+        return-type forwarding.
+  - [x] Cast target types — read from `expression_types[cast.id]`.
+  - [x] Free-function call type args — `generic_instantiations.type_args`
+        is the single source for both turbofish and inferred forms; reify
+        no longer branches on `call.type_args.is_empty()`.
+  - [x] Mangled-name class — `ImplFacts.struct_name`,
+        `GenericInstantiation.mangled_name` (struct literal / range / anon),
+        per-method `MethodNames`, `SequenceCoercionFacts` / `KeyValueCoercionFacts`
+        method names, and `FromCallFacts` (?-op + static `T::from`) all
+        carry the elaborator-computed strings; reify is a pure read.
+  - [x] From-conversion shapes — `DesugarKind::NewtypeFromCollapse` /
+        `NewtypeFromUnwrap` / `NewtypeFromWrap` tag the three "no explicit
+        impl" `from` paths; the bodyless `impl From<X> for T;` synthesis is
+        detected via `from_call_facts[call.id]`. Reify no longer compares
+        `type_name(arg)` against the prefix to recognise them.
+  - [x] Namespace static methods — `ns::Type::method(x)` records
+        `static_method_dispatch` like every other static call; reify's
+        ns-arm in-line reconstruction is gone.
+  - [x] Static-call / Type::method recovery paths in reify deleted (every
+        non-variant static call is dispatched via the recorded
+        `static_method_dispatch` early return).
+- [x] **Stage 5 completion — trait default-method synthesis moved to
+      reify.** Originally, the combined walk's `resolve_module` synthesised
+      per-impl `TirFunction`s for trait default methods and pushed them
+      onto `pending_default_methods` for reify to drain — making combined-
+      walk TIR for those bodies live, not dead. Stage 7-B leaves dropping
+      TIR construction in the body walk would corrupt the synthesised
+      default-method TIR (proven by an aborted `template.rs` slice that
+      trapped Wasm validation on `trait_default` fixtures).
+      Resolution: the body walk now snapshots each
+      `(impl_block.id, default_method.id)` synthesis as a full
+      `ModuleSemantics` on `default_method_semantics`, and reify's
+      `reify_impl_default_methods` swaps `self.sem` to that snapshot to
+      synthesise the `TirFunction` the same way it processes explicit impl
+      methods. Per-impl snapshots avoid the `(trait_module, ast_id)`
+      overwrite that happens when the same trait body is synthesised
+      across many impls. `pending_default_methods` + the
+      `record_pending_default_method` helper are gone. Reify is now the
+      sole producer of every `TirFunction` in every emitted `TirModule`.
+- [x] **Stage 5 completion — missing-return analysis moved off the
+      combined walk's body TIR.** `validate_missing_return`,
+      `block_always_exits`, and `find_return_type_in_*` previously
+      walked the combined walk's `TirBlock` from `resolve_function` /
+      `resolve_method` / `resolve_closure`, which forced Stage 7-B
+      leaves to keep producing `TirStmtKind::Return` /
+      `TirExprKind::Block` / `LabeledBlock` / `If` / `Match` /
+      `Resume` / `WithHandler` shapes the analysis could read.
+      Resolution: `elaborator/control_flow.rs` ports the eight walkers
+      to operate on the parsed AST, reading
+      `expression_types[(module, expr.id)]` for the `type_id == NEVER`
+      check the TIR version did on `TirExpr::type_id`. Both phases
+      consult it via a small `CtrlFlowCtx { expression_types, module }`
+      view — the combined walk through `Elaborator::ctrl_flow_ctx`,
+      reify through a direct construction over `self.sem.types`. The
+      TIR walkers (~330 lines in `expr.rs`) and the
+      `validate_missing_return(TirBlock)` helper are deleted.
+- [ ] **Stage 7-B** — `annotate` stops building TIR. Each `resolve_*`
+      returns the resolved type + records facts only; the duplicate
+      `TirExpr` / `TirStmt` / `TirItem` halves of expr.rs / stmt.rs /
+      item.rs / call.rs / method_call.rs / operators.rs / coercion.rs /
+      assert.rs / closure.rs / handlers.rs / matches.rs / template.rs /
+      module.rs are deleted, and `build_tir_from_state` becomes a
+      body-walk pass that returns no TIR. LSP then runs `annotate` only.
 
 ### Landing log
 

@@ -1,5 +1,11 @@
 // Lexer for Wado
 // This module must be synchronized with syntax.rs (canonical syntax definition).
+//
+// The lexer is *resilient*: malformed input never aborts tokenisation. Every
+// byte of the source is accounted for as a token, comment, whitespace,
+// shebang, or data-section content, and lex errors are surfaced alongside a
+// best-effort token stream via [`LexResult`]. The recommended entry points
+// are the free functions [`lex`] and [`lex_with_line`].
 
 use crate::comment::{Comment, CommentKind};
 use crate::token::{Span, Token, TokenKind};
@@ -15,7 +21,28 @@ pub fn is_valid_ident(s: &str) -> bool {
     chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-pub struct Lexer<'a> {
+/// Tokenise `source`. See module docs for the recovery contract.
+pub fn lex(source: &str) -> LexResult {
+    Lexer::new(source).run()
+}
+
+/// Like [`lex`] but starts numbering lines at `start_line` — used by the
+/// parser when re-lexing the inside of a template-string interpolation.
+pub fn lex_with_line(source: &str, start_line: usize) -> LexResult {
+    Lexer::with_line(source, start_line).run()
+}
+
+/// Bundle of tokens + recovered diagnostics + trivia returned by [`lex`].
+#[derive(Debug)]
+pub struct LexResult {
+    pub tokens: Vec<Token>,
+    pub errors: Vec<LexError>,
+    pub comments: Vec<Comment>,
+    pub shebang: Option<String>,
+    pub data_section: Option<String>,
+}
+
+pub(crate) struct Lexer<'a> {
     input: &'a str,
     chars: std::iter::Peekable<std::str::CharIndices<'a>>,
     pos: usize,
@@ -27,12 +54,64 @@ pub struct Lexer<'a> {
     comments: Vec<Comment>,
     /// Shebang line, if present (e.g., "#!/usr/bin/env wado")
     shebang: Option<String>,
+    /// Recovered errors, in source order. Drained into [`LexResult::errors`].
+    errors: Vec<LexError>,
 }
 
+/// Structured lexer error. Pair with [`LexError::span`] for source location.
 #[derive(Debug)]
 pub struct LexError {
-    pub message: String,
+    pub kind: LexErrorKind,
     pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LexErrorKind {
+    /// A character that does not begin any valid token. Paired with a
+    /// [`TokenKind::Error`] in the token stream.
+    UnexpectedChar(char),
+    /// String literal lacking a closing `"`. Paired with a `StringLit`
+    /// holding everything from the opening `"` to EOF.
+    UnterminatedString,
+    /// Template string (`` `...` ``) lacking its closing backtick.
+    UnterminatedTemplateString,
+    /// Character literal lacking its closing `'`.
+    UnterminatedChar,
+    /// Character literal with more than one character between the quotes
+    /// (e.g. `'abc'`).
+    CharLiteralTooLong,
+    /// Empty character literal (`''`).
+    EmptyCharLiteral,
+    /// Block comment (`/* ... */`) lacking its closing `*/`.
+    UnterminatedBlockComment,
+    /// `0x` with no following hex digit.
+    MissingHexDigits,
+    /// `0b` with no following binary digit.
+    MissingBinaryDigits,
+    /// `0o` with no following octal digit.
+    MissingOctalDigits,
+    /// Floating-point exponent (`e` / `E`) with no following digit.
+    MissingExponentDigits,
+}
+
+impl std::fmt::Display for LexError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.kind {
+            LexErrorKind::UnexpectedChar(ch) => write!(f, "unexpected character: '{ch}'"),
+            LexErrorKind::UnterminatedString => write!(f, "unterminated string literal"),
+            LexErrorKind::UnterminatedTemplateString => write!(f, "unterminated template string"),
+            LexErrorKind::UnterminatedChar => write!(f, "unterminated character literal"),
+            LexErrorKind::CharLiteralTooLong => {
+                write!(f, "character literal must contain a single character")
+            }
+            LexErrorKind::EmptyCharLiteral => write!(f, "empty character literal"),
+            LexErrorKind::UnterminatedBlockComment => write!(f, "unterminated block comment"),
+            LexErrorKind::MissingHexDigits => write!(f, "expected hex digit after 0x"),
+            LexErrorKind::MissingBinaryDigits => write!(f, "expected binary digit after 0b"),
+            LexErrorKind::MissingOctalDigits => write!(f, "expected octal digit after 0o"),
+            LexErrorKind::MissingExponentDigits => write!(f, "expected digit after exponent"),
+        }
+    }
 }
 
 impl From<LexError> for crate::compiler_host::Diagnostic {
@@ -41,14 +120,14 @@ impl From<LexError> for crate::compiler_host::Diagnostic {
         Self {
             severity: Severity::Error,
             code: Code::InvalidSyntax,
-            message: format!("lexer error: {}", e.message),
+            message: format!("lexer error: {e}"),
             span: Some(DiagnosticSpan::from_span(&e.span, None)),
         }
     }
 }
 
 impl<'a> Lexer<'a> {
-    pub fn new(input: &'a str) -> Self {
+    fn new(input: &'a str) -> Self {
         Self {
             input,
             chars: input.char_indices().peekable(),
@@ -58,13 +137,12 @@ impl<'a> Lexer<'a> {
             data_section: None,
             comments: Vec::new(),
             shebang: None,
+            errors: Vec::new(),
         }
     }
 
-    /// Create a new lexer with a custom starting line number.
-    /// Useful for parsing embedded expressions (e.g., template string interpolations)
-    /// where the line number should reflect the original source location.
-    pub fn with_line(input: &'a str, line: usize) -> Self {
+    /// Like `new`, but starts numbering lines at `line`.
+    fn with_line(input: &'a str, line: usize) -> Self {
         Self {
             input,
             chars: input.char_indices().peekable(),
@@ -74,46 +152,17 @@ impl<'a> Lexer<'a> {
             data_section: None,
             comments: Vec::new(),
             shebang: None,
+            errors: Vec::new(),
         }
     }
 
-    /// Returns the content of the __DATA__ section, if present.
-    /// This is available after calling `tokenize()`.
-    pub fn data_section(&self) -> Option<&str> {
-        self.data_section.as_deref()
-    }
-
-    /// Consumes the lexer and returns the data section content.
-    pub fn into_data_section(self) -> Option<String> {
-        self.data_section
-    }
-
-    pub fn comments(&self) -> &[Comment] {
-        &self.comments
-    }
-
-    pub fn into_comments(self) -> Vec<Comment> {
-        self.comments
-    }
-
-    pub fn into_parts(self) -> (Option<String>, Vec<Comment>, Option<String>) {
-        (self.data_section, self.comments, self.shebang)
-    }
-
-    /// Returns the shebang line, if present.
-    /// This is available after calling `tokenize()`.
-    pub fn shebang(&self) -> Option<&str> {
-        self.shebang.as_deref()
-    }
-
-    pub fn tokenize(&mut self) -> Result<Vec<Token>, LexError> {
-        // Skip shebang if present at the very beginning of the file
+    /// Drive the lexer to completion and return the bundled [`LexResult`].
+    fn run(mut self) -> LexResult {
         self.skip_shebang();
 
         let mut tokens = Vec::new();
-
         loop {
-            let token = self.next_token()?;
+            let token = self.next_token();
             let is_eof = token.kind == TokenKind::Eof;
             tokens.push(token);
             if is_eof {
@@ -121,10 +170,31 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        Ok(tokens)
+        LexResult {
+            tokens,
+            errors: self.errors,
+            comments: self.comments,
+            shebang: self.shebang,
+            data_section: self.data_section,
+        }
     }
 
-    fn next_token(&mut self) -> Result<Token, LexError> {
+    /// Build a span from a saved start position to the current cursor.
+    /// Captures `(start, self.pos, start_line, start_column, self.line,
+    /// self.column)` — the recurring pattern at every error site and every
+    /// closing-token site.
+    fn span_from(&self, start: usize, start_line: usize, start_column: usize) -> Span {
+        Span::with_end(
+            start,
+            self.pos,
+            start_line,
+            start_column,
+            self.line,
+            self.column,
+        )
+    }
+
+    fn next_token(&mut self) -> Token {
         self.skip_whitespace_and_comments();
 
         let start = self.pos;
@@ -132,10 +202,10 @@ impl<'a> Lexer<'a> {
         let start_column = self.column;
 
         let Some((_, ch)) = self.peek() else {
-            return Ok(Token::new(
+            return Token::new(
                 TokenKind::Eof,
                 Span::new(start, start, start_line, start_column),
-            ));
+            );
         };
 
         let kind = match ch {
@@ -143,16 +213,16 @@ impl<'a> Lexer<'a> {
             'a'..='z' | 'A'..='Z' | '_' => self.lex_ident_or_keyword(),
 
             // Numbers
-            '0'..='9' => self.lex_number()?,
+            '0'..='9' => self.lex_number(),
 
             // Strings
-            '"' => self.lex_string()?,
+            '"' => self.lex_string(),
 
             // Character literals
-            '\'' => self.lex_char()?,
+            '\'' => self.lex_char(),
 
             // Template strings
-            '`' => self.lex_template_string()?,
+            '`' => self.lex_template_string(),
 
             // Punctuation and operators
             '(' => {
@@ -381,24 +451,20 @@ impl<'a> Lexer<'a> {
             }
 
             _ => {
-                return Err(LexError {
-                    message: format!("unexpected character: '{ch}'"),
-                    span: Span::new(start, self.pos + 1, start_line, start_column),
+                // Unrecognised character: consume it, record an error, and
+                // emit a `TokenKind::Error` so the source text is preserved
+                // for span lookup and LSP semantic-token rendering.
+                self.advance();
+                let span = self.span_from(start, start_line, start_column);
+                self.errors.push(LexError {
+                    kind: LexErrorKind::UnexpectedChar(ch),
+                    span,
                 });
+                TokenKind::Error(self.input[start..self.pos].to_string())
             }
         };
 
-        Ok(Token::new(
-            kind,
-            Span::with_end(
-                start,
-                self.pos,
-                start_line,
-                start_column,
-                self.line,
-                self.column,
-            ),
-        ))
+        Token::new(kind, self.span_from(start, start_line, start_column))
     }
 
     fn peek(&mut self) -> Option<(usize, char)> {
@@ -485,18 +551,12 @@ impl<'a> Lexer<'a> {
                         continue;
                     }
                     Some((_, '*')) => {
-                        // Block comment - collect instead of discard
-                        match self.lex_block_comment() {
-                            Ok(comment) => {
-                                self.comments.push(comment);
-                                continue;
-                            }
-                            Err(_) => {
-                                // Error will be caught in next_token when we
-                                // encounter the unterminated block comment again
-                                break;
-                            }
-                        }
+                        // Block comment — always returns a comment, even if
+                        // unterminated. The error (if any) was already pushed
+                        // into `self.errors` by `lex_block_comment`.
+                        let comment = self.lex_block_comment();
+                        self.comments.push(comment);
+                        continue;
                     }
                     _ => {}
                 }
@@ -541,18 +601,14 @@ impl<'a> Lexer<'a> {
         Comment {
             text,
             kind,
-            span: Span::with_end(
-                start,
-                self.pos,
-                start_line,
-                start_column,
-                self.line,
-                self.column,
-            ),
+            span: self.span_from(start, start_line, start_column),
         }
     }
 
-    fn lex_block_comment(&mut self) -> Result<Comment, LexError> {
+    /// Lex a block comment. Always returns the comment (possibly unterminated
+    /// to EOF) and records a [`LexErrorKind::UnterminatedBlockComment`] error
+    /// when no closing `*/` was found.
+    fn lex_block_comment(&mut self) -> Comment {
         let start = self.pos;
         let start_line = self.line;
         let start_column = self.column;
@@ -564,17 +620,17 @@ impl<'a> Lexer<'a> {
         loop {
             match self.peek() {
                 None => {
-                    return Err(LexError {
-                        message: "unterminated block comment".to_string(),
-                        span: Span::with_end(
-                            start,
-                            self.pos,
-                            start_line,
-                            start_column,
-                            self.line,
-                            self.column,
-                        ),
+                    let span = self.span_from(start, start_line, start_column);
+                    self.errors.push(LexError {
+                        kind: LexErrorKind::UnterminatedBlockComment,
+                        span,
                     });
+                    let text = self.input[text_start..self.pos].to_string();
+                    return Comment {
+                        text,
+                        kind: CommentKind::Block,
+                        span,
+                    };
                 }
                 Some((_, '*')) => {
                     self.advance();
@@ -582,18 +638,11 @@ impl<'a> Lexer<'a> {
                         let text_end = self.pos - 1; // before the *
                         self.advance(); // consume /
                         let text = self.input[text_start..text_end].to_string();
-                        return Ok(Comment {
+                        return Comment {
                             text,
                             kind: CommentKind::Block,
-                            span: Span::with_end(
-                                start,
-                                self.pos,
-                                start_line,
-                                start_column,
-                                self.line,
-                                self.column,
-                            ),
-                        });
+                            span: self.span_from(start, start_line, start_column),
+                        };
                     }
                 }
                 Some(_) => {
@@ -714,7 +763,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn lex_number(&mut self) -> Result<TokenKind, LexError> {
+    fn lex_number(&mut self) -> TokenKind {
         let start = self.pos;
         let start_line = self.line;
         let start_column = self.column;
@@ -775,18 +824,14 @@ impl<'a> Lexer<'a> {
             if let Some('+' | '-') = self.peek_char() {
                 self.advance();
             }
-            // Must have at least one digit
+            // Must have at least one digit. Resilient behaviour: emit the
+            // partial `NumberLit` (e.g. `1e`) and record an error; the
+            // elaborator already rejects malformed numeric literals, but the
+            // explicit lex-time diagnostic gives the user a precise span.
             if !matches!(self.peek_char(), Some('0'..='9')) {
-                return Err(LexError {
-                    message: "expected digit after exponent".to_string(),
-                    span: Span::with_end(
-                        start,
-                        self.pos,
-                        start_line,
-                        start_column,
-                        self.line,
-                        self.column,
-                    ),
+                self.errors.push(LexError {
+                    kind: LexErrorKind::MissingExponentDigits,
+                    span: self.span_from(start, start_line, start_column),
                 });
             }
             while let Some((_, ch)) = self.peek() {
@@ -801,7 +846,7 @@ impl<'a> Lexer<'a> {
         let text = &self.input[start..self.pos];
 
         // Return string representation; type is determined by context in elaborator
-        Ok(TokenKind::NumberLit(text.to_string()))
+        TokenKind::NumberLit(text.to_string())
     }
 
     fn lex_hex_number(
@@ -809,7 +854,7 @@ impl<'a> Lexer<'a> {
         start: usize,
         start_line: usize,
         start_column: usize,
-    ) -> Result<TokenKind, LexError> {
+    ) -> TokenKind {
         let digit_start = self.pos;
 
         while let Some((_, ch)) = self.peek() {
@@ -821,22 +866,14 @@ impl<'a> Lexer<'a> {
         }
 
         if self.pos == digit_start {
-            return Err(LexError {
-                message: "expected hex digit after 0x".to_string(),
-                span: Span::with_end(
-                    start,
-                    self.pos,
-                    start_line,
-                    start_column,
-                    self.line,
-                    self.column,
-                ),
+            self.errors.push(LexError {
+                kind: LexErrorKind::MissingHexDigits,
+                span: self.span_from(start, start_line, start_column),
             });
         }
 
         // Include "0x" prefix in repr; actual parsing happens in elaborator
-        let repr = self.input[start..self.pos].to_string();
-        Ok(TokenKind::NumberLit(repr))
+        TokenKind::NumberLit(self.input[start..self.pos].to_string())
     }
 
     fn lex_binary_number(
@@ -844,7 +881,7 @@ impl<'a> Lexer<'a> {
         start: usize,
         start_line: usize,
         start_column: usize,
-    ) -> Result<TokenKind, LexError> {
+    ) -> TokenKind {
         let digit_start = self.pos;
 
         while let Some((_, ch)) = self.peek() {
@@ -856,22 +893,13 @@ impl<'a> Lexer<'a> {
         }
 
         if self.pos == digit_start {
-            return Err(LexError {
-                message: "expected binary digit after 0b".to_string(),
-                span: Span::with_end(
-                    start,
-                    self.pos,
-                    start_line,
-                    start_column,
-                    self.line,
-                    self.column,
-                ),
+            self.errors.push(LexError {
+                kind: LexErrorKind::MissingBinaryDigits,
+                span: self.span_from(start, start_line, start_column),
             });
         }
 
-        // Include "0b" prefix in repr; actual parsing happens in elaborator
-        let repr = self.input[start..self.pos].to_string();
-        Ok(TokenKind::NumberLit(repr))
+        TokenKind::NumberLit(self.input[start..self.pos].to_string())
     }
 
     fn lex_octal_number(
@@ -879,7 +907,7 @@ impl<'a> Lexer<'a> {
         start: usize,
         start_line: usize,
         start_column: usize,
-    ) -> Result<TokenKind, LexError> {
+    ) -> TokenKind {
         let digit_start = self.pos;
 
         while let Some((_, ch)) = self.peek() {
@@ -891,25 +919,16 @@ impl<'a> Lexer<'a> {
         }
 
         if self.pos == digit_start {
-            return Err(LexError {
-                message: "expected octal digit after 0o".to_string(),
-                span: Span::with_end(
-                    start,
-                    self.pos,
-                    start_line,
-                    start_column,
-                    self.line,
-                    self.column,
-                ),
+            self.errors.push(LexError {
+                kind: LexErrorKind::MissingOctalDigits,
+                span: self.span_from(start, start_line, start_column),
             });
         }
 
-        // Include "0o" prefix in repr; actual parsing happens in elaborator
-        let repr = self.input[start..self.pos].to_string();
-        Ok(TokenKind::NumberLit(repr))
+        TokenKind::NumberLit(self.input[start..self.pos].to_string())
     }
 
-    fn lex_string(&mut self) -> Result<TokenKind, LexError> {
+    fn lex_string(&mut self) -> TokenKind {
         let start = self.pos;
         let start_line = self.line;
         let start_column = self.column;
@@ -920,23 +939,21 @@ impl<'a> Lexer<'a> {
         loop {
             match self.peek() {
                 None => {
-                    return Err(LexError {
-                        message: "unterminated string literal".to_string(),
-                        span: Span::with_end(
-                            start,
-                            self.pos,
-                            start_line,
-                            start_column,
-                            self.line,
-                            self.column,
-                        ),
+                    // Unterminated: emit a `StringLit` covering everything we
+                    // managed to read. Multi-line strings are legal, so we
+                    // cannot break on newline; EOF is the only safe recovery.
+                    self.errors.push(LexError {
+                        kind: LexErrorKind::UnterminatedString,
+                        span: self.span_from(start, start_line, start_column),
                     });
+                    let raw = self.input[content_start..self.pos].to_string();
+                    return TokenKind::StringLit(raw);
                 }
                 Some((_, '"')) => {
                     let content_end = self.pos;
                     self.advance();
                     let raw = self.input[content_start..content_end].to_string();
-                    return Ok(TokenKind::StringLit(raw));
+                    return TokenKind::StringLit(raw);
                 }
                 Some((_, '\\')) => {
                     self.advance();
@@ -982,7 +999,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn lex_template_string(&mut self) -> Result<TokenKind, LexError> {
+    fn lex_template_string(&mut self) -> TokenKind {
         use crate::token::TemplateTokenPart;
 
         let start = self.pos;
@@ -997,17 +1014,14 @@ impl<'a> Lexer<'a> {
         loop {
             match self.peek() {
                 None => {
-                    return Err(LexError {
-                        message: "unterminated template string".to_string(),
-                        span: Span::with_end(
-                            start,
-                            self.pos,
-                            start_line,
-                            start_column,
-                            self.line,
-                            self.column,
-                        ),
+                    self.errors.push(LexError {
+                        kind: LexErrorKind::UnterminatedTemplateString,
+                        span: self.span_from(start, start_line, start_column),
                     });
+                    if !current_literal.is_empty() {
+                        parts.push(TemplateTokenPart::Literal(current_literal));
+                    }
+                    return TokenKind::TemplateStringLit(parts);
                 }
                 Some((_, '\\')) => {
                     current_literal.push('\\');
@@ -1061,9 +1075,15 @@ impl<'a> Lexer<'a> {
                             &mut current_literal,
                         )));
                     }
-                    let interp =
-                        self.collect_interpolation_source(start, start_line, start_column)?;
+                    let (interp, hit_eof) =
+                        self.collect_interpolation_source(start, start_line, start_column);
                     parts.push(TemplateTokenPart::Interpolation(interp));
+                    if hit_eof {
+                        // Outer template terminated mid-interpolation. The
+                        // error was already recorded; surface whatever parts
+                        // we have so the parser still sees a TemplateString.
+                        return TokenKind::TemplateStringLit(parts);
+                    }
                 }
                 Some((_, '`')) => {
                     self.advance();
@@ -1080,17 +1100,20 @@ impl<'a> Lexer<'a> {
             parts.push(TemplateTokenPart::Literal(current_literal));
         }
 
-        Ok(TokenKind::TemplateStringLit(parts))
+        TokenKind::TemplateStringLit(parts)
     }
 
     /// Collect the raw source text of an interpolation expression.
-    /// Called after consuming the opening `{`. Consumes up to and including the closing `}`.
+    /// Called after consuming the opening `{`. Consumes up to and including
+    /// the closing `}`. Returns `(source, hit_eof)`; when `hit_eof` is true
+    /// the enclosing template string was truncated mid-interpolation and an
+    /// error has been recorded.
     fn collect_interpolation_source(
         &mut self,
         start: usize,
         start_line: usize,
         start_column: usize,
-    ) -> Result<String, LexError> {
+    ) -> (String, bool) {
         let mut source = String::new();
         let mut brace_depth = 1u32;
         let mut in_string = false;
@@ -1099,17 +1122,11 @@ impl<'a> Lexer<'a> {
 
         loop {
             let Some((_, ch)) = self.peek() else {
-                return Err(LexError {
-                    message: "unterminated template string".to_string(),
-                    span: Span::with_end(
-                        start,
-                        self.pos,
-                        start_line,
-                        start_column,
-                        self.line,
-                        self.column,
-                    ),
+                self.errors.push(LexError {
+                    kind: LexErrorKind::UnterminatedTemplateString,
+                    span: self.span_from(start, start_line, start_column),
                 });
+                return (source, true);
             };
             self.advance();
 
@@ -1141,7 +1158,7 @@ impl<'a> Lexer<'a> {
                 '}' if !in_string && backtick_depth == 0 => {
                     brace_depth -= 1;
                     if brace_depth == 0 {
-                        return Ok(source);
+                        return (source, false);
                     }
                     source.push(ch);
                 }
@@ -1152,7 +1169,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn lex_char(&mut self) -> Result<TokenKind, LexError> {
+    fn lex_char(&mut self) -> TokenKind {
         let start = self.pos;
         let start_line = self.line;
         let start_column = self.column;
@@ -1162,30 +1179,22 @@ impl<'a> Lexer<'a> {
 
         match self.peek() {
             None => {
-                return Err(LexError {
-                    message: "unterminated character literal".to_string(),
-                    span: Span::with_end(
-                        start,
-                        self.pos,
-                        start_line,
-                        start_column,
-                        self.line,
-                        self.column,
-                    ),
+                // `'` at EOF: empty content, no closing quote.
+                self.errors.push(LexError {
+                    kind: LexErrorKind::UnterminatedChar,
+                    span: self.span_from(start, start_line, start_column),
                 });
+                return TokenKind::CharLit(String::new());
             }
             Some((_, '\'')) => {
-                return Err(LexError {
-                    message: "empty character literal".to_string(),
-                    span: Span::with_end(
-                        start,
-                        self.pos,
-                        start_line,
-                        start_column,
-                        self.line,
-                        self.column,
-                    ),
+                // `''` — empty char. Consume the closing quote so the lexer
+                // can continue past it cleanly.
+                self.advance();
+                self.errors.push(LexError {
+                    kind: LexErrorKind::EmptyCharLiteral,
+                    span: self.span_from(start, start_line, start_column),
                 });
+                return TokenKind::CharLit(String::new());
             }
             Some((_, '\\')) => {
                 self.advance();
@@ -1196,30 +1205,52 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        let raw = self.input[inner_start..self.pos].to_string();
-
-        if self.peek_char() != Some('\'') {
-            return Err(LexError {
-                message: "unterminated character literal".to_string(),
-                span: Span::with_end(
-                    start,
-                    self.pos,
-                    start_line,
-                    start_column,
-                    self.line,
-                    self.column,
-                ),
-            });
+        if self.peek_char() == Some('\'') {
+            let raw = self.input[inner_start..self.pos].to_string();
+            self.advance(); // consume closing '
+            return TokenKind::CharLit(raw);
         }
-        self.advance(); // consume closing '
 
-        Ok(TokenKind::CharLit(raw))
+        // Scan forward to the next `'`, newline, or EOF so the literal
+        // recovers as one CharLit + one diagnostic.
+        while let Some((_, ch)) = self.peek() {
+            if ch == '\'' || ch == '\n' {
+                break;
+            }
+            if ch == '\\' {
+                self.advance();
+                self.skip_escape();
+            } else {
+                self.advance();
+            }
+        }
+        let raw = self.input[inner_start..self.pos].to_string();
+        let kind = if self.peek_char() == Some('\'') {
+            self.advance(); // consume closing '
+            LexErrorKind::CharLiteralTooLong
+        } else {
+            LexErrorKind::UnterminatedChar
+        };
+        self.errors.push(LexError {
+            kind,
+            span: self.span_from(start, start_line, start_column),
+        });
+        TokenKind::CharLit(raw)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Lex a clean (no recovered errors) source and return the token stream.
+    /// Asserts that no lex errors were recorded, since these tests cover the
+    /// happy paths; recovery behaviour is covered by `tests/lexer_recovery.rs`.
+    fn tokens(source: &str) -> Vec<Token> {
+        let r = lex(source);
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
+        r.tokens
+    }
 
     #[test]
     fn test_is_valid_ident() {
@@ -1243,8 +1274,7 @@ mod tests {
 
     #[test]
     fn test_simple_tokens() {
-        let mut lexer = Lexer::new("fn main() { }");
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = tokens("fn main() { }");
 
         assert!(matches!(tokens[0].kind, TokenKind::Fn));
         assert!(matches!(&tokens[1].kind, TokenKind::Ident(s) if s == "main"));
@@ -1258,8 +1288,7 @@ mod tests {
     #[test]
     fn test_use_statement() {
         // Test the new ESM-like import syntax
-        let mut lexer = Lexer::new(r#"use {println} from "core:cli";"#);
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = tokens(r#"use {println} from "core:cli";"#);
 
         assert!(matches!(tokens[0].kind, TokenKind::Use));
         assert!(matches!(tokens[1].kind, TokenKind::LBrace));
@@ -1272,21 +1301,21 @@ mod tests {
 
     #[test]
     fn test_string_literal() {
-        let mut lexer = Lexer::new(r#""Hello, world!""#);
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = tokens(r#""Hello, world!""#);
 
         assert!(matches!(&tokens[0].kind, TokenKind::StringLit(raw) if raw == "Hello, world!"));
     }
 
     #[test]
     fn test_comments() {
-        let mut lexer = Lexer::new("// comment\nfn");
-        let tokens = lexer.tokenize().unwrap();
+        let r = lex("// comment\nfn");
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
+        let tokens = &r.tokens;
 
         assert!(matches!(tokens[0].kind, TokenKind::Fn));
 
         // Comments should be collected, not discarded
-        let comments = lexer.comments();
+        let comments = &r.comments;
         assert_eq!(comments.len(), 1);
         assert_eq!(comments[0].text, " comment");
         assert_eq!(comments[0].kind, CommentKind::Line);
@@ -1294,12 +1323,13 @@ mod tests {
 
     #[test]
     fn test_block_comments() {
-        let mut lexer = Lexer::new("/* block comment */fn");
-        let tokens = lexer.tokenize().unwrap();
+        let r = lex("/* block comment */fn");
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
+        let tokens = &r.tokens;
 
         assert!(matches!(tokens[0].kind, TokenKind::Fn));
 
-        let comments = lexer.comments();
+        let comments = &r.comments;
         assert_eq!(comments.len(), 1);
         assert_eq!(comments[0].text, " block comment ");
         assert_eq!(comments[0].kind, CommentKind::Block);
@@ -1307,12 +1337,13 @@ mod tests {
 
     #[test]
     fn test_multiline_block_comment() {
-        let mut lexer = Lexer::new("/*\n * multi-line\n * comment\n */\nfn");
-        let tokens = lexer.tokenize().unwrap();
+        let r = lex("/*\n * multi-line\n * comment\n */\nfn");
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
+        let tokens = &r.tokens;
 
         assert!(matches!(tokens[0].kind, TokenKind::Fn));
 
-        let comments = lexer.comments();
+        let comments = &r.comments;
         assert_eq!(comments.len(), 1);
         assert!(comments[0].text.contains("multi-line"));
         assert!(comments[0].text.contains("comment"));
@@ -1321,12 +1352,13 @@ mod tests {
 
     #[test]
     fn test_multiple_comments() {
-        let mut lexer = Lexer::new("// first\n/* second */\n// third\nfn");
-        let tokens = lexer.tokenize().unwrap();
+        let r = lex("// first\n/* second */\n// third\nfn");
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
+        let tokens = &r.tokens;
 
         assert!(matches!(tokens[0].kind, TokenKind::Fn));
 
-        let comments = lexer.comments();
+        let comments = &r.comments;
         assert_eq!(comments.len(), 3);
         assert_eq!(comments[0].text, " first");
         assert_eq!(comments[0].kind, CommentKind::Line);
@@ -1338,13 +1370,13 @@ mod tests {
 
     #[test]
     fn test_trailing_comment() {
-        let mut lexer = Lexer::new("fn main() { } // trailing comment");
-        let tokens = lexer.tokenize().unwrap();
+        let r = lex("fn main() { } // trailing comment");
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
 
         // Find the function tokens
-        assert!(matches!(tokens[0].kind, TokenKind::Fn));
+        assert!(matches!(r.tokens[0].kind, TokenKind::Fn));
 
-        let comments = lexer.comments();
+        let comments = &r.comments;
         assert_eq!(comments.len(), 1);
         assert_eq!(comments[0].text, " trailing comment");
         // The comment should be on the same line as the code
@@ -1356,15 +1388,16 @@ mod tests {
         let source = r"fn main() { }
 __DATA__
 hello world";
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().unwrap();
+        let r = lex(source);
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
+        let tokens = &r.tokens;
 
         // Should have parsed the function tokens and EOF
         assert!(matches!(tokens[0].kind, TokenKind::Fn));
         assert!(matches!(tokens.last().unwrap().kind, TokenKind::Eof));
 
         // Should have captured the data section
-        assert_eq!(lexer.data_section(), Some("hello world"));
+        assert_eq!(r.data_section.as_deref(), Some("hello world"));
     }
 
     #[test]
@@ -1374,10 +1407,10 @@ __DATA__
 line 1
 line 2
 line 3";
-        let mut lexer = Lexer::new(source);
-        lexer.tokenize().unwrap();
+        let r = lex(source);
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
 
-        assert_eq!(lexer.data_section(), Some("line 1\nline 2\nline 3"));
+        assert_eq!(r.data_section.as_deref(), Some("line 1\nline 2\nline 3"));
     }
 
     #[test]
@@ -1388,10 +1421,10 @@ __DATA__
   "exit": 0,
   "stdout": "Hello\n"
 }"#;
-        let mut lexer = Lexer::new(source);
-        lexer.tokenize().unwrap();
+        let r = lex(source);
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
 
-        let data = lexer.data_section().unwrap();
+        let data = r.data_section.as_deref().unwrap();
         assert!(data.contains("\"exit\": 0"));
         assert!(data.contains("\"stdout\": \"Hello\\n\""));
     }
@@ -1399,44 +1432,45 @@ __DATA__
     #[test]
     fn test_data_section_empty() {
         let source = "fn main() { }\n__DATA__\n";
-        let mut lexer = Lexer::new(source);
-        lexer.tokenize().unwrap();
+        let r = lex(source);
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
 
         // Empty data section should be Some("")
-        assert_eq!(lexer.data_section(), Some(""));
+        assert_eq!(r.data_section.as_deref(), Some(""));
     }
 
     #[test]
     fn test_no_data_section() {
         let source = "fn main() { }";
-        let mut lexer = Lexer::new(source);
-        lexer.tokenize().unwrap();
+        let r = lex(source);
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
 
-        assert_eq!(lexer.data_section(), None);
+        assert_eq!(r.data_section.as_deref(), None);
     }
 
     #[test]
     fn test_data_section_not_at_start_of_line() {
         // __DATA__ in the middle of a line should not be recognized
         let source = "let x = __DATA__;";
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().unwrap();
+        let r = lex(source);
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
 
         // Should parse __DATA__ as an identifier
         assert!(
-            tokens
+            r.tokens
                 .iter()
                 .any(|t| matches!(&t.kind, TokenKind::Ident(s) if s == "__DATA__"))
         );
-        assert_eq!(lexer.data_section(), None);
+        assert_eq!(r.data_section.as_deref(), None);
     }
 
     #[test]
     fn test_data_section_with_trailing_content() {
         // __DATA__ with content on the same line should not be recognized
         let source = "fn main() { }\n__DATA__ some content";
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().unwrap();
+        let r = lex(source);
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
+        let tokens = &r.tokens;
 
         // Should parse __DATA__ as an identifier since it's not on its own line
         assert!(
@@ -1444,7 +1478,7 @@ __DATA__
                 .iter()
                 .any(|t| matches!(&t.kind, TokenKind::Ident(s) if s == "__DATA__"))
         );
-        assert_eq!(lexer.data_section(), None);
+        assert_eq!(r.data_section.as_deref(), None);
     }
 
     #[test]
@@ -1453,27 +1487,26 @@ __DATA__
 fn main() { }
 __DATA__
 test data";
-        let mut lexer = Lexer::new(source);
-        lexer.tokenize().unwrap();
+        let r = lex(source);
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
 
-        assert_eq!(lexer.data_section(), Some("test data"));
+        assert_eq!(r.data_section.as_deref(), Some("test data"));
     }
 
     #[test]
     fn test_into_data_section() {
         let source = "fn main() { }\n__DATA__\nowned data";
-        let mut lexer = Lexer::new(source);
-        lexer.tokenize().unwrap();
+        let r = lex(source);
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
 
-        let data = lexer.into_data_section();
+        let data = r.data_section;
         assert_eq!(data, Some("owned data".to_string()));
     }
 
     #[test]
     fn test_shebang_basic() {
         let source = "#!/usr/bin/env wado\nfn main() { }";
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = tokens(source);
 
         // Shebang should be completely skipped
         assert!(matches!(tokens[0].kind, TokenKind::Fn));
@@ -1483,8 +1516,7 @@ test data";
     #[test]
     fn test_shebang_with_args() {
         let source = "#!/usr/bin/wado --some-flag\nfn test() { }";
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = tokens(source);
 
         assert!(matches!(tokens[0].kind, TokenKind::Fn));
     }
@@ -1493,8 +1525,7 @@ test data";
     fn test_no_shebang() {
         // Regular code without shebang
         let source = "fn main() { }";
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = tokens(source);
 
         assert!(matches!(tokens[0].kind, TokenKind::Fn));
     }
@@ -1503,8 +1534,7 @@ test data";
     fn test_hash_not_shebang() {
         // Hash on first line but not shebang (no !)
         let source = "#[attr]\nfn main() { }";
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = tokens(source);
 
         // Should parse # as Hash token, not skip as shebang
         assert!(matches!(tokens[0].kind, TokenKind::Hash));
@@ -1514,8 +1544,7 @@ test data";
     fn test_inner_attribute_not_shebang() {
         // #![ is an inner attribute, not a shebang
         let source = "#![no_prelude]\nfn main() { }";
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = tokens(source);
 
         // Should parse #, !, [ as tokens, not skip as shebang
         assert!(matches!(tokens[0].kind, TokenKind::Hash));
@@ -1527,8 +1556,7 @@ test data";
     fn test_shebang_not_on_first_line() {
         // #! on second line should be parsed as Hash + Not, not skipped as shebang
         let source = "fn main() { }\n#!/usr/bin/wado";
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = tokens(source);
 
         // Should find Hash and Not tokens after the function
         let has_hash = tokens.iter().any(|t| matches!(t.kind, TokenKind::Hash));
@@ -1540,32 +1568,29 @@ test data";
     #[test]
     fn test_shebang_with_data_section() {
         let source = "#!/usr/bin/env wado\nfn main() { }\n__DATA__\ntest data";
-        let mut lexer = Lexer::new(source);
-        lexer.tokenize().unwrap();
+        let r = lex(source);
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
 
-        assert_eq!(lexer.data_section(), Some("test data"));
+        assert_eq!(r.data_section.as_deref(), Some("test data"));
     }
 
     #[test]
     fn test_dot_dot_token() {
-        let mut lexer = Lexer::new("..x");
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = tokens("..x");
         assert!(matches!(tokens[0].kind, TokenKind::DotDot));
         assert!(matches!(&tokens[1].kind, TokenKind::Ident(s) if s == "x"));
     }
 
     #[test]
     fn test_dot_dot_dot_token() {
-        let mut lexer = Lexer::new("...x");
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = tokens("...x");
         assert!(matches!(tokens[0].kind, TokenKind::DotDotDot));
         assert!(matches!(&tokens[1].kind, TokenKind::Ident(s) if s == "x"));
     }
 
     #[test]
     fn test_dot_dot_lt_token() {
-        let mut lexer = Lexer::new("0..<10");
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = tokens("0..<10");
         assert!(matches!(&tokens[0].kind, TokenKind::NumberLit(s) if s == "0"));
         assert!(matches!(tokens[1].kind, TokenKind::DotDotLt));
         assert!(matches!(&tokens[2].kind, TokenKind::NumberLit(s) if s == "10"));
@@ -1573,8 +1598,7 @@ test data";
 
     #[test]
     fn test_dot_dot_eq_token() {
-        let mut lexer = Lexer::new("1..=10");
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = tokens("1..=10");
         assert!(matches!(&tokens[0].kind, TokenKind::NumberLit(s) if s == "1"));
         assert!(matches!(tokens[1].kind, TokenKind::DotDotEq));
         assert!(matches!(&tokens[2].kind, TokenKind::NumberLit(s) if s == "10"));
@@ -1582,8 +1606,7 @@ test data";
 
     #[test]
     fn test_dot_dot_lt_with_chars() {
-        let mut lexer = Lexer::new("'a'..='z'");
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = tokens("'a'..='z'");
         assert!(matches!(&tokens[0].kind, TokenKind::CharLit(s) if s == "a"));
         assert!(matches!(tokens[1].kind, TokenKind::DotDotEq));
         assert!(matches!(&tokens[2].kind, TokenKind::CharLit(s) if s == "z"));
@@ -1591,8 +1614,7 @@ test data";
 
     #[test]
     fn test_single_dot_followed_by_ident() {
-        let mut lexer = Lexer::new("a.b");
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = tokens("a.b");
         assert!(matches!(&tokens[0].kind, TokenKind::Ident(s) if s == "a"));
         assert!(matches!(tokens[1].kind, TokenKind::Dot));
         assert!(matches!(&tokens[2].kind, TokenKind::Ident(s) if s == "b"));

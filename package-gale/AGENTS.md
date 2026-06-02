@@ -31,13 +31,22 @@ The parser must still recognize these constructs (so files containing them parse
 
 When fixing or extending the g4 frontend:
 
-- Cross-check the canonical semantics against `vendor/antlr4/tool/src/org/antlr/v4/parse/ANTLRParser.g` and the curated doc index below.
 - Drive every change with a unit test in `src/g4/{lexer,parser}_test.wado` (TDD: failing test first, then implementation).
-- If an existing test encodes a wrong expectation that diverges from ANTLR4, fix the test — the spec wins.
+- If an existing test encodes a wrong expectation that diverges from ANTLR4, fix the test — the spec wins. Use the published `antlr-4.13.2-complete.jar` as a black-box oracle to confirm the expectation (see "License hygiene" below); do not read ANTLR4's implementation source to figure out what the right answer is.
 
 ## ANTLR4 Reference
 
-The upstream ANTLR4 source — including its full documentation and the `LICENSE.txt` (BSD 3-Clause) — is vendored as a shallow git submodule at `vendor/antlr4/`. Read it directly when you need the canonical semantics of a `.g4` construct; do not duplicate the docs into this repo.
+The upstream ANTLR4 source is vendored as a shallow git submodule at `vendor/antlr4/` for two reasons: (1) the `runtime-testsuite/` descriptor corpus drives Gale's Stage A / Stage B regression tests, and (2) the JVM tool can be built locally as a black-box oracle for behavior verification. The vendored tree is **not** intended as a reading reference for implementation details — see "License hygiene" below.
+
+### License hygiene — what you may read from `vendor/antlr4/`
+
+Gale ships under its own license. ANTLR4 is BSD-3, but copying or paraphrasing its implementation creates a derivative-work risk for Gale. Therefore, while developing Gale:
+
+- **DO NOT read** ANTLR4 implementation source: `vendor/antlr4/tool/**/*.{java,g}` and `vendor/antlr4/runtime/**/*.java` (and the same content under any other path). This includes `ParserATNSimulator.java`, `ATNConfig.java`, `LL1Analyzer.java`, and the bootstrap `.g` grammars under `tool/`. Algorithmic ideas inferred from reading the source belong to ANTLR4, not Gale.
+- **OK to read**: `.g4` files anywhere under `vendor/antlr4/` (test-descriptor grammars, sample grammars). A `.g4` is data in the language Gale targets, not ANTLR4 implementation — reading one teaches you the user-facing grammar language, not how ANTLR4 internally implements parsing.
+- **OK to read**: `vendor/antlr4/runtime-testsuite/**/*.txt` (test descriptors — observed input/output).
+- **OK to run**: the published `antlr-4.13.2-complete.jar` from antlr.org on grammars + inputs to observe its behavior as a black box. This is clean-room oracle measurement and does not contaminate Gale.
+- **OK to read**: `vendor/antlr4/doc/*.md`. These are prose describing the grammar / lexer / parser-rule semantics — effectively a third-party language spec, not implementation code. Refer to them when you need the canonical meaning of a `.g4` construct, but do not copy the text into this repo verbatim.
 
 Initialize the submodule (first time only):
 
@@ -65,7 +74,7 @@ See [`antlr4-compatibility.md`](./antlr4-compatibility.md) for the pipeline mech
 
 ### Curated doc index
 
-These are the upstream pages that matter most when working on the g4 parser, the lexer/parser code generator, or the runtime. Read them in roughly this order when ramping up.
+These are the upstream pages that matter most when working on the g4 parser or the lexer/parser code generator. Read them in roughly this order when ramping up. Per the License-hygiene rule above, prose `doc/*.md` pages are spec-like and OK to consult; the implementation source under `tool/` and `runtime/` remains off-limits.
 
 | File                                                                                                | Why it matters for Gale                                                                                |
 | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
@@ -87,10 +96,14 @@ For everything else, browse `vendor/antlr4/doc/` directly.
 `gale dump` lowers the grammar to GIR and prints a readable, per-rule
 report of the actual prediction decisions — rule shape (Simple /
 MultiAlt: Direct / MultiAlt: Tournament / LeftRecursive), per-alt first
-sets, repeat strategies, follow-variants, and inlined prediction
-warnings — followed by a summary of every warning. It reflects what the
-emitter sees, not the raw surface IR. There are no options; multiple
-files are merged the same as `gale gen`.
+sets, the per-overlap-group `PredictionNode` tree (Consume / Dispatch /
+Leaf / Ambiguous, mirroring `build_prediction` in `parser_gen.wado`),
+repeat strategies, follow-variants, and inlined prediction warnings —
+followed by a summary of every warning. It reflects what the emitter
+sees, not the raw surface IR. ATN-class decisions where static
+prediction cannot disambiguate surface as `Ambiguous([alt N, alt M])`
+under the relevant rule's `prediction:` section. There are no options;
+multiple files are merged the same as `gale gen`.
 
 (note: each `wado` command is actually `cargo run --bin wado`)
 
@@ -319,8 +332,8 @@ each site.
    `tests/grammars/ll_wildcard_alt.g4`.
 
 Beyond what static FOLLOW + K-prefix can decide, runtime ATN
-simulation is the only complete answer
-(`vendor/antlr4/runtime/Java/src/org/antlr/v4/runtime/atn/ParserATNSimulator.java`).
+simulation is the only complete answer (ANTLR4 implements one in
+its runtime; do not read it — see "License hygiene" above).
 Remaining gaps are tracked in [`TODO.md`](./TODO.md).
 
 ## Failed Approaches (Do Not Repeat)
@@ -363,4 +376,4 @@ Remaining gaps are tracked in [`TODO.md`](./TODO.md).
 
 - Static analysis can't distinguish "tail-greedy that should yield to caller" from "tail-greedy that legitimately re-enters." The conservative side is silent failure (variant doesn't fire); the unsound side is broken parses.
 - Each LL repair must be paired with a regression fixture covering the rejection case, not just the hit case — otherwise the next contributor relaxes the guard and quietly breaks `htmlContent` / `selector` again.
-- The ANTLR4 `ParserATNSimulator`'s closure / DFA cache exists precisely because a single global rule cannot decide "should this token be consumed here or by my caller?". A static repair will always have edges; pick the edge that matches today's grammar set and add a fixture so it stays the edge.
+- A single global rule cannot decide "should this token be consumed here or by my caller?" — that's why a runtime simulator (closure / DFA cache, as used in ANTLR4) is the complete answer (out of scope to inspect; see "License hygiene" above). A static repair will always have edges; pick the edge that matches today's grammar set and add a fixture so it stays the edge.

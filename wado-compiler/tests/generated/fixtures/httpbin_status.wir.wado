@@ -719,19 +719,19 @@ type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::
 
 type "functype//core:prelude/string.wado/String^Ord::cmp" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(188)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(189)
+type "functype//core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//Array<u8>";  // TypeId(189)
 
-type "functype//core:prelude/string.wado/String::is_char_boundary" = fn(ref "core:prelude/string.wado//String", i32) -> bool;  // TypeId(190)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(190)
 
-type "functype//core:prelude/string.wado/String::substr_bytes" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/string.wado//String";  // TypeId(191)
+type "functype//core:prelude/string.wado/String::is_char_boundary" = fn(ref "core:prelude/string.wado//String", i32) -> bool;  // TypeId(191)
 
-type "functype//core:prelude/string.wado/String::substr_bytes_unchecked" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/string.wado//String";  // TypeId(192)
+type "functype//core:prelude/string.wado/String::substr_bytes" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/string.wado//String";  // TypeId(192)
 
-type "functype//core:prelude/string.wado/String::starts_with" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(193)
+type "functype//core:prelude/string.wado/String::substr_bytes_unchecked" = fn(ref "core:prelude/string.wado//String", i32, i32) -> ref "core:prelude/string.wado//String";  // TypeId(193)
 
-type "functype//core:prelude/string.wado/StrSplitIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrSplitIter") -> ref null "core:prelude/string.wado//String";  // TypeId(194)
+type "functype//core:prelude/string.wado/String::starts_with" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(194)
 
-type "functype//core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//Array<u8>";  // TypeId(195)
+type "functype//core:prelude/string.wado/StrSplitIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrSplitIter") -> ref null "core:prelude/string.wado//String";  // TypeId(195)
 
 type "functype//core:json/JsonSerializer^Serializer::serialize_f64" = fn(ref "core:json//JsonSerializer", f64) -> ref null "core:serde//SerializeError";  // TypeId(196)
 
@@ -4505,6 +4505,31 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
     return 1;
 }
 
+fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
+    let __b: ref "core:prelude//Array<u8>";
+    let byte: u8;
+    let _licm_used_10: i32;
+    let _licm_repr_11: ref builtin::array<u8>;
+    let __hfs_index_12: i32;
+    __b = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+    _licm_used_10 = self.used;
+    _licm_repr_11 = self.repr;
+    __hfs_index_12 = self.index;
+    b491: block {
+        l492: loop {
+            if __hfs_index_12 >= _licm_used_10 {
+                break b491;
+            }
+            byte = builtin::array_get_u8(_licm_repr_11, __hfs_index_12);
+            __hfs_index_12 = __hfs_index_12 + 1;
+            "core:prelude/array.wado/Array<u8>::push"(__b, byte);
+            self.index = __hfs_index_12;
+            continue l492;
+        };
+    };
+    return __b;
+}
+
 fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
     let b0: u8;
     let b1_2: u32;
@@ -4705,16 +4730,36 @@ fn "core:prelude/string.wado/String::starts_with"(self, pat) {
     pat_repr = pat.repr;
     i = 0;
     _licm_repr_7 = self.repr;
+<<<<<<< HEAD
     b512: block {
         l513: loop {
+||||||| 925d9340
+    b517: block {
+        l518: loop {
+=======
+    b520: block {
+        l521: loop {
+>>>>>>> origin/main
             if i >= pat_len {
+<<<<<<< HEAD
                 break b512;
+||||||| 925d9340
+                break b517;
+=======
+                break b520;
+>>>>>>> origin/main
             }
             if builtin::array_get_u8(_licm_repr_7, i) != builtin::array_get_u8(pat_repr, i) {
                 return 0;
             }
             i = i + 1;
+<<<<<<< HEAD
             continue l513;
+||||||| 925d9340
+            continue l518;
+=======
+            continue l521;
+>>>>>>> origin/main
         };
     };
     return 1;
@@ -4739,31 +4784,77 @@ fn "core:prelude/string.wado/String::find"(self, pat) {
     limit = self.used - pat_len;
     i = 0;
     _licm_repr_10 = self.repr;
+<<<<<<< HEAD
     b518: block {
         l519: loop {
+||||||| 925d9340
+    b523: block {
+        l524: loop {
+=======
+    b526: block {
+        l527: loop {
+>>>>>>> origin/main
             if i > limit {
+<<<<<<< HEAD
                 break b518;
+||||||| 925d9340
+                break b523;
+=======
+                break b526;
+>>>>>>> origin/main
             }
             matched = 1;
             j = 0;
+<<<<<<< HEAD
             b521: block {
                 l522: loop {
+||||||| 925d9340
+            b526: block {
+                l527: loop {
+=======
+            b529: block {
+                l530: loop {
+>>>>>>> origin/main
                     if j >= pat_len {
+<<<<<<< HEAD
                         break b521;
+||||||| 925d9340
+                        break b526;
+=======
+                        break b529;
+>>>>>>> origin/main
                     }
                     if builtin::array_get_u8(_licm_repr_10, i + j) != builtin::array_get_u8(pat_repr, j) {
                         matched = 0;
+<<<<<<< HEAD
                         break b521;
+||||||| 925d9340
+                        break b526;
+=======
+                        break b529;
+>>>>>>> origin/main
                     }
                     j = j + 1;
+<<<<<<< HEAD
                     continue l522;
+||||||| 925d9340
+                    continue l527;
+=======
+                    continue l530;
+>>>>>>> origin/main
                 };
             };
             if matched {
                 return 0, i;
             }
             i = i + 1;
+<<<<<<< HEAD
             continue l519;
+||||||| 925d9340
+            continue l524;
+=======
+            continue l527;
+>>>>>>> origin/main
         };
     };
     return 1, 0;
@@ -4789,24 +4880,64 @@ fn "core:prelude/string.wado/StrSplitIter^Iterator::next"(self) {
     _licm_sep_len_13 = self.sep_len;
     _licm_repr_14 = self.repr;
     _licm_sep_repr_15 = self.sep_repr;
+<<<<<<< HEAD
     b527: block {
         l528: loop {
+||||||| 925d9340
+    b532: block {
+        l533: loop {
+=======
+    b535: block {
+        l536: loop {
+>>>>>>> origin/main
             if i > limit {
+<<<<<<< HEAD
                 break b527;
+||||||| 925d9340
+                break b532;
+=======
+                break b535;
+>>>>>>> origin/main
             }
             matched = 1;
             j = 0;
+<<<<<<< HEAD
             b530: block {
                 l531: loop {
+||||||| 925d9340
+            b535: block {
+                l536: loop {
+=======
+            b538: block {
+                l539: loop {
+>>>>>>> origin/main
                     if j >= _licm_sep_len_13 {
+<<<<<<< HEAD
                         break b530;
+||||||| 925d9340
+                        break b535;
+=======
+                        break b538;
+>>>>>>> origin/main
                     }
                     if builtin::array_get_u8(_licm_repr_14, i + j) != builtin::array_get_u8(_licm_sep_repr_15, j) {
                         matched = 0;
+<<<<<<< HEAD
                         break b530;
+||||||| 925d9340
+                        break b535;
+=======
+                        break b538;
+>>>>>>> origin/main
                     }
                     j = j + 1;
+<<<<<<< HEAD
                     continue l531;
+||||||| 925d9340
+                    continue l536;
+=======
+                    continue l539;
+>>>>>>> origin/main
                 };
             };
             if matched {
@@ -4817,7 +4948,13 @@ fn "core:prelude/string.wado/StrSplitIter^Iterator::next"(self) {
                 return struct.new "core:prelude/string.wado//String" { repr: part_6, used: len_5 };
             }
             i = i + 1;
+<<<<<<< HEAD
             continue l528;
+||||||| 925d9340
+            continue l533;
+=======
+            continue l536;
+>>>>>>> origin/main
         };
     };
     len_7 = self.used - self.pos;
@@ -4827,6 +4964,7 @@ fn "core:prelude/string.wado/StrSplitIter^Iterator::next"(self) {
     return struct.new "core:prelude/string.wado//String" { repr: part_8, used: len_7 };
 }
 
+<<<<<<< HEAD
 fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
     let __b: ref "core:prelude//Array<u8>";
     let byte: u8;
@@ -4852,6 +4990,34 @@ fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
     return __b;
 }
 
+||||||| 925d9340
+fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
+    let __b: ref "core:prelude//Array<u8>";
+    let byte: u8;
+    let _licm_used_10: i32;
+    let _licm_repr_11: ref builtin::array<u8>;
+    let __hfs_index_12: i32;
+    __b = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+    _licm_used_10 = self.used;
+    _licm_repr_11 = self.repr;
+    __hfs_index_12 = self.index;
+    b540: block {
+        l541: loop {
+            if __hfs_index_12 >= _licm_used_10 {
+                break b540;
+            }
+            byte = builtin::array_get_u8(_licm_repr_11, __hfs_index_12);
+            __hfs_index_12 = __hfs_index_12 + 1;
+            "core:prelude/array.wado/Array<u8>::push"(__b, byte);
+            self.index = __hfs_index_12;
+            continue l541;
+        };
+    };
+    return __b;
+}
+
+=======
+>>>>>>> origin/main
 fn "core:json/JsonSerializer^Serializer::serialize_f64"(self, v) {
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";

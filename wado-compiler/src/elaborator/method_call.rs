@@ -800,6 +800,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_names,
                 param_defaults,
                 return_type,
+                method_type_args.clone(),
             );
             // Side-channel for synthetic callers (Gap 6 of Stage 5):
             // for-of's `.into_iter()` / `.next()` dispatches pass
@@ -1196,6 +1197,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 args[0].type_id,
                 args.into_iter().next().unwrap(),
                 static_call.span,
+                static_call.id,
             );
         }
 

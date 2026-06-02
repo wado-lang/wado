@@ -14,9 +14,8 @@ use t from "../../grammars/SemPredEvalParser/PredFromAltTestedInLoopBack_1.g4"
     };
 use { normalize_tree } from "../../grammars/SemPredEvalParser/PredFromAltTestedInLoopBack_1.g4";
 
-
-// triage: Stage B test parse fails with Result::Err — semantic predicate enforcement is Stage C
 #[TODO]
+// triage: Stage B test parse fails with Result::Err — semantic predicate enforcement is Stage C
 test "stage_b: SemPredEvalParser/PredFromAltTestedInLoopBack_1" {
     let input = "s
 
@@ -24,7 +23,7 @@ test "stage_b: SemPredEvalParser/PredFromAltTestedInLoopBack_1" {
 x
 ";
     let expected = "(file_ (para (paraContent s) \\n \\n) (para (paraContent \\n x \\n)))";
-    let root = t::parse(&input).unwrap();
+    let root = t::parse_file_(&input).unwrap();
     let actual = t::to_tree(&root).to_string_tree();
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;

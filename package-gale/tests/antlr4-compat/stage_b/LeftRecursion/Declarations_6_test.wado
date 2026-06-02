@@ -17,7 +17,7 @@ use { normalize_tree } from "../../grammars/LeftRecursion/Declarations_6.g4";
 test "stage_b: LeftRecursion/Declarations_6" {
     let input = "(a)";
     let expected = "(s (declarator ( (declarator a) )))";
-    let root = t::parse(&input).unwrap();
+    let root = t::parse_s(&input).unwrap();
     let actual = t::to_tree(&root).to_string_tree();
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;

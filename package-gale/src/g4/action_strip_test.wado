@@ -1,0 +1,100 @@
+use { strip_action_bodies } from "./action_strip.wado";
+
+test "strip: removes simple inline action body" {
+    let g = "myRule : 'a' { writeln(\"x\"); } 'b' ;";
+    let result = strip_action_bodies(&g);
+    assert result == "myRule : 'a'  'b' ;", `got '{result}'`;
+}
+
+test "strip: removes semantic predicate including the '?' suffix" {
+    let g = "myRule : { isOk() }? 'a' ;";
+    let result = strip_action_bodies(&g);
+    assert result == "myRule :  'a' ;", `got '{result}'`;
+}
+
+test "strip: removes @header / @members named actions" {
+    let g = "grammar T;\n@header { import java.util.*; }\n@members { int x = 0; }\nstart : 'a' ;";
+    let result = strip_action_bodies(&g);
+    let expected = "grammar T;\n\n\nstart : 'a' ;";
+    assert result == expected, `got '{result}'`;
+}
+
+test "strip: removes @scope::name actions" {
+    let g = "@parser::members { void foo() {} }\nstart : 'a' ;";
+    let result = strip_action_bodies(&g);
+    let expected = "\nstart : 'a' ;";
+    assert result == expected, `got '{result}'`;
+}
+
+test "strip: keeps tokens { ... } grammar prequel" {
+    let g = "grammar T;\ntokens { TK_A, TK_B }\nstart : TK_A ;";
+    let result = strip_action_bodies(&g);
+    assert result == g, `tokens block was modified: '{result}'`;
+}
+
+test "strip: keeps options { ... } grammar prequel" {
+    let g = "grammar T;\noptions { caseInsensitive = true; }\nstart : 'a' ;";
+    let result = strip_action_bodies(&g);
+    assert result == g, `options block was modified: '{result}'`;
+}
+
+test "strip: keeps channels { ... } grammar prequel" {
+    let g = "grammar T;\nchannels { COMMENTS, WHITESPACE }\nstart : 'a' ;";
+    let result = strip_action_bodies(&g);
+    assert result == g, `channels block was modified: '{result}'`;
+}
+
+test "strip: preserves brace inside string literal" {
+    let g = "BRACE : '{' ;";
+    let result = strip_action_bodies(&g);
+    assert result == g, `string-literal brace was treated as action: '{result}'`;
+}
+
+test "strip: preserves brace inside character class" {
+    let g = "WS : [ \\t\\n{}]+ ;";
+    let result = strip_action_bodies(&g);
+    assert result == g, `char-class braces were treated as action: '{result}'`;
+}
+
+test "strip: preserves brace inside line comment" {
+    let g = "// comment with { brace }\nstart : 'a' ;";
+    let result = strip_action_bodies(&g);
+    assert result == g, `line-comment was modified: '{result}'`;
+}
+
+test "strip: preserves brace inside block comment" {
+    let g = "/* { not an action } */\nstart : 'a' ;";
+    let result = strip_action_bodies(&g);
+    assert result == g, `block-comment was modified: '{result}'`;
+}
+
+test "strip: removes catch [...] { ... } handlers" {
+    let g = "start : 'a' ; catch [Exception e] { handle(e); }";
+    let result = strip_action_bodies(&g);
+    assert result == "start : 'a' ; ", `got '{result}'`;
+}
+
+test "strip: removes finally { ... } handlers" {
+    let g = "start : 'a' ; finally { cleanup(); }";
+    let result = strip_action_bodies(&g);
+    assert result == "start : 'a' ; ", `got '{result}'`;
+}
+
+test "strip: balances nested braces inside an action body" {
+    let g = "myRule : 'a' { if (x) { foo(); } } 'b' ;";
+    let result = strip_action_bodies(&g);
+    assert result == "myRule : 'a'  'b' ;", `got '{result}'`;
+}
+
+test "strip: respects string literals inside an action body" {
+    let g = "myRule : 'a' { String s = \"}\"; } 'b' ;";
+    let result = strip_action_bodies(&g);
+    assert result == "myRule : 'a'  'b' ;", `got '{result}'`;
+}
+
+test "strip: IfIfElseNonGreedyBinding1 — the descriptor that motivated this" {
+    let g = "grammar T;\nstart : statement+ ;\nstatement : 'x' | ifStatement;\nifStatement : 'if' 'y' statement ('else' statement)?? {\n<writeln(\"$text\")>\n};\nID : 'a'..'z'+ ;\nWS : (' '|'\\n') -> channel(HIDDEN);\n";
+    let result = strip_action_bodies(&g);
+    let expected = "grammar T;\nstart : statement+ ;\nstatement : 'x' | ifStatement;\nifStatement : 'if' 'y' statement ('else' statement)?? ;\nID : 'a'..'z'+ ;\nWS : (' '|'\\n') -> channel(HIDDEN);\n";
+    assert result == expected, `got '{result}'`;
+}

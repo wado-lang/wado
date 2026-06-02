@@ -1,0 +1,332 @@
+//! Action-body stripper for ANTLR4 grammar source.
+//!
+//! The published ANTLR4 jar's Java target copies action-body source
+//! into the generated parser verbatim — it does not substitute the
+//! StringTemplate directives the testsuite uses (`<writeln("$text")>`,
+//! etc.). `javac` then rejects the body, making the oracle uninvocable.
+//! Stripping action bodies before handing the grammar to the oracle
+//! works because actions are side-effecting host code; they don't
+//! affect what the parser matches.
+
+pub fn strip_action_bodies(grammar: &String) -> String {
+    let chars: Array<char> = grammar.chars().collect();
+    let n = chars.len();
+    let mut out = String::with_capacity(grammar.len());
+    let mut i = 0;
+    while i < n {
+        let c = chars[i];
+        if c == '\'' {
+            // `.g4` lexer doesn't recognise `"..."` outside actions, so
+            // only single-quote strings need top-level skip protection.
+            out.push(c);
+            i += 1;
+            while i < n {
+                let cc = chars[i];
+                out.push(cc);
+                i += 1;
+                if cc == '\\' && i < n {
+                    out.push(chars[i]);
+                    i += 1;
+                    continue;
+                }
+                if cc == '\'' {
+                    break;
+                }
+            }
+            continue;
+        }
+        if c == '[' {
+            // Treat `[...]` as transparent: char-class brackets, rule
+            // args, and `catch [...]` brackets never legitimately
+            // contain action-body `{`s.
+            out.push(c);
+            i += 1;
+            let mut depth = 1;
+            while i < n && depth > 0 {
+                let cc = chars[i];
+                out.push(cc);
+                i += 1;
+                if cc == '\\' && i < n {
+                    out.push(chars[i]);
+                    i += 1;
+                    continue;
+                }
+                if cc == '[' {
+                    depth += 1;
+                } else if cc == ']' {
+                    depth -= 1;
+                }
+            }
+            continue;
+        }
+        if c == '/' && i + 1 < n && chars[i + 1] == '/' {
+            while i < n && chars[i] != '\n' {
+                out.push(chars[i]);
+                i += 1;
+            }
+            continue;
+        }
+        if c == '/' && i + 1 < n && chars[i + 1] == '*' {
+            out.push(chars[i]);
+            out.push(chars[i + 1]);
+            i += 2;
+            while i < n {
+                let cc = chars[i];
+                out.push(cc);
+                i += 1;
+                if cc == '*' && i < n && chars[i] == '/' {
+                    out.push(chars[i]);
+                    i += 1;
+                    break;
+                }
+            }
+            continue;
+        }
+        if c == '@' {
+            // Named actions: `@id { … }` or `@scope::id { … }`. Strip
+            // the prefix and its body together. If no `{` follows,
+            // fall through and copy the `@` verbatim.
+            let saved = i;
+            let mut j = i + 1;
+            if j < n && is_id_start_char(chars[j]) {
+                j += 1;
+                while j < n && is_id_continue_char(chars[j]) {
+                    j += 1;
+                }
+                if j + 1 < n && chars[j] == ':' && chars[j + 1] == ':' {
+                    j += 2;
+                    if j < n && is_id_start_char(chars[j]) {
+                        j += 1;
+                        while j < n && is_id_continue_char(chars[j]) {
+                            j += 1;
+                        }
+                    }
+                }
+                while j < n && is_whitespace_char(chars[j]) {
+                    j += 1;
+                }
+                if j < n && chars[j] == '{' {
+                    let body_end = find_balanced_close(&chars, j);
+                    if body_end > 0 {
+                        i = body_end + 1;
+                        continue;
+                    }
+                }
+            }
+            i = saved;
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        if c == 'c' && starts_with_word(&chars, i, &"catch") {
+            let mut j = i + 5;
+            while j < n && is_whitespace_char(chars[j]) {
+                j += 1;
+            }
+            if j < n && chars[j] == '[' {
+                let bracket_end = find_balanced_close_bracket(&chars, j);
+                if bracket_end > 0 {
+                    let mut k = bracket_end + 1;
+                    while k < n && is_whitespace_char(chars[k]) {
+                        k += 1;
+                    }
+                    if k < n && chars[k] == '{' {
+                        let body_end = find_balanced_close(&chars, k);
+                        if body_end > 0 {
+                            i = body_end + 1;
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+        if c == 'f' && starts_with_word(&chars, i, &"finally") {
+            let mut j = i + 7;
+            while j < n && is_whitespace_char(chars[j]) {
+                j += 1;
+            }
+            if j < n && chars[j] == '{' {
+                let body_end = find_balanced_close(&chars, j);
+                if body_end > 0 {
+                    i = body_end + 1;
+                    continue;
+                }
+            }
+        }
+        if c == '{' {
+            // `tokens { … }`, `options { … }`, `channels { … }` are
+            // grammar prequels, not action bodies — keep them.
+            if preceded_by_prequel_keyword(&out) {
+                out.push(c);
+                i += 1;
+                continue;
+            }
+            let body_end = find_balanced_close(&chars, i);
+            if body_end < 0 {
+                out.push(c);
+                i += 1;
+                continue;
+            }
+            let mut k = body_end + 1;
+            // `{…}?` is a semantic predicate — strip the `?` too.
+            if k < n && chars[k] == '?' {
+                k += 1;
+            }
+            i = k;
+            continue;
+        }
+        out.push(c);
+        i += 1;
+    }
+    return out;
+}
+
+fn is_id_start_char(c: char) -> bool {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+}
+
+fn is_id_continue_char(c: char) -> bool {
+    return is_id_start_char(c) || (c >= '0' && c <= '9');
+}
+
+fn is_whitespace_char(c: char) -> bool {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+fn starts_with_word(chars: &Array<char>, i: i32, word: &String) -> bool {
+    let w: Array<char> = word.chars().collect();
+    let wn = w.len();
+    if i + wn > chars.len() {
+        return false;
+    }
+    if i > 0 && is_id_continue_char(chars[i - 1]) {
+        return false;
+    }
+    for let mut k = 0; k < wn; k += 1 {
+        if chars[i + k] != w[k] {
+            return false;
+        }
+    }
+    if i + wn < chars.len() && is_id_continue_char(chars[i + wn]) {
+        return false;
+    }
+    return true;
+}
+
+fn find_balanced_close(chars: &Array<char>, open_idx: i32) -> i32 {
+    let n = chars.len();
+    let mut depth = 1;
+    let mut i = open_idx + 1;
+    while i < n {
+        let c = chars[i];
+        if c == '\'' {
+            i += 1;
+            while i < n {
+                let cc = chars[i];
+                i += 1;
+                if cc == '\\' && i < n {
+                    i += 1;
+                    continue;
+                }
+                if cc == '\'' {
+                    break;
+                }
+            }
+            continue;
+        }
+        if c == '"' {
+            i += 1;
+            while i < n {
+                let cc = chars[i];
+                i += 1;
+                if cc == '\\' && i < n {
+                    i += 1;
+                    continue;
+                }
+                if cc == '"' {
+                    break;
+                }
+            }
+            continue;
+        }
+        if c == '/' && i + 1 < n && chars[i + 1] == '/' {
+            while i < n && chars[i] != '\n' {
+                i += 1;
+            }
+            continue;
+        }
+        if c == '/' && i + 1 < n && chars[i + 1] == '*' {
+            i += 2;
+            while i + 1 < n {
+                if chars[i] == '*' && chars[i + 1] == '/' {
+                    i += 2;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+        if c == '{' {
+            depth += 1;
+        } else if c == '}' {
+            depth -= 1;
+            if depth == 0 {
+                return i;
+            }
+        }
+        i += 1;
+    }
+    return -1;
+}
+
+fn find_balanced_close_bracket(chars: &Array<char>, open_idx: i32) -> i32 {
+    let n = chars.len();
+    let mut depth = 1;
+    let mut i = open_idx + 1;
+    while i < n {
+        let c = chars[i];
+        if c == '\\' && i + 1 < n {
+            i += 2;
+            continue;
+        }
+        if c == '[' {
+            depth += 1;
+        } else if c == ']' {
+            depth -= 1;
+            if depth == 0 {
+                return i;
+            }
+        }
+        i += 1;
+    }
+    return -1;
+}
+
+fn preceded_by_prequel_keyword(out: &String) -> bool {
+    let out_chars: Array<char> = out.chars().collect();
+    let mut j = out_chars.len();
+    while j > 0 && is_whitespace_char(out_chars[j - 1]) {
+        j -= 1;
+    }
+    return ends_with_word(&out_chars, j, &"tokens")
+        || ends_with_word(&out_chars, j, &"options")
+        || ends_with_word(&out_chars, j, &"channels");
+}
+
+fn ends_with_word(chars: &Array<char>, end: i32, word: &String) -> bool {
+    let w: Array<char> = word.chars().collect();
+    let wn = w.len();
+    if end < wn {
+        return false;
+    }
+    let start = end - wn;
+    if start > 0 && is_id_continue_char(chars[start - 1]) {
+        return false;
+    }
+    for let mut k = 0; k < wn; k += 1 {
+        if chars[start + k] != w[k] {
+            return false;
+        }
+    }
+    return true;
+}

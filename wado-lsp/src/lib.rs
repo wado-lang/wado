@@ -438,18 +438,14 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
 /// returns [`Semantics::empty`], so callers see a uniformly-shaped
 /// (possibly empty) snapshot regardless of which stage bailed.
 async fn build_semantics<H: CompilerHost>(source: &str, filename: &str, host: &H) -> Semantics {
-    let parsed = match wado_compiler::parse(source) {
-        Ok(p) => p,
-        Err(e) => {
-            // Lexer failure: no usable AST.
-            host.emit_diagnostic(wado_compiler::parse_failure_diagnostic(&e, Some(filename)));
-            return Semantics::empty();
-        }
-    };
-    // Report each recovered syntax error, then continue with the partial AST
-    // so position queries resolve in the regions outside the error. A
+    let parsed = wado_compiler::parse(source);
+    // Report each recovered lex/parse error, then continue with the partial
+    // AST so position queries resolve in the regions outside the error. A
     // load/bind failure on the partial AST still degrades to
     // `Semantics::empty()` below; recovery helps only when binding succeeds.
+    for e in &parsed.lex_errors {
+        host.emit_diagnostic(wado_compiler::lex_error_diagnostic(e, Some(filename)));
+    }
     for e in &parsed.errors {
         host.emit_diagnostic(wado_compiler::parse_error_diagnostic(e, Some(filename)));
     }

@@ -43,6 +43,9 @@ pub(crate) use decls::ModuleDecls;
 pub(crate) use imports::ModuleImports;
 pub(crate) use types::TypeAnnotations;
 
+use crate::ast::AstId;
+use crate::hashmap::IndexMap;
+
 /// Per-module semantic facts. See the module-level documentation for the
 /// membership rules and ownership story.
 #[derive(Default, Clone)]
@@ -51,4 +54,35 @@ pub(crate) struct ModuleSemantics {
     pub(crate) imports: ModuleImports,
     pub(crate) types: TypeAnnotations,
     pub(crate) decls: ModuleDecls,
+    /// Per-impl trait default-method `ModuleSemantics` snapshots. Keyed by
+    /// `(impl_block.id, trait_default_method.ast_id)` — `impl_block.id`
+    /// from the impl module's parse tree, `default_method.id` from the
+    /// trait module's parse tree. The pair is unique per synthesis site
+    /// even when the same default body is synthesised across many impls of
+    /// the same trait, so the per-walk fact maps stay isolated (no
+    /// `(trait_module, ast_id)` collision).
+    ///
+    /// Each value is a full `ModuleSemantics` with:
+    /// - `types` / `bindings`: freshly produced by the combined walk's body
+    ///   walk for that one `(impl, default_method)` pair, keyed under the
+    ///   trait module via `ann_module_override`.
+    /// - `decls` / `imports`: cloned from the surrounding impl module's
+    ///   `ModuleSemantics` so name resolution + decl indices work inside
+    ///   the default body walk.
+    /// - `default_method_semantics`: empty (no recursive synthesis).
+    ///
+    /// Reify reads each entry by doing the same `self.sem` /
+    /// `self.current_module_source` swap that
+    /// [`super::reify::Reify::with_const_module_perspective`] uses for
+    /// cross-module AST: the entry has lifetime `'a` because it lives
+    /// inside the impl module's `ModuleSemantics` (which reify borrows
+    /// at `'a`), so the swap is a pointer swap (no lifetime extension).
+    ///
+    /// Populated by the combined walk's `Item::Impl` default-method loop
+    /// (`elaborator.rs`'s trait-default synthesis branch) and consumed by
+    /// reify's `reify_impl_default_methods` to produce the same
+    /// `TirFunction`s the combined walk used to push onto
+    /// `ModuleDecls::pending_default_methods` (now gone — reify is the
+    /// sole producer of default-method TIR).
+    pub(crate) default_method_semantics: IndexMap<(AstId, AstId), ModuleSemantics>,
 }

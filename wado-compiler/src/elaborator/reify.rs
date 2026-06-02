@@ -262,6 +262,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     // list in one place, mirroring `TypeAnnotations::split_off_overlay`.
     reify_annotation_accessors! {
         ann_expression_types => expression_types: crate::tir::TypeId,
+        ann_local_type => local_types: crate::tir::TypeId,
+        ann_let_annotated_type => let_annotated_types: crate::tir::TypeId,
         ann_method_dispatch => method_dispatch: super::sem::types::MethodDispatch,
         ann_coercions => coercions: super::sem::types::CoercionChoice,
         ann_desugars => desugars: super::sem::types::DesugarKind,
@@ -275,17 +277,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ann_sequence_coercions => sequence_coercions: super::sem::types::SequenceCoercionFacts,
         ann_key_value_coercions => key_value_coercions: super::sem::types::KeyValueCoercionFacts,
         ann_index_assign_dispatch => index_assign_dispatch: super::sem::types::OperatorDispatch,
-    }
-
-    /// Read the recorded type of a local binding (keyed by the binding's
-    /// def `AstId`). Unlike the `ann_*` accessors above, `local_types` is not
-    /// part of the per-element tuple-for-of overlay — but reify only consults
-    /// it for *annotated* `let` types, which are written in source and so are
-    /// element-invariant (a for-of binds a value, not a type), making the
-    /// base map's last-write value correct for every unrolled element.
-    fn ann_local_type(&self, id: crate::ast::AstId) -> Option<crate::tir::TypeId> {
-        let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
-        self.sem.types.local_types.get(&key).copied()
     }
 
     // Decl/signature facts the combined walk records once per decl (the
@@ -306,6 +297,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ann_fn_return_type => fn_return_types: crate::tir::TypeId,
             ann_effect_ops => effect_ops: Vec<crate::tir::TirEffectOp>,
             ann_decl_type_params => decl_type_params: Vec<crate::tir::TirTypeParam>,
+            ann_struct_field_types => struct_field_types: Vec<crate::tir::TypeId>,
+            ann_method_names => method_names: super::sem::types::MethodNames,
         }
     }
 
@@ -490,6 +483,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     for tir_func in self.reify_impl(impl_block) {
                         tir_module.add_function(tir_func);
                     }
+                    // Stage 5 completion: reify is the sole producer of
+                    // trait default-method `TirFunction`s, synthesised here
+                    // from the per-impl `ModuleSemantics` snapshots the
+                    // combined walk recorded on `sem.default_method_semantics`.
+                    for tir_func in self.reify_impl_default_methods(impl_block) {
+                        tir_module.add_function(tir_func);
+                    }
                 }
                 Item::Trait(_) => {
                     // Trait declarations don't lower to TIR; the elaborator
@@ -554,17 +554,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             tir_module.add_struct(anon_struct.clone());
         }
 
-        // Stage 5 / Gap 12: forward the per-module synthesis
-        // requests and default-method synthesis output annotate
-        // recorded on `ModuleDecls`. Same shape the existing
-        // combined walk pushes during the `Item::Impl` arm; the
-        // recording side already mirrors both writes so reify
-        // produces the same `TirModule` content.
+        // Stage 5 / Gap 12: forward the per-module synthesis requests
+        // annotate recorded on `ModuleDecls`. Default-method synthesis is
+        // now reify's job (handled per impl by
+        // `reify_impl_default_methods` in the `Item::Impl` arm above) — the
+        // old `pending_default_methods` hand-off is gone with Stage 5.
         for req in &self.sem.decls.pending_synthesis_requests {
             tir_module.synthesis_requests.push(req.clone());
-        }
-        for default_method in &self.sem.decls.pending_default_methods {
-            tir_module.add_function(default_method.clone());
         }
 
         tir_module.wasm_module = module.wasm_module().map(String::from);
@@ -659,37 +655,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `tysys.all_struct_fields`; field-default expressions and
     /// type-param defaults are read from `ModuleSemantics`.
     fn reify_struct(&mut self, struct_decl: &ast::StructDecl) -> TirStruct {
-        // Field types are decl-resolved during annotate and live in
-        // `tysys.all_struct_fields`. Snapshot the per-field types into
-        // an owned `Vec` so the borrow on `self.tysys` ends here —
-        // the field-default reify below mutably borrows `self`.
-        let mut field_types: Vec<TypeId> = {
-            let field_info = self
-                .tysys
-                .all_struct_fields
-                .get(&self.current_module_source)
-                .and_then(|m| m.get(&struct_decl.name));
-            (0..struct_decl.fields.len())
-                .map(|i| {
-                    field_info
-                        .and_then(|info| info.fields.get(i).map(|(_, t, _)| *t))
-                        .unwrap_or(crate::tir::TypeTable::UNKNOWN)
-                })
-                .collect()
-        };
-
-        // The static decl-field pass (`resolve_type_static` → `TypeLookup`
-        // without `loaded_modules`) cannot follow `pub use` re-export chains,
-        // so a field typed by a re-exported decl (e.g. `Mark = u64` re-exported
-        // from `wasi:clocks`) lands `UNKNOWN`. Reify's own [`Self::resolve_type`]
-        // carries `loaded_modules`, so re-resolving the field's AST annotation
-        // recovers the real type. Production masks the same `UNKNOWN` by
-        // re-resolving through the instance resolver at emission time.
-        for (index, field) in struct_decl.fields.iter().enumerate() {
-            if field_types[index] == crate::tir::TypeTable::UNKNOWN {
-                field_types[index] = self.resolve_type(&field.ty);
-            }
-        }
+        // Single source of truth: `resolve_struct` recorded the per-field
+        // resolved types (with the decl's type-param scope alive and
+        // `loaded_modules` available, so `pub use` re-export chains are
+        // followed). Reify reads them straight from the annotation rather
+        // than reading the static decl-field pass output and masking
+        // UNKNOWNs with its own re-resolve.
+        let field_types = self
+            .ann_struct_field_types(struct_decl.id)
+            .expect("resolve_struct records the field types for every struct reify emits");
 
         // Field-default expressions resolve in a per-struct
         // `FunctionContext` keyed `struct:<name>` (no self, no other
@@ -1039,8 +1013,126 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         impl_block
             .methods
             .iter()
-            .filter_map(|method| self.reify_method(method, &facts, &impl_block.ty))
+            .filter_map(|method| self.reify_method(method, &facts))
             .collect()
+    }
+
+    /// Synthesise the trait default-method `TirFunction`s for `impl_block`.
+    ///
+    /// Mirrors the combined walk's default-method loop in
+    /// `elaborator.rs`'s `Item::Impl` arm: for each default method on the
+    /// impl's trait that the impl does not override, build a `TirFunction`
+    /// keyed `Struct^Trait::method`. Reify reads the per-impl body-walk
+    /// facts from `sem.default_method_semantics[(impl_block.id,
+    /// default_method.id)]` (recorded by the combined walk) — each entry
+    /// is a full `ModuleSemantics` cloned with the trait module's facts in
+    /// its `types` / `bindings` and the impl module's `decls` / `imports`
+    /// so [`Self::reify_method`] sees both.
+    ///
+    /// The swap pattern is identical to
+    /// [`Self::with_const_module_perspective`]: `self.sem`,
+    /// `self.current_module_source`, and `self.current_module_items` are
+    /// replaced with the trait module's view for the duration of the body
+    /// walk so the `ann_*` accessors' `SymbolKey`s name the trait module
+    /// (where the facts were keyed).
+    fn reify_impl_default_methods(&mut self, impl_block: &ast::ImplBlock) -> Vec<TirFunction> {
+        use crate::name::MethodName;
+
+        if impl_block.is_synthesize_request {
+            return Vec::new();
+        }
+        let Some(trait_ast) = impl_block.trait_type.as_ref() else {
+            return Vec::new();
+        };
+        let impl_key =
+            crate::symbol::SymbolKey::new(self.current_module_source.clone(), impl_block.id);
+        let Some(facts) = self.sem.types.impl_facts.get(&impl_key).cloned() else {
+            return Vec::new();
+        };
+        let Some(trait_name_mangled) = facts.trait_name_mangled.clone() else {
+            return Vec::new();
+        };
+        let struct_name = facts.struct_name.clone();
+
+        // Same trait-decl lookup the combined walk does.
+        let trait_decl_name = super::Elaborator::<H>::get_type_name_static(trait_ast);
+        let Some((trait_methods, trait_module)) =
+            super::trait_query::find_trait_decl_methods_with_module_with(
+                &trait_decl_name,
+                &self.current_module_source,
+                self.current_module_items,
+                &self.sem.imports,
+                self.symbols,
+                &self.tysys.trait_env,
+                self.loaded_modules,
+            )
+        else {
+            return Vec::new();
+        };
+        let provided: crate::hashmap::IndexSet<&str> =
+            impl_block.methods.iter().map(|m| m.name.as_str()).collect();
+        let default_methods: Vec<ast::Function> = trait_methods
+            .into_iter()
+            .filter(|m| m.body.is_some() && !provided.contains(m.name.as_str()))
+            .collect();
+
+        let trait_items: &'a [ast::Item] = self
+            .loaded_modules
+            .get(&trait_module)
+            .map(|m| m.items.as_slice())
+            .unwrap_or(&[]);
+
+        let mut out = Vec::with_capacity(default_methods.len());
+        for default_method in &default_methods {
+            // The per-impl `ModuleSemantics` snapshot lives on the parent
+            // `self.sem.default_method_semantics`. Borrow it at `'a` — the
+            // parent is `&'a ModuleSemantics`, so `IndexMap::get` returns
+            // `Option<&'a ModuleSemantics>`, which is exactly what
+            // `self.sem` accepts in the swap.
+            let key = (impl_block.id, default_method.id);
+            let Some(synth_sem) = self.sem.default_method_semantics.get(&key) else {
+                // Combined walk did not record a synthesis for this default
+                // method (e.g. `resolve_method` returned `None` in
+                // error-recovery). Skip — reify produces no TIR for it.
+                continue;
+            };
+
+            // Swap perspective. Both `self.sem` and the swap target carry
+            // lifetime `'a` (from the parent `&'a ModuleSemantics`), so
+            // the `mem::replace` is a pointer swap.
+            let saved_sem = std::mem::replace(&mut self.sem, synth_sem);
+            let saved_module_source =
+                std::mem::replace(&mut self.current_module_source, trait_module.clone());
+            let saved_module_items = std::mem::replace(&mut self.current_module_items, trait_items);
+
+            let tir_func_opt = self.reify_method(default_method, &facts);
+
+            self.current_module_items = saved_module_items;
+            self.current_module_source = saved_module_source;
+            self.sem = saved_sem;
+
+            if let Some(mut tir_func) = tir_func_opt {
+                // The combined walk overwrites the name with
+                // `format_local(struct, trait, method)` after
+                // `resolve_method` returns. `reify_method` would have
+                // already read this exact string from
+                // `ann_method_names(func.id)`; the overwrite here is a
+                // safety net for the synthesis path and matches the
+                // combined walk byte-for-byte.
+                tir_func.name = MethodName::format_local(
+                    &struct_name,
+                    Some(&trait_name_mangled),
+                    &default_method.name,
+                );
+                // Default methods from trait declarations are not marked
+                // pub in the AST, but they should be treated as pub since
+                // they are part of a trait implementation.
+                tir_func.is_pub = true;
+                out.push(tir_func);
+            }
+        }
+
+        out
     }
 
     /// Reify a single method inside an `impl` block. The method's
@@ -1054,11 +1146,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         func: &ast::Function,
         facts: &super::sem::types::ImplFacts,
-        impl_self_ty: &ast::Type,
     ) -> Option<TirFunction> {
         use crate::ast::SelfKind;
-        use crate::name::{LocalMethodName, MethodName};
-        use crate::tir::TypeTable;
+        use crate::name::LocalMethodName;
 
         // Single source of truth: the impl-type-param scheme is computed once
         // by `Elaborator::resolve_method` and recorded; reify reads it. reify
@@ -1125,58 +1215,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let saved_effect_param_names =
             std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
 
-        // Derive the mangler's base-struct-name input from the
-        // resolved `Self` type. The mangler wants the bare name
-        // (`Box`, not `Box<T>`); the type table's
-        // `type_name(self_type)` returns the mangled form, so
-        // truncate at the first `<`.
-        //
-        // A variadic tuple impl (`impl<..T> Trait for [..T]`) is the
-        // exception: `type_name` renders the tuple self type in bracket
-        // notation (`[..T]`, no `<`), so the truncation would mangle the
-        // method as `[..T]^Trait::method`. Production instead uses the
-        // builtin tuple's `name` field — `Tuple` — for both the method
-        // name and `method_info` (item.rs:660 / method_call.rs:724), so
-        // the call site's `monomorph_info.generic_name` (`Tuple^…`) and
-        // the monomorphizer's tuple-variadic instantiation path
-        // (func_inst.rs:888, gated on `struct_name == TUPLE_TYPE_NAME`)
-        // both find the template. Match that here.
-        // A reference impl (`impl<T: Bound> Trait for &T` /
-        // `impl<…> Trait for &Array<T>`) mangles to base struct `&` / `&mut`,
-        // independent of the inner type — production's `get_type_name`
-        // (module.rs:581) returns exactly `"&"` / `"&mut"` for any reference
-        // target, and the monomorphizer / template synthesis look up the
-        // blanket template by that bare name (`&^Inspect::inspect`), keyed off
-        // the inner type via `impl_type_args`. Deriving the name from the
-        // *resolved* self type instead would mangle `&T` → `&T^…`, a name the
-        // monomorphizer never queries, leaving every `&T`-blanket method call
-        // (e.g. `&i32^Inspect::inspect` from `{x:?}` on a reference) unresolved.
-        let base_struct_name = match impl_self_ty {
-            ast::Type::Reference(_) => "&".to_string(),
-            ast::Type::MutReference(_) => "&mut".to_string(),
-            _ if self.tysys.type_table.borrow().is_tuple(facts.self_type) => {
-                TypeTable::TUPLE_TYPE_NAME.to_string()
-            }
-            _ => {
-                let struct_name_for_mangle: String =
-                    self.tysys.type_table.borrow().type_name(facts.self_type);
-                struct_name_for_mangle
-                    .split('<')
-                    .next()
-                    .unwrap_or(&struct_name_for_mangle)
-                    .to_string()
-            }
-        };
-        // `#function` display name `Struct::method` (trait omitted), matching
-        // `resolve_method`'s `display_name`; the bare `func.name` would regress
-        // assert / panic messages to drop the type qualifier
-        // (`String::remove` → `remove`).
-        let display_name = MethodName::format_local(&base_struct_name, None, &func.name);
-        let mangled_name = MethodName::format_local(
-            &base_struct_name,
-            facts.trait_name_mangled.as_deref(),
-            &func.name,
+        // Single source of truth: the impl block's mangled struct name as
+        // the elaborator computed it via `get_type_name(&impl_block.ty)`
+        // (recorded on `ImplFacts::struct_name`). Reconstructing it from
+        // `facts.self_type` would need the `&` / `&mut` / tuple
+        // special-cases and the `&T`-blanket "bare `&`" carve-out that
+        // `get_type_name` (module.rs:581) already encodes — exactly the
+        // parity-bug class WEP 2026-05-26 §"Stage 7 gap" calls out.
+        let base_struct_name = facts.struct_name.clone();
+        // Mangled / display names — read straight off the per-method facts
+        // `resolve_method` already publishes; reify no longer runs
+        // `format_local` itself.
+        let method_names = self.ann_method_names(func.id).expect(
+            "resolve_method records the mangled + display names for every impl method reify emits",
         );
+        let display_name = method_names.display;
+        let mangled_name = method_names.mangled;
         let method_info = {
             let mut info = LocalMethodName::new(
                 base_struct_name,
@@ -1435,13 +1489,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `is_nullable` / `lazy_init` are populated by the lower phase
     /// (kept `false` here, matching `Elaborator::resolve_global`).
     fn reify_global(&mut self, global_decl: &ast::GlobalDecl) -> Option<TirGlobal> {
+        // `resolve_module` populates `current_module_globals` for every
+        // global it sees before any per-item reify runs, so the lookup
+        // never misses; reify is a pure read.
         let ty = self
             .sem
             .decls
             .current_module_globals
             .get(&global_decl.name)
             .map(|(t, _)| *t)
-            .unwrap_or_else(|| self.resolve_type(&global_decl.ty));
+            .expect("resolve_module records every global in current_module_globals");
 
         let mut ctx = FunctionContext::new(ty, format!("global:{}", global_decl.name));
         let initializer = self.reify_expr(&global_decl.initializer, &mut ctx, Some(ty));
@@ -1672,10 +1729,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let type_id = let_stmt
                 .ty
                 .as_ref()
-                .map(|t| {
+                .map(|_| {
                     binding_id
                         .and_then(|id| self.ann_local_type(id))
-                        .unwrap_or_else(|| self.resolve_type(t))
+                        .or_else(|| self.ann_let_annotated_type(let_stmt.id))
+                        .expect(
+                            "uninitialised let with annotation: annotate records the type on \
+                             local_types (simple binding) or let_annotated_types (destructure)",
+                        )
                 })
                 .unwrap_or(TypeTable::UNKNOWN);
             return match &let_stmt.pattern {
@@ -1718,10 +1779,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => Some(*id),
             _ => None,
         };
-        let annotated_type = let_stmt.ty.as_ref().map(|t| {
+        let annotated_type = let_stmt.ty.as_ref().map(|_| {
             simple_binding_id
                 .and_then(|id| self.ann_local_type(id))
-                .unwrap_or_else(|| self.resolve_type(t))
+                .or_else(|| self.ann_let_annotated_type(let_stmt.id))
+                .expect(
+                    "annotated let: annotate records the type on local_types (simple binding) \
+                     or let_annotated_types (destructure)",
+                )
         });
         let value = self.reify_expr(ast_value, ctx, annotated_type);
         let type_id = annotated_type.unwrap_or(value.type_id);
@@ -1864,15 +1929,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_tuple_literal(tuple_lit, ctx, span)
             }
             ast::Expr::Cast(cast) => {
-                // 7-A (E2-thin): resolving `cast.target_type` is a
-                // scope-sensitive decision annotate already makes and records
-                // as the cast expression's type. Read it instead of
-                // re-resolving; re-resolution remains only as a fallback for
-                // any node annotate did not type, and is dropped once the
-                // contract is proven complete.
-                let target_type = self
-                    .ann_expression_types(cast.id)
-                    .unwrap_or_else(|| self.resolve_type(&cast.target_type));
+                // The cast expression's type is the resolved target type;
+                // `resolve_cast` lands it on `expression_types` via the
+                // `resolve_expr` wrapper. Reify is a pure read.
+                let target_type = self.ann_expression_types(cast.id).expect(
+                    "resolve_cast records the target type on expression_types for every cast",
+                );
                 // `expr as i128/u128` lowers to a `from_u64` / `from_i64`
                 // / `from_pair` constructor call rather than a bare cast,
                 // since the 128-bit types are prelude structs. Mirrors
@@ -3976,8 +4038,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             });
         }
 
-        let arg_names = vec![self.tysys.type_table.borrow().type_name(element_type)];
-        let mangled_name = crate::name::mangle_generic_name(&struct_name, &arg_names);
+        // Single source of truth: `resolve_range` recorded the mangled
+        // struct name (`RangeExclusive<i32>` etc.) on the same
+        // `GenericInstantiation` slot reify already consults for struct
+        // literals. Falls back to the bare name on the off chance the
+        // recording is absent (e.g. a recovery path).
+        let mangled_name = self
+            .ann_generic_instantiations(range.id)
+            .and_then(|gi| gi.mangled_name)
+            .unwrap_or_else(|| struct_name.clone());
 
         // Honour the recorded result type if present (annotate may
         // have unified with a more specific `RangeInclusive<i32>` etc.
@@ -4054,23 +4123,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|(n, i, t, _)| (n.clone(), (*i, *t)))
             .collect();
 
-        // Instance type for generic structs is recorded by Gap 1; for
-        // non-generic structs Gap 1's recording is skipped and we use
-        // the bare struct type from `recorded_type`.
-        let (struct_type, generic_args): (TypeId, Vec<TypeId>) = self
-            .ann_generic_instantiations(struct_lit.id)
-            .map(|gi| (gi.instance_type, gi.type_args))
+        // Instance type and mangled name for generic structs are recorded by
+        // Gap 1; for non-generic structs Gap 1's recording is skipped and we
+        // use the bare struct type from `recorded_type` plus the source-level
+        // struct name as-is.
+        let gi = self.ann_generic_instantiations(struct_lit.id);
+        let (struct_type, generic_args): (TypeId, Vec<TypeId>) = gi
+            .as_ref()
+            .map(|gi| (gi.instance_type, gi.type_args.clone()))
             .unwrap_or((recorded_type, Vec::new()));
-
-        let mangled_struct_name = if generic_args.is_empty() {
-            struct_name
-        } else {
-            let arg_names: Vec<String> = generic_args
-                .iter()
-                .map(|&t| self.tysys.type_table.borrow().type_name(t))
-                .collect();
-            crate::name::mangle_generic_name(&struct_name, &arg_names)
-        };
+        let mangled_struct_name = gi.and_then(|gi| gi.mangled_name).unwrap_or(struct_name);
 
         // Substitute the decl's `TypeParam`s with the instance's generic
         // args so a field's expected type is concrete (a no-op for
@@ -4337,7 +4399,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if is_option {
             self.reify_question_mark_option(inner, ctx, qm.span)
         } else if is_result {
-            self.reify_question_mark_result(inner, ctx, qm.span)
+            self.reify_question_mark_result(inner, ctx, qm.span, qm.id)
         } else {
             // Annotate already diagnosed; produce a Unit-typed
             // placeholder of `ERROR` so downstream phases see the
@@ -4444,6 +4506,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         inner: TirExpr,
         ctx: &mut FunctionContext,
         span: crate::token::Span,
+        qm_id: AstId,
     ) -> TirExpr {
         use crate::tir::{
             ResolvedType, TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind,
@@ -4518,7 +4581,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         );
         let converted_err = if need_from_conversion {
-            self.reify_from_call(outer_err_type, inner_err_type, e_expr, span)
+            self.reify_from_call(outer_err_type, inner_err_type, e_expr, span, qm_id)
         } else {
             e_expr
         };
@@ -4985,27 +5048,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // the functor signature diverges from the call site, leaving the
         // `__call` method unreachable. Mirrors production's coercion-aware
         // param inference.
+        // Closure param types come from `local_types`, which
+        // `resolve_closure` populated via `record_local_symbol(p.id, …,
+        // type_id)`. Reify is a pure read; the prior fallback over
+        // `resolve_type(ty)` + the expected-fn-type peeling is gone.
         let expected_fn_type = expected_type.map(|t| {
             let table = self.tysys.type_table.borrow();
             table.get_ultimate_base_type(table.peel_refs(t))
         });
-        let expected_fn_params: Option<Vec<TypeId>> =
-            expected_fn_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
-                ResolvedType::Function { params, .. } => Some(params.clone()),
-                _ => None,
-            });
         let params: Vec<(String, TypeId)> = closure
             .params
             .iter()
-            .enumerate()
-            .map(|(i, p)| {
-                let type_id = if let Some(ty) = &p.ty {
-                    self.resolve_type(ty)
-                } else if let Some(ref fn_params) = expected_fn_params {
-                    fn_params.get(i).copied().unwrap_or(TypeTable::UNKNOWN)
-                } else {
-                    TypeTable::UNKNOWN
-                };
+            .map(|p| {
+                let type_id = self.ann_local_type(p.id).unwrap_or(TypeTable::UNKNOWN);
                 closure_ctx.add_local(p.name.clone(), type_id, p.is_mut, Some(p.id));
                 (p.name.clone(), type_id)
             })
@@ -5033,9 +5088,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Block bodies with explicit `return X` have a NEVER/UNIT
         // tail; the closure's logical return is the returned type.
-        // Production: closure.rs:276+.
-        let return_type = if let TirExprKind::Block(ref block) = body.kind {
-            super::Elaborator::<H>::find_return_type_in_block(block).unwrap_or(body.type_id)
+        // Use the AST-walker (consults `expression_types`) so this
+        // doesn't depend on the combined walk's body TIR. Block-gated
+        // to match the original TIR walker's
+        // `if let TirExprKind::Block(ref block) = body.kind` —
+        // single-expression closure bodies (e.g. `|c| c.method()`)
+        // take their body's type as the return type directly.
+        let return_type = if let crate::ast::Expr::Block(ref block) = closure.body {
+            let ctrl_ctx = super::control_flow::CtrlFlowCtx {
+                expression_types: &self.sem.types.expression_types,
+                module: &self.current_module_source,
+            };
+            super::control_flow::find_return_type_in_block(ctrl_ctx, block).unwrap_or(body.type_id)
         } else {
             body.type_id
         };
@@ -5274,7 +5338,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         span: crate::token::Span,
     ) -> TirExpr {
-        use crate::name::{LocalMethodName, MethodName};
+        use crate::name::LocalMethodName;
         use crate::tir::{
             CallArg, FunctionRef, MonomorphInfo, TirBlock, TirExprKind, TirStmt, TirStmtKind,
             TypeTable,
@@ -5290,17 +5354,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             "new_literal".to_string(),
         )
         .with_struct_type_args(&facts.type_arg_names);
-        let new_mangled_name = MethodName::format_local(
-            &facts.mangled_builder_name,
-            Some(&facts.trait_name),
-            "new_literal",
-        );
         let capacity = tuple_lit.elements.len() as u64;
         let new_call = TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
                     module_source: facts.impl_module_source.clone(),
-                    name: new_mangled_name,
+                    name: facts.new_mangled_name.clone(),
                     monomorph_info: if facts.type_arg_ids.is_empty() {
                         None
                     } else {
@@ -5345,11 +5404,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )];
 
         // --- For each element: __b.push_literal(elem) ---
-        let push_mangled_name = MethodName::format_local(
-            &facts.mangled_builder_name,
-            Some(&facts.trait_name),
-            "push_literal",
-        );
         let push_method_info = LocalMethodName::new(
             facts.builder_base_name.clone(),
             Some(facts.trait_name.clone()),
@@ -5378,7 +5432,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 receiver,
                 FunctionRef {
                     module_source: facts.impl_module_source.clone(),
-                    name: push_mangled_name.clone(),
+                    name: facts.push_mangled_name.clone(),
                     monomorph_info: if facts.type_arg_ids.is_empty() {
                         None
                     } else {
@@ -5408,11 +5462,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             facts.builder_type,
             span,
         );
-        let build_mangled_name = MethodName::format_local(
-            &facts.mangled_builder_name,
-            Some(&facts.trait_name),
-            "build",
-        );
         let build_method_info = LocalMethodName::new(
             facts.builder_base_name.clone(),
             Some(facts.trait_name.clone()),
@@ -5423,7 +5472,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             builder_local_final,
             FunctionRef {
                 module_source: facts.impl_module_source.clone(),
-                name: build_mangled_name,
+                name: facts.build_mangled_name.clone(),
                 monomorph_info: if facts.type_arg_ids.is_empty() {
                     None
                 } else {
@@ -5489,7 +5538,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         span: crate::token::Span,
     ) -> TirExpr {
-        use crate::name::{LocalMethodName, MethodName};
+        use crate::name::LocalMethodName;
         use crate::tir::{
             CallArg, FunctionRef, MonomorphInfo, TirBlock, TirExprKind, TirStmt, TirStmtKind,
             TypeTable,
@@ -5511,11 +5560,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             "new_literal".to_string(),
         )
         .with_struct_type_args(&facts.type_arg_names);
-        let new_mangled_name = MethodName::format_local(
-            &facts.mangled_builder_name,
-            Some(&facts.trait_name),
-            "new_literal",
-        );
         let capacity = struct_lit.fields.len() as u64;
         let new_args = if facts.use_new_api {
             vec![CallArg::new(
@@ -5536,7 +5580,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             TirExprKind::Call {
                 func: FunctionRef {
                     module_source: facts.impl_module_source.clone(),
-                    name: new_mangled_name,
+                    name: facts.new_mangled_name.clone(),
                     monomorph_info: if facts.type_arg_ids.is_empty() {
                         None
                     } else {
@@ -5571,11 +5615,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )];
 
         // --- For each field: __b.insert_literal("name", value) ---
-        let insert_mangled_name = MethodName::format_local(
-            &facts.mangled_builder_name,
-            Some(&facts.trait_name),
-            "insert_literal",
-        );
         let insert_method_info = LocalMethodName::new(
             facts.builder_base_name.clone(),
             Some(facts.trait_name.clone()),
@@ -5608,7 +5647,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 receiver,
                 FunctionRef {
                     module_source: facts.impl_module_source.clone(),
-                    name: insert_mangled_name.clone(),
+                    name: facts.insert_mangled_name.clone(),
                     monomorph_info: None,
                     method_info: Some(insert_method_info.clone()),
                 },
@@ -5629,12 +5668,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             facts.builder_type,
             span,
         );
-        let result_expr = if facts.use_new_api {
-            let build_mangled_name = MethodName::format_local(
-                &facts.mangled_builder_name,
-                Some(&facts.trait_name),
-                "build",
-            );
+        let result_expr = if let Some(build_mangled_name) = facts.build_mangled_name.clone() {
             let build_method_info = LocalMethodName::new(
                 facts.builder_base_name.clone(),
                 Some(facts.trait_name.clone()),
@@ -5688,45 +5722,49 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// signature, and finds the impl's home module by walking the
-    /// current module + loaded modules looking for a matching
-    /// `impl From<From> for Target`.
+    /// Synthesise a `From<From>::from(value)` call from the facts the
+    /// combined walk's [`super::Elaborator::resolve_from_call`] recorded
+    /// under `caller_id`. Every caller has a source-level handle (`?`
+    /// operator, `Type::from(x)` static call, `Type::<…>::from(x)`); the
+    /// recording is unconditional, so reify is a pure read.
     fn reify_from_call(
         &mut self,
         target_type: TypeId,
         from_type: TypeId,
         value: TirExpr,
         span: crate::token::Span,
+        caller_id: AstId,
     ) -> TirExpr {
-        use crate::name::{LocalMethodName, MethodName};
+        use crate::name::LocalMethodName;
         use crate::tir::{CallArg, FunctionRef, TirExprKind};
 
-        let (target_name, from_name, from_trait_name) = {
-            let tt = self.tysys.type_table.borrow();
-            let target = tt.type_name(target_type);
-            let from = tt.type_name(from_type);
-            let trait_n = tt
-                .compiler_items()
-                .trait_name(crate::compiler_item::CompilerItem::From)
-                .to_string();
-            (target, from, trait_n)
-        };
-
-        let from_trait = format!("{from_trait_name}<{from_name}>");
-        let method_name = MethodName::format_local(&target_name, Some(&from_trait), "from");
-        let module_source = self.find_from_impl_module(&target_name, &from_name, &from_trait_name);
+        let _ = from_type;
+        let facts = self
+            .sem
+            .types
+            .from_call_facts
+            .get(&crate::symbol::SymbolKey::new(
+                self.current_module_source.clone(),
+                caller_id,
+            ))
+            .cloned()
+            .expect(
+                "resolve_from_call records FromCallFacts at every site reify hits — \
+                 ?-op, Type::from(x), and Type::<…>::from(x)",
+            );
+        let from_trait = format!("{}<{}>", facts.from_trait_name, facts.from_name);
 
         TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
-                    module_source,
-                    name: method_name,
+                    module_source: facts.module_source,
+                    name: facts.mangled_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName {
-                        struct_name: target_name.clone(),
-                        base_struct_name: target_name,
+                        struct_name: facts.target_name.clone(),
+                        base_struct_name: facts.target_name,
                         trait_name: Some(from_trait),
-                        base_trait_name: Some(from_trait_name),
+                        base_trait_name: Some(facts.from_trait_name),
                         base_trait_module: None,
                         trait_type_args: vec![],
                         method_name: "from".to_string(),
@@ -5742,59 +5780,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             target_type,
             span,
         )
-    }
-
-    /// Find the module that hosts `impl From<From> for Target`.
-    /// Mirrors `Elaborator::find_from_impl_module` (expr.rs:4319+);
-    /// walks current-module items + all loaded modules looking for
-    /// a matching `impl_block`. Falls back to the current module
-    /// when no impl is found (the synthesis path expects a
-    /// late-bound impl; codegen produces the body).
-    fn find_from_impl_module(
-        &self,
-        target_name: &str,
-        from_name: &str,
-        from_trait_name: &str,
-    ) -> ModuleSource {
-        let check_impl = |impl_block: &ast::ImplBlock| -> bool {
-            let impl_target = ast_type_name_static(&impl_block.ty);
-            if impl_target != target_name {
-                return false;
-            }
-            let Some(trait_type) = &impl_block.trait_type else {
-                return false;
-            };
-            let base = ast_type_name_static(trait_type);
-            if base != from_trait_name {
-                return false;
-            }
-            if let ast::Type::Generic(g) = trait_type
-                && let Some(arg) = g.args.first()
-            {
-                return ast_type_name_static(arg) == from_name;
-            }
-            false
-        };
-
-        for item in self.current_module_items {
-            if let ast::Item::Impl(impl_block) = item
-                && check_impl(impl_block)
-            {
-                return self.current_module_source.clone();
-            }
-        }
-
-        for (source, module) in self.loaded_modules {
-            for item in &module.items {
-                if let ast::Item::Impl(impl_block) = item
-                    && check_impl(impl_block)
-                {
-                    return source.clone();
-                }
-            }
-        }
-
-        self.current_module_source.clone()
     }
 
     /// Reify a `with E => h, … do { body }` effect handler block.
@@ -5940,7 +5925,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // diverge from annotate's (evaporated coercion wrappers).
         // Production registers it in expr.rs:3603+.
         let struct_type = recorded_type;
-        let struct_name = self.tysys.type_table.borrow().type_name(struct_type);
+        // Single source of truth: `resolve_anonymous_struct_literal`
+        // records the synthesised `__anon_{…}` name on the
+        // `GenericInstantiation` slot for every anonymous struct literal.
+        let struct_name = self
+            .ann_generic_instantiations(struct_lit.id)
+            .and_then(|gi| gi.mangled_name)
+            .expect(
+                "resolve_anonymous_struct_literal records the synthesised name on \
+                 generic_instantiations for every anonymous struct literal",
+            );
 
         TirExpr::new(
             TirExprKind::StructLiteral {
@@ -6020,7 +6014,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::name::{LocalMethodName, MethodName};
         use crate::tir::{CallArg, ResolvedType, TirExprKind, TypeId};
 
         // Reuse the static-method `FunctionRef` annotate resolved
@@ -6057,63 +6050,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
-        let target_type_id = self.resolve_type(&static_call.target_type);
-        let (struct_name, struct_module): (String, crate::module_source::ModuleSource) = {
-            let tt = self.tysys.type_table.borrow();
-            match tt.get(target_type_id).clone() {
-                ResolvedType::Struct {
-                    name,
-                    module_source,
-                    ..
-                }
-                | ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    ..
-                }
-                | ResolvedType::Newtype {
-                    name,
-                    module_source,
-                    ..
-                }
-                | ResolvedType::Variant {
-                    name,
-                    module_source,
-                }
-                | ResolvedType::Flags {
-                    name,
-                    module_source,
-                }
-                | ResolvedType::Enum {
-                    name,
-                    module_source,
-                }
-                | ResolvedType::Resource {
-                    name,
-                    module_source,
-                }
-                | ResolvedType::GenericResource {
-                    name,
-                    module_source,
-                    ..
-                } => (name, module_source),
-                ResolvedType::Primitive(prim) => (
-                    prim.as_str().to_string(),
-                    crate::module_source::ModuleSource::primitive(),
-                ),
-                _ => (String::new(), self.current_module_source.clone()),
-            }
-        };
-
         // Variant constructor in turbofish form (`Option::<T>::Some(x)`,
-        // `Result::<T, E>::Ok(v)`): the target type is a variant and the
-        // method names one of its cases. Must beat the static-method
-        // dispatch below, which would emit an unresolved `Option::Some`
-        // call. The variant name + instance type come from the call's
-        // recorded expression type (a `GenericInstance` / `Variant`) when
-        // available — reify's own resolution of the turbofish target can
-        // collapse to an empty name for imported / CM args — falling back
-        // to the resolved target type.
+        // `Result::<T, E>::Ok(v)`): annotate's variant-ctor branch in
+        // `resolve_static_method_call` types the expression as the variant
+        // (line 1105+ / 1173+ in method_call.rs), so `recorded_type` is
+        // always the variant instance and reify reads it directly.
         let (variant_name, variant_type, variant_type_args): (String, TypeId, Vec<TypeId>) = {
             let tt = self.tysys.type_table.borrow();
             match tt.get(recorded_type).clone() {
@@ -6121,13 +6062,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name, type_args, ..
                 } => (name, recorded_type, type_args),
                 ResolvedType::Variant { name, .. } => (name, recorded_type, Vec::new()),
-                _ => {
-                    let args = match tt.get(target_type_id).clone() {
-                        ResolvedType::GenericInstance { type_args, .. } => type_args,
-                        _ => Vec::new(),
-                    };
-                    (struct_name.clone(), target_type_id, args)
-                }
+                _ => (String::new(), recorded_type, Vec::new()),
             }
         };
         if let Some(variant_info) = self.type_lookup().variant_case(&variant_name).cloned()
@@ -6159,41 +6094,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
-        let mangled_method_name = MethodName::format_local(&struct_name, None, &static_call.method);
-
-        let explicit_method_type_args: Vec<TypeId> = static_call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
-        let type_args: Vec<TypeId> = if explicit_method_type_args.is_empty() {
-            self.ann_generic_instantiations(static_call.id)
-                .map(|gi| gi.type_args)
-                .unwrap_or_default()
-        } else {
-            explicit_method_type_args
-        };
-
-        let args: Vec<CallArg> = static_call
-            .args
-            .iter()
-            .map(|a| CallArg::new(self.reify_expr(a, ctx, None), false))
-            .collect();
-
-        let method_info = LocalMethodName::new(struct_name, None, static_call.method.clone());
-
+        // Everything else flows through `static_method_dispatch` above —
+        // `resolve_static_method_call` records the resolved
+        // `FunctionRef` for every non-variant static call. Hitting this
+        // shape means annotate diagnosed an unresolvable call.
         TirExpr::new(
-            TirExprKind::Call {
-                func: crate::tir::FunctionRef {
-                    module_source: struct_module,
-                    name: mangled_method_name,
-                    monomorph_info: None,
-                    method_info: Some(method_info),
-                },
-                type_args,
-                args,
-            },
-            recorded_type,
+            TirExprKind::Unit,
+            crate::tir::TypeTable::ERROR,
             static_call.span,
         )
     }
@@ -6371,80 +6278,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// and qualified-flags shapes route through `todo!` until each
     /// branch is ported — `Elaborator::resolve_call` (call.rs:200+)
     /// is the source they mirror.
-    /// AST-only full type name (generic args, refs included), matching
-    /// `Elaborator::get_type_name_full` without needing `&self`. Used to
-    /// compare a `From<Arg>` marker impl's type argument against a resolved
-    /// `type_name`.
-    fn ast_type_name_full(ty: &ast::Type) -> String {
-        match ty {
-            ast::Type::Named(named) => named.name.clone(),
-            ast::Type::Generic(generic) => {
-                let args: Vec<String> = generic.args.iter().map(Self::ast_type_name_full).collect();
-                format!("{}<{}>", generic.name, args.join(", "))
-            }
-            ast::Type::Reference(inner) => format!("&{}", Self::ast_type_name_full(inner)),
-            ast::Type::MutReference(inner) => format!("&mut {}", Self::ast_type_name_full(inner)),
-            _ => super::Elaborator::<H>::get_type_name_static(ty),
-        }
-    }
-
-    /// Locate the module providing a bodyless `impl From<arg_type> for
-    /// target;` synthesis-request marker impl, scanning the current module
-    /// then loaded modules. Returns `None` when no such marker impl exists
-    /// (so the caller falls back to reflexive / newtype / regular handling).
-    /// Mirrors `has_from_synthesis_request` + `find_from_impl_module`
-    /// (in `method_call.rs` / `expr.rs`) but reads only the AST tables
-    /// reify holds.
-    fn find_from_synthesis_module(
-        &self,
-        target_name: &str,
-        arg_type_name: &str,
-    ) -> Option<crate::module_source::ModuleSource> {
-        let from_trait_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .trait_name(crate::compiler_item::CompilerItem::From)
-            .to_string();
-        let matches = |impl_block: &ast::ImplBlock| -> bool {
-            if !impl_block.is_synthesize_request {
-                return false;
-            }
-            let Some(trait_type) = &impl_block.trait_type else {
-                return false;
-            };
-            if super::Elaborator::<H>::get_type_name_static(&impl_block.ty) != target_name
-                || super::Elaborator::<H>::get_type_name_static(trait_type) != from_trait_name
-            {
-                return false;
-            }
-            // Match the `From<Arg>` type argument by its full name (with
-            // generic args, `&`, etc.) so `From<Vec<i32>>` etc. compare
-            // correctly — mirroring `has_from_synthesis_request`'s use of
-            // `get_type_name_full` rather than the base-name-only static form.
-            matches!(trait_type, ast::Type::Generic(g) if g.args.len() == 1
-                && Self::ast_type_name_full(&g.args[0]) == arg_type_name)
-        };
-        for item in self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && matches(impl_block)
-            {
-                return Some(self.current_module_source.clone());
-            }
-        }
-        for (source, module) in self.loaded_modules {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item
-                    && matches(impl_block)
-                {
-                    return Some(source.clone());
-                }
-            }
-        }
-        None
-    }
-
     fn reify_call(
         &mut self,
         call: &ast::CallExpr,
@@ -6535,55 +6368,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     );
                 }
 
-                // `ns::Type::method(args)` — a namespace-imported static
-                // method (e.g. `geo::Point::new(x, y)`). Not a variant
-                // case, so build a static-method `Call` against the
-                // namespace module's `Type::method`. Without this the
-                // call reaches the recovery `ERROR` shape, its result type
-                // is lost, and monomorphization prunes the entire
-                // namespace module as unreachable.
-                if self
-                    .tysys
-                    .all_struct_fields
-                    .get(&ns_source)
-                    .is_some_and(|m| m.contains_key(type_name))
-                {
-                    let mangled = crate::name::MethodName::format_local(type_name, None, case_name);
-                    let type_args: Vec<TypeId> = if call.type_args.is_empty() {
-                        self.ann_generic_instantiations(call.id)
-                            .map(|gi| gi.type_args)
-                            .unwrap_or_default()
-                    } else {
-                        call.type_args
-                            .iter()
-                            .map(|ty| self.resolve_type(ty))
-                            .collect()
-                    };
-                    let arg_calls: Vec<CallArg> = call
-                        .args
-                        .iter()
-                        .map(|a| CallArg::new(self.reify_expr(a, ctx, None), false))
-                        .collect();
-                    let method_info = crate::name::LocalMethodName::new(
-                        type_name.to_string(),
-                        None,
-                        case_name.to_string(),
-                    );
-                    return TirExpr::new(
-                        TirExprKind::Call {
-                            func: crate::tir::FunctionRef {
-                                module_source: ns_source,
-                                name: mangled,
-                                monomorph_info: None,
-                                method_info: Some(method_info),
-                            },
-                            type_args,
-                            args: arg_calls,
-                        },
-                        recorded_type,
-                        span,
-                    );
-                }
+                // `ns::Type::method(args)` is handled by the
+                // `static_method_dispatch` early return below — annotate
+                // now records the resolved `FunctionRef` for namespace-
+                // qualified static calls too (see call.rs's ns-static
+                // branch). The fallthrough here is intentional.
+                let _ = (ns_source, type_name, case_name);
             }
         }
 
@@ -6668,90 +6458,59 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && !ident.name[pos + 2..].contains("::")
             && call.args.len() == 1
         {
-            let prefix = ident.name[..pos].to_string();
+            let _ = ident.name[..pos].to_string(); // prefix kept for context only
             let arg = self.reify_expr(&call.args[0], ctx, None);
             let arg_type = arg.type_id;
-            let arg_type_name = self.tysys.type_table.borrow().type_name(arg_type);
 
             // Bodyless `impl From<X> for Type;` marker impl — production
-            // synthesizes a `From::from` call inline (method_call.rs:1189 →
-            // expr.rs:resolve_from_call) and records no dispatch. Reify
-            // rebuilds the same trait-qualified `Call` so monomorphization
-            // emits the synthesized conversion. Checked before reflexive /
-            // newtype, matching production's order.
-            if let Some(module_source) = self.find_from_synthesis_module(&prefix, &arg_type_name) {
-                let from_trait_name = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .compiler_items()
-                    .trait_name(crate::compiler_item::CompilerItem::From)
-                    .to_string();
-                let from_trait = format!("{from_trait_name}<{arg_type_name}>");
-                let name =
-                    crate::name::MethodName::format_local(&prefix, Some(&from_trait), "from");
+            // synthesizes a `From::from` call inline (call.rs:768 →
+            // expr.rs:resolve_from_call) and records `FromCallFacts`
+            // under `call.id`. Reify reuses `reify_from_call` so both the
+            // ?-op path and this static-call path emit identical TIR.
+            let from_facts_key =
+                crate::symbol::SymbolKey::new(self.current_module_source.clone(), call.id);
+            if self.sem.types.from_call_facts.contains_key(&from_facts_key) {
+                return self.reify_from_call(recorded_type, arg_type, arg, span, call.id);
+            }
+
+            // Reflexive: `T::from(T_val)` — identity, return the argument.
+            // Annotate tags the call with `NewtypeFromCollapse`; reify
+            // recognises it and emits the argument's TIR directly.
+            if self.ann_desugars(call.id)
+                == Some(super::sem::types::DesugarKind::NewtypeFromCollapse)
+            {
+                return arg;
+            }
+
+            // Newtype→Base: `Base::from(Newtype_val)`. Annotate records
+            // `NewtypeFromUnwrap` on the call and lowers to a `Cast` to
+            // the base type; reify replays the shape using the recorded
+            // expression type (which is the base type).
+            if self.ann_desugars(call.id) == Some(super::sem::types::DesugarKind::NewtypeFromUnwrap)
+            {
                 return TirExpr::new(
-                    TirExprKind::Call {
-                        func: crate::tir::FunctionRef {
-                            module_source,
-                            name,
-                            monomorph_info: None,
-                            method_info: Some(crate::name::LocalMethodName {
-                                struct_name: prefix.clone(),
-                                base_struct_name: prefix.clone(),
-                                trait_name: Some(from_trait),
-                                base_trait_name: Some(from_trait_name),
-                                base_trait_module: None,
-                                trait_type_args: vec![],
-                                method_name: "from".to_string(),
-                                method_type_args: vec![],
-                                is_type_param_receiver: false,
-                                is_ref_impl: false,
-                                cm_name: None,
-                            }),
-                        },
-                        type_args: vec![],
-                        args: vec![CallArg::new(arg, false)],
+                    TirExprKind::Cast {
+                        expr: Box::new(arg),
+                        target_type: recorded_type,
                     },
                     recorded_type,
                     span,
                 );
             }
 
-            // Reflexive: `T::from(T_val)` — identity, return the argument
-            // (the `NewtypeFromCollapse` desugar, call.rs:526).
-            if arg_type_name == prefix {
-                return arg;
-            }
-
-            // Newtype→Base: `Base::from(Newtype_val)` where the arg is a
-            // newtype over `Base` — lower to a `Cast` (call.rs:534).
-            let base_of_arg = self.tysys.type_table.borrow().get_newtype_base(arg_type);
-            if let Some(base_id) = base_of_arg
-                && self.tysys.type_table.borrow().type_name(base_id) == prefix
-            {
-                return TirExpr::new(
-                    TirExprKind::Cast {
-                        expr: Box::new(arg),
-                        target_type: base_id,
-                    },
-                    base_id,
-                    span,
-                );
-            }
-
             // Base→Newtype: `Newtype::from(Base_val)` where `Newtype` is a
             // newtype over the arg's type — lower to a `Cast` (call.rs:549).
-            if let Some(newtype_id) = self.type_lookup().newtype(&prefix)
-                && let Some(base_id) = self.tysys.type_table.borrow().get_newtype_base(newtype_id)
-                && self.tysys.type_table.borrow().type_name(base_id) == arg_type_name
-            {
+            // Base→Newtype: `Newtype::from(Base_val)`. Annotate records
+            // `NewtypeFromWrap` on the call and lowers to a `Cast` to the
+            // newtype; reify replays the shape using the recorded
+            // expression type (which is the newtype).
+            if self.ann_desugars(call.id) == Some(super::sem::types::DesugarKind::NewtypeFromWrap) {
                 return TirExpr::new(
                     TirExprKind::Cast {
                         expr: Box::new(arg),
-                        target_type: newtype_id,
+                        target_type: recorded_type,
                     },
-                    newtype_id,
+                    recorded_type,
                     span,
                 );
             }
@@ -6896,16 +6655,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         self.sem.imports.namespace_imports.get(ns_prefix).cloned()
                         && !rest.contains("::")
                     {
-                        let type_args: Vec<TypeId> = if call.type_args.is_empty() {
-                            self.ann_generic_instantiations(call.id)
-                                .map(|gi| gi.type_args)
-                                .unwrap_or_default()
-                        } else {
-                            call.type_args
-                                .iter()
-                                .map(|ty| self.resolve_type(ty))
-                                .collect()
-                        };
+                        // `resolve_call`'s free-function path records the
+                        // final `type_args` (turbofish + inferred) on
+                        // `generic_instantiations`; reify reads it.
+                        let type_args: Vec<TypeId> = self
+                            .ann_generic_instantiations(call.id)
+                            .map(|gi| gi.type_args)
+                            .unwrap_or_default();
                         let arg_calls: Vec<CallArg> = call
                             .args
                             .iter()
@@ -6932,18 +6688,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 return TirExpr::new(TirExprKind::Unit, crate::tir::TypeTable::ERROR, span);
             };
 
-            // Type args: explicit turbofish on the call expression,
-            // else the inference recorded by Gap 1.
-            let type_args: Vec<TypeId> = if call.type_args.is_empty() {
-                self.ann_generic_instantiations(call.id)
-                    .map(|gi| gi.type_args)
-                    .unwrap_or_default()
-            } else {
-                call.type_args
-                    .iter()
-                    .map(|ty| self.resolve_type(ty))
-                    .collect()
-            };
+            // Type args: `resolve_call` records the final `type_args`
+            // (turbofish + inferred) on `generic_instantiations`; reify
+            // reads it. Non-generic calls leave no entry and reify gets
+            // the empty vector, matching the production builder.
+            let type_args: Vec<TypeId> = self
+                .ann_generic_instantiations(call.id)
+                .map(|gi| gi.type_args)
+                .unwrap_or_default();
 
             // Per-argument expected types come from the recorded resolved
             // param types. They are required for unannotated-param closure
@@ -6986,14 +6738,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
-        // Qualified-callee static method `Struct::method(args)`.
-        // Reify resolves the prefix to its module via the type
-        // lookup (struct / namespace / newtype follow chain) and
-        // builds the same mangled `__Struct__method` FunctionRef
-        // the elaborator's `resolve_static_method_call_from_qualified`
-        // produces. The type-arg list comes from Gap 1's record on
-        // the call's AstId (the recording site at call.rs:472
-        // already covers impl-args + method-args concatenation).
+        // Qualified-callee `Type::method` shapes that don't flow through
+        // `static_method_dispatch` recording: `Flags::none()` /
+        // `Flags::all()` lower to an `IntLiteral` (not a `Call`) so
+        // the combined walk's static-method recording in
+        // `resolve_call` skips them. Reify reproduces the same
+        // `IntLiteral` here.
         if let ast::Expr::Ident(ident) = &call.callee
             && let Some(pos) = ident.name.find("::")
             && !ident.name[pos + 2..].contains("::")
@@ -7001,10 +6751,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let prefix = &ident.name[..pos];
             let suffix = &ident.name[pos + 2..];
 
-            // Flags `Type::none()` / `Type::all()` lower to an
-            // `IntLiteral` with the bitmask value (matches
-            // `Elaborator::resolve_call`'s flags branch at
-            // call.rs:586+).
             let flags = self.type_lookup().flags_case(prefix).cloned();
             if let Some(flags_info) = flags
                 && matches!(suffix, "none" | "all")
@@ -7024,64 +6770,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 );
             }
-
-            // Resolve the prefix struct's module so the
-            // FunctionRef points at the impl block's home
-            // module. Follows newtype chains the same way
-            // `Elaborator::resolve_static_method_call`
-            // (method_call.rs:820+) does.
-            let lookup = self.type_lookup();
-            let struct_module = lookup
-                .struct_fields(prefix)
-                .map(|info| info.module_source.clone())
-                .or_else(|| {
-                    lookup
-                        .variant_case(prefix)
-                        .map(|info| info.module_source.clone())
-                })
-                .or_else(|| {
-                    lookup
-                        .resource_type(prefix)
-                        .map(|info| info.module_source.clone())
-                })
-                .unwrap_or_else(|| self.current_module_source.clone());
-
-            let mangled_method_name = crate::name::MethodName::format_local(prefix, None, suffix);
-
-            let type_args: Vec<TypeId> = if call.type_args.is_empty() {
-                self.ann_generic_instantiations(call.id)
-                    .map(|gi| gi.type_args)
-                    .unwrap_or_default()
-            } else {
-                call.type_args
-                    .iter()
-                    .map(|ty| self.resolve_type(ty))
-                    .collect()
-            };
-
-            let arg_calls: Vec<CallArg> = call
-                .args
-                .iter()
-                .map(|a| CallArg::new(self.reify_expr(a, ctx, None), false))
-                .collect();
-
-            let method_info =
-                crate::name::LocalMethodName::new(prefix.to_string(), None, suffix.to_string());
-
-            return TirExpr::new(
-                TirExprKind::Call {
-                    func: crate::tir::FunctionRef {
-                        module_source: struct_module,
-                        name: mangled_method_name,
-                        monomorph_info: None,
-                        method_info: Some(method_info),
-                    },
-                    type_args,
-                    args: arg_calls,
-                },
-                recorded_type,
-                span,
-            );
         }
 
         // Unrecognised callee shape — annotate diagnosed it.
@@ -7164,11 +6852,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &self.tysys.type_table,
         );
 
-        let type_args: Vec<TypeId> = method_call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
+        // Method-level type args ride along on `MethodDispatch` — the
+        // IndexMut rewrite in `method_lookup.rs` records the same vector
+        // it passes to `build_tir_method_call`, so reify is a pure read.
+        let type_args = outer_dispatch.method_type_args.clone();
         let args: Vec<CallArg> = method_call
             .args
             .iter()
@@ -7384,30 +7071,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &self.tysys.type_table,
         );
 
-        // Method-level type args for the TIR `MethodCall` node. The
-        // monomorphizer's `collect_func_instantiation_sites` keys off this
-        // field to queue `Struct^Trait::method<Args>` instances, so it
-        // must carry the *resolved* args — including ones inferred from
-        // argument types when there is no turbofish (`c.transform(42)`
-        // infers `T = i32`). Explicit turbofish resolves against the
-        // current type-param scope; otherwise fall back to the inferred
-        // args the elaborator baked into the recorded `FunctionRef`'s
-        // `monomorph_info` (production passes the same vector as the node
-        // type args at `method_call.rs:817`).
-        let type_args: Vec<TypeId> = if method_call.type_args.is_empty() {
-            dispatch
-                .function_ref
-                .monomorph_info
-                .as_ref()
-                .map(|mi| mi.method_type_args.clone())
-                .unwrap_or_default()
-        } else {
-            method_call
-                .type_args
-                .iter()
-                .map(|ty| self.resolve_type(ty))
-                .collect()
-        };
+        // Method-level type args for the TIR `MethodCall` node — the exact
+        // vector annotate fed into `build_tir_method_call`. The monomorphizer's
+        // `collect_func_instantiation_sites` keys off this field to queue
+        // `Struct^Trait::method<Args>` instances, so it must match what the
+        // combined walk produced byte-for-byte (turbofish-resolved or
+        // inference-recovered). Reading it from `MethodDispatch` keeps the
+        // blanket-impl turbofish case correct (where
+        // `monomorph_info.method_type_args` is zeroed by design).
+        let type_args = dispatch.method_type_args.clone();
 
         // Per-arg `is_mut` comes from the recorded `MethodDispatch`
         // (drained from `lookup_method_param_is_mut` at annotate time).
@@ -7770,14 +7442,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    static expression in practice), so reify uses the
         //    surrounding `ctx` directly — matches the elaborator's
         //    `resolve_expr(&const_expr, ctx, …)` (expr.rs:594–605).
-        if let Some((const_module, const_ty, const_expr)) = self
+        if let Some((const_module, type_id, const_expr)) = self
             .sem
             .decls
             .associated_constants
             .get(&ident.name)
             .cloned()
         {
-            let type_id = self.resolve_type(&const_ty);
             // The constant's body lives in its *defining* module (e.g.
             // `pub const MAX: i32 = 2147483647;` in primitive.wado). Its
             // `AstId`s index that module's `ModuleSemantics`, not the use
@@ -8419,10 +8090,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             Some(_) => variant_name.to_string(),
         };
 
-        let (const_module, const_ty, const_expr) =
+        let (const_module, type_id, const_expr) =
             self.sem.decls.associated_constants.get(&key).cloned()?;
 
-        let type_id = self.resolve_type(&const_ty);
         // Reify the body under its defining module so colliding cross-module
         // `AstId`s can't mis-type the inlined constant (see `reify_ident`).
         let resolved = self.with_const_module_perspective(&const_module, |this| {
@@ -8497,10 +8167,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 Some(ast::Type::NamespacedGeneric(t)) => format!("{}::{}", t.name, variant_name),
                 Some(_) => variant_name.clone(),
             };
-            if let Some((const_module, const_ty, const_expr)) =
+            if let Some((const_module, type_id, const_expr)) =
                 self.sem.decls.associated_constants.get(&key).cloned()
             {
-                let type_id = self.resolve_type(&const_ty);
                 let resolved = self.with_const_module_perspective(&const_module, |this| {
                     this.reify_expr(&const_expr, ctx, Some(type_id))
                 });
@@ -9219,32 +8888,6 @@ fn extract_allocator_tag_attr(attrs: &[crate::ast::Attribute]) -> Option<String>
         .find(|a| a.name == "allocator")
         .and_then(|a| a.args.first())
         .map(|a| a.as_str().to_string())
-}
-
-/// Return the base name of an AST [`ast::Type`] for impl-block /
-/// method-name mangling. A free-function variant matching the
-/// elaborator's `Elaborator::get_type_name_static` (module.rs).
-/// Used by `Reify::find_from_impl_module` to recognise an
-/// `impl From<Source> for Target` block by its AST shape.
-fn ast_type_name_static(ty: &ast::Type) -> String {
-    use crate::tir::TypeTable;
-    match ty {
-        ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
-        ast::Type::Named(named) => named.name.clone(),
-        ast::Type::Generic(generic) => generic.name.clone(),
-        ast::Type::Reference(_) => "&".to_string(),
-        ast::Type::MutReference(_) => "&mut".to_string(),
-        ast::Type::Tuple(elems) => {
-            if elems.is_empty() {
-                TypeTable::UNIT_TYPE_NAME.to_string()
-            } else {
-                TypeTable::TUPLE_TYPE_NAME.to_string()
-            }
-        }
-        ast::Type::Function(_)
-        | ast::Type::NamespacedGeneric(_)
-        | ast::Type::TypePackSpread(_, _) => "Unknown".to_string(),
-    }
 }
 
 /// True when `arg` is a closure literal with at least one param that lacks a
