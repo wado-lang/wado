@@ -6307,80 +6307,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// and qualified-flags shapes route through `todo!` until each
     /// branch is ported — `Elaborator::resolve_call` (call.rs:200+)
     /// is the source they mirror.
-    /// AST-only full type name (generic args, refs included), matching
-    /// `Elaborator::get_type_name_full` without needing `&self`. Used to
-    /// compare a `From<Arg>` marker impl's type argument against a resolved
-    /// `type_name`.
-    fn ast_type_name_full(ty: &ast::Type) -> String {
-        match ty {
-            ast::Type::Named(named) => named.name.clone(),
-            ast::Type::Generic(generic) => {
-                let args: Vec<String> = generic.args.iter().map(Self::ast_type_name_full).collect();
-                format!("{}<{}>", generic.name, args.join(", "))
-            }
-            ast::Type::Reference(inner) => format!("&{}", Self::ast_type_name_full(inner)),
-            ast::Type::MutReference(inner) => format!("&mut {}", Self::ast_type_name_full(inner)),
-            _ => super::Elaborator::<H>::get_type_name_static(ty),
-        }
-    }
-
-    /// Locate the module providing a bodyless `impl From<arg_type> for
-    /// target;` synthesis-request marker impl, scanning the current module
-    /// then loaded modules. Returns `None` when no such marker impl exists
-    /// (so the caller falls back to reflexive / newtype / regular handling).
-    /// Mirrors `has_from_synthesis_request` + `find_from_impl_module`
-    /// (in `method_call.rs` / `expr.rs`) but reads only the AST tables
-    /// reify holds.
-    fn find_from_synthesis_module(
-        &self,
-        target_name: &str,
-        arg_type_name: &str,
-    ) -> Option<crate::module_source::ModuleSource> {
-        let from_trait_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .trait_name(crate::compiler_item::CompilerItem::From)
-            .to_string();
-        let matches = |impl_block: &ast::ImplBlock| -> bool {
-            if !impl_block.is_synthesize_request {
-                return false;
-            }
-            let Some(trait_type) = &impl_block.trait_type else {
-                return false;
-            };
-            if super::Elaborator::<H>::get_type_name_static(&impl_block.ty) != target_name
-                || super::Elaborator::<H>::get_type_name_static(trait_type) != from_trait_name
-            {
-                return false;
-            }
-            // Match the `From<Arg>` type argument by its full name (with
-            // generic args, `&`, etc.) so `From<Vec<i32>>` etc. compare
-            // correctly — mirroring `has_from_synthesis_request`'s use of
-            // `get_type_name_full` rather than the base-name-only static form.
-            matches!(trait_type, ast::Type::Generic(g) if g.args.len() == 1
-                && Self::ast_type_name_full(&g.args[0]) == arg_type_name)
-        };
-        for item in self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && matches(impl_block)
-            {
-                return Some(self.current_module_source.clone());
-            }
-        }
-        for (source, module) in self.loaded_modules {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item
-                    && matches(impl_block)
-                {
-                    return Some(source.clone());
-                }
-            }
-        }
-        None
-    }
-
     fn reify_call(
         &mut self,
         call: &ast::CallExpr,
@@ -6561,19 +6487,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && !ident.name[pos + 2..].contains("::")
             && call.args.len() == 1
         {
-            let prefix = ident.name[..pos].to_string();
+            let _ = ident.name[..pos].to_string(); // prefix kept for context only
             let arg = self.reify_expr(&call.args[0], ctx, None);
             let arg_type = arg.type_id;
-            let arg_type_name = self.tysys.type_table.borrow().type_name(arg_type);
 
             // Bodyless `impl From<X> for Type;` marker impl — production
             // synthesizes a `From::from` call inline (call.rs:768 →
             // expr.rs:resolve_from_call) and records `FromCallFacts`
             // under `call.id`. Reify reuses `reify_from_call` so both the
             // ?-op path and this static-call path emit identical TIR.
-            // The fallback inside `reify_from_call` covers the recovery
-            // path where no facts were recorded.
-            if self.find_from_synthesis_module(&prefix, &arg_type_name).is_some() {
+            let from_facts_key =
+                crate::symbol::SymbolKey::new(self.current_module_source.clone(), call.id);
+            if self.sem.types.from_call_facts.contains_key(&from_facts_key) {
                 return self.reify_from_call(
                     recorded_type,
                     arg_type,
