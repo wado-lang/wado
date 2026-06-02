@@ -536,6 +536,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(base_id) = base_of_arg
                         && self.tysys.type_table.borrow().type_name(base_id) == prefix
                     {
+                        self.record_desugar(
+                            call.id,
+                            super::sem::types::DesugarKind::NewtypeFromUnwrap,
+                        );
                         return TirExpr::new(
                             TirExprKind::Cast {
                                 expr: Box::new(args[0].clone()),
@@ -556,6 +560,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if let Some(base_id) = base_opt
                             && self.tysys.type_table.borrow().type_name(base_id) == arg_type_name
                         {
+                            self.record_desugar(
+                                call.id,
+                                super::sem::types::DesugarKind::NewtypeFromWrap,
+                            );
                             return TirExpr::new(
                                 TirExprKind::Cast {
                                     expr: Box::new(args[0].clone()),

@@ -430,6 +430,8 @@ impl Semantics {
             DesugarKind::CompoundAssign => "compound_assign",
             DesugarKind::IndexMutMethodCall => "index_mut_method_call",
             DesugarKind::NewtypeFromCollapse => "newtype_from_collapse",
+            DesugarKind::NewtypeFromUnwrap => "newtype_from_unwrap",
+            DesugarKind::NewtypeFromWrap => "newtype_from_wrap",
         };
         Some(name.to_string())
     }

@@ -1010,4 +1010,12 @@ pub(crate) enum DesugarKind {
     /// reads this tag on the outer `Call`'s [`AstId`] and emits the
     /// inner argument's TIR directly, skipping the call construction.
     NewtypeFromCollapse,
+    /// `Base::from(Newtype_val)` where `Newtype = Base` — the elaborator
+    /// lowers to a `Cast` of the argument to the base type. Reify reads
+    /// this tag on the outer `Call`'s `AstId` and emits the same shape.
+    NewtypeFromUnwrap,
+    /// `Newtype::from(Base_val)` where `Newtype = Base` — the elaborator
+    /// lowers to a `Cast` of the argument to the newtype. Reify reads
+    /// this tag on the outer `Call`'s `AstId` and emits the same shape.
+    NewtypeFromWrap,
 }

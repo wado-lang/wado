@@ -6583,40 +6583,47 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 );
             }
 
-            // Reflexive: `T::from(T_val)` — identity, return the argument
-            // (the `NewtypeFromCollapse` desugar, call.rs:526).
-            if arg_type_name == prefix {
+            // Reflexive: `T::from(T_val)` — identity, return the argument.
+            // Annotate tags the call with `NewtypeFromCollapse`; reify
+            // recognises it and emits the argument's TIR directly.
+            if self.ann_desugars(call.id)
+                == Some(super::sem::types::DesugarKind::NewtypeFromCollapse)
+            {
                 return arg;
             }
 
-            // Newtype→Base: `Base::from(Newtype_val)` where the arg is a
-            // newtype over `Base` — lower to a `Cast` (call.rs:534).
-            let base_of_arg = self.tysys.type_table.borrow().get_newtype_base(arg_type);
-            if let Some(base_id) = base_of_arg
-                && self.tysys.type_table.borrow().type_name(base_id) == prefix
+            // Newtype→Base: `Base::from(Newtype_val)`. Annotate records
+            // `NewtypeFromUnwrap` on the call and lowers to a `Cast` to
+            // the base type; reify replays the shape using the recorded
+            // expression type (which is the base type).
+            if self.ann_desugars(call.id)
+                == Some(super::sem::types::DesugarKind::NewtypeFromUnwrap)
             {
                 return TirExpr::new(
                     TirExprKind::Cast {
                         expr: Box::new(arg),
-                        target_type: base_id,
+                        target_type: recorded_type,
                     },
-                    base_id,
+                    recorded_type,
                     span,
                 );
             }
 
             // Base→Newtype: `Newtype::from(Base_val)` where `Newtype` is a
             // newtype over the arg's type — lower to a `Cast` (call.rs:549).
-            if let Some(newtype_id) = self.type_lookup().newtype(&prefix)
-                && let Some(base_id) = self.tysys.type_table.borrow().get_newtype_base(newtype_id)
-                && self.tysys.type_table.borrow().type_name(base_id) == arg_type_name
+            // Base→Newtype: `Newtype::from(Base_val)`. Annotate records
+            // `NewtypeFromWrap` on the call and lowers to a `Cast` to the
+            // newtype; reify replays the shape using the recorded
+            // expression type (which is the newtype).
+            if self.ann_desugars(call.id)
+                == Some(super::sem::types::DesugarKind::NewtypeFromWrap)
             {
                 return TirExpr::new(
                     TirExprKind::Cast {
                         expr: Box::new(arg),
-                        target_type: newtype_id,
+                        target_type: recorded_type,
                     },
-                    newtype_id,
+                    recorded_type,
                     span,
                 );
             }
