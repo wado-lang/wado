@@ -115,10 +115,6 @@ pub struct WirContext<'a> {
     /// `(arity, return_type)`.
     pub canonical_inspectable_base_type_id: Option<WirTypeId>,
 
-    /// Collected string literals (from all TIR modules).
-    pub string_literals: Vec<String>,
-    /// Collected bytes literals (from all TIR modules).
-    pub bytes_literals: Vec<Vec<u8>>,
     /// Available WASI function names (computed during component generation).
     pub available_wasi_funcs: IndexSet<String>,
 
@@ -208,23 +204,10 @@ pub struct ClosureWrapperFuncs {
 impl<'a> WirContext<'a> {
     /// Create a new `WirContext` from a `NirPackage`.
     pub fn new(package: &'a NirPackage) -> Self {
-        // Collect string literals (deduped)
-        let mut seen: IndexSet<&str> = IndexSet::default();
-        let mut string_literals = Vec::new();
-        for s in &package.string_literals {
-            if seen.insert(s.as_str()) {
-                string_literals.push(s.clone());
-            }
-        }
-
-        // Collect bytes literals (deduped)
-        let mut seen_bytes: IndexSet<&[u8]> = IndexSet::default();
-        let mut bytes_literals = Vec::new();
-        for b in &package.bytes_literals {
-            if seen_bytes.insert(b.as_slice()) {
-                bytes_literals.push(b.clone());
-            }
-        }
+        // String and bytes literals live on `package`; `register_string_data`
+        // / `register_bytes_data` read them directly and dedup into `data` via
+        // `string_literal_map` / `bytes_literal_map`, so the context keeps no
+        // separate copy.
 
         // Compute the per-`(N, Ret)` inspectable gate. After DCE,
         // `package.functions` only contains reachable functions, so the
@@ -296,8 +279,6 @@ impl<'a> WirContext<'a> {
             canonical_closure_counter: 0,
             inspectable_fn_dispatch,
             canonical_inspectable_base_type_id: None,
-            string_literals,
-            bytes_literals,
             wasm_module_sources: IndexMap::<ModuleSource, String>::default(),
             available_wasi_funcs: IndexSet::default(),
             pending_bodies: Vec::new(),
