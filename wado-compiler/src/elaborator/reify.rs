@@ -6881,14 +6881,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
-        // Qualified-callee static method `Struct::method(args)`.
-        // Reify resolves the prefix to its module via the type
-        // lookup (struct / namespace / newtype follow chain) and
-        // builds the same mangled `__Struct__method` FunctionRef
-        // the elaborator's `resolve_static_method_call_from_qualified`
-        // produces. The type-arg list comes from Gap 1's record on
-        // the call's AstId (the recording site at call.rs:472
-        // already covers impl-args + method-args concatenation).
+        // Qualified-callee `Type::method` shapes that don't flow through
+        // `static_method_dispatch` recording: `Flags::none()` /
+        // `Flags::all()` lower to an `IntLiteral` (not a `Call`) so
+        // the combined walk's static-method recording in
+        // `resolve_call` skips them. Reify reproduces the same
+        // `IntLiteral` here.
         if let ast::Expr::Ident(ident) = &call.callee
             && let Some(pos) = ident.name.find("::")
             && !ident.name[pos + 2..].contains("::")
@@ -6896,10 +6894,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let prefix = &ident.name[..pos];
             let suffix = &ident.name[pos + 2..];
 
-            // Flags `Type::none()` / `Type::all()` lower to an
-            // `IntLiteral` with the bitmask value (matches
-            // `Elaborator::resolve_call`'s flags branch at
-            // call.rs:586+).
             let flags = self.type_lookup().flags_case(prefix).cloned();
             if let Some(flags_info) = flags
                 && matches!(suffix, "none" | "all")
@@ -6919,64 +6913,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 );
             }
-
-            // Resolve the prefix struct's module so the
-            // FunctionRef points at the impl block's home
-            // module. Follows newtype chains the same way
-            // `Elaborator::resolve_static_method_call`
-            // (method_call.rs:820+) does.
-            let lookup = self.type_lookup();
-            let struct_module = lookup
-                .struct_fields(prefix)
-                .map(|info| info.module_source.clone())
-                .or_else(|| {
-                    lookup
-                        .variant_case(prefix)
-                        .map(|info| info.module_source.clone())
-                })
-                .or_else(|| {
-                    lookup
-                        .resource_type(prefix)
-                        .map(|info| info.module_source.clone())
-                })
-                .unwrap_or_else(|| self.current_module_source.clone());
-
-            let mangled_method_name = crate::name::MethodName::format_local(prefix, None, suffix);
-
-            let type_args: Vec<TypeId> = if call.type_args.is_empty() {
-                self.ann_generic_instantiations(call.id)
-                    .map(|gi| gi.type_args)
-                    .unwrap_or_default()
-            } else {
-                call.type_args
-                    .iter()
-                    .map(|ty| self.resolve_type(ty))
-                    .collect()
-            };
-
-            let arg_calls: Vec<CallArg> = call
-                .args
-                .iter()
-                .map(|a| CallArg::new(self.reify_expr(a, ctx, None), false))
-                .collect();
-
-            let method_info =
-                crate::name::LocalMethodName::new(prefix.to_string(), None, suffix.to_string());
-
-            return TirExpr::new(
-                TirExprKind::Call {
-                    func: crate::tir::FunctionRef {
-                        module_source: struct_module,
-                        name: mangled_method_name,
-                        monomorph_info: None,
-                        method_info: Some(method_info),
-                    },
-                    type_args,
-                    args: arg_calls,
-                },
-                recorded_type,
-                span,
-            );
         }
 
         // Unrecognised callee shape — annotate diagnosed it.
