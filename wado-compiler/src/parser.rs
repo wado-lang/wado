@@ -630,6 +630,49 @@ impl Parser {
         })
     }
 
+    /// Parse an expression at statement granularity, recovering on failure: the
+    /// error is reported, tokens are skipped to the next statement boundary
+    /// (see [`Parser::sync_expr_boundary`]), and an [`Expr::Error`] placeholder
+    /// spanning the skipped run is returned. This keeps the enclosing statement
+    /// (its `let` binding, `return`, expression-statement node) intact instead
+    /// of discarding it, so e.g. `let x = a + ;` still binds `x`.
+    ///
+    /// Must only be called from non-speculative statement positions — never
+    /// from inside a `checkpoint`/`restore` — so a real parse error is never
+    /// masked from a backtracking caller. The speculative paths
+    /// (`parse_pattern` / `parse_type` / primary-name `::` lookahead) call
+    /// [`Parser::parse_expr`] directly and keep their `Result`.
+    fn parse_expr_recovering(&mut self) -> Expr {
+        let before = self.pos;
+        match self.parse_expr() {
+            Ok(e) => e,
+            Err(e) => {
+                self.errors.push(e);
+                let span = self.sync_expr_boundary(before);
+                self.error_expr(span)
+            }
+        }
+    }
+
+    /// Skip a malformed statement-level expression: advance to the next `;`,
+    /// `}`, hard item keyword, or EOF — none consumed — so the enclosing
+    /// statement can still close on its terminator. Returns the span of the
+    /// skipped run anchored at `before`. A boundary token already at `before`
+    /// (e.g. `let x = ;`) yields an empty-run span and consumes nothing, so the
+    /// statement parser keeps its `;`.
+    fn sync_expr_boundary(&mut self, before: usize) -> Span {
+        while !self.is_at_end()
+            && !self.check(&TokenKind::Semicolon)
+            && !self.check(&TokenKind::RBrace)
+            && !self.at_hard_item_keyword()
+        {
+            self.advance();
+        }
+        let start = self.tokens[before].span;
+        let end = self.tokens[self.pos.saturating_sub(1)].span;
+        start.merge(&end)
+    }
+
     /// Parse a comma-separated list of types within angle brackets (`<T1, T2>`).
     /// Assumes the opening `<` has already been consumed.
     /// Handles `>>` splitting for nested generics via `pending_gt`.
@@ -1865,7 +1908,7 @@ impl Parser {
     fn parse_expr_stmt_in_block(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
         let id = self.alloc_ast_id();
-        let expr = self.parse_expr()?;
+        let expr = self.parse_expr_recovering();
 
         // Semicolon is optional if followed by `}` (end of block)
         let end_span = if self.check(&TokenKind::Semicolon) {
@@ -1987,7 +2030,7 @@ impl Parser {
 
         let (value, end_span) = if self.check(&TokenKind::Eq) {
             self.advance();
-            let v = self.parse_expr()?;
+            let v = self.parse_expr_recovering();
             let s = v.span();
             (Some(v), s)
         } else {
@@ -2025,7 +2068,7 @@ impl Parser {
         let value = if self.check(&TokenKind::Semicolon) || self.check(&TokenKind::RBrace) {
             None
         } else {
-            Some(self.parse_expr()?)
+            Some(self.parse_expr_recovering())
         };
 
         let end_span = if self.check(&TokenKind::Semicolon) {
@@ -2055,7 +2098,7 @@ impl Parser {
         // Consume the `return` keyword
         self.expect(&TokenKind::Return)?;
 
-        let value = self.parse_expr()?;
+        let value = self.parse_expr_recovering();
 
         let end_span = if self.check(&TokenKind::Semicolon) {
             self.advance().span
@@ -7335,10 +7378,11 @@ line 2
 
     #[test]
     fn recovery_block_internal_error_keeps_stmt_error_and_following_stmts() {
-        // A broken statement inside a block becomes a Stmt::Error placeholder;
-        // the statements before and after it survive intact.
+        // A statement whose *form* is broken — here a `let` with no pattern,
+        // which is not expression-recoverable — becomes a Stmt::Error
+        // placeholder; the statements before and after it survive intact.
         let (module, _errors) = parse_recovering(
-            "fn f() -> i32 {\n    let a: i32 = 1;\n    let x: i32 = ;\n    return a;\n}\n",
+            "fn f() -> i32 {\n    let a: i32 = 1;\n    let = 5;\n    return a;\n}\n",
         );
         let func = module
             .items
@@ -7498,6 +7542,104 @@ line 2
         assert!(
             module.has_todo(),
             "module must retain #![TODO] despite the later failure",
+        );
+    }
+
+    /// Navigate to the statements of `fn f`'s body.
+    fn fn_f_stmts(module: &Module) -> &[Stmt] {
+        module
+            .items
+            .iter()
+            .find_map(|i| match i {
+                Item::Function(f) if f.name == "f" => f.body.as_ref(),
+                _ => None,
+            })
+            .expect("fn f should survive recovery")
+            .stmts
+            .as_slice()
+    }
+
+    #[test]
+    fn recovery_let_initializer_keeps_binding() {
+        // `let x = ;` — the missing initializer becomes an Expr::Error, but the
+        // `let` survives as a proper binding (so LSP still sees `x`), and the
+        // following statement parses.
+        let (module, errors) =
+            parse_recovering("fn f() -> i32 {\n    let x = ;\n    return 0;\n}\n");
+        assert!(!errors.is_empty(), "missing initializer should be reported");
+        let stmts = fn_f_stmts(&module);
+        let let_stmt = stmts
+            .iter()
+            .find_map(|s| match s {
+                Stmt::Let(l) => Some(l),
+                _ => None,
+            })
+            .expect("the let binding survives");
+        assert!(
+            matches!(&let_stmt.pattern, Pattern::Ident { name, .. } if name == "x"),
+            "the binding name is preserved",
+        );
+        assert!(
+            matches!(let_stmt.value, Some(Expr::Error(_))),
+            "the missing initializer is an Expr::Error placeholder",
+        );
+        assert!(
+            stmts.iter().any(|s| matches!(s, Stmt::Return(_))),
+            "the following return survives",
+        );
+    }
+
+    #[test]
+    fn recovery_let_initializer_with_partial_expr_keeps_binding() {
+        // `let x = a + ;` — a binary expression with a missing right operand.
+        // The whole initializer becomes an Expr::Error but the binding survives.
+        let (module, errors) =
+            parse_recovering("fn f() -> i32 {\n    let x = a + ;\n    return 0;\n}\n");
+        assert!(!errors.is_empty(), "missing operand should be reported");
+        let stmts = fn_f_stmts(&module);
+        let let_stmt = stmts
+            .iter()
+            .find_map(|s| match s {
+                Stmt::Let(l) => Some(l),
+                _ => None,
+            })
+            .expect("the let binding survives");
+        assert!(matches!(let_stmt.value, Some(Expr::Error(_))));
+    }
+
+    #[test]
+    fn recovery_return_value_keeps_statement() {
+        // `return a + ;` — the return survives with an Expr::Error value instead
+        // of being discarded.
+        let (module, errors) = parse_recovering("fn f() -> i32 {\n    return a + ;\n}\n");
+        assert!(!errors.is_empty());
+        let stmts = fn_f_stmts(&module);
+        let ret = stmts
+            .iter()
+            .find_map(|s| match s {
+                Stmt::Return(r) => Some(r),
+                _ => None,
+            })
+            .expect("the return statement survives");
+        assert!(matches!(ret.value, Some(Expr::Error(_))));
+    }
+
+    #[test]
+    fn recovery_expr_statement_keeps_following_statements() {
+        // `a + ;` as an expression statement becomes a Stmt::Expr wrapping an
+        // Expr::Error; the following statement still parses.
+        let (module, errors) = parse_recovering("fn f() -> i32 {\n    a + ;\n    return 0;\n}\n");
+        assert!(!errors.is_empty());
+        let stmts = fn_f_stmts(&module);
+        assert!(
+            stmts
+                .iter()
+                .any(|s| matches!(s, Stmt::Expr(e) if matches!(e.expr, Expr::Error(_)))),
+            "the broken expression statement survives as Stmt::Expr(Error)",
+        );
+        assert!(
+            stmts.iter().any(|s| matches!(s, Stmt::Return(_))),
+            "the following return survives",
         );
     }
 
