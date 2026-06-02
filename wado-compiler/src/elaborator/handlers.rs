@@ -36,8 +36,16 @@ use super::types::{FunctionContext, TypeError};
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Annotate `with E1 => h1, ... do { body }`. Walks each handler
     /// binding for fact recording + diagnostics, walks the body for
-    /// fact recording, returns a `Unit` placeholder of `UNIT` type;
-    /// reify is the sole producer of the `WithHandler` TIR.
+    /// fact recording, returns a `WithHandler`-shaped `TirExpr` whose
+    /// `bindings` are empty (reify rebuilds them from
+    /// `HandlerBindingFacts`) but whose `body` is the real resolved
+    /// `TirBlock`. The `WithHandler` shape (rather than a `Unit`
+    /// placeholder) is required so the combined walk's missing-return
+    /// validator (`expr_always_exits`'s `TirExprKind::WithHandler` arm
+    /// recurses into `body`) keeps recognising
+    /// `fn foo() -> i32 { with E => h do { return X; } }` as a
+    /// definite exit. Reify replaces this shape wholesale with its
+    /// own `WithHandler` built from the recorded facts.
     pub(super) fn resolve_with_handler(
         &mut self,
         with_expr: &ast::WithHandlerExpr,
@@ -60,10 +68,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // so handler-introduced bindings, if any, don't leak — matches how
         // regular block expressions behave.
         ctx.enter_scope();
-        let _body = self.resolve_block(&with_expr.body, ctx, None);
+        let body = self.resolve_block(&with_expr.body, ctx, None);
         ctx.exit_scope();
 
-        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, with_expr.span)
+        TirExpr::new(
+            TirExprKind::WithHandler {
+                bindings: Vec::new(),
+                body,
+                result_type: TypeTable::UNIT,
+            },
+            TypeTable::UNIT,
+            with_expr.span,
+        )
     }
 
     /// Annotate a single binding inside a `with ... do` clause. `bundle_group`
@@ -421,9 +437,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// The expression itself yields `()` — `resume` is control-flow rather
     /// than a value-producing expression at the source level. The dispatch
-    /// synthesis pass lowers `Resume { value }` (rebuilt by reify) into
-    /// `Return { value }`, which is checked against the enclosing handler
-    /// method's return type by the existing return-type rules.
+    /// synthesis pass (running on reify's TIR) lowers `Resume { value }`
+    /// into `Return { value }`, which is checked against the enclosing
+    /// handler method's return type by the existing return-type rules.
+    ///
+    /// The returned `TirExpr` keeps the `Resume` shape (with the resolved
+    /// `value` inside) so the combined walk's missing-return validator
+    /// (`expr_always_exits`'s `TirExprKind::Resume` arm) still recognises
+    /// `fn handler_method(&self) -> Mark { resume self.mark }` as a
+    /// definite exit. Reify rebuilds its own `Resume` from the AST.
     pub(super) fn resolve_resume(
         &mut self,
         resume: &ast::ResumeExpr,
@@ -449,7 +471,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.typecheck(value.type_id, ctx.return_type, resume.span);
         }
 
-        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, resume.span)
+        TirExpr::new(
+            TirExprKind::Resume {
+                value: Box::new(value),
+            },
+            TypeTable::UNIT,
+            resume.span,
+        )
     }
 }
 
