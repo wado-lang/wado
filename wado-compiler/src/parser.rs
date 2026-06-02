@@ -317,7 +317,7 @@ impl Parser {
     /// errors are recovered and collected into `self.errors`, drained by
     /// [`Parser::take_errors`]. An unparsable item becomes an [`Item::Error`]
     /// node (see [`Parser::recover_item`]); a broken statement inside a block
-    /// is skipped without a node.
+    /// becomes a [`Stmt::Error`] placeholder (see [`Parser::error_stmt`]).
     pub fn parse(&mut self) -> Module {
         // `parse_inner_attributes` records each attribute as it parses, so a
         // malformed one only loses itself; the rest stay in the module.
@@ -616,6 +616,15 @@ impl Parser {
     /// [`AstId`] so the node participates in the dense id space like any other.
     fn error_expr(&mut self, span: Span) -> Expr {
         Expr::Error(crate::ast::ErrorExpr {
+            id: self.alloc_ast_id(),
+            span,
+        })
+    }
+
+    /// Build a [`Stmt::Error`] placeholder spanning `span`, allocating a fresh
+    /// [`AstId`] so the node participates in the dense id space like any other.
+    fn error_stmt(&mut self, span: Span) -> Stmt {
+        Stmt::Error(crate::ast::ErrorStmt {
             id: self.alloc_ast_id(),
             span,
         })
@@ -1752,11 +1761,16 @@ impl Parser {
             match self.parse_stmt_in_block() {
                 Ok(stmt) => stmts.push(stmt),
                 Err(e) => {
-                    // Drop the broken statement (no Stmt::Error node yet) and
-                    // recover to the next boundary so the rest of the block,
-                    // and any following items, still parse.
+                    // Replace the broken statement with a Stmt::Error placeholder
+                    // and recover to the next boundary so the rest of the block,
+                    // and any following items, still parse. The placeholder keeps
+                    // a stable span/id for the skipped run so LSP queries over the
+                    // surrounding healthy code are unaffected.
                     self.errors.push(e);
+                    let start = self.tokens[before].span;
                     self.recover_in_block(before);
+                    let end = self.tokens[self.pos.saturating_sub(1)].span;
+                    stmts.push(self.error_stmt(start.merge(&end)));
                 }
             }
         }
@@ -7297,6 +7311,36 @@ line 2
         assert!(
             !module.items.iter().any(|i| matches!(i, Item::Error(_))),
             "a recovered statement should not produce an Item::Error",
+        );
+    }
+
+    #[test]
+    fn recovery_block_internal_error_keeps_stmt_error_and_following_stmts() {
+        // A broken statement inside a block becomes a Stmt::Error placeholder;
+        // the statements before and after it survive intact.
+        let (module, _errors) = parse_recovering(
+            "fn f() -> i32 {\n    let a: i32 = 1;\n    let x: i32 = ;\n    return a;\n}\n",
+        );
+        let func = module
+            .items
+            .iter()
+            .find_map(|i| match i {
+                Item::Function(f) if f.name == "f" => Some(f),
+                _ => None,
+            })
+            .expect("fn f should survive recovery");
+        let stmts = &func.body.as_ref().expect("fn f has a body").stmts;
+        assert!(
+            stmts.iter().any(|s| matches!(s, Stmt::Error(_))),
+            "the broken statement should leave a Stmt::Error placeholder, got {stmts:?}",
+        );
+        assert!(
+            stmts.iter().any(|s| matches!(s, Stmt::Let(_))),
+            "the let before the broken statement survives",
+        );
+        assert!(
+            stmts.iter().any(|s| matches!(s, Stmt::Return(_))),
+            "the return after the broken statement survives",
         );
     }
 

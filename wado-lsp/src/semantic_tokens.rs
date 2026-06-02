@@ -385,6 +385,7 @@ fn visit_stmt(spans: &mut TypeSpans, stmt: &Stmt) {
             }
         }
         Stmt::LabeledBlock(lb) => visit_block(spans, &lb.block),
+        Stmt::Error(_) => {}
     }
 }
 

@@ -575,6 +575,7 @@ pub fn walk_stmt<V: AstVisitor>(v: &mut V, stmt: &Stmt) {
             }
         }
         Stmt::LabeledBlock(s) => v.visit_block(&s.block),
+        Stmt::Error(_) => {}
     }
 }
 
@@ -1505,6 +1506,19 @@ pub enum Stmt {
     Continue(ContinueStmt),
     Assert(AssertStmt),
     LabeledBlock(LabeledBlockStmt),
+    /// Placeholder for a statement that failed to parse, emitted by error
+    /// recovery so a broken statement inside a block leaves a node (with a
+    /// stable span/id) instead of vanishing. Inert in every later phase; the
+    /// batch path is fail-fast and never sees it.
+    Error(ErrorStmt),
+}
+
+/// Placeholder for a token run that failed to parse as a statement. See
+/// [`Stmt::Error`].
+#[derive(Debug, Clone)]
+pub struct ErrorStmt {
+    pub id: AstId,
+    pub span: Span,
 }
 
 /// Labeled block statement: `LABEL: { ... }`
@@ -1689,6 +1703,7 @@ impl Stmt {
             Stmt::Continue(s) => s.id,
             Stmt::Assert(s) => s.id,
             Stmt::LabeledBlock(s) => s.id,
+            Stmt::Error(s) => s.id,
         }
     }
 
@@ -1709,6 +1724,7 @@ impl Stmt {
             Stmt::Continue(s) => s.span,
             Stmt::Assert(s) => s.span,
             Stmt::LabeledBlock(s) => s.span,
+            Stmt::Error(s) => s.span,
         }
     }
 }

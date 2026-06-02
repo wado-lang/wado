@@ -260,6 +260,7 @@ fn find_let_in_stmt(stmt: &Stmt, target: AstId, name: &str) -> Option<String> {
         Stmt::Break(_) | Stmt::Continue(_) => None,
         Stmt::Assert(_) => None,
         Stmt::LabeledBlock(s) => find_let_in_block(&s.block, target, name),
+        Stmt::Error(_) => None,
     }
 }
 

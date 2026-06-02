@@ -109,6 +109,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Stmt::LabeledBlock(labeled_block) => {
                 vec![self.resolve_labeled_block(labeled_block, ctx)]
             }
+            // Parser error-recovery placeholder: the syntax error was already
+            // reported, so emit nothing.
+            Stmt::Error(_) => Vec::new(),
         }
     }
 

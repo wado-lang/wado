@@ -1985,7 +1985,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     logger,
                 )?;
             }
-            ast::Stmt::Break(_) | ast::Stmt::Continue(_) => {}
+            ast::Stmt::Break(_) | ast::Stmt::Continue(_) | ast::Stmt::Error(_) => {}
         }
         Ok(())
     }

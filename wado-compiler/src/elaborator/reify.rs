@@ -1646,6 +1646,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Stmt::For(f) => self.reify_for(f, ctx),
             ast::Stmt::Assert(assert_stmt) => self.reify_assert(assert_stmt, ctx),
             ast::Stmt::ForOf(for_of) => self.reify_for_of(for_of, ctx),
+            // Parser error-recovery placeholder; unreachable on the fail-fast
+            // batch path. Emit nothing to keep the match total.
+            ast::Stmt::Error(_) => Vec::new(),
         }
     }
 
