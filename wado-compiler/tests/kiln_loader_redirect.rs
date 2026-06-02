@@ -23,6 +23,12 @@ fn build_with_invocations(
 ) -> Semantics {
     block_on(async {
         let parsed = parse(source);
+        assert!(
+            parsed.lex_errors.is_empty() && parsed.errors.is_empty(),
+            "entry source should parse cleanly: lex={:?} parse={:?}",
+            parsed.lex_errors,
+            parsed.errors,
+        );
         let loaded = load(
             parsed,
             Some(filename),
