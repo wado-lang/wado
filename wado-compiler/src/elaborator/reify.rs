@@ -306,6 +306,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ann_fn_return_type => fn_return_types: crate::tir::TypeId,
             ann_effect_ops => effect_ops: Vec<crate::tir::TirEffectOp>,
             ann_decl_type_params => decl_type_params: Vec<crate::tir::TirTypeParam>,
+            ann_struct_field_types => struct_field_types: Vec<crate::tir::TypeId>,
         }
     }
 
@@ -659,37 +660,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `tysys.all_struct_fields`; field-default expressions and
     /// type-param defaults are read from `ModuleSemantics`.
     fn reify_struct(&mut self, struct_decl: &ast::StructDecl) -> TirStruct {
-        // Field types are decl-resolved during annotate and live in
-        // `tysys.all_struct_fields`. Snapshot the per-field types into
-        // an owned `Vec` so the borrow on `self.tysys` ends here —
-        // the field-default reify below mutably borrows `self`.
-        let mut field_types: Vec<TypeId> = {
-            let field_info = self
-                .tysys
-                .all_struct_fields
-                .get(&self.current_module_source)
-                .and_then(|m| m.get(&struct_decl.name));
-            (0..struct_decl.fields.len())
-                .map(|i| {
-                    field_info
-                        .and_then(|info| info.fields.get(i).map(|(_, t, _)| *t))
-                        .unwrap_or(crate::tir::TypeTable::UNKNOWN)
-                })
-                .collect()
-        };
-
-        // The static decl-field pass (`resolve_type_static` → `TypeLookup`
-        // without `loaded_modules`) cannot follow `pub use` re-export chains,
-        // so a field typed by a re-exported decl (e.g. `Mark = u64` re-exported
-        // from `wasi:clocks`) lands `UNKNOWN`. Reify's own [`Self::resolve_type`]
-        // carries `loaded_modules`, so re-resolving the field's AST annotation
-        // recovers the real type. Production masks the same `UNKNOWN` by
-        // re-resolving through the instance resolver at emission time.
-        for (index, field) in struct_decl.fields.iter().enumerate() {
-            if field_types[index] == crate::tir::TypeTable::UNKNOWN {
-                field_types[index] = self.resolve_type(&field.ty);
-            }
-        }
+        // Single source of truth: `resolve_struct` recorded the per-field
+        // resolved types (with the decl's type-param scope alive and
+        // `loaded_modules` available, so `pub use` re-export chains are
+        // followed). Reify reads them straight from the annotation rather
+        // than reading the static decl-field pass output and masking
+        // UNKNOWNs with its own re-resolve.
+        let field_types = self
+            .ann_struct_field_types(struct_decl.id)
+            .expect("resolve_struct records the field types for every struct reify emits");
 
         // Field-default expressions resolve in a per-struct
         // `FunctionContext` keyed `struct:<name>` (no self, no other

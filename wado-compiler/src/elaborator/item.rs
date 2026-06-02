@@ -520,6 +520,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .decl_type_params
             .insert(self.ann_key(struct_decl.id), type_params.clone());
 
+        // Record per-field resolved types for reify to read instead of
+        // re-resolving them off the static decl pass + UNKNOWN-fallback.
+        // The static pass cannot follow `pub use` re-export chains; the
+        // resolution we just did, with `loaded_modules` in scope, can.
+        let struct_field_types: Vec<TypeId> = fields.iter().map(|f| f.type_id).collect();
+        self.sem
+            .types
+            .struct_field_types
+            .insert(self.ann_key(struct_decl.id), struct_field_types);
+
         let serde_rename_all = struct_decl.attrs.iter().find_map(|a| {
             if a.name == "serde" {
                 a.kv_value("rename_all").map(str::to_string)
