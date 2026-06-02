@@ -6965,11 +6965,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &self.tysys.type_table,
         );
 
-        let type_args: Vec<TypeId> = method_call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
+        // Method-level type args ride along on `MethodDispatch` — the
+        // IndexMut rewrite in `method_lookup.rs` records the same vector
+        // it passes to `build_tir_method_call`, so reify is a pure read.
+        let type_args = outer_dispatch.method_type_args.clone();
         let args: Vec<CallArg> = method_call
             .args
             .iter()
