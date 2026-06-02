@@ -115,6 +115,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     TypeTable::ERROR
                 }
             }
+            // Parser error-recovery placeholder: the syntax error was already
+            // reported, so resolve to the error type to suppress cascades.
+            Type::Error(_) => TypeTable::ERROR,
         }
     }
 

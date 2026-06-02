@@ -810,6 +810,7 @@ pub fn walk_type<V: AstVisitor>(v: &mut V, ty: &Type) {
         }
         Type::Reference(t) | Type::MutReference(t) => v.visit_type(t),
         Type::TypePackSpread(_, _) => {}
+        Type::Error(_) => {}
     }
 }
 
@@ -2590,6 +2591,11 @@ pub enum Type {
     MutReference(Box<Type>),
     /// Type pack spread inside a tuple: `..T` in `[i32, ..T, bool]`
     TypePackSpread(String, Span),
+    /// Placeholder for a type that failed to parse, emitted by error recovery
+    /// (e.g. a broken element in a type-argument or parameter list) so the
+    /// surrounding list survives. Resolves to the elaborator's error type; the
+    /// batch path is fail-fast and never sees it.
+    Error(Span),
 }
 
 impl Type {
@@ -2605,7 +2611,8 @@ impl Type {
             | Type::Tuple(_)
             | Type::Reference(_)
             | Type::MutReference(_)
-            | Type::TypePackSpread(_, _) => None,
+            | Type::TypePackSpread(_, _)
+            | Type::Error(_) => None,
         }
     }
 
@@ -2627,6 +2634,7 @@ impl Type {
             Type::Tuple(elems) => elems.first().map(Type::span).unwrap_or_default(),
             Type::Reference(inner) | Type::MutReference(inner) => inner.span(),
             Type::TypePackSpread(_, span) => *span,
+            Type::Error(span) => *span,
         }
     }
 }

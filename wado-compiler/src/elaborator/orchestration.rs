@@ -2550,7 +2550,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     logger,
                 )
             }
-            Type::TypePackSpread(_, _) => Ok(()),
+            Type::TypePackSpread(_, _) | Type::Error(_) => Ok(()),
         }
     }
 
@@ -2800,6 +2800,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     TypeTable::UNKNOWN
                 }
             }
+            // Parser error-recovery placeholder: resolve to the error type.
+            Type::Error(_) => TypeTable::ERROR,
         }
     }
 

@@ -658,7 +658,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | Type::Tuple(_)
             | Type::Reference(_)
             | Type::MutReference(_)
-            | Type::TypePackSpread(_, _) => false,
+            | Type::TypePackSpread(_, _)
+            | Type::Error(_) => false,
         }
     }
 
@@ -686,7 +687,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | Type::Tuple(_)
             | Type::Reference(_)
             | Type::MutReference(_)
-            | Type::TypePackSpread(_, _) => return variant_name.to_string(),
+            | Type::TypePackSpread(_, _)
+            | Type::Error(_) => return variant_name.to_string(),
         };
         format!("{base}::{variant_name}")
     }
@@ -3360,6 +3362,7 @@ fn format_pattern_qualifier_type(ty: &Type) -> String {
         Type::Reference(inner) => format!("&{}", format_pattern_qualifier_type(inner)),
         Type::MutReference(inner) => format!("&mut {}", format_pattern_qualifier_type(inner)),
         Type::TypePackSpread(name, _) => format!("..{name}"),
+        Type::Error(_) => "<error>".to_string(),
     }
 }
 
@@ -3502,7 +3505,8 @@ pub(super) fn primitive_assoc_const_to_i128(
         | Type::Tuple(_)
         | Type::Reference(_)
         | Type::MutReference(_)
-        | Type::TypePackSpread(_, _) => return None,
+        | Type::TypePackSpread(_, _)
+        | Type::Error(_) => return None,
     };
     match (ty_name, const_name) {
         ("i8", "MAX") => Some(i128::from(i8::MAX)),

@@ -9250,7 +9250,8 @@ fn ast_type_name_static(ty: &ast::Type) -> String {
         }
         ast::Type::Function(_)
         | ast::Type::NamespacedGeneric(_)
-        | ast::Type::TypePackSpread(_, _) => "Unknown".to_string(),
+        | ast::Type::TypePackSpread(_, _)
+        | ast::Type::Error(_) => "Unknown".to_string(),
     }
 }
 

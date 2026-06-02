@@ -4150,7 +4150,11 @@ impl Parser {
             self.expect(&TokenKind::LParen)?;
 
             // Parse parameter types
-            let params = self.parse_comma_separated(&TokenKind::RParen, Self::parse_type)?;
+            let params = self.parse_comma_separated_recovering(
+                &TokenKind::RParen,
+                Self::parse_type,
+                |_, span| Type::Error(span),
+            );
             self.expect(&TokenKind::RParen)?;
 
             // Parse return type (optional)
@@ -4220,8 +4224,11 @@ impl Parser {
         // Tuple type: [] or [T1, T2, ...] or [i32, ..T, bool]
         if self.check(&TokenKind::LBracket) {
             self.advance();
-            let types =
-                self.parse_comma_separated(&TokenKind::RBracket, Self::parse_type_or_pack)?;
+            let types = self.parse_comma_separated_recovering(
+                &TokenKind::RBracket,
+                Self::parse_type_or_pack,
+                |_, span| Type::Error(span),
+            );
             self.expect(&TokenKind::RBracket)?;
             return Ok(Type::Tuple(types));
         }
@@ -4519,7 +4526,11 @@ impl Parser {
             false
         };
         self.expect(&TokenKind::LParen)?;
-        let params = self.parse_comma_separated(&TokenKind::RParen, Self::parse_type)?;
+        let params = self.parse_comma_separated_recovering(
+            &TokenKind::RParen,
+            Self::parse_type,
+            |_, span| Type::Error(span),
+        );
         self.expect(&TokenKind::RParen)?;
 
         let return_type = if self.check(&TokenKind::Arrow) {
@@ -7341,6 +7352,31 @@ line 2
         assert!(
             stmts.iter().any(|s| matches!(s, Stmt::Return(_))),
             "the return after the broken statement survives",
+        );
+    }
+
+    #[test]
+    fn recovery_tuple_type_keeps_following_elements() {
+        // A broken element inside a tuple type becomes a Type::Error placeholder
+        // and the surrounding element types survive. `%` cannot start a type.
+        let (module, errors) =
+            parse_recovering("fn f(x: [i32, %, bool]) -> i32 {\n    return 0;\n}\n");
+        assert!(!errors.is_empty(), "broken type element should be reported");
+        let func = module
+            .items
+            .iter()
+            .find_map(|i| match i {
+                Item::Function(f) if f.name == "f" => Some(f),
+                _ => None,
+            })
+            .expect("fn f should survive recovery");
+        let Type::Tuple(elems) = &func.params[0].ty else {
+            panic!("expected a tuple type, got {:?}", func.params[0].ty);
+        };
+        assert_eq!(elems.len(), 3, "all three type slots survive");
+        assert!(
+            matches!(elems[1], Type::Error(_)),
+            "middle type is a placeholder"
         );
     }
 

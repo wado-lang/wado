@@ -317,6 +317,7 @@ fn visit_type(spans: &mut TypeSpans, ty: &Type) {
             visit_type(spans, inner);
         }
         Type::TypePackSpread(_, _) => {}
+        Type::Error(_) => {}
     }
 }
 
