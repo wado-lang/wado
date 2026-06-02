@@ -160,7 +160,7 @@ fn lexer_error_recovers_around_stray_character() {
                 &host,
             )
             .await;
-        assert!(hover.is_some(), "hover should resolve before the lex error",);
+        assert!(hover.is_some(), "hover should resolve before the lex error");
     });
 }
 

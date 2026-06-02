@@ -1499,7 +1499,7 @@ test data";
         let r = lex(source);
         assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
 
-        let data = r.data_section.clone();
+        let data = r.data_section;
         assert_eq!(data, Some("owned data".to_string()));
     }
 
