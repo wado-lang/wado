@@ -1703,8 +1703,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Stmt::For(f) => self.reify_for(f, ctx),
             ast::Stmt::Assert(assert_stmt) => self.reify_assert(assert_stmt, ctx),
             ast::Stmt::ForOf(for_of) => self.reify_for_of(for_of, ctx),
-            // Parser error-recovery placeholder; unreachable on the fail-fast
-            // batch path. Emit nothing to keep the match total.
+            // Parser error-recovery placeholder. Reached when the LSP
+            // `semantics_of` path reifies a partial AST (the batch path is
+            // fail-fast and stops before reify). Emit nothing.
             ast::Stmt::Error(_) => Vec::new(),
         }
     }
@@ -1864,9 +1865,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     let_stmt.pattern
                 )
             }
-            // Parser error-recovery placeholder; unreachable on the fail-fast
-            // batch path. Bind nothing, keep the (error-typed) value as an
-            // expression statement so the result stays a valid TirStmt.
+            // Parser error-recovery placeholder. Reached when the LSP
+            // `semantics_of` path reifies a partial AST (the batch path is
+            // fail-fast and stops before reify). Bind nothing, keep the
+            // (error-typed) value as an expression statement so the result
+            // stays a valid TirStmt.
             ast::Pattern::Error(_) => {
                 TirStmt::new(crate::tir::TirStmtKind::Expr(value), let_stmt.span)
             }
@@ -2291,9 +2294,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
             }
             ast::Expr::WithHandler(with_expr) => self.reify_with_handler(with_expr, ctx),
-            // Parser error-recovery placeholder. The batch path is fail-fast on
-            // syntax errors, so this is unreachable in practice; emit an error
-            // typed unit to keep the match total and stay sound if ever reached.
+            // Parser error-recovery placeholder. Reached when the LSP
+            // `semantics_of` path reifies a partial AST (the batch path is
+            // fail-fast and stops before reify); resolves to the error type.
             ast::Expr::Error(e) => TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, e.span),
         }
     }
@@ -8658,8 +8661,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 scrutinee_type,
                 ctx,
             ),
-            // Parser error-recovery placeholder; unreachable on the fail-fast
-            // batch path. Inert.
+            // Parser error-recovery placeholder. Reached when the LSP
+            // `semantics_of` path reifies a partial AST (the batch path is
+            // fail-fast and stops before reify). Inert.
             ast::Pattern::Error(_) => TirPattern::Wildcard,
         }
     }
