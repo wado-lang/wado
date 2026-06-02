@@ -63,8 +63,8 @@ pub use compiler_host::{
 };
 pub use logger::{Bail, Logger};
 pub use semantics::{
-    Cursor, Definition, Semantics, lex_error_diagnostic, parse_error_diagnostic,
-    parse_failure_diagnostic, semantics, semantics_of,
+    Cursor, Definition, Semantics, lex_error_diagnostic, parse_error_diagnostic, semantics,
+    semantics_of,
 };
 
 #[cfg(test)]
@@ -982,24 +982,13 @@ pub fn format(source: &str) -> Result<String, CompileError> {
     // `CompileError::Lexer` (the first one wins).
     let lex_result = lexer::lex(source);
     if let Some(e) = lex_result.errors.first() {
-        return Err(CompileError::Lexer {
-            message: e.to_string(),
-            line: e.span.line,
-            column: e.span.column,
-            filename: None,
-        });
+        return Err(CompileError::from_lex_error(e, None));
     }
     let mut parser = Parser::from_lex(lex_result);
     // Formatting requires a clean parse: reject the first recovered error.
     let ast = parser.parse();
     if let Some(e) = parser.take_errors().first() {
-        return Err(CompileError::Parser {
-            message: e.message.clone(),
-            line: e.span.line,
-            column: e.span.column,
-            filename: None,
-            is_todo_module: parser.has_todo(),
-        });
+        return Err(CompileError::from_parse_error(e, None, parser.has_todo()));
     }
     let mut trivia = parser.take_trivia();
     comment::populate_trailing(&mut trivia, &ast);
@@ -1034,21 +1023,10 @@ impl ParseResult {
     /// which must reject malformed input.
     pub fn into_fail_fast(self) -> Result<ParseResult, CompileError> {
         if let Some(e) = self.lex_errors.first() {
-            return Err(CompileError::Lexer {
-                message: e.to_string(),
-                line: e.span.line,
-                column: e.span.column,
-                filename: None,
-            });
+            return Err(CompileError::from_lex_error(e, None));
         }
         if let Some(e) = self.errors.first() {
-            return Err(CompileError::Parser {
-                message: e.message.clone(),
-                line: e.span.line,
-                column: e.span.column,
-                filename: None,
-                is_todo_module: self.ast.has_todo(),
-            });
+            return Err(CompileError::from_parse_error(e, None, self.ast.has_todo()));
         }
         Ok(self)
     }
@@ -1079,24 +1057,24 @@ pub async fn load<H: CompilerHost>(
 }
 
 /// Parse a Wado source file into AST and trivia map.
-/// This is a lightweight operation that only lexes and parses.
-pub fn parse(source: &str) -> Result<ParseResult, CompileError> {
+/// This is a lightweight operation that only lexes and parses; both are
+/// error-recovering, so the call cannot fail. Lex / parse errors are
+/// surfaced via [`ParseResult::lex_errors`] / [`ParseResult::errors`].
+pub fn parse(source: &str) -> ParseResult {
     let mut lex_result = lexer::lex(source);
     let lex_errors = std::mem::take(&mut lex_result.errors);
     let mut parser = Parser::from_lex(lex_result);
-    // Both lexing and parsing are resilient and always produce a `Module`;
-    // callers that need fail-fast call `ParseResult::into_fail_fast`.
     let ast = parser.parse();
     let errors = parser.take_errors();
     let mut trivia = parser.take_trivia();
     comment::populate_trailing(&mut trivia, &ast);
     comment::populate_inner_tail(&mut trivia, &ast);
-    Ok(ParseResult {
+    ParseResult {
         ast,
         trivia,
         lex_errors,
         errors,
-    })
+    }
 }
 
 /// Compilation error with structured location info
@@ -1144,6 +1122,35 @@ impl CompileError {
                 ..
             }
         )
+    }
+
+    /// Build a `CompileError::Lexer` from a recovered [`lexer::LexError`].
+    /// Single projection consulted by every fail-fast site so message /
+    /// line / column extraction lives in one place.
+    pub fn from_lex_error(e: &lexer::LexError, filename: Option<&str>) -> Self {
+        CompileError::Lexer {
+            message: e.to_string(),
+            line: e.span.line,
+            column: e.span.column,
+            filename: filename.map(String::from),
+        }
+    }
+
+    /// Build a `CompileError::Parser` from a recovered
+    /// [`parser::ParseError`]. Mirrors [`Self::from_lex_error`] for the parse
+    /// fail-fast path; `is_todo_module` comes from the surrounding AST.
+    pub fn from_parse_error(
+        e: &parser::ParseError,
+        filename: Option<&str>,
+        is_todo_module: bool,
+    ) -> Self {
+        CompileError::Parser {
+            message: e.message.clone(),
+            line: e.span.line,
+            column: e.span.column,
+            filename: filename.map(String::from),
+            is_todo_module,
+        }
     }
 }
 

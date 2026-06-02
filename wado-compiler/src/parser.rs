@@ -111,39 +111,53 @@ impl Parser {
     /// should call [`Parser::from_lex`] instead so shebang / data section /
     /// comments flow through.
     pub fn new(tokens: Vec<Token>) -> Self {
+        Self::build(tokens, None, None, Vec::new())
+    }
+
+    /// Parse a complete [`crate::lexer::LexResult`], keeping the comment
+    /// stream so the formatter / doc / dump paths can attach leading comments
+    /// to AST nodes as ids are allocated. The lexer's errors are not consumed
+    /// here — callers route them through [`crate::ParseResult::lex_errors`]
+    /// so the wire format keeps the `lexer error:` prefix distinct from
+    /// `parse error:`.
+    pub fn from_lex(lex: crate::lexer::LexResult) -> Self {
+        Self::build(lex.tokens, lex.shebang, lex.data_section, lex.comments)
+    }
+
+    /// Like [`Parser::from_lex`] but drops the comment stream. Used by the
+    /// loader and other non-formatter paths where trivia is allocated then
+    /// thrown away — clearing it up front skips the per-AST-id comment-cursor
+    /// walk and `Comment::clone` into [`crate::comment::TriviaMap`].
+    pub fn from_lex_no_trivia(lex: crate::lexer::LexResult) -> Self {
+        Self::build(lex.tokens, lex.shebang, lex.data_section, Vec::new())
+    }
+
+    fn build(
+        tokens: Vec<Token>,
+        shebang: Option<String>,
+        data_section: Option<String>,
+        comments: Vec<crate::comment::Comment>,
+    ) -> Self {
+        // Filter `TokenKind::Error` tokens at construction time so no parser
+        // path can mistake one for an identifier or generate a duplicate
+        // "expected …, found Error(...)" diagnostic. The lex error is already
+        // surfaced through `ParseResult::lex_errors`; the parser has no use
+        // for the recovery sentinel.
+        let tokens: Vec<Token> = tokens
+            .into_iter()
+            .filter(|t| !matches!(t.kind, TokenKind::Error(_)))
+            .collect();
         Self {
             tokens,
             pos: 0,
             pending_gt: false,
             restrict_struct_literals: false,
-            shebang: None,
-            data_section: None,
+            shebang,
+            data_section,
             include_paths: crate::hashmap::IndexSet::default(),
             parsed_inner_attributes: Vec::new(),
             next_ast_id: 0,
-            comments: Vec::new(),
-            comment_cursor: 0,
-            trivia: crate::comment::TriviaMap::new(),
-            errors: Vec::new(),
-        }
-    }
-
-    /// Parse a complete [`crate::lexer::LexResult`]. The lexer's errors are
-    /// not consumed here — callers route them through
-    /// [`crate::ParseResult::lex_errors`] so the wire format keeps the
-    /// `lexer error:` prefix distinct from `parse error:`.
-    pub fn from_lex(lex: crate::lexer::LexResult) -> Self {
-        Self {
-            tokens: lex.tokens,
-            pos: 0,
-            pending_gt: false,
-            restrict_struct_literals: false,
-            shebang: lex.shebang,
-            data_section: lex.data_section,
-            include_paths: crate::hashmap::IndexSet::default(),
-            parsed_inner_attributes: Vec::new(),
-            next_ast_id: 0,
-            comments: lex.comments,
+            comments,
             comment_cursor: 0,
             trivia: crate::comment::TriviaMap::new(),
             errors: Vec::new(),
@@ -315,14 +329,6 @@ impl Parser {
         let mut items = Vec::new();
 
         while !self.is_at_end() {
-            // Skip lexer-emitted error tokens silently — the underlying lex
-            // error was already absorbed via `absorb_lex_errors`, so the
-            // parser would otherwise report a redundant "expected item"
-            // diagnostic for the same span.
-            if matches!(self.peek_kind(), TokenKind::Error(_)) {
-                self.advance();
-                continue;
-            }
             let before = self.pos;
             match self.parse_item() {
                 Ok(item) => items.push(item),
@@ -1673,12 +1679,6 @@ impl Parser {
         // still over-reads `#` as a compile-time literal, blurring that one
         // diagnostic — the following item still recovers.
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() && !self.at_hard_item_keyword() {
-            // Same rationale as the item loop: lex-error tokens are already
-            // diagnosed, so skip them without re-reporting.
-            if matches!(self.peek_kind(), TokenKind::Error(_)) {
-                self.advance();
-                continue;
-            }
             let before = self.pos;
             match self.parse_stmt_in_block() {
                 Ok(stmt) => stmts.push(stmt),
@@ -5346,11 +5346,13 @@ impl Parser {
 
         let lex_result = crate::lexer::lex_with_line(expr_str, span.line);
         // Lex errors inside the interpolation surface alongside the outer
-        // parser's diagnostics; we still try to parse whatever tokens we got.
+        // parser's diagnostics. Use the lex error's own span — carefully
+        // line-shifted by `lex_with_line` — so the editor highlights the
+        // offending byte, not the whole `{…}`.
         for e in &lex_result.errors {
             self.errors.push(ParseError {
-                message: format!("error parsing template interpolation: {}", e.to_string()),
-                span,
+                message: format!("error parsing template interpolation: {e}"),
+                span: e.span,
             });
         }
 
@@ -5557,7 +5559,7 @@ mod tests {
             "lexer error in test input: {:?}",
             r.errors
         );
-        let mut parser = Parser::from_lex(r);
+        let mut parser = Parser::from_lex_no_trivia(r);
         parser.parse_strict()
     }
 
@@ -5570,7 +5572,7 @@ mod tests {
             "lexer error in test input: {:?}",
             r.errors
         );
-        let mut parser = Parser::from_lex(r);
+        let mut parser = Parser::from_lex_no_trivia(r);
         let module = parser.parse();
         let errors = parser.take_errors();
         (module, errors)
@@ -7282,7 +7284,7 @@ line 2
             "lexer error in test input: {:?}",
             r.errors
         );
-        let mut parser = Parser::from_lex(r);
+        let mut parser = Parser::from_lex_no_trivia(r);
         let module = parser.parse();
         assert!(
             !parser.take_errors().is_empty(),

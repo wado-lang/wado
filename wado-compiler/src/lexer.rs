@@ -85,6 +85,12 @@ pub enum LexErrorKind {
     UnterminatedTemplateString,
     /// Character literal lacking its closing `'`.
     UnterminatedChar,
+    /// Character literal with more than one character between the quotes
+    /// (e.g. `'abc'`). The lexer recovers by greedily consuming up to the
+    /// closing quote, so the elaborator still sees a `CharLit` payload — but
+    /// the diagnostic flags the size violation here rather than letting it
+    /// cascade into a tail of follow-on identifier / unterminated-char errors.
+    CharLiteralTooLong,
     /// Empty character literal (`''`).
     EmptyCharLiteral,
     /// Block comment (`/* ... */`) lacking its closing `*/`.
@@ -106,6 +112,9 @@ impl std::fmt::Display for LexError {
             LexErrorKind::UnterminatedString => write!(f, "unterminated string literal"),
             LexErrorKind::UnterminatedTemplateString => write!(f, "unterminated template string"),
             LexErrorKind::UnterminatedChar => write!(f, "unterminated character literal"),
+            LexErrorKind::CharLiteralTooLong => {
+                write!(f, "character literal must contain a single character")
+            }
             LexErrorKind::EmptyCharLiteral => write!(f, "empty character literal"),
             LexErrorKind::UnterminatedBlockComment => write!(f, "unterminated block comment"),
             LexErrorKind::MissingHexDigits => write!(f, "expected hex digit after 0x"),
@@ -182,6 +191,21 @@ impl<'a> Lexer<'a> {
             shebang: self.shebang,
             data_section: self.data_section,
         }
+    }
+
+    /// Build a span from a saved start position to the current cursor.
+    /// Captures `(start, self.pos, start_line, start_column, self.line,
+    /// self.column)` — the recurring pattern at every error site and every
+    /// closing-token site.
+    fn span_from(&self, start: usize, start_line: usize, start_column: usize) -> Span {
+        Span::with_end(
+            start,
+            self.pos,
+            start_line,
+            start_column,
+            self.line,
+            self.column,
+        )
     }
 
     fn next_token(&mut self) -> Token {
@@ -445,14 +469,7 @@ impl<'a> Lexer<'a> {
                 // emit a `TokenKind::Error` carrying its source text so the
                 // parser can step over it without losing forward progress.
                 self.advance();
-                let span = Span::with_end(
-                    start,
-                    self.pos,
-                    start_line,
-                    start_column,
-                    self.line,
-                    self.column,
-                );
+                let span = self.span_from(start, start_line, start_column);
                 self.errors.push(LexError {
                     kind: LexErrorKind::UnexpectedChar(ch),
                     span,
@@ -461,17 +478,7 @@ impl<'a> Lexer<'a> {
             }
         };
 
-        Token::new(
-            kind,
-            Span::with_end(
-                start,
-                self.pos,
-                start_line,
-                start_column,
-                self.line,
-                self.column,
-            ),
-        )
+        Token::new(kind, self.span_from(start, start_line, start_column))
     }
 
     fn peek(&mut self) -> Option<(usize, char)> {
@@ -608,14 +615,7 @@ impl<'a> Lexer<'a> {
         Comment {
             text,
             kind,
-            span: Span::with_end(
-                start,
-                self.pos,
-                start_line,
-                start_column,
-                self.line,
-                self.column,
-            ),
+            span: self.span_from(start, start_line, start_column),
         }
     }
 
@@ -634,14 +634,7 @@ impl<'a> Lexer<'a> {
         loop {
             match self.peek() {
                 None => {
-                    let span = Span::with_end(
-                        start,
-                        self.pos,
-                        start_line,
-                        start_column,
-                        self.line,
-                        self.column,
-                    );
+                    let span = self.span_from(start, start_line, start_column);
                     self.errors.push(LexError {
                         kind: LexErrorKind::UnterminatedBlockComment,
                         span,
@@ -662,14 +655,7 @@ impl<'a> Lexer<'a> {
                         return Comment {
                             text,
                             kind: CommentKind::Block,
-                            span: Span::with_end(
-                                start,
-                                self.pos,
-                                start_line,
-                                start_column,
-                                self.line,
-                                self.column,
-                            ),
+                            span: self.span_from(start, start_line, start_column),
                         };
                     }
                 }
@@ -859,14 +845,7 @@ impl<'a> Lexer<'a> {
             if !matches!(self.peek_char(), Some('0'..='9')) {
                 self.errors.push(LexError {
                     kind: LexErrorKind::MissingExponentDigits,
-                    span: Span::with_end(
-                        start,
-                        self.pos,
-                        start_line,
-                        start_column,
-                        self.line,
-                        self.column,
-                    ),
+                    span: self.span_from(start, start_line, start_column),
                 });
             }
             while let Some((_, ch)) = self.peek() {
@@ -903,14 +882,7 @@ impl<'a> Lexer<'a> {
         if self.pos == digit_start {
             self.errors.push(LexError {
                 kind: LexErrorKind::MissingHexDigits,
-                span: Span::with_end(
-                    start,
-                    self.pos,
-                    start_line,
-                    start_column,
-                    self.line,
-                    self.column,
-                ),
+                span: self.span_from(start, start_line, start_column),
             });
         }
 
@@ -937,14 +909,7 @@ impl<'a> Lexer<'a> {
         if self.pos == digit_start {
             self.errors.push(LexError {
                 kind: LexErrorKind::MissingBinaryDigits,
-                span: Span::with_end(
-                    start,
-                    self.pos,
-                    start_line,
-                    start_column,
-                    self.line,
-                    self.column,
-                ),
+                span: self.span_from(start, start_line, start_column),
             });
         }
 
@@ -970,14 +935,7 @@ impl<'a> Lexer<'a> {
         if self.pos == digit_start {
             self.errors.push(LexError {
                 kind: LexErrorKind::MissingOctalDigits,
-                span: Span::with_end(
-                    start,
-                    self.pos,
-                    start_line,
-                    start_column,
-                    self.line,
-                    self.column,
-                ),
+                span: self.span_from(start, start_line, start_column),
             });
         }
 
@@ -1000,14 +958,7 @@ impl<'a> Lexer<'a> {
                     // cannot break on newline; EOF is the only safe recovery.
                     self.errors.push(LexError {
                         kind: LexErrorKind::UnterminatedString,
-                        span: Span::with_end(
-                            start,
-                            self.pos,
-                            start_line,
-                            start_column,
-                            self.line,
-                            self.column,
-                        ),
+                        span: self.span_from(start, start_line, start_column),
                     });
                     let raw = self.input[content_start..self.pos].to_string();
                     return TokenKind::StringLit(raw);
@@ -1079,14 +1030,7 @@ impl<'a> Lexer<'a> {
                 None => {
                     self.errors.push(LexError {
                         kind: LexErrorKind::UnterminatedTemplateString,
-                        span: Span::with_end(
-                            start,
-                            self.pos,
-                            start_line,
-                            start_column,
-                            self.line,
-                            self.column,
-                        ),
+                        span: self.span_from(start, start_line, start_column),
                     });
                     if !current_literal.is_empty() {
                         parts.push(TemplateTokenPart::Literal(current_literal));
@@ -1194,14 +1138,7 @@ impl<'a> Lexer<'a> {
             let Some((_, ch)) = self.peek() else {
                 self.errors.push(LexError {
                     kind: LexErrorKind::UnterminatedTemplateString,
-                    span: Span::with_end(
-                        start,
-                        self.pos,
-                        start_line,
-                        start_column,
-                        self.line,
-                        self.column,
-                    ),
+                    span: self.span_from(start, start_line, start_column),
                 });
                 return (source, true);
             };
@@ -1259,14 +1196,7 @@ impl<'a> Lexer<'a> {
                 // `'` at EOF: empty content, no closing quote.
                 self.errors.push(LexError {
                     kind: LexErrorKind::UnterminatedChar,
-                    span: Span::with_end(
-                        start,
-                        self.pos,
-                        start_line,
-                        start_column,
-                        self.line,
-                        self.column,
-                    ),
+                    span: self.span_from(start, start_line, start_column),
                 });
                 return TokenKind::CharLit(String::new());
             }
@@ -1276,14 +1206,7 @@ impl<'a> Lexer<'a> {
                 self.advance();
                 self.errors.push(LexError {
                     kind: LexErrorKind::EmptyCharLiteral,
-                    span: Span::with_end(
-                        start,
-                        self.pos,
-                        start_line,
-                        start_column,
-                        self.line,
-                        self.column,
-                    ),
+                    span: self.span_from(start, start_line, start_column),
                 });
                 return TokenKind::CharLit(String::new());
             }
@@ -1296,27 +1219,39 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        let raw = self.input[inner_start..self.pos].to_string();
-
-        if self.peek_char() != Some('\'') {
-            // Missing closing quote: emit the char with what we read so far,
-            // record the error, and leave the cursor where it is so the
-            // surrounding tokens (after this position) can still lex.
-            self.errors.push(LexError {
-                kind: LexErrorKind::UnterminatedChar,
-                span: Span::with_end(
-                    start,
-                    self.pos,
-                    start_line,
-                    start_column,
-                    self.line,
-                    self.column,
-                ),
-            });
+        if self.peek_char() == Some('\'') {
+            let raw = self.input[inner_start..self.pos].to_string();
+            self.advance(); // consume closing '
             return TokenKind::CharLit(raw);
         }
-        self.advance(); // consume closing '
 
+        // No closing quote where one was expected. Scan forward up to the
+        // next `'` (or newline / EOF) so a multi-char literal like `'abc'`
+        // recovers as a single CharLit("abc") + one diagnostic, instead of
+        // cascading into Ident("bc") + a second unterminated char on the
+        // closing quote.
+        while let Some((_, ch)) = self.peek() {
+            if ch == '\'' || ch == '\n' {
+                break;
+            }
+            if ch == '\\' {
+                self.advance();
+                self.skip_escape();
+            } else {
+                self.advance();
+            }
+        }
+        let raw = self.input[inner_start..self.pos].to_string();
+        let kind = if self.peek_char() == Some('\'') {
+            self.advance(); // consume closing '
+            LexErrorKind::CharLiteralTooLong
+        } else {
+            LexErrorKind::UnterminatedChar
+        };
+        self.errors.push(LexError {
+            kind,
+            span: self.span_from(start, start_line, start_column),
+        });
         TokenKind::CharLit(raw)
     }
 }

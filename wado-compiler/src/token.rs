@@ -455,16 +455,15 @@ pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
         // Special
         Eof => write_str(out, b'V', "Eof"),
 
-        // Recovery artefacts: not part of the canonical encoding. Source files
-        // tracked by kiln only contain healthy code, so they never carry an
-        // `Error` token, and the sidecar hash stays stable across this variant
-        // being added. Panic in debug builds if this invariant breaks.
-        TokenKind::Error(_) => {
-            debug_assert!(
-                false,
-                "TokenKind::Error must not appear in canonically-hashed token streams"
-            );
-        }
+        // Recovery artefacts have no canonical encoding. The only consumer
+        // (kiln_provider::hash_source) gates on `LexResult::errors.is_empty()`
+        // before reaching this function, so `Error` tokens are unreachable
+        // here; release builds get a loud panic instead of a silent empty
+        // arm that would collide hashes across distinct malformed sources.
+        TokenKind::Error(_) => unreachable!(
+            "TokenKind::Error must not appear in canonically-hashed token streams; \
+             callers must filter on LexResult::errors.is_empty() first",
+        ),
     }
 }
 

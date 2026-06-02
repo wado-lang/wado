@@ -22,7 +22,7 @@ fn build_with_invocations(
     invocations: InvocationIndex,
 ) -> Semantics {
     block_on(async {
-        let parsed = parse(source).expect("entry source should parse");
+        let parsed = parse(source);
         let loaded = load(
             parsed,
             Some(filename),

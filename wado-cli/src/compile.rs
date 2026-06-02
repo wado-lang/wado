@@ -444,9 +444,7 @@ pub fn collect_inline_invocations_for_entry(
     let Ok(source) = fs::read_to_string(entry_file) else {
         return Vec::new();
     };
-    let Ok(parsed) = wado_compiler::parse(&source) else {
-        return Vec::new();
-    };
+    let parsed = wado_compiler::parse(&source);
     let mut modules =
         wado_compiler::hashmap::IndexMap::<String, wado_compiler::ast::Module>::default();
     // Key by the full path so `decl_site.module` here matches the

@@ -67,11 +67,8 @@ pub fn compute(source: &str) -> Vec<SemanticToken> {
     let tokens = lex_result.tokens;
     let comments = lex_result.comments;
 
-    // 2. Parse (best-effort)
-    let ast_types = match wado_compiler::parse(source) {
-        Ok(pr) => collect_type_spans(&pr.ast),
-        Err(_) => TypeSpans::default(),
-    };
+    // 2. Parse (best-effort — resilient, always produces an AST).
+    let ast_types = collect_type_spans(&wado_compiler::parse(source).ast);
 
     // 3. Classify lexer tokens
     let mut result = Vec::new();

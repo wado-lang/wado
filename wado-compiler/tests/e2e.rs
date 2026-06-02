@@ -700,10 +700,7 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
     // For test world: individual tests are already marked #[TODO] by the elaborator,
     // so no special handling is needed here.
     // For CLI/HTTP worlds: runtime failures in #![TODO] modules need catch_unwind.
-    let is_todo_module = match wado_compiler::parse(source) {
-        Ok(r) => r.ast.has_todo(),
-        Err(e) => e.is_todo_module(),
-    };
+    let is_todo_module = wado_compiler::parse(source).ast.has_todo();
 
     if is_todo_module {
         eprintln!("[{test_id}] #![TODO] module — expecting failure");

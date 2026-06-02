@@ -675,20 +675,16 @@ pub async fn semantics<H: CompilerHost>(
     host: &H,
     filename: Option<&str>,
 ) -> Semantics {
-    let parsed = match crate::parse(source) {
-        Ok(p) => p,
-        Err(e) => {
-            // Lexer failure: no usable AST.
-            host.emit_diagnostic(parse_failure_diagnostic(&e, filename));
-            return Semantics::empty();
-        }
-    };
-    // Surface every recovered syntax error, then analyze the partial AST so
-    // queries still resolve in the regions outside the error. If load/bind
+    let parsed = crate::parse(source);
+    // Surface every recovered lex/parse error, then analyze the partial AST
+    // so queries still resolve in the regions outside the error. If load/bind
     // then fails on the partial AST, the result still collapses to
     // `Semantics::empty()` below — recovery helps only when binding succeeds,
     // which holds for the common cases (missing brace, garbage item) where
     // scopes stay separate.
+    for e in &parsed.lex_errors {
+        host.emit_diagnostic(lex_error_diagnostic(e, filename));
+    }
     for e in &parsed.errors {
         host.emit_diagnostic(parse_error_diagnostic(e, filename));
     }
@@ -710,47 +706,6 @@ pub async fn semantics<H: CompilerHost>(
             let _ = logger.error(e);
             Semantics::empty()
         }
-    }
-}
-
-/// Convert a lex/parse failure from [`crate::parse`] into the same
-/// [`crate::Diagnostic`] shape the loader emits for
-/// `LoadError::{LexError, ParseError}`. Keeps every route to a
-/// [`Semantics`] (the [`semantics`] convenience, LSP-side three-stage
-/// composition, batch frontend) producing the same wire diagnostic for
-/// the same input failure.
-#[must_use]
-pub fn parse_failure_diagnostic(
-    err: &crate::CompileError,
-    filename: Option<&str>,
-) -> crate::Diagnostic {
-    use crate::{Code, Diagnostic, DiagnosticSpan, Severity};
-    let (message, line, column) = match err {
-        crate::CompileError::Lexer {
-            message,
-            line,
-            column,
-            ..
-        } => (format!("lexer error: {message}"), *line, *column),
-        crate::CompileError::Parser {
-            message,
-            line,
-            column,
-            ..
-        } => (format!("parse error: {message}"), *line, *column),
-        other => (other.to_string(), 1, 1),
-    };
-    Diagnostic {
-        severity: Severity::Error,
-        code: Code::InvalidSyntax,
-        message,
-        span: filename.map(|f| DiagnosticSpan {
-            file: f.to_string(),
-            line,
-            column,
-            end_line: None,
-            end_column: None,
-        }),
     }
 }
 
@@ -791,7 +746,7 @@ pub fn lex_error_diagnostic(
     Diagnostic {
         severity: Severity::Error,
         code: Code::InvalidSyntax,
-        message: format!("lexer error: {}", err.to_string()),
+        message: format!("lexer error: {err}"),
         span: filename.map(|f| DiagnosticSpan {
             file: f.to_string(),
             line: err.span.line,

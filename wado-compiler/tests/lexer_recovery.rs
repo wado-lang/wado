@@ -77,6 +77,49 @@ fn unterminated_char_emits_charlit_with_content() {
 }
 
 #[test]
+fn multi_char_literal_recovers_as_single_charlit_too_long() {
+    // `'abc'` used to cascade: CharLit("a") + UnterminatedChar + Ident("bc")
+    // + a second UnterminatedChar on the lone closing `'`. Recovery now
+    // consumes up to the closing quote and emits exactly one diagnostic.
+    let r = lex("let c = 'abc';");
+    assert_eq!(r.errors.len(), 1);
+    assert!(matches!(r.errors[0].kind, LexErrorKind::CharLiteralTooLong));
+    let kinds: Vec<&TokenKind> = r.tokens.iter().map(|t| &t.kind).collect();
+    // No stray Ident("bc") — the inner content stays inside the CharLit.
+    assert!(
+        !kinds
+            .iter()
+            .any(|k| matches!(k, TokenKind::Ident(s) if s == "bc")),
+        "found stray Ident(\"bc\") — recovery cascaded: {kinds:?}"
+    );
+    assert!(
+        r.tokens
+            .iter()
+            .any(|t| matches!(&t.kind, TokenKind::CharLit(s) if s == "abc"))
+    );
+    assert!(
+        r.tokens
+            .iter()
+            .any(|t| matches!(t.kind, TokenKind::Semicolon))
+    );
+}
+
+#[test]
+fn unterminated_char_stops_at_newline_not_eof() {
+    // `'ab\n` (no closing quote, then newline): recover at the newline so
+    // the next line still lexes cleanly.
+    let r = lex("let c = 'ab\nlet d = 1;");
+    assert_eq!(r.errors.len(), 1);
+    assert!(matches!(r.errors[0].kind, LexErrorKind::UnterminatedChar));
+    // `let d = 1;` after the broken line must still tokenise.
+    assert!(
+        r.tokens
+            .iter()
+            .any(|t| matches!(&t.kind, TokenKind::Ident(s) if s == "d"))
+    );
+}
+
+#[test]
 fn empty_char_literal_emits_charlit_and_continues() {
     // `''` -> error + CharLit("") + subsequent tokens.
     let r = lex("let c = ''; fn main(){}");
