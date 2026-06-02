@@ -2127,11 +2127,10 @@ fn generate_cm_imports(
                         let resolved_ty = project.cm_interface_registry.resolve_type(ty);
                         let val_type = if let Type::Named(named) = &resolved_ty
                             && named.source_interface.as_deref().is_some_and(|s| {
-                                crate::component_model::source_uses_cm_abi(s)
-                                    && project
-                                        .cm_interface_registry
-                                        .get_struct_fields_by_source(s, &named.name)
-                                        .is_some()
+                                project
+                                    .cm_interface_registry
+                                    .get_struct_fields_by_source(s, &named.name)
+                                    .is_some()
                             }) {
                             shared_type_gen.set_next_idx(local_type_idx);
                             let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
@@ -2172,11 +2171,10 @@ fn generate_cm_imports(
                     let resolved_ty = project.cm_interface_registry.resolve_type(ty);
                     if let Type::Named(named) = &resolved_ty
                         && named.source_interface.as_deref().is_some_and(|s| {
-                            crate::component_model::source_uses_cm_abi(s)
-                                && project
-                                    .cm_interface_registry
-                                    .get_struct_fields_by_source(s, &named.name)
-                                    .is_some()
+                            project
+                                .cm_interface_registry
+                                .get_struct_fields_by_source(s, &named.name)
+                                .is_some()
                         })
                     {
                         shared_type_gen.set_next_idx(local_type_idx);

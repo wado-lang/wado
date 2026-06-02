@@ -28,7 +28,8 @@ use crate::synthesis::common::{
 };
 
 use super::types::{
-    binary_add, cm_type_to_type_id, flatten_param_type, kebab_to_pascal, variant_tag, variant_test,
+    binary_add, cm_type_to_type_id, field_access, flatten_param_type, kebab_to_pascal, variant_tag,
+    variant_test,
 };
 
 /// Zero constant matching a CM flat slot type (i32/i64/f32/f64).
@@ -612,13 +613,14 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 TypeTable::I32,
             ));
         }
-        // Enum → variant_tag (single i32)
+        // Enum → variant_tag (single i32). The registry lookup is the gate:
+        // every source it holds is a CM interface, so a prefix check would be
+        // redundant (same for the record/variant gates below).
         Type::Named(n)
             if n.source_interface.as_deref().is_some_and(|s| {
-                crate::component_model::source_uses_cm_abi(s)
-                    && cm_interface_registry
-                        .get_enum_variants_by_source(s, &n.name)
-                        .is_some()
+                cm_interface_registry
+                    .get_enum_variants_by_source(s, &n.name)
+                    .is_some()
             }) =>
         {
             flat_args.push(variant_tag(value));
@@ -626,10 +628,9 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
         // Variant → disc + join of all case payload flats
         Type::Named(n)
             if n.source_interface.as_deref().is_some_and(|s| {
-                crate::component_model::source_uses_cm_abi(s)
-                    && cm_interface_registry
-                        .get_variant_cases_by_source(s, &n.name)
-                        .is_some()
+                cm_interface_registry
+                    .get_variant_cases_by_source(s, &n.name)
+                    .is_some()
             }) =>
         {
             let source = n
@@ -823,59 +824,30 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
             );
         }
         // CM record → concatenation of its fields' flat args, in declared
-        // order. Keyed on the explicit source interface so it fires for both
-        // `wasi:*` and `core:kiln/*` records and never for a plain Wado GC
-        // struct (which carries no `source_interface`). Reached for a nested
-        // record field — e.g. `SourceSpan` inside `Option<SourceSpan>` — so
+        // order; otherwise a simple primitive / handle / plain Wado GC struct
+        // passes through directly. The record check keys on the explicit
+        // source interface (set for both `wasi:*` and `core:kiln/*` types by
+        // the registry bootstrap, including nested field types) and resolves
+        // its fields with one registry lookup; a plain Wado struct carries no
+        // `source_interface` and falls through. Reached for a nested record
+        // field — e.g. `SourceSpan` inside `Option<SourceSpan>` — so
         // arbitrarily nested CM records lower through one recursion.
-        Type::Named(n)
-            if n.source_interface
-                .as_deref()
-                .and_then(|s| {
+        _ => {
+            if let Type::Named(n) = &resolved
+                && let Some(fields) = n.source_interface.as_deref().and_then(|s| {
                     cm_interface_registry.get_struct_fields_with_wado_names_by_source(s, &n.name)
                 })
-                .is_some() =>
-        {
-            let source = n
-                .source_interface
-                .as_deref()
-                .expect("CM struct source_interface present");
-            let resolved_fields: Vec<(String, Type)> = cm_interface_registry
-                .get_struct_fields_with_wado_names_by_source(source, &n.name)
-                .expect("CM struct fields present")
-                .iter()
-                .map(|(wn, _, ft)| (wn.clone(), cm_interface_registry.resolve_type(ft)))
-                .collect();
-            let value_type_id = value.type_id;
-            let val_local = alloc_local(next_local, locals, value_type_id);
-            stmts.push(let_stmt(
-                &format!("{prefix}_rec"),
-                val_local,
-                value_type_id,
-                value,
-            ));
-            for (field_idx, (wado_name, field_ty)) in resolved_fields.iter().enumerate() {
-                let field_type_id = {
-                    let mut tt = type_table.borrow_mut();
-                    cm_type_to_type_id(field_ty, &mut tt, cm_interface_registry, wasi_package)
-                };
-                let field_expr = TirExpr {
-                    kind: TirExprKind::FieldAccess {
-                        expr: Box::new(local_ref(
-                            val_local,
-                            &format!("{prefix}_rec"),
-                            value_type_id,
-                        )),
-                        field_index: field_idx as u32,
-                        field_name: wado_name.clone(),
-                    },
-                    type_id: field_type_id,
-                    span: synth_span(),
-                };
-                synthesize_flatten_value_to_flat_args(
-                    field_ty,
-                    field_expr,
-                    &format!("{prefix}_f{field_idx}"),
+            {
+                let value_type_id = value.type_id;
+                let val_local = alloc_local(next_local, locals, value_type_id);
+                let val_name = format!("{prefix}_rec");
+                stmts.push(let_stmt(&val_name, val_local, value_type_id, value));
+                flatten_cm_record_fields(
+                    fields,
+                    val_local,
+                    &val_name,
+                    value_type_id,
+                    prefix,
                     next_local,
                     stmts,
                     locals,
@@ -884,12 +856,57 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                     wasi_package,
                     type_table,
                 );
+            } else {
+                flat_args.push(value);
             }
         }
-        // Simple primitives / handles → pass through directly
-        _ => {
-            flat_args.push(value);
-        }
+    }
+}
+
+/// Flatten a CM record value (already bound to `val_local` of `value_type_id`)
+/// into its fields' flat CM-ABI args, in declared order. Each field recurses
+/// through [`synthesize_flatten_value_to_flat_args`], so String / Option /
+/// enum / nested-record fields expand to their own flat slots. Shared by the
+/// nested-field path here and the top-level struct-param path in
+/// `import_adapter`, so both flatten a record by exactly the same rule.
+pub(super) fn flatten_cm_record_fields(
+    fields: &[(String, String, Type)],
+    val_local: u32,
+    val_name: &str,
+    value_type_id: TypeId,
+    prefix: &str,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+    flat_args: &mut Vec<TirExpr>,
+    cm_interface_registry: &CmInterfaceRegistry,
+    wasi_package: &str,
+    type_table: &RefCell<TypeTable>,
+) {
+    for (field_idx, (wado_name, _, field_ty)) in fields.iter().enumerate() {
+        let resolved_field = cm_interface_registry.resolve_type(field_ty);
+        let field_type_id = {
+            let mut tt = type_table.borrow_mut();
+            cm_type_to_type_id(&resolved_field, &mut tt, cm_interface_registry, wasi_package)
+        };
+        let field_expr = field_access(
+            local_ref(val_local, val_name, value_type_id),
+            wado_name,
+            field_idx as u32,
+            field_type_id,
+        );
+        synthesize_flatten_value_to_flat_args(
+            &resolved_field,
+            field_expr,
+            &format!("{prefix}_f{field_idx}"),
+            next_local,
+            stmts,
+            locals,
+            flat_args,
+            cm_interface_registry,
+            wasi_package,
+            type_table,
+        );
     }
 }
 

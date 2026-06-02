@@ -34,9 +34,9 @@ use crate::synthesis::common::{
 
 use super::lift::{materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum};
 use super::lower::{
-    synthesize_flatten_option_to_flat_args, synthesize_flatten_value_to_flat_args,
-    synthesize_lower, synthesize_lower_option_to_memory, synthesize_lower_tuple,
-    synthesize_lower_wasi_variant_to_memory,
+    flatten_cm_record_fields, synthesize_flatten_option_to_flat_args,
+    synthesize_flatten_value_to_flat_args, synthesize_lower, synthesize_lower_option_to_memory,
+    synthesize_lower_tuple, synthesize_lower_wasi_variant_to_memory,
 };
 use super::types::{
     LiftContext, binary_add, cm_param_align, cm_param_size, cm_param_store_plan,
@@ -504,10 +504,9 @@ pub(super) fn synthesize_adapter(
             // Struct (record) param: single GC reference, binding extracts fields
             Type::Named(n)
                 if n.source_interface.as_deref().is_some_and(|s| {
-                    crate::component_model::source_uses_cm_abi(s)
-                        && cm_interface_registry
-                            .get_struct_fields_by_source(s, &n.name)
-                            .is_some()
+                    cm_interface_registry
+                        .get_struct_fields_by_source(s, &n.name)
+                        .is_some()
                 }) =>
             {
                 let struct_type_id = {
@@ -534,10 +533,9 @@ pub(super) fn synthesize_adapter(
             // Variant param: single GC reference, binding lowers to flat args
             Type::Named(n)
                 if n.source_interface.as_deref().is_some_and(|s| {
-                    crate::component_model::source_uses_cm_abi(s)
-                        && cm_interface_registry
-                            .get_variant_cases_by_source(s, &n.name)
-                            .is_some()
+                    cm_interface_registry
+                        .get_variant_cases_by_source(s, &n.name)
+                        .is_some()
                 }) =>
             {
                 let variant_type_id = {
@@ -907,10 +905,9 @@ pub(super) fn synthesize_adapter(
             // Struct (record) param: extract fields as flat args
             Type::Named(n)
                 if n.source_interface.as_deref().is_some_and(|s| {
-                    crate::component_model::source_uses_cm_abi(s)
-                        && cm_interface_registry
-                            .get_struct_fields_by_source(s, &n.name)
-                            .is_some()
+                    cm_interface_registry
+                        .get_struct_fields_by_source(s, &n.name)
+                        .is_some()
                 }) =>
             {
                 let struct_type_id = params[start_idx].type_id;
@@ -921,54 +918,36 @@ pub(super) fn synthesize_adapter(
                 let wado_fields = cm_interface_registry
                     .get_struct_fields_with_wado_names_by_source(source, &n.name)
                     .expect("struct fields_with_wado_names present when fields are");
-                // Each field is itself flattened per the canonical ABI: a
-                // scalar field passes through, but a String / Option / nested
-                // record field expands to its own flat slots. Recursing here
-                // (rather than pushing the raw field value) is what lets a
-                // record with compound fields — e.g. the kiln-host
+                // Flatten each field per the canonical ABI through the shared
+                // helper: a scalar field passes through, but a String / Option
+                // / nested-record / enum field expands to its own flat slots,
+                // so a record with compound fields — e.g. the kiln-host
                 // `Diagnostic { level, span: Option<SourceSpan>, message:
-                // String }` — match the import's flattened signature.
-                for (field_idx, (wado_name, _, field_ty)) in wado_fields.iter().enumerate() {
-                    let field_type_id = {
-                        let mut tt = type_table.borrow_mut();
-                        cm_type_to_type_id(
-                            field_ty,
-                            &mut tt,
-                            cm_interface_registry,
-                            &func_info.package,
-                        )
-                    };
-                    let field_expr = TirExpr {
-                        kind: TirExprKind::FieldAccess {
-                            expr: Box::new(local_ref(param_local, param_name, struct_type_id)),
-                            field_index: field_idx as u32,
-                            field_name: wado_name.clone(),
-                        },
-                        type_id: field_type_id,
-                        span: synth_span(),
-                    };
-                    synthesize_flatten_value_to_flat_args(
-                        field_ty,
-                        field_expr,
-                        &format!("__{param_name}_f{field_idx}"),
-                        &mut next_local,
-                        &mut body_stmts,
-                        &mut locals,
-                        &mut flat_args,
-                        cm_interface_registry,
-                        &func_info.package,
-                        type_table,
-                    );
-                }
+                // String }` — matches the import's flattened signature. Same
+                // rule as the nested-field path in
+                // `synthesize_flatten_value_to_flat_args`.
+                flatten_cm_record_fields(
+                    wado_fields,
+                    param_local,
+                    param_name,
+                    struct_type_id,
+                    &format!("__{param_name}"),
+                    &mut next_local,
+                    &mut body_stmts,
+                    &mut locals,
+                    &mut flat_args,
+                    cm_interface_registry,
+                    &func_info.package,
+                    type_table,
+                );
             }
             // Variant param: for async, pass GC ref (lowered in Step 3 indirect params);
             // for sync, flatten directly to flat i32 args.
             Type::Named(n)
                 if n.source_interface.as_deref().is_some_and(|s| {
-                    crate::component_model::source_uses_cm_abi(s)
-                        && cm_interface_registry
-                            .get_variant_cases_by_source(s, &n.name)
-                            .is_some()
+                    cm_interface_registry
+                        .get_variant_cases_by_source(s, &n.name)
+                        .is_some()
                 }) =>
             {
                 if func_info.is_async {
@@ -1098,10 +1077,9 @@ pub(super) fn synthesize_adapter(
             matches!(ty, Type::Named(n) if n
                 .source_interface
                 .as_deref()
-                .is_some_and(|s| crate::component_model::source_uses_cm_abi(s)
-                    && cm_interface_registry
-                        .get_variant_cases_by_source(s, &n.name)
-                        .is_some()))
+                .is_some_and(|s| cm_interface_registry
+                    .get_variant_cases_by_source(s, &n.name)
+                    .is_some()))
                 || matches!(ty, Type::Generic(g) if g.name == "Option" && g.args.len() == 1)
         });
 
@@ -1152,7 +1130,6 @@ pub(super) fn synthesize_adapter(
                 // WASI variants: lower directly to the buffer using registry-aware layout
                 if let Type::Named(n) = ty
                     && let Some(source) = n.source_interface.as_deref()
-                    && crate::component_model::source_uses_cm_abi(source)
                     && cm_interface_registry
                         .get_variant_cases_by_source(source, &n.name)
                         .is_some()
