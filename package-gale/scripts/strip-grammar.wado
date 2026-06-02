@@ -1,19 +1,7 @@
 #!/usr/bin/env wado
-//! Thin CLI exposing `strip_action_bodies` (g4/action_strip.wado) for
-//! invocation from the descriptor extract shell wrapper.
-//!
-//! Reads a `.g4` grammar from the path given on argv, runs the action-
-//! body stripper, prints the result to stdout. Used as the
-//! preprocessing step before handing the grammar to the ANTLR4 JVM
-//! oracle (`scripts/antlr4-oracle.sh`) — see Stage B' in
-//! `antlr4-compatibility.md`.
-//!
-//! Usage:
-//!   wado run package-gale/scripts/strip-grammar.wado <path/to/Grammar.g4>
-//!
-//! Exit codes:
-//!   0 = stripped grammar printed
-//!   1 = invocation error (wrong args, file not found, etc.)
+//! CLI wrapper for `strip_action_bodies` — preprocesses a `.g4` before
+//! it's handed to `scripts/antlr4-oracle.sh`. Reads the path on argv,
+//! prints the stripped grammar to stdout.
 
 use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";

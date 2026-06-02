@@ -1,40 +1,12 @@
 //! Action-body stripper for ANTLR4 grammar source.
 //!
-//! The published ANTLR4 jar's Java target faithfully copies action-body
-//! source into the generated parser; it does NOT substitute the
-//! StringTemplate directives the testsuite uses for action bodies
-//! (`<writeln("$text")>`, `<ImportListener(...)>`, etc.). So a grammar
-//! with `ifStatement : ... { <writeln("$text")> };` codegens valid Java
-//! shape but `javac` rejects the body — making the oracle uninvocable.
-//!
-//! `strip_action_bodies` removes these blocks before the grammar is
-//! handed to the oracle. The parse tree is independent of action-body
-//! contents (actions are side-effecting host code; they do not alter
-//! what gets matched), so this is sound for Stage B' use. The result is
-//! a strict subset of the input grammar, never wider.
-//!
-//! What gets stripped:
-//!   * `{ ... }` action blocks inline in rule alternatives
-//!   * `{ ... }?` semantic predicates (entire `{...}?` removed)
-//!   * `@<id> { ... }` and `@<scope>::<id> { ... }` named actions
-//!     (e.g. `@header { ... }`, `@parser::members { ... }`,
-//!      `@init { ... }`, `@after { ... }`) — the `@<...>` prefix and
-//!     its `{...}` body both removed
-//!   * `catch [ ... ] { ... }` and `finally { ... }` rule exception
-//!     handlers
-//!
-//! What stays untouched:
-//!   * `tokens { ... }`, `options { ... }`, `channels { ... }` grammar-
-//!     prequel blocks — recognised by the preceding keyword
-//!   * `{...}` characters inside string literals (`'...'`), character
-//!     classes (`[...]`), single-line comments (`// ...`), block
-//!     comments (`/* ... */`), and rule-arg / locals brackets
-//!   * Everything outside `{...}` blocks
-//!
-//! The stripper is balanced-brace-aware: action bodies can contain
-//! nested `{...}` (Java code blocks), and the inner content is
-//! processed against the same string-literal / comment skip rules so
-//! `"...{...}..."` inside Java does not unbalance the count.
+//! The published ANTLR4 jar's Java target copies action-body source
+//! into the generated parser verbatim — it does not substitute the
+//! StringTemplate directives the testsuite uses (`<writeln("$text")>`,
+//! etc.). `javac` then rejects the body, making the oracle uninvocable.
+//! Stripping action bodies before handing the grammar to the oracle
+//! works because actions are side-effecting host code; they don't
+//! affect what the parser matches.
 
 pub fn strip_action_bodies(grammar: &String) -> String {
     let chars: Array<char> = grammar.chars().collect();
@@ -43,8 +15,9 @@ pub fn strip_action_bodies(grammar: &String) -> String {
     let mut i = 0;
     while i < n {
         let c = chars[i];
-        // String literal `'...'`: copy verbatim, respecting `\\` escapes.
         if c == '\'' {
+            // `.g4` lexer doesn't recognise `"..."` outside actions, so
+            // only single-quote strings need top-level skip protection.
             out.push(c);
             i += 1;
             while i < n {
@@ -62,8 +35,10 @@ pub fn strip_action_bodies(grammar: &String) -> String {
             }
             continue;
         }
-        // Character class `[...]`.
         if c == '[' {
+            // Treat `[...]` as transparent: char-class brackets, rule
+            // args, and `catch [...]` brackets never legitimately
+            // contain action-body `{`s.
             out.push(c);
             i += 1;
             let mut depth = 1;
@@ -84,7 +59,6 @@ pub fn strip_action_bodies(grammar: &String) -> String {
             }
             continue;
         }
-        // Line comment.
         if c == '/' && i + 1 < n && chars[i + 1] == '/' {
             while i < n && chars[i] != '\n' {
                 out.push(chars[i]);
@@ -92,7 +66,6 @@ pub fn strip_action_bodies(grammar: &String) -> String {
             }
             continue;
         }
-        // Block comment.
         if c == '/' && i + 1 < n && chars[i + 1] == '*' {
             out.push(chars[i]);
             out.push(chars[i + 1]);
@@ -109,8 +82,10 @@ pub fn strip_action_bodies(grammar: &String) -> String {
             }
             continue;
         }
-        // Named action `@<id>` or `@<scope>::<id>`.
         if c == '@' {
+            // Named actions: `@id { … }` or `@scope::id { … }`. Strip
+            // the prefix and its body together. If no `{` follows,
+            // fall through and copy the `@` verbatim.
             let saved = i;
             let mut j = i + 1;
             if j < n && is_id_start_char(chars[j]) {
@@ -143,7 +118,6 @@ pub fn strip_action_bodies(grammar: &String) -> String {
             i += 1;
             continue;
         }
-        // `catch` / `finally` rule exception handlers.
         if c == 'c' && starts_with_word(&chars, i, &"catch") {
             let mut j = i + 5;
             while j < n && is_whitespace_char(chars[j]) {
@@ -179,8 +153,9 @@ pub fn strip_action_bodies(grammar: &String) -> String {
                 }
             }
         }
-        // Open brace `{`: action body, predicate, or prequel.
         if c == '{' {
+            // `tokens { … }`, `options { … }`, `channels { … }` are
+            // grammar prequels, not action bodies — keep them.
             if preceded_by_prequel_keyword(&out) {
                 out.push(c);
                 i += 1;
@@ -193,6 +168,7 @@ pub fn strip_action_bodies(grammar: &String) -> String {
                 continue;
             }
             let mut k = body_end + 1;
+            // `{…}?` is a semantic predicate — strip the `?` too.
             if k < n && chars[k] == '?' {
                 k += 1;
             }
