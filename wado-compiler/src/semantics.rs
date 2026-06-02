@@ -791,7 +791,7 @@ pub fn lex_error_diagnostic(
     Diagnostic {
         severity: Severity::Error,
         code: Code::InvalidSyntax,
-        message: format!("lexer error: {}", err.message()),
+        message: format!("lexer error: {}", err.to_string()),
         span: filename.map(|f| DiagnosticSpan {
             file: f.to_string(),
             line: err.span.line,

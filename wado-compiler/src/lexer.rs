@@ -39,7 +39,7 @@ pub fn lex_with_line(source: &str, start_line: usize) -> LexResult {
 
 /// Resilient lexer output. Every field is final after [`lex`] returns; the
 /// lexer is consumed in the process.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct LexResult {
     pub tokens: Vec<Token>,
     pub errors: Vec<LexError>,
@@ -66,7 +66,7 @@ pub(crate) struct Lexer<'a> {
 }
 
 /// Structured lexer error. Pair with [`LexError::span`] for source location.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct LexError {
     pub kind: LexErrorKind,
     pub span: Span,
@@ -99,21 +99,19 @@ pub enum LexErrorKind {
     MissingExponentDigits,
 }
 
-impl LexError {
-    /// Render a human-readable message. Used by diagnostic conversion and
-    /// logging paths that previously stored the message inline.
-    pub fn message(&self) -> String {
+impl std::fmt::Display for LexError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.kind {
-            LexErrorKind::UnexpectedChar(ch) => format!("unexpected character: '{ch}'"),
-            LexErrorKind::UnterminatedString => "unterminated string literal".to_string(),
-            LexErrorKind::UnterminatedTemplateString => "unterminated template string".to_string(),
-            LexErrorKind::UnterminatedChar => "unterminated character literal".to_string(),
-            LexErrorKind::EmptyCharLiteral => "empty character literal".to_string(),
-            LexErrorKind::UnterminatedBlockComment => "unterminated block comment".to_string(),
-            LexErrorKind::MissingHexDigits => "expected hex digit after 0x".to_string(),
-            LexErrorKind::MissingBinaryDigits => "expected binary digit after 0b".to_string(),
-            LexErrorKind::MissingOctalDigits => "expected octal digit after 0o".to_string(),
-            LexErrorKind::MissingExponentDigits => "expected digit after exponent".to_string(),
+            LexErrorKind::UnexpectedChar(ch) => write!(f, "unexpected character: '{ch}'"),
+            LexErrorKind::UnterminatedString => write!(f, "unterminated string literal"),
+            LexErrorKind::UnterminatedTemplateString => write!(f, "unterminated template string"),
+            LexErrorKind::UnterminatedChar => write!(f, "unterminated character literal"),
+            LexErrorKind::EmptyCharLiteral => write!(f, "empty character literal"),
+            LexErrorKind::UnterminatedBlockComment => write!(f, "unterminated block comment"),
+            LexErrorKind::MissingHexDigits => write!(f, "expected hex digit after 0x"),
+            LexErrorKind::MissingBinaryDigits => write!(f, "expected binary digit after 0b"),
+            LexErrorKind::MissingOctalDigits => write!(f, "expected octal digit after 0o"),
+            LexErrorKind::MissingExponentDigits => write!(f, "expected digit after exponent"),
         }
     }
 }
@@ -121,11 +119,10 @@ impl LexError {
 impl From<LexError> for crate::compiler_host::Diagnostic {
     fn from(e: LexError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
-        let message = format!("lexer error: {}", e.message());
         Self {
             severity: Severity::Error,
             code: Code::InvalidSyntax,
-            message,
+            message: format!("lexer error: {e}"),
             span: Some(DiagnosticSpan::from_span(&e.span, None)),
         }
     }

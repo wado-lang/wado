@@ -718,15 +718,11 @@ fn parse_bind_stdlib(label: &str, source: &str) -> Module {
                 e.span.line,
                 e.span.column,
                 Some(e.span.end_column),
-                &e.message(),
+                &e.to_string(),
             )
         );
     }
-    let mut parser = Parser::with_metadata(
-        lex_result.tokens,
-        lex_result.shebang,
-        lex_result.data_section,
-    );
+    let mut parser = Parser::from_lex(lex_result);
     let ast = parser.parse();
     if let Some(e) = parser.take_errors().first() {
         // Bundled stdlib must always parse cleanly; a syntax error here is a
@@ -812,7 +808,7 @@ mod tests {
     fn parse_test_module(source: &str) -> Module {
         let r = lex(source);
         assert!(r.errors.is_empty(), "test source must lex: {:?}", r.errors);
-        let mut parser = Parser::with_metadata(r.tokens, r.shebang, r.data_section);
+        let mut parser = Parser::from_lex(r);
         parser.parse_strict().expect("test source must parse")
     }
 
@@ -1532,17 +1528,13 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         if let Some(e) = lex_result.errors.first() {
             return Err(LoadError::LexError {
                 module_source: module_source.clone(),
-                message: e.message(),
+                message: e.to_string(),
                 line: e.span.line,
                 column: e.span.column,
             });
         }
 
-        let mut parser = Parser::with_metadata(
-            lex_result.tokens,
-            lex_result.shebang,
-            lex_result.data_section,
-        );
+        let mut parser = Parser::from_lex(lex_result);
         // Batch loading is fail-fast: report the first recovered syntax error
         // as a load error so compilation never proceeds on a partial AST.
         let ast = parser.parse();

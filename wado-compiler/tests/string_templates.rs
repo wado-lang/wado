@@ -12,7 +12,7 @@ fn parse_expr(source: &str) -> Result<wado_compiler::ast::Module, String> {
 
     let r = lex(&wrapped);
     if let Some(e) = r.errors.first() {
-        return Err(e.message());
+        return Err(e.to_string());
     }
 
     let mut parser = Parser::new(r.tokens);

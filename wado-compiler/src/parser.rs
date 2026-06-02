@@ -106,49 +106,44 @@ enum ComparisonChainGroup {
 }
 
 impl Parser {
+    /// Parse a hand-built token stream. Used by tests and the interpolation
+    /// re-parser; production sites that have a full [`crate::lexer::LexResult`]
+    /// should call [`Parser::from_lex`] instead so shebang / data section /
+    /// comments flow through.
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self::build(tokens, None, None, Vec::new())
-    }
-
-    /// Creates a new parser with the given tokens, shebang, and data section.
-    pub fn with_metadata(
-        tokens: Vec<Token>,
-        shebang: Option<String>,
-        data_section: Option<String>,
-    ) -> Self {
-        Self::build(tokens, shebang, data_section, Vec::new())
-    }
-
-    /// Creates a new parser with full lexer output, including the comment
-    /// stream so leading comments can be attached to AST nodes as they are
-    /// allocated. Use this on the formatter path; the comment stream is
-    /// otherwise harmless when omitted.
-    pub fn with_trivia(
-        tokens: Vec<Token>,
-        shebang: Option<String>,
-        data_section: Option<String>,
-        comments: Vec<crate::comment::Comment>,
-    ) -> Self {
-        Self::build(tokens, shebang, data_section, comments)
-    }
-
-    fn build(
-        tokens: Vec<Token>,
-        shebang: Option<String>,
-        data_section: Option<String>,
-        comments: Vec<crate::comment::Comment>,
-    ) -> Self {
         Self {
             tokens,
             pos: 0,
             pending_gt: false,
             restrict_struct_literals: false,
-            shebang,
-            data_section,
+            shebang: None,
+            data_section: None,
             include_paths: crate::hashmap::IndexSet::default(),
             parsed_inner_attributes: Vec::new(),
             next_ast_id: 0,
-            comments,
+            comments: Vec::new(),
+            comment_cursor: 0,
+            trivia: crate::comment::TriviaMap::new(),
+            errors: Vec::new(),
+        }
+    }
+
+    /// Parse a complete [`crate::lexer::LexResult`]. The lexer's errors are
+    /// not consumed here — callers route them through
+    /// [`crate::ParseResult::lex_errors`] so the wire format keeps the
+    /// `lexer error:` prefix distinct from `parse error:`.
+    pub fn from_lex(lex: crate::lexer::LexResult) -> Self {
+        Self {
+            tokens: lex.tokens,
+            pos: 0,
+            pending_gt: false,
+            restrict_struct_literals: false,
+            shebang: lex.shebang,
+            data_section: lex.data_section,
+            include_paths: crate::hashmap::IndexSet::default(),
+            parsed_inner_attributes: Vec::new(),
+            next_ast_id: 0,
+            comments: lex.comments,
             comment_cursor: 0,
             trivia: crate::comment::TriviaMap::new(),
             errors: Vec::new(),
@@ -5354,7 +5349,7 @@ impl Parser {
         // parser's diagnostics; we still try to parse whatever tokens we got.
         for e in &lex_result.errors {
             self.errors.push(ParseError {
-                message: format!("error parsing template interpolation: {}", e.message()),
+                message: format!("error parsing template interpolation: {}", e.to_string()),
                 span,
             });
         }
@@ -5562,7 +5557,7 @@ mod tests {
             "lexer error in test input: {:?}",
             r.errors
         );
-        let mut parser = Parser::with_metadata(r.tokens, r.shebang, r.data_section);
+        let mut parser = Parser::from_lex(r);
         parser.parse_strict()
     }
 
@@ -5575,7 +5570,7 @@ mod tests {
             "lexer error in test input: {:?}",
             r.errors
         );
-        let mut parser = Parser::with_metadata(r.tokens, r.shebang, r.data_section);
+        let mut parser = Parser::from_lex(r);
         let module = parser.parse();
         let errors = parser.take_errors();
         (module, errors)
@@ -7287,7 +7282,7 @@ line 2
             "lexer error in test input: {:?}",
             r.errors
         );
-        let mut parser = Parser::with_metadata(r.tokens, r.shebang, r.data_section);
+        let mut parser = Parser::from_lex(r);
         let module = parser.parse();
         assert!(
             !parser.take_errors().is_empty(),
