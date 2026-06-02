@@ -316,6 +316,14 @@ impl TriageMap {
 ///   (full-tree or sub-tree). A descriptor can be Stage A green and Stage B
 ///   skipped if its `[output]` block is a host-language artefact rather
 ///   than a parse tree, and vice versa.
+/// - **stage_b_oracle** comes from the `[stage_b_oracle_skip]` bucket and
+///   applies to Stage B′ — the JVM-oracle-derived expected-tree path that
+///   covers descriptors whose `[output]` is a host artefact (most commonly
+///   an `<writeln("$text")>` action-print) but whose grammar would still
+///   produce a meaningful parse tree under ANTLR4. Entries here suppress
+///   the manifest emission so the shell wrapper never invokes the oracle
+///   on a descriptor known to mis-codegen or to produce a tree we cannot
+///   pin (e.g. cases that still depend on action-bodies after stripping).
 ///
 /// The maps are deliberately independent so triaging one axis never quietly
 /// toggles the others.
@@ -323,6 +331,7 @@ struct TriageMaps {
     pub category: TriageMap,
     pub stage_a: TriageMap,
     pub stage_b: TriageMap,
+    pub stage_b_oracle: TriageMap,
 }
 
 /// Parse the status file. Tolerant of missing file (returns empty maps).
@@ -341,14 +350,17 @@ struct TriageMaps {
 ///   "Category/Name" = "reason text"
 ///   [stage_b_skip]
 ///   "Category/Name" = "reason text"
+///   [stage_b_oracle_skip]
+///   "Category/Name" = "reason text"
 fn load_triage_maps(content: &Option<String>) -> TriageMaps {
     let mut category = TriageMap::new();
     let mut stage_a = TriageMap::new();
     let mut stage_b = TriageMap::new();
+    let mut stage_b_oracle = TriageMap::new();
     let text = match content {
         Some(t) => t,
         None => {
-            return TriageMaps { category, stage_a, stage_b };
+            return TriageMaps { category, stage_a, stage_b, stage_b_oracle };
         },
     };
     let mut section: String = "";
@@ -377,11 +389,12 @@ fn load_triage_maps(content: &Option<String>) -> TriageMaps {
             "stage_a_skip" => stage_a.entries.push(TriageEntry { key, triage: Triage::Skip(reason) }),
             "stage_b_todo" => stage_b.entries.push(TriageEntry { key, triage: Triage::Todo(reason) }),
             "stage_b_skip" => stage_b.entries.push(TriageEntry { key, triage: Triage::Skip(reason) }),
+            "stage_b_oracle_skip" => stage_b_oracle.entries.push(TriageEntry { key, triage: Triage::Skip(reason) }),
             _ => {
             },
         }
     }
-    return TriageMaps { category, stage_a, stage_b };
+    return TriageMaps { category, stage_a, stage_b, stage_b_oracle };
 }
 
 /// Per-category convenience wrapper retained so the test blocks at the
@@ -1056,6 +1069,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     let triage_map = triage_maps.category;
     let stage_a_triage_map = triage_maps.stage_a;
     let stage_b_triage_map = triage_maps.stage_b;
+    let stage_b_oracle_triage_map = triage_maps.stage_b_oracle;
 
     let grammars_dir = match ensure_dir(&compat_dir, &grammars_subdir()) {
         Ok(d) => d,
@@ -1081,6 +1095,23 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         },
     };
 
+    // Stage B′ candidate manifest dir. We write `<base>.input` and
+    // `<base>.start` files per descriptor that hits the Stage B
+    // auto-skip path while still being a plausible oracle target
+    // (single-grammar parser descriptor with non-empty input/output
+    // and no expected errors). The shell wrapper iterates this dir
+    // after the Wado extract completes — see
+    // `scripts/extract-antlr4-descriptors.sh`. Inputs are written
+    // verbatim (no escaping) so the oracle sees byte-identical bytes
+    // to what the descriptor declares.
+    let oracle_pending_dir = match ensure_dir(&compat_dir, &"oracle-pending") {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln("extract: cannot create or open antlr4-compat/oracle-pending/");
+            return;
+        },
+    };
+
     let mut total_emitted = 0;
     let mut total_todo = 0;
     let mut total_skip = 0;
@@ -1099,6 +1130,12 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     let mut stage_b_todo = 0;
     let mut stage_b_skip = 0;
     let mut stage_b_auto_skip = 0;
+    // Stage B′ candidates: descriptors that would auto-skip from
+    // Stage B but for which the JVM oracle could plausibly furnish an
+    // expected tree. Counted at extract time; the shell wrapper then
+    // converts each into a generated test under `stage_b_oracle/`.
+    let mut stage_b_oracle_pending = 0;
+    let mut stage_b_oracle_suppressed = 0;
 
     for let category of &categories {
         let cat_src_dir = match open_dir(&src_root, category, false) {
@@ -1126,6 +1163,13 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
             Ok(d) => d,
             Err(_) => {
                 eprintln(`extract: cannot create stage_a/{*category}/, skipping`);
+                continue;
+            },
+        };
+        let oracle_pending_cat_dir = match ensure_dir(&oracle_pending_dir, category) {
+            Ok(d) => d,
+            Err(_) => {
+                eprintln(`extract: cannot create oracle-pending/{*category}/, skipping`);
                 continue;
             },
         };
@@ -1371,6 +1415,24 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
             // Anything else is silently skipped (auto-skip counter); explicit
             // [stage_b_skip] / [stage_b_todo] entries override the default.
             let stage_b_filename_pre = `{base}_test.wado`;
+            // Stage B′ pending-file management. Default-clear at the top
+            // so every path through the Stage B section leaves the
+            // descriptor's oracle-pending entries in a consistent state
+            // (cleared); the two auto-skip branches re-write them when
+            // the descriptor is a viable JVM-oracle candidate. Reading
+            // the triage entry up here keeps the [stage_b_oracle_skip]
+            // suppression observable in the summary even when the
+            // descriptor would otherwise hit a Stage B emission path.
+            let oracle_input_filename = `{base}.input`;
+            let oracle_start_filename = `{base}.start`;
+            let _ = remove_file(&oracle_pending_cat_dir, &oracle_input_filename);
+            let _ = remove_file(&oracle_pending_cat_dir, &oracle_start_filename);
+            let oracle_triage = stage_b_oracle_triage_map.lookup(&key);
+            let oracle_intrinsic = stage_b_oracle_eligible(&parsed);
+            let oracle_eligible = oracle_intrinsic && !(oracle_triage matches { Skip(_) });
+            if oracle_intrinsic && oracle_triage matches { Skip(_) } {
+                stage_b_oracle_suppressed += 1;
+            }
             if parsed.output.is_empty() || parsed.input.is_empty() || parsed.slave_grammars.len() > 0 {
                 // Stale-file sweep mirrors the per-stage paths: drop a
                 // previously-emitted file when the descriptor lost its
@@ -1384,6 +1446,18 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                 None => {
                     stage_b_auto_skip += 1;
                     if let Err(_) = remove_file(&stage_b_cat_dir, &stage_b_filename_pre) {
+                    }
+                    if oracle_eligible {
+                        if let Err(_) = write_oracle_pending_files(
+                            &oracle_pending_cat_dir,
+                            &oracle_input_filename,
+                            &oracle_start_filename,
+                            &parsed,
+                        ) {
+                            eprintln(`extract: cannot write oracle-pending/{*category}/{base}.*`);
+                        } else {
+                            stage_b_oracle_pending += 1;
+                        }
                     }
                     continue;
                 },
@@ -1410,6 +1484,23 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
                     None => {
                         stage_b_auto_skip += 1;
                         if let Err(_) = remove_file(&stage_b_cat_dir, &stage_b_filename) {
+                        }
+                        // Even though the descriptor's [output] is a
+                        // sub-tree, the oracle produces the full tree
+                        // for `[start]`, so the sub-tree concern
+                        // disappears once we run the oracle. Register
+                        // as a candidate when otherwise eligible.
+                        if oracle_eligible {
+                            if let Err(_) = write_oracle_pending_files(
+                                &oracle_pending_cat_dir,
+                                &oracle_input_filename,
+                                &oracle_start_filename,
+                                &parsed,
+                            ) {
+                                eprintln(`extract: cannot write oracle-pending/{*category}/{base}.*`);
+                            } else {
+                                stage_b_oracle_pending += 1;
+                            }
                         }
                         continue;
                     },
@@ -1501,6 +1592,8 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     println(`extract:           {stage_b_todo} marked #[TODO]`);
     println(`extract:           {stage_b_skip} explicit skip`);
     println(`extract:           {stage_b_auto_skip} auto-skip (output is not a parse tree)`);
+    println(`extract: stage B' — JVM-oracle candidates: {stage_b_oracle_pending} pending (handed to scripts/extract-antlr4-descriptors.sh post-processor)`);
+    println(`extract:           {stage_b_oracle_suppressed} suppressed via [stage_b_oracle_skip]`);
     println(`extract: deferred — gaps blocked on missing infrastructure:`);
     println(
         `extract:           {deferred_composite} composite descriptors — need Kiln multi-grammar \`use\` support to resolve \`import S;\` against sibling \`<Name>.slaveN.g4\``,
@@ -1535,6 +1628,50 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
 /// parse-tree node, and the descriptor is rejected. Likewise, `${…}`
 /// always denotes an action-block reference. False rejections are
 /// triaged as `[stage_b_todo]` once the underlying capability lands.
+/// Intrinsic Stage B′ eligibility predicate. A descriptor is a
+/// plausible JVM-oracle candidate iff:
+///
+///   * `[type]` is `Parser` — Stage B′ tests the parse-tree shape,
+///     so lexer-only descriptors are out of scope (they belong to a
+///     future Stage L token-stream oracle, if one is ever needed);
+///   * `[errors]` is empty — the oracle's tree carries `<missing>` /
+///     `<error>` placeholders when the input mis-parses, which we
+///     cannot pin meaningfully. Error-bearing descriptors are
+///     Stage A claim (c) territory anyway;
+///   * `[start]` is non-empty — the oracle's TestRig needs an
+///     explicit rule to dispatch to (Gale defaults to the first
+///     parser rule, but ANTLR4's TestRig does not).
+///
+/// Composite descriptors and empty-`[input]` / empty-`[output]`
+/// descriptors are filtered out before reaching this predicate via
+/// the short-circuit at the top of the Stage B section.
+fn stage_b_oracle_eligible(parsed: &ParsedDescriptor) -> bool {
+    return parsed.descriptor_type == "Parser"
+        && parsed.errors.is_empty()
+        && !parsed.start.is_empty();
+}
+
+/// Write `<base>.input` / `<base>.start` into the per-category
+/// oracle-pending dir. Returns `Ok(())` iff both files were written.
+/// On failure, rolls back partial state by removing whichever file
+/// was successfully written before the error. Diagnostics are the
+/// caller's responsibility (this helper has no Stderr effect).
+fn write_oracle_pending_files(
+    dir: &Descriptor,
+    input_filename: &String,
+    start_filename: &String,
+    parsed: &ParsedDescriptor,
+) -> Result<(), ErrorCode> {
+    if let Err(e) = write_file_string(dir, input_filename, &parsed.input) {
+        return Result::Err(e);
+    }
+    if let Err(e) = write_file_string(dir, start_filename, &parsed.start) {
+        let _ = remove_file(dir, input_filename);
+        return Result::Err(e);
+    }
+    return Result::Ok(());
+}
+
 fn normalize_output_for_stage_b(raw: &String) -> Option<String> {
     let s = raw.trim();
     if s.is_empty() {
