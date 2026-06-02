@@ -3919,8 +3919,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             });
         }
 
-        let arg_names = vec![self.tysys.type_table.borrow().type_name(element_type)];
-        let mangled_name = crate::name::mangle_generic_name(&struct_name, &arg_names);
+        // Single source of truth: `resolve_range` recorded the mangled
+        // struct name (`RangeExclusive<i32>` etc.) on the same
+        // `GenericInstantiation` slot reify already consults for struct
+        // literals. Falls back to the bare name on the off chance the
+        // recording is absent (e.g. a recovery path).
+        let mangled_name = self
+            .ann_generic_instantiations(range.id)
+            .and_then(|gi| gi.mangled_name)
+            .unwrap_or_else(|| struct_name.clone());
 
         // Honour the recorded result type if present (annotate may
         // have unified with a more specific `RangeInclusive<i32>` etc.

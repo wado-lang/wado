@@ -4584,10 +4584,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             vec![element_type],
         );
 
+        // Mangled name for the resulting `TirExprKind::StructLiteral`.
+        // The monomorphizer keys instantiation lookup on this form
+        // (`RangeExclusive<i32>`), so reify and the combined walk both emit
+        // the mangled name. Recorded so reify reads it instead of running
+        // its own `type_name(t)` + `mangle_generic_name`.
+        let arg_names = vec![self.tysys.type_table.borrow().type_name(element_type)];
+        let mangled_name = mangle_generic_name(&struct_name, &arg_names);
+        self.record_generic_instantiation_with_mangle(
+            range.id,
+            vec![element_type],
+            struct_type,
+            Some(mangled_name.clone()),
+        );
+
         TirExpr::new(
             TirExprKind::StructLiteral {
                 struct_type,
-                struct_name,
+                struct_name: mangled_name,
                 fields,
             },
             struct_type,
