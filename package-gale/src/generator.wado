@@ -84,7 +84,9 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     }
 
     let gen_opts = GenerateOptions { highlight: req.options.highlight };
-    let wado_source = codegen_generate(&mut grammar, &gen_opts);
+    // The Kiln surface only emits module text; prediction-strategy
+    // diagnostics are surfaced by the `gale gen` CLI, not here.
+    let wado_source = codegen_generate(&mut grammar, &gen_opts).source;
 
     // Kiln entry module name mirrors Gale's CLI convention: snake-case
     // the grammar name. Reuses `gen_util::to_snake_case` so the filename

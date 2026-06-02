@@ -33,12 +33,6 @@ Parts 1–4 have landed; the items below are follow-ups left on the table.
   `ends_with_scan` (today the warn-once invariant is backstopped by the
   `(rule, message)` dedup in `GenContext::warn`, but the suffix heuristic is
   fragile on its own).
-- **Single lowering on `gale gen` (part 3 follow-up).** `cmd_gen` lowers once
-  to read diagnostics for stderr, then `generate` lowers again internally and
-  discards its `LoweredGrammar.diagnostics`. Have `generate` return (or expose)
-  the diagnostics so `gale gen` lowers once. Same site should run
-  `normalize_caches` before the diagnostic lower to match `generate` /
-  `cmd_dump` (benign for parser-built IR today, but inconsistent).
 
 ## LL prediction — remaining gaps
 
