@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780436911550,
+  "lastUpdate": 1780437285916,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29097,6 +29097,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1aa1cce364d64343fce6e5c139c49ea15c294dc9"
         },
         "date": 1780436911034,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17195,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cb89a669878f0f53806c81de97ea7f462e0bba5a",
+          "message": "Merge pull request #1273 from wado-lang/claude/gale-single-lowering-uZZOj\n\nLower once on gale gen; surface prediction diagnostics on the Kiln path",
+          "timestamp": "2026-06-03T06:47:03+09:00",
+          "tree_id": "b7454c445f973c1617902d580602b913e59b0c9e",
+          "url": "https://github.com/wado-lang/wado/commit/cb89a669878f0f53806c81de97ea7f462e0bba5a"
+        },
+        "date": 1780437285502,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
