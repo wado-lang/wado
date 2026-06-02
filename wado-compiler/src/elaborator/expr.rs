@@ -1260,6 +1260,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::sem::types::GenericInstantiation {
                 type_args: type_args.to_vec(),
                 instance_type,
+                mangled_name: None,
             },
         );
     }
@@ -3559,17 +3560,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 struct_module_source,
                 type_args.clone(),
             );
-            // Stage 5 (Gap 1 of WEP 2026-05-26): record the inferred
-            // type_args + the resulting `GenericInstance` so reify can
-            // emit `TirExprKind::StructLiteral { struct_type, … }`
-            // without re-running `infer_struct_type_args`.
-            self.record_generic_instantiation(struct_lit.id, type_args.clone(), struct_type);
             // Build mangled name with type arguments
             let arg_names: Vec<String> = type_args
                 .iter()
                 .map(|&t| self.tysys.type_table.borrow().type_name(t))
                 .collect();
             let mangled_name = mangle_generic_name(&struct_name, &arg_names);
+            // Stage 5 (Gap 1 of WEP 2026-05-26): record the inferred
+            // type_args + the resulting `GenericInstance` + the mangled
+            // name so reify can emit `TirExprKind::StructLiteral { struct_type,
+            // struct_name, … }` without re-running `infer_struct_type_args`
+            // or `mangle_generic_name`.
+            self.record_generic_instantiation_with_mangle(
+                struct_lit.id,
+                type_args.clone(),
+                struct_type,
+                Some(mangled_name.clone()),
+            );
             (struct_type, mangled_name, fields)
         } else {
             let struct_type = self

@@ -3997,23 +3997,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|(n, i, t, _)| (n.clone(), (*i, *t)))
             .collect();
 
-        // Instance type for generic structs is recorded by Gap 1; for
-        // non-generic structs Gap 1's recording is skipped and we use
-        // the bare struct type from `recorded_type`.
-        let (struct_type, generic_args): (TypeId, Vec<TypeId>) = self
-            .ann_generic_instantiations(struct_lit.id)
-            .map(|gi| (gi.instance_type, gi.type_args))
+        // Instance type and mangled name for generic structs are recorded by
+        // Gap 1; for non-generic structs Gap 1's recording is skipped and we
+        // use the bare struct type from `recorded_type` plus the source-level
+        // struct name as-is.
+        let gi = self.ann_generic_instantiations(struct_lit.id);
+        let (struct_type, generic_args): (TypeId, Vec<TypeId>) = gi
+            .as_ref()
+            .map(|gi| (gi.instance_type, gi.type_args.clone()))
             .unwrap_or((recorded_type, Vec::new()));
-
-        let mangled_struct_name = if generic_args.is_empty() {
-            struct_name
-        } else {
-            let arg_names: Vec<String> = generic_args
-                .iter()
-                .map(|&t| self.tysys.type_table.borrow().type_name(t))
-                .collect();
-            crate::name::mangle_generic_name(&struct_name, &arg_names)
-        };
+        let mangled_struct_name = gi
+            .and_then(|gi| gi.mangled_name.clone())
+            .unwrap_or(struct_name);
 
         // Substitute the decl's `TypeParam`s with the instance's generic
         // args so a field's expected type is concrete (a no-op for

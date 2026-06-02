@@ -625,7 +625,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_args: Vec<TypeId>,
         instance_type: TypeId,
     ) {
-        if type_args.is_empty() {
+        self.record_generic_instantiation_with_mangle(ast_id, type_args, instance_type, None);
+    }
+
+    /// Variant of [`Self::record_generic_instantiation`] that also stores the
+    /// mangled name reify needs to emit on the TIR node. Used by struct
+    /// literal / call sites that compute the mangled form anyway; everything
+    /// else takes the default `None` through the bare helper above.
+    pub(super) fn record_generic_instantiation_with_mangle(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        type_args: Vec<TypeId>,
+        instance_type: TypeId,
+        mangled_name: Option<String>,
+    ) {
+        if type_args.is_empty() && mangled_name.is_none() {
             return;
         }
         let key = self.ann_key(ast_id);
@@ -634,6 +648,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             sem::types::GenericInstantiation {
                 type_args,
                 instance_type,
+                mangled_name,
             },
         );
     }

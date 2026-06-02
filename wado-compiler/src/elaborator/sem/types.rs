@@ -606,6 +606,16 @@ pub(crate) struct StaticMethodDispatch {
 pub(crate) struct GenericInstantiation {
     pub(crate) type_args: Vec<TypeId>,
     pub(crate) instance_type: TypeId,
+    /// Mangled name as the combined walk emitted it onto the TIR node
+    /// (`StructLiteral::struct_name`, `Call::FuncRef::name`, ...).
+    /// `None` for sites that don't carry a mangled name (e.g. when the
+    /// instantiation is recorded purely for type-arg replay).
+    ///
+    /// Recording it here lets reify drop its own `mangle_generic_name`
+    /// reconstruction at struct-literal / call sites — the parity-bug
+    /// class WEP 2026-05-26 §"Stage 7 gap" calls out (`type_name(t)`
+    /// drift between annotate and reify) goes away by construction.
+    pub(crate) mangled_name: Option<String>,
 }
 
 /// A single mutating outer-binding captured by a closure. The closure
