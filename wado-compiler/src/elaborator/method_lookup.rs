@@ -18,6 +18,14 @@ use super::types::{
     IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, SequenceLiteralTraitInfo, TypeError,
 };
 
+/// Body-walk placeholder for the IndexMut method-call rewrite. Stage 7-B:
+/// the combined walk records the inner `operator_dispatch`, the outer
+/// `method_dispatch`, and the `IndexMutMethodCall` desugar; reify rebuilds
+/// the full `*recv.index_mut(idx).method(args)` expansion from those facts.
+fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(TirExprKind::Unit, type_id, span)
+}
+
 /// Lightweight reference to an impl block, avoiding deep clones.
 /// Stores just enough info to re-access the impl block's fields on demand.
 enum ImplBlockRef {
@@ -3456,14 +3464,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
 
-        let index_mut_call = Self::build_tir_method_call(
-            receiver_for_index_mut,
-            index_mut_func,
-            vec![],
-            vec![CallArg::new(index_resolved, false)],
-            mut_ref_output_type,
-            index_expr.span,
-        );
+        // Stage 7-B: reify (`reify_index_mut_method_call`) rebuilds the
+        // inner `*expr.index_mut(idx)` from the recorded `operator_dispatch`
+        // above; the combined walk only needed the dispatch fact. The
+        // receiver + index were resolved above for their side effects.
+        let _ = (receiver_for_index_mut, index_mut_func, index_resolved);
 
         // Step 2: Resolve method args with expected parameter types for literal coercion
         let args: Vec<TirExpr> = method_call
@@ -3482,11 +3487,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
-
-        // Step 4: Create the method call on the result of index_mut
-        // The receiver for the method is index_mut_call (which has type &mut Output)
-        let receiver_for_method =
-            self.adjust_receiver_for_self_kind(index_mut_call, self_kind, false, method_call.span);
 
         let mangled_method_name = MethodName::format_local(
             &output_struct_name,
@@ -3537,21 +3537,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::sem::types::DesugarKind::IndexMutMethodCall,
         );
 
-        Some(Self::build_tir_method_call(
-            receiver_for_method,
-            func,
-            type_args,
-            args.into_iter()
-                .zip(
-                    method_param_is_mut
-                        .into_iter()
-                        .chain(std::iter::repeat(false)),
-                )
-                .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
-                .collect(),
-            return_type,
-            method_call.span,
-        ))
+        // Stage 7-B: reify (`reify_index_mut_method_call`) rebuilds the
+        // outer `MethodCall` (and the `__index_mut_val` synthesis) from the
+        // recorded `method_dispatch` + `IndexMutMethodCall` desugar; the
+        // combined walk projects only the result type. `args` was resolved
+        // above for its fact-recording side effects.
+        let _ = (args, func);
+        Some(placeholder(return_type, method_call.span))
     }
 
     /// Sole elaborator-side constructor of [`TirExprKind::MethodCall`].
