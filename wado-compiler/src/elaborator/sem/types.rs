@@ -528,6 +528,15 @@ pub(crate) struct SequenceCoercionFacts {
     /// the builder's output — reify wraps the final `__b.build()` call
     /// in a `Cast` to this newtype `TypeId`.
     pub(crate) newtype_cast_to: Option<crate::tir::TypeId>,
+    /// `Builder::new_literal` call's mangled name (the one
+    /// `MethodName::format_local(mangled_builder_name, trait_name,
+    /// "new_literal")` produces). Recorded so reify reads it instead
+    /// of running its own `format_local`.
+    pub(crate) new_mangled_name: String,
+    /// `Builder::push_literal` call's mangled name.
+    pub(crate) push_mangled_name: String,
+    /// `Builder::build` call's mangled name.
+    pub(crate) build_mangled_name: String,
 }
 
 /// Resolved `KeyValueLiteralBuilder` impl data for an anonymous

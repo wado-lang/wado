@@ -962,12 +962,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             crate::name::mangle_generic_name(&builder_base_name, &type_arg_names)
         };
 
+        let new_mangled_name =
+            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");
+        let push_mangled_name =
+            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "push_literal");
+        let build_mangled_name =
+            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "build");
+
         // Stage 5 (WEP 2026-05-26): record the resolved
         // `SequenceLiteralBuilder` impl data so reify can rebuild the
         // same `__seq_lit:` desugar block deterministically — the
         // trait-impl lookup chain (newtype peel + sequence-trait
-        // search) and the type-arg mangling are not reproducible from
-        // the AST alone.
+        // search), the type-arg mangling, and the per-method mangled
+        // names are not reproducible from the AST alone.
         let key = self.ann_key(expr.id());
         self.sem.types.sequence_coercions.insert(
             key,
@@ -987,6 +994,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } else {
                     None
                 },
+                new_mangled_name: new_mangled_name.clone(),
+                push_mangled_name: push_mangled_name.clone(),
+                build_mangled_name: build_mangled_name.clone(),
             },
         );
 
@@ -1000,8 +1010,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "new_literal".to_string(),
         )
         .with_struct_type_args(&type_arg_names);
-        let new_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");
         let capacity = tuple_lit.elements.len() as u64;
         let new_call = TirExpr::new(
             TirExprKind::Call {
@@ -1052,8 +1060,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )];
 
         // --- For each element: __b.push_literal(elem) ---
-        let push_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "push_literal");
         let push_method_info = LocalMethodName::new(
             builder_base_name.clone(),
             Some(trait_name.clone()),
@@ -1130,8 +1136,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             builder_type,
             span,
         );
-        let build_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "build");
         let build_method_info = LocalMethodName::new(
             builder_base_name.clone(),
             Some(trait_name),

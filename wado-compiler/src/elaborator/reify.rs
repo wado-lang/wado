@@ -5219,7 +5219,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         span: crate::token::Span,
     ) -> TirExpr {
-        use crate::name::{LocalMethodName, MethodName};
+        use crate::name::LocalMethodName;
         use crate::tir::{
             CallArg, FunctionRef, MonomorphInfo, TirBlock, TirExprKind, TirStmt, TirStmtKind,
             TypeTable,
@@ -5235,17 +5235,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             "new_literal".to_string(),
         )
         .with_struct_type_args(&facts.type_arg_names);
-        let new_mangled_name = MethodName::format_local(
-            &facts.mangled_builder_name,
-            Some(&facts.trait_name),
-            "new_literal",
-        );
         let capacity = tuple_lit.elements.len() as u64;
         let new_call = TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
                     module_source: facts.impl_module_source.clone(),
-                    name: new_mangled_name,
+                    name: facts.new_mangled_name.clone(),
                     monomorph_info: if facts.type_arg_ids.is_empty() {
                         None
                     } else {
@@ -5290,11 +5285,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )];
 
         // --- For each element: __b.push_literal(elem) ---
-        let push_mangled_name = MethodName::format_local(
-            &facts.mangled_builder_name,
-            Some(&facts.trait_name),
-            "push_literal",
-        );
         let push_method_info = LocalMethodName::new(
             facts.builder_base_name.clone(),
             Some(facts.trait_name.clone()),
@@ -5323,7 +5313,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 receiver,
                 FunctionRef {
                     module_source: facts.impl_module_source.clone(),
-                    name: push_mangled_name.clone(),
+                    name: facts.push_mangled_name.clone(),
                     monomorph_info: if facts.type_arg_ids.is_empty() {
                         None
                     } else {
@@ -5353,11 +5343,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             facts.builder_type,
             span,
         );
-        let build_mangled_name = MethodName::format_local(
-            &facts.mangled_builder_name,
-            Some(&facts.trait_name),
-            "build",
-        );
         let build_method_info = LocalMethodName::new(
             facts.builder_base_name.clone(),
             Some(facts.trait_name.clone()),
@@ -5368,7 +5353,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             builder_local_final,
             FunctionRef {
                 module_source: facts.impl_module_source.clone(),
-                name: build_mangled_name,
+                name: facts.build_mangled_name.clone(),
                 monomorph_info: if facts.type_arg_ids.is_empty() {
                     None
                 } else {
