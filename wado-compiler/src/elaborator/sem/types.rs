@@ -108,6 +108,23 @@ pub(crate) struct MethodDispatch {
     /// type makes reify emit a spurious `drop` of a value-less call →
     /// Wasm stack underflow).
     pub(crate) return_type: TypeId,
+    /// Method-level type args for the [`crate::tir::TirExprKind::MethodCall`]
+    /// node, in the exact form the combined walk passes to
+    /// [`super::super::Elaborator::build_tir_method_call`]. The
+    /// monomorphizer's `collect_func_instantiation_sites` keys off this
+    /// field to queue `Struct^Trait::method<Args>` instances, so it must
+    /// carry the resolved args — both explicit turbofish and
+    /// inference-recovered ones.
+    ///
+    /// Recorded separately from `function_ref.monomorph_info.method_type_args`
+    /// because the blanket-impl branch in `resolve_method_call_with`
+    /// constructs `MonomorphInfo` with `method_type_args: vec![]` even when
+    /// the call site has a non-empty turbofish — the TIR node still receives
+    /// the turbofish args (they pass straight through `build_tir_method_call`),
+    /// so reify needs its own un-zeroed copy to avoid re-resolving the AST
+    /// type-arg list against the current type-param scope.
+    #[allow(dead_code)]
+    pub(crate) method_type_args: Vec<TypeId>,
 }
 
 /// Which sub-coercion [`super::super::Elaborator::try_coerce`] applied at
@@ -152,6 +169,14 @@ pub(crate) struct TypeAnnotations {
     /// `record_local_symbol` call. Consumed by LSP inlay hints via
     /// [`crate::semantics::Semantics::local_type_name`] so `let x = 1` can
     /// render the inferred `: i32` annotation without reaching into TIR.
+    ///
+    /// Part of [`ElementOverlay`]: a tuple-`for-of` body rebinds the same
+    /// pattern `AstId` to a different element type per iteration, so the
+    /// per-iteration overlay keeps each iteration's value pinned to its
+    /// own `ElementOverlay` rather than letting later iterations overwrite
+    /// earlier reads on the base map. Same applies to inner closure
+    /// params / let bindings whose inferred types depend on the iteration's
+    /// element.
     pub(crate) local_types: IndexMap<SymbolKey, TypeId>,
     /// Resolved [`TypeId`] for every expression visited by
     /// [`super::super::Elaborator::resolve_expr`], keyed by the
@@ -300,6 +325,13 @@ pub(crate) struct TypeAnnotations {
     /// deterministically.
     #[allow(dead_code)]
     pub(crate) key_value_coercions: IndexMap<SymbolKey, KeyValueCoercionFacts>,
+    /// `From<T>::from` call facts recorded at every site that synthesises
+    /// a conversion call: the `?` operator's err-arm conversion, and the
+    /// bodyless-impl static-call inline path. Keyed by the caller's
+    /// [`crate::ast::AstId`] (the `?` expr / static-call expr). See
+    /// [`FromCallFacts`].
+    #[allow(dead_code)]
+    pub(crate) from_call_facts: IndexMap<SymbolKey, FromCallFacts>,
     /// `IndexAssign` trait dispatch decisions for `arr[i] = v` and
     /// `arr[i] OP= v` shapes whose target is an `Expr::Index`. Keyed
     /// by the **inner [`crate::ast::IndexExpr`]'s [`AstId`]** (the
@@ -359,6 +391,39 @@ pub(crate) struct TypeAnnotations {
     /// after its own scope is torn down. `AstId` is dense per module across all
     /// item kinds, so function and decl entries never collide.
     pub(crate) decl_type_params: IndexMap<SymbolKey, Vec<crate::tir::TirTypeParam>>,
+    /// Per-impl-method mangled / display names as `resolve_method` computed
+    /// them (`MethodName::format_local(struct_name, trait_name, method_name)`
+    /// and the trait-omitted display form). Reify reads these instead of
+    /// re-running `format_local` against the impl facts' `struct_name`.
+    pub(crate) method_names: IndexMap<SymbolKey, MethodNames>,
+    /// Resolved `let x: T = …` whole-pattern type annotation, keyed by the
+    /// `LetStmt`'s `AstId`. For simple `Ident` / `MutIdent` bindings the same
+    /// type also appears in `local_types` (keyed by the binding's id); for
+    /// destructuring patterns the binding ids carry per-element types so the
+    /// whole-pattern annotation has no `local_types` slot to land on, and
+    /// reify reads it from here instead of re-resolving the AST annotation.
+    ///
+    /// Part of [`ElementOverlay`] because the `LetStmt::AstId` is shared
+    /// across every iteration of a tuple-`for-of` unrolling, so the
+    /// per-iteration walk would otherwise overwrite earlier entries on
+    /// the base map and reify would read the last iteration's resolution
+    /// for every element. The overlay stack keeps each iteration's value
+    /// pinned to that iteration's `ElementOverlay`.
+    pub(crate) let_annotated_types: IndexMap<SymbolKey, TypeId>,
+    /// Resolved field types per struct decl `AstId`, in declaration order, as
+    /// `resolve_struct` resolved them with the struct's type-param scope and
+    /// the `loaded_modules`-aware resolver in place.
+    ///
+    /// Recorded so reify can read field types straight from this map instead
+    /// of relying on `tysys.all_struct_fields` + an UNKNOWN-fallback
+    /// re-resolve. The fallback existed because the static decl-field pass
+    /// (which seeds `all_struct_fields`) runs without `loaded_modules` and
+    /// cannot follow `pub use` re-export chains — so a field typed by a
+    /// re-exported decl (e.g. `Mark = u64` re-exported from `wasi:clocks`)
+    /// landed as `UNKNOWN` there and forced reify to re-resolve. The combined
+    /// walk already resolves these correctly during `resolve_struct`; we just
+    /// publish the resolved vector here for reify to read.
+    pub(crate) struct_field_types: IndexMap<SymbolKey, Vec<crate::tir::TypeId>>,
 }
 
 /// One tuple-`for-of` element's slice of the body-level annotation maps.
@@ -373,6 +438,8 @@ pub(crate) struct TypeAnnotations {
 #[allow(dead_code)]
 pub(crate) struct ElementOverlay {
     pub(crate) expression_types: IndexMap<SymbolKey, TypeId>,
+    pub(crate) local_types: IndexMap<SymbolKey, TypeId>,
+    pub(crate) let_annotated_types: IndexMap<SymbolKey, TypeId>,
     pub(crate) method_dispatch: IndexMap<SymbolKey, MethodDispatch>,
     pub(crate) coercions: IndexMap<SymbolKey, CoercionChoice>,
     pub(crate) desugars: IndexMap<SymbolKey, DesugarKind>,
@@ -385,6 +452,7 @@ pub(crate) struct ElementOverlay {
     pub(crate) static_method_dispatch: IndexMap<SymbolKey, StaticMethodDispatch>,
     pub(crate) sequence_coercions: IndexMap<SymbolKey, SequenceCoercionFacts>,
     pub(crate) key_value_coercions: IndexMap<SymbolKey, KeyValueCoercionFacts>,
+    pub(crate) from_call_facts: IndexMap<SymbolKey, FromCallFacts>,
     pub(crate) index_assign_dispatch: IndexMap<SymbolKey, OperatorDispatch>,
 }
 
@@ -395,6 +463,8 @@ pub(crate) struct ElementOverlay {
 #[derive(Clone, Copy)]
 pub(crate) struct ElementOverlayLens {
     expression_types: usize,
+    local_types: usize,
+    let_annotated_types: usize,
     method_dispatch: usize,
     coercions: usize,
     desugars: usize,
@@ -407,6 +477,7 @@ pub(crate) struct ElementOverlayLens {
     static_method_dispatch: usize,
     sequence_coercions: usize,
     key_value_coercions: usize,
+    from_call_facts: usize,
     index_assign_dispatch: usize,
 }
 
@@ -416,6 +487,8 @@ impl TypeAnnotations {
     pub(crate) fn overlay_base_lens(&self) -> ElementOverlayLens {
         ElementOverlayLens {
             expression_types: self.expression_types.len(),
+            local_types: self.local_types.len(),
+            let_annotated_types: self.let_annotated_types.len(),
             method_dispatch: self.method_dispatch.len(),
             coercions: self.coercions.len(),
             desugars: self.desugars.len(),
@@ -428,6 +501,7 @@ impl TypeAnnotations {
             static_method_dispatch: self.static_method_dispatch.len(),
             sequence_coercions: self.sequence_coercions.len(),
             key_value_coercions: self.key_value_coercions.len(),
+            from_call_facts: self.from_call_facts.len(),
             index_assign_dispatch: self.index_assign_dispatch.len(),
         }
     }
@@ -444,6 +518,8 @@ impl TypeAnnotations {
     pub(crate) fn split_off_overlay(&mut self, base: ElementOverlayLens) -> ElementOverlay {
         ElementOverlay {
             expression_types: self.expression_types.split_off(base.expression_types),
+            local_types: self.local_types.split_off(base.local_types),
+            let_annotated_types: self.let_annotated_types.split_off(base.let_annotated_types),
             method_dispatch: self.method_dispatch.split_off(base.method_dispatch),
             coercions: self.coercions.split_off(base.coercions),
             desugars: self.desugars.split_off(base.desugars),
@@ -460,11 +536,51 @@ impl TypeAnnotations {
                 .split_off(base.static_method_dispatch),
             sequence_coercions: self.sequence_coercions.split_off(base.sequence_coercions),
             key_value_coercions: self.key_value_coercions.split_off(base.key_value_coercions),
+            from_call_facts: self.from_call_facts.split_off(base.from_call_facts),
             index_assign_dispatch: self
                 .index_assign_dispatch
                 .split_off(base.index_assign_dispatch),
         }
     }
+}
+
+/// Mangled and display names for one impl method, as
+/// `Elaborator::resolve_method` computes them. Display omits the trait
+/// (`Struct::method`); mangled includes it
+/// (`Struct^Trait::method`). See [`TypeAnnotations::method_names`].
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct MethodNames {
+    pub(crate) display: String,
+    pub(crate) mangled: String,
+}
+
+/// Resolved `From<T>::from` call facts recorded at every site that
+/// invokes the conversion: the `?` operator's error-arm conversion
+/// (`expr.rs:resolve_question_mark_result`), the bodyless
+/// `impl From<X> for T;` static-call inline (`call.rs` /
+/// `method_call.rs`). Reify reads these to rebuild the same
+/// `TirExprKind::Call` without re-walking loaded modules to find the
+/// impl's home or re-mangling the method name.
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct FromCallFacts {
+    /// Module that hosts the `impl From<From> for Target` block (or
+    /// the auto-derived synthesis site).
+    pub(crate) module_source: crate::module_source::ModuleSource,
+    /// `MethodName::format_local(target_name, Some(from_trait), "from")` —
+    /// the mangled `Target^From<From>::from` name the monomorphizer
+    /// keys on.
+    pub(crate) mangled_name: String,
+    /// `type_name(target_type)` — the call's struct prefix
+    /// (`LocalMethodName::struct_name` / `base_struct_name`).
+    pub(crate) target_name: String,
+    /// `type_name(from_type)` — the conversion source type's name,
+    /// used to build `LocalMethodName::trait_name`'s `From<…>` form.
+    pub(crate) from_name: String,
+    /// `compiler_items().trait_name(From)` — the bare trait name
+    /// (typically `"From"`).
+    pub(crate) from_trait_name: String,
 }
 
 /// Resolved `SequenceLiteralBuilder` impl data for a tuple-to-sequence
@@ -497,6 +613,15 @@ pub(crate) struct SequenceCoercionFacts {
     /// the builder's output — reify wraps the final `__b.build()` call
     /// in a `Cast` to this newtype `TypeId`.
     pub(crate) newtype_cast_to: Option<crate::tir::TypeId>,
+    /// `Builder::new_literal` call's mangled name (the one
+    /// `MethodName::format_local(mangled_builder_name, trait_name,
+    /// "new_literal")` produces). Recorded so reify reads it instead
+    /// of running its own `format_local`.
+    pub(crate) new_mangled_name: String,
+    /// `Builder::push_literal` call's mangled name.
+    pub(crate) push_mangled_name: String,
+    /// `Builder::build` call's mangled name.
+    pub(crate) build_mangled_name: String,
 }
 
 /// Resolved `KeyValueLiteralBuilder` impl data for an anonymous
@@ -530,6 +655,14 @@ pub(crate) struct KeyValueCoercionFacts {
     /// taking a capacity arg + emitting `__b.build()`); `false` for
     /// the legacy `KeyValueLiteral` shape that breaks with `__b`.
     pub(crate) use_new_api: bool,
+    /// `Builder::new_literal` call's mangled name. Recorded so reify reads it
+    /// instead of running its own `MethodName::format_local`.
+    pub(crate) new_mangled_name: String,
+    /// `Builder::insert_literal` call's mangled name.
+    pub(crate) insert_mangled_name: String,
+    /// `Builder::build` call's mangled name. `None` under the legacy API
+    /// where the block breaks with `__b` directly.
+    pub(crate) build_mangled_name: Option<String>,
 }
 
 /// Static-method call dispatch decision. See
@@ -575,6 +708,16 @@ pub(crate) struct StaticMethodDispatch {
 pub(crate) struct GenericInstantiation {
     pub(crate) type_args: Vec<TypeId>,
     pub(crate) instance_type: TypeId,
+    /// Mangled name as the combined walk emitted it onto the TIR node
+    /// (`StructLiteral::struct_name`, `Call::FuncRef::name`, ...).
+    /// `None` for sites that don't carry a mangled name (e.g. when the
+    /// instantiation is recorded purely for type-arg replay).
+    ///
+    /// Recording it here lets reify drop its own `mangle_generic_name`
+    /// reconstruction at struct-literal / call sites — the parity-bug
+    /// class WEP 2026-05-26 §"Stage 7 gap" calls out (`type_name(t)`
+    /// drift between annotate and reify) goes away by construction.
+    pub(crate) mangled_name: Option<String>,
 }
 
 /// A single mutating outer-binding captured by a closure. The closure
@@ -753,6 +896,18 @@ pub(crate) struct ImplFacts {
     /// receiver-adjustment time; mirrors Gap 2's per-call
     /// `is_ref_impl` but is decided at impl-block scope.
     pub(crate) is_ref_impl: bool,
+    /// Mangled struct name the elaborator feeds into
+    /// [`crate::name::MethodName::format_local`] when naming the impl's
+    /// methods — the result of `get_type_name(&impl_block.ty)` at
+    /// elaborator-level recording time.
+    ///
+    /// Reify reads this verbatim instead of reconstructing it from the
+    /// resolved [`Self::self_type`] (which would need `&` / `&mut` / tuple
+    /// special cases and the `&T`-blanket "bare `&`" carve-out that
+    /// `get_type_name` already encodes — `module.rs:581`). Keeping the
+    /// canonical name on the impl facts prevents the parity-bug class
+    /// called out in WEP 2026-05-26 §"Stage 7 gap".
+    pub(crate) struct_name: String,
 }
 
 /// Operator-dispatch decision recorded when the elaborator lowers a
@@ -878,4 +1033,12 @@ pub(crate) enum DesugarKind {
     /// reads this tag on the outer `Call`'s [`AstId`] and emits the
     /// inner argument's TIR directly, skipping the call construction.
     NewtypeFromCollapse,
+    /// `Base::from(Newtype_val)` where `Newtype = Base` — the elaborator
+    /// lowers to a `Cast` of the argument to the base type. Reify reads
+    /// this tag on the outer `Call`'s `AstId` and emits the same shape.
+    NewtypeFromUnwrap,
+    /// `Newtype::from(Base_val)` where `Newtype = Base` — the elaborator
+    /// lowers to a `Cast` of the argument to the newtype. Reify reads
+    /// this tag on the outer `Call`'s `AstId` and emits the same shape.
+    NewtypeFromWrap,
 }

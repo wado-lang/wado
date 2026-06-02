@@ -35,15 +35,19 @@ pub(crate) struct ModuleDecls {
     /// `local_name → (source, original_name, TypeId, is_mut)` for globals
     /// brought in by `use`.
     pub(crate) imported_globals: IndexMap<String, (ModuleSource, String, TypeId, bool)>,
-    /// `"Type::CONST" → (defining module, type, expr)`. Inlined at every
-    /// use site during resolution. Built from impl blocks across all loaded
-    /// modules plus this module's own impls. The `ModuleSource` records
+    /// `"Type::CONST" → (defining module, resolved type, expr)`. Inlined at
+    /// every use site during resolution. Built from impl blocks across all
+    /// loaded modules plus this module's own impls. The `ModuleSource` records
     /// which module the `expr` body's AST nodes belong to: `AstId`s are
     /// only unique within a module, so reify must reify the body under that
     /// module's perspective (its `ModuleSemantics`) rather than the use
     /// site's, or a colliding `AstId` would mis-type the inlined constant.
+    ///
+    /// The type is resolved once at population time (`Elaborator::resolve_module`)
+    /// so reify and the combined walk both read the same `TypeId` without
+    /// re-running `resolve_type` at every use site.
     pub(crate) associated_constants:
-        IndexMap<String, (crate::module_source::ModuleSource, ast::Type, ast::Expr)>,
+        IndexMap<String, (crate::module_source::ModuleSource, TypeId, ast::Expr)>,
 
     /// Names of generic structs declared in this module (used to decide
     /// whether a struct reference needs generic-instance handling).
@@ -83,20 +87,6 @@ pub(crate) struct ModuleDecls {
     /// and `reify_module` reads the list.
     #[allow(dead_code)]
     pub(crate) pending_synthesis_requests: Vec<crate::tir::SynthesisRequest>,
-
-    /// Default-method synthesis output (Gap 12 / Stage 5). When
-    /// an impl omits methods that the trait decl declares with a
-    /// default body, the elaborator synthesises a `TirFunction`
-    /// per missing default and records it here. `reify_module`
-    /// reads this list and pushes each onto the emitted
-    /// `TirModule`'s function list, preserving the existing
-    /// dispatch behaviour without re-running the default-method
-    /// synthesis inside reify.
-    ///
-    /// `#[allow(dead_code)]` for the same reason as
-    /// `pending_synthesis_requests` above.
-    #[allow(dead_code)]
-    pub(crate) pending_default_methods: Vec<crate::tir::TirFunction>,
 
     /// Per-module additions to the type tables, consulted by
     /// [`super::super::types::TypeLookup`] before the shared `all_*` tables.

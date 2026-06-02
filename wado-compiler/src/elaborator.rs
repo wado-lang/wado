@@ -13,6 +13,7 @@ mod call;
 mod callee;
 mod closure;
 mod coercion;
+mod control_flow;
 mod expr;
 mod handlers;
 mod infer;
@@ -535,6 +536,68 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         SymbolKey::new(module.clone(), ast_id)
     }
 
+    /// Build a [`control_flow::CtrlFlowCtx`] over the currently-active
+    /// module's `expression_types` map. Used by the AST-level
+    /// missing-return / definite-exit walks that replaced the TIR
+    /// walkers consuming the combined walk's body TIR.
+    fn ctrl_flow_ctx(&self) -> control_flow::CtrlFlowCtx<'_> {
+        let module = self
+            .ann_module_override
+            .as_ref()
+            .unwrap_or(&self.current_module_source);
+        control_flow::CtrlFlowCtx {
+            expression_types: &self.sem.types.expression_types,
+            module,
+        }
+    }
+
+    pub(super) fn ast_find_return_type_in_block(
+        &self,
+        block: &crate::ast::Block,
+    ) -> Option<TypeId> {
+        control_flow::find_return_type_in_block(self.ctrl_flow_ctx(), block)
+    }
+
+    pub(super) fn ast_block_always_exits(&self, block: &crate::ast::Block) -> bool {
+        control_flow::block_always_exits(self.ctrl_flow_ctx(), block)
+    }
+
+    /// Emit a `MissingReturn` diagnostic when a declared non-Unit
+    /// return type cannot be satisfied by the body. Skipped for
+    /// `Unit`/`Never` declarations, for missing bodies (declared-only
+    /// externals), and for bodies whose every control path provably
+    /// exits before the end — either via an explicit `return`, a
+    /// divergent statement like `panic("…")`, or a fully-diverging
+    /// labeled block / `loop`.
+    ///
+    /// The previous heuristic accepted any nested `return` even when
+    /// only one branch of an `if` carried one, which let partial-return
+    /// bodies through and produced an invalid core Wasm module ("type
+    /// mismatch: expected i32 but nothing on stack") for the
+    /// fall-through path. AST-walker mirrors that strict definite-exit
+    /// analysis using recorded `expression_types`.
+    pub(super) fn validate_missing_return_ast(
+        &self,
+        return_type: TypeId,
+        body: Option<&crate::ast::Block>,
+        span: crate::token::Span,
+    ) {
+        if return_type == crate::tir::TypeTable::UNIT || return_type == crate::tir::TypeTable::NEVER
+        {
+            return;
+        }
+        let Some(body) = body else {
+            return;
+        };
+        if control_flow::block_always_exits(self.ctrl_flow_ctx(), body) {
+            return;
+        }
+        let _ = self.logger.error(types::TypeError::MissingReturn {
+            return_type: self.tysys.type_table.borrow().type_name(return_type),
+            span,
+        });
+    }
+
     /// Record the resolved [`TypeId`] for the expression at `ast_id` —
     /// the per-`AstId` annotation the future `reify` pass (Stage 5 of WEP
     /// 2026-05-26) reads to set `TirExpr::type_id` without re-running
@@ -586,6 +649,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         param_names: Vec<String>,
         param_defaults: Vec<Option<ast::Expr>>,
         return_type: TypeId,
+        method_type_args: Vec<TypeId>,
     ) {
         let Some(ast_id) = ast_id else { return };
         let key = self.ann_key(ast_id);
@@ -599,6 +663,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 param_names,
                 param_defaults,
                 return_type,
+                method_type_args,
             },
         );
     }
@@ -623,7 +688,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_args: Vec<TypeId>,
         instance_type: TypeId,
     ) {
-        if type_args.is_empty() {
+        self.record_generic_instantiation_with_mangle(ast_id, type_args, instance_type, None);
+    }
+
+    /// Variant of [`Self::record_generic_instantiation`] that also stores the
+    /// mangled name reify needs to emit on the TIR node. Used by struct
+    /// literal / call sites that compute the mangled form anyway; everything
+    /// else takes the default `None` through the bare helper above.
+    pub(super) fn record_generic_instantiation_with_mangle(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        type_args: Vec<TypeId>,
+        instance_type: TypeId,
+        mangled_name: Option<String>,
+    ) {
+        if type_args.is_empty() && mangled_name.is_none() {
             return;
         }
         let key = self.ann_key(ast_id);
@@ -632,6 +711,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             sem::types::GenericInstantiation {
                 type_args,
                 instance_type,
+                mangled_name,
             },
         );
     }
@@ -767,21 +847,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     #[allow(dead_code)]
     pub(super) fn record_pending_synthesis_request(&mut self, req: tir::SynthesisRequest) {
         self.sem.decls.pending_synthesis_requests.push(req);
-    }
-
-    /// Record a synthesised default-method `TirFunction` (Gap 12 /
-    /// Stage 5). `reify_module` reads
-    /// [`sem::decls::ModuleDecls::pending_default_methods`] and
-    /// pushes each onto the emitted [`tir::TirModule`]'s function
-    /// list. Decouples the synthesis output from the reify walk so
-    /// reify doesn't re-run the default-method synthesis.
-    ///
-    /// `#[allow(dead_code)]` until the recording site in the
-    /// existing default-method synthesis loop is rerouted
-    /// through here.
-    #[allow(dead_code)]
-    pub(super) fn record_pending_default_method(&mut self, func: tir::TirFunction) {
-        self.sem.decls.pending_default_methods.push(func);
     }
 
     /// Record a coercion decision for the expression at `ast_id`. Called
@@ -981,75 +1046,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// the returned key uses the *original* declaration name, so the index
     /// (whose key is `(decl_module, decl_name)`) matches.
     pub(crate) fn canonical_decl_key(&self, name: &str) -> (ModuleSource, String) {
-        // Built-in primitive types have inherent impls in
-        // `core:prelude/primitive`. They aren't declared as Wado items
-        // (so the symbol table can't canonicalise them), but they have
-        // a well-known canonical module the build phase shares with
-        // every lookup site. Recognise them explicitly.
-        if is_primitive_type_name(name) {
-            return (ModuleSource::primitive(), name.to_string());
-        }
-        if let Some(src) = self.sem.imports.imported_type_sources.get(name) {
-            let original = self
-                .sem
-                .imports
-                .import_original_names
-                .get(name)
-                .cloned()
-                .unwrap_or_else(|| name.to_string());
-            let canonical = self
-                .symbols
-                .lookup_in_module(src, &original)
-                .map(|sym| sym.defined_at.module.clone())
-                .unwrap_or_else(|| src.clone());
-            return (canonical, original);
-        }
-        if let Some(src) = self.sem.imports.effect_sources.get(name) {
-            // `effect_sources` carries either a local effect / resource
-            // declaration (no alias possible — the local name IS the
-            // declaration name) or a non-aliased import that
-            // `imported_type_sources` above already covered. In both cases
-            // `name` is the original declaration name. Canonicalise through
-            // `lookup_in_module` so re-exports (e.g. `wasi:clocks` re-
-            // exporting `MonotonicClock` from `wasi:clocks/monotonic_clock`)
-            // resolve to the *defining* module's key rather than the
-            // re-exporting one.
-            let canonical = self
-                .symbols
-                .lookup_in_module(src, name)
-                .map(|sym| sym.defined_at.module.clone())
-                .unwrap_or_else(|| src.clone());
-            return (canonical, name.to_string());
-        }
-        if let Some(sym) = self.symbols.lookup(name) {
-            return (sym.defined_at.module.clone(), name.to_string());
-        }
-        // Last-resort fallback: scan the global decl indices for any
-        // declaration with this bare name. Stdlib code (e.g. `core:json`
-        // calling `f64::from_str`) references prelude traits / resources
-        // that aren't carried in `effect_sources` / `imported_type_sources`
-        // — prelude is implicit, not via `use` — and that may not be
-        // registered in the per-module symbol table for non-user modules.
-        // The lookup picks "first registered" when two modules declare
-        // same-named items; this is the legacy bare-name behaviour and is
-        // reachable only when the prior priorities (which DO disambiguate
-        // user-visible cases) all miss.
-        if let Some(key) = self.tysys.trait_env.find_trait_decl_key(name) {
-            return key;
-        }
-        if let Some(key) = self.tysys.trait_env.find_effect_or_resource_decl_key(name) {
-            return key;
-        }
-        // Final fallback: a receiver type name (often a built-in primitive
-        // such as `char` / `i32` / `f64`) that has no `Symbol` entry to
-        // canonicalise through. The static-method index was keyed at
-        // build time by `(impl_module, type_name)`; scanning its keys for
-        // a matching bare name recovers the receiver's canonical module
-        // so the lookup site sees the same key the build phase wrote.
-        if let Some(key) = self.tysys.trait_env.find_static_method_decl_key(name) {
-            return key;
-        }
-        (self.current_module_source.clone(), name.to_string())
+        super::elaborator::trait_query::canonical_decl_key_with(
+            name,
+            &self.current_module_source,
+            &self.sem.imports,
+            self.symbols,
+            &self.tysys.trait_env,
+        )
     }
 
     /// Resolve AST effect names (strings) to TIR `EffectRefs` with module source information.
@@ -1252,29 +1255,53 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // module, tagging each with its defining `ModuleSource` so reify can
         // reify the body under the right module perspective (the body's
         // `AstId`s are only unique within that module).
+        //
+        // Resolve the const's type here, in the current module's perspective,
+        // so reify and the combined walk both read a ready `TypeId` instead
+        // of re-running `resolve_type` at every use site. The resolution
+        // context matches what the use sites would use today (assoc-const
+        // types are primitive or `Self`-substituted and resolve uniformly
+        // across modules).
         self.sem.decls.associated_constants.clear();
-        let const_sources = self
+        let assoc_const_inputs: Vec<(ModuleSource, String, ast::Type, ast::Expr)> = self
             .loaded_modules
             .iter()
             .map(|(src, m)| (src.clone(), &m.items))
-            .chain(std::iter::once((module_source.clone(), &module.items)));
-        for (src, module_items) in const_sources {
-            for item in module_items {
-                if let Item::Impl(impl_block) = item {
-                    let type_name = self.get_type_name(&impl_block.ty);
-                    for assoc_const in &impl_block.constants {
-                        let key = MethodName::format_local(&type_name, None, &assoc_const.name);
-                        self.sem.decls.associated_constants.insert(
-                            key,
-                            (
-                                src.clone(),
-                                assoc_const.ty.clone(),
-                                assoc_const.value.clone(),
-                            ),
-                        );
-                    }
-                }
-            }
+            .chain(std::iter::once((module_source.clone(), &module.items)))
+            .flat_map(|(src, module_items)| {
+                module_items
+                    .iter()
+                    .filter_map(|item| {
+                        if let Item::Impl(impl_block) = item {
+                            Some((src.clone(), impl_block))
+                        } else {
+                            None
+                        }
+                    })
+                    .flat_map(|(src, impl_block)| {
+                        let type_name = self.get_type_name(&impl_block.ty);
+                        impl_block
+                            .constants
+                            .iter()
+                            .map(move |assoc_const| {
+                                (
+                                    src.clone(),
+                                    MethodName::format_local(&type_name, None, &assoc_const.name),
+                                    assoc_const.ty.clone(),
+                                    assoc_const.value.clone(),
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        for (src, key, ty, value) in assoc_const_inputs {
+            let type_id = self.resolve_type(&ty);
+            self.sem
+                .decls
+                .associated_constants
+                .insert(key, (src, type_id, value));
         }
 
         // Third pass: resolve functions
@@ -1532,6 +1559,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 assoc_type_bindings: self.trait_ctx.assoc_type_bindings.clone(),
                                 is_handler_method,
                                 is_ref_impl,
+                                struct_name: struct_name.clone(),
                             },
                         );
                     }
@@ -1588,39 +1616,78 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         // `builtin::array_copy` call in `String::push_str`
                         // mistyped as `Iterator::last`'s `Option<T>`, making
                         // reify emit a spurious `drop` of a value-less call →
-                        // Wasm stack underflow). Reify never reads these facts —
-                        // it emits default methods from the pre-synthesised
-                        // `pending_default_methods` TIR — so keying them off the
-                        // impl module is all that matters; the same trait body
-                        // walked for multiple impls harmlessly overwrites its
-                        // own entries under the trait-module key.
+                        // Wasm stack underflow).
+                        //
+                        // Stage 5 completion: the body walk's only output
+                        // is a per-impl `ModuleSemantics` snapshot stored on
+                        // `ModuleSemantics::default_method_semantics`. Reify
+                        // (the sole TIR source) reads those snapshots and
+                        // produces the impl's default-method
+                        // `TirFunction`s. The combined walk no longer builds
+                        // default-method TIR.
+                        //
+                        // Per-impl snapshots are required because the same
+                        // trait body synthesised for many impls would
+                        // otherwise overwrite its own `(trait_module,
+                        // ast_id)` facts on each iteration. Each impl gets a
+                        // fresh `ModuleSemantics` whose `types` / `bindings`
+                        // capture only this one synthesis; `decls` and
+                        // `imports` are cloned from the surrounding
+                        // (impl-module) `ModuleSemantics` so name resolution
+                        // / decl indices work during the body walk.
                         let prev_override =
                             std::mem::replace(&mut self.ann_module_override, trait_module);
 
                         for default_method in &default_methods {
-                            if let Some(mut tir_func) = self.resolve_method(
+                            // Build a synthetic `ModuleSemantics` for this
+                            // one (impl, default_method) synthesis. Fresh
+                            // `types` / `bindings` so the body walk's writes
+                            // stay isolated; clone the impl module's `decls`
+                            // / `imports` so the walk's reads see the
+                            // resolved decls + import context.
+                            let synthetic = super::elaborator::sem::ModuleSemantics {
+                                bindings: super::elaborator::sem::ModuleBindings::default(),
+                                imports: self.sem.imports.clone(),
+                                types: super::elaborator::sem::TypeAnnotations::default(),
+                                decls: self.sem.decls.clone(),
+                                default_method_semantics: crate::hashmap::IndexMap::default(),
+                            };
+                            // Swap the elaborator's owned `sem` with the
+                            // synthetic. `resolve_method` writes through
+                            // `self.sem` (`record_*` calls, fact insertions)
+                            // — they all land in `synthetic`'s fresh maps.
+                            // Its `TirFunction` return is discarded; reify
+                            // emits the authoritative TIR from the recorded
+                            // facts.
+                            let saved_sem = std::mem::replace(&mut self.sem, synthetic);
+
+                            let _ = self.resolve_method(
                                 default_method,
                                 &struct_name,
                                 &impl_block.ty,
                                 Some(trait_n),
                                 Some(trait_ast),
-                            ) {
-                                tir_func.name = MethodName::format_local(
-                                    &struct_name,
-                                    Some(trait_n),
-                                    &default_method.name,
-                                );
-                                // Default methods from trait declarations are not marked pub
-                                // in the AST, but they should be treated as pub since they are
-                                // part of a trait implementation
-                                tir_func.is_pub = true;
-                                // Stage 5 / Gap 12: record the synthesised
-                                // default-method function so `reify_module`
-                                // reads it from
-                                // `sem.decls.pending_default_methods`.
-                                self.record_pending_default_method(tir_func.clone());
-                                tir_module.add_function(tir_func);
-                            }
+                            );
+
+                            // Swap back, take the populated synthetic out.
+                            let mut populated = std::mem::replace(&mut self.sem, saved_sem);
+
+                            // Drain decl-level writes that must flow back
+                            // into the impl module's `TirModule`. The body
+                            // walk's only such write is anon-struct push;
+                            // synthesis-request pushes only happen at the
+                            // decl pass, not inside a method body.
+                            self.sem
+                                .decls
+                                .pending_anonymous_structs
+                                .append(&mut populated.decls.pending_anonymous_structs);
+
+                            // Stash the populated synthetic under the
+                            // (impl, default_method) key so reify can swap
+                            // `self.sem` to it during its synthesis pass.
+                            self.sem
+                                .default_method_semantics
+                                .insert((impl_block.id, default_method.id), populated);
                         }
 
                         self.ann_module_override = prev_override;

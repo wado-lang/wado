@@ -12,8 +12,8 @@ use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
-    FunctionKind, TirBlock, TirEffect, TirEffectOp, TirFunction, TirGlobal, TirParam, TirResource,
-    TirStruct, TirTest, TirVariantCase, TirVariantDecl, TypeId, TypeTable,
+    FunctionKind, TirEffect, TirEffectOp, TirFunction, TirGlobal, TirParam, TirResource, TirStruct,
+    TirTest, TirVariantCase, TirVariantDecl, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -520,6 +520,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .decl_type_params
             .insert(self.ann_key(struct_decl.id), type_params.clone());
 
+        // Record per-field resolved types for reify to read instead of
+        // re-resolving them off the static decl pass + UNKNOWN-fallback.
+        // The static pass cannot follow `pub use` re-export chains; the
+        // resolution we just did, with `loaded_modules` in scope, can.
+        let struct_field_types: Vec<TypeId> = fields.iter().map(|f| f.type_id).collect();
+        self.sem
+            .types
+            .struct_field_types
+            .insert(self.ann_key(struct_decl.id), struct_field_types);
+
         let serde_rename_all = struct_decl.attrs.iter().find_map(|a| {
             if a.name == "serde" {
                 a.kv_value("rename_all").map(str::to_string)
@@ -990,35 +1000,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         declared_return_type
     }
 
-    /// Emit a `MissingReturn` diagnostic when a declared non-Unit return
-    /// type cannot be satisfied by the body. Skipped for `Unit`/`Never`
-    /// declarations, for missing bodies (declared-only externals), and
-    /// for bodies whose every control path provably exits before the end
-    /// (`block_always_exits`) — either via an explicit `return`, a
-    /// divergent statement like `panic("…")`, or a fully-diverging
-    /// labeled block / `loop`.
-    ///
-    /// The previous heuristic accepted any nested `return` even when only
-    /// one branch of an `if` carried one, which let partial-return
-    /// bodies through and produced an invalid core Wasm module ("type
-    /// mismatch: expected i32 but nothing on stack") for the
-    /// fall-through path.
-    fn validate_missing_return(&self, return_type: TypeId, body: Option<&TirBlock>, span: Span) {
-        if return_type == TypeTable::UNIT || return_type == TypeTable::NEVER {
-            return;
-        }
-        let Some(body) = body else {
-            return;
-        };
-        if Self::block_always_exits(body) {
-            return;
-        }
-        let _ = self.logger.error(TypeError::MissingReturn {
-            return_type: self.tysys.type_table.borrow().type_name(return_type),
-            span,
-        });
-    }
-
     /// Resolve a function
     pub(super) fn resolve_function(&mut self, func: &Function) -> Option<TirFunction> {
         // Set up type parameters in scope before resolving types. Use an
@@ -1173,7 +1154,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .as_ref()
             .map(|b| scope.resolve_block(b, &mut ctx, None));
 
-        scope.validate_missing_return(return_type, body.as_ref(), func.span);
+        scope.validate_missing_return_ast(return_type, func.body.as_ref(), func.span);
 
         // Convert AST type params to TIR type params (while type params
         // still in scope). `<F: fn(...)>` / `<F: fn mut(...)>` bounds are
@@ -1712,6 +1693,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Display name for #function: StructName::method_name
         let display_name = MethodName::format_local(struct_name, None, &func.name);
+
+        // Stage 5 / mangled-name slice: publish the mangled + display
+        // names for reify to read straight off `MethodNames` instead of
+        // running `format_local` itself against the impl facts.
+        let method_names_key = scope.ann_key(func.id);
+        scope.sem.types.method_names.insert(
+            method_names_key,
+            super::sem::types::MethodNames {
+                display: display_name.clone(),
+                mangled: mangled_name.clone(),
+            },
+        );
+
         let mut ctx = FunctionContext::new(return_type, display_name);
         // Mark this context as a handler method body when the surrounding
         // impl block targets an effect or resource declaration. `resume`
@@ -1808,7 +1802,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .as_ref()
             .map(|b| scope.resolve_block(b, &mut ctx, None));
 
-        scope.validate_missing_return(return_type, body.as_ref(), func.span);
+        scope.validate_missing_return_ast(return_type, func.body.as_ref(), func.span);
 
         // Convert AST type params to TIR type params (while type params still
         // in scope). Mirror the free-function path in `resolve_function`:

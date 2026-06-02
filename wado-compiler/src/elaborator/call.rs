@@ -536,6 +536,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(base_id) = base_of_arg
                         && self.tysys.type_table.borrow().type_name(base_id) == prefix
                     {
+                        self.record_desugar(
+                            call.id,
+                            super::sem::types::DesugarKind::NewtypeFromUnwrap,
+                        );
                         return TirExpr::new(
                             TirExprKind::Cast {
                                 expr: Box::new(args[0].clone()),
@@ -556,6 +560,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if let Some(base_id) = base_opt
                             && self.tysys.type_table.borrow().type_name(base_id) == arg_type_name
                         {
+                            self.record_desugar(
+                                call.id,
+                                super::sem::types::DesugarKind::NewtypeFromWrap,
+                            );
                             return TirExpr::new(
                                 TirExprKind::Cast {
                                     expr: Box::new(args[0].clone()),
@@ -770,6 +778,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             from_type,
                             args.into_iter().next().unwrap(),
                             call.span,
+                            call.id,
                         );
                     }
                     let _ = self.logger.error(TypeError::UnknownFunction {
@@ -935,22 +944,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.lookup_static_method_param_is_mut(type_name, method_name);
                     let call_args: Vec<CallArg> = args
                         .into_iter()
-                        .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
+                        .zip(param_is_mut.iter().copied().chain(std::iter::repeat(false)))
                         .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
                         .collect();
 
+                    let func_ref = FunctionRef {
+                        module_source: struct_module,
+                        name: final_mangled,
+                        monomorph_info,
+                        method_info: Some(LocalMethodName::new(
+                            type_name.to_string(),
+                            trait_name,
+                            method_name.to_string(),
+                        )),
+                    };
+
+                    // Record so reify replays the same Call shape via its
+                    // `static_method_dispatch` early return — without
+                    // re-running `locate_static_method_impl` /
+                    // `lookup_static_method_*` from the AST alone.
+                    let key = self.ann_key(call.id);
+                    self.sem.types.static_method_dispatch.insert(
+                        key,
+                        super::sem::types::StaticMethodDispatch {
+                            function_ref: func_ref.clone(),
+                            param_is_mut,
+                            type_args: vec![],
+                        },
+                    );
+
                     return TirExpr::new(
                         TirExprKind::Call {
-                            func: FunctionRef {
-                                module_source: struct_module,
-                                name: final_mangled,
-                                monomorph_info,
-                                method_info: Some(LocalMethodName::new(
-                                    type_name.to_string(),
-                                    trait_name,
-                                    method_name.to_string(),
-                                )),
-                            },
+                            func: func_ref,
                             type_args: vec![],
                             args: call_args,
                         },
