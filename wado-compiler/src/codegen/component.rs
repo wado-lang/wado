@@ -2127,7 +2127,7 @@ fn generate_cm_imports(
                         let resolved_ty = project.cm_interface_registry.resolve_type(ty);
                         let val_type = if let Type::Named(named) = &resolved_ty
                             && named.source_interface.as_deref().is_some_and(|s| {
-                                s.starts_with("wasi:")
+                                crate::component_model::source_uses_cm_abi(s)
                                     && project
                                         .cm_interface_registry
                                         .get_struct_fields_by_source(s, &named.name)
@@ -2172,7 +2172,7 @@ fn generate_cm_imports(
                     let resolved_ty = project.cm_interface_registry.resolve_type(ty);
                     if let Type::Named(named) = &resolved_ty
                         && named.source_interface.as_deref().is_some_and(|s| {
-                            s.starts_with("wasi:")
+                            crate::component_model::source_uses_cm_abi(s)
                                 && project
                                     .cm_interface_registry
                                     .get_struct_fields_by_source(s, &named.name)
