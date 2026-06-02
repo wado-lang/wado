@@ -100,6 +100,57 @@
 # closed.
 
 [stage_b_oracle_skip]
+# Stripped grammar still doesn't `javac` cleanly — the descriptors below
+# declare return-types via the testsuite's StringTemplate directives
+# (`<IntArg("")>`, `<StringType()>`, `<StringList()>`) directly inside
+# the rule's `returns [...]` bracket. The action-body stripper only
+# reaches `{...}` blocks and `[...]` character classes / rule-arg
+# brackets, not the type-slot inside a `returns` list. ANTLR4's Java
+# target codegens the directive as the literal Java type, which javac
+# then rejects with `> expected` / `illegal start of type`. Bringing
+# these into Stage B′ would require either a smarter stripper that
+# rewrites `returns [<X()> name]` to a stub, or a parallel
+# `_stage_b_oracle_aware.g4` rendering of the descriptor — Stage C-
+# tier work, not worth the complexity for 9 descriptors.
+"LeftRecursion/PrefixOpWithActionAndLabel_1" = "oracle: `returns [<StringType()> result]` — StringTemplate directive in a return-type slot the stripper cannot reach"
+"LeftRecursion/PrefixOpWithActionAndLabel_2" = "oracle: `returns [<StringType()> result]` — same root cause as PrefixOpWithActionAndLabel_1"
+"LeftRecursion/PrefixOpWithActionAndLabel_3" = "oracle: `returns [<StringType()> result]` — same root cause as PrefixOpWithActionAndLabel_1"
+"LeftRecursion/ReturnValueAndActions_1" = "oracle: `returns [<StringList()> ignored]` — StringTemplate directive in a return-type slot the stripper cannot reach"
+"LeftRecursion/ReturnValueAndActions_2" = "oracle: `returns [<StringList()> ignored]` — same root cause as ReturnValueAndActions_1"
+"LeftRecursion/ReturnValueAndActions_3" = "oracle: `returns [<StringList()> ignored]` — same root cause as ReturnValueAndActions_1"
+"LeftRecursion/ReturnValueAndActions_4" = "oracle: `returns [<StringList()> ignored]` — same root cause as ReturnValueAndActions_1"
+"ParserExec/ReservedWordsEscaping" = "oracle: `returns [<IntArg(\"\")> return_]` — StringTemplate directive in a return-type slot the stripper cannot reach"
+"SemPredEvalParser/DependentPredNotInOuterCtxShouldBeIgnored" = "oracle: `returns [<IntArg(\"\")> i]` — StringTemplate directive in a return-type slot the stripper cannot reach"
+
+# wado-compiler downstream — the Gale-emitted parser source triggers
+# `Internal compiler error: WIR pipeline generated invalid core Wasm
+# module` (`wado-compiler/src/codegen.rs:45`) when compiled. The same
+# descriptors' Stage A `_parse_test.wado` files compile fine, so the
+# panic is specific to a code path the Stage B′ test exercises (likely
+# `to_tree(&root).to_string_tree()` over a deeply-nested grammar). Move
+# back to active once the wado-compiler bug is filed and fixed; the
+# oracle's tree is in oracle-pending/ ready to go.
+"ParserExec/OpenDeviceStatement_Case1" = "downstream wado-compiler codegen panic on the Gale-emitted parser source — `WIR pipeline generated invalid core Wasm module` (codegen.rs:45). Stage A parse test for the same descriptor compiles fine, so the panic is specific to the to_string_tree path."
+"ParserExec/OpenDeviceStatement_Case2" = "same wado-compiler codegen panic as OpenDeviceStatement_Case1"
+"ParserExec/OpenDeviceStatement_Case3" = "same wado-compiler codegen panic as OpenDeviceStatement_Case1"
+
+# Oracle TestRig mojibakes non-ASCII output to `?`. The descriptors
+# below have grammars that accept Unicode characters and emit them as
+# token text; Gale correctly reproduces the actual code points, while
+# the oracle's `[output]` records `???`. Pinning to the oracle would
+# strictly worsen Gale's behaviour. Skip rather than `_todo` because
+# fixing the oracle output encoding is upstream territory.
+"Sets/UnicodeEscapedBMPRangeSet" = "oracle: TestRig encodes non-ASCII output as `?`; Gale renders the actual code points (`á ä á â å`). The oracle's tree is not a valid pin."
+"Sets/UnicodeEscapedBMPSet" = "oracle: TestRig encodes non-ASCII as `?`; Gale renders `äあ亜`. Same root cause as UnicodeEscapedBMPRangeSet."
+"Sets/UnicodeEscapedSMPRangeSet" = "oracle: TestRig encodes non-ASCII as `?`; Gale renders the actual SMP code points (`😉 🥂 🜀`). Same root cause as UnicodeEscapedBMPRangeSet."
+"Sets/UnicodeEscapedSMPSet" = "oracle: TestRig encodes non-ASCII as `?`; Gale renders `𝗂𝗎𝖺`. Same root cause as UnicodeEscapedBMPRangeSet."
+"Sets/UnicodeNegatedBMPSetIncludesSMPCodePoints" = "oracle: TestRig encodes non-ASCII as `?`; Gale renders `😳😡😝🤓`. Same root cause as UnicodeEscapedBMPRangeSet."
+"Sets/UnicodeUnescapedBMPRangeSet" = "oracle: TestRig encodes non-ASCII as `?`; Gale renders `á ä á â å`. Same root cause as UnicodeEscapedBMPRangeSet."
+"Sets/UnicodeUnescapedBMPSet" = "oracle: TestRig encodes non-ASCII as `?`; Gale renders `äあ亜`. Same root cause as UnicodeEscapedBMPRangeSet."
 
 [stage_b_oracle_todo]
 "ParserExec/IfIfElseNonGreedyBinding1" = "Gale's static prediction commits to the inner ifStatement's `else` branch (the greedy choice) on `else statement` lookahead at the inner `(else statement)??` decision point. ANTLR4's runtime ATN simulator picks the non-greedy alternative, binding the `else` to the outer ifStatement instead — see the oracle's pinned tree. Same root cause as the `[stage_a_todo]` entry; both flip green together when a follow-set guard on the Optional dispatch or a runtime ATN simulator lands."
+"ParserExec/IfIfElseNonGreedyBinding2" = "Same ATN-class non-greedy `??` decision as IfIfElseNonGreedyBinding1 — Gale's static prediction binds the `else` to the inner ifStatement; the oracle binds it to the outer. Both Binding1 and Binding2 flip green together when non-greedy `??` prediction lands."
+"SemPredEvalParser/ToLeftWithVaryingPredicate" = "Stage C: semantic predicate evaluation drives alt selection at runtime in ANTLR4. Gale's generator skips action bodies entirely (including `{...}?` predicates), so it picks the first alt unconditionally and produces an empty `(s)` shell instead of the oracle's predicate-guided `(s (a x) (a x) (a y))`. Untriaged until Stage C lands."
+"Sets/CharSetLiteral" = "Lexer or grammar shape mismatch — Gale produces `(a)` while the oracle produces `(a A a B b)`. Likely a Gale-side parser bug (rule fails to repeat or EOF is consumed too early). Worth a TDD investigation as a self-contained ATN-class case."
+"ParserErrors/LL1ErrorInfo" = "Error recovery: ANTLR4's recovered tree pulls `acClass` up as a bare token (single-token insertion), while Gale produces a proper empty-rule `(acClass)` node. Error-recovery shape differences are the same gap as `ParseTrees/ExtraToken` / `NoViableAlt` / `Sync`; flip together when error recovery lands."

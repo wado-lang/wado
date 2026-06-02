@@ -1,25 +1,25 @@
 #![generated(by = "package-gale/scripts/extract_antlr4_descriptors.wado --finalize-stage-b-oracle")]
 // Do not edit by hand — re-run the generator to regenerate.
 //
-// Source descriptor: ParserExec/IfIfElseNonGreedyBinding1 (ANTLR4 runtime-testsuite).
+// Source descriptor: ParserExec/IfIfElseNonGreedyBinding2 (ANTLR4 runtime-testsuite).
 // Expected tree: ANTLR4 oracle (antlr-<unspecified>-complete.jar) on the
 //   action-body-stripped grammar — see package-gale/CLAUDE.md
 //   "Stage B′" for the rationale.
 // Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_oracle_*]).
 
-use t from "../../grammars/ParserExec/IfIfElseNonGreedyBinding1.g4"
+use t from "../../grammars/ParserExec/IfIfElseNonGreedyBinding2.g4"
     with {
         generator: {
             module: "../../../../src/generator.wado",
             options: { highlight: false },
-            output_dir: "tests/generated/antlr4_compat_b_oracle/ParserExec/IfIfElseNonGreedyBinding1",
+            output_dir: "tests/generated/antlr4_compat_b_oracle/ParserExec/IfIfElseNonGreedyBinding2",
         },
     };
-use { normalize_tree } from "../../grammars/ParserExec/IfIfElseNonGreedyBinding1.g4";
+use { normalize_tree } from "../../grammars/ParserExec/IfIfElseNonGreedyBinding2.g4";
 
 #[TODO]
-// triage: Gale's static prediction commits to the inner ifStatement's `else` branch (the greedy choice) on `else statement` lookahead at the inner `(else statement)??` decision point. ANTLR4's runtime ATN simulator picks the non-greedy alternative, binding the `else` to the outer ifStatement instead — see the oracle's pinned tree. Same root cause as the `[stage_a_todo]` entry; both flip green together when a follow-set guard on the Optional dispatch or a runtime ATN simulator lands.
-test "stage_b_oracle: ParserExec/IfIfElseNonGreedyBinding1" {
+// triage: Same ATN-class non-greedy `??` decision as IfIfElseNonGreedyBinding1 — Gale's static prediction binds the `else` to the inner ifStatement; the oracle binds it to the outer. Both Binding1 and Binding2 flip green together when non-greedy `??` prediction lands.
+test "stage_b_oracle: ParserExec/IfIfElseNonGreedyBinding2" {
     let input = "if y if y x else x";
     let expected = "(start (statement (ifStatement if y (statement (ifStatement if y (statement x))) else (statement x))))";
     let root = t::parse_start(&input).unwrap();
