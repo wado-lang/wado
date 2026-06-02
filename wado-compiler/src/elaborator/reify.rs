@@ -1018,7 +1018,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         impl_block
             .methods
             .iter()
-            .filter_map(|method| self.reify_method(method, &facts, &impl_block.ty))
+            .filter_map(|method| self.reify_method(method, &facts))
             .collect()
     }
 
@@ -1033,11 +1033,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         func: &ast::Function,
         facts: &super::sem::types::ImplFacts,
-        impl_self_ty: &ast::Type,
     ) -> Option<TirFunction> {
         use crate::ast::SelfKind;
         use crate::name::{LocalMethodName, MethodName};
-        use crate::tir::TypeTable;
 
         // Single source of truth: the impl-type-param scheme is computed once
         // by `Elaborator::resolve_method` and recorded; reify reads it. reify
@@ -1104,48 +1102,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let saved_effect_param_names =
             std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
 
-        // Derive the mangler's base-struct-name input from the
-        // resolved `Self` type. The mangler wants the bare name
-        // (`Box`, not `Box<T>`); the type table's
-        // `type_name(self_type)` returns the mangled form, so
-        // truncate at the first `<`.
-        //
-        // A variadic tuple impl (`impl<..T> Trait for [..T]`) is the
-        // exception: `type_name` renders the tuple self type in bracket
-        // notation (`[..T]`, no `<`), so the truncation would mangle the
-        // method as `[..T]^Trait::method`. Production instead uses the
-        // builtin tuple's `name` field — `Tuple` — for both the method
-        // name and `method_info` (item.rs:660 / method_call.rs:724), so
-        // the call site's `monomorph_info.generic_name` (`Tuple^…`) and
-        // the monomorphizer's tuple-variadic instantiation path
-        // (func_inst.rs:888, gated on `struct_name == TUPLE_TYPE_NAME`)
-        // both find the template. Match that here.
-        // A reference impl (`impl<T: Bound> Trait for &T` /
-        // `impl<…> Trait for &Array<T>`) mangles to base struct `&` / `&mut`,
-        // independent of the inner type — production's `get_type_name`
-        // (module.rs:581) returns exactly `"&"` / `"&mut"` for any reference
-        // target, and the monomorphizer / template synthesis look up the
-        // blanket template by that bare name (`&^Inspect::inspect`), keyed off
-        // the inner type via `impl_type_args`. Deriving the name from the
-        // *resolved* self type instead would mangle `&T` → `&T^…`, a name the
-        // monomorphizer never queries, leaving every `&T`-blanket method call
-        // (e.g. `&i32^Inspect::inspect` from `{x:?}` on a reference) unresolved.
-        let base_struct_name = match impl_self_ty {
-            ast::Type::Reference(_) => "&".to_string(),
-            ast::Type::MutReference(_) => "&mut".to_string(),
-            _ if self.tysys.type_table.borrow().is_tuple(facts.self_type) => {
-                TypeTable::TUPLE_TYPE_NAME.to_string()
-            }
-            _ => {
-                let struct_name_for_mangle: String =
-                    self.tysys.type_table.borrow().type_name(facts.self_type);
-                struct_name_for_mangle
-                    .split('<')
-                    .next()
-                    .unwrap_or(&struct_name_for_mangle)
-                    .to_string()
-            }
-        };
+        // Single source of truth: the impl block's mangled struct name as
+        // the elaborator computed it via `get_type_name(&impl_block.ty)`
+        // (recorded on `ImplFacts::struct_name`). Reconstructing it from
+        // `facts.self_type` would need the `&` / `&mut` / tuple
+        // special-cases and the `&T`-blanket "bare `&`" carve-out that
+        // `get_type_name` (module.rs:581) already encodes — exactly the
+        // parity-bug class WEP 2026-05-26 §"Stage 7 gap" calls out.
+        let base_struct_name = facts.struct_name.clone();
         // `#function` display name `Struct::method` (trait omitted), matching
         // `resolve_method`'s `display_name`; the bare `func.name` would regress
         // assert / panic messages to drop the type qualifier

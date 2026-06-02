@@ -784,6 +784,18 @@ pub(crate) struct ImplFacts {
     /// receiver-adjustment time; mirrors Gap 2's per-call
     /// `is_ref_impl` but is decided at impl-block scope.
     pub(crate) is_ref_impl: bool,
+    /// Mangled struct name the elaborator feeds into
+    /// [`crate::name::MethodName::format_local`] when naming the impl's
+    /// methods — the result of `get_type_name(&impl_block.ty)` at
+    /// elaborator-level recording time.
+    ///
+    /// Reify reads this verbatim instead of reconstructing it from the
+    /// resolved [`Self::self_type`] (which would need `&` / `&mut` / tuple
+    /// special cases and the `&T`-blanket "bare `&`" carve-out that
+    /// `get_type_name` already encodes — `module.rs:581`). Keeping the
+    /// canonical name on the impl facts prevents the parity-bug class
+    /// called out in WEP 2026-05-26 §"Stage 7 gap".
+    pub(crate) struct_name: String,
 }
 
 /// Operator-dispatch decision recorded when the elaborator lowers a

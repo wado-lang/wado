@@ -1558,6 +1558,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 assoc_type_bindings: self.trait_ctx.assoc_type_bindings.clone(),
                                 is_handler_method,
                                 is_ref_impl,
+                                struct_name: struct_name.clone(),
                             },
                         );
                     }
