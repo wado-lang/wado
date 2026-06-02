@@ -33,7 +33,7 @@ use crate::nir_visitor::{
     opt_walk_expr, opt_walk_stmt, stmt_has_break_to,
 };
 use crate::niri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::alias::{build_alias_info, build_value_copy_helpers, recognize_value_copy};
 
@@ -213,11 +213,27 @@ impl NirOptVisitor for ConstFoldVisitor<'_> {
                 let mut changed = self.visit_expr(condition);
                 let snap = self.interpreter.snapshot_fields();
                 changed |= self.visit_block(then_block);
+                let then_falls_through = block_falls_through(then_block, self.type_table);
                 self.interpreter.restore_fields(snap);
                 if let Some(eb) = else_block {
                     changed |= self.visit_block(eb);
+                    // Without a proper join of post-then and post-else,
+                    // conservatively drop field knowledge after a
+                    // two-armed if. Future work can compute the meet.
+                    self.interpreter.clear_fields();
+                } else if then_falls_through {
+                    // No else, then could fall through: post-if is the
+                    // meet of post-then and pre-if. Drop conservatively.
+                    self.interpreter.clear_fields();
                 }
-                self.interpreter.clear_fields();
+                // Else: no `else`, and then ends in panic / return /
+                // break / continue. Only the implicit-else (pre-if
+                // state, already restored from the snapshot) reaches
+                // past the if-stmt, so outer field knowledge survives.
+                // `condition_implication` is loop-guard-aware over both
+                // local and literal bounds, so a `tree.used` that folds
+                // to a literal here still gets recognised by its bounds
+                // checker.
                 return changed;
             }
             _ => {}
@@ -710,6 +726,42 @@ fn single_producing_tail(expr: &NirExpr) -> Option<&NirExpr> {
         }
         _ => None,
     }
+}
+
+/// True when control reaching the bottom of `block` is possible.
+///
+/// Returns `false` when the block ends in a terminator stmt
+/// (`Return`, `Break`, `Continue`) or in an expression whose type is
+/// `!` (a `panic(…)` / `unreachable()` call, or any call returning
+/// `Never`). Used by the if-stmt handler to recognise an
+/// "if-with-trapping-then" pattern (`if cond { panic("…"); }`,
+/// `if cond { return … }`) so the then-branch's field-env mutations
+/// don't poison the post-if state — only the implicit-else path
+/// (pre-if state) reaches past the if.
+///
+/// An empty block falls through trivially. The check only looks at
+/// the last stmt's shape, so a nested `if` whose both arms trap is
+/// conservatively reported as falling through — a later precision
+/// pass could prove non-fall-through there, but reporting
+/// fall-through is always sound (it triggers `clear_fields` which is
+/// the previous behavior).
+fn block_falls_through(block: &NirBlock, type_table: &TypeTable) -> bool {
+    let Some(last) = block.stmts.last() else {
+        return true;
+    };
+    match &last.kind {
+        NirStmtKind::Return { .. } | NirStmtKind::Break { .. } | NirStmtKind::Continue => false,
+        NirStmtKind::Expr(expr) => !is_never_type(expr.type_id, type_table),
+        _ => true,
+    }
+}
+
+/// True when `type_id` resolves to [`ResolvedType::Never`] — the
+/// uninhabited `!` type the elaborator gives expressions that
+/// definitely do not produce a value (`panic(…)`, `unreachable()`,
+/// `loop { }`, calls whose return type is `!`).
+fn is_never_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    matches!(type_table.get(type_id), ResolvedType::Never)
 }
 
 /// True when a `Call`'s callee is a compiler builtin that cannot

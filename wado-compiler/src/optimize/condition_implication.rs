@@ -21,8 +21,8 @@ use crate::nir_visitor::{NirOptVisitor, opt_walk_expr, opt_walk_stmt};
 struct LoopGuard {
     /// Local index of the induction variable (e.g., `i`)
     var: u32,
-    /// Local index of the bound variable (e.g., `_licm_used_25`)
-    bound: u32,
+    /// Bound (e.g., `_licm_used_25` or a literal like `143`).
+    bound: BoundValue,
     /// `true` for `<` (strict), `false` for `<=` (inclusive)
     is_strict: bool,
 }
@@ -35,8 +35,19 @@ struct DominatingGuard {
     var: u32,
     /// Maximum offset proven: `var + max_offset < bound`
     max_offset: i64,
-    /// Local index of the bound
-    bound: u32,
+    /// Bound (Local index or literal)
+    bound: BoundValue,
+}
+
+/// Right-hand side of a loop guard, dominating guard, or bounds-check
+/// condition. Accepting both `Local` and `Literal` forms is what lets
+/// the eliminator handle loops written as `for n in 0..=143 { … }`
+/// (literal bound, no `.used` field access) and bounds checks where
+/// `field_env` already folded the `local.field` access to a constant.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BoundValue {
+    Local(u32),
+    Literal(i64),
 }
 
 #[derive(Clone)]
@@ -238,15 +249,82 @@ fn extract_loop_guard(stmts: &[NirStmt]) -> Option<LoopGuard> {
     let NirExprKind::Local { index: var, .. } = &var_expr.kind else {
         return None;
     };
-    let NirExprKind::Local { index: bound, .. } = &bound_expr.kind else {
-        return None;
-    };
+    let bound = extract_bound_value(bound_expr)?;
 
     Some(LoopGuard {
         var: *var,
-        bound: *bound,
+        bound,
         is_strict,
     })
+}
+
+/// Decode an expression as a [`BoundValue`]: an immediate `Local` or
+/// `IntLiteral`. Anything else (arithmetic, method calls, …) yields
+/// `None` so the caller bails — those shapes are still too opaque for
+/// the implication checker.
+fn extract_bound_value(expr: &NirExpr) -> Option<BoundValue> {
+    match &expr.kind {
+        NirExprKind::Local { index, .. } => Some(BoundValue::Local(*index)),
+        NirExprKind::IntLiteral { value, .. } => Some(BoundValue::Literal(*value as i64)),
+        _ => None,
+    }
+}
+
+/// Project a [`BoundValue`] to a concrete integer when one can be
+/// proven through the `defs` chain. Used by comparisons that need to
+/// equate two bounds with different surface shapes (e.g. a guard
+/// bound recorded as `BoundValue::Local(_licm_used_25)` where
+/// `_licm_used_25 = 288`, and a check bound that already folded to
+/// `BoundValue::Literal(288)`).
+fn bound_to_constant(bound: BoundValue, defs: &DefMap) -> Option<i64> {
+    match bound {
+        BoundValue::Literal(v) => Some(v),
+        BoundValue::Local(idx) => resolve_constant(idx, defs),
+    }
+}
+
+/// True when a comparison `var >= check` is implied false by a loop
+/// (or dominating) guard `var (< | <=) guard`.
+///
+/// Two regimes, chosen by the operand shape:
+///
+/// - Both sides `Local`: legacy behavior, exact-match via the chain
+///   walk. A strict (`<`) guard requires `check` resolves to the same
+///   local as `guard`; a non-strict (`<=`) requires `check` resolves
+///   to `guard + 1`. Sound without literal information.
+/// - At least one side `Literal` (or resolvable to one through
+///   `defs`): compare integer values. `var < guard` proves
+///   `var < check` whenever `check >= guard`; `var <= guard` proves
+///   it whenever `check > guard`, i.e. `check >= guard + 1`.
+///
+/// The mixed regime is what catches `for n in 0..=143 { arr[n] = … }`
+/// where `arr.used` already folded to the literal `288` and the
+/// resulting `n >= 288` bounds check needs to be eliminated by the
+/// loop guard `n <= 143`.
+fn check_bound_implied_false(
+    check: BoundValue,
+    guard: BoundValue,
+    is_strict_guard: bool,
+    defs: &DefMap,
+) -> bool {
+    if let (BoundValue::Local(c), BoundValue::Local(g)) = (check, guard) {
+        return if is_strict_guard {
+            resolves_to(c, g, defs)
+        } else {
+            resolves_to_plus_one(c, g, defs)
+        };
+    }
+    let (Some(c_val), Some(g_val)) = (
+        bound_to_constant(check, defs),
+        bound_to_constant(guard, defs),
+    ) else {
+        return false;
+    };
+    if is_strict_guard {
+        c_val >= g_val
+    } else {
+        c_val > g_val
+    }
 }
 
 fn record_def_from_stmt(stmt: &NirStmt, defs: &mut DefMap) {
@@ -1013,10 +1091,7 @@ fn is_bitmask_bounded(condition: &NirExpr, defs: &DefMap) -> bool {
     else {
         return false;
     };
-    let NirExprKind::Local {
-        index: check_bound, ..
-    } = &right.kind
-    else {
+    let Some(check_bound) = extract_bound_value(right) else {
         return false;
     };
 
@@ -1025,8 +1100,9 @@ fn is_bitmask_bounded(condition: &NirExpr, defs: &DefMap) -> bool {
         return false;
     };
 
-    // Find the constant value of check_bound
-    let Some(bound_val) = resolve_constant(*check_bound, defs) else {
+    // Resolve `check_bound` to a concrete integer — literal RHS goes
+    // through directly, a Local RHS gets walked through `defs`.
+    let Some(bound_val) = bound_to_constant(check_bound, defs) else {
         return false;
     };
 
@@ -1125,10 +1201,7 @@ fn is_implied_false(condition: &NirExpr, guard: &LoopGuard, defs: &DefMap) -> bo
     else {
         return false;
     };
-    let NirExprKind::Local {
-        index: check_bound, ..
-    } = &right.kind
-    else {
+    let Some(check_bound) = extract_bound_value(right) else {
         return false;
     };
 
@@ -1137,13 +1210,11 @@ fn is_implied_false(condition: &NirExpr, guard: &LoopGuard, defs: &DefMap) -> bo
         return false;
     }
 
-    if guard.is_strict {
-        // For `<` guard: check_bound must resolve to the same bound
-        resolves_to(*check_bound, guard.bound, defs)
-    } else {
-        // For `<=` guard: check_bound must resolve to `guard.bound + 1`
-        resolves_to_plus_one(*check_bound, guard.bound, defs)
-    }
+    // For `<` guard (`var < B`): check is false iff `check_bound >= B`.
+    // For `<=` guard (`var <= B`): check is false iff `check_bound > B`.
+    // [`check_bound_implied_false`] applies exact-match for two-Local
+    // bounds and >=/> for literal-mixed bounds.
+    check_bound_implied_false(check_bound, guard.bound, guard.is_strict, defs)
 }
 
 /// Peel a `builtin::likely` / `builtin::unlikely` branch-hint wrapper so the
@@ -1207,15 +1278,14 @@ fn is_implied_by_dominating_guard(
     else {
         return false;
     };
-    let NirExprKind::Local {
-        index: check_bound, ..
-    } = &right.kind
-    else {
+    let Some(check_bound) = extract_bound_value(right) else {
         return false;
     };
 
-    // check_bound must resolve to the dominating guard's bound
-    if !resolves_to(*check_bound, dg.bound, defs) {
+    // Dominating guard is `(var + k) < bound`, i.e. always strict
+    // for the purposes of the `var + k < check_bound` proof. The
+    // check is implied false when `check_bound >= bound`.
+    if !check_bound_implied_false(check_bound, dg.bound, true, defs) {
         return false;
     }
 
@@ -1235,19 +1305,14 @@ fn extract_dominating_guard(condition: &NirExpr, defs: &DefMap) -> Option<Domina
     if *op != NirBinaryOp::Lt {
         return None;
     }
-    let NirExprKind::Local {
-        index: bound_var, ..
-    } = &right.kind
-    else {
-        return None;
-    };
+    let bound = extract_bound_value(right)?;
 
     // Left side: either `var` or `var + offset`
     match &left.kind {
         NirExprKind::Local { index: var, .. } => Some(DominatingGuard {
             var: *var,
             max_offset: 0,
-            bound: *bound_var,
+            bound,
         }),
         NirExprKind::Binary {
             left: inner_left,
@@ -1269,7 +1334,7 @@ fn extract_dominating_guard(condition: &NirExpr, defs: &DefMap) -> Option<Domina
             Some(DominatingGuard {
                 var: *var,
                 max_offset: offset,
-                bound: *bound_var,
+                bound,
             })
         }
         _ => None,
