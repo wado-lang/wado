@@ -15,6 +15,18 @@ use super::callee::{CalleeRef, StaticMethodRef};
 use super::infer::InferCtx;
 use super::types::{FunctionContext, TypeError};
 
+/// Body-walk placeholder for a resolved call. Stage 7-B: the combined walk
+/// records the dispatch decision (`static_method_dispatch` /
+/// `generic_instantiations` / `call_param_types` / the variant + `From`
+/// facts) and resolves the arguments for their side-effect fact recording,
+/// but no longer assembles the call's TIR — reify is the sole producer and
+/// rebuilds it from the recorded facts. The returned `TirExpr` only needs
+/// the right `type_id` + `span` for the caller's outer typecheck /
+/// `expression_types` recording.
+fn placeholder(type_id: TypeId, span: crate::token::Span) -> TirExpr {
+    TirExpr::new(TirExprKind::Unit, type_id, span)
+}
+
 /// View of a `ResolvedType::Function` after peeling references and
 /// fn-type newtypes. Returned by [`Elaborator::as_fn_signature`].
 struct FnSignature {
@@ -540,14 +552,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             call.id,
                             super::sem::types::DesugarKind::NewtypeFromUnwrap,
                         );
-                        return TirExpr::new(
-                            TirExprKind::Cast {
-                                expr: Box::new(args[0].clone()),
-                                target_type: base_id,
-                            },
-                            base_id,
-                            call.span,
-                        );
+                        // Stage 7-B: reify rebuilds the newtype `Cast` from the
+                        // recorded `DesugarKind`; project only the result type.
+                        return placeholder(base_id, call.span);
                     }
 
                     // Base→Newtype: UserId::from(u64_val) where type UserId = u64
@@ -564,14 +571,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 call.id,
                                 super::sem::types::DesugarKind::NewtypeFromWrap,
                             );
-                            return TirExpr::new(
-                                TirExprKind::Cast {
-                                    expr: Box::new(args[0].clone()),
-                                    target_type: newtype_type_id,
-                                },
-                                newtype_type_id,
-                                call.span,
-                            );
+                            // Stage 7-B: reify rebuilds the newtype `Cast` from
+                            // the recorded `DesugarKind`; project only the type.
+                            return placeholder(newtype_type_id, call.span);
                         }
                     }
                 }
@@ -630,20 +632,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(prefix_seg) = ident.segments.first() {
                     self.record_item_reference_by_name(prefix_seg.id, prefix);
                 }
-                let member_count = flags_info.members.len();
-                let value: u64 = match suffix {
-                    "none" => 0,
-                    "all" => u64::from((1u32 << member_count) - 1),
-                    _ => unreachable!(),
-                };
-                return TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value,
-                        repr: value.to_string(),
-                    },
-                    flags_info.type_id,
-                    call.span,
-                );
+                // Stage 7-B: reify rebuilds the flags `none()` / `all()`
+                // constant from the AST + flags info; the combined walk
+                // projects only the result type.
+                return placeholder(flags_info.type_id, call.span);
             }
             // Check if this is a variant case construction (Color::Red)
             else if let Some(variant_info) = self.lookup_variant_case(prefix) {
@@ -711,16 +703,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     self.record_generic_instantiation(call.id, type_args, variant_type);
 
-                    return TirExpr::new(
-                        TirExprKind::VariantConstruct {
-                            variant_type,
-                            case_index: case_index as u32,
-                            case_name: case_data.name.clone(),
-                            payload,
-                        },
-                        variant_type,
-                        call.span,
-                    );
+                    // Stage 7-B: reify rebuilds the `VariantConstruct` from
+                    // the AST + variant info + recorded `generic_instantiations`;
+                    // the combined walk projects only the result type. The
+                    // payload was resolved above (and fed variant type-arg
+                    // inference) for its fact-recording side effects.
+                    let _ = (case_index, payload);
+                    return placeholder(variant_type, call.span);
                 }
                 // If no matching case, check for From<T> synthesis requests
                 else if suffix == "from" && args.len() == 1 {
@@ -859,16 +848,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             };
                             self.record_generic_instantiation(call.id, type_args, variant_type);
 
-                            return TirExpr::new(
-                                TirExprKind::VariantConstruct {
-                                    variant_type,
-                                    case_index: case_index as u32,
-                                    case_name: case_data.name.clone(),
-                                    payload,
-                                },
-                                variant_type,
-                                call.span,
-                            );
+                            // Stage 7-B: reify rebuilds the `VariantConstruct`;
+                            // the combined walk projects only the result type.
+                            let _ = (case_index, payload);
+                            return placeholder(variant_type, call.span);
                         }
                     }
 
@@ -950,21 +933,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.sem.types.static_method_dispatch.insert(
                         key,
                         super::sem::types::StaticMethodDispatch {
-                            function_ref: func_ref.clone(),
+                            function_ref: func_ref,
                             param_is_mut,
                             type_args: vec![],
                         },
                     );
 
-                    return TirExpr::new(
-                        TirExprKind::Call {
-                            func: func_ref,
-                            type_args: vec![],
-                            args: call_args,
-                        },
-                        return_type,
-                        call.span,
-                    );
+                    // Stage 7-B: reify rebuilds the `Call` from the recorded
+                    // `static_method_dispatch`; the combined walk projects
+                    // only the result type. `call_args` (resolved above) is
+                    // discarded.
+                    let _ = call_args;
+                    return placeholder(return_type, call.span);
                 }
                 (
                     Some(CalleeRef::new(ns_source, suffix)),
@@ -1155,11 +1135,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let param_is_mut = self.lookup_function_param_is_mut(&call.callee);
-        let call_args: Vec<CallArg> = args
-            .into_iter()
-            .zip(param_is_mut.iter().copied().chain(std::iter::repeat(false)))
-            .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
-            .collect();
         let func_ref = FunctionRef {
             module_source: callee.module,
             name: callee.name,
@@ -1178,20 +1153,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem.types.static_method_dispatch.insert(
             key,
             super::sem::types::StaticMethodDispatch {
-                function_ref: func_ref.clone(),
+                function_ref: func_ref,
                 param_is_mut,
                 type_args: type_args.clone(),
             },
         );
-        TirExpr::new(
-            TirExprKind::Call {
-                func: func_ref,
-                type_args,
-                args: call_args,
-            },
-            return_type,
-            call.span,
-        )
+        // Stage 7-B: reify rebuilds the `Call` TIR from the recorded
+        // `static_method_dispatch` + `generic_instantiations` +
+        // `call_param_types` and the resolved args; the combined walk
+        // projects only the result type. `args` was resolved above for its
+        // fact-recording side effects and is now discarded.
+        let _ = (args, type_args);
+        placeholder(return_type, call.span)
     }
 
     /// Lower `call` into a `TirExprKind::IndirectCall` using `callee_expr`
