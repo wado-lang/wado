@@ -392,7 +392,14 @@ Trade-offs.
       per-`AstId` fact store, `SymbolKey`-keyed.
 - [x] **Stage 5** — reify is the sole TIR source for every module (user /
       stdlib / snapshot), 2692/2692 E2E. It still re-derived some types /
-      mangled names; Stage 7 cleans that.
+      mangled names; Stage 7 cleans that. The trait default-method
+      synthesis path (the combined walk pushing pre-built `TirFunction`s
+      onto `pending_default_methods` for reify to drain) was the last
+      hold-out and was resolved by a follow-up: combined walk records a
+      per-impl `ModuleSemantics` snapshot on `default_method_semantics`,
+      and reify's `reify_impl_default_methods` synthesises the
+      `TirFunction` from those snapshots — reify is now the sole producer
+      of every `TirFunction`, including default methods.
 - [x] **Stage 7a** — routing removed; the combined walk survives only as the
       (still TIR-building) `annotate` fact-recorder.
 - [ ] **Stage 6** — Liveness / DCE. Not started; independent of Stage 7.
@@ -437,25 +444,24 @@ Trade-offs.
   - [x] Static-call / Type::method recovery paths in reify deleted (every
         non-variant static call is dispatched via the recorded
         `static_method_dispatch` early return).
-- [ ] **Stage 7-B prerequisite — move trait default-method synthesis to
-      reify.** The combined walk's `resolve_module` synthesises per-impl
-      TIR for each trait default method that the impl does not override
-      (`elaborator.rs:1602-1668`) and pushes the resulting `TirFunction`
-      onto `sem.decls.pending_default_methods`; reify consumes that list
-      verbatim (`reify_module`'s `pending_default_methods` drain) instead
-      of walking the trait decl itself. Reify's `Item::Trait` arm is
-      explicitly a no-op for the same reason. That makes the combined
-      walk's TIR for those bodies _live_, not dead — until this synthesis
-      moves into reify, dropping TIR construction in any leaf of the body
-      walk (template, matches, assert, closure, coercion, …) produces a
-      broken default-method `TirFunction` that downstream phases consume.
-      An attempted Stage 7-B slice on `template.rs` proved the failure
-      mode: trait default methods that interpolate a template
-      (`fn greet(&self) -> String { return \`Hello, {self.name()}!\`; }`)
-      lower to a`Unit`placeholder typed`String`and trip Wasm
-      validation. **Action:** synthesise each impl's default methods
-      inside reify by walking the trait decl's AST under the impl's
-      module /`Self`perspective and emitting a`TirFunction`directly, then drop`pending_default_methods`and the`ann_module_override`-gated path in the combined walk.
+- [x] **Stage 5 completion — trait default-method synthesis moved to
+      reify.** Originally, the combined walk's `resolve_module` synthesised
+      per-impl `TirFunction`s for trait default methods and pushed them
+      onto `pending_default_methods` for reify to drain — making combined-
+      walk TIR for those bodies live, not dead. Stage 7-B leaves dropping
+      TIR construction in the body walk would corrupt the synthesised
+      default-method TIR (proven by an aborted `template.rs` slice that
+      trapped Wasm validation on `trait_default` fixtures).
+      Resolution: the body walk now snapshots each
+      `(impl_block.id, default_method.id)` synthesis as a full
+      `ModuleSemantics` on `default_method_semantics`, and reify's
+      `reify_impl_default_methods` swaps `self.sem` to that snapshot to
+      synthesise the `TirFunction` the same way it processes explicit impl
+      methods. Per-impl snapshots avoid the `(trait_module, ast_id)`
+      overwrite that happens when the same trait body is synthesised
+      across many impls. `pending_default_methods` + the
+      `record_pending_default_method` helper are gone. Reify is now the
+      sole producer of every `TirFunction` in every emitted `TirModule`.
 - [ ] **Stage 7-B** — `annotate` stops building TIR. Each `resolve_*`
       returns the resolved type + records facts only; the duplicate
       `TirExpr` / `TirStmt` / `TirItem` halves of expr.rs / stmt.rs /

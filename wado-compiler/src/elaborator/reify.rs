@@ -1045,10 +1045,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// replaced with the trait module's view for the duration of the body
     /// walk so the `ann_*` accessors' `SymbolKey`s name the trait module
     /// (where the facts were keyed).
-    fn reify_impl_default_methods(
-        &mut self,
-        impl_block: &ast::ImplBlock,
-    ) -> Vec<TirFunction> {
+    fn reify_impl_default_methods(&mut self, impl_block: &ast::ImplBlock) -> Vec<TirFunction> {
         use crate::name::MethodName;
 
         if impl_block.is_synthesize_request {
@@ -1114,12 +1111,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // lifetime `'a` (from the parent `&'a ModuleSemantics`), so
             // the `mem::replace` is a pointer swap.
             let saved_sem = std::mem::replace(&mut self.sem, synth_sem);
-            let saved_module_source = std::mem::replace(
-                &mut self.current_module_source,
-                trait_module.clone(),
-            );
-            let saved_module_items =
-                std::mem::replace(&mut self.current_module_items, trait_items);
+            let saved_module_source =
+                std::mem::replace(&mut self.current_module_source, trait_module.clone());
+            let saved_module_items = std::mem::replace(&mut self.current_module_items, trait_items);
 
             let tir_func_opt = self.reify_method(default_method, &facts);
 

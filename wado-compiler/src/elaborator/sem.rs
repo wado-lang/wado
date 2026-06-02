@@ -82,8 +82,7 @@ pub(crate) struct ModuleSemantics {
     /// (`elaborator.rs`'s trait-default synthesis branch) and consumed by
     /// reify's `reify_impl_default_methods` to produce the same
     /// `TirFunction`s the combined walk used to push onto
-    /// `ModuleDecls::pending_default_methods`.
-    #[allow(dead_code)]
-    pub(crate) default_method_semantics:
-        IndexMap<(AstId, AstId), ModuleSemantics>,
+    /// `ModuleDecls::pending_default_methods` (now gone — reify is the
+    /// sole producer of default-method TIR).
+    pub(crate) default_method_semantics: IndexMap<(AstId, AstId), ModuleSemantics>,
 }

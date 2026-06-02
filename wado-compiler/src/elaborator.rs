@@ -1622,10 +1622,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             // Stash the populated synthetic under the
                             // (impl, default_method) key so reify can swap
                             // `self.sem` to it during its synthesis pass.
-                            self.sem.default_method_semantics.insert(
-                                (impl_block.id, default_method.id),
-                                populated,
-                            );
+                            self.sem
+                                .default_method_semantics
+                                .insert((impl_block.id, default_method.id), populated);
                         }
 
                         self.ann_module_override = prev_override;
