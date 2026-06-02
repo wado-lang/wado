@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780396800485,
+  "lastUpdate": 1780404048593,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -28833,6 +28833,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7793b34f6b85f7a3414c86a20c43dcc51cebf83a"
         },
         "date": 1780396799951,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17104,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "76894dbe9659fb56ee610198633fbeece078bcbf",
+          "message": "Merge pull request #1269 from wado-lang/claude/inspiring-curie-KrRCP\n\nrefactor(elaborator): finish Stage 7-A and complete Stage 5 (reify is the sole TIR producer)",
+          "timestamp": "2026-06-02T21:32:04+09:00",
+          "tree_id": "56e7057ec6044e8c9b6b865dcbf41f828aa1726a",
+          "url": "https://github.com/wado-lang/wado/commit/76894dbe9659fb56ee610198633fbeece078bcbf"
+        },
+        "date": 1780404048079,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
