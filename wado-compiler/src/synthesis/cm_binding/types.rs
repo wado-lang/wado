@@ -368,9 +368,11 @@ pub(super) fn is_gc_passthrough_param(
     match ty {
         Type::Named(n) if n.name == names.string => true,
         Type::Named(n) => n.source_interface.as_deref().is_some_and(|s| {
-            s.starts_with("wasi:")
-                && cm_interface_registry
-                    .get_variant_cases_by_source(s, &n.name)
+            cm_interface_registry
+                .get_variant_cases_by_source(s, &n.name)
+                .is_some()
+                || cm_interface_registry
+                    .get_struct_fields_by_source(s, &n.name)
                     .is_some()
         }),
         Type::Generic(g) if g.name == names.array && g.args.len() == 1 => true,
@@ -415,12 +417,12 @@ pub fn flatten_param_type(
                 "f32" => vec![TypeTable::F32],
                 "f64" => vec![TypeTable::F64],
                 name => {
-                    // Without a resolved WASI source the reference is not a WASI
-                    // variant/struct — flatten to a single i32 handle.
+                    // Without a resolved CM-interface source the reference is
+                    // not a CM variant/struct — flatten to a single i32 handle.
                     let Some(source) = named
                         .source_interface
                         .as_deref()
-                        .filter(|s| s.starts_with("wasi:"))
+                        .filter(|s| crate::component_model::source_uses_cm_abi(s))
                     else {
                         return vec![TypeTable::I32];
                     };

@@ -1,0 +1,18 @@
+// Regression: a grammar whose lowering raises an OverlapTournament
+// diagnostic must (a) still generate a working parser and (b) surface the
+// warning through the Kiln host at build time. The warning text appears on
+// the compiler's diagnostic stream during this test's Kiln invocation; the
+// runtime assertions below confirm the generated parser itself is correct.
+use overlap from "./grammars/ll_overlap_tournament.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/overlap_tournament",
+        },
+    };
+
+test "tournament grammar still parses both alts" {
+    assert overlap::parse(&"a b") matches { Ok(_) };
+    assert overlap::parse(&"a c") matches { Ok(_) };
+}
