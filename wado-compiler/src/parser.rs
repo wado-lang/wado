@@ -616,9 +616,7 @@ impl Parser {
         {
             self.advance();
         }
-        let start = self.tokens[before].span;
-        let end = self.tokens[self.pos.saturating_sub(1)].span;
-        start.merge(&end)
+        self.skipped_span(before)
     }
 
     /// Build an [`Expr::Error`] placeholder spanning `span`, allocating a fresh
@@ -637,6 +635,20 @@ impl Parser {
             id: self.alloc_ast_id(),
             span,
         })
+    }
+
+    /// Span covering the recovery run `[before, self.pos)`. When nothing was
+    /// skipped (`self.pos <= before`, i.e. the parse failed on the boundary
+    /// token itself, as in `let x = ;`), this is the single `before` token's
+    /// span — never the inverted `tokens[before]..tokens[before - 1]` that
+    /// `Span::merge` would otherwise produce (it takes its start from the first
+    /// argument and end from the second).
+    fn skipped_span(&self, before: usize) -> Span {
+        let start = self.tokens[before].span;
+        if self.pos <= before {
+            return start;
+        }
+        start.merge(&self.tokens[self.pos - 1].span)
     }
 
     /// Parse an expression at statement granularity, recovering on failure: the
@@ -671,18 +683,22 @@ impl Parser {
         }
     }
 
-    /// Skip a malformed operand: advance to the next `;`, `,`, closing
-    /// delimiter (`)` / `]` / `}`), hard item keyword, or EOF — none consumed —
-    /// so recovery stays inside the current delimited context (a parenthesised
-    /// sub-expression stops at its `)`, an argument stops at `,` / `)`). Returns
-    /// the span of the skipped run anchored at `before`. Used only for
-    /// operand-position recovery, gated by [`Parser::recovering`].
+    /// Skip a malformed operand: advance to the next `;`, `,`, an opening or
+    /// closing delimiter (`{` / `}` / `)` / `]`), a hard item keyword, or EOF —
+    /// none consumed — so recovery stays inside the current delimited context (a
+    /// parenthesised sub-expression stops at its `)`, an argument stops at `,` /
+    /// `)`). Stopping at `{` is essential: an operand never legitimately crosses
+    /// a block-introducing brace, so a failed operand right before an
+    /// `if`/`while`/`match` body (e.g. `if a + { … }`) must not swallow the
+    /// block. Returns the span of the skipped run anchored at `before`. Used
+    /// only for operand-position recovery, gated by [`Parser::recovering`].
     fn sync_operand_boundary(&mut self, before: usize) -> Span {
         while !self.is_at_end()
             && !matches!(
                 self.peek_kind(),
                 TokenKind::Semicolon
                     | TokenKind::Comma
+                    | TokenKind::LBrace
                     | TokenKind::RParen
                     | TokenKind::RBracket
                     | TokenKind::RBrace
@@ -691,9 +707,7 @@ impl Parser {
         {
             self.advance();
         }
-        let start = self.tokens[before].span;
-        let end = self.tokens[self.pos.saturating_sub(1)].span;
-        start.merge(&end)
+        self.skipped_span(before)
     }
 
     /// Skip a malformed statement-level expression: advance to the next `;`,
@@ -710,9 +724,7 @@ impl Parser {
         {
             self.advance();
         }
-        let start = self.tokens[before].span;
-        let end = self.tokens[self.pos.saturating_sub(1)].span;
-        start.merge(&end)
+        self.skipped_span(before)
     }
 
     /// Parse a comma-separated list of types within angle brackets (`<T1, T2>`).
@@ -770,9 +782,7 @@ impl Parser {
         {
             self.advance();
         }
-        let start = self.tokens[before].span;
-        let end = self.tokens[self.pos.saturating_sub(1)].span;
-        start.merge(&end)
+        self.skipped_span(before)
     }
 
     /// Parse a `+`-separated list of trait bounds: `Bound1 + Bound2 + ...`
@@ -3710,7 +3720,15 @@ impl Parser {
             }
             TokenKind::Pipe => self.parse_closure(),
             TokenKind::Or => self.parse_zero_arg_closure_expr(start_span),
-            TokenKind::LBrace => self.parse_implicit_struct_literal_expr(start_span),
+            // A bare `{ ... }` implicit struct literal is restricted in the same
+            // contexts as a named one (if/while/match conditions and scrutinees,
+            // see the `Name {` case above): there the `{` introduces the body, so
+            // it must not be eaten as an expression. Falling through to the
+            // `_ => expected expression` arm leaves the `{` for the body parser
+            // and lets operand recovery resync cleanly.
+            TokenKind::LBrace if !self.restrict_struct_literals => {
+                self.parse_implicit_struct_literal_expr(start_span)
+            }
             TokenKind::If => self.parse_if_expr(),
             TokenKind::Match => self.parse_match_expr(),
             TokenKind::With => self.parse_with_handler_expr(),
@@ -7701,6 +7719,73 @@ line 2
             .expect("fn f should survive recovery")
             .stmts
             .as_slice()
+    }
+
+    #[test]
+    fn recovery_operand_before_if_body_does_not_swallow_block() {
+        // `let y = if a + { 1 } else { 2 };` — the right operand of `+` is
+        // missing right before the `if` body. Operand recovery must stop at the
+        // body-introducing `{` (not skip into the block), so the `if` keeps both
+        // branch blocks and, crucially, the following `return y;` survives.
+        // Regression: previously this collapsed the whole function body.
+        let (module, errors) = parse_recovering(
+            "fn f() -> i32 {\n    let y = if a + { 1 } else { 2 };\n    return y;\n}\n",
+        );
+        assert!(!errors.is_empty(), "missing operand should be reported");
+        let stmts = fn_f_stmts(&module);
+        assert!(
+            stmts.iter().any(|s| matches!(s, Stmt::Return(_))),
+            "`return y;` must survive recovery, got {stmts:?}",
+        );
+    }
+
+    #[test]
+    fn recovery_placeholder_spans_are_not_inverted() {
+        // A recovery that consumes no tokens (the parse failed on the boundary
+        // token itself, e.g. `let x = ;`) must still produce a forward span,
+        // never the inverted `end < start` that `tokens[before]..tokens[before-1]`
+        // would yield.
+        fn assert_forward(span: Span) {
+            assert!(
+                (span.end_line, span.end_column) >= (span.line, span.column),
+                "inverted span: {span:?}",
+            );
+        }
+
+        // Expr::Error from an empty let initializer (operand at the boundary).
+        let (m, _) = parse_recovering("fn f() -> i32 {\n    let x = ;\n    return 0;\n}\n");
+        let Some(Stmt::Let(l)) = fn_f_stmts(&m).iter().find(|s| matches!(s, Stmt::Let(_))) else {
+            panic!("let survives");
+        };
+        let Some(Expr::Error(e)) = &l.value else {
+            panic!("initializer is Expr::Error, got {:?}", l.value);
+        };
+        assert_forward(e.span);
+
+        // Expr::Error from an empty call argument between two commas.
+        let (m, _) = parse_recovering("fn f() -> i32 {\n    return g(1, , 3);\n}\n");
+        let Expr::Error(e) = &single_return_call(&m).args[1] else {
+            panic!("middle arg is Expr::Error");
+        };
+        assert_forward(e.span);
+
+        // Type::Error from an empty generic type argument between two commas.
+        let (m, _) = parse_recovering("fn f(x: Map<i32, , bool>) -> i32 {\n    return 0;\n}\n");
+        let func = m
+            .items
+            .iter()
+            .find_map(|i| match i {
+                Item::Function(f) if f.name == "f" => Some(f),
+                _ => None,
+            })
+            .unwrap();
+        let Type::Generic(g) = &func.params[0].ty else {
+            panic!("param type is generic");
+        };
+        let Type::Error(span) = g.args[1] else {
+            panic!("middle type arg is Type::Error, got {:?}", g.args[1]);
+        };
+        assert_forward(span);
     }
 
     #[test]
