@@ -73,6 +73,18 @@ Two complementary directions, neither scoped yet:
 - **Runtime ATN simulator** in Gale. Large investment; matches ANTLR4 semantics one-for-one.
 - **Stage B′ via the JVM ANTLR4 oracle.** Shell out to the vendored `antlr4` JVM tool (already available in the submodule plus `runtime-testsuite/`) to compute oracle parse trees for descriptors whose `[output]` is action-printed (`FullContextParsing/*`, composite descriptors, etc.) and would otherwise be auto-skipped by `normalize_output_for_stage_b`. Cheaper to land; gives us a measurement axis for any future runtime simulator.
 
+Before either direction is scoped, `gale dump` now renders the
+overlap-group prediction tree (the same `build_prediction` tree
+`gen_multi_alt_body_bt` emits in `parser_gen.wado`) so the
+ATN-class edges surface as `Ambiguous([alt N, alt M])` leaves
+under the relevant rule. Example: dumping the Performance
+`DropLoopEntryBranchInLRRule_4` grammar shows `stat`'s overlap
+group resolving to `Ambiguous([alt 0, alt 1])` at depth 0 — both
+`expr ';'` and `expr '.'` share their entire `expr` prefix. The
+remaining halt-reason / LR loop-entry / K-prefix per-site fields
+are still missing from the dump (Phase 1 deferred them); add them
+when a concrete ATN-class fix needs them.
+
 ## LL prediction — architecture cleanup
 
 Reduces coupling between the codegen walk and the analysis layer; no behaviour change.

@@ -87,10 +87,14 @@ For everything else, browse `vendor/antlr4/doc/` directly.
 `gale dump` lowers the grammar to GIR and prints a readable, per-rule
 report of the actual prediction decisions — rule shape (Simple /
 MultiAlt: Direct / MultiAlt: Tournament / LeftRecursive), per-alt first
-sets, repeat strategies, follow-variants, and inlined prediction
-warnings — followed by a summary of every warning. It reflects what the
-emitter sees, not the raw surface IR. There are no options; multiple
-files are merged the same as `gale gen`.
+sets, the per-overlap-group `PredictionNode` tree (Consume / Dispatch /
+Leaf / Ambiguous, mirroring `build_prediction` in `parser_gen.wado`),
+repeat strategies, follow-variants, and inlined prediction warnings —
+followed by a summary of every warning. It reflects what the emitter
+sees, not the raw surface IR. ATN-class decisions where static
+prediction cannot disambiguate surface as `Ambiguous([alt N, alt M])`
+under the relevant rule's `prediction:` section. There are no options;
+multiple files are merged the same as `gale gen`.
 
 (note: each `wado` command is actually `cargo run --bin wado`)
 
