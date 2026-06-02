@@ -12,17 +12,18 @@
 //! and inclusive `<=` guard patterns.
 
 use crate::hashmap::IndexMap;
+use crate::hashmap::IndexSet;
 use crate::nir::{
     NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind, NirUnaryOp,
 };
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::{NirOptVisitor, opt_walk_expr, opt_walk_stmt};
+use crate::nir_visitor::{NirOptVisitor, NirRefVisitor, opt_walk_expr, opt_walk_stmt};
 
 struct LoopGuard {
     /// Local index of the induction variable (e.g., `i`)
     var: u32,
-    /// Local index of the bound variable (e.g., `_licm_used_25`)
-    bound: u32,
+    /// Bound: a Local, an `IntLiteral`, or a `local.f1.f2…` chain.
+    bound: Bound,
     /// `true` for `<` (strict), `false` for `<=` (inclusive)
     is_strict: bool,
 }
@@ -35,8 +36,27 @@ struct DominatingGuard {
     var: u32,
     /// Maximum offset proven: `var + max_offset < bound`
     max_offset: i64,
-    /// Local index of the bound
-    bound: u32,
+    /// Bound (Local, literal, or `local.f1.f2…` chain)
+    bound: Bound,
+}
+
+/// Right-hand side of a guard or bounds-check comparison.
+///
+/// - `Local` — e.g. an LICM-hoisted `let _licm_used_25 = arr.used;`,
+///   identity-compared via [`resolves_to`].
+/// - `Literal` — a folded constant; lets `for n in 0..=143 { … }`
+///   work without a `.used` field access surviving to NIR.
+/// - `FieldChain` — `local.f1.f2…`; lets `for n in 0..arr.used { … }`
+///   work directly. An empty `field_indices` is never constructed
+///   (degenerates to `Local`).
+#[derive(Clone, PartialEq, Eq)]
+enum Bound {
+    Local(u32),
+    Literal(i64),
+    FieldChain {
+        root_local: u32,
+        field_indices: Vec<u32>,
+    },
 }
 
 #[derive(Clone)]
@@ -76,23 +96,170 @@ fn process_function(func: &mut NirFunction) -> bool {
     let Some(ref mut body) = func.body else {
         return false;
     };
+    let tainted = collect_tainted_locals(body);
     let mut defs = DefMap::default();
-    process_block(body, &mut defs)
+    process_block(body, &mut defs, &tainted)
 }
 
-fn process_block(block: &mut NirBlock, defs: &mut DefMap) -> bool {
+/// Per-function summary of locals and `(local, field_index)` pairs
+/// whose values may change anywhere in the function body.
+/// [`record_def_from_stmt`] and [`record_struct_lit_def`] skip
+/// captures that would go stale, so the numeric path in
+/// [`check_bound_implied_false`] (via [`Bound::to_constant`]) never
+/// reads a `Def` whose underlying storage was later mutated.
+#[derive(Default)]
+struct Taints {
+    /// Locals whose whole value may change: direct `local = expr`,
+    /// `&mut local` escapes, `is_mut` call args, and method-call
+    /// receivers (auto-`&mut self` is opaque here).
+    locals: IndexSet<u32>,
+    /// `(local, field_index)` pairs assigned by `local.field = expr`.
+    /// [`record_struct_lit_def`] uses this to drop only the stale
+    /// field, keeping the rest of the struct literal's captures.
+    fields: IndexSet<(u32, u32)>,
+}
+
+/// Walk the function body and collect every local whose value (or
+/// recorded field) could change anywhere downstream. Sources of taint
+/// are described on [`Taints`].
+fn collect_tainted_locals(body: &NirBlock) -> Taints {
+    let mut collector = TaintCollector {
+        taints: Taints::default(),
+    };
+    collector.visit_block(body);
+    collector.taints
+}
+
+struct TaintCollector {
+    taints: Taints,
+}
+
+impl TaintCollector {
+    /// Resolve an `Assign`'s target shape into the (local, optional
+    /// `field_index`) it mutates and record it into `self.taints`.
+    fn taint_target(&mut self, target: &NirExpr) {
+        match &target.kind {
+            // `local = expr`.
+            NirExprKind::Local { index, .. } => {
+                self.taints.locals.insert(*index);
+            }
+            // `local.field = expr`: only that field is stale.
+            NirExprKind::FieldAccess {
+                expr: inner,
+                field_index,
+                ..
+            } if matches!(inner.kind, NirExprKind::Local { .. }) => {
+                if let NirExprKind::Local { index, .. } = &inner.kind {
+                    self.taints.fields.insert((*index, *field_index));
+                }
+            }
+            // Nested receiver: `local.f.g = …` taints `local`
+            // whole — the inner field's contents are now in an
+            // unknown state from our (one-level) recorder's view.
+            NirExprKind::FieldAccess { expr: inner, .. }
+            | NirExprKind::Unary { expr: inner, .. } => {
+                self.taint_root_local(inner);
+            }
+            // `local[i] = expr` mutates an array element, not any
+            // recorded field. DefMap never captures element values,
+            // so no taint is required.
+            NirExprKind::Index { .. } => {}
+            _ => {}
+        }
+    }
+
+    /// Walk a sub-expression to find its root Local and taint it
+    /// whole. Used when an assignment target nests deeper than one
+    /// field-access level and we can't pinpoint a single field.
+    fn taint_root_local(&mut self, expr: &NirExpr) {
+        match &expr.kind {
+            NirExprKind::Local { index, .. } => {
+                self.taints.locals.insert(*index);
+            }
+            NirExprKind::FieldAccess { expr: inner, .. }
+            | NirExprKind::Unary { expr: inner, .. }
+            | NirExprKind::Index { expr: inner, .. }
+            | NirExprKind::Cast { expr: inner, .. } => {
+                self.taint_root_local(inner);
+            }
+            _ => {}
+        }
+    }
+}
+
+impl NirRefVisitor for TaintCollector {
+    fn visit_expr(&mut self, expr: &NirExpr) {
+        match &expr.kind {
+            NirExprKind::Assign { target, .. } => {
+                self.taint_target(target);
+            }
+            NirExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: inner,
+            } => {
+                // `&mut local.field` aliases the field only;
+                // `&mut local` aliases the whole local.
+                match &inner.kind {
+                    NirExprKind::Local { index, .. } => {
+                        self.taints.locals.insert(*index);
+                    }
+                    NirExprKind::FieldAccess {
+                        expr: receiver,
+                        field_index,
+                        ..
+                    } if matches!(receiver.kind, NirExprKind::Local { .. }) => {
+                        if let NirExprKind::Local { index, .. } = &receiver.kind {
+                            self.taints.fields.insert((*index, *field_index));
+                        }
+                    }
+                    _ => {
+                        self.taint_root_local(inner);
+                    }
+                }
+            }
+            NirExprKind::Call { args, .. } => {
+                for arg in args {
+                    if arg.is_mut
+                        && let NirExprKind::Local { index, .. } = &arg.expr.kind
+                    {
+                        self.taints.locals.insert(*index);
+                    }
+                }
+            }
+            NirExprKind::MethodCall { receiver, args, .. } => {
+                // Auto-ref makes the receiver implicitly mutable when
+                // the callee is a `&mut self` method, but we can't
+                // tell statically — taint the whole receiver.
+                if let NirExprKind::Local { index, .. } = &receiver.kind {
+                    self.taints.locals.insert(*index);
+                }
+                for arg in args {
+                    if arg.is_mut
+                        && let NirExprKind::Local { index, .. } = &arg.expr.kind
+                    {
+                        self.taints.locals.insert(*index);
+                    }
+                }
+            }
+            _ => {}
+        }
+        self.walk_expr(expr);
+    }
+}
+
+fn process_block(block: &mut NirBlock, defs: &mut DefMap, tainted: &Taints) -> bool {
     let mut changed = false;
     let mut guards: Vec<ShortCircuitGuard> = Vec::new();
     for i in 0..block.stmts.len() {
-        record_def_from_stmt(&block.stmts[i], defs);
-        record_defs_from_nested(&block.stmts[i], defs);
+        record_def_from_stmt(&block.stmts[i], defs, tainted);
+        record_defs_from_nested(&block.stmts[i], defs, tainted);
         // Apply accumulated guards from previous early-exit stmts to this stmt
         for guard in &guards {
             changed |= guard.eliminate_in_stmt(&mut block.stmts[i], defs);
         }
         changed |= BitmaskEliminator { defs }.visit_stmt(&mut block.stmts[i]);
         changed |= ShortCircuitEliminator { defs }.visit_stmt(&mut block.stmts[i]);
-        changed |= process_stmt(&mut block.stmts[i], defs);
+        changed |= process_stmt(&mut block.stmts[i], defs, tainted);
         // If this is `if (var >= bound) { return/break }`, extract a guard
         if let Some(guard) = extract_early_exit_guard(&block.stmts[i], defs) {
             guards.push(guard);
@@ -101,29 +268,29 @@ fn process_block(block: &mut NirBlock, defs: &mut DefMap) -> bool {
     changed
 }
 
-fn process_stmt(stmt: &mut NirStmt, defs: &mut DefMap) -> bool {
+fn process_stmt(stmt: &mut NirStmt, defs: &mut DefMap, tainted: &Taints) -> bool {
     // Record definitions from let bindings
-    record_def_from_stmt(stmt, defs);
+    record_def_from_stmt(stmt, defs, tainted);
 
     match &mut stmt.kind {
-        NirStmtKind::Loop { body } => process_loop(body, defs),
+        NirStmtKind::Loop { body } => process_loop(body, defs, tainted),
         NirStmtKind::If {
             then_block,
             else_block,
             ..
         } => {
-            let mut changed = process_block(then_block, defs);
+            let mut changed = process_block(then_block, defs, tainted);
             if let Some(else_block) = else_block {
-                changed |= process_block(else_block, defs);
+                changed |= process_block(else_block, defs, tainted);
             }
             changed
         }
-        NirStmtKind::LabeledBlock { block, .. } => process_block(block, defs),
+        NirStmtKind::LabeledBlock { block, .. } => process_block(block, defs, tainted),
         _ => false,
     }
 }
 
-fn process_loop(body: &mut NirBlock, defs: &mut DefMap) -> bool {
+fn process_loop(body: &mut NirBlock, defs: &mut DefMap, tainted: &Taints) -> bool {
     // First, record defs inside the loop body (for copies like `let index = i`)
     // and recurse into nested structures
     let mut changed = false;
@@ -131,8 +298,8 @@ fn process_loop(body: &mut NirBlock, defs: &mut DefMap) -> bool {
     // Collect defs from the loop body before eliminating
     let mut loop_defs = defs.clone();
     for stmt in &body.stmts {
-        record_def_from_stmt(stmt, &mut loop_defs);
-        record_defs_from_nested(stmt, &mut loop_defs);
+        record_def_from_stmt(stmt, &mut loop_defs, tainted);
+        record_defs_from_nested(stmt, &mut loop_defs, tainted);
     }
 
     // Extract the loop guard from the first statement
@@ -157,7 +324,7 @@ fn process_loop(body: &mut NirBlock, defs: &mut DefMap) -> bool {
 
     // Recurse into nested loops
     for stmt in &mut body.stmts {
-        changed |= process_stmt_nested_loops(stmt, defs);
+        changed |= process_stmt_nested_loops(stmt, defs, tainted);
     }
 
     changed
@@ -165,9 +332,9 @@ fn process_loop(body: &mut NirBlock, defs: &mut DefMap) -> bool {
 
 /// Recurse into nested structures to find inner loops, but don't re-process
 /// the current loop level.
-fn process_stmt_nested_loops(stmt: &mut NirStmt, defs: &mut DefMap) -> bool {
+fn process_stmt_nested_loops(stmt: &mut NirStmt, defs: &mut DefMap, tainted: &Taints) -> bool {
     match &mut stmt.kind {
-        NirStmtKind::Loop { body } => process_loop(body, defs),
+        NirStmtKind::Loop { body } => process_loop(body, defs, tainted),
         NirStmtKind::If {
             then_block,
             else_block,
@@ -175,11 +342,11 @@ fn process_stmt_nested_loops(stmt: &mut NirStmt, defs: &mut DefMap) -> bool {
         } => {
             let mut changed = false;
             for s in &mut then_block.stmts {
-                changed |= process_stmt_nested_loops(s, defs);
+                changed |= process_stmt_nested_loops(s, defs, tainted);
             }
             if let Some(else_block) = else_block {
                 for s in &mut else_block.stmts {
-                    changed |= process_stmt_nested_loops(s, defs);
+                    changed |= process_stmt_nested_loops(s, defs, tainted);
                 }
             }
             changed
@@ -187,7 +354,7 @@ fn process_stmt_nested_loops(stmt: &mut NirStmt, defs: &mut DefMap) -> bool {
         NirStmtKind::LabeledBlock { block, .. } => {
             let mut changed = false;
             for s in &mut block.stmts {
-                changed |= process_stmt_nested_loops(s, defs);
+                changed |= process_stmt_nested_loops(s, defs, tainted);
             }
             changed
         }
@@ -238,24 +405,145 @@ fn extract_loop_guard(stmts: &[NirStmt]) -> Option<LoopGuard> {
     let NirExprKind::Local { index: var, .. } = &var_expr.kind else {
         return None;
     };
-    let NirExprKind::Local { index: bound, .. } = &bound_expr.kind else {
-        return None;
-    };
+    let bound = Bound::extract(bound_expr)?;
 
     Some(LoopGuard {
         var: *var,
-        bound: *bound,
+        bound,
         is_strict,
     })
 }
 
-fn record_def_from_stmt(stmt: &NirStmt, defs: &mut DefMap) {
+impl Bound {
+    /// Decode an expression as a `Bound`. Returns `None` for shapes
+    /// we don't model (arithmetic, casts, method calls, …); `Cast`
+    /// in particular may truncate or sign-flip and we don't inspect
+    /// source / target types here.
+    ///
+    /// `IntLiteral.value` is the literal's `u64` bit pattern; use
+    /// `i64::try_from` so a payload with bit 63 set bails rather
+    /// than silently feed a negative bound to the numeric
+    /// comparisons in [`check_bound_implied_false`].
+    fn extract(expr: &NirExpr) -> Option<Bound> {
+        match &expr.kind {
+            NirExprKind::Local { index, .. } => Some(Bound::Local(*index)),
+            NirExprKind::IntLiteral { value, .. } => i64::try_from(*value).ok().map(Bound::Literal),
+            NirExprKind::FieldAccess { .. } => {
+                let (root_local, field_indices) = extract_field_chain(expr)?;
+                if field_indices.is_empty() {
+                    Some(Bound::Local(root_local))
+                } else {
+                    Some(Bound::FieldChain {
+                        root_local,
+                        field_indices,
+                    })
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Project a `Bound` to a concrete integer through the `defs`
+    /// chain. `Literal` returns immediately; `Local` walks
+    /// [`resolve_constant`]; `FieldChain` only resolves the
+    /// single-level form (`local.field`) — multi-level chains would
+    /// require chained struct-lit lookup that no `Def` shape
+    /// captures today.
+    fn to_constant(&self, defs: &DefMap) -> Option<i64> {
+        match self {
+            Bound::Literal(v) => Some(*v),
+            Bound::Local(idx) => resolve_constant(*idx, defs),
+            Bound::FieldChain {
+                root_local,
+                field_indices,
+            } if field_indices.len() == 1 => {
+                resolve_constant_through_struct(*root_local, field_indices[0], defs, 0)
+            }
+            Bound::FieldChain { .. } => None,
+        }
+    }
+}
+
+/// True when a comparison `var >= check` is implied false by a loop
+/// (or dominating) guard `var (< | <=) guard`.
+///
+/// Two regimes, chosen by the operand shape:
+///
+/// - Identity: two `Local`s via [`resolves_to`] (and
+///   [`resolves_to_plus_one`] for the non-strict guard), or two
+///   `FieldChain`s with the same `field_indices` and roots that
+///   resolve to the same local.
+/// - Numeric: both bounds project to concrete integers via
+///   [`Bound::to_constant`], then `var < guard` proves `var < check`
+///   whenever `check >= guard`; `var <= guard` proves it whenever
+///   `check > guard`.
+///
+/// The numeric path catches `for n in 0..=143 { arr[n] = … }` where
+/// `arr.used` folded to a literal; the [`Bound::FieldChain`]
+/// identity path catches `for n in 0..arr.used { arr[n] = … }`
+/// where it didn't.
+fn check_bound_implied_false(
+    check: &Bound,
+    guard: &Bound,
+    is_strict_guard: bool,
+    defs: &DefMap,
+) -> bool {
+    // Identity regime: same structural shape, no value comparison.
+    // Sound for the strict guard whenever the two bounds denote the
+    // same runtime value; the non-strict (`<=`) form needs a +1
+    // step that only the Local chain walk currently expresses.
+    match (check, guard) {
+        (Bound::Local(c), Bound::Local(g)) => {
+            return if is_strict_guard {
+                resolves_to(*c, *g, defs)
+            } else {
+                resolves_to_plus_one(*c, *g, defs)
+            };
+        }
+        (
+            Bound::FieldChain {
+                root_local: cr,
+                field_indices: cf,
+            },
+            Bound::FieldChain {
+                root_local: gr,
+                field_indices: gf,
+            },
+        ) if is_strict_guard && cf == gf => {
+            if resolves_to(*cr, *gr, defs) {
+                return true;
+            }
+        }
+        _ => {}
+    }
+    // Numeric regime: both sides project to a concrete constant.
+    let (Some(c_val), Some(g_val)) = (check.to_constant(defs), guard.to_constant(defs)) else {
+        return false;
+    };
+    if is_strict_guard {
+        c_val >= g_val
+    } else {
+        c_val > g_val
+    }
+}
+
+fn record_def_from_stmt(stmt: &NirStmt, defs: &mut DefMap, tainted: &Taints) {
     let NirStmtKind::Let {
         local_index, value, ..
     } = &stmt.kind
     else {
         return;
     };
+
+    // Skip when the let-target itself may later be reassigned: the
+    // value-extracting path (`Bound::to_constant`) would otherwise
+    // observe a stale snapshot. Identity-only paths (`resolves_to`
+    // between two Locals) compare names and stay sound regardless.
+    // Field-level taint is handled per-field in
+    // `record_struct_lit_def`.
+    if tainted.locals.contains(local_index) {
+        return;
+    }
 
     // Unwrap LabeledBlock to find the actual defining expression
     // (e.g., `let arr = __inline_...: { ...; break LABEL: StructLiteral { ... }; }`)
@@ -288,6 +576,15 @@ fn record_def_from_stmt(stmt: &NirStmt, defs: &mut DefMap) {
             expr, field_index, ..
         } => {
             if let NirExprKind::Local { index, .. } = &expr.kind {
+                // The chain `let _licm = arr.used` is captured as
+                // `Def::FieldAccess { local: arr, field_index: used }`.
+                // When `resolve_constant` walks the chain it goes
+                // through `arr`'s `Def::StructLit`; if `arr.used` is
+                // field-tainted, the StructLit recorder will have
+                // already dropped that field, so the FieldAccess
+                // walk naturally returns `None`. Recording the
+                // FieldAccess def itself is always sound — the
+                // soundness check happens at the StructLit layer.
                 defs.insert(
                     *local_index,
                     Def::FieldAccess {
@@ -298,7 +595,7 @@ fn record_def_from_stmt(stmt: &NirStmt, defs: &mut DefMap) {
             }
         }
         NirExprKind::StructLiteral { fields, .. } => {
-            record_struct_lit_def(*local_index, fields, defs);
+            record_struct_lit_def(*local_index, fields, defs, tainted);
         }
         _ => {}
     }
@@ -308,9 +605,17 @@ fn record_struct_lit_def(
     local_index: u32,
     fields: &[crate::nir::NirStructField],
     defs: &mut DefMap,
+    tainted: &Taints,
 ) {
     let mut field_map = IndexMap::default();
     for f in fields {
+        // Skip fields that may be reassigned anywhere — `local.f = …`
+        // taints `(local, f)` and we must not capture this StructLit's
+        // initial value for that field, otherwise a later
+        // bound-constant lookup would observe the stale snapshot.
+        if tainted.fields.contains(&(local_index, f.field_index)) {
+            continue;
+        }
         if let NirExprKind::Local { index, .. } = &f.value.kind {
             field_map.insert(f.field_index, FieldSource::Local(*index));
         } else if let NirExprKind::IntLiteral { value, .. } = &f.value.kind {
@@ -356,18 +661,18 @@ fn unwrap_labeled_block_value(expr: &NirExpr) -> &NirExpr {
 }
 
 /// Record defs from nested blocks within a statement (e.g., labeled blocks in expressions).
-fn record_defs_from_nested(stmt: &NirStmt, defs: &mut DefMap) {
+fn record_defs_from_nested(stmt: &NirStmt, defs: &mut DefMap, tainted: &Taints) {
     match &stmt.kind {
         NirStmtKind::Let { value, .. } => {
-            record_defs_from_expr(value, defs);
+            record_defs_from_expr(value, defs, tainted);
         }
         NirStmtKind::Expr(expr) => {
-            record_defs_from_expr(expr, defs);
+            record_defs_from_expr(expr, defs, tainted);
         }
         NirStmtKind::LabeledBlock { block, .. } => {
             for s in &block.stmts {
-                record_def_from_stmt(s, defs);
-                record_defs_from_nested(s, defs);
+                record_def_from_stmt(s, defs, tainted);
+                record_defs_from_nested(s, defs, tainted);
             }
         }
         NirStmtKind::If {
@@ -375,15 +680,15 @@ fn record_defs_from_nested(stmt: &NirStmt, defs: &mut DefMap) {
             then_block,
             else_block,
         } => {
-            record_defs_from_expr(condition, defs);
+            record_defs_from_expr(condition, defs, tainted);
             for s in &then_block.stmts {
-                record_def_from_stmt(s, defs);
-                record_defs_from_nested(s, defs);
+                record_def_from_stmt(s, defs, tainted);
+                record_defs_from_nested(s, defs, tainted);
             }
             if let Some(eb) = else_block {
                 for s in &eb.stmts {
-                    record_def_from_stmt(s, defs);
-                    record_defs_from_nested(s, defs);
+                    record_def_from_stmt(s, defs, tainted);
+                    record_defs_from_nested(s, defs, tainted);
                 }
             }
         }
@@ -391,10 +696,10 @@ fn record_defs_from_nested(stmt: &NirStmt, defs: &mut DefMap) {
         | NirStmtKind::Break {
             value: Some(expr), ..
         } => {
-            record_defs_from_expr(expr, defs);
+            record_defs_from_expr(expr, defs, tainted);
         }
         NirStmtKind::LetDestructure { value, .. } => {
-            record_defs_from_expr(value, defs);
+            record_defs_from_expr(value, defs, tainted);
         }
         // Loop bodies have their own scope handled via process_loop.
         // Remaining kinds (Return/Break with None, Continue) carry no
@@ -406,12 +711,12 @@ fn record_defs_from_nested(stmt: &NirStmt, defs: &mut DefMap) {
     }
 }
 
-fn record_defs_from_expr(expr: &NirExpr, defs: &mut DefMap) {
+fn record_defs_from_expr(expr: &NirExpr, defs: &mut DefMap, tainted: &Taints) {
     match &expr.kind {
         NirExprKind::LabeledBlock { block, .. } | NirExprKind::Block(block) => {
             for s in &block.stmts {
-                record_def_from_stmt(s, defs);
-                record_defs_from_nested(s, defs);
+                record_def_from_stmt(s, defs, tainted);
+                record_defs_from_nested(s, defs, tainted);
             }
         }
         NirExprKind::Binary { left, right, .. }
@@ -423,8 +728,8 @@ fn record_defs_from_expr(expr: &NirExpr, defs: &mut DefMap) {
             expr: left,
             index: right,
         } => {
-            record_defs_from_expr(left, defs);
-            record_defs_from_expr(right, defs);
+            record_defs_from_expr(left, defs, tainted);
+            record_defs_from_expr(right, defs, tainted);
         }
         NirExprKind::Unary { expr: inner, .. }
         | NirExprKind::Cast { expr: inner, .. }
@@ -434,22 +739,22 @@ fn record_defs_from_expr(expr: &NirExpr, defs: &mut DefMap) {
         | NirExprKind::VariantTest { expr: inner, .. }
         | NirExprKind::VariantPayload { expr: inner, .. }
         | NirExprKind::ClosureToCanonical { functor: inner, .. } => {
-            record_defs_from_expr(inner, defs);
+            record_defs_from_expr(inner, defs, tainted);
         }
         NirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            record_defs_from_expr(condition, defs);
+            record_defs_from_expr(condition, defs, tainted);
             for s in &then_branch.stmts {
-                record_def_from_stmt(s, defs);
-                record_defs_from_nested(s, defs);
+                record_def_from_stmt(s, defs, tainted);
+                record_defs_from_nested(s, defs, tainted);
             }
             if let Some(eb) = else_branch {
                 for s in &eb.stmts {
-                    record_def_from_stmt(s, defs);
-                    record_defs_from_nested(s, defs);
+                    record_def_from_stmt(s, defs, tainted);
+                    record_defs_from_nested(s, defs, tainted);
                 }
             }
         }
@@ -457,12 +762,12 @@ fn record_defs_from_expr(expr: &NirExpr, defs: &mut DefMap) {
             expr: scrutinee,
             arms,
         } => {
-            record_defs_from_expr(scrutinee, defs);
+            record_defs_from_expr(scrutinee, defs, tainted);
             for arm in arms {
                 if let Some(guard) = &arm.guard {
-                    record_defs_from_expr(guard, defs);
+                    record_defs_from_expr(guard, defs, tainted);
                 }
-                record_defs_from_expr(&arm.body, defs);
+                record_defs_from_expr(&arm.body, defs, tainted);
             }
         }
         NirExprKind::Switch {
@@ -471,53 +776,53 @@ fn record_defs_from_expr(expr: &NirExpr, defs: &mut DefMap) {
             default,
             ..
         } => {
-            record_defs_from_expr(scrutinee, defs);
+            record_defs_from_expr(scrutinee, defs, tainted);
             for arm in arms {
                 for s in &arm.stmts {
-                    record_def_from_stmt(s, defs);
-                    record_defs_from_nested(s, defs);
+                    record_def_from_stmt(s, defs, tainted);
+                    record_defs_from_nested(s, defs, tainted);
                 }
             }
             for s in &default.stmts {
-                record_def_from_stmt(s, defs);
-                record_defs_from_nested(s, defs);
+                record_def_from_stmt(s, defs, tainted);
+                record_defs_from_nested(s, defs, tainted);
             }
         }
         NirExprKind::Call { args, .. } => {
             for arg in args {
-                record_defs_from_expr(&arg.expr, defs);
+                record_defs_from_expr(&arg.expr, defs, tainted);
             }
         }
         NirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                record_defs_from_expr(arg, defs);
+                record_defs_from_expr(arg, defs, tainted);
             }
         }
         NirExprKind::MethodCall { receiver, args, .. } => {
-            record_defs_from_expr(receiver, defs);
+            record_defs_from_expr(receiver, defs, tainted);
             for arg in args {
-                record_defs_from_expr(&arg.expr, defs);
+                record_defs_from_expr(&arg.expr, defs, tainted);
             }
         }
         NirExprKind::IndirectCall { callee, args } => {
-            record_defs_from_expr(callee, defs);
+            record_defs_from_expr(callee, defs, tainted);
             for arg in args {
-                record_defs_from_expr(arg, defs);
+                record_defs_from_expr(arg, defs, tainted);
             }
         }
         NirExprKind::StructLiteral { fields, .. } => {
             for f in fields {
-                record_defs_from_expr(&f.value, defs);
+                record_defs_from_expr(&f.value, defs, tainted);
             }
         }
         NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
             for e in elements {
-                record_defs_from_expr(e, defs);
+                record_defs_from_expr(e, defs, tainted);
             }
         }
         NirExprKind::VariantConstruct { payload, .. } => {
             if let Some(inner) = payload {
-                record_defs_from_expr(inner, defs);
+                record_defs_from_expr(inner, defs, tainted);
             }
         }
         // Leaf nodes carry no sub-expressions with definitions.
@@ -720,21 +1025,8 @@ struct ShortCircuitGuard {
     var: u32,
     /// Maximum offset proven safe: `var + max_offset < bound`
     max_offset: i64,
-    /// The bound expression — either a local index or a field access descriptor
-    bound: BoundExpr,
-}
-
-#[derive(Clone)]
-enum BoundExpr {
-    Local(u32),
-    /// A chain of field accesses from a root local:
-    /// `root_local.field_indices[0].field_indices[1]...`.
-    /// `FieldChain { root_local, field_indices: [] }` would be equivalent to
-    /// `Local(root_local)`, so an empty chain is never constructed.
-    FieldChain {
-        root_local: u32,
-        field_indices: Vec<u32>,
-    },
+    /// The bound expression (Local, Literal, or field chain).
+    bound: Bound,
 }
 
 /// Decompose `local`, `local.f1`, `local.f1.f2`, ... into a `(root_local,
@@ -766,21 +1058,7 @@ impl ShortCircuitGuard {
             return None;
         }
 
-        let bound = match &right.kind {
-            NirExprKind::Local { index, .. } => BoundExpr::Local(*index),
-            NirExprKind::FieldAccess { .. } => {
-                let (root_local, field_indices) = extract_field_chain(right)?;
-                if field_indices.is_empty() {
-                    BoundExpr::Local(root_local)
-                } else {
-                    BoundExpr::FieldChain {
-                        root_local,
-                        field_indices,
-                    }
-                }
-            }
-            _ => return None,
-        };
+        let bound = Bound::extract(right)?;
 
         let (var, max_offset) = match &left.kind {
             NirExprKind::Local { index, .. } => (*index, 0),
@@ -832,42 +1110,31 @@ impl ShortCircuitGuard {
     }
 
     fn bound_matches(&self, expr: &NirExpr, defs: &DefMap) -> bool {
-        match &self.bound {
-            BoundExpr::Local(guard_bound) => {
-                if let NirExprKind::Local { index, .. } = &expr.kind {
-                    resolves_to(*index, *guard_bound, defs)
-                } else {
-                    false
-                }
-            }
-            BoundExpr::FieldChain {
-                root_local: guard_root,
-                field_indices: guard_fields,
-            } => {
-                // Walk `expr` outermost-first against `guard_fields` in
-                // reverse without materialising a new Vec — `bound_matches`
-                // is a hot per-condition check.
-                let mut current = expr;
-                for &expected_field in guard_fields.iter().rev() {
-                    let NirExprKind::FieldAccess {
-                        expr: inner,
-                        field_index,
-                        ..
-                    } = &current.kind
-                    else {
-                        return false;
-                    };
-                    if *field_index != expected_field {
-                        return false;
-                    }
-                    current = inner;
-                }
-                if let NirExprKind::Local { index, .. } = &current.kind {
-                    resolves_to(*index, *guard_root, defs)
-                } else {
-                    false
-                }
-            }
+        // Decode `expr` as a Bound and compare with the guard's
+        // bound via the same identity / numeric regime that
+        // `check_bound_implied_false` uses. Strict-equality form:
+        // either structurally identical, or both bounds project to
+        // the same constant.
+        let Some(expr_bound) = Bound::extract(expr) else {
+            return false;
+        };
+        match (&expr_bound, &self.bound) {
+            (Bound::Local(c), Bound::Local(g)) => resolves_to(*c, *g, defs),
+            (
+                Bound::FieldChain {
+                    root_local: cr,
+                    field_indices: cf,
+                },
+                Bound::FieldChain {
+                    root_local: gr,
+                    field_indices: gf,
+                },
+            ) if cf == gf => resolves_to(*cr, *gr, defs),
+            (Bound::Literal(c), Bound::Literal(g)) => c == g,
+            _ => match (expr_bound.to_constant(defs), self.bound.to_constant(defs)) {
+                (Some(c), Some(g)) => c == g,
+                _ => false,
+            },
         }
     }
 
@@ -1013,10 +1280,7 @@ fn is_bitmask_bounded(condition: &NirExpr, defs: &DefMap) -> bool {
     else {
         return false;
     };
-    let NirExprKind::Local {
-        index: check_bound, ..
-    } = &right.kind
-    else {
+    let Some(check_bound) = Bound::extract(right) else {
         return false;
     };
 
@@ -1025,8 +1289,9 @@ fn is_bitmask_bounded(condition: &NirExpr, defs: &DefMap) -> bool {
         return false;
     };
 
-    // Find the constant value of check_bound
-    let Some(bound_val) = resolve_constant(*check_bound, defs) else {
+    // Resolve `check_bound` to a concrete integer — literal RHS goes
+    // through directly, a Local RHS gets walked through `defs`.
+    let Some(bound_val) = check_bound.to_constant(defs) else {
         return false;
     };
 
@@ -1125,10 +1390,7 @@ fn is_implied_false(condition: &NirExpr, guard: &LoopGuard, defs: &DefMap) -> bo
     else {
         return false;
     };
-    let NirExprKind::Local {
-        index: check_bound, ..
-    } = &right.kind
-    else {
+    let Some(check_bound) = Bound::extract(right) else {
         return false;
     };
 
@@ -1137,13 +1399,11 @@ fn is_implied_false(condition: &NirExpr, guard: &LoopGuard, defs: &DefMap) -> bo
         return false;
     }
 
-    if guard.is_strict {
-        // For `<` guard: check_bound must resolve to the same bound
-        resolves_to(*check_bound, guard.bound, defs)
-    } else {
-        // For `<=` guard: check_bound must resolve to `guard.bound + 1`
-        resolves_to_plus_one(*check_bound, guard.bound, defs)
-    }
+    // For `<` guard (`var < B`): check is false iff `check_bound >= B`.
+    // For `<=` guard (`var <= B`): check is false iff `check_bound > B`.
+    // [`check_bound_implied_false`] applies exact-match for two-Local
+    // bounds and >=/> for literal-mixed bounds.
+    check_bound_implied_false(&check_bound, &guard.bound, guard.is_strict, defs)
 }
 
 /// Peel a `builtin::likely` / `builtin::unlikely` branch-hint wrapper so the
@@ -1151,11 +1411,15 @@ fn is_implied_false(condition: &NirExpr, guard: &LoopGuard, defs: &DefMap) -> bo
 /// without changing the condition's value, so a guarded bounds check written as
 /// `if builtin::unlikely(i >= len) { panic }` must be seen through to reach the
 /// `i >= len` comparison.
+///
+/// Inclusion criteria are funnelled through
+/// [`FunctionRef::is_branch_hint_call`] so this matcher, niri's
+/// `try_fold` peel, and the WIR builder's `BranchHint` lowering stay
+/// in sync.
 fn peel_branch_hint(condition: &NirExpr) -> &NirExpr {
     if let NirExprKind::Call { func, args, .. } = &condition.kind
         && args.len() == 1
-        && func.module_source.is_core_builtin()
-        && (func.name == "likely" || func.name == "unlikely")
+        && func.is_branch_hint_call()
     {
         return peel_branch_hint(&args[0].expr);
     }
@@ -1203,21 +1467,29 @@ fn is_implied_by_dominating_guard(
     else {
         return false;
     };
-    let NirExprKind::Local {
-        index: check_bound, ..
-    } = &right.kind
-    else {
+    let Some(check_bound) = Bound::extract(right) else {
         return false;
     };
 
-    // check_bound must resolve to the dominating guard's bound
-    if !resolves_to(*check_bound, dg.bound, defs) {
+    // check_var must resolve to `dg.var + offset` where
+    // `0 <= offset <= dg.max_offset`.
+    let Some(offset) = resolve_offset_from(*check_var, dg.var, defs) else {
+        return false;
+    };
+    if offset < 0 || offset > dg.max_offset {
         return false;
     }
 
-    // check_var must resolve to `dg.var + k` where `k <= dg.max_offset`
-    resolve_offset_from(*check_var, dg.var, defs)
-        .is_some_and(|offset| offset >= 0 && offset <= dg.max_offset)
+    // `var + max_offset < dg.bound` gives `check_var = var + offset
+    // < dg.bound - (max_offset - offset)`, so the check is implied
+    // false when `check_bound >= dg.bound - (max_offset - offset)`.
+    // Local-only bounds fall back to identity match — the legacy
+    // regime, sound only at `offset == max_offset`.
+    let tighten = dg.max_offset - offset;
+    match (check_bound.to_constant(defs), dg.bound.to_constant(defs)) {
+        (Some(check_v), Some(guard_v)) => check_v >= guard_v - tighten,
+        _ => check_bound_implied_false(&check_bound, &dg.bound, true, defs),
+    }
 }
 
 /// Extract a dominating guard from an if-condition.
@@ -1231,19 +1503,14 @@ fn extract_dominating_guard(condition: &NirExpr, defs: &DefMap) -> Option<Domina
     if *op != NirBinaryOp::Lt {
         return None;
     }
-    let NirExprKind::Local {
-        index: bound_var, ..
-    } = &right.kind
-    else {
-        return None;
-    };
+    let bound = Bound::extract(right)?;
 
     // Left side: either `var` or `var + offset`
     match &left.kind {
         NirExprKind::Local { index: var, .. } => Some(DominatingGuard {
             var: *var,
             max_offset: 0,
-            bound: *bound_var,
+            bound,
         }),
         NirExprKind::Binary {
             left: inner_left,
@@ -1265,7 +1532,7 @@ fn extract_dominating_guard(condition: &NirExpr, defs: &DefMap) -> Option<Domina
             Some(DominatingGuard {
                 var: *var,
                 max_offset: offset,
-                bound: *bound_var,
+                bound,
             })
         }
         _ => None,
