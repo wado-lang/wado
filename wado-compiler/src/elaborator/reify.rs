@@ -5810,13 +5810,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Production registers it in expr.rs:3603+.
         let struct_type = recorded_type;
         // Single source of truth: `resolve_anonymous_struct_literal`
-        // recorded the synthesised `__anon_{…}` name on the
-        // `GenericInstantiation` slot. Falls back to `type_name(struct_type)`
-        // for any recovery path where the recording is absent.
+        // records the synthesised `__anon_{…}` name on the
+        // `GenericInstantiation` slot for every anonymous struct literal.
         let struct_name = self
             .ann_generic_instantiations(struct_lit.id)
             .and_then(|gi| gi.mangled_name)
-            .unwrap_or_else(|| self.tysys.type_table.borrow().type_name(struct_type));
+            .expect(
+                "resolve_anonymous_struct_literal records the synthesised name on \
+                 generic_instantiations for every anonymous struct literal",
+            );
 
         TirExpr::new(
             TirExprKind::StructLiteral {
