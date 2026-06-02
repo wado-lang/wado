@@ -899,6 +899,17 @@ fn collect_loop_write_effects(block: &NirBlock) -> LoopWriteEffects {
     collector.effects
 }
 
+/// Walk down a `local.f.g.…` field chain and return the rooted local
+/// index, or `None` if the chain is rooted at something other than a
+/// `Local` (e.g. `(*p).f`).
+fn root_local_of(expr: &NirExpr) -> Option<u32> {
+    match &expr.kind {
+        NirExprKind::Local { index, .. } => Some(*index),
+        NirExprKind::FieldAccess { expr: inner, .. } => root_local_of(inner),
+        _ => None,
+    }
+}
+
 struct LoopWriteCollector {
     effects: LoopWriteEffects,
 }
@@ -948,11 +959,40 @@ impl NirRefVisitor for LoopWriteCollector {
             NirExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
-            } => {
-                if let NirExprKind::Local { index, .. } = &inner.kind {
+            } => match &inner.kind {
+                NirExprKind::Local { index, .. } => {
                     self.effects.mut_borrowed.insert(*index);
                 }
-            }
+                NirExprKind::FieldAccess {
+                    expr: receiver,
+                    field_name,
+                    ..
+                } => match &receiver.kind {
+                    NirExprKind::Local { index, .. } => {
+                        // `&mut local.field` — callee can replace
+                        // the field or mutate its interior, so the
+                        // cached `(local, field)` entry is stale.
+                        self.effects
+                            .written_fields
+                            .insert((*index, field_name.clone()));
+                    }
+                    _ => {
+                        // `&mut local.f.g` or deeper — fall back to
+                        // dropping the whole rooted local, since we
+                        // do not track fields-of-fields.
+                        if let Some(root) = root_local_of(receiver) {
+                            self.effects.mut_borrowed.insert(root);
+                        } else {
+                            self.effects.has_external_writes = true;
+                        }
+                    }
+                },
+                _ => {
+                    // `&mut (*p).x`, `&mut arr[i]`, … — opaque
+                    // receiver; treat as an external write.
+                    self.effects.has_external_writes = true;
+                }
+            },
             NirExprKind::Call { func, args, .. } => {
                 for arg in args {
                     if arg.is_mut

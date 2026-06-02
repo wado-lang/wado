@@ -8,14 +8,17 @@
 //
 // This fixture exercises the pattern: a struct literal records
 // `c.size = 16`, then `c.size = 99` mutates the field, and a later
-// `if k >= c.size { panic }` is a bounds check that MUST fire when
-// `k = 50` (since the runtime value of `c.size` is 99, not 16).
+// `if 50 >= c.size { return -1 }` would be unsoundly eliminated if
+// the eliminator used the stale `DefMap` entry `c.size = 16` — since
+// `50 >= 16` is true, the dead-branch path would constant-fold the
+// `if` to "always taken" and the function would return `-1`.
 //
-// The taint analysis (`collect_tainted_locals`) marks
-// `(c, size)` as field-tainted, so the StructLit's `size` entry is
-// dropped from `DefMap`. `is_implied_false` then bails (can't resolve
-// the bound to a constant) and the panic survives — runtime panics
-// as it should.
+// The taint analysis (`collect_tainted_locals`) marks `(c, size)` as
+// field-tainted, so the StructLit's `size` entry is dropped from
+// `DefMap`. `is_implied_false` then bails (cannot resolve the bound
+// to a constant) and the `if` survives. At runtime `c.size == 99` and
+// `50 >= 99` is false, so the body is not taken and the function
+// returns `99`.
 
 use { println, Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
@@ -31,10 +34,11 @@ fn check_stale_def(_unused: bool) -> i32 {
     // from the StructLit and does NOT update for this Assign.
     c.size = 99;
     // Bounds-check shape: `unlikely(50 >= c.size)`. Pre-fix would
-    // numerically compare `50 >= 16` (stale) and eliminate the
-    // panic — wrong. Post-fix the `size` field is taint-filtered
-    // from the StructLit recording, the eliminator bails, and the
-    // runtime check fires.
+    // numerically compare `50 >= 16` (stale) and constant-fold the
+    // `if` to always-taken — wrong. Post-fix the `size` field is
+    // taint-filtered from the StructLit recording, the eliminator
+    // bails, and the runtime comparison runs (and returns false at
+    // `c.size == 99`).
     if builtin::unlikely(50 >= c.size) {
         return -1;
     }
