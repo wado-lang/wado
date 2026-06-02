@@ -22,8 +22,8 @@ use crate::nir_visitor::{NirOptVisitor, NirRefVisitor, opt_walk_expr, opt_walk_s
 struct LoopGuard {
     /// Local index of the induction variable (e.g., `i`)
     var: u32,
-    /// Bound (e.g., `_licm_used_25` or a literal like `143`).
-    bound: BoundValue,
+    /// Bound: a Local, an `IntLiteral`, or a `local.f1.f2…` chain.
+    bound: Bound,
     /// `true` for `<` (strict), `false` for `<=` (inclusive)
     is_strict: bool,
 }
@@ -36,19 +36,27 @@ struct DominatingGuard {
     var: u32,
     /// Maximum offset proven: `var + max_offset < bound`
     max_offset: i64,
-    /// Bound (Local index or literal)
-    bound: BoundValue,
+    /// Bound (Local, literal, or `local.f1.f2…` chain)
+    bound: Bound,
 }
 
-/// Right-hand side of a loop guard, dominating guard, or bounds-check
-/// condition. Accepting both `Local` and `Literal` forms is what lets
-/// the eliminator handle loops written as `for n in 0..=143 { … }`
-/// (literal bound, no `.used` field access) and bounds checks where
-/// `field_env` already folded the `local.field` access to a constant.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum BoundValue {
+/// Right-hand side of a guard or bounds-check comparison.
+///
+/// - `Local` — e.g. an LICM-hoisted `let _licm_used_25 = arr.used;`,
+///   identity-compared via [`resolves_to`].
+/// - `Literal` — a folded constant; lets `for n in 0..=143 { … }`
+///   work without a `.used` field access surviving to NIR.
+/// - `FieldChain` — `local.f1.f2…`; lets `for n in 0..arr.used { … }`
+///   work directly. An empty `field_indices` is never constructed
+///   (degenerates to `Local`).
+#[derive(Clone, PartialEq, Eq)]
+enum Bound {
     Local(u32),
     Literal(i64),
+    FieldChain {
+        root_local: u32,
+        field_indices: Vec<u32>,
+    },
 }
 
 #[derive(Clone)]
@@ -96,8 +104,8 @@ fn process_function(func: &mut NirFunction) -> bool {
 /// Per-function summary of locals and `(local, field_index)` pairs
 /// whose values may change anywhere in the function body.
 /// [`record_def_from_stmt`] and [`record_struct_lit_def`] skip
-/// captures that would go stale, so the literal-mixed path in
-/// [`check_bound_implied_false`] (via [`bound_to_constant`]) never
+/// captures that would go stale, so the numeric path in
+/// [`check_bound_implied_false`] (via [`Bound::to_constant`]) never
 /// reads a `Def` whose underlying storage was later mutated.
 #[derive(Default)]
 struct Taints {
@@ -397,7 +405,7 @@ fn extract_loop_guard(stmts: &[NirStmt]) -> Option<LoopGuard> {
     let NirExprKind::Local { index: var, .. } = &var_expr.kind else {
         return None;
     };
-    let bound = extract_bound_value(bound_expr)?;
+    let bound = Bound::extract(bound_expr)?;
 
     Some(LoopGuard {
         var: *var,
@@ -406,36 +414,53 @@ fn extract_loop_guard(stmts: &[NirStmt]) -> Option<LoopGuard> {
     })
 }
 
-/// Decode an expression as a [`BoundValue`]: an immediate `Local` or
-/// `IntLiteral`. Anything else (arithmetic, casts, method calls, …)
-/// yields `None` so the caller bails — including casts, since a
-/// `Cast` may truncate or sign-flip the inner literal and we don't
-/// inspect the source/target type pair here.
-///
-/// `IntLiteral.value` is the literal's `u64` bit pattern; use
-/// `i64::try_from` so a payload with bit 63 set bails rather than
-/// silently feed a negative bound into the numeric comparisons in
-/// [`check_bound_implied_false`].
-fn extract_bound_value(expr: &NirExpr) -> Option<BoundValue> {
-    match &expr.kind {
-        NirExprKind::Local { index, .. } => Some(BoundValue::Local(*index)),
-        NirExprKind::IntLiteral { value, .. } => {
-            i64::try_from(*value).ok().map(BoundValue::Literal)
+impl Bound {
+    /// Decode an expression as a `Bound`. Returns `None` for shapes
+    /// we don't model (arithmetic, casts, method calls, …); `Cast`
+    /// in particular may truncate or sign-flip and we don't inspect
+    /// source / target types here.
+    ///
+    /// `IntLiteral.value` is the literal's `u64` bit pattern; use
+    /// `i64::try_from` so a payload with bit 63 set bails rather
+    /// than silently feed a negative bound to the numeric
+    /// comparisons in [`check_bound_implied_false`].
+    fn extract(expr: &NirExpr) -> Option<Bound> {
+        match &expr.kind {
+            NirExprKind::Local { index, .. } => Some(Bound::Local(*index)),
+            NirExprKind::IntLiteral { value, .. } => i64::try_from(*value).ok().map(Bound::Literal),
+            NirExprKind::FieldAccess { .. } => {
+                let (root_local, field_indices) = extract_field_chain(expr)?;
+                if field_indices.is_empty() {
+                    Some(Bound::Local(root_local))
+                } else {
+                    Some(Bound::FieldChain {
+                        root_local,
+                        field_indices,
+                    })
+                }
+            }
+            _ => None,
         }
-        _ => None,
     }
-}
 
-/// Project a [`BoundValue`] to a concrete integer when one can be
-/// proven through the `defs` chain. Used by comparisons that need to
-/// equate two bounds with different surface shapes (e.g. a guard
-/// bound recorded as `BoundValue::Local(_licm_used_25)` where
-/// `_licm_used_25 = 288`, and a check bound that already folded to
-/// `BoundValue::Literal(288)`).
-fn bound_to_constant(bound: BoundValue, defs: &DefMap) -> Option<i64> {
-    match bound {
-        BoundValue::Literal(v) => Some(v),
-        BoundValue::Local(idx) => resolve_constant(idx, defs),
+    /// Project a `Bound` to a concrete integer through the `defs`
+    /// chain. `Literal` returns immediately; `Local` walks
+    /// [`resolve_constant`]; `FieldChain` only resolves the
+    /// single-level form (`local.field`) — multi-level chains would
+    /// require chained struct-lit lookup that no `Def` shape
+    /// captures today.
+    fn to_constant(&self, defs: &DefMap) -> Option<i64> {
+        match self {
+            Bound::Literal(v) => Some(*v),
+            Bound::Local(idx) => resolve_constant(*idx, defs),
+            Bound::FieldChain {
+                root_local,
+                field_indices,
+            } if field_indices.len() == 1 => {
+                resolve_constant_through_struct(*root_local, field_indices[0], defs, 0)
+            }
+            Bound::FieldChain { .. } => None,
+        }
     }
 }
 
@@ -444,36 +469,55 @@ fn bound_to_constant(bound: BoundValue, defs: &DefMap) -> Option<i64> {
 ///
 /// Two regimes, chosen by the operand shape:
 ///
-/// - Both sides `Local`: legacy behavior, exact-match via the chain
-///   walk. A strict (`<`) guard requires `check` resolves to the same
-///   local as `guard`; a non-strict (`<=`) requires `check` resolves
-///   to `guard + 1`. Sound without literal information.
-/// - At least one side `Literal` (or resolvable to one through
-///   `defs`): compare integer values. `var < guard` proves
-///   `var < check` whenever `check >= guard`; `var <= guard` proves
-///   it whenever `check > guard`, i.e. `check >= guard + 1`.
+/// - Identity: two `Local`s via [`resolves_to`] (and
+///   [`resolves_to_plus_one`] for the non-strict guard), or two
+///   `FieldChain`s with the same `field_indices` and roots that
+///   resolve to the same local.
+/// - Numeric: both bounds project to concrete integers via
+///   [`Bound::to_constant`], then `var < guard` proves `var < check`
+///   whenever `check >= guard`; `var <= guard` proves it whenever
+///   `check > guard`.
 ///
-/// The mixed regime is what catches `for n in 0..=143 { arr[n] = … }`
-/// where `arr.used` already folded to the literal `288` and the
-/// resulting `n >= 288` bounds check needs to be eliminated by the
-/// loop guard `n <= 143`.
+/// The numeric path catches `for n in 0..=143 { arr[n] = … }` where
+/// `arr.used` folded to a literal; the [`Bound::FieldChain`]
+/// identity path catches `for n in 0..arr.used { arr[n] = … }`
+/// where it didn't.
 fn check_bound_implied_false(
-    check: BoundValue,
-    guard: BoundValue,
+    check: &Bound,
+    guard: &Bound,
     is_strict_guard: bool,
     defs: &DefMap,
 ) -> bool {
-    if let (BoundValue::Local(c), BoundValue::Local(g)) = (check, guard) {
-        return if is_strict_guard {
-            resolves_to(c, g, defs)
-        } else {
-            resolves_to_plus_one(c, g, defs)
-        };
+    // Identity regime: same structural shape, no value comparison.
+    // Sound for the strict guard whenever the two bounds denote the
+    // same runtime value; the non-strict (`<=`) form needs a +1
+    // step that only the Local chain walk currently expresses.
+    match (check, guard) {
+        (Bound::Local(c), Bound::Local(g)) => {
+            return if is_strict_guard {
+                resolves_to(*c, *g, defs)
+            } else {
+                resolves_to_plus_one(*c, *g, defs)
+            };
+        }
+        (
+            Bound::FieldChain {
+                root_local: cr,
+                field_indices: cf,
+            },
+            Bound::FieldChain {
+                root_local: gr,
+                field_indices: gf,
+            },
+        ) if is_strict_guard && cf == gf => {
+            if resolves_to(*cr, *gr, defs) {
+                return true;
+            }
+        }
+        _ => {}
     }
-    let (Some(c_val), Some(g_val)) = (
-        bound_to_constant(check, defs),
-        bound_to_constant(guard, defs),
-    ) else {
+    // Numeric regime: both sides project to a concrete constant.
+    let (Some(c_val), Some(g_val)) = (check.to_constant(defs), guard.to_constant(defs)) else {
         return false;
     };
     if is_strict_guard {
@@ -492,7 +536,7 @@ fn record_def_from_stmt(stmt: &NirStmt, defs: &mut DefMap, tainted: &Taints) {
     };
 
     // Skip when the let-target itself may later be reassigned: the
-    // value-extracting path (`bound_to_constant`) would otherwise
+    // value-extracting path (`Bound::to_constant`) would otherwise
     // observe a stale snapshot. Identity-only paths (`resolves_to`
     // between two Locals) compare names and stay sound regardless.
     // Field-level taint is handled per-field in
@@ -981,21 +1025,8 @@ struct ShortCircuitGuard {
     var: u32,
     /// Maximum offset proven safe: `var + max_offset < bound`
     max_offset: i64,
-    /// The bound expression — either a local index or a field access descriptor
-    bound: BoundExpr,
-}
-
-#[derive(Clone)]
-enum BoundExpr {
-    Local(u32),
-    /// A chain of field accesses from a root local:
-    /// `root_local.field_indices[0].field_indices[1]...`.
-    /// `FieldChain { root_local, field_indices: [] }` would be equivalent to
-    /// `Local(root_local)`, so an empty chain is never constructed.
-    FieldChain {
-        root_local: u32,
-        field_indices: Vec<u32>,
-    },
+    /// The bound expression (Local, Literal, or field chain).
+    bound: Bound,
 }
 
 /// Decompose `local`, `local.f1`, `local.f1.f2`, ... into a `(root_local,
@@ -1027,21 +1058,7 @@ impl ShortCircuitGuard {
             return None;
         }
 
-        let bound = match &right.kind {
-            NirExprKind::Local { index, .. } => BoundExpr::Local(*index),
-            NirExprKind::FieldAccess { .. } => {
-                let (root_local, field_indices) = extract_field_chain(right)?;
-                if field_indices.is_empty() {
-                    BoundExpr::Local(root_local)
-                } else {
-                    BoundExpr::FieldChain {
-                        root_local,
-                        field_indices,
-                    }
-                }
-            }
-            _ => return None,
-        };
+        let bound = Bound::extract(right)?;
 
         let (var, max_offset) = match &left.kind {
             NirExprKind::Local { index, .. } => (*index, 0),
@@ -1093,42 +1110,31 @@ impl ShortCircuitGuard {
     }
 
     fn bound_matches(&self, expr: &NirExpr, defs: &DefMap) -> bool {
-        match &self.bound {
-            BoundExpr::Local(guard_bound) => {
-                if let NirExprKind::Local { index, .. } = &expr.kind {
-                    resolves_to(*index, *guard_bound, defs)
-                } else {
-                    false
-                }
-            }
-            BoundExpr::FieldChain {
-                root_local: guard_root,
-                field_indices: guard_fields,
-            } => {
-                // Walk `expr` outermost-first against `guard_fields` in
-                // reverse without materialising a new Vec — `bound_matches`
-                // is a hot per-condition check.
-                let mut current = expr;
-                for &expected_field in guard_fields.iter().rev() {
-                    let NirExprKind::FieldAccess {
-                        expr: inner,
-                        field_index,
-                        ..
-                    } = &current.kind
-                    else {
-                        return false;
-                    };
-                    if *field_index != expected_field {
-                        return false;
-                    }
-                    current = inner;
-                }
-                if let NirExprKind::Local { index, .. } = &current.kind {
-                    resolves_to(*index, *guard_root, defs)
-                } else {
-                    false
-                }
-            }
+        // Decode `expr` as a Bound and compare with the guard's
+        // bound via the same identity / numeric regime that
+        // `check_bound_implied_false` uses. Strict-equality form:
+        // either structurally identical, or both bounds project to
+        // the same constant.
+        let Some(expr_bound) = Bound::extract(expr) else {
+            return false;
+        };
+        match (&expr_bound, &self.bound) {
+            (Bound::Local(c), Bound::Local(g)) => resolves_to(*c, *g, defs),
+            (
+                Bound::FieldChain {
+                    root_local: cr,
+                    field_indices: cf,
+                },
+                Bound::FieldChain {
+                    root_local: gr,
+                    field_indices: gf,
+                },
+            ) if cf == gf => resolves_to(*cr, *gr, defs),
+            (Bound::Literal(c), Bound::Literal(g)) => c == g,
+            _ => match (expr_bound.to_constant(defs), self.bound.to_constant(defs)) {
+                (Some(c), Some(g)) => c == g,
+                _ => false,
+            },
         }
     }
 
@@ -1274,7 +1280,7 @@ fn is_bitmask_bounded(condition: &NirExpr, defs: &DefMap) -> bool {
     else {
         return false;
     };
-    let Some(check_bound) = extract_bound_value(right) else {
+    let Some(check_bound) = Bound::extract(right) else {
         return false;
     };
 
@@ -1285,7 +1291,7 @@ fn is_bitmask_bounded(condition: &NirExpr, defs: &DefMap) -> bool {
 
     // Resolve `check_bound` to a concrete integer — literal RHS goes
     // through directly, a Local RHS gets walked through `defs`.
-    let Some(bound_val) = bound_to_constant(check_bound, defs) else {
+    let Some(bound_val) = check_bound.to_constant(defs) else {
         return false;
     };
 
@@ -1384,7 +1390,7 @@ fn is_implied_false(condition: &NirExpr, guard: &LoopGuard, defs: &DefMap) -> bo
     else {
         return false;
     };
-    let Some(check_bound) = extract_bound_value(right) else {
+    let Some(check_bound) = Bound::extract(right) else {
         return false;
     };
 
@@ -1397,7 +1403,7 @@ fn is_implied_false(condition: &NirExpr, guard: &LoopGuard, defs: &DefMap) -> bo
     // For `<=` guard (`var <= B`): check is false iff `check_bound > B`.
     // [`check_bound_implied_false`] applies exact-match for two-Local
     // bounds and >=/> for literal-mixed bounds.
-    check_bound_implied_false(check_bound, guard.bound, guard.is_strict, defs)
+    check_bound_implied_false(&check_bound, &guard.bound, guard.is_strict, defs)
 }
 
 /// Peel a `builtin::likely` / `builtin::unlikely` branch-hint wrapper so the
@@ -1461,7 +1467,7 @@ fn is_implied_by_dominating_guard(
     else {
         return false;
     };
-    let Some(check_bound) = extract_bound_value(right) else {
+    let Some(check_bound) = Bound::extract(right) else {
         return false;
     };
 
@@ -1480,12 +1486,9 @@ fn is_implied_by_dominating_guard(
     // Local-only bounds fall back to identity match — the legacy
     // regime, sound only at `offset == max_offset`.
     let tighten = dg.max_offset - offset;
-    match (
-        bound_to_constant(check_bound, defs),
-        bound_to_constant(dg.bound, defs),
-    ) {
+    match (check_bound.to_constant(defs), dg.bound.to_constant(defs)) {
         (Some(check_v), Some(guard_v)) => check_v >= guard_v - tighten,
-        _ => check_bound_implied_false(check_bound, dg.bound, true, defs),
+        _ => check_bound_implied_false(&check_bound, &dg.bound, true, defs),
     }
 }
 
@@ -1500,7 +1503,7 @@ fn extract_dominating_guard(condition: &NirExpr, defs: &DefMap) -> Option<Domina
     if *op != NirBinaryOp::Lt {
         return None;
     }
-    let bound = extract_bound_value(right)?;
+    let bound = Bound::extract(right)?;
 
     // Left side: either `var` or `var + offset`
     match &left.kind {
