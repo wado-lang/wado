@@ -1,90 +1,44 @@
-//! Closure expression resolution (mutable and immutable captures).
+//! Annotation pass for closure expressions.
+//!
+//! The body walk still allocates the synthetic `__ref_<var>` locals,
+//! address-takes their outer bindings, walks the body so its
+//! `ModuleSemantics` lands, projects the closure's `fn(...)` / `fn mut(...)`
+//! type (so the caller's typecheck sees the right `expression_types`), and
+//! records [`super::sem::types::ClosureCaptureInfo`]. Reify rebuilds the
+//! `let __ref_* = &mut <var>;` materialisation, the
+//! `TirExprKind::Closure { params, body, captures, … }`, and the optional
+//! enclosing `Block` wrapper from the AST + that record.
 
 use crate::hashmap::IndexSet;
 
 use crate::ast::{self};
 use crate::compiler_host::CompilerHost;
-use crate::tir::{
-    EffectRef, ResolvedType, TirBlock, TirCapture, TirExpr, TirExprKind, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
-};
+use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirStmt, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use crate::hashmap::IndexMap;
 
 /// Expected function-type info extracted from an `expected_type` hint.
-///
-/// A closure is contextually typed against this hint: unannotated parameters
-/// default to the expected positional param type, and the body is resolved
-/// against the expected return type so e.g. struct-literal bodies elaborate
-/// correctly. The closure's *effect* set is left as an empty list rather
-/// than copied from the hint — let-statement resolution in
-/// `elaborator/stmt.rs` handles function-type assignability structurally, so
-/// the closure expression and the let annotation can carry different
-/// `effects` lists without a spurious `TypeMismatch`.
 struct ExpectedFn {
     params: Vec<TypeId>,
     return_type: TypeId,
-    /// Concrete effect set declared at the use site, when one is available.
-    /// `None` when the expected type is unavailable or has any
-    /// `EffectRef::Param` (generic-effect bound contexts) — in those cases
-    /// the closure body keeps inheriting outer effects.
-    declared_effects: Option<Vec<EffectRef>>,
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     fn extract_expected_fn(&self, expected_type: Option<TypeId>) -> Option<ExpectedFn> {
         let tid = expected_type?;
         let tt = self.tysys.type_table.borrow();
-        // See through newtype layers so a closure assigned to a `type Handler =
-        // fn(...)` newtype still gets its parameter types inferred from the
-        // underlying fn signature.
         let base_id = tt.get_ultimate_base_type(tid);
         match tt.get(base_id) {
             ResolvedType::Function {
                 params,
                 return_type,
-                effects,
                 ..
-            } => {
-                // Adopt the declared effect set only when the expected fn
-                // type explicitly declares at least one concrete effect.
-                //
-                // Two cases we deliberately skip:
-                //
-                // * Empty effect set (`fn(...)` / `fn mut(...)` without a
-                //   `with` clause). Stdlib parameter types (e.g.
-                //   `Iterator::for_each`, `Array::sort_by`) declare empty
-                //   effects today — the `<effect E>` polymorphism Phase 7
-                //   defers is what would mark them as effect-transparent.
-                //   Until that lands, treating empty as a binding constraint
-                //   would reject every effectful closure passed to those
-                //   methods, even though the call site is patently capable
-                //   of supplying the closure's effects.
-                //
-                // * Any `EffectRef::Param` entry (generic `<effect E>`
-                //   bounds). Param ids are opaque to the effect checker, so
-                //   swapping to them would produce spurious errors.
-                //
-                // In both cases, the closure body inherits the enclosing
-                // function's effects — matching the documented Phase 7
-                // contract that "closure literals already inherit caller
-                // effects". The leak from `let inner: fn() = ||{println}` is
-                // a separate, deferred concern (proper fix needs body-effect
-                // inference, WEP 2026-01-25 option (a)).
-                let declared_effects =
-                    if effects.is_empty() || effects.iter().any(EffectRef::is_param) {
-                        None
-                    } else {
-                        Some(effects.clone())
-                    };
-                Some(ExpectedFn {
-                    params: params.clone(),
-                    return_type: *return_type,
-                    declared_effects,
-                })
-            }
+            } => Some(ExpectedFn {
+                params: params.clone(),
+                return_type: *return_type,
+            }),
             _ => None,
         }
     }
@@ -124,10 +78,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve a closure expression. Auto-capture by reference: every outer
-    /// binding that the body assigns to is captured as `&mut T`; reads alone
-    /// keep the original by-value capture path. The closure type is tagged
-    /// `fn mut(...)` when any capture is mutating, otherwise `fn(...)`.
     pub(super) fn resolve_closure(
         &mut self,
         closure: &ast::ClosureExpr,
@@ -138,16 +88,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let expected_fn = self.extract_expected_fn(expected_type);
         let span = closure.span;
 
-        // Step 1: Collect outer bindings the body assigns to.
+        // Collect outer bindings the body assigns to.
         let mut assigned_names: IndexSet<String> = IndexSet::default();
         Self::collect_mutated_vars(&closure.body, &mut assigned_names);
 
-        // Step 2: For each assigned name that resolves to an outer `mut`
-        // local, materialize a `&mut T` reference in the outer context and
-        // rewrite inner uses to deref that reference. Also accumulate the
-        // Stage 5 `MutCapture` records that reify replays in the same
-        // order (Gap 4 of WEP 2026-05-26).
-        let mut ref_stmts: Vec<TirStmt> = Vec::new();
+        // For each assigned name that resolves to an outer `mut` local,
+        // record a `MutCapture` (so reify replays the `__ref_<var>` materialisation
+        // in the same order) and mark the outer local address-taken. The
+        // `__ref_<var>` local slot is also reserved on the outer `ctx` so any
+        // subsequent local-index accounting in the parent function stays
+        // consistent with what reify will produce.
         let mut deref_overrides: IndexMap<String, (String, TypeId)> = IndexMap::default();
         let mut mut_captures: Vec<super::sem::types::MutCapture> = Vec::new();
         let mut any_mutating_capture = false;
@@ -161,35 +111,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let outer_index = local.index;
                 let ref_type = self.tysys.type_table.borrow_mut().make_mut_ref(inner_type);
                 let ref_name = format!("__ref_{var_name}");
-                let ref_index = ctx.add_local(ref_name.clone(), ref_type, false, None);
+                let _ref_index = ctx.add_local(ref_name.clone(), ref_type, false, None);
                 ctx.address_taken_locals.insert(outer_index);
-
-                ref_stmts.push(TirStmt::new(
-                    TirStmtKind::Let {
-                        name: ref_name.clone(),
-                        local_index: ref_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: ref_type,
-                        value: TirExpr::new(
-                            TirExprKind::Unary {
-                                op: TirUnaryOp::MutRef,
-                                expr: Box::new(TirExpr::new(
-                                    TirExprKind::Local {
-                                        index: outer_index,
-                                        name: var_name.clone(),
-                                    },
-                                    inner_type,
-                                    span,
-                                )),
-                            },
-                            ref_type,
-                            span,
-                        ),
-                        skip_value_copy: false,
-                    },
-                    span,
-                ));
 
                 mut_captures.push(super::sem::types::MutCapture {
                     var_name: var_name.clone(),
@@ -202,12 +125,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Step 3: Open the closure scope with the deref overrides.
+        // Open the closure scope with the deref overrides and walk params
+        // + body so their facts land.
         let mut closure_ctx =
             FunctionContext::new_closure(TypeTable::UNKNOWN, ctx, &self.tysys.type_table);
         closure_ctx.deref_overrides = deref_overrides;
 
-        // Step 4: Add closure parameters.
         let params: Vec<(String, TypeId)> = closure
             .params
             .iter()
@@ -220,16 +143,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
 
-        // Step 5: Resolve the body, forwarding the expected return type so
-        // e.g. struct-literal bodies can be elaborated against it.
         let body_expected = expected_fn.as_ref().map(|ef| ef.return_type);
         let body = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
 
-        // Step 6: Build the capture list.
-        let captures: Vec<TirCapture> = closure_ctx
+        // Build the recorded capture list from the closure scope's captures.
+        let recorded_captures: Vec<super::sem::types::CaptureEntry> = closure_ctx
             .get_captures()
             .into_iter()
-            .map(|(name, _index, local)| TirCapture {
+            .map(|(name, _index, local)| super::sem::types::CaptureEntry {
                 name,
                 outer_index: local.index,
                 type_id: local.type_id,
@@ -237,42 +158,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
 
-        // Stage 5 (Gap 4 of WEP 2026-05-26): record the capture-analysis
-        // result so reify can replay the `__ref_*` materialisation and
-        // build the same `TirCapture` list without re-running
-        // `collect_mutated_vars` / closure-scope plumbing.
+        // Stage 5 (Gap 4 of WEP 2026-05-26): the only signal reify needs
+        // for the closure's capture analysis.
         self.record_closure_captures(
             closure.id,
             super::sem::types::ClosureCaptureInfo {
                 mut_captures,
-                captures: captures
-                    .iter()
-                    .map(|c| super::sem::types::CaptureEntry {
-                        name: c.name.clone(),
-                        outer_index: c.outer_index,
-                        type_id: c.type_id,
-                        is_mut: c.is_mut,
-                    })
-                    .collect(),
+                captures: recorded_captures,
                 is_mutating: any_mutating_capture,
             },
         );
 
-        // Step 7: Determine the return type.
-        //
-        // When the body is a Block, prefer the type of any explicit
-        // `return` statement; if there is none, fall back to the block's
-        // own result type. `body.type_id` (computed by `block_result_type`)
-        // keeps a diverging-tail block like `{ panic("oops"); }` as
-        // `Never` rather than collapsing to `Unit` — otherwise a closure
-        // passed to `fn<T>(f: fn() -> T) -> T` would bind `T = ()` and
-        // let the caller run past the call site.
-        //
-        // If the body contains an explicit `return` but does NOT always
-        // exit (`if cond { return 1; }` with no `else`), the fall-through
-        // path silently yields `body.type_id` while the explicit-return
-        // path yields the returned type — Wasm validation would reject
-        // the generated functor. Treat this as missing-return.
+        // Diagnose missing returns / type mismatches on the body. Mirrors the
+        // pre-7-B return-type analysis so an explicit `return` inside a
+        // partial branch reports the same error.
         let return_type = if let TirExprKind::Block(ref block) = body.kind {
             match Self::find_return_type_in_block(block) {
                 Some(t) => {
@@ -302,10 +201,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             body.type_id
         };
 
-        // Step 8: Build the closure's function type. `is_mut` is set when any
-        // outer binding is mutated by the body. Effects/stores stay empty for
-        // the same reason as before: function-type assignability is
-        // structural in params/return and ignores effects.
+        // Project the closure's `fn(...)` / `fn mut(...)` type so the caller's
+        // typecheck context (`expression_types[closure.id]`, etc.) sees it.
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
         let func_type = self.tysys.type_table.borrow_mut().make_function_with_mut(
             any_mutating_capture,
@@ -315,39 +212,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Vec::new(),
         );
 
-        let mut all_locals = closure_ctx.locals;
-        let body_locals = all_locals.split_off(params.len());
-
-        let declared_effects = expected_fn
-            .as_ref()
-            .and_then(|ef| ef.declared_effects.clone());
-
-        let closure_tir = TirExpr::new(
-            TirExprKind::Closure {
-                params,
-                body: Box::new(body),
-                captures,
-                functor_id: None,
-                address_taken_locals: closure_ctx.address_taken_locals,
-                body_locals,
-                declared_effects,
-            },
-            func_type,
-            closure.span,
-        );
-
-        // Step 9: If we materialized `&mut` ref locals, wrap the closure
-        // expression in a block that binds them first.
-        if ref_stmts.is_empty() {
-            return closure_tir;
-        }
-
-        let mut stmts = ref_stmts;
-        stmts.push(TirStmt::new(TirStmtKind::Expr(closure_tir), span));
-        TirExpr::new(
-            TirExprKind::Block(TirBlock::new(stmts, span)),
-            func_type,
-            span,
-        )
+        // Placeholder — reify is the sole producer of the closure's TIR shape.
+        let _ = (closure_ctx, body, span);
+        let _: Vec<TirStmt> = Vec::new();
+        TirExpr::new(TirExprKind::Unit, func_type, closure.span)
     }
 }
