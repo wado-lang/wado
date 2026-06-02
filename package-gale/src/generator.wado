@@ -17,7 +17,7 @@
 //! `let req = bind_request::<Options>(req)?;` prepended. The v1
 //! explicit form still compiles for packages that prefer it.
 
-use { Request, Response, Error, OutputFile } from "core:kiln";
+use { Request, Response, Error, OutputFile, KilnHost, Diagnostic as KilnDiagnostic, DiagnosticLevel } from "core:kiln";
 use { parse } from "./g4/parser.wado";
 use { Grammar, merge_grammars, check_references, synthesize_implicit_tokens } from "./ir.wado";
 use { generate as codegen_generate, GenerateOptions } from "./codegen.wado";
@@ -43,7 +43,7 @@ impl Deserialize for Options;
 /// `bind_request` shape during
 /// `kiln::import_check::inject_kiln_request_adapter` (runs before
 /// analyze).
-export fn generate(req: Request<Options>) -> Result<Response, Error> {
+export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
     // Parse the primary grammar plus any supplementary grammars listed in
     // `inputs` (e.g. a sibling lexer grammar for a split parser grammar).
     // `merge_grammars` handles the single-grammar case by returning the
@@ -84,7 +84,20 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     }
 
     let gen_opts = GenerateOptions { highlight: req.options.highlight };
-    let wado_source = codegen_generate(&mut grammar, &gen_opts);
+    let generated = codegen_generate(&mut grammar, &gen_opts);
+    // Surface Gale's prediction-strategy diagnostics through the Kiln host so
+    // they appear as normal compile warnings. The Kiln surface is the
+    // production entry (the `gale gen` CLI prints the same warnings on
+    // stderr), so a grammar built either way gets identical visibility. Gale
+    // diagnostics carry no source span yet, so the rule label leads the text.
+    for let d of &generated.diagnostics {
+        KilnHost::emit_diagnostic(KilnDiagnostic {
+            level: DiagnosticLevel::Warning,
+            span: null,
+            message: `gale: {d.rule}: {d.message}`,
+        });
+    }
+    let wado_source = generated.source;
 
     // Kiln entry module name mirrors Gale's CLI convention: snake-case
     // the grammar name. Reuses `gen_util::to_snake_case` so the filename

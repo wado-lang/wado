@@ -178,6 +178,109 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         result
     }
 
+    /// Explain *why* `type_id` does not implement `trait_name` by walking the
+    /// auto-derive structure. Each returned entry is one step of a reason
+    /// chain, deepest cause last; an empty result means no structural
+    /// explanation is available (the type is itself a leaf — e.g. a function
+    /// type — whose non-conformance the headline message already states).
+    ///
+    /// Only the `Eq` / `Ord` auto-derive paths are explained, since those are
+    /// the structural-conformance rules a diagnostic can usefully unfold.
+    pub(super) fn trait_unimpl_reason_chain(
+        &self,
+        type_id: TypeId,
+        trait_name: &str,
+    ) -> Vec<String> {
+        let mut chain = Vec::new();
+        self.collect_trait_unimpl_reason(type_id, trait_name, &mut chain);
+        chain
+    }
+
+    fn collect_trait_unimpl_reason(
+        &self,
+        type_id: TypeId,
+        trait_name: &str,
+        chain: &mut Vec<String>,
+    ) {
+        // Bound the depth so a pathologically nested (or cyclic) type cannot
+        // produce an unbounded chain.
+        if chain.len() >= 8 {
+            return;
+        }
+
+        let (eq_name, ord_name) = {
+            let tt = self.tysys.type_table.borrow();
+            let items = tt.compiler_items();
+            (
+                items.trait_name(CompilerItem::Eq).to_string(),
+                items.trait_name(CompilerItem::Ord).to_string(),
+            )
+        };
+        let is_eq = trait_name == eq_name;
+        let is_eq_or_ord = is_eq || trait_name == ord_name;
+
+        let resolved = self.tysys.type_table.borrow().get(type_id).clone();
+
+        // Collect the members to walk as owned (label, member type) pairs,
+        // releasing the field/case borrow before the conformance recursion.
+        let members: Vec<(String, TypeId)> = match &resolved {
+            ResolvedType::Struct { name, .. } if is_eq_or_ord => {
+                let Some(info) = self.lookup_struct_fields(name) else {
+                    return;
+                };
+                info.fields
+                    .iter()
+                    .map(|(fname, tid, _)| (format!("field `{fname}`"), *tid))
+                    .collect()
+            }
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } if is_eq_or_ord => {
+                let Some(info) = self.lookup_struct_fields(name) else {
+                    return;
+                };
+                let param_map: IndexMap<TypeId, TypeId> = info
+                    .type_param_type_ids
+                    .iter()
+                    .zip(type_args.iter())
+                    .map(|(param, arg)| (*param, *arg))
+                    .collect();
+                info.fields
+                    .iter()
+                    .map(|(fname, tid, _)| {
+                        let concrete = param_map.get(tid).copied().unwrap_or(*tid);
+                        (format!("field `{fname}`"), concrete)
+                    })
+                    .collect()
+            }
+            ResolvedType::Variant { name, .. } if is_eq => {
+                let Some(info) = self.lookup_variant_case(name) else {
+                    return;
+                };
+                info.cases
+                    .iter()
+                    .filter(|c| c.payload != TypeTable::UNIT)
+                    .map(|c| (format!("variant `{}`", c.name), c.payload))
+                    .collect()
+            }
+            _ => return,
+        };
+
+        // Report the first member that breaks the trait, then recurse to
+        // explain that member in turn.
+        for (label, member_tid) in members {
+            if !self.type_implements_trait(member_tid, trait_name) {
+                let owner = self.type_id_to_string(type_id);
+                let member_ty = self.type_id_to_string(member_tid);
+                chain.push(format!(
+                    "`{owner}` does not implement `{trait_name}` because {label} of type `{member_ty}` does not implement `{trait_name}`"
+                ));
+                self.collect_trait_unimpl_reason(member_tid, trait_name, chain);
+                return;
+            }
+        }
+    }
+
     fn type_implements_trait_inner(&self, resolved: &ResolvedType, trait_name: &str) -> bool {
         // Type parameters satisfy bounds declared on them (e.g., T: Describable
         // means T implements Describable within the scope of that declaration)
@@ -851,10 +954,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         );
                     } else {
                         let type_name = self.type_id_to_string(type_arg);
+                        let reason = self.trait_unimpl_reason_chain(type_arg, &bound.name);
                         let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                             type_name,
                             trait_name: bound.name.clone(),
                             param_name: param.name.clone(),
+                            reason,
                             span,
                         });
                     }

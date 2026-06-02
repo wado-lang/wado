@@ -136,69 +136,84 @@ pub async fn run_generator<H: CompilerHost + 'static>(
     component: &Component,
     request: GeneratorRequest,
     policy: KilnRunPolicy,
-) -> Result<GeneratorResponse, GeneratorRunnerError> {
+) -> (
+    Result<GeneratorResponse, GeneratorRunnerError>,
+    Vec<GeneratorDiagnostic>,
+) {
     let reads = Arc::new(Mutex::new(Vec::<GeneratorReadRecord>::new()));
     let diagnostics = Arc::new(Mutex::new(Vec::<GeneratorDiagnostic>::new()));
 
-    let state = KilnHostState {
-        host: host.clone(),
-        reads: reads.clone(),
-        diagnostics: diagnostics.clone(),
-    };
+    // Run the generator in an inner future that yields the typed outcome, then
+    // drain the diagnostics and return them alongside it — on both the success
+    // and the failure path. `emit_diagnostic` guarantees they are printed even
+    // when the generator returns successfully; relaying on the error path too
+    // keeps a failing generator from swallowing the diagnostics that explain
+    // the failure. The only host reachable here is the collect-only inner
+    // host, so the relay (print + collect) is the caller's job (see
+    // `FilesystemCompilerHost::run_generator`).
+    let reads_inner = reads.clone();
+    let diagnostics_inner = diagnostics.clone();
+    let outcome: Result<GeneratorResponse, GeneratorRunnerError> = async move {
+        let state = KilnHostState {
+            host: host.clone(),
+            reads: reads_inner.clone(),
+            diagnostics: diagnostics_inner,
+        };
 
-    // The kiln determinism guarantee (WEP 2026-04-12 §"Design
-    // principles" #1) says the linker exposes only `core:kiln/kiln-
-    // host`. The compiler handles the panic-path stderr elision
-    // at codegen time so the generator component never imports WASI
-    // in the first place.
-    let mut linker: Linker<KilnHostState<H>> = Linker::new(engine);
-    kiln_host::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s)
-        .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e}")))?;
+        // The kiln determinism guarantee (WEP 2026-04-12 §"Design
+        // principles" #1) says the linker exposes only `core:kiln/kiln-
+        // host`. The compiler handles the panic-path stderr elision
+        // at codegen time so the generator component never imports WASI
+        // in the first place.
+        let mut linker: Linker<KilnHostState<H>> = Linker::new(engine);
+        kiln_host::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s)
+            .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e}")))?;
 
-    let mut store = Store::new(engine, state);
-    let fuel = if policy.fuel == 0 {
-        u64::MAX
-    } else {
-        policy.fuel
-    };
-    store
-        .set_fuel(fuel)
-        .map_err(|e| GeneratorRunnerError::Host(format!("set fuel: {e}")))?;
+        let mut store = Store::new(engine, state);
+        let fuel = if policy.fuel == 0 {
+            u64::MAX
+        } else {
+            policy.fuel
+        };
+        store
+            .set_fuel(fuel)
+            .map_err(|e| GeneratorRunnerError::Host(format!("set fuel: {e}")))?;
 
-    let generator = Generator::instantiate_async(&mut store, component, &linker)
-        .await
-        .map_err(|e| GeneratorRunnerError::Host(format!("instantiate: {e}")))?;
+        let generator = Generator::instantiate_async(&mut store, component, &linker)
+            .await
+            .map_err(|e| GeneratorRunnerError::Host(format!("instantiate: {e}")))?;
 
-    let wit_request = kiln_types::RawRequest {
-        primary: lower_input_file(&request.primary),
-        inputs: request.inputs.iter().map(lower_input_file).collect(),
-        options: request.options,
-    };
+        let wit_request = kiln_types::RawRequest {
+            primary: lower_input_file(&request.primary),
+            inputs: request.inputs.iter().map(lower_input_file).collect(),
+            options: request.options,
+        };
 
-    // Async exports in wasmtime bindgen take an `Accessor` rather than
-    // `&mut Store`, so we drive the call through `run_concurrent`. The
-    // outer Result combines wasmtime's runtime errors and the
-    // generator's own typed `error` variant.
-    let result = store
-        .run_concurrent(async |accessor| generator.call_generate(accessor, wit_request).await)
-        .await
-        .map_err(|e| GeneratorRunnerError::Host(format!("generate call: {e}")))?
-        .map_err(|e| GeneratorRunnerError::Host(format!("generate call: {e}")))?;
+        // Async exports in wasmtime bindgen take an `Accessor` rather than
+        // `&mut Store`, so we drive the call through `run_concurrent`. The
+        // outer Result combines wasmtime's runtime errors and the
+        // generator's own typed `error` variant.
+        let result = store
+            .run_concurrent(async |accessor| generator.call_generate(accessor, wit_request).await)
+            .await
+            .map_err(|e| GeneratorRunnerError::Host(format!("generate call: {e}")))?
+            .map_err(|e| GeneratorRunnerError::Host(format!("generate call: {e}")))?;
 
-    for diag in diagnostics.lock().unwrap().drain(..) {
-        relay_diagnostic(host.as_ref(), diag);
+        match result {
+            Ok(response) => Ok(GeneratorResponse {
+                files: response.files.into_iter().map(lift_output_file).collect(),
+                reads: std::mem::take(&mut *reads_inner.lock().unwrap()),
+            }),
+            Err(e) => Err(GeneratorRunnerError::Generator(lift_error(e))),
+        }
     }
+    .await;
 
-    match result {
-        Ok(response) => Ok(GeneratorResponse {
-            files: response.files.into_iter().map(lift_output_file).collect(),
-            reads: std::mem::take(&mut *reads.lock().unwrap()),
-        }),
-        Err(e) => Err(GeneratorRunnerError::Generator(lift_error(e))),
-    }
+    let emitted: Vec<GeneratorDiagnostic> = diagnostics.lock().unwrap().drain(..).collect();
+    (outcome, emitted)
 }
 
-fn relay_diagnostic<H: CompilerHost + ?Sized>(host: &H, diag: GeneratorDiagnostic) {
+pub(crate) fn relay_diagnostic<H: CompilerHost + ?Sized>(host: &H, diag: GeneratorDiagnostic) {
     use wado_compiler::{Code, Diagnostic, DiagnosticSpan, Severity};
     let severity = match diag.level {
         GeneratorDiagnosticLevel::Error => Severity::Error,

@@ -189,11 +189,33 @@ pub enum TypeError {
         type_name: String,
         trait_name: String,
         param_name: String,
+        /// Reason chain explaining *why* `type_name` does not implement
+        /// `trait_name`, walking the auto-derive structure step by step
+        /// (e.g. "`Handler` does not implement `Ord` because field `cb` …").
+        /// Empty when no structural explanation is available. Rendered as
+        /// indented `note:` lines beneath the headline message.
+        reason: Vec<String>,
         span: Span,
     },
 
     /// Invalid pattern in context
     InvalidPattern { message: String, span: Span },
+
+    /// A unary or binary operator cannot be applied to its operand type(s).
+    ///
+    /// Replaces the former practice of routing operator errors through
+    /// `InvalidPattern`, which mislabeled them with an "invalid pattern:"
+    /// prefix. `operands` holds one type name when both operands share a
+    /// type (or for unary operators) and two names when a binary operator
+    /// is applied to two differing types; `note` carries an optional
+    /// explanation appended after a colon (e.g. "type does not implement
+    /// `Sub`").
+    OperatorNotApplicable {
+        op: String,
+        operands: Vec<String>,
+        note: Option<String>,
+        span: Span,
+    },
 
     /// Invalid type cast
     InvalidCast {
@@ -381,6 +403,40 @@ pub enum TypeError {
     },
 }
 
+/// Render the human-readable body of an [`TypeError::OperatorNotApplicable`].
+///
+/// Shared by the `Display` impl and the `From<TypeError> for Diagnostic`
+/// conversion so both surfaces phrase operator errors identically. The
+/// message names one operand type when `operands` has a single entry and
+/// both when it has two, keeping the wording symmetric regardless of which
+/// operand triggered the error.
+/// Append a trait-bound reason chain as indented `note:` lines beneath a
+/// headline message. Shared by the `Display` impl and the `Diagnostic`
+/// conversion so the chain renders identically on every surface.
+pub(super) fn append_reason_chain(mut message: String, reason: &[String]) -> String {
+    for step in reason {
+        message.push_str("\n  note: ");
+        message.push_str(step);
+    }
+    message
+}
+
+pub(super) fn format_operator_not_applicable(
+    op: &str,
+    operands: &[String],
+    note: Option<&str>,
+) -> String {
+    let base = match operands {
+        [t] => format!("operator `{op}` cannot be applied to type `{t}`"),
+        [l, r] => format!("operator `{op}` cannot be applied to types `{l}` and `{r}`"),
+        _ => format!("operator `{op}` cannot be applied"),
+    };
+    match note {
+        Some(note) => format!("{base}: {note}"),
+        None => base,
+    }
+}
+
 impl std::fmt::Display for TypeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -465,19 +521,34 @@ impl std::fmt::Display for TypeError {
                 type_name,
                 trait_name,
                 param_name,
+                reason,
                 span,
             } => {
-                write!(
-                    f,
+                let headline = format!(
                     "{}:{}: type '{}' does not implement trait '{}' required by bound on '{}'",
                     span.line, span.column, type_name, trait_name, param_name
-                )
+                );
+                write!(f, "{}", append_reason_chain(headline, reason))
             }
             TypeError::InvalidPattern { message, span } => {
                 write!(
                     f,
                     "{}:{}: invalid pattern: {}",
                     span.line, span.column, message
+                )
+            }
+            TypeError::OperatorNotApplicable {
+                op,
+                operands,
+                note,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: {}",
+                    span.line,
+                    span.column,
+                    format_operator_not_applicable(op, operands, note.as_deref())
                 )
             }
             TypeError::InvalidCast {
@@ -810,17 +881,31 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 type_name,
                 trait_name,
                 param_name,
+                reason,
                 span,
             } => (
                 Code::TypeMismatch,
-                format!(
-                    "type '{type_name}' does not implement trait '{trait_name}' required by bound on '{param_name}'"
+                append_reason_chain(
+                    format!(
+                        "type '{type_name}' does not implement trait '{trait_name}' required by bound on '{param_name}'"
+                    ),
+                    reason,
                 ),
                 *span,
             ),
             TypeError::InvalidPattern { message, span } => (
                 Code::InvalidSyntax,
                 format!("invalid pattern: {message}"),
+                *span,
+            ),
+            TypeError::OperatorNotApplicable {
+                op,
+                operands,
+                note,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format_operator_not_applicable(op, operands, note.as_deref()),
                 *span,
             ),
             TypeError::InvalidCast {

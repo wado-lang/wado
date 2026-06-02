@@ -170,7 +170,8 @@ impl HintCollector<'_> {
                     self.hint_pattern_bindings(p);
                 }
             }
-            Pattern::Range { .. } | Pattern::Literal(_) | Pattern::Wildcard => {}
+            Pattern::Range { .. } | Pattern::Literal(_) | Pattern::Wildcard | Pattern::Error(_) => {
+            }
         }
     }
 

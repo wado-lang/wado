@@ -2086,7 +2086,13 @@ impl FunctionTranslator<'_, '_> {
                         result_ty: WirType::I32,
                     }
                 } else {
-                    WirInstr::I32Const(0)
+                    // A plain `enum` lowers to a bare i32 discriminant (see
+                    // `EnumConstruct` below), so the value already *is* the
+                    // tag — pass it through. The previous `I32Const(0)` stub
+                    // silently mis-tagged every plain enum (the case never
+                    // arose until enums began flowing through CM-import
+                    // binding synthesis via `variant_tag`).
+                    val
                 }
             }
             NirExprKind::VariantTest {

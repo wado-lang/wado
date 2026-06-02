@@ -2066,7 +2066,7 @@ impl CmInterfaceRegistry {
                 })
             }
             // TypePackSpread is only valid inside tuple types — pass through
-            Type::TypePackSpread(..) => ty.clone(),
+            Type::TypePackSpread(..) | Type::Error(_) => ty.clone(),
         }
     }
 }
@@ -2421,7 +2421,7 @@ impl CmInstanceTypeGen {
                     let source_owned: String = named
                         .source_interface
                         .as_deref()
-                        .filter(|s| s.starts_with("wasi:"))
+                        .filter(|s| source_uses_cm_abi(s))
                         .map(str::to_string)
                         .or(interface_hint_match)
                         .or_else(|| {
@@ -2435,7 +2435,7 @@ impl CmInstanceTypeGen {
                         })
                         .unwrap_or_else(|| {
                             panic!(
-                                "unresolved wasi named type reference `{name}` while emitting CM instance"
+                                "unresolved CM named type reference `{name}` while emitting CM instance"
                             )
                         });
                     let source = source_owned.as_str();
@@ -2746,6 +2746,21 @@ fn join_val_types(a: Option<ValType>, b: Option<ValType>) -> ValType {
     }
 }
 
+/// True when a type's `source_interface` denotes a Component Model interface
+/// whose values follow the canonical ABI — records flatten to their fields,
+/// strings to (ptr, len), options/variants to a discriminant plus payload —
+/// rather than being passed as opaque Wado GC structs.
+///
+/// This covers the WASI interfaces and the `core:kiln` host interfaces the
+/// Kiln generator world imports (`KilnHost`, plus the `core:kiln/types`
+/// request/response records). The check is on the *explicit* source so it is
+/// safe to widen: every stdlib `core:kiln` type carries its `#[cm(...)]`
+/// source after the registry's two-pass bootstrap, and plain Wado structs
+/// have no `source_interface` at all.
+pub fn source_uses_cm_abi(source: &str) -> bool {
+    source.starts_with("wasi:") || source.starts_with("core:kiln/")
+}
+
 /// Flatten a pre-resolved AST type into CM core-level `ValType`s.
 ///
 /// Compound types like String and `Array<T>` are lowered to (ptr: i32, len: i32)
@@ -2773,7 +2788,7 @@ pub fn flatten_cm_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &CmInt
             name if named
                 .source_interface
                 .as_deref()
-                .filter(|s| s.starts_with("wasi:"))
+                .filter(|s| source_uses_cm_abi(s))
                 .or_else(|| registry.find_wasi_struct_source(name))
                 .and_then(|s| registry.get_struct_fields_by_source(s, name))
                 .is_some() =>
@@ -2781,7 +2796,7 @@ pub fn flatten_cm_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &CmInt
                 let source = named
                     .source_interface
                     .as_deref()
-                    .filter(|s| s.starts_with("wasi:"))
+                    .filter(|s| source_uses_cm_abi(s))
                     .or_else(|| registry.find_wasi_struct_source(name))
                     .expect("already matched above");
                 let fields = registry
@@ -2795,7 +2810,7 @@ pub fn flatten_cm_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &CmInt
             name if named
                 .source_interface
                 .as_deref()
-                .filter(|s| s.starts_with("wasi:"))
+                .filter(|s| source_uses_cm_abi(s))
                 .or_else(|| registry.find_wasi_variant_source(name))
                 .and_then(|s| registry.get_variant_cases_by_source(s, name))
                 .is_some() =>
@@ -2804,7 +2819,7 @@ pub fn flatten_cm_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &CmInt
                 let source = named
                     .source_interface
                     .as_deref()
-                    .filter(|s| s.starts_with("wasi:"))
+                    .filter(|s| source_uses_cm_abi(s))
                     .or_else(|| registry.find_wasi_variant_source(name))
                     .expect("already matched above");
                 if let Some(cases) = registry.get_variant_cases_by_source(source, name) {

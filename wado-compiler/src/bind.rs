@@ -264,7 +264,7 @@ fn expr_references_var(expr: &Expr, name: &str) -> bool {
         }
         Expr::Resume(r) => expr_references_var(&r.value, name),
 
-        Expr::Literal(_) => false,
+        Expr::Literal(_) | Expr::Error(_) => false,
     }
 }
 
@@ -331,7 +331,9 @@ fn stmt_references_var(stmt: &crate::ast::Stmt, name: &str) -> bool {
         crate::ast::Stmt::LabeledBlock(lb) => {
             lb.block.stmts.iter().any(|s| stmt_references_var(s, name))
         }
-        crate::ast::Stmt::Break(_) | crate::ast::Stmt::Continue(_) => false,
+        crate::ast::Stmt::Break(_) | crate::ast::Stmt::Continue(_) | crate::ast::Stmt::Error(_) => {
+            false
+        }
     }
 }
 
@@ -499,6 +501,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             Stmt::Continue(_) => {} // No bindings for continue
             Stmt::Assert(assert_stmt) => self.bind_assert(assert_stmt)?,
             Stmt::LabeledBlock(labeled_block) => self.bind_block(&labeled_block.block)?,
+            Stmt::Error(_) => {} // Parser error-recovery placeholder: nothing to bind
         }
         Ok(())
     }
@@ -575,7 +578,8 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             }
             crate::ast::Pattern::Literal(_)
             | crate::ast::Pattern::Variant { .. }
-            | crate::ast::Pattern::Range { .. } => {}
+            | crate::ast::Pattern::Range { .. }
+            | crate::ast::Pattern::Error(_) => {}
             crate::ast::Pattern::Or(alternatives) => {
                 // Bind variables from the first alternative (all alternatives must bind the same names)
                 if let Some(first) = alternatives.first() {
@@ -619,9 +623,11 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             }
             crate::ast::Pattern::Literal(_)
             | crate::ast::Pattern::Variant { .. }
-            | crate::ast::Pattern::Range { .. } => {
+            | crate::ast::Pattern::Range { .. }
+            | crate::ast::Pattern::Error(_) => {
                 // Literal, variant, and range patterns are not valid in let statements
-                // This would be caught by the type checker
+                // This would be caught by the type checker.
+                // Pattern::Error is a parser recovery placeholder: nothing to bind.
             }
         }
         Ok(())
@@ -979,6 +985,9 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
             // Literals don't reference variables
             Expr::Literal(_) => {}
+
+            // Parser error-recovery placeholder: nothing to bind.
+            Expr::Error(_) => {}
         }
         Ok(())
     }
@@ -1121,7 +1130,8 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             }
             crate::ast::Pattern::Literal(_)
             | crate::ast::Pattern::Wildcard
-            | crate::ast::Pattern::Range { .. } => {
+            | crate::ast::Pattern::Range { .. }
+            | crate::ast::Pattern::Error(_) => {
                 // No variables introduced
             }
             crate::ast::Pattern::Or(alternatives) => {

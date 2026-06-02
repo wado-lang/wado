@@ -9,6 +9,7 @@ use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
 use { lower_with_ctx } from "./lower.wado";
 use {
     LoweredGrammar,
+    Diagnostic,
     Rule,
     SimpleRule,
     MultiAltRule,
@@ -28,7 +29,18 @@ pub struct GenerateOptions {
     pub highlight: bool,
 }
 
-pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> String {
+/// Result of a codegen pass: the generated `.wado` source plus the
+/// prediction-strategy diagnostics the single lowering raised. Codegen
+/// always lowers exactly once, so the diagnostics ride out on the same
+/// `LoweredGrammar` the emit walk consumes — callers that want to surface
+/// warnings (`gale gen`) read `diagnostics`; callers that only need the
+/// module text (the Kiln generator entry, unit tests) read `source`.
+pub struct GeneratedOutput {
+    pub source: String,
+    pub diagnostics: Array<Diagnostic>,
+}
+
+pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOutput {
     // Fill in `snake_name` / `field_name` caches on every name-bearing IR
     // node before any codegen pass touches the grammar. Production IR built
     // through `RuleRefElement::with_options` etc. already has these set —
@@ -66,7 +78,10 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> String {
     // intern its set. Visitor and highlight do not emit `matches { TK_* }`
     // checks so this ordering is safe.
     gen_kind_set_helpers(&mut w, &lowered, &ctx);
-    return w.to_string();
+    return GeneratedOutput {
+        source: w.to_string(),
+        diagnostics: lowered.diagnostics,
+    };
 }
 
 fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {

@@ -512,10 +512,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     );
                                 } else {
                                     let type_name = self.type_id_to_string(type_arg);
+                                    let reason =
+                                        self.trait_unimpl_reason_chain(type_arg, &bound.name);
                                     let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                                         type_name,
                                         trait_name: bound.name.clone(),
                                         param_name: param.name.clone(),
+                                        reason,
                                         span: call.span,
                                     });
                                 }

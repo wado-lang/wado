@@ -31,7 +31,7 @@ WS : (' '|'\\n') -> skip ;
         Ok(g) => g,
         Err(e) => panic(`parse_checked failed: {e.message}`),
     };
-    let out = generate(&mut grammar, &GenerateOptions { highlight: false });
+    let out = generate(&mut grammar, &GenerateOptions { highlight: false }).source;
     // The buggy codegen emitted two `let e = _parse_e(p)?;` lines in the
     // same function body for the alt `a=e ... b=e`. Different functions
     // each having their own copy is fine; the failure mode is the same

@@ -575,6 +575,7 @@ pub fn walk_stmt<V: AstVisitor>(v: &mut V, stmt: &Stmt) {
             }
         }
         Stmt::LabeledBlock(s) => v.visit_block(&s.block),
+        Stmt::Error(_) => {}
     }
 }
 
@@ -742,6 +743,7 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
             v.visit_block(&w.body);
         }
         Expr::Resume(r) => v.visit_expr(&r.value),
+        Expr::Error(_) => {}
     }
 }
 
@@ -773,7 +775,7 @@ pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
                 v.visit_pattern(p);
             }
         }
-        Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } => {}
+        Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } | Pattern::Error(_) => {}
     }
 }
 
@@ -808,6 +810,7 @@ pub fn walk_type<V: AstVisitor>(v: &mut V, ty: &Type) {
         }
         Type::Reference(t) | Type::MutReference(t) => v.visit_type(t),
         Type::TypePackSpread(_, _) => {}
+        Type::Error(_) => {}
     }
 }
 
@@ -1504,6 +1507,19 @@ pub enum Stmt {
     Continue(ContinueStmt),
     Assert(AssertStmt),
     LabeledBlock(LabeledBlockStmt),
+    /// Placeholder for a statement that failed to parse, emitted by error
+    /// recovery so a broken statement inside a block leaves a node (with a
+    /// stable span/id) instead of vanishing. Inert in every later phase; the
+    /// batch path is fail-fast and never sees it.
+    Error(ErrorStmt),
+}
+
+/// Placeholder for a token run that failed to parse as a statement. See
+/// [`Stmt::Error`].
+#[derive(Debug, Clone)]
+pub struct ErrorStmt {
+    pub id: AstId,
+    pub span: Span,
 }
 
 /// Labeled block statement: `LABEL: { ... }`
@@ -1688,6 +1704,7 @@ impl Stmt {
             Stmt::Continue(s) => s.id,
             Stmt::Assert(s) => s.id,
             Stmt::LabeledBlock(s) => s.id,
+            Stmt::Error(s) => s.id,
         }
     }
 
@@ -1708,6 +1725,7 @@ impl Stmt {
             Stmt::Continue(s) => s.span,
             Stmt::Assert(s) => s.span,
             Stmt::LabeledBlock(s) => s.span,
+            Stmt::Error(s) => s.span,
         }
     }
 }
@@ -1751,6 +1769,20 @@ pub enum Expr {
     /// handler method. Delivers `value` to the suspended computation; in the
     /// MVP (no post-resume code) it lowers to `return value`.
     Resume(Box<ResumeExpr>),
+    /// Placeholder for an expression that failed to parse, emitted by error
+    /// recovery so one malformed expression doesn't discard its enclosing
+    /// statement or list (e.g. a broken argument in a call). Resolves to
+    /// `ResolvedType::Error` in the elaborator; the batch path never sees it
+    /// because it is fail-fast on the first syntax error.
+    Error(ErrorExpr),
+}
+
+/// Placeholder for a token run that failed to parse as an expression. See
+/// [`Expr::Error`].
+#[derive(Debug, Clone)]
+pub struct ErrorExpr {
+    pub id: AstId,
+    pub span: Span,
 }
 
 /// `with E1 => h1, E2 => h2 do { body }` — installs effect handlers for the
@@ -1859,6 +1891,7 @@ impl Expr {
             Expr::Range(e) => e.id,
             Expr::WithHandler(e) => e.id,
             Expr::Resume(e) => e.id,
+            Expr::Error(e) => e.id,
         }
     }
 
@@ -1892,6 +1925,7 @@ impl Expr {
             Expr::Range(e) => e.span,
             Expr::WithHandler(e) => e.span,
             Expr::Resume(e) => e.span,
+            Expr::Error(e) => e.span,
         }
     }
 
@@ -2004,6 +2038,10 @@ impl Expr {
                 e.span = new_span;
                 Expr::Resume(e)
             }
+            Expr::Error(mut e) => {
+                e.span = new_span;
+                Expr::Error(e)
+            }
         }
     }
 
@@ -2102,7 +2140,8 @@ impl Expr {
             | Expr::Closure(_)
             | Expr::LabeledBlock(_)
             | Expr::WithHandler(_)
-            | Expr::Resume(_) => {
+            | Expr::Resume(_)
+            | Expr::Error(_) => {
                 // Not expected inside pure default expressions; leave as-is.
             }
         }
@@ -2485,6 +2524,11 @@ pub enum Pattern {
         kind: RangeKind,
         span: Span,
     },
+    /// Placeholder for a pattern that failed to parse, emitted by error
+    /// recovery (e.g. a broken element in a tuple pattern or match-arm pattern)
+    /// so the surrounding pattern list survives. Inert in every later phase;
+    /// the batch path is fail-fast and never sees it.
+    Error(Span),
 }
 
 #[derive(Debug, Clone)]
@@ -2552,6 +2596,11 @@ pub enum Type {
     MutReference(Box<Type>),
     /// Type pack spread inside a tuple: `..T` in `[i32, ..T, bool]`
     TypePackSpread(String, Span),
+    /// Placeholder for a type that failed to parse, emitted by error recovery
+    /// (e.g. a broken element in a type-argument or parameter list) so the
+    /// surrounding list survives. Resolves to the elaborator's error type; the
+    /// batch path is fail-fast and never sees it.
+    Error(Span),
 }
 
 impl Type {
@@ -2567,7 +2616,8 @@ impl Type {
             | Type::Tuple(_)
             | Type::Reference(_)
             | Type::MutReference(_)
-            | Type::TypePackSpread(_, _) => None,
+            | Type::TypePackSpread(_, _)
+            | Type::Error(_) => None,
         }
     }
 
@@ -2589,6 +2639,7 @@ impl Type {
             Type::Tuple(elems) => elems.first().map(Type::span).unwrap_or_default(),
             Type::Reference(inner) | Type::MutReference(inner) => inner.span(),
             Type::TypePackSpread(_, span) => *span,
+            Type::Error(span) => *span,
         }
     }
 }

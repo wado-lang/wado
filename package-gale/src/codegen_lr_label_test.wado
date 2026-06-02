@@ -30,7 +30,7 @@ WS : (' '|'\\n') -> skip ;
         Ok(g) => g,
         Err(err) => panic(`parse_checked failed: {err.message}`),
     };
-    let out = generate(&mut grammar, &GenerateOptions { highlight: false });
+    let out = generate(&mut grammar, &GenerateOptions { highlight: false }).source;
 
     // After the fix the LR-aware codegen emits `scan_e_atom` and at
     // least one `scan_e_lr_<N>`. The non-LR path emits a unified

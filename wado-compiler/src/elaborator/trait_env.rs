@@ -760,9 +760,10 @@ fn classify_position(
                 PositionKind::ForeignType
             }
         }
-        Type::Function(_) | Type::NamespacedGeneric(_) | Type::TypePackSpread(..) => {
-            PositionKind::ForeignType
-        }
+        Type::Function(_)
+        | Type::NamespacedGeneric(_)
+        | Type::TypePackSpread(..)
+        | Type::Error(_) => PositionKind::ForeignType,
     }
 }
 
