@@ -378,9 +378,9 @@ satisfied at the end of 7-B.
   updated to match.
 
 Order is 7-A → 7-B: 7-A is incremental and de-risks 7-B, and while 7-A
-runs the combined walk's TIR stays live as reify's reference. Migration
-guard: a temporary structural diff between the combined walk's TIR and
-reify's TIR detects any drift before 7-B removes the former.
+runs the combined walk's TIR stays live as reify's reference. The E2E
+suite and WIR golden fixtures carry the equivalence guarantee at every
+step.
 
 Each stage keeps `mise run test`, the WIR golden fixtures, and the LSP
 query tests green. Performance is not tracked during migration; see
