@@ -21,7 +21,7 @@
 //!
 //! Default categories (Phase 1): Sets, LexerExec, ParseTrees.
 
-use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { args, env, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use {
     Preopens,
     Descriptor,
@@ -316,14 +316,19 @@ impl TriageMap {
 ///   (full-tree or sub-tree). A descriptor can be Stage A green and Stage B
 ///   skipped if its `[output]` block is a host-language artefact rather
 ///   than a parse tree, and vice versa.
-/// - **stage_b_oracle** comes from the `[stage_b_oracle_skip]` bucket and
-///   applies to Stage B′ — the JVM-oracle-derived expected-tree path that
-///   covers descriptors whose `[output]` is a host artefact (most commonly
-///   an `<writeln("$text")>` action-print) but whose grammar would still
-///   produce a meaningful parse tree under ANTLR4. Entries here suppress
-///   the manifest emission so the shell wrapper never invokes the oracle
-///   on a descriptor known to mis-codegen or to produce a tree we cannot
-///   pin (e.g. cases that still depend on action-bodies after stripping).
+/// - **stage_b_oracle** comes from the `[stage_b_oracle_skip]` and
+///   `[stage_b_oracle_todo]` buckets and applies to Stage B′ — the
+///   JVM-oracle-derived expected-tree path that covers descriptors
+///   whose `[output]` is a host artefact (most commonly an
+///   `<writeln("$text")>` action-print) but whose grammar would still
+///   produce a meaningful parse tree under ANTLR4. `_skip` entries
+///   suppress manifest emission so the shell wrapper never invokes the
+///   oracle on a descriptor known to mis-codegen or to produce a tree
+///   we cannot pin. `_todo` entries DO get oracle output (the manifest
+///   is emitted and the shell wrapper runs the oracle), but the emitted
+///   test is marked `#[TODO]` — used for descriptors whose oracle tree
+///   doesn't match Gale's current output (typically because Gale's
+///   static prediction can't reproduce ANTLR4's runtime ATN decision).
 ///
 /// The maps are deliberately independent so triaging one axis never quietly
 /// toggles the others.
@@ -351,6 +356,8 @@ struct TriageMaps {
 ///   [stage_b_skip]
 ///   "Category/Name" = "reason text"
 ///   [stage_b_oracle_skip]
+///   "Category/Name" = "reason text"
+///   [stage_b_oracle_todo]
 ///   "Category/Name" = "reason text"
 fn load_triage_maps(content: &Option<String>) -> TriageMaps {
     let mut category = TriageMap::new();
@@ -390,6 +397,7 @@ fn load_triage_maps(content: &Option<String>) -> TriageMaps {
             "stage_b_todo" => stage_b.entries.push(TriageEntry { key, triage: Triage::Todo(reason) }),
             "stage_b_skip" => stage_b.entries.push(TriageEntry { key, triage: Triage::Skip(reason) }),
             "stage_b_oracle_skip" => stage_b_oracle.entries.push(TriageEntry { key, triage: Triage::Skip(reason) }),
+            "stage_b_oracle_todo" => stage_b_oracle.entries.push(TriageEntry { key, triage: Triage::Todo(reason) }),
             _ => {
             },
         }
@@ -980,15 +988,25 @@ fn emit_stage_a_tokens_test_file(category: &String, name: &String, input: &Strin
 struct CliArgs {
     want_all: bool,
     categories: Array<String>,
+    /// When true, skip the descriptor walk entirely and instead drain
+    /// `tests/antlr4-compat/oracle-pending/` into
+    /// `tests/antlr4-compat/stage_b_oracle/`. Driven by the shell
+    /// wrapper after it has invoked the JVM oracle for each pending
+    /// candidate; see `scripts/extract-antlr4-descriptors.sh`.
+    finalize_stage_b_oracle: bool,
 }
 
 fn parse_cli_args(arguments: Array<String>) -> CliArgs {
     let mut want_all = false;
     let mut categories: Array<String> = [];
+    let mut finalize_stage_b_oracle = false;
     for let a of arguments {
         match a {
             "all" => {
                 want_all = true;
+            },
+            "--finalize-stage-b-oracle" => {
+                finalize_stage_b_oracle = true;
             },
             _ => {
                 if !a.starts_with("-") {
@@ -1000,7 +1018,7 @@ fn parse_cli_args(arguments: Array<String>) -> CliArgs {
     if !want_all && categories.is_empty() {
         categories = default_categories();
     }
-    return CliArgs { want_all, categories };
+    return CliArgs { want_all, categories, finalize_stage_b_oracle };
 }
 
 export fn run() with Stdout, Stderr, Environment, Preopens {
@@ -1014,6 +1032,11 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         return;
     }
     let root = dirs[0].0;
+
+    if cli.finalize_stage_b_oracle {
+        finalize_stage_b_oracle(&root);
+        return;
+    }
 
     // Open the antlr4 descriptors source. If missing, error out — never auto-init.
     let src_root = match open_dir(&root, &descriptors_root(), false) {
@@ -1670,6 +1693,211 @@ fn write_oracle_pending_files(
         return Result::Err(e);
     }
     return Result::Ok(());
+}
+
+// ===== Stage B′ finalize: oracle-pending → stage_b_oracle =====
+
+/// Drain `tests/antlr4-compat/oracle-pending/` into
+/// `tests/antlr4-compat/stage_b_oracle/`. For each `<C>/<N>.input`,
+/// if a matching `<C>/<N>.expected` exists (produced by the shell
+/// wrapper after the JVM oracle ran), emit `<C>/<N>_test.wado`.
+/// Sweep any `stage_b_oracle/<C>/<N>_test.wado` whose corresponding
+/// `oracle-pending/<C>/<N>.input` no longer exists.
+///
+/// Reads `status.toml` to honour `[stage_b_oracle_todo]` (emit with
+/// `#[TODO]`). `[stage_b_oracle_skip]` entries were already filtered
+/// out by the extract pass, so no manifest entry exists for them and
+/// no emission happens here.
+///
+/// The resolved ANTLR4 version is taken from the `ORACLE_VERSION`
+/// environment variable (set by `extract-antlr4-descriptors.sh`
+/// after invoking `antlr4-oracle.sh`). When unset, the emitted file
+/// records `<unspecified>` — useful for offline reproduction but a
+/// signal that the shell wrapper did not run the oracle this round.
+fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment {
+    let pending_root = match open_dir(root, &"package-gale/tests/antlr4-compat/oracle-pending", false) {
+        Ok(d) => d,
+        Err(_) => {
+            // No oracle-pending — nothing to finalize. Don't error; this
+            // is the steady state when no Stage B′ candidates exist.
+            return;
+        },
+    };
+    let compat_dir = match open_dir(root, &"package-gale/tests/antlr4-compat", true) {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln("finalize: cannot open antlr4-compat/");
+            return;
+        },
+    };
+    let oracle_out_root = match ensure_dir(&compat_dir, &"stage_b_oracle") {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln("finalize: cannot create stage_b_oracle/");
+            return;
+        },
+    };
+    let status_text = match read_file_to_string(root, &status_file_path()) {
+        Ok(s) => Option::Some(s),
+        Err(_) => null,
+    };
+    let oracle_triage_map = load_triage_maps(&status_text).stage_b_oracle;
+    let oracle_version = match env("ORACLE_VERSION") {
+        Some(v) => v,
+        None => "<unspecified>",
+    };
+    let mut emitted = 0;
+    let mut emitted_todo = 0;
+    let mut swept = 0;
+    let mut pending_no_expected = 0;
+    for let category of list_subdirs(&pending_root) {
+        let pending_cat = match open_dir(&pending_root, &category, false) {
+            Ok(d) => d,
+            Err(_) => {
+                eprintln(`finalize: cannot open oracle-pending/{category}/`);
+                continue;
+            },
+        };
+        let oracle_cat = match ensure_dir(&oracle_out_root, &category) {
+            Ok(d) => d,
+            Err(_) => {
+                eprintln(`finalize: cannot create stage_b_oracle/{category}/`);
+                continue;
+            },
+        };
+        let input_files = list_files_with_suffix(&pending_cat, &".input");
+        let mut keep_test_files: Array<String> = [];
+        for let input_filename of &input_files {
+            // Strip ".input" (6 chars) to get the descriptor base name.
+            let base = input_filename.substr_bytes(0, input_filename.len() - 6);
+            let start_filename = `{base}.start`;
+            let expected_filename = `{base}.expected`;
+            let test_filename = `{base}_test.wado`;
+            keep_test_files.push(test_filename);
+            let key = `{category}/{base}`;
+            let start_text = match read_file_to_string(&pending_cat, &start_filename) {
+                Ok(s) => s,
+                Err(_) => {
+                    eprintln(`finalize: missing oracle-pending/{category}/{start_filename}`);
+                    continue;
+                },
+            };
+            let expected_raw = match read_file_to_string(&pending_cat, &expected_filename) {
+                Ok(s) => s,
+                Err(_) => {
+                    // Oracle hasn't run for this entry (or failed). Drop
+                    // any prior test file so the corpus reflects current
+                    // reality.
+                    pending_no_expected += 1;
+                    let _ = remove_file(&oracle_cat, &test_filename);
+                    continue;
+                },
+            };
+            let input_text = match read_file_to_string(&pending_cat, input_filename) {
+                Ok(s) => s,
+                Err(_) => {
+                    eprintln(`finalize: cannot read oracle-pending/{category}/{*input_filename}`);
+                    continue;
+                },
+            };
+            let expected_tree = strip_eof_marker(&expected_raw);
+            let triage = oracle_triage_map.lookup(&key);
+            let src = emit_stage_b_oracle_test_file(
+                &category,
+                &base,
+                &input_text,
+                &start_text,
+                &expected_tree,
+                &triage,
+                &oracle_version,
+            );
+            if let Err(_) = write_file_string(&oracle_cat, &test_filename, &src) {
+                eprintln(`finalize: cannot write stage_b_oracle/{category}/{test_filename}`);
+                continue;
+            }
+            if triage matches { Todo(_) } {
+                emitted_todo += 1;
+            }
+            emitted += 1;
+        }
+        // Sweep stale tests: anything in oracle_cat not in keep_test_files.
+        for let existing of list_files_with_suffix(&oracle_cat, &"_test.wado") {
+            if !keep_test_files.contains(&existing) {
+                let _ = remove_file(&oracle_cat, &existing);
+                swept += 1;
+            }
+        }
+    }
+    println(`finalize: emitted {emitted} Stage B′ test(s) ({emitted_todo} #[TODO])`);
+    println(`finalize:           swept {swept} stale test(s)`);
+    println(`finalize:           {pending_no_expected} pending without .expected (oracle did not produce output)`);
+}
+
+/// Strip the trailing ` <EOF>` marker that ANTLR4 TestRig appends to
+/// every `-tree` output, plus surrounding whitespace. Gale's
+/// `to_string_tree()` omits the EOF token, so we normalise the oracle
+/// side to match.
+///
+/// The marker always appears as ` <EOF>` (space-prefixed) immediately
+/// before the closing `)` of the start rule. We strip the first such
+/// occurrence; defensive about there being none (an empty input would
+/// still emit `<EOF>` so this is in practice always present, but the
+/// stripper is total).
+fn strip_eof_marker(raw: &String) -> String {
+    let trimmed = raw.trim();
+    let needle = " <EOF>";
+    match trimmed.find(needle) {
+        Some(idx) => {
+            let prefix = trimmed.substr_bytes(0, idx);
+            let suffix = trimmed.substr_bytes(idx + needle.len(), trimmed.len());
+            return `{prefix}{suffix}`;
+        },
+        None => return trimmed,
+    }
+}
+
+fn emit_stage_b_oracle_test_file(
+    category: &String,
+    name: &String,
+    input: &String,
+    start: &String,
+    expected_tree: &String,
+    triage: &Triage,
+    oracle_version: &String,
+) -> String {
+    let mut w = CodeWriter::new();
+    w.line(&"#![generated(by = \"package-gale/scripts/extract_antlr4_descriptors.wado --finalize-stage-b-oracle\")]");
+    w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
+    w.line(&"//");
+    w.line(&`// Source descriptor: {*category}/{*name} (ANTLR4 runtime-testsuite).`);
+    w.line(&`// Expected tree: ANTLR4 oracle (antlr-{*oracle_version}-complete.jar) on the`);
+    w.line(&"//   action-body-stripped grammar — see package-gale/CLAUDE.md");
+    w.line(&"//   \"Stage B′\" for the rationale.");
+    w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_oracle_*]).");
+    w.blank();
+    w.line(&`use t from "../../grammars/{*category}/{*name}.g4"`);
+    w.line(&"    with {");
+    w.line(&"        generator: {");
+    w.line(&`            module: "../../../../src/generator.wado",`);
+    w.line(&"            options: { highlight: false },");
+    w.line(&`            output_dir: "tests/generated/antlr4_compat_b_oracle/{*category}/{*name}",`);
+    w.line(&"        },");
+    w.line(&"    };");
+    w.line(&`use \{ normalize_tree \} from "../../grammars/{*category}/{*name}.g4";`);
+    w.blank();
+    if let Todo(reason) = triage {
+        w.line(&"#[TODO]");
+        w.line(&`// triage: {escape_for_wado_str(reason)}`);
+    }
+    w.begin(&`test "stage_b_oracle: {*category}/{*name}"`);
+    w.line(&`let input = "{escape_for_wado_str(input)}";`);
+    w.line(&`let expected = "{escape_for_wado_str(expected_tree)}";`);
+    w.line(&`let root = t::{parse_call_for_start(start)}(&input).unwrap();`);
+    w.line(&"let actual = t::to_tree(&root).to_string_tree();");
+    w.line(&"let norm = normalize_tree(&expected);");
+    w.line(&"assert actual == norm, `actual:   {actual}\\nexpected: {norm}`;");
+    w.end();
+    return w.to_string();
 }
 
 fn normalize_output_for_stage_b(raw: &String) -> Option<String> {

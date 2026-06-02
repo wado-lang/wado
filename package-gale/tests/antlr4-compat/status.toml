@@ -78,3 +78,27 @@
 "ParseTrees/Sync" = "sub-tree: expected [output] is ANTLR4's error-recovered sub-tree (synchronisation set fallback). Same error-recovery gap as `ParseTrees/ExtraToken`."
 
 [stage_b_skip]
+
+# Stage B′ — JVM-oracle-derived expected trees. Entries here are read
+# by `scripts/extract_antlr4_descriptors.wado` (manifest emission) and
+# the `--finalize-stage-b-oracle` mode (emit-time `#[TODO]` decoration).
+#
+# `_skip` — suppresses manifest emission entirely. Use for descriptors
+# whose grammar still does not codegen cleanly after action-body
+# stripping (most commonly when the grammar references tree-rewrite
+# or attribute-grammar features the action stripper cannot remove
+# in isolation), or whose oracle tree happens to converge on Gale's
+# current output via coincidence and pinning would mask a future
+# Gale-side regression.
+#
+# `_todo` — manifest is emitted, oracle runs, test file is emitted
+# with `#[TODO]`. Use for descriptors where the oracle's tree is the
+# right expected value but Gale's current generated parser produces
+# a different tree (typically an ATN-class decision Gale's static
+# prediction cannot reproduce). Flipping these from `_todo` to
+# unmarked passes is the regression signal that the prediction gap
+# closed.
+
+[stage_b_oracle_skip]
+
+[stage_b_oracle_todo]
