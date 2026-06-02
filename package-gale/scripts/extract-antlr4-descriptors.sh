@@ -50,7 +50,7 @@ cargo run --quiet --bin wado -- run \
 echo "==> Phase 2/3: Stage B′ oracle invocation"
 if ! command -v java >/dev/null 2>&1 || ! command -v javac >/dev/null 2>&1; then
     echo "extract: skipping Stage B′ oracle invocation — neither 'java' nor 'javac' on PATH." >&2
-    echo "extract: install a JDK 17+ (e.g. via 'mise install java') to enable Stage B′." >&2
+    echo "extract: install a JDK 17+ (e.g. apt install default-jdk) to enable Stage B′." >&2
 else
     if [ ! -d "$PENDING_ROOT" ]; then
         echo "extract: no oracle-pending/ — nothing to invoke the oracle on."
