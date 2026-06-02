@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780417210637,
+  "lastUpdate": 1780423344130,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29009,6 +29009,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/733eb4c174d2c39208251bdc18152266e8bd11d5"
         },
         "date": 1780417210119,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17195,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "14a9dcdd127bbf22f6eb6d01286f6996c011bdfd",
+          "message": "Merge pull request #1274 from wado-lang/claude/arxiv-wado-compiler-review-5DGc1\n\nRicher type/trait diagnostics: symmetric operator errors and trait-bound reason chains",
+          "timestamp": "2026-06-03T02:53:28+09:00",
+          "tree_id": "46506745d802a85b280f3baf0d1c56069bedeb47",
+          "url": "https://github.com/wado-lang/wado/commit/14a9dcdd127bbf22f6eb6d01286f6996c011bdfd"
+        },
+        "date": 1780423343609,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
