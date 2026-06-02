@@ -14,6 +14,16 @@ use super::Elaborator;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 use super::util;
 
+/// Body-walk placeholder for an operator expression. Stage 7-B: the
+/// combined walk records the dispatch decision (`operator_dispatch`) and
+/// typechecks the operands, but no longer assembles the overloaded
+/// operator's `MethodCall` TIR — reify rebuilds it from the recorded
+/// fact + the AST. The returned `TirExpr` only needs the right `type_id`
+/// + `span` for the caller's outer typecheck / `expression_types` recording.
+fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(TirExprKind::Unit, type_id, span)
+}
+
 /// The right-hand side of an assignment passed to
 /// [`Elaborator::assign_to_target`]. Either an AST expression (the
 /// regular [`Elaborator::resolve_assign`] path) or an already-resolved
@@ -1560,34 +1570,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             wrap_flags.push(wrap);
         }
 
-        let receiver =
-            self.adjust_receiver_for_self_kind(receiver, resolved.self_kind, false, span);
-
-        let call_args: Vec<CallArg> = args
-            .into_iter()
-            .zip(wrap_flags.iter().copied())
-            .map(|(arg, wrap)| {
-                let arg_expr = if wrap {
-                    let arg_ref_type = self
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::Ref(arg.type_id));
-                    TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref,
-                            expr: Box::new(arg),
-                        },
-                        arg_ref_type,
-                        span,
-                    )
-                } else {
-                    arg
-                };
-                CallArg::new(arg_expr, false)
-            })
-            .collect();
-
         let mangled_method_name = MethodName::format_local(
             &resolved.impl_name,
             Some(&resolved.trait_name),
@@ -1620,7 +1602,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_operator_dispatch(
                 ast_id,
                 super::sem::types::OperatorDispatch {
-                    function_ref: function_ref.clone(),
+                    function_ref,
                     self_kind: resolved.self_kind,
                     arg_ref_wraps: wrap_flags,
                     return_type: resolved.return_type,
@@ -1629,14 +1611,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        Self::build_tir_method_call(
-            receiver,
-            function_ref,
-            vec![],
-            call_args,
-            resolved.return_type,
-            span,
-        )
+        // Stage 7-B: reify rebuilds the overloaded operator's `MethodCall`
+        // from the recorded `operator_dispatch` (receiver adjustment via
+        // `self_kind`, arg `&`-wrapping via `arg_ref_wraps`) + the AST; the
+        // combined walk projects only the result type. `receiver` and
+        // `args` were resolved / typechecked above for their side effects.
+        let _ = (receiver, args);
+        placeholder(resolved.return_type, span)
     }
 
     /// Wrap an `Ord::cmp` method call into a `bool` by comparing the returned
