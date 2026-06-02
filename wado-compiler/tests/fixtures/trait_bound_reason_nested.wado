@@ -1,0 +1,20 @@
+// The reason chain unfolds recursively through nested structs: Outer fails
+// because field `inner: Inner` fails, which fails because field `f` is a
+// function type. The deepest cause is reported as a further `note:` line.
+struct Inner { f: fn() -> i32 }
+struct Outer { inner: Inner }
+
+fn smallest<T: Ord>(a: T, b: T) -> T {
+    if a < b { return a; }
+    return b;
+}
+
+export fn run() {
+    let _ = smallest(
+        Outer { inner: Inner { f: || 1 } },
+        Outer { inner: Inner { f: || 2 } },
+    );
+}
+
+__DATA__
+{"compile_error": "because field `inner`"}

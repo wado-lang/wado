@@ -386,11 +386,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     if !self.type_implements_trait(type_arg, bound) {
                                         // Get the type name for the error message
                                         let type_name = self.type_id_to_string(type_arg);
+                                        let reason =
+                                            self.trait_unimpl_reason_chain(type_arg, bound);
                                         let _ =
                                             self.logger.error(TypeError::TraitBoundNotSatisfied {
                                                 type_name,
                                                 trait_name: bound.clone(),
                                                 param_name: param_name.clone(),
+                                                reason,
                                                 span,
                                             });
                                     }

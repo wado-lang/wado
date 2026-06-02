@@ -1,0 +1,83 @@
+// Stage 2: at an if-stmt boundary, post-if field-env state is the
+// lattice meet of post-arm snapshots — every `(local, field) → value`
+// that both arms agree on survives. Prior behaviour was a blanket
+// `clear_fields()` that dropped facts neither arm touched (e.g. an
+// `arr.used` binding held outside the if).
+//
+// We use `Array<u16>` rather than a plain struct because SROA would
+// scalarize a plain struct into per-field locals, bypassing the
+// field-env path entirely. `Array<T>`'s `repr` is an opaque
+// `builtin::array<T>` so SROA leaves the struct intact and `arr.used`
+// stays as a tracked field — the exact shape zlib's loop-carried
+// arrays take.
+//
+// We also need a runtime-opaque flag to defeat inline +
+// const-condition splicing; `MonotonicClock::now() != itself` is
+// always false but opaque at compile time.
+
+use { println, Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+
+#[inline(never)]
+fn check_two_arm_meet(flag: bool) -> i32 {
+    let arr: Array<u16> = Array::filled(16, 0 as u16);
+    let mut x: i32 = 0;
+    // Both arms write `x` but neither touches `arr`. Meet of
+    // post-then and post-else preserves `arr.used = 16`.
+    if flag {
+        x = 10;
+    } else {
+        x = 20;
+    }
+    if builtin::unlikely(1 >= arr.len()) {
+        panic("dead_two_arm_meet_2731");
+    }
+    return arr.len() + x;
+}
+
+#[inline(never)]
+fn check_no_else_falling_through(flag: bool) -> i32 {
+    let arr: Array<u16> = Array::filled(32, 0 as u16);
+    let mut x: i32 = 0;
+    // No-else if, then-arm falls through (writes `x` and continues).
+    // The implicit-else equals the pre-if state, so the meet
+    // preserves `arr.used = 32` regardless of which path ran.
+    if flag {
+        x = 7;
+    }
+    if builtin::unlikely(2 >= arr.len()) {
+        panic("dead_no_else_meet_2731");
+    }
+    return arr.len() + x;
+}
+
+#[inline(never)]
+fn check_arm_writes_diverge(flag: bool) -> i32 {
+    let mut arr: Array<u16> = Array::filled(16, 0 as u16);
+    // Then-arm mutates `arr` (push pulls .used); else-arm leaves it.
+    // Post-arm bindings disagree → meet drops `arr.used` from
+    // field_env. The function must reflect the runtime length.
+    if flag {
+        arr.push(99 as u16);
+    }
+    return arr.len();
+}
+
+export fn run() with Stdout, MonotonicClock {
+    // Runtime-opaque flag.
+    let now = MonotonicClock::now();
+    let flag: bool = now != now;  // false at runtime, opaque at compile time
+
+    let a = check_two_arm_meet(!flag);
+    let b = check_two_arm_meet(flag);
+    let c = check_no_else_falling_through(!flag);
+    let d = check_arm_writes_diverge(!flag);
+    let e = check_arm_writes_diverge(flag);
+    println(`{a},{b},{c},{d},{e}`);
+}
+
+__DATA__
+{
+    "stdout": "26,36,39,17,16\n",
+    "wir_not_expect:O2": ["dead_two_arm_meet_2731", "dead_no_else_meet_2731"]
+}

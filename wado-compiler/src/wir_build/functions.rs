@@ -467,16 +467,21 @@ fn register_single_function(
 
 /// Register data segments for string literals.
 fn register_string_data(ctx: &mut WirContext<'_>) {
-    let literals: Vec<String> = ctx.string_literals.clone();
-    for s in &literals {
+    // `package` is a `&NirPackage` whose lifetime outlives `ctx`, so copying
+    // the reference lets us iterate the source literals while still calling
+    // `&mut self` registration methods. `register_string_literal` dedups via
+    // `string_literal_map`, so segment indices are assigned in first-occurrence
+    // order regardless of duplicates in the package list.
+    let package = ctx.package;
+    for s in &package.string_literals {
         ctx.register_string_literal(s);
     }
 }
 
 /// Register data segments for bytes literals.
 fn register_bytes_data(ctx: &mut WirContext<'_>) {
-    let literals: Vec<Vec<u8>> = ctx.bytes_literals.clone();
-    for b in &literals {
+    let package = ctx.package;
+    for b in &package.bytes_literals {
         ctx.register_bytes_literal(b);
     }
 }

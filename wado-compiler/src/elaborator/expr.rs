@@ -9,8 +9,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirMatchArm,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TirUnaryOp,
-    TypeId, TypeTable,
+    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
@@ -20,98 +19,6 @@ use super::infer::InferCtx;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, LabeledBlockTarget, TypeError, VarRef};
 use super::util;
-
-/// Per-node decision for [`Elaborator::any_in_tree`] predicate walks.
-#[derive(Clone, Copy)]
-enum Step {
-    /// Predicate matched — short-circuit and return `true`.
-    Match,
-    /// Not matched here, and do not descend into children.
-    Skip,
-    /// Not matched here; continue descending into children.
-    Descend,
-}
-
-/// A probe driving [`Elaborator::any_in_tree`]. Each visit is consulted
-/// independently for statements and expressions; an implementor can
-/// carry its own mutable state across calls (e.g. an in-scope-labels
-/// stack) so analyses needing more context than a per-node match keep
-/// their state in one place.
-trait TreeProbe {
-    fn check_stmt(&mut self, stmt: &TirStmt) -> Step;
-    fn check_expr(&mut self, _expr: &TirExpr) -> Step {
-        Step::Descend
-    }
-}
-
-/// Searches for `break <label>` whose `label` is NOT defined inside
-/// the walked loop body. Labels declared by `LabeledBlock` nodes we
-/// enter are pushed onto `inner_labels`; a `break label` matches only
-/// when `label` is not on that stack.
-///
-/// `inner_labels` is append-only: once a `LabeledBlock` introduces a
-/// name, that name stays in scope for the rest of the walk. That's
-/// safe because the walk only proceeds forward through the body — a
-/// `break <label>` further along that mentions an earlier inner label
-/// would be a use of an already-defined label, and one that mentions a
-/// later inner label is invalid Wado source rejected by the elaborator
-/// before this analysis runs.
-#[derive(Default)]
-struct LoopEscape {
-    inner_labels: Vec<String>,
-}
-
-impl TreeProbe for LoopEscape {
-    fn check_stmt(&mut self, stmt: &TirStmt) -> Step {
-        match &stmt.kind {
-            TirStmtKind::Break { label: None, .. } => Step::Match,
-            TirStmtKind::Break { label: Some(l), .. } => {
-                if self.inner_labels.iter().any(|owned| owned == l) {
-                    Step::Skip
-                } else {
-                    Step::Match
-                }
-            }
-            TirStmtKind::Loop { .. } | TirStmtKind::VariadicForOf { .. } => Step::Skip,
-            TirStmtKind::LabeledBlock { label, .. } => {
-                self.inner_labels.push(label.clone());
-                Step::Descend
-            }
-            _ => Step::Descend,
-        }
-    }
-
-    fn check_expr(&mut self, expr: &TirExpr) -> Step {
-        if let TirExprKind::LabeledBlock { label, .. } = &expr.kind {
-            self.inner_labels.push(label.clone());
-        }
-        Step::Descend
-    }
-}
-
-/// Searches for `break <label>` targeting `label`, treating an inner
-/// labeled block that reuses the same name as a shadowing scope (so
-/// `break <label>` inside it targets the inner block, not us).
-struct BreakToLabel<'a> {
-    label: &'a str,
-}
-
-impl TreeProbe for BreakToLabel<'_> {
-    fn check_stmt(&mut self, stmt: &TirStmt) -> Step {
-        match &stmt.kind {
-            TirStmtKind::Break { label: Some(l), .. } if l == self.label => Step::Match,
-            TirStmtKind::LabeledBlock { label: own, .. } if own == self.label => Step::Skip,
-            _ => Step::Descend,
-        }
-    }
-
-    fn check_expr(&mut self, expr: &TirExpr) -> Step {
-        match &expr.kind {
-            TirExprKind::LabeledBlock { label: own, .. } if own == self.label => Step::Skip,
-            _ => Step::Descend,
-        }
-    }
-}
 
 /// Outcome of trying to derive type arguments for a generic function
 /// reference from an expected `fn(...)` (or `&fn(...)`) type. Distinguishes
@@ -604,7 +511,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // resolved while compiling `core:json`, overwriting a `core:json`
         // `i32` literal's type with `f64`). Reify reads these facts under the
         // same key after `with_const_module_perspective` swaps to `const_module`.
-        if let Some((const_module, const_ty, const_expr)) = self
+        if let Some((const_module, type_id, const_expr)) = self
             .sem
             .decls
             .associated_constants
@@ -612,7 +519,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .cloned()
         {
             let prev_override = self.ann_module_override.replace(const_module);
-            let type_id = self.resolve_type(&const_ty);
             let resolved = self.resolve_expr(&const_expr, ctx, Some(type_id));
             self.ann_module_override = prev_override;
             return TirExpr::new(resolved.kind, type_id, ident.span);
@@ -1264,6 +1170,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::sem::types::GenericInstantiation {
                 type_args: type_args.to_vec(),
                 instance_type,
+                mangled_name: None,
             },
         );
     }
@@ -2872,338 +2779,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Find the return type from return statements in a block.
-    /// Returns the type of the first return statement found, or None if no returns.
-    pub(super) fn find_return_type_in_block(block: &TirBlock) -> Option<TypeId> {
-        for stmt in &block.stmts {
-            if let Some(type_id) = Self::find_return_type_in_stmt(stmt) {
-                return Some(type_id);
-            }
-        }
-        None
-    }
-
-    /// Whether every control path through `block` exits before reaching
-    /// the end — either via a `return` statement, a divergent expression
-    /// (`panic("…")`, a `match` whose every arm diverges), an `if` /
-    /// `if let` whose every branch exits, a `loop { … }` with no `break`
-    /// that escapes it, or a labeled block whose body provably exits
-    /// without a `break <label>` returning control to the surrounding
-    /// scope.
-    ///
-    /// Used by the missing-return validator to skip the diagnostic only
-    /// when the body provably never reaches a fall-through return — the
-    /// previous heuristic accepted any nested `return` even when only
-    /// one branch of an `if` had it, which let partial-return bodies
-    /// through and produced invalid core Wasm at codegen ("type
-    /// mismatch: expected i32 but nothing on stack").
-    pub(super) fn block_always_exits(block: &TirBlock) -> bool {
-        block.stmts.iter().any(Self::stmt_always_exits)
-    }
-
-    fn stmt_always_exits(stmt: &TirStmt) -> bool {
-        match &stmt.kind {
-            TirStmtKind::Return { .. } => true,
-            TirStmtKind::Expr(e) => Self::expr_always_exits(e),
-            TirStmtKind::If {
-                then_block,
-                else_block: Some(else_block),
-                ..
-            } => Self::block_always_exits(then_block) && Self::block_always_exits(else_block),
-            TirStmtKind::Loop { body } => !Self::loop_body_can_escape(body),
-            TirStmtKind::LabeledBlock { block, label } => {
-                Self::block_always_exits(block) && !Self::block_can_break_to_label(block, label)
-            }
-            _ => false,
-        }
-    }
-
-    fn expr_always_exits(expr: &TirExpr) -> bool {
-        if expr.type_id == TypeTable::NEVER {
-            return true;
-        }
-        match &expr.kind {
-            TirExprKind::Block(block) => Self::block_always_exits(block),
-            TirExprKind::LabeledBlock { block, label, .. } => {
-                Self::block_always_exits(block) && !Self::block_can_break_to_label(block, label)
-            }
-            TirExprKind::If {
-                then_branch,
-                else_branch: Some(else_branch),
-                ..
-            } => Self::block_always_exits(then_branch) && Self::block_always_exits(else_branch),
-            TirExprKind::Match { arms, .. } => {
-                !arms.is_empty() && arms.iter().all(|a| Self::expr_always_exits(&a.body))
-            }
-            // `resume value` transfers control out of the enclosing
-            // handler method — `synthesis::effect_dispatch` lowers it to
-            // `return value`. Its expression type is `Unit` even though
-            // it diverges, so `find_return_type_in_expr` matches it here
-            // for return-type inference; mirror that for definite-exit.
-            TirExprKind::Resume { .. } => true,
-            // `with … do { body }` evaluates `body` once and returns
-            // its value (typed `Unit` by default — even when body
-            // always returns from the surrounding function via
-            // `return`). Defer to `body`'s definite-exit instead of
-            // the wrapper's `Unit` type so
-            //   `fn foo() -> i32 { with E => h do { return X; } }`
-            // satisfies the missing-return check.
-            TirExprKind::WithHandler { body, .. } => Self::block_always_exits(body),
-            _ => false,
-        }
-    }
-
-    /// Whether `body` (a `loop`'s body) contains a `break` that would
-    /// either target this loop (unlabeled) or escape it (labeled). Either
-    /// case lets control resume after the loop, so the loop is NOT
-    /// divergent.
-    ///
-    /// Nested `loop`s and `VariadicForOf`s catch their own unlabeled
-    /// breaks; closure bodies have their own scope. Labeled breaks
-    /// whose target is defined INSIDE this loop body (e.g. a labeled
-    /// block within the loop) stay inside too — the inner-labels stack
-    /// shadows them so a user pattern like `loop { scope: { break
-    /// scope: V; } }` is correctly classified as divergent.
-    fn loop_body_can_escape(body: &TirBlock) -> bool {
-        let mut probe = LoopEscape::default();
-        Self::any_in_tree(body, &mut probe)
-    }
-
-    /// Whether `block` contains a `break <label>` that would exit a
-    /// labeled block with this label. An inner labeled block that
-    /// reuses `label` (in either stmt or expr position) shadows it.
-    fn block_can_break_to_label(block: &TirBlock, label: &str) -> bool {
-        let mut probe = BreakToLabel { label };
-        Self::any_in_tree(block, &mut probe)
-    }
-
-    /// Generic "exists a node matching the predicate" walker shared by
-    /// `loop_body_can_escape` and `block_can_break_to_label`. The probe
-    /// is consulted at every statement and expression; either visit
-    /// may return [`Step::Match`] to short-circuit, [`Step::Skip`] to
-    /// prune the subtree (e.g. a nested `loop` swallows its own
-    /// breaks, a same-labeled inner block shadows an outer label), or
-    /// [`Step::Descend`] to keep recursing. Closure bodies are never
-    /// entered — their control flow stays in the closure's own scope.
-    fn any_in_tree<P: TreeProbe>(block: &TirBlock, probe: &mut P) -> bool {
-        block.stmts.iter().any(|s| Self::any_in_stmt(s, probe))
-    }
-
-    fn any_in_stmt<P: TreeProbe>(stmt: &TirStmt, probe: &mut P) -> bool {
-        match probe.check_stmt(stmt) {
-            Step::Match => return true,
-            Step::Skip => return false,
-            Step::Descend => {}
-        }
-        match &stmt.kind {
-            TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => {
-                Self::any_in_tree(then_block, probe)
-                    || else_block
-                        .as_ref()
-                        .is_some_and(|b| Self::any_in_tree(b, probe))
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                Self::any_in_tree(body, probe)
-            }
-            TirStmtKind::VariadicForOf { iterable, body, .. } => {
-                Self::any_in_expr(iterable, probe) || Self::any_in_tree(body, probe)
-            }
-            TirStmtKind::Expr(e) => Self::any_in_expr(e, probe),
-            TirStmtKind::Let { value, .. }
-            | TirStmtKind::LetDestructure { value, .. }
-            | TirStmtKind::TaskReturn { value, .. }
-            | TirStmtKind::Return {
-                value: Some(value), ..
-            } => Self::any_in_expr(value, probe),
-            _ => false,
-        }
-    }
-
-    fn any_in_expr<P: TreeProbe>(expr: &TirExpr, probe: &mut P) -> bool {
-        match probe.check_expr(expr) {
-            Step::Match => return true,
-            Step::Skip => return false,
-            Step::Descend => {}
-        }
-        // Every variant that can carry a sub-expression or block is
-        // recursed into, mirroring `TirRefVisitor::walk_expr` — a
-        // `break` / `return` can be buried inside virtually any
-        // context (`(if cond { break; 0 } else { 0 }) + 1`, struct
-        // literal fields, call args, `with` handler bodies, …) and
-        // missing one variant would let `block_always_exits` skip
-        // `MissingReturn` for a function that can actually fall
-        // through. The lone exception is `Closure`: a closure's body
-        // is its own scope, so breaks / returns there don't touch the
-        // surrounding function.
-        match &expr.kind {
-            // Pure leaves — nothing to descend into.
-            TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
-            | TirExprKind::StringLiteral(_)
-            | TirExprKind::BytesLiteral(_)
-            | TirExprKind::Null
-            | TirExprKind::Unit
-            | TirExprKind::Local { .. }
-            | TirExprKind::FuncRef { .. }
-            | TirExprKind::GlobalVarGet { .. }
-            | TirExprKind::Capture { .. }
-            | TirExprKind::EnumConstruct { .. } => false,
-
-            // Block / labeled block — descend straight into the body.
-            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-                Self::any_in_tree(block, probe)
-            }
-
-            // Control-flow expression forms.
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                Self::any_in_expr(condition, probe)
-                    || Self::any_in_tree(then_branch, probe)
-                    || else_branch
-                        .as_ref()
-                        .is_some_and(|b| Self::any_in_tree(b, probe))
-            }
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                Self::any_in_expr(scrutinee, probe)
-                    || arms.iter().any(|arm| {
-                        arm.guard
-                            .as_ref()
-                            .is_some_and(|g| Self::any_in_expr(g, probe))
-                            || Self::any_in_expr(&arm.body, probe)
-                    })
-            }
-
-            // Single / paired subexpressions.
-            TirExprKind::GlobalVarSet { value, .. } | TirExprKind::Resume { value } => {
-                Self::any_in_expr(value, probe)
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                Self::any_in_expr(left, probe) || Self::any_in_expr(right, probe)
-            }
-            TirExprKind::Unary { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::TupleSpread { expr: inner }
-            | TirExprKind::TupleZip { expr: inner }
-            | TirExprKind::TypePackExpansion {
-                call_expr: inner, ..
-            }
-            | TirExprKind::VariantTag { expr: inner }
-            | TirExprKind::VariantTest { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. } => Self::any_in_expr(inner, probe),
-            TirExprKind::Assign { target, value }
-            | TirExprKind::Index {
-                expr: target,
-                index: value,
-            } => Self::any_in_expr(target, probe) || Self::any_in_expr(value, probe),
-
-            // Calls / arg lists.
-            TirExprKind::Call { args, .. } => {
-                args.iter().any(|a| Self::any_in_expr(&a.expr, probe))
-            }
-            TirExprKind::CmRawCall { args, .. } => args.iter().any(|a| Self::any_in_expr(a, probe)),
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                Self::any_in_expr(receiver, probe)
-                    || args.iter().any(|a| Self::any_in_expr(&a.expr, probe))
-            }
-            TirExprKind::IndirectCall { callee, args } => {
-                Self::any_in_expr(callee, probe) || args.iter().any(|a| Self::any_in_expr(a, probe))
-            }
-
-            // Aggregate literals.
-            TirExprKind::StructLiteral { fields, .. } => {
-                fields.iter().any(|f| Self::any_in_expr(&f.value, probe))
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                elements.iter().any(|e| Self::any_in_expr(e, probe))
-            }
-            TirExprKind::VariantConstruct { payload, .. } => payload
-                .as_ref()
-                .is_some_and(|p| Self::any_in_expr(p, probe)),
-
-            // `with … do { body }`: descend into each handler's value
-            // expression (evaluated in the surrounding scope) and the
-            // do-block body.
-            TirExprKind::WithHandler { bindings, body, .. } => {
-                bindings
-                    .iter()
-                    .any(|b| Self::any_in_expr(&b.handler, probe))
-                    || Self::any_in_tree(body, probe)
-            }
-
-            // Template-string interpolations carry resolved sub-expressions.
-            TirExprKind::TemplateString { parts } => parts.iter().any(|part| match part {
-                TirTemplatePart::Interpolation { expr, .. } => Self::any_in_expr(expr, probe),
-                TirTemplatePart::Literal(_) => false,
-            }),
-
-            // Closures stay in their own scope.
-            TirExprKind::Closure { .. } => false,
-        }
-    }
-
-    pub(super) fn find_return_type_in_stmt(stmt: &TirStmt) -> Option<TypeId> {
-        match &stmt.kind {
-            TirStmtKind::Return { value: Some(expr) } => Some(expr.type_id),
-            TirStmtKind::Return { value: None } => Some(TypeTable::UNIT),
-            TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => {
-                if let Some(t) = Self::find_return_type_in_block(then_block) {
-                    return Some(t);
-                }
-                if let Some(else_blk) = else_block
-                    && let Some(t) = Self::find_return_type_in_block(else_blk)
-                {
-                    return Some(t);
-                }
-                None
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                Self::find_return_type_in_block(body)
-            }
-            TirStmtKind::Expr(expr) => Self::find_return_type_in_expr(expr),
-            _ => None,
-        }
-    }
-
-    fn find_return_type_in_expr(expr: &TirExpr) -> Option<TypeId> {
-        match &expr.kind {
-            TirExprKind::Match { arms, .. } => {
-                for arm in arms {
-                    if let Some(t) = Self::find_return_type_in_expr(&arm.body) {
-                        return Some(t);
-                    }
-                }
-                None
-            }
-            TirExprKind::Block(block) => Self::find_return_type_in_block(block),
-            // `resume value` is the handler-method analogue of `return value`:
-            // it transfers control out of the current method and yields
-            // `value` to the enclosing computation. The MVP lowers it to
-            // `Return { value }` (no post-resume continuation), so a method
-            // whose body terminates with `resume` satisfies the
-            // missing-return check just like a method that ends with
-            // `return`.
-            TirExprKind::Resume { value } => Some(value.type_id),
-            _ => None,
-        }
-    }
-
     /// Resolve a struct literal
     pub(super) fn resolve_struct_literal(
         &mut self,
@@ -3546,10 +3121,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         for bound in bounds {
                             if !self.type_implements_trait(type_arg, bound) {
                                 let type_name = self.type_id_to_string(type_arg);
+                                let reason = self.trait_unimpl_reason_chain(type_arg, bound);
                                 let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                                     type_name,
                                     trait_name: bound.clone(),
                                     param_name: param_name.clone(),
+                                    reason,
                                     span: struct_lit.span,
                                 });
                             }
@@ -3563,17 +3140,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 struct_module_source,
                 type_args.clone(),
             );
-            // Stage 5 (Gap 1 of WEP 2026-05-26): record the inferred
-            // type_args + the resulting `GenericInstance` so reify can
-            // emit `TirExprKind::StructLiteral { struct_type, … }`
-            // without re-running `infer_struct_type_args`.
-            self.record_generic_instantiation(struct_lit.id, type_args.clone(), struct_type);
             // Build mangled name with type arguments
             let arg_names: Vec<String> = type_args
                 .iter()
                 .map(|&t| self.tysys.type_table.borrow().type_name(t))
                 .collect();
             let mangled_name = mangle_generic_name(&struct_name, &arg_names);
+            // Stage 5 (Gap 1 of WEP 2026-05-26): record the inferred
+            // type_args + the resulting `GenericInstance` + the mangled
+            // name so reify can emit `TirExprKind::StructLiteral { struct_type,
+            // struct_name, … }` without re-running `infer_struct_type_args`
+            // or `mangle_generic_name`.
+            self.record_generic_instantiation_with_mangle(
+                struct_lit.id,
+                type_args,
+                struct_type,
+                Some(mangled_name.clone()),
+            );
             (struct_type, mangled_name, fields)
         } else {
             let struct_type = self
@@ -3626,12 +3209,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let module_source = self.current_module_source.clone();
 
         // Check if this anonymous struct type already exists (structural equivalence)
-        if let Some(existing_type) = self
+        let existing_type = self
             .tysys
             .type_table
             .borrow()
-            .find_struct_type(&anon_name, &module_source)
-        {
+            .find_struct_type(&anon_name, &module_source);
+        if let Some(existing_type) = existing_type {
+            self.record_generic_instantiation_with_mangle(
+                struct_lit.id,
+                vec![],
+                existing_type,
+                Some(anon_name.clone()),
+            );
             return TirExpr::new(
                 TirExprKind::StructLiteral {
                     struct_type: existing_type,
@@ -3695,6 +3284,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span: struct_lit.span,
             serde_rename_all: None,
         });
+
+        self.record_generic_instantiation_with_mangle(
+            struct_lit.id,
+            vec![],
+            struct_type,
+            Some(anon_name.clone()),
+        );
 
         TirExpr::new(
             TirExprKind::StructLiteral {
@@ -4026,7 +3622,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_option {
             self.resolve_question_mark_option(inner, ctx, qm.span)
         } else {
-            self.resolve_question_mark_result(inner, ctx, qm.span)
+            self.resolve_question_mark_result(inner, ctx, qm.span, qm.id)
         }
     }
 
@@ -4122,6 +3718,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         inner: TirExpr,
         ctx: &mut FunctionContext,
         span: Span,
+        qm_id: AstId,
     ) -> TirExpr {
         let inner_type = inner.type_id;
         let return_type = ctx.return_type;
@@ -4196,7 +3793,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let converted_err = if inner_err_type == outer_err_type {
             e_expr
         } else {
-            self.resolve_from_call(outer_err_type, inner_err_type, e_expr, span)
+            self.resolve_from_call(outer_err_type, inner_err_type, e_expr, span, qm_id)
         };
 
         // Build Result::Err(converted_err) with the function's return Result type
@@ -4257,12 +3854,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// Looks up `impl From<from_type> for target_type` and generates
     /// `target_type::from(value)` as a static method call.
+    ///
+    /// `caller_id` is the [`AstId`] of the source-level expression that
+    /// triggered this conversion (the `?` operator, a static `T::from(v)`
+    /// call, etc.). The resolved facts are recorded under that key so
+    /// reify can rebuild the same `Call` without re-walking impl blocks or
+    /// re-mangling the method name.
     pub(super) fn resolve_from_call(
         &mut self,
         target_type: TypeId,
         from_type: TypeId,
         value: TirExpr,
         span: Span,
+        caller_id: crate::ast::AstId,
     ) -> TirExpr {
         let tt = self.tysys.type_table.borrow();
         let target_name = tt.type_name(target_type);
@@ -4280,6 +3884,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Find the module source that provides the From impl
         let module_source = self.find_from_impl_module(&target_name, &from_name);
+
+        let key = self.ann_key(caller_id);
+        self.sem.types.from_call_facts.insert(
+            key,
+            super::sem::types::FromCallFacts {
+                module_source: module_source.clone(),
+                mangled_name: method_name.clone(),
+                target_name: target_name.clone(),
+                from_name,
+                from_trait_name: from_trait_name.clone(),
+            },
+        );
 
         TirExpr::new(
             TirExprKind::Call {
@@ -4488,10 +4104,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !self.type_implements_trait(element_type, &ord_trait_name)
         {
             let type_name = self.type_id_to_string(element_type);
+            let reason = self.trait_unimpl_reason_chain(element_type, &ord_trait_name);
             let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                 type_name,
                 trait_name: ord_trait_name,
                 param_name: "T".to_string(),
+                reason,
                 span: range.span,
             });
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
@@ -4581,10 +4199,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             vec![element_type],
         );
 
+        // Mangled name for the resulting `TirExprKind::StructLiteral`.
+        // The monomorphizer keys instantiation lookup on this form
+        // (`RangeExclusive<i32>`), so reify and the combined walk both emit
+        // the mangled name. Recorded so reify reads it instead of running
+        // its own `type_name(t)` + `mangle_generic_name`.
+        let arg_names = vec![self.tysys.type_table.borrow().type_name(element_type)];
+        let mangled_name = mangle_generic_name(&struct_name, &arg_names);
+        self.record_generic_instantiation_with_mangle(
+            range.id,
+            vec![element_type],
+            struct_type,
+            Some(mangled_name.clone()),
+        );
+
         TirExpr::new(
             TirExprKind::StructLiteral {
                 struct_type,
-                struct_name,
+                struct_name: mangled_name,
                 fields,
             },
             struct_type,

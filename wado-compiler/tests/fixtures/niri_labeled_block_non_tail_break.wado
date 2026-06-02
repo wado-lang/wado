@@ -1,0 +1,56 @@
+// Verifies `has_non_tail_break_to`: a labeled block whose body has
+// an early `break label:` (not just the trailing one) must drop
+// field-env knowledge on exit, because the early break carries a
+// different field state than the body bottom.
+//
+// `label: { ...; break label: 99; }` exits early with value 99.
+// Pre-block `c.size = 16` should NOT survive past the labeled block
+// because the early break could land in either the early-exit state
+// or the (unreachable) body-bottom state — without a proper join,
+// the conservative answer is to drop everything.
+//
+// Compared with the "tail-only break" shape that the inliner
+// produces, which DOES allow field knowledge to flow through.
+
+use { println, Stdout } from "core:cli";
+
+struct Container {
+    pub size: i32,
+    pub tag: i32,
+}
+
+fn early_break_clears_post_block() -> i32 {
+    let mut c = Container { size: 16, tag: 0 };
+    // Labeled block with an EARLY break (non-tail): if cond fires,
+    // the block exits with value 99 *and* writes c.size to 7 first;
+    // the trailing break (which never fires here at compile time
+    // since `if` is opaque) carries the body-bottom state. Without
+    // `has_non_tail_break_to`, niri might let the pre-block
+    // c.size = 16 binding survive — but mid-block writes could
+    // change c.size before the break fires.
+    let _v: i32 = early_label: {
+        if c.size > 0 {
+            c.size = 7;
+            break early_label: 99;
+        }
+        break early_label: 0;
+    };
+    // At runtime c.size = 7 (the if fires). The bounds check on a
+    // literal index against c.size must reflect the post-block
+    // state. A bug where c.size = 16 survives would make this fold
+    // wrong.
+    if builtin::unlikely(10 >= c.size) {
+        return c.size;
+    }
+    return -1;
+}
+
+export fn run() with Stdout {
+    let a = early_break_clears_post_block();
+    println(`{a}`);
+}
+
+__DATA__
+{
+    "stdout": "7\n"
+}

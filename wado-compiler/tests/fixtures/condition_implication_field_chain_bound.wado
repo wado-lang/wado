@@ -1,0 +1,41 @@
+// The `Bound` unification lets `extract_loop_guard` accept a
+// `local.field` (FieldChain) RHS directly, instead of bailing on
+// anything except a `Local` or `IntLiteral`. The pattern is the
+// non-LICM-hoisted form `for n in 0..arr.used { … }`.
+//
+// `condition_implication`'s identity regime then matches the inner
+// bounds-check RHS against the same FieldChain structurally — no
+// constant folding needed — and the dead `unlikely(n >= arr.used)`
+// branch goes away.
+
+use { println, Stdout } from "core:cli";
+
+struct Container {
+    pub size: i32,
+}
+
+#[inline(never)]
+fn loop_guard_field_chain_bound(c: &Container, src: &Array<u16>) -> i32 {
+    let mut sum: i32 = 0;
+    // Loop bound is `c.size`, a FieldChain shape. The inner `src[n]`
+    // bounds check folds against the same structural bound via the
+    // unified Bound identity match.
+    for let mut n = 0; n < c.size; n += 1 {
+        if n < src.len() {
+            sum += src[n] as i32;
+        }
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let c = Container { size: 4 };
+    let src: Array<u16> = Array::filled(16, 7 as u16);
+    let r = loop_guard_field_chain_bound(&c, &src);
+    println(`{r}`);
+}
+
+__DATA__
+{
+    "stdout": "28\n"
+}

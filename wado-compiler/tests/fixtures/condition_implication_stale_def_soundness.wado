@@ -1,0 +1,59 @@
+// Soundness regression: `condition_implication`'s `DefMap` only sees
+// `Let` statements (`record_def_from_stmt`). Pre-Stage-2, a mutable
+// local's StructLit / IntConst recording could go stale after a
+// subsequent `Assign`, but the predicate compared identities only, so
+// the stale value never reached a comparison. Stage 1.5 / Stage 2
+// introduced literal-mixed numeric comparison via `bound_to_constant`,
+// turning the staleness into a real elimination bug.
+//
+// This fixture exercises the pattern: a struct literal records
+// `c.size = 16`, then `c.size = 99` mutates the field, and a later
+// `if 50 >= c.size { return -1 }` would be unsoundly eliminated if
+// the eliminator used the stale `DefMap` entry `c.size = 16` — since
+// `50 >= 16` is true, the dead-branch path would constant-fold the
+// `if` to "always taken" and the function would return `-1`.
+//
+// The taint analysis (`collect_tainted_locals`) marks `(c, size)` as
+// field-tainted, so the StructLit's `size` entry is dropped from
+// `DefMap`. `is_implied_false` then bails (cannot resolve the bound
+// to a constant) and the `if` survives. At runtime `c.size == 99` and
+// `50 >= 99` is false, so the body is not taken and the function
+// returns `99`.
+
+use { println, Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+
+struct Container {
+    pub size: i32,
+}
+
+#[inline(never)]
+fn check_stale_def(_unused: bool) -> i32 {
+    let mut c = Container { size: 16 };
+    // Mutate the field. Pre-fix, `DefMap` records `c.size = Const(16)`
+    // from the StructLit and does NOT update for this Assign.
+    c.size = 99;
+    // Bounds-check shape: `unlikely(50 >= c.size)`. Pre-fix would
+    // numerically compare `50 >= 16` (stale) and constant-fold the
+    // `if` to always-taken — wrong. Post-fix the `size` field is
+    // taint-filtered from the StructLit recording, the eliminator
+    // bails, and the runtime comparison runs (and returns false at
+    // `c.size == 99`).
+    if builtin::unlikely(50 >= c.size) {
+        return -1;
+    }
+    return c.size;
+}
+
+export fn run() with Stdout, MonotonicClock {
+    let now = MonotonicClock::now();
+    let opaque: bool = now != now; // false at runtime, opaque at compile time
+    let v = check_stale_def(opaque);
+    // c.size = 99 at runtime, so 50 >= 99 is false → no panic, v = 99.
+    println(`{v}`);
+}
+
+__DATA__
+{
+    "stdout": "99\n"
+}

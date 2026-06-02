@@ -115,3 +115,4 @@ It may include TODOs on WIP.
 - [Elaborator Re-architecture — TypeSystem / Annotate / Reify](./wep-2026-05-26-elaborator-rearchitecture.md)
 - [Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md)
 - [`NirExprKind::ArrayLiteral` — a NIR-Materialized Array Node](./wep-2026-05-31-nir-array-literal.md)
+- [Diagnostic Reason Chains for Type and Trait Errors](./wep-2026-06-02-diagnostic-reason-chains.md)

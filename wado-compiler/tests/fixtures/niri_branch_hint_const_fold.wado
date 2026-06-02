@@ -1,0 +1,39 @@
+// Verify that niri folds `builtin::likely(c)` / `builtin::unlikely(c)`
+// wrappers when the inner condition `c` is a constant.
+//
+// Without this, a const-folded bounds check like `1 >= 16` stays buried
+// inside `builtin::unlikely(...)` and the panic branch survives to WIR
+// codegen. The hot loops in `core:zlib` (e.g. `inflate_table`'s
+// `offs[1] = 0`) leak these dead branches into hot code at -O2.
+//
+// Use a unique panic message in each branch so a `wir_not_expect` check
+// confirms the dead branch was actually pruned (not just bypassed at
+// runtime).
+
+use { println, Stdout } from "core:cli";
+
+fn check_unlikely() -> i32 {
+    if builtin::unlikely(1 >= 16) {
+        panic("dead_branch_unlikely_2731");
+    }
+    return 100;
+}
+
+fn check_likely() -> i32 {
+    if builtin::likely(0 < 1) {
+        return 200;
+    }
+    panic("dead_branch_likely_2731");
+}
+
+export fn run() with Stdout {
+    let a = check_unlikely();
+    let b = check_likely();
+    println(`{a},{b}`);
+}
+
+__DATA__
+{
+    "stdout": "100,200\n",
+    "wir_not_expect:O2": ["dead_branch_unlikely_2731", "dead_branch_likely_2731"]
+}

@@ -1,9 +1,9 @@
-//! Elaborator lowering for effect handler installation (`with E => h do { ... }`)
+//! Annotation pass for effect handler installation (`with E => h do { ... }`)
 //! and the `resume` control-flow expression.
 //!
 //! See WEP 2026-04-11 (Effect Handler) for the language semantics.
 //!
-//! Validation responsibilities here:
+//! Validation responsibilities here (preserved post-7-B):
 //! - Each binding's effect name must resolve to a known effect declaration
 //!   (not a regular trait, struct, or unknown name).
 //! - The handler value's underlying type (after stripping `&` / `&mut`) must
@@ -13,104 +13,108 @@
 //!   performed by the existing return-type checker (resume lowers to
 //!   `Return { value }` in the dispatch synthesis pass).
 //!
-//! Bundled handlers (`with &mut h do`) expand at this layer to one
-//! `TirHandlerBinding` per effect that the handler's underlying type
-//! implements. Each generated binding goes through the same downstream
-//! dispatch-synthesis path as an explicit `Effect => h` form, and bindings
-//! are emitted in **source order** — both within a single bundled handler
-//! (sorted by impl-block discovery order) and across bundled / explicit
-//! entries on the same `with` line — so a later binding installs as the
-//! inner (active) handler when the same effect appears more than once.
+//! Stage 7-B: the combined walk records `HandlerBindingFacts` (and walks
+//! every handler value + body for sub-expression facts) but no longer
+//! constructs `TirHandlerBinding` / `TirExprKind::WithHandler` /
+//! `TirExprKind::Resume`. Reify rebuilds those from the AST + the
+//! recorded facts (`sem.types.handler_bindings`).
+//!
+//! Bundled handlers (`with &mut h do`) record the per-effect enumeration
+//! (one entry per `impl <Effect> for <Type>` in scope) plus a shared
+//! `bundle_group` so reify emits one `TirHandlerBinding` per recorded
+//! effect, all sharing the same bundle group's synthesised
+//! `__h_<bundle>` local.
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::tir::{
-    EffectRef, ResolvedType, TirExpr, TirExprKind, TirHandlerBinding, TypeId, TypeTable,
-};
+use crate::tir::{EffectRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Resolve `with E1 => h1, ... do { body }`.
+    /// Annotate `with E1 => h1, ... do { body }`. Walks each handler
+    /// binding for fact recording + diagnostics, walks the body for
+    /// fact recording, returns a `WithHandler`-shaped `TirExpr` whose
+    /// `bindings` are empty (reify rebuilds them from
+    /// `HandlerBindingFacts`) but whose `body` is the real resolved
+    /// `TirBlock`.
+    ///
+    /// The retained `WithHandler` shape (rather than a bare `Unit`
+    /// placeholder) is a Stage 7-B holdover: the surrounding combined-
+    /// walk TIR is otherwise dead after Stage 5 (the AST-level
+    /// missing-return analysis in `control_flow.rs` doesn't read it),
+    /// so this shape and the inner body could be reduced to a `Unit`
+    /// placeholder. Kept verbatim to keep this `resolve_with_handler`
+    /// slice byte-identical with the pre-7-B output until the
+    /// downstream `expr.rs` / `stmt.rs` leaves also stop emitting TIR
+    /// — at that point the combined walk's TIR is uniformly dead and
+    /// the shape can be flattened in one pass. Reify replaces this
+    /// expression wholesale with its own `WithHandler` built from the
+    /// recorded facts.
     pub(super) fn resolve_with_handler(
         &mut self,
         with_expr: &ast::WithHandlerExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let mut bindings: Vec<TirHandlerBinding> = Vec::with_capacity(with_expr.handlers.len());
-        // Counter feeding `TirHandlerBinding.bundle_group`. A bundled
-        // clause may expand into multiple effect bindings that must all
-        // share one synthesised `__h_<bundle>` local (so a value-form
-        // handler is evaluated exactly once and mutations propagate
-        // across effects). Allocating ids per `with` block keeps them
-        // unique within one synthesis-pass invocation.
+        // Counter feeding `HandlerBindingFacts.bundle_group` for the
+        // bundled-handler form. A bundled clause may expand into multiple
+        // effect bindings that share one synthesised `__h_<bundle>` local
+        // (value-form handler evaluated once, mutations propagate across
+        // effects). Per-`with` allocation keeps ids unique inside one
+        // synthesis-pass invocation.
         let mut next_bundle_group: u32 = 0;
 
         for binding in &with_expr.handlers {
-            let resolved = self.resolve_handler_binding(binding, ctx, &mut next_bundle_group);
-            // A bundled binding may expand to multiple `TirHandlerBinding`s
-            // (one per effect the handler type implements). They are
-            // appended in the order the elaborator enumerated them, which
-            // means they install in that order — earlier ones become the
-            // outer handlers and later ones become inner.
-            bindings.extend(resolved);
+            self.resolve_handler_binding(binding, ctx, &mut next_bundle_group);
         }
 
-        // Body is resolved in the same function context (locals introduced
+        // Body is annotated in the same function context (locals introduced
         // here remain in the function frame). A new lexical scope is opened
-        // so handler-introduced bindings, if any, don't leak — this matches
-        // how regular block expressions behave.
+        // so handler-introduced bindings, if any, don't leak — matches how
+        // regular block expressions behave.
         ctx.enter_scope();
         let body = self.resolve_block(&with_expr.body, ctx, None);
         ctx.exit_scope();
 
-        // The block expression's value is currently always Unit: the parser
-        // produces a statement-only body for `with ... do { ... }` and the
-        // WEP does not (yet) define a value for the `with` expression.
-        let result_type = TypeTable::UNIT;
-
         TirExpr::new(
             TirExprKind::WithHandler {
-                bindings,
+                bindings: Vec::new(),
                 body,
-                result_type,
+                result_type: TypeTable::UNIT,
             },
-            result_type,
+            TypeTable::UNIT,
             with_expr.span,
         )
     }
 
-    /// Resolve a single binding inside a `with ... do` clause.
-    ///
-    /// Returns one `TirHandlerBinding` for the explicit form
-    /// (`Effect => handler_expr`), or one binding per effect the handler's
-    /// underlying type implements for the bundled form (`handler_expr`,
-    /// no `=>`). Bindings are returned in install order. `next_bundle_group`
+    /// Annotate a single binding inside a `with ... do` clause. `bundle_group`
     /// is consumed (post-incremented) only when the binding expands as
-    /// bundled.
+    /// bundled. Diagnostics + fact recording are the only outputs; no TIR.
     fn resolve_handler_binding(
         &mut self,
         binding: &ast::EffectHandlerBinding,
         ctx: &mut FunctionContext,
         next_bundle_group: &mut u32,
-    ) -> Vec<TirHandlerBinding> {
+    ) {
         match &binding.effect {
             Some(effect_ty) => {
-                vec![self.resolve_explicit_handler_binding(binding, effect_ty, ctx)]
+                self.resolve_explicit_handler_binding(binding, effect_ty, ctx);
             }
-            None => self.resolve_bundled_handler_binding(binding, ctx, next_bundle_group),
+            None => {
+                self.resolve_bundled_handler_binding(binding, ctx, next_bundle_group);
+            }
         }
     }
 
-    /// Resolve `Effect => handler_expr` — the explicit form.
+    /// Annotate `Effect => handler_expr` — the explicit form.
     fn resolve_explicit_handler_binding(
         &mut self,
         binding: &ast::EffectHandlerBinding,
         effect_ty: &ast::Type,
         ctx: &mut FunctionContext,
-    ) -> TirHandlerBinding {
+    ) {
         // Resolve the effect name. Use `resolve_effects` so that LSP
         // jump-to-def edges are recorded just like in `with E1, E2`
         // function signatures.
@@ -204,12 +208,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Stage 5 / Gap 13 — record this explicit binding so
-        // reify_with_handler reads the single-effect entry
-        // without re-resolving the effect reference.
+        // reify_with_handler reads the single-effect entry without
+        // re-resolving the effect reference.
         if let Some(EffectRef::Concrete {
-            name: ref eff_name,
-            module_source: ref eff_module,
-        }) = effect
+            name: eff_name,
+            module_source: eff_module,
+        }) = &effect
         {
             self.record_handler_binding_facts(
                 binding.id,
@@ -217,50 +221,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     effects: vec![super::sem::types::HandlerEffectEntry {
                         name: eff_name.clone(),
                         module_source: eff_module.clone(),
-                        trait_type_args: trait_type_args.clone(),
+                        trait_type_args,
                     }],
                     bundle_group: None,
                     handler_type,
                 },
             );
         }
-
-        TirHandlerBinding {
-            effect,
-            trait_type_args,
-            handler,
-            handler_type,
-            span: binding.span,
-            bundle_group: None,
-        }
     }
 
-    /// Resolve `handler_expr` — the bundled form.
+    /// Annotate `handler_expr` — the bundled form.
     ///
     /// Walks every `impl <Effect> for <T>` block where `T` is the handler
-    /// value's underlying type, and emits one binding per effect, in
-    /// impl-discovery order.
-    ///
-    /// Diagnostics:
-    /// - If the handler underlying type implements no effect, emit
-    ///   `BundledHandlerImplementsNoEffect`. The user almost certainly
-    ///   meant `with E => h do`.
-    /// - If the handler type is `Unknown`/`Error`, return no bindings
-    ///   silently — earlier diagnostics already reported the cause.
-    ///
-    /// Emits `BundledHandlerUnsupportedHandlerType` for handler types
-    /// that can't be index-keyed by name (type parameters, associated-
-    /// type projections, function types, tuples, ...). User code can
-    /// reach those cases — e.g. `fn f<T: SomeEffect>(t: &mut T) { with
-    /// &mut t do { ... } }` — so a diagnostic is the right shape, not a
-    /// `panic!`. The explicit `with E => h do` form remains available
-    /// as the workaround.
+    /// value's underlying type, records the per-effect enumeration + shared
+    /// `bundle_group`, and emits diagnostics for unsupported handler types
+    /// or empty-impl cases.
     fn resolve_bundled_handler_binding(
         &mut self,
         binding: &ast::EffectHandlerBinding,
         ctx: &mut FunctionContext,
         next_bundle_group: &mut u32,
-    ) -> Vec<TirHandlerBinding> {
+    ) {
         let handler = self.resolve_expr(&binding.handler, ctx, None);
         let handler_type = self.handler_underlying_type(handler.type_id);
 
@@ -268,7 +249,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match resolved {
             // Already-diagnosed shapes: keep quiet so we don't pile a
             // bundled-specific error on top.
-            ResolvedType::Unknown | ResolvedType::Error => return Vec::new(),
+            ResolvedType::Unknown | ResolvedType::Error => return,
             // Nameable, indexable types — proceed with enumeration.
             ResolvedType::Struct { .. }
             | ResolvedType::Enum { .. }
@@ -282,9 +263,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Anything else can't be the target of an `impl Effect for T`
             // block. These cases are reachable from user code — the most
             // common is a `&T` where `T` is a generic parameter — so we
-            // emit a proper diagnostic instead of panicking. Returning an
-            // empty bindings list lets the rest of the `with` body
-            // continue resolving (the user gets one error, not a chain).
+            // emit a proper diagnostic instead of panicking.
             ref other => {
                 let type_name = self.tysys.type_table.borrow().type_name(handler_type);
                 let type_kind = describe_resolved_type_kind(other);
@@ -295,7 +274,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         type_kind,
                         span: binding.span,
                     });
-                return Vec::new();
+                return;
             }
         }
 
@@ -309,7 +288,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     type_name,
                     span: binding.span,
                 });
-            return Vec::new();
+            return;
         }
 
         // All bindings expanded from this single bundled clause share one
@@ -325,18 +304,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         *next_bundle_group += 1;
 
         // Stage 5 / Gap 13 — record the bundled binding's effect
-        // enumeration so reify_with_handler reproduces the same
-        // list without re-running collect_effect_impls_for_type.
+        // enumeration so reify_with_handler reproduces the same list
+        // without re-running collect_effect_impls_for_type.
         self.record_handler_binding_facts(
             binding.id,
             super::sem::types::HandlerBindingFacts {
                 effects: effects
-                    .iter()
+                    .into_iter()
                     .map(
                         |(name, module, type_args)| super::sem::types::HandlerEffectEntry {
-                            name: name.clone(),
-                            module_source: module.clone(),
-                            trait_type_args: type_args.clone(),
+                            name,
+                            module_source: module,
+                            trait_type_args: type_args,
                         },
                     )
                     .collect(),
@@ -344,23 +323,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 handler_type,
             },
         );
-
-        effects
-            .into_iter()
-            .map(
-                |(interface_name, effect_module, type_args)| TirHandlerBinding {
-                    effect: Some(EffectRef::Concrete {
-                        name: interface_name,
-                        module_source: effect_module,
-                    }),
-                    trait_type_args: type_args,
-                    handler: handler.clone(),
-                    handler_type,
-                    span: binding.span,
-                    bundle_group: Some(bundle_group),
-                },
-            )
-            .collect()
     }
 
     /// Walk every `impl Trait for <type_name>` block in scope and return
@@ -478,13 +440,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve `resume value`.
+    /// Annotate `resume value`.
     ///
     /// The expression itself yields `()` — `resume` is control-flow rather
     /// than a value-producing expression at the source level. The dispatch
-    /// synthesis pass lowers `Resume { value }` into `Return { value }`,
-    /// which is checked against the enclosing handler method's return type
-    /// by the existing return-type rules.
+    /// synthesis pass (running on reify's TIR) lowers `Resume { value }`
+    /// into `Return { value }`, which is checked against the enclosing
+    /// handler method's return type by the existing return-type rules.
+    ///
+    /// The returned `TirExpr` keeps the `Resume` shape (with the resolved
+    /// `value` inside) so the combined walk's missing-return validator
+    /// (`expr_always_exits`'s `TirExprKind::Resume` arm) still recognises
+    /// `fn handler_method(&self) -> Mark { resume self.mark }` as a
+    /// definite exit. Reify rebuilds its own `Resume` from the AST.
     pub(super) fn resolve_resume(
         &mut self,
         resume: &ast::ResumeExpr,

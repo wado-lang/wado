@@ -121,17 +121,26 @@ else
     log "Warning: Some tools may have failed to install"
 fi
 
-# Initialize the wasmtime submodule. wado-compiler has a path dependency on
-# vendor/wasmtime/crates/wasmtime (see [workspace.dependencies] in Cargo.toml),
-# so any cargo build/test/benchmark fails without it. Only this submodule is
-# needed for builds; the rest of vendor/ holds reference specs that can be
-# initialized on demand. --recommend-shallow keeps the checkout small.
-if [ -f .gitmodules ] && [ ! -f vendor/wasmtime/Cargo.toml ]; then
-    log "Initializing vendor/wasmtime submodule..."
-    if git submodule update --init --recommend-shallow vendor/wasmtime; then
-        log "vendor/wasmtime initialized"
+# Sync the wasmtime submodule to the commit pinned in the superproject.
+# wado-compiler has a path dependency on vendor/wasmtime/crates/wasmtime
+# (see [workspace.dependencies] in Cargo.toml), so any cargo build/test/
+# benchmark fails without it. Only this submodule is needed for builds; the
+# rest of vendor/ holds reference specs that can be initialized on demand.
+# --recommend-shallow keeps the checkout small.
+#
+# We run this unconditionally (not just when the checkout is absent): the
+# remote container provisions submodules at the fork's branch tip rather than
+# the pinned gitlink SHA, and since wado-lang/wasmtime's main tracks upstream,
+# a populated-but-stale checkout drifts away from the pin each session. A bare
+# `git submodule update` is idempotent when already in sync and reconciles the
+# checkout back to the pinned SHA otherwise; --force resets it even if the
+# container left the working tree pointing elsewhere.
+if [ -f .gitmodules ]; then
+    log "Syncing vendor/wasmtime submodule to the pinned commit..."
+    if git submodule update --init --force --recommend-shallow vendor/wasmtime; then
+        log "vendor/wasmtime synced to pinned commit"
     else
-        log "Warning: failed to initialize vendor/wasmtime submodule"
+        log "Warning: failed to sync vendor/wasmtime submodule"
     fi
 fi
 

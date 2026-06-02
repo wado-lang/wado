@@ -1,0 +1,58 @@
+// Verifies `LoopWriteCollector::mut_borrowed` and `written_fields`:
+// a loop body that takes `&mut c` (or writes `c.size = …`) must drop
+// `c.size`'s field-env binding so a post-loop bounds check on `c.size`
+// does NOT fold to the pre-loop literal value.
+//
+// Without proper write tracking, a stale `c.size = 16` binding would
+// let `unlikely(99 >= c.size)` const-fold to `false` and silently
+// remove the panic — even though `c.size` was mutated to 0 inside
+// the loop, which should make the bounds check fire at runtime.
+
+use { println, Stdout } from "core:cli";
+
+struct Container {
+    pub size: i32,
+}
+
+fn mutate_size(c: &mut Container) {
+    c.size = 0;
+}
+
+fn check_mut_borrowed() -> i32 {
+    let mut c = Container { size: 16 };
+    // Loop body mutably borrows `c` — pre-loop `c.size = 16` MUST be
+    // dropped before the post-loop bounds check.
+    for let mut i = 0; i < 1; i += 1 {
+        mutate_size(&mut c);
+    }
+    // c.size is now 0 at runtime. The bounds check must NOT fold.
+    if builtin::unlikely(99 >= c.size) {
+        return -1;
+    }
+    return c.size;
+}
+
+fn check_written_fields() -> i32 {
+    let mut c = Container { size: 16 };
+    // Loop body writes `c.size` directly (no `&mut` escape).
+    for let mut i = 0; i < 1; i += 1 {
+        c.size = 5;
+    }
+    // c.size is now 5 at runtime. The bounds check must NOT fold
+    // away because the loop wrote the field.
+    if builtin::unlikely(99 >= c.size) {
+        return -2;
+    }
+    return c.size;
+}
+
+export fn run() with Stdout {
+    let a = check_mut_borrowed();
+    let b = check_written_fields();
+    println(`{a},{b}`);
+}
+
+__DATA__
+{
+    "stdout": "-1,-2\n"
+}

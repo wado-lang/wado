@@ -391,6 +391,225 @@ pub struct FieldSnapshot {
     fields: IndexMap<u32, IndexMap<String, Value>>,
 }
 
+impl FieldSnapshot {
+    /// Empty snapshot — no bindings. Conceptually the bottom element
+    /// of the field-env lattice; meeting with anything else discards
+    /// every binding.
+    #[must_use]
+    pub fn empty() -> Self {
+        Self {
+            fields: IndexMap::default(),
+        }
+    }
+
+    /// Lattice meet: keep only `(local, field) → value` entries that
+    /// appear in **both** snapshots bound to the **same** value.
+    /// Entries present in only one snapshot, or bound to different
+    /// values, are dropped.
+    ///
+    /// Used by the driving visitor at if-stmt / match / switch
+    /// boundaries to compute the post-branch state as the join of the
+    /// per-arm post-states. The semantics mirror the standard
+    /// dataflow lattice join: a fact holds after the branch iff it
+    /// holds on every reachable arm with the same value.
+    #[must_use]
+    pub fn meet(self, other: &Self) -> Self {
+        let mut out: IndexMap<u32, IndexMap<String, Value>> = IndexMap::default();
+        for (local, my_fields) in self.fields {
+            let Some(other_fields) = other.fields.get(&local) else {
+                continue;
+            };
+            let mut merged: IndexMap<String, Value> = IndexMap::default();
+            for (name, val) in my_fields {
+                if other_fields.get(&name) == Some(&val) {
+                    merged.insert(name, val);
+                }
+            }
+            if !merged.is_empty() {
+                out.insert(local, merged);
+            }
+        }
+        Self { fields: out }
+    }
+}
+
+/// One arm of a branch (`if` then / else, `match` arm, `switch`
+/// arm) joining into [`FieldSnapshot::join_arms`]. An arm with
+/// `reachable = false` terminates (`return` / `break` / `continue`
+/// / `panic(…)` / call returning `!`) and is excluded from the meet.
+#[derive(Clone, Debug)]
+pub struct Arm {
+    pub reachable: bool,
+    pub post_state: FieldSnapshot,
+}
+
+impl FieldSnapshot {
+    /// Lattice meet of every reachable arm's post-state.
+    /// Unreachable arms (`reachable = false`) are excluded — their
+    /// writes are not observed past the branch. If no arm is
+    /// reachable, the post-branch point is itself dead code and
+    /// `snap_pre` is returned as an arbitrary placeholder.
+    ///
+    /// Callers model an implicit no-`else` arm as a reachable arm
+    /// carrying `snap_pre`.
+    #[must_use]
+    pub fn join_arms(snap_pre: FieldSnapshot, arms: impl IntoIterator<Item = Arm>) -> Self {
+        let mut accumulator: Option<FieldSnapshot> = None;
+        for arm in arms {
+            if !arm.reachable {
+                continue;
+            }
+            accumulator = Some(match accumulator {
+                None => arm.post_state,
+                Some(acc) => acc.meet(&arm.post_state),
+            });
+        }
+        accumulator.unwrap_or(snap_pre)
+    }
+}
+
+#[cfg(test)]
+mod field_snapshot_tests {
+    use super::{FieldSnapshot, PrimitiveType, Value};
+    use crate::hashmap::IndexMap;
+
+    fn int(v: u64) -> Value {
+        Value::Int {
+            value: v,
+            prim: PrimitiveType::I32,
+        }
+    }
+
+    fn snap(entries: &[(u32, &[(&str, Value)])]) -> FieldSnapshot {
+        let mut fields: IndexMap<u32, IndexMap<String, Value>> = IndexMap::default();
+        for (local, kvs) in entries {
+            let mut m: IndexMap<String, Value> = IndexMap::default();
+            for (k, v) in *kvs {
+                m.insert((*k).to_string(), *v);
+            }
+            fields.insert(*local, m);
+        }
+        FieldSnapshot { fields }
+    }
+
+    fn extract(s: &FieldSnapshot) -> Vec<(u32, Vec<(String, Value)>)> {
+        s.fields
+            .iter()
+            .map(|(l, m)| {
+                let mut v: Vec<_> = m.iter().map(|(k, v)| (k.clone(), *v)).collect();
+                v.sort_by(|a, b| a.0.cmp(&b.0));
+                (*l, v)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn meet_with_empty_is_empty() {
+        let a = snap(&[(0, &[("used", int(16))])]);
+        let empty = FieldSnapshot::empty();
+        assert_eq!(extract(&a.clone().meet(&empty)), vec![]);
+        assert_eq!(extract(&empty.meet(&a)), vec![]);
+    }
+
+    #[test]
+    fn meet_with_self_is_self() {
+        let a = snap(&[(0, &[("used", int(16)), ("cap", int(32))])]);
+        let result = a.clone().meet(&a);
+        assert_eq!(extract(&result), extract(&a));
+    }
+
+    #[test]
+    fn meet_keeps_matching_fields_drops_mismatched() {
+        let a = snap(&[(0, &[("used", int(16)), ("cap", int(32))])]);
+        let b = snap(&[(0, &[("used", int(16)), ("cap", int(64))])]);
+        // `used` agrees → kept; `cap` disagrees → dropped; local
+        // survives because at least one field agrees.
+        let result = a.meet(&b);
+        assert_eq!(
+            extract(&result),
+            vec![(0, vec![("used".to_string(), int(16))])]
+        );
+    }
+
+    #[test]
+    fn meet_drops_locals_only_present_in_one() {
+        let a = snap(&[(0, &[("used", int(16))]), (1, &[("size", int(8))])]);
+        let b = snap(&[(0, &[("used", int(16))])]);
+        // Local 1 is missing from `b` → dropped from meet.
+        let result = a.meet(&b);
+        assert_eq!(
+            extract(&result),
+            vec![(0, vec![("used".to_string(), int(16))])]
+        );
+    }
+
+    #[test]
+    fn meet_drops_local_when_no_field_agrees() {
+        let a = snap(&[(0, &[("used", int(16))])]);
+        let b = snap(&[(0, &[("used", int(32))])]);
+        // Single field disagrees → entire local dropped.
+        let result = a.meet(&b);
+        assert_eq!(extract(&result), vec![]);
+    }
+
+    fn arm(reachable: bool, post: FieldSnapshot) -> super::Arm {
+        super::Arm {
+            reachable,
+            post_state: post,
+        }
+    }
+
+    #[test]
+    fn join_arms_zero_reachable_returns_pre() {
+        let pre = snap(&[(0, &[("used", int(99))])]);
+        let result = FieldSnapshot::join_arms(
+            pre.clone(),
+            vec![
+                arm(false, FieldSnapshot::empty()),
+                arm(false, FieldSnapshot::empty()),
+            ],
+        );
+        assert_eq!(extract(&result), extract(&pre));
+    }
+
+    #[test]
+    fn join_arms_single_reachable_is_that_arms_post_state() {
+        let pre = snap(&[(0, &[("used", int(99))])]);
+        let then = snap(&[(0, &[("used", int(16))])]);
+        let result = FieldSnapshot::join_arms(
+            pre,
+            vec![arm(true, then.clone()), arm(false, FieldSnapshot::empty())],
+        );
+        assert_eq!(extract(&result), extract(&then));
+    }
+
+    #[test]
+    fn join_arms_multiple_reachable_meets_them() {
+        let pre = FieldSnapshot::empty();
+        let then = snap(&[(0, &[("used", int(16)), ("cap", int(32))])]);
+        let els = snap(&[(0, &[("used", int(16)), ("cap", int(64))])]);
+        let result = FieldSnapshot::join_arms(pre, vec![arm(true, then), arm(true, els)]);
+        // `used` agrees → kept; `cap` disagrees → dropped.
+        assert_eq!(
+            extract(&result),
+            vec![(0, vec![("used".to_string(), int(16))])]
+        );
+    }
+
+    #[test]
+    fn join_arms_implicit_else_is_pre_as_a_reachable_arm() {
+        // No-else if encoded as `[then, Arm { reachable: true, snap_pre }]`.
+        let pre = snap(&[(0, &[("used", int(16))])]);
+        let then = snap(&[(0, &[("used", int(16)), ("cap", int(99))])]);
+        let result = FieldSnapshot::join_arms(pre.clone(), vec![arm(true, then), arm(true, pre)]);
+        // Pre's lack-of-cap drops the then-arm's cap; `used = 16` agrees.
+        assert_eq!(
+            extract(&result),
+            vec![(0, vec![("used".to_string(), int(16))])]
+        );
+    }
+}
+
 /// Decide whether a function may be evaluated at compile time.
 ///
 /// The check is a conservative pure-and-safe gate, applied once when the
@@ -1590,6 +1809,25 @@ impl<'a> Interpreter<'a> {
                     Lattice::Const(v) => option_to_lattice(eval_cast(v, target)),
                     other => other,
                 }
+            }
+            // `builtin::likely(c)` / `builtin::unlikely(c)` are value-
+            // preserving branch-hint wrappers: their runtime result is
+            // exactly `c`. Pass the inner lattice through so a const-
+            // folded condition (`1 >= 16` → `false`) collapses the call
+            // to a bool literal and the surrounding `if` is pruned by
+            // `rewrite_if_expr` / `prune_constant_branches`. Without
+            // this, the inner Binary folds to `false` but the wrapper
+            // keeps the panic branch alive all the way through WIR
+            // (seen in hot `core:zlib` bounds checks at -O2).
+            //
+            // Inclusion criteria are funnelled through
+            // [`FunctionRef::is_branch_hint_call`] so this matcher,
+            // `condition_implication::peel_branch_hint`, and the WIR
+            // builder's `BranchHint` lowering stay in sync.
+            NirExprKind::Call { func, args, .. }
+                if args.len() == 1 && func.is_branch_hint_call() =>
+            {
+                self.expr_to_lattice(&args[0].expr)
             }
             _ => Lattice::Unevaluated,
         }

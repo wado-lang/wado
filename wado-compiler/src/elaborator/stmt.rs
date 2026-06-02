@@ -157,6 +157,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check for tuple literal to array coercion when type annotation is present
         let (value, type_id) = if let Some(annotated_type) = &let_stmt.ty {
             let target_type = self.resolve_type(annotated_type);
+            // Publish the resolved whole-pattern annotation so reify reads it
+            // instead of re-running `resolve_type` against the AST.
+            let key = self.ann_key(let_stmt.id);
+            self.sem.types.let_annotated_types.insert(key, target_type);
 
             // Special case: tuple literal with Tuple type annotation
             if let ast::Expr::TupleLiteral(tuple_lit) = ast_value {
@@ -267,6 +271,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             })
                             .collect();
 
+                        // Record the implicit struct literal's mangled name
+                        // (the target struct's name as the elaborator picks
+                        // it up) so reify reads it from
+                        // `GenericInstantiation` instead of taking the
+                        // anon-literal path that expects a synthesised
+                        // `__anon_{…}` name.
+                        self.record_generic_instantiation_with_mangle(
+                            struct_lit.id,
+                            vec![],
+                            struct_type,
+                            Some(name.clone()),
+                        );
                         let value = TirExpr::new(
                             TirExprKind::StructLiteral {
                                 struct_type,
@@ -1471,14 +1487,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let assoc_const_key =
                         Self::format_assoc_const_key(variant_name, variant_qualifier.as_ref());
                     // Resolve to literal patterns when possible for switch optimization.
-                    if let Some((_const_module, const_ty, const_expr)) = self
+                    if let Some((_const_module, type_id, const_expr)) = self
                         .sem
                         .decls
                         .associated_constants
                         .get(&assoc_const_key)
                         .cloned()
                     {
-                        let type_id = self.resolve_type(&const_ty);
                         let resolved = self.resolve_expr(&const_expr, ctx, Some(type_id));
                         // If the resolved expression is a literal, emit a Literal pattern
                         // so it benefits from switch optimization and exhaustiveness checking.
