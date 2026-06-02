@@ -1591,6 +1591,23 @@ impl<'a> Interpreter<'a> {
                     other => other,
                 }
             }
+            // `builtin::likely(c)` / `builtin::unlikely(c)` are value-
+            // preserving branch-hint wrappers: their runtime result is
+            // exactly `c`. Pass the inner lattice through so a const-
+            // folded condition (`1 >= 16` → `false`) collapses the call
+            // to a bool literal and the surrounding `if` is pruned by
+            // `rewrite_if_expr` / `prune_constant_branches`. Without
+            // this, the inner Binary folds to `false` but the wrapper
+            // keeps the panic branch alive all the way through WIR
+            // (seen in hot `core:zlib` bounds checks at -O2).
+            NirExprKind::Call { func, args, .. }
+                if args.len() == 1
+                    && func.monomorph_info.is_none()
+                    && func.module_source.is_core_builtin()
+                    && (func.name == "likely" || func.name == "unlikely") =>
+            {
+                self.expr_to_lattice(&args[0].expr)
+            }
             _ => Lattice::Unevaluated,
         }
     }
