@@ -519,6 +519,7 @@ fn visit_expr(spans: &mut TypeSpans, expr: &Expr) {
             visit_block(spans, &w.body);
         }
         Expr::Resume(r) => visit_expr(spans, &r.value),
+        Expr::Error(_) => {}
     }
 }
 

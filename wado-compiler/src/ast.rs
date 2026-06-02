@@ -742,6 +742,7 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
             v.visit_block(&w.body);
         }
         Expr::Resume(r) => v.visit_expr(&r.value),
+        Expr::Error(_) => {}
     }
 }
 
@@ -1751,6 +1752,20 @@ pub enum Expr {
     /// handler method. Delivers `value` to the suspended computation; in the
     /// MVP (no post-resume code) it lowers to `return value`.
     Resume(Box<ResumeExpr>),
+    /// Placeholder for an expression that failed to parse, emitted by error
+    /// recovery so one malformed expression doesn't discard its enclosing
+    /// statement or list (e.g. a broken argument in a call). Resolves to
+    /// `ResolvedType::Error` in the elaborator; the batch path never sees it
+    /// because it is fail-fast on the first syntax error.
+    Error(ErrorExpr),
+}
+
+/// Placeholder for a token run that failed to parse as an expression. See
+/// [`Expr::Error`].
+#[derive(Debug, Clone)]
+pub struct ErrorExpr {
+    pub id: AstId,
+    pub span: Span,
 }
 
 /// `with E1 => h1, E2 => h2 do { body }` — installs effect handlers for the
@@ -1859,6 +1874,7 @@ impl Expr {
             Expr::Range(e) => e.id,
             Expr::WithHandler(e) => e.id,
             Expr::Resume(e) => e.id,
+            Expr::Error(e) => e.id,
         }
     }
 
@@ -1892,6 +1908,7 @@ impl Expr {
             Expr::Range(e) => e.span,
             Expr::WithHandler(e) => e.span,
             Expr::Resume(e) => e.span,
+            Expr::Error(e) => e.span,
         }
     }
 
@@ -2004,6 +2021,10 @@ impl Expr {
                 e.span = new_span;
                 Expr::Resume(e)
             }
+            Expr::Error(mut e) => {
+                e.span = new_span;
+                Expr::Error(e)
+            }
         }
     }
 
@@ -2102,7 +2123,8 @@ impl Expr {
             | Expr::Closure(_)
             | Expr::LabeledBlock(_)
             | Expr::WithHandler(_)
-            | Expr::Resume(_) => {
+            | Expr::Resume(_)
+            | Expr::Error(_) => {
                 // Not expected inside pure default expressions; leave as-is.
             }
         }

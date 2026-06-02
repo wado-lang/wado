@@ -2220,6 +2220,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
             }
             ast::Expr::WithHandler(with_expr) => self.reify_with_handler(with_expr, ctx),
+            // Parser error-recovery placeholder. The batch path is fail-fast on
+            // syntax errors, so this is unreachable in practice; emit an error
+            // typed unit to keep the match total and stay sound if ever reached.
+            ast::Expr::Error(e) => TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, e.span),
         }
     }
 

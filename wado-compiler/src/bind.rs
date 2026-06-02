@@ -264,7 +264,7 @@ fn expr_references_var(expr: &Expr, name: &str) -> bool {
         }
         Expr::Resume(r) => expr_references_var(&r.value, name),
 
-        Expr::Literal(_) => false,
+        Expr::Literal(_) | Expr::Error(_) => false,
     }
 }
 
@@ -979,6 +979,9 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
             // Literals don't reference variables
             Expr::Literal(_) => {}
+
+            // Parser error-recovery placeholder: nothing to bind.
+            Expr::Error(_) => {}
         }
         Ok(())
     }

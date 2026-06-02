@@ -177,7 +177,8 @@ impl TypeSystem {
             | Expr::Spread(..)
             | Expr::Range(_)
             | Expr::WithHandler(_)
-            | Expr::Resume(_) => false,
+            | Expr::Resume(_)
+            | Expr::Error(_) => false,
         }
     }
 

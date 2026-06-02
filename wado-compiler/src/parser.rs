@@ -552,6 +552,75 @@ impl Parser {
         Ok(items)
     }
 
+    /// Like [`parse_comma_separated`], but with element-local error recovery
+    /// instead of aborting the whole list: a malformed element is reported,
+    /// its tokens are skipped to the next `,` or `terminator`, and `make_error`
+    /// supplies a placeholder node so the surviving elements keep their
+    /// positions. Always returns (never `Err`), so one broken element no longer
+    /// discards the enclosing call / literal.
+    fn parse_comma_separated_recovering<T>(
+        &mut self,
+        terminator: &TokenKind,
+        mut parse_item: impl FnMut(&mut Self) -> ParseResult<T>,
+        mut make_error: impl FnMut(&mut Self, Span) -> T,
+    ) -> Vec<T> {
+        let mut items = Vec::new();
+        if self.check(terminator) {
+            return items;
+        }
+        loop {
+            let before = self.pos;
+            match parse_item(self) {
+                Ok(item) => items.push(item),
+                Err(e) => {
+                    self.errors.push(e);
+                    let span = self.sync_list_element(before, terminator);
+                    items.push(make_error(self, span));
+                }
+            }
+            if !self.check(&TokenKind::Comma) {
+                break;
+            }
+            self.advance();
+            if self.check(terminator) {
+                break;
+            }
+        }
+        items
+    }
+
+    /// Skip a malformed list element: advance until the next `,`, the list
+    /// `terminator`, a closing delimiter, `;`, a hard item keyword, or EOF —
+    /// whichever comes first — so the surrounding list can resume at a stable
+    /// boundary. Returns the span covering the skipped run (anchored at the
+    /// element's first token, `before`). Forward progress is guaranteed by the
+    /// caller, which consumes the separating `,` on the next iteration.
+    fn sync_list_element(&mut self, before: usize, terminator: &TokenKind) -> Span {
+        while !self.is_at_end()
+            && !self.check(&TokenKind::Comma)
+            && !self.check(terminator)
+            && !matches!(
+                self.peek_kind(),
+                TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace | TokenKind::Semicolon
+            )
+            && !self.at_hard_item_keyword()
+        {
+            self.advance();
+        }
+        let start = self.tokens[before].span;
+        let end = self.tokens[self.pos.saturating_sub(1)].span;
+        start.merge(&end)
+    }
+
+    /// Build an [`Expr::Error`] placeholder spanning `span`, allocating a fresh
+    /// [`AstId`] so the node participates in the dense id space like any other.
+    fn error_expr(&mut self, span: Span) -> Expr {
+        Expr::Error(crate::ast::ErrorExpr {
+            id: self.alloc_ast_id(),
+            span,
+        })
+    }
+
     /// Parse a comma-separated list of types within angle brackets (`<T1, T2>`).
     /// Assumes the opening `<` has already been consumed.
     /// Handles `>>` splitting for nested generics via `pending_gt`.
@@ -3929,8 +3998,11 @@ impl Parser {
 
     /// Parse tuple literal: `[expr, expr, ...]` or `[]`
     fn parse_tuple_literal(&mut self, start_span: Span) -> ParseResult<Expr> {
-        let elements =
-            self.parse_comma_separated(&TokenKind::RBracket, Self::parse_tuple_element)?;
+        let elements = self.parse_comma_separated_recovering(
+            &TokenKind::RBracket,
+            Self::parse_tuple_element,
+            Self::error_expr,
+        );
 
         let end_token = self.expect(&TokenKind::RBracket)?;
         let end_span = end_token.span;
@@ -3955,7 +4027,11 @@ impl Parser {
     /// Parse argument list. Returns (args, `has_trailing_comma`).
     fn parse_arg_list(&mut self) -> ParseResult<(Vec<Expr>, bool)> {
         let pos_before = self.pos;
-        let args = self.parse_comma_separated(&TokenKind::RParen, Self::parse_expr)?;
+        let args = self.parse_comma_separated_recovering(
+            &TokenKind::RParen,
+            Self::parse_expr,
+            Self::error_expr,
+        );
         // Detect trailing comma: pos moved past at least one comma, and we're at RParen
         let has_trailing_comma = !args.is_empty()
             && self.check(&TokenKind::RParen)
@@ -7295,5 +7371,97 @@ line 2
             module.has_todo(),
             "module must retain #![TODO] despite the later failure",
         );
+    }
+
+    /// Navigate to the single `return <call>;` in `fn f`'s body.
+    fn single_return_call(module: &Module) -> &CallExpr {
+        let func = module
+            .items
+            .iter()
+            .find_map(|i| match i {
+                Item::Function(f) if f.name == "f" => Some(f),
+                _ => None,
+            })
+            .expect("fn f should survive recovery");
+        let body = func.body.as_ref().expect("fn f has a body");
+        let ret = body
+            .stmts
+            .iter()
+            .find_map(|s| match s {
+                Stmt::Return(r) => r.value.as_ref(),
+                _ => None,
+            })
+            .expect("return statement survives");
+        match ret {
+            Expr::Call(c) => c,
+            other => panic!("expected a call, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn recovery_call_arg_keeps_following_arguments() {
+        // A broken middle argument becomes an Expr::Error; the call keeps all
+        // three argument slots and the enclosing statement is not dropped.
+        let (module, errors) = parse_recovering("fn f() -> i32 {\n    return g(1, %, 3);\n}\n");
+        assert!(!errors.is_empty(), "broken argument should be reported");
+        let call = single_return_call(&module);
+        assert_eq!(call.args.len(), 3, "all three argument slots survive");
+        assert!(
+            matches!(call.args[0], Expr::Literal(_)),
+            "first argument is unaffected",
+        );
+        assert!(
+            matches!(call.args[1], Expr::Error(_)),
+            "broken middle argument is an Expr::Error placeholder",
+        );
+        assert!(
+            matches!(call.args[2], Expr::Literal(_)),
+            "argument after the broken one still parses",
+        );
+        assert!(module.has_syntax_errors());
+    }
+
+    #[test]
+    fn recovery_call_arg_skips_garbage_run() {
+        // A multi-token garbage element is skipped to the next comma, leaving a
+        // single Expr::Error placeholder, and the following argument survives.
+        // `%` lexes cleanly but cannot start an expression.
+        let (module, errors) = parse_recovering("fn f() -> i32 {\n    return g(% % %, 7);\n}\n");
+        assert!(!errors.is_empty(), "garbage argument should be reported");
+        let call = single_return_call(&module);
+        assert_eq!(call.args.len(), 2, "two argument slots survive");
+        assert!(matches!(call.args[0], Expr::Error(_)));
+        assert!(matches!(call.args[1], Expr::Literal(_)));
+    }
+
+    #[test]
+    fn recovery_array_element_keeps_following_elements() {
+        // A broken element inside an array/tuple literal becomes a placeholder
+        // and the surrounding elements survive.
+        let (module, errors) = parse_recovering("fn f() -> i32 {\n    return [1, %, 3];\n}\n");
+        assert!(!errors.is_empty(), "broken element should be reported");
+        let func = module
+            .items
+            .iter()
+            .find_map(|i| match i {
+                Item::Function(f) if f.name == "f" => Some(f),
+                _ => None,
+            })
+            .expect("fn f should survive recovery");
+        let ret = func
+            .body
+            .as_ref()
+            .unwrap()
+            .stmts
+            .iter()
+            .find_map(|s| match s {
+                Stmt::Return(r) => r.value.as_ref(),
+                _ => None,
+            });
+        let Some(Expr::TupleLiteral(t)) = ret else {
+            panic!("expected a tuple/array literal, got {ret:?}");
+        };
+        assert_eq!(t.elements.len(), 3, "all three element slots survive");
+        assert!(matches!(t.elements[1], Expr::Error(_)));
     }
 }

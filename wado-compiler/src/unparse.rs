@@ -1567,6 +1567,9 @@ impl<'a> Unparser<'a> {
                 self.output.push_str("resume ");
                 self.unparse_expr(&r.value);
             }
+            // The formatter is fail-fast on syntax errors, so this placeholder
+            // is never reached; emit nothing to keep the match total.
+            Expr::Error(_) => {}
         }
     }
 
@@ -3116,6 +3119,9 @@ fn unparse_expr_into(expr: &Expr, output: &mut String) {
             output.push_str("resume ");
             unparse_expr_into(&r.value, output);
         }
+        // Parser error-recovery placeholder; rendered as an empty marker for
+        // the readability-first preview paths that use this helper.
+        Expr::Error(_) => output.push_str("<error>"),
     }
 }
 

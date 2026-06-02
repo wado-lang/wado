@@ -2453,7 +2453,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     logger,
                 )?;
             }
-            ast::Expr::Ident(_) | ast::Expr::Literal(_) => {}
+            ast::Expr::Ident(_) | ast::Expr::Literal(_) | ast::Expr::Error(_) => {}
         }
         Ok(())
     }

@@ -321,6 +321,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Range(range) => self.resolve_range(range, ctx),
             Expr::WithHandler(w) => self.resolve_with_handler(w, ctx),
             Expr::Resume(r) => self.resolve_resume(r, ctx),
+            // Parser error-recovery placeholder: the syntax error was already
+            // reported, so resolve to the error type to suppress cascades.
+            Expr::Error(e) => TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, e.span),
         }
     }
 
