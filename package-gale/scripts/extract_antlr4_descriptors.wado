@@ -228,6 +228,412 @@ fn unescape_st_text(s: &String) -> String {
     return out;
 }
 
+// ===== Action-body stripper (for Stage B' oracle pre-processing) =====
+//
+// The published ANTLR4 jar's Java target faithfully copies action-body
+// source into the generated parser; it does NOT substitute the
+// StringTemplate directives the testsuite uses for action bodies
+// (`<writeln("$text")>`, `<ImportListener(...)>`, etc.). So a grammar
+// with `ifStatement : ... { <writeln("$text")> };` codegens valid Java
+// shape but `javac` rejects the body — making the oracle uninvocable.
+//
+// `strip_action_bodies` removes these blocks before the grammar is
+// handed to the oracle. The parse tree is independent of action-body
+// contents (actions are side-effecting host code; they do not alter
+// what gets matched), so this is sound for Stage B' use. The result is
+// a strict subset of the input grammar, never wider.
+//
+// What gets stripped:
+//   * `{ ... }` action blocks inline in rule alternatives
+//   * `{ ... }?` semantic predicates (entire `{...}?` removed)
+//   * `@<id> { ... }` and `@<scope>::<id> { ... }` named actions
+//     (e.g. `@header { ... }`, `@parser::members { ... }`,
+//      `@init { ... }`, `@after { ... }`) — the `@<...>` prefix and
+//     its `{...}` body both removed
+//   * `catch [ ... ] { ... }` and `finally { ... }` rule exception
+//     handlers
+//
+// What stays untouched:
+//   * `tokens { ... }`, `options { ... }`, `channels { ... }` grammar-
+//     prequel blocks — recognised by the preceding keyword
+//   * `{...}` characters inside string literals (`'...'`), character
+//     classes (`[...]`), single-line comments (`// ...`), block
+//     comments (`/* ... */`), and rule-arg / locals brackets
+//   * Everything outside `{...}` blocks
+//
+// The stripper is balanced-brace-aware: action bodies can contain
+// nested `{...}` (Java code blocks), and the inner content is
+// processed against the same string-literal / comment skip rules so
+// `"...{...}..."` inside Java does not unbalance the count.
+fn strip_action_bodies(grammar: &String) -> String {
+    let chars: Array<char> = grammar.chars().collect();
+    let n = chars.len();
+    let mut out = String::with_capacity(grammar.len());
+    let mut i = 0;
+    while i < n {
+        let c = chars[i];
+        // String literal `'...'`: copy verbatim, respecting `\\` escapes
+        // so `'\\''` doesn't end early. `.g4` lexer doesn't recognise
+        // `"..."` outside actions, so we don't track double quotes at
+        // the top level.
+        if c == '\'' {
+            out.push(c);
+            i += 1;
+            while i < n {
+                let cc = chars[i];
+                out.push(cc);
+                i += 1;
+                if cc == '\\' && i < n {
+                    out.push(chars[i]);
+                    i += 1;
+                    continue;
+                }
+                if cc == '\'' {
+                    break;
+                }
+            }
+            continue;
+        }
+        // Character class `[...]`: copy verbatim with `\\` escapes.
+        if c == '[' {
+            // Distinguish from rule-arg-locals `[ Type x ]` or
+            // exception-handler `catch [ ... ]`. Both contain `{` only
+            // rarely, and even then a stray `{` inside `[...]` is not
+            // an action body in g4 grammar. So treat the whole `[...]`
+            // as a transparent block where nested `{` do not start an
+            // action body.
+            out.push(c);
+            i += 1;
+            let mut depth = 1;
+            while i < n && depth > 0 {
+                let cc = chars[i];
+                out.push(cc);
+                i += 1;
+                if cc == '\\' && i < n {
+                    out.push(chars[i]);
+                    i += 1;
+                    continue;
+                }
+                if cc == '[' {
+                    depth += 1;
+                } else if cc == ']' {
+                    depth -= 1;
+                }
+            }
+            continue;
+        }
+        // Line comment `// ... \n`.
+        if c == '/' && i + 1 < n && chars[i + 1] == '/' {
+            while i < n && chars[i] != '\n' {
+                out.push(chars[i]);
+                i += 1;
+            }
+            continue;
+        }
+        // Block comment `/* ... */`.
+        if c == '/' && i + 1 < n && chars[i + 1] == '*' {
+            out.push(chars[i]);
+            out.push(chars[i + 1]);
+            i += 2;
+            while i < n {
+                let cc = chars[i];
+                out.push(cc);
+                i += 1;
+                if cc == '*' && i < n && chars[i] == '/' {
+                    out.push(chars[i]);
+                    i += 1;
+                    break;
+                }
+            }
+            continue;
+        }
+        // Named action `@<id>` or `@<scope>::<id>`: skip the `@...`
+        // identifier sequence, then the following `{...}` body. Allows
+        // arbitrary whitespace between `@<id>` and `{`. If no `{`
+        // follows (malformed input), copy verbatim.
+        if c == '@' {
+            // Look ahead: skip whitespace, expect ident chars, then a
+            // possible `::ident`, then optional whitespace, then `{`.
+            let saved = i;
+            let mut j = i + 1;
+            // Identifier.
+            if j < n && is_id_start_char(chars[j]) {
+                j += 1;
+                while j < n && is_id_continue_char(chars[j]) {
+                    j += 1;
+                }
+                // Optional `::ident`.
+                if j + 1 < n && chars[j] == ':' && chars[j + 1] == ':' {
+                    j += 2;
+                    if j < n && is_id_start_char(chars[j]) {
+                        j += 1;
+                        while j < n && is_id_continue_char(chars[j]) {
+                            j += 1;
+                        }
+                    }
+                }
+                // Skip whitespace.
+                while j < n && is_whitespace_char(chars[j]) {
+                    j += 1;
+                }
+                if j < n && chars[j] == '{' {
+                    // It's a named action — skip @<id...>{ ... } entirely.
+                    let body_end = find_balanced_close(&chars, j);
+                    if body_end > 0 {
+                        i = body_end + 1;
+                        continue;
+                    }
+                }
+            }
+            // Not a recognised named action — copy `@` and keep going.
+            i = saved;
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        // `catch` / `finally` rule exception handlers.
+        if c == 'c' && starts_with_word(&chars, i, &"catch") {
+            // `catch [ ... ] { ... }` — strip the whole construct.
+            let mut j = i + 5;
+            while j < n && is_whitespace_char(chars[j]) {
+                j += 1;
+            }
+            if j < n && chars[j] == '[' {
+                let bracket_end = find_balanced_close_bracket(&chars, j);
+                if bracket_end > 0 {
+                    let mut k = bracket_end + 1;
+                    while k < n && is_whitespace_char(chars[k]) {
+                        k += 1;
+                    }
+                    if k < n && chars[k] == '{' {
+                        let body_end = find_balanced_close(&chars, k);
+                        if body_end > 0 {
+                            i = body_end + 1;
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+        if c == 'f' && starts_with_word(&chars, i, &"finally") {
+            let mut j = i + 7;
+            while j < n && is_whitespace_char(chars[j]) {
+                j += 1;
+            }
+            if j < n && chars[j] == '{' {
+                let body_end = find_balanced_close(&chars, j);
+                if body_end > 0 {
+                    i = body_end + 1;
+                    continue;
+                }
+            }
+        }
+        // Open brace `{`. Decide: action body, predicate, or top-level
+        // grammar prequel (`tokens { ... }` / `options { ... }` /
+        // `channels { ... }`). The latter is preserved.
+        if c == '{' {
+            if preceded_by_prequel_keyword(&chars, i, &out) {
+                out.push(c);
+                i += 1;
+                continue;
+            }
+            // Strip the `{...}` body. If a `?` follows, it's a semantic
+            // predicate and the `?` goes with it.
+            let body_end = find_balanced_close(&chars, i);
+            if body_end < 0 {
+                // Unbalanced — fall back to copying so we don't truncate
+                // the grammar silently. The oracle will then surface
+                // the codegen failure.
+                out.push(c);
+                i += 1;
+                continue;
+            }
+            let mut k = body_end + 1;
+            if k < n && chars[k] == '?' {
+                k += 1;
+            }
+            i = k;
+            continue;
+        }
+        // Default: emit verbatim.
+        out.push(c);
+        i += 1;
+    }
+    return out;
+}
+
+fn is_id_start_char(c: char) -> bool {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+}
+
+fn is_id_continue_char(c: char) -> bool {
+    return is_id_start_char(c) || (c >= '0' && c <= '9');
+}
+
+fn is_whitespace_char(c: char) -> bool {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+/// True iff `chars[i..i+word.len()]` matches `word` AND the position
+/// `i` is at a word boundary (not preceded by an identifier-continue
+/// char, not followed by one).
+fn starts_with_word(chars: &Array<char>, i: i32, word: &String) -> bool {
+    let w: Array<char> = word.chars().collect();
+    let wn = w.len();
+    if i + wn > chars.len() {
+        return false;
+    }
+    if i > 0 && is_id_continue_char(chars[i - 1]) {
+        return false;
+    }
+    for let mut k = 0; k < wn; k += 1 {
+        if chars[i + k] != w[k] {
+            return false;
+        }
+    }
+    if i + wn < chars.len() && is_id_continue_char(chars[i + wn]) {
+        return false;
+    }
+    return true;
+}
+
+/// Find the position of the `}` that matches the `{` at `open_idx`,
+/// respecting nested braces and string / char / comment escapes
+/// inside the body. Returns -1 if unbalanced.
+fn find_balanced_close(chars: &Array<char>, open_idx: i32) -> i32 {
+    let n = chars.len();
+    let mut depth = 1;
+    let mut i = open_idx + 1;
+    while i < n {
+        let c = chars[i];
+        // Single-quote string literal.
+        if c == '\'' {
+            i += 1;
+            while i < n {
+                let cc = chars[i];
+                i += 1;
+                if cc == '\\' && i < n {
+                    i += 1;
+                    continue;
+                }
+                if cc == '\'' {
+                    break;
+                }
+            }
+            continue;
+        }
+        // Double-quote string literal (Java / Python / etc.).
+        if c == '"' {
+            i += 1;
+            while i < n {
+                let cc = chars[i];
+                i += 1;
+                if cc == '\\' && i < n {
+                    i += 1;
+                    continue;
+                }
+                if cc == '"' {
+                    break;
+                }
+            }
+            continue;
+        }
+        // Line comment.
+        if c == '/' && i + 1 < n && chars[i + 1] == '/' {
+            while i < n && chars[i] != '\n' {
+                i += 1;
+            }
+            continue;
+        }
+        // Block comment.
+        if c == '/' && i + 1 < n && chars[i + 1] == '*' {
+            i += 2;
+            while i + 1 < n {
+                if chars[i] == '*' && chars[i + 1] == '/' {
+                    i += 2;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+        if c == '{' {
+            depth += 1;
+        } else if c == '}' {
+            depth -= 1;
+            if depth == 0 {
+                return i;
+            }
+        }
+        i += 1;
+    }
+    return -1;
+}
+
+/// Find the position of the `]` that matches the `[` at `open_idx`.
+/// Brackets in `.g4` rule-arg / catch lists don't contain string
+/// literals worth tracking, but we honour `\\]` escapes.
+fn find_balanced_close_bracket(chars: &Array<char>, open_idx: i32) -> i32 {
+    let n = chars.len();
+    let mut depth = 1;
+    let mut i = open_idx + 1;
+    while i < n {
+        let c = chars[i];
+        if c == '\\' && i + 1 < n {
+            i += 2;
+            continue;
+        }
+        if c == '[' {
+            depth += 1;
+        } else if c == ']' {
+            depth -= 1;
+            if depth == 0 {
+                return i;
+            }
+        }
+        i += 1;
+    }
+    return -1;
+}
+
+/// Look backwards from `brace_idx` (the position of the `{` in the
+/// INPUT) over whitespace and detect whether the immediately preceding
+/// token is one of `tokens` / `options` / `channels`. We consult the
+/// PRODUCED output (`out`) rather than the input because comments and
+/// string literals in the input may have shifted the position, and out
+/// is what we just emitted (post-strip).
+fn preceded_by_prequel_keyword(chars: &Array<char>, brace_idx: i32, out: &String) -> bool {
+    let _ = chars;
+    let _ = brace_idx;
+    let out_chars: Array<char> = out.chars().collect();
+    let mut j = out_chars.len();
+    while j > 0 && is_whitespace_char(out_chars[j - 1]) {
+        j -= 1;
+    }
+    return ends_with_word(&out_chars, j, &"tokens")
+        || ends_with_word(&out_chars, j, &"options")
+        || ends_with_word(&out_chars, j, &"channels");
+}
+
+/// True iff `chars[..end]` ends with `word` at a word boundary.
+fn ends_with_word(chars: &Array<char>, end: i32, word: &String) -> bool {
+    let w: Array<char> = word.chars().collect();
+    let wn = w.len();
+    if end < wn {
+        return false;
+    }
+    let start = end - wn;
+    if start > 0 && is_id_continue_char(chars[start - 1]) {
+        return false;
+    }
+    for let mut k = 0; k < wn; k += 1 {
+        if chars[start + k] != w[k] {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// If `line` is a known `[section]` header, return the section name.
 fn section_header_of(line: &String) -> Option<String> {
     if line.len() <= 2 {
@@ -1947,4 +2353,111 @@ test "stage_a_err_category_eligible: only ParserErrors and LexerErrors" {
     assert stage_a_err_category_eligible(&"SemPredEvalParser") == false;
     assert stage_a_err_category_eligible(&"LexerExec") == false;
     assert stage_a_err_category_eligible(&"") == false;
+}
+
+// ===== strip_action_bodies tests =====
+
+test "strip: removes simple inline action body" {
+    let g = "myRule : 'a' { writeln(\"x\"); } 'b' ;";
+    let result = strip_action_bodies(&g);
+    assert result == "myRule : 'a'  'b' ;", `got '{result}'`;
+}
+
+test "strip: removes semantic predicate including the '?' suffix" {
+    let g = "myRule : { isOk() }? 'a' ;";
+    let result = strip_action_bodies(&g);
+    assert result == "myRule :  'a' ;", `got '{result}'`;
+}
+
+test "strip: removes @header / @members named actions" {
+    let g = "grammar T;\n@header { import java.util.*; }\n@members { int x = 0; }\nstart : 'a' ;";
+    let result = strip_action_bodies(&g);
+    let expected = "grammar T;\n\n\nstart : 'a' ;";
+    assert result == expected, `got '{result}'`;
+}
+
+test "strip: removes @scope::name actions" {
+    let g = "@parser::members { void foo() {} }\nstart : 'a' ;";
+    let result = strip_action_bodies(&g);
+    let expected = "\nstart : 'a' ;";
+    assert result == expected, `got '{result}'`;
+}
+
+test "strip: keeps tokens { ... } grammar prequel" {
+    let g = "grammar T;\ntokens { TK_A, TK_B }\nstart : TK_A ;";
+    let result = strip_action_bodies(&g);
+    assert result == g, `tokens block was modified: '{result}'`;
+}
+
+test "strip: keeps options { ... } grammar prequel" {
+    let g = "grammar T;\noptions { caseInsensitive = true; }\nstart : 'a' ;";
+    let result = strip_action_bodies(&g);
+    assert result == g, `options block was modified: '{result}'`;
+}
+
+test "strip: keeps channels { ... } grammar prequel" {
+    let g = "grammar T;\nchannels { COMMENTS, WHITESPACE }\nstart : 'a' ;";
+    let result = strip_action_bodies(&g);
+    assert result == g, `channels block was modified: '{result}'`;
+}
+
+test "strip: preserves brace inside string literal" {
+    // Single-quote string in `.g4` is a Literal token; `{` inside is a
+    // literal char, not the start of an action body.
+    let g = "BRACE : '{' ;";
+    let result = strip_action_bodies(&g);
+    assert result == g, `string-literal brace was treated as action: '{result}'`;
+}
+
+test "strip: preserves brace inside character class" {
+    let g = "WS : [ \\t\\n{}]+ ;";
+    let result = strip_action_bodies(&g);
+    assert result == g, `char-class braces were treated as action: '{result}'`;
+}
+
+test "strip: preserves brace inside line comment" {
+    let g = "// comment with { brace }\nstart : 'a' ;";
+    let result = strip_action_bodies(&g);
+    assert result == g, `line-comment was modified: '{result}'`;
+}
+
+test "strip: preserves brace inside block comment" {
+    let g = "/* { not an action } */\nstart : 'a' ;";
+    let result = strip_action_bodies(&g);
+    assert result == g, `block-comment was modified: '{result}'`;
+}
+
+test "strip: removes catch [...] { ... } handlers" {
+    let g = "start : 'a' ; catch [Exception e] { handle(e); }";
+    let result = strip_action_bodies(&g);
+    assert result == "start : 'a' ; ", `got '{result}'`;
+}
+
+test "strip: removes finally { ... } handlers" {
+    let g = "start : 'a' ; finally { cleanup(); }";
+    let result = strip_action_bodies(&g);
+    assert result == "start : 'a' ; ", `got '{result}'`;
+}
+
+test "strip: balances nested braces inside an action body" {
+    let g = "myRule : 'a' { if (x) { foo(); } } 'b' ;";
+    let result = strip_action_bodies(&g);
+    assert result == "myRule : 'a'  'b' ;", `got '{result}'`;
+}
+
+test "strip: respects string literals inside an action body" {
+    // Without `\"...\"` tracking inside the action, the `}` inside the
+    // Java string would close the action prematurely.
+    let g = "myRule : 'a' { String s = \"}\"; } 'b' ;";
+    let result = strip_action_bodies(&g);
+    assert result == "myRule : 'a'  'b' ;", `got '{result}'`;
+}
+
+test "strip: IfIfElseNonGreedyBinding1 — the descriptor that motivated this" {
+    let g = "grammar T;\nstart : statement+ ;\nstatement : 'x' | ifStatement;\nifStatement : 'if' 'y' statement ('else' statement)?? {\n<writeln(\"$text\")>\n};\nID : 'a'..'z'+ ;\nWS : (' '|'\\n') -> channel(HIDDEN);\n";
+    let result = strip_action_bodies(&g);
+    // Action body and its trailing space should be gone; everything
+    // else stays.
+    let expected = "grammar T;\nstart : statement+ ;\nstatement : 'x' | ifStatement;\nifStatement : 'if' 'y' statement ('else' statement)?? ;\nID : 'a'..'z'+ ;\nWS : (' '|'\\n') -> channel(HIDDEN);\n";
+    assert result == expected, `got '{result}'`;
 }
