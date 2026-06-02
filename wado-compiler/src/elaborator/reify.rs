@@ -308,6 +308,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ann_decl_type_params => decl_type_params: Vec<crate::tir::TirTypeParam>,
             ann_struct_field_types => struct_field_types: Vec<crate::tir::TypeId>,
             ann_method_names => method_names: super::sem::types::MethodNames,
+            ann_let_annotated_type => let_annotated_types: crate::tir::TypeId,
         }
     }
 
@@ -1377,13 +1378,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `is_nullable` / `lazy_init` are populated by the lower phase
     /// (kept `false` here, matching `Elaborator::resolve_global`).
     fn reify_global(&mut self, global_decl: &ast::GlobalDecl) -> Option<TirGlobal> {
+        // `resolve_module` populates `current_module_globals` for every
+        // global it sees before any per-item reify runs, so the lookup
+        // never misses; reify is a pure read.
         let ty = self
             .sem
             .decls
             .current_module_globals
             .get(&global_decl.name)
             .map(|(t, _)| *t)
-            .unwrap_or_else(|| self.resolve_type(&global_decl.ty));
+            .expect("resolve_module records every global in current_module_globals");
 
         let mut ctx = FunctionContext::new(ty, format!("global:{}", global_decl.name));
         let initializer = self.reify_expr(&global_decl.initializer, &mut ctx, Some(ty));
@@ -1614,10 +1618,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let type_id = let_stmt
                 .ty
                 .as_ref()
-                .map(|t| {
+                .map(|_| {
                     binding_id
                         .and_then(|id| self.ann_local_type(id))
-                        .unwrap_or_else(|| self.resolve_type(t))
+                        .or_else(|| self.ann_let_annotated_type(let_stmt.id))
+                        .expect(
+                            "uninitialised let with annotation: annotate records the type on \
+                             local_types (simple binding) or let_annotated_types (destructure)",
+                        )
                 })
                 .unwrap_or(TypeTable::UNKNOWN);
             return match &let_stmt.pattern {
@@ -1660,10 +1668,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => Some(*id),
             _ => None,
         };
-        let annotated_type = let_stmt.ty.as_ref().map(|t| {
+        let annotated_type = let_stmt.ty.as_ref().map(|_| {
             simple_binding_id
                 .and_then(|id| self.ann_local_type(id))
-                .unwrap_or_else(|| self.resolve_type(t))
+                .or_else(|| self.ann_let_annotated_type(let_stmt.id))
+                .expect(
+                    "annotated let: annotate records the type on local_types (simple binding) \
+                     or let_annotated_types (destructure)",
+                )
         });
         let value = self.reify_expr(ast_value, ctx, annotated_type);
         let type_id = annotated_type.unwrap_or(value.type_id);

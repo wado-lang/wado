@@ -388,6 +388,13 @@ pub(crate) struct TypeAnnotations {
     /// and the trait-omitted display form). Reify reads these instead of
     /// re-running `format_local` against the impl facts' `struct_name`.
     pub(crate) method_names: IndexMap<SymbolKey, MethodNames>,
+    /// Resolved `let x: T = …` whole-pattern type annotation, keyed by the
+    /// `LetStmt`'s `AstId`. For simple `Ident` / `MutIdent` bindings the same
+    /// type also appears in `local_types` (keyed by the binding's id); for
+    /// destructuring patterns the binding ids carry per-element types so the
+    /// whole-pattern annotation has no `local_types` slot to land on, and
+    /// reify reads it from here instead of re-resolving the AST annotation.
+    pub(crate) let_annotated_types: IndexMap<SymbolKey, TypeId>,
     /// Resolved field types per struct decl `AstId`, in declaration order, as
     /// `resolve_struct` resolved them with the struct's type-param scope and
     /// the `loaded_modules`-aware resolver in place.

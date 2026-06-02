@@ -154,6 +154,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check for tuple literal to array coercion when type annotation is present
         let (value, type_id) = if let Some(annotated_type) = &let_stmt.ty {
             let target_type = self.resolve_type(annotated_type);
+            // Publish the resolved whole-pattern annotation so reify reads it
+            // instead of re-running `resolve_type` against the AST.
+            let key = self.ann_key(let_stmt.id);
+            self.sem.types.let_annotated_types.insert(key, target_type);
 
             // Special case: tuple literal with Tuple type annotation
             if let ast::Expr::TupleLiteral(tuple_lit) = ast_value {
