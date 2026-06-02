@@ -391,6 +391,133 @@ pub struct FieldSnapshot {
     fields: IndexMap<u32, IndexMap<String, Value>>,
 }
 
+impl FieldSnapshot {
+    /// Empty snapshot — no bindings. Conceptually the bottom element
+    /// of the field-env lattice; meeting with anything else discards
+    /// every binding.
+    #[must_use]
+    pub fn empty() -> Self {
+        Self {
+            fields: IndexMap::default(),
+        }
+    }
+
+    /// Lattice meet: keep only `(local, field) → value` entries that
+    /// appear in **both** snapshots bound to the **same** value.
+    /// Entries present in only one snapshot, or bound to different
+    /// values, are dropped.
+    ///
+    /// Used by the driving visitor at if-stmt / match / switch
+    /// boundaries to compute the post-branch state as the join of the
+    /// per-arm post-states. The semantics mirror the standard
+    /// dataflow lattice join: a fact holds after the branch iff it
+    /// holds on every reachable arm with the same value.
+    #[must_use]
+    pub fn meet(self, other: &Self) -> Self {
+        let mut out: IndexMap<u32, IndexMap<String, Value>> = IndexMap::default();
+        for (local, my_fields) in self.fields {
+            let Some(other_fields) = other.fields.get(&local) else {
+                continue;
+            };
+            let mut merged: IndexMap<String, Value> = IndexMap::default();
+            for (name, val) in my_fields {
+                if other_fields.get(&name) == Some(&val) {
+                    merged.insert(name, val);
+                }
+            }
+            if !merged.is_empty() {
+                out.insert(local, merged);
+            }
+        }
+        Self { fields: out }
+    }
+}
+
+#[cfg(test)]
+mod field_snapshot_tests {
+    use super::{FieldSnapshot, PrimitiveType, Value};
+    use crate::hashmap::IndexMap;
+
+    fn int(v: u64) -> Value {
+        Value::Int {
+            value: v,
+            prim: PrimitiveType::I32,
+        }
+    }
+
+    fn snap(entries: &[(u32, &[(&str, Value)])]) -> FieldSnapshot {
+        let mut fields: IndexMap<u32, IndexMap<String, Value>> = IndexMap::default();
+        for (local, kvs) in entries {
+            let mut m: IndexMap<String, Value> = IndexMap::default();
+            for (k, v) in *kvs {
+                m.insert((*k).to_string(), *v);
+            }
+            fields.insert(*local, m);
+        }
+        FieldSnapshot { fields }
+    }
+
+    fn extract(s: &FieldSnapshot) -> Vec<(u32, Vec<(String, Value)>)> {
+        s.fields
+            .iter()
+            .map(|(l, m)| {
+                let mut v: Vec<_> = m.iter().map(|(k, v)| (k.clone(), *v)).collect();
+                v.sort_by(|a, b| a.0.cmp(&b.0));
+                (*l, v)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn meet_with_empty_is_empty() {
+        let a = snap(&[(0, &[("used", int(16))])]);
+        let empty = FieldSnapshot::empty();
+        assert_eq!(extract(&a.clone().meet(&empty)), vec![]);
+        assert_eq!(extract(&empty.meet(&a)), vec![]);
+    }
+
+    #[test]
+    fn meet_with_self_is_self() {
+        let a = snap(&[(0, &[("used", int(16)), ("cap", int(32))])]);
+        let result = a.clone().meet(&a);
+        assert_eq!(extract(&result), extract(&a));
+    }
+
+    #[test]
+    fn meet_keeps_matching_fields_drops_mismatched() {
+        let a = snap(&[(0, &[("used", int(16)), ("cap", int(32))])]);
+        let b = snap(&[(0, &[("used", int(16)), ("cap", int(64))])]);
+        // `used` agrees → kept; `cap` disagrees → dropped; local
+        // survives because at least one field agrees.
+        let result = a.meet(&b);
+        assert_eq!(
+            extract(&result),
+            vec![(0, vec![("used".to_string(), int(16))])]
+        );
+    }
+
+    #[test]
+    fn meet_drops_locals_only_present_in_one() {
+        let a = snap(&[(0, &[("used", int(16))]), (1, &[("size", int(8))])]);
+        let b = snap(&[(0, &[("used", int(16))])]);
+        // Local 1 is missing from `b` → dropped from meet.
+        let result = a.meet(&b);
+        assert_eq!(
+            extract(&result),
+            vec![(0, vec![("used".to_string(), int(16))])]
+        );
+    }
+
+    #[test]
+    fn meet_drops_local_when_no_field_agrees() {
+        let a = snap(&[(0, &[("used", int(16))])]);
+        let b = snap(&[(0, &[("used", int(32))])]);
+        // Single field disagrees → entire local dropped.
+        let result = a.meet(&b);
+        assert_eq!(extract(&result), vec![]);
+    }
+}
+
 /// Decide whether a function may be evaluated at compile time.
 ///
 /// The check is a conservative pure-and-safe gate, applied once when the

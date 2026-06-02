@@ -32,7 +32,9 @@ use crate::nir_visitor::{
     NirOptVisitor, NirRefVisitor, block_has_break_to, expr_has_break_to, opt_walk_block,
     opt_walk_expr, opt_walk_stmt, stmt_has_break_to,
 };
-use crate::niri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
+use crate::niri::{
+    CalleeMap, FieldSnapshot, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible,
+};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::alias::{build_alias_info, build_value_copy_helpers, recognize_value_copy};
@@ -211,29 +213,38 @@ impl NirOptVisitor for ConstFoldVisitor<'_> {
                 else_block,
             } => {
                 let mut changed = self.visit_expr(condition);
-                let snap = self.interpreter.snapshot_fields();
+                let snap_pre = self.interpreter.snapshot_fields();
                 changed |= self.visit_block(then_block);
                 let then_falls_through = block_falls_through(then_block, self.type_table);
-                self.interpreter.restore_fields(snap);
-                if let Some(eb) = else_block {
+                let snap_then = self.interpreter.snapshot_fields();
+                self.interpreter.restore_fields(snap_pre.clone());
+                let post_state = if let Some(eb) = else_block {
                     changed |= self.visit_block(eb);
-                    // Without a proper join of post-then and post-else,
-                    // conservatively drop field knowledge after a
-                    // two-armed if. Future work can compute the meet.
-                    self.interpreter.clear_fields();
-                } else if then_falls_through {
-                    // No else, then could fall through: post-if is the
-                    // meet of post-then and pre-if. Drop conservatively.
-                    self.interpreter.clear_fields();
-                }
-                // Else: no `else`, and then ends in panic / return /
-                // break / continue. Only the implicit-else (pre-if
-                // state, already restored from the snapshot) reaches
-                // past the if-stmt, so outer field knowledge survives.
-                // `condition_implication` is loop-guard-aware over both
-                // local and literal bounds, so a `tree.used` that folds
-                // to a literal here still gets recognised by its bounds
-                // checker.
+                    let else_falls_through = block_falls_through(eb, self.type_table);
+                    let snap_else = self.interpreter.snapshot_fields();
+                    if_arm_meet(
+                        then_falls_through,
+                        snap_then,
+                        else_falls_through,
+                        snap_else,
+                        snap_pre,
+                    )
+                } else {
+                    // No `else`: implicit else evaluates to the
+                    // pre-if state. The meet between post-then and
+                    // pre-if is the right post-if state when then
+                    // falls through; when then traps, only the
+                    // implicit-else path reaches past the if, so
+                    // post-if = pre-if directly.
+                    if_arm_meet(
+                        then_falls_through,
+                        snap_then,
+                        true,
+                        snap_pre.clone(),
+                        snap_pre,
+                    )
+                };
+                self.interpreter.restore_fields(post_state);
                 return changed;
             }
             _ => {}
@@ -271,13 +282,32 @@ impl NirOptVisitor for ConstFoldVisitor<'_> {
                 else_branch,
             } => {
                 let mut changed = self.visit_expr(condition);
-                let snap = self.interpreter.snapshot_fields();
+                let snap_pre = self.interpreter.snapshot_fields();
                 changed |= self.visit_block(then_branch);
-                self.interpreter.restore_fields(snap);
-                if let Some(eb) = else_branch {
+                let then_falls_through = block_falls_through(then_branch, self.type_table);
+                let snap_then = self.interpreter.snapshot_fields();
+                self.interpreter.restore_fields(snap_pre.clone());
+                let post_state = if let Some(eb) = else_branch {
                     changed |= self.visit_block(eb);
-                }
-                self.interpreter.clear_fields();
+                    let else_falls_through = block_falls_through(eb, self.type_table);
+                    let snap_else = self.interpreter.snapshot_fields();
+                    if_arm_meet(
+                        then_falls_through,
+                        snap_then,
+                        else_falls_through,
+                        snap_else,
+                        snap_pre,
+                    )
+                } else {
+                    if_arm_meet(
+                        then_falls_through,
+                        snap_then,
+                        true,
+                        snap_pre.clone(),
+                        snap_pre,
+                    )
+                };
+                self.interpreter.restore_fields(post_state);
                 changed |= self.interpreter.reduce_local(expr);
                 return changed;
             }
@@ -762,6 +792,43 @@ fn block_falls_through(block: &NirBlock, type_table: &TypeTable) -> bool {
 /// `loop { }`, calls whose return type is `!`).
 fn is_never_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     matches!(type_table.get(type_id), ResolvedType::Never)
+}
+
+/// Compute the post-if `field_env` state from the per-arm snapshots
+/// and each arm's fall-through flag. The result implements the
+/// standard control-flow join: a `(local, field) → value` binding
+/// survives only if every arm reachable past the if agrees on it.
+///
+/// The match below enumerates the four arm-shape combinations
+/// against the pre-if snapshot, where the implicit no-`else` arm
+/// passes `snap_else = snap_pre` and `else_falls_through = true`:
+///
+/// | then ↧ | else ↧ | post-if                       |
+/// | ------ | ------ | ----------------------------- |
+/// |    ✓   |    ✓   | `meet(snap_then, snap_else)`  |
+/// |    ✓   |    ✗   | `snap_then`                   |
+/// |    ✗   |    ✓   | `snap_else`                   |
+/// |    ✗   |    ✗   | unreachable — use `snap_pre`  |
+///
+/// "Falls through" means control can reach the bottom of the arm.
+/// A `Return`, `Break`, `Continue`, or `Never`-typed tail expression
+/// terminates control without reaching post-if; that arm's writes
+/// then don't contribute to the join because they're not observed
+/// after the if-stmt.
+#[must_use]
+fn if_arm_meet(
+    then_falls_through: bool,
+    snap_then: FieldSnapshot,
+    else_falls_through: bool,
+    snap_else: FieldSnapshot,
+    snap_pre: FieldSnapshot,
+) -> FieldSnapshot {
+    match (then_falls_through, else_falls_through) {
+        (true, true) => snap_then.meet(&snap_else),
+        (true, false) => snap_then,
+        (false, true) => snap_else,
+        (false, false) => snap_pre,
+    }
 }
 
 /// True when a `Call`'s callee is a compiler builtin that cannot
