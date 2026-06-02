@@ -445,19 +445,17 @@ Trade-offs.
       verbatim (`reify_module`'s `pending_default_methods` drain) instead
       of walking the trait decl itself. Reify's `Item::Trait` arm is
       explicitly a no-op for the same reason. That makes the combined
-      walk's TIR for those bodies *live*, not dead — until this synthesis
+      walk's TIR for those bodies _live_, not dead — until this synthesis
       moves into reify, dropping TIR construction in any leaf of the body
       walk (template, matches, assert, closure, coercion, …) produces a
       broken default-method `TirFunction` that downstream phases consume.
       An attempted Stage 7-B slice on `template.rs` proved the failure
       mode: trait default methods that interpolate a template
       (`fn greet(&self) -> String { return \`Hello, {self.name()}!\`; }`)
-      lower to a `Unit` placeholder typed `String` and trip Wasm
+      lower to a`Unit`placeholder typed`String`and trip Wasm
       validation. **Action:** synthesise each impl's default methods
       inside reify by walking the trait decl's AST under the impl's
-      module / `Self` perspective and emitting a `TirFunction`
-      directly, then drop `pending_default_methods` and the
-      `ann_module_override`-gated path in the combined walk.
+      module /`Self`perspective and emitting a`TirFunction`directly, then drop`pending_default_methods`and the`ann_module_override`-gated path in the combined walk.
 - [ ] **Stage 7-B** — `annotate` stops building TIR. Each `resolve_*`
       returns the resolved type + records facts only; the duplicate
       `TirExpr` / `TirStmt` / `TirItem` halves of expr.rs / stmt.rs /
