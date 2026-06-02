@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780359720061,
+  "lastUpdate": 1780396552887,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -28745,6 +28745,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/925d9340e98d6f9e3bfeb9d0bd2f118dfc5add88"
         },
         "date": 1780359719773,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17104,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "995760ac85386aa9ff076689be89deabfbb3cc50",
+          "message": "Merge pull request #1268 from wado-lang/claude/zealous-ritchie-DtczN\n\nfeat(gale): Stage B' — JVM-oracle-derived expected trees",
+          "timestamp": "2026-06-02T19:27:01+09:00",
+          "tree_id": "3d6d85b26b142653480856def68cb314757eb5c2",
+          "url": "https://github.com/wado-lang/wado/commit/995760ac85386aa9ff076689be89deabfbb3cc50"
+        },
+        "date": 1780396552371,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
