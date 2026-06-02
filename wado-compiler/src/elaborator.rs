@@ -1568,23 +1568,71 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         // `builtin::array_copy` call in `String::push_str`
                         // mistyped as `Iterator::last`'s `Option<T>`, making
                         // reify emit a spurious `drop` of a value-less call →
-                        // Wasm stack underflow). Reify never reads these facts —
-                        // it emits default methods from the pre-synthesised
-                        // `pending_default_methods` TIR — so keying them off the
-                        // impl module is all that matters; the same trait body
-                        // walked for multiple impls harmlessly overwrites its
-                        // own entries under the trait-module key.
+                        // Wasm stack underflow).
+                        //
+                        // Stage 5 completion (this commit): we additionally
+                        // snapshot each default method's body-walk facts into
+                        // `ModuleSemantics::default_method_facts` so reify can
+                        // synthesise the same `TirFunction` from those facts
+                        // (no `pending_default_methods` horizontal hand-off).
+                        // The snapshot is per-(impl_block.id,
+                        // default_method.id) so the same trait body
+                        // synthesised for many impls stays per-impl-isolated
+                        // — without the swap, each walk would overwrite the
+                        // previous impl's `(trait_module, ast_id)` keys and
+                        // reify would only see the last impl's facts.
+                        //
+                        // `pending_default_methods` is still pushed in this
+                        // intermediate step so the existing reify drain keeps
+                        // producing TIR; step 4 of the migration switches
+                        // reify to read `default_method_facts` and step 5
+                        // removes this push site entirely.
                         let prev_override =
                             std::mem::replace(&mut self.ann_module_override, trait_module);
 
                         for default_method in &default_methods {
-                            if let Some(mut tir_func) = self.resolve_method(
+                            // Swap in fresh fact maps so this default method's
+                            // body walk records into its own isolated key
+                            // space. `decls` and `imports` stay shared with
+                            // the surrounding `ModuleSemantics` (the walk
+                            // reads them for name resolution + decl indices,
+                            // and any `pending_anonymous_structs` from an
+                            // anon literal inside the default body must flow
+                            // into the impl module's `TirModule`).
+                            let saved_types = std::mem::replace(
+                                &mut self.sem.types,
+                                super::elaborator::sem::TypeAnnotations::default(),
+                            );
+                            let saved_bindings = std::mem::replace(
+                                &mut self.sem.bindings,
+                                super::elaborator::sem::ModuleBindings::default(),
+                            );
+
+                            let tir_func_opt = self.resolve_method(
                                 default_method,
                                 &struct_name,
                                 &impl_block.ty,
                                 Some(trait_n),
                                 Some(trait_ast),
-                            ) {
+                            );
+
+                            // Take the per-impl body facts back out under
+                            // `(impl_block.id, default_method.id)` so reify
+                            // can load them when synthesising this default
+                            // method for this impl.
+                            let body_types =
+                                std::mem::replace(&mut self.sem.types, saved_types);
+                            let body_bindings =
+                                std::mem::replace(&mut self.sem.bindings, saved_bindings);
+                            self.sem.default_method_facts.insert(
+                                (impl_block.id, default_method.id),
+                                super::elaborator::sem::DefaultMethodFacts {
+                                    types: body_types,
+                                    bindings: body_bindings,
+                                },
+                            );
+
+                            if let Some(mut tir_func) = tir_func_opt {
                                 tir_func.name = MethodName::format_local(
                                     &struct_name,
                                     Some(trait_n),
@@ -1594,10 +1642,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 // in the AST, but they should be treated as pub since they are
                                 // part of a trait implementation
                                 tir_func.is_pub = true;
-                                // Stage 5 / Gap 12: record the synthesised
-                                // default-method function so `reify_module`
-                                // reads it from
-                                // `sem.decls.pending_default_methods`.
+                                // Transitional: keep the existing
+                                // `pending_default_methods` push site live so
+                                // reify's current drain still produces TIR.
+                                // Step 5 of the migration removes this once
+                                // reify_impl_default_methods is the sole
+                                // source.
                                 self.record_pending_default_method(tir_func.clone());
                                 tir_module.add_function(tir_func);
                             }
