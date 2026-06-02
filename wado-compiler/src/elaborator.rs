@@ -13,6 +13,7 @@ mod call;
 mod callee;
 mod closure;
 mod coercion;
+mod control_flow;
 mod expr;
 mod handlers;
 mod infer;
@@ -533,6 +534,68 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .as_ref()
             .unwrap_or(&self.current_module_source);
         SymbolKey::new(module.clone(), ast_id)
+    }
+
+    /// Build a [`control_flow::CtrlFlowCtx`] over the currently-active
+    /// module's `expression_types` map. Used by the AST-level
+    /// missing-return / definite-exit walks that replaced the TIR
+    /// walkers consuming the combined walk's body TIR.
+    fn ctrl_flow_ctx(&self) -> control_flow::CtrlFlowCtx<'_> {
+        let module = self
+            .ann_module_override
+            .as_ref()
+            .unwrap_or(&self.current_module_source);
+        control_flow::CtrlFlowCtx {
+            expression_types: &self.sem.types.expression_types,
+            module,
+        }
+    }
+
+    pub(super) fn ast_find_return_type_in_block(
+        &self,
+        block: &crate::ast::Block,
+    ) -> Option<TypeId> {
+        control_flow::find_return_type_in_block(self.ctrl_flow_ctx(), block)
+    }
+
+    pub(super) fn ast_block_always_exits(&self, block: &crate::ast::Block) -> bool {
+        control_flow::block_always_exits(self.ctrl_flow_ctx(), block)
+    }
+
+    /// Emit a `MissingReturn` diagnostic when a declared non-Unit
+    /// return type cannot be satisfied by the body. Skipped for
+    /// `Unit`/`Never` declarations, for missing bodies (declared-only
+    /// externals), and for bodies whose every control path provably
+    /// exits before the end — either via an explicit `return`, a
+    /// divergent statement like `panic("…")`, or a fully-diverging
+    /// labeled block / `loop`.
+    ///
+    /// The previous heuristic accepted any nested `return` even when
+    /// only one branch of an `if` carried one, which let partial-return
+    /// bodies through and produced an invalid core Wasm module ("type
+    /// mismatch: expected i32 but nothing on stack") for the
+    /// fall-through path. AST-walker mirrors that strict definite-exit
+    /// analysis using recorded `expression_types`.
+    pub(super) fn validate_missing_return_ast(
+        &self,
+        return_type: TypeId,
+        body: Option<&crate::ast::Block>,
+        span: crate::token::Span,
+    ) {
+        if return_type == crate::tir::TypeTable::UNIT || return_type == crate::tir::TypeTable::NEVER
+        {
+            return;
+        }
+        let Some(body) = body else {
+            return;
+        };
+        if control_flow::block_always_exits(self.ctrl_flow_ctx(), body) {
+            return;
+        }
+        let _ = self.logger.error(types::TypeError::MissingReturn {
+            return_type: self.tysys.type_table.borrow().type_name(return_type),
+            span,
+        });
     }
 
     /// Record the resolved [`TypeId`] for the expression at `ast_id` —

@@ -462,6 +462,23 @@ Trade-offs.
       across many impls. `pending_default_methods` + the
       `record_pending_default_method` helper are gone. Reify is now the
       sole producer of every `TirFunction` in every emitted `TirModule`.
+- [x] **Stage 5 completion — missing-return analysis moved off the
+      combined walk's body TIR.** `validate_missing_return`,
+      `block_always_exits`, and `find_return_type_in_*` previously
+      walked the combined walk's `TirBlock` from `resolve_function` /
+      `resolve_method` / `resolve_closure`, which forced Stage 7-B
+      leaves to keep producing `TirStmtKind::Return` /
+      `TirExprKind::Block` / `LabeledBlock` / `If` / `Match` /
+      `Resume` / `WithHandler` shapes the analysis could read.
+      Resolution: `elaborator/control_flow.rs` ports the eight walkers
+      to operate on the parsed AST, reading
+      `expression_types[(module, expr.id)]` for the `type_id == NEVER`
+      check the TIR version did on `TirExpr::type_id`. Both phases
+      consult it via a small `CtrlFlowCtx { expression_types, module }`
+      view — the combined walk through `Elaborator::ctrl_flow_ctx`,
+      reify through a direct construction over `self.sem.types`. The
+      TIR walkers (~330 lines in `expr.rs`) and the
+      `validate_missing_return(TirBlock)` helper are deleted.
 - [ ] **Stage 7-B** — `annotate` stops building TIR. Each `resolve_*`
       returns the resolved type + records facts only; the duplicate
       `TirExpr` / `TirStmt` / `TirItem` halves of expr.rs / stmt.rs /

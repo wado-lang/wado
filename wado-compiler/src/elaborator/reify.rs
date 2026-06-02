@@ -4142,9 +4142,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .as_ref()
             .map(|gi| (gi.instance_type, gi.type_args.clone()))
             .unwrap_or((recorded_type, Vec::new()));
-        let mangled_struct_name = gi
-            .and_then(|gi| gi.mangled_name.clone())
-            .unwrap_or(struct_name);
+        let mangled_struct_name = gi.and_then(|gi| gi.mangled_name).unwrap_or(struct_name);
 
         // Substitute the decl's `TypeParam`s with the instance's generic
         // args so a field's expected type is concrete (a no-op for
@@ -5100,9 +5098,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Block bodies with explicit `return X` have a NEVER/UNIT
         // tail; the closure's logical return is the returned type.
-        // Production: closure.rs:276+.
-        let return_type = if let TirExprKind::Block(ref block) = body.kind {
-            super::Elaborator::<H>::find_return_type_in_block(block).unwrap_or(body.type_id)
+        // Use the AST-walker (consults `expression_types`) so this
+        // doesn't depend on the combined walk's body TIR. Block-gated
+        // to match the original TIR walker's
+        // `if let TirExprKind::Block(ref block) = body.kind` —
+        // single-expression closure bodies (e.g. `|c| c.method()`)
+        // take their body's type as the return type directly.
+        let return_type = if let crate::ast::Expr::Block(ref block) = closure.body {
+            let ctrl_ctx = super::control_flow::CtrlFlowCtx {
+                expression_types: &self.sem.types.expression_types,
+                module: &self.current_module_source,
+            };
+            super::control_flow::find_return_type_in_block(ctrl_ctx, block).unwrap_or(body.type_id)
         } else {
             body.type_id
         };

@@ -54,8 +54,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `outer_index`, recorded `MutCapture::outer_index`, etc.) stays in
         // lockstep with reify's expansion — reify's `reify_assert` also
         // allocates `__cond` at this point in its own walk.
-        let _cond_local_index =
-            ctx.add_local("__cond".to_string(), cond_tir.type_id, false, None);
+        let _cond_local_index = ctx.add_local("__cond".to_string(), cond_tir.type_id, false, None);
 
         // Walk the assert message for fact recording too.
         if let Some(msg) = &assert_stmt.message {

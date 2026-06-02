@@ -64,7 +64,7 @@ pub(crate) struct ModuleSemantics {
     ///
     /// Each value is a full `ModuleSemantics` with:
     /// - `types` / `bindings`: freshly produced by the combined walk's body
-    ///   walk for that one (impl, default_method) pair, keyed under the
+    ///   walk for that one `(impl, default_method)` pair, keyed under the
     ///   trait module via `ann_module_override`.
     /// - `decls` / `imports`: cloned from the surrounding impl module's
     ///   `ModuleSemantics` so name resolution + decl indices work inside

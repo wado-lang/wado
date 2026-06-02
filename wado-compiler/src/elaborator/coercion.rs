@@ -8,9 +8,7 @@ use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
-use crate::tir::{
-    CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable,
-};
+use crate::tir::{CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
 use crate::token::Span;
 
 /// Body-walk placeholder for a successful coercion. The combined walk no
@@ -748,20 +746,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 builder_type,
                 element_type,
                 push_self_kind,
-                trait_name: trait_name.clone(),
+                trait_name,
                 output_type,
-                impl_module_source: impl_module_source.clone(),
-                builder_base_name: builder_base_name.clone(),
-                mangled_builder_name: mangled_builder_name.clone(),
-                type_arg_ids: type_arg_ids.clone(),
-                type_arg_names: type_arg_names.clone(),
+                impl_module_source,
+                builder_base_name,
+                mangled_builder_name,
+                type_arg_ids,
+                type_arg_names,
                 newtype_cast_to: if needs_newtype_cast {
                     Some(target_type)
                 } else {
                     None
                 },
-                new_mangled_name: new_mangled_name.clone(),
-                push_mangled_name: push_mangled_name.clone(),
+                new_mangled_name,
+                push_mangled_name,
                 build_mangled_name,
             },
         );

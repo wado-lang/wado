@@ -171,13 +171,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
 
-        // Diagnose missing returns / type mismatches on the body. Mirrors
-        // the pre-7-B return-type analysis so an explicit `return` inside
-        // a partial branch reports the same error.
-        let return_type = if let TirExprKind::Block(ref block) = body.kind {
-            match Self::find_return_type_in_block(block) {
+        // Diagnose missing returns / type mismatches on block-bodied
+        // closures via the AST-walker. Mirrors the pre-7-B return-type
+        // analysis (which gated this on `body.kind == TirExprKind::Block`)
+        // so an explicit `return` inside a partial branch reports the
+        // same error, without depending on the combined walk's body
+        // TIR. Single-expression closure bodies (e.g.
+        // `|c: char| c.to_ascii_uppercase()`) take the body's type as
+        // the return type directly — no missing-return check applies.
+        let return_type = if let ast::Expr::Block(ref block) = closure.body {
+            match self.ast_find_return_type_in_block(block) {
                 Some(t) => {
-                    if !Self::block_always_exits(block)
+                    if !self.ast_block_always_exits(block)
                         && body.type_id != t
                         && body.type_id != TypeTable::NEVER
                     {
