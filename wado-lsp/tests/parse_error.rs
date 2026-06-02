@@ -216,3 +216,29 @@ fn g() -> i32 {
         );
     });
 }
+
+/// A body-level syntax error leaves an `Expr::Error` placeholder inside an
+/// otherwise reachable function body. The LSP `semantics` path must tolerate
+/// it without panicking: `build_tir_from_state` skips reify (Stage 5) for a
+/// module with syntax errors, so reify never walks the placeholder, while the
+/// Phase-1 body walk still records diagnostics and edges. Pins the
+/// reify-skip guard that makes the reify `Error` arms `unreachable!`.
+#[test]
+fn body_error_node_does_not_panic_semantics() {
+    futures::executor::block_on(async {
+        let path = "file:///body_err.wado";
+        // `let b = a + ;` reifies to `Binary { a, +, Expr::Error }` in a
+        // reachable, otherwise-valid body — the case that reaches reify.
+        let src = "export fn f() -> i32 {\n    let a = 1;\n    let b = a + ;\n    return 0;\n}\n";
+        let mut engine = Engine::new();
+        engine.open_document(path, src.to_string());
+        let host = MapHost::single("/body_err.wado", src);
+        let diags = engine.diagnostics(path, &host).await;
+        assert!(
+            errors(&diags)
+                .iter()
+                .any(|d| d.message.starts_with("parse error:")),
+            "the body syntax error must surface as a parse-error diagnostic",
+        );
+    });
+}

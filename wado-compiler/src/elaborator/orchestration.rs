@@ -1222,9 +1222,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .module_semantics
                 .insert(module_source.clone(), saved_sem);
 
-            if resolve_result.is_ok() {
+            if resolve_result.is_ok() && !module.has_syntax_errors() {
                 // Phase 2 — `reify_modules`: walk the AST + `ModuleSemantics`
                 // to produce the TIR. Reify is the source of truth.
+                //
+                // Skipped for a module with recovered syntax errors: its TIR is
+                // never consumed (the batch path bails on `!is_complete()`
+                // before reading `tir_modules`, and the LSP path reads only the
+                // Phase 1 edge/type maps, never `tir_modules`). Skipping keeps
+                // reify off partial ASTs, so it never walks an `Error`
+                // placeholder node — `reify` stays "real TIR for well-formed
+                // code only", while Phase 1 still records the use→def edges the
+                // LSP needs on the broken module.
                 let sem_ref = state
                     .module_semantics
                     .get(module_source)

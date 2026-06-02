@@ -1703,10 +1703,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Stmt::For(f) => self.reify_for(f, ctx),
             ast::Stmt::Assert(assert_stmt) => self.reify_assert(assert_stmt, ctx),
             ast::Stmt::ForOf(for_of) => self.reify_for_of(for_of, ctx),
-            // Parser error-recovery placeholder. Reached when the LSP
-            // `semantics_of` path reifies a partial AST (the batch path is
-            // fail-fast and stops before reify). Emit nothing.
-            ast::Stmt::Error(_) => Vec::new(),
+            // `build_tir_from_state` skips reify for modules with syntax
+            // errors, so reify never walks an `Error` placeholder.
+            ast::Stmt::Error(_) => {
+                unreachable!("reify does not run on modules with syntax errors")
+            }
         }
     }
 
@@ -1865,13 +1866,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     let_stmt.pattern
                 )
             }
-            // Parser error-recovery placeholder. Reached when the LSP
-            // `semantics_of` path reifies a partial AST (the batch path is
-            // fail-fast and stops before reify). Bind nothing, keep the
-            // (error-typed) value as an expression statement so the result
-            // stays a valid TirStmt.
+            // `build_tir_from_state` skips reify for modules with syntax
+            // errors, so reify never walks an `Error` placeholder.
             ast::Pattern::Error(_) => {
-                TirStmt::new(crate::tir::TirStmtKind::Expr(value), let_stmt.span)
+                unreachable!("reify does not run on modules with syntax errors")
             }
         }
     }
@@ -2294,10 +2292,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
             }
             ast::Expr::WithHandler(with_expr) => self.reify_with_handler(with_expr, ctx),
-            // Parser error-recovery placeholder. Reached when the LSP
-            // `semantics_of` path reifies a partial AST (the batch path is
-            // fail-fast and stops before reify); resolves to the error type.
-            ast::Expr::Error(e) => TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, e.span),
+            // `build_tir_from_state` skips reify for modules with syntax
+            // errors, so reify never walks an `Error` placeholder.
+            ast::Expr::Error(_) => {
+                unreachable!("reify does not run on modules with syntax errors")
+            }
         }
     }
 
@@ -8661,10 +8660,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 scrutinee_type,
                 ctx,
             ),
-            // Parser error-recovery placeholder. Reached when the LSP
-            // `semantics_of` path reifies a partial AST (the batch path is
-            // fail-fast and stops before reify). Inert.
-            ast::Pattern::Error(_) => TirPattern::Wildcard,
+            // `build_tir_from_state` skips reify for modules with syntax
+            // errors, so reify never walks an `Error` placeholder.
+            ast::Pattern::Error(_) => {
+                unreachable!("reify does not run on modules with syntax errors")
+            }
         }
     }
 
