@@ -586,6 +586,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         param_names: Vec<String>,
         param_defaults: Vec<Option<ast::Expr>>,
         return_type: TypeId,
+        method_type_args: Vec<TypeId>,
     ) {
         let Some(ast_id) = ast_id else { return };
         let key = self.ann_key(ast_id);
@@ -599,6 +600,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 param_names,
                 param_defaults,
                 return_type,
+                method_type_args,
             },
         );
     }

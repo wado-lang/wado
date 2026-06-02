@@ -108,6 +108,23 @@ pub(crate) struct MethodDispatch {
     /// type makes reify emit a spurious `drop` of a value-less call →
     /// Wasm stack underflow).
     pub(crate) return_type: TypeId,
+    /// Method-level type args for the [`crate::tir::TirExprKind::MethodCall`]
+    /// node, in the exact form the combined walk passes to
+    /// [`super::super::Elaborator::build_tir_method_call`]. The
+    /// monomorphizer's `collect_func_instantiation_sites` keys off this
+    /// field to queue `Struct^Trait::method<Args>` instances, so it must
+    /// carry the resolved args — both explicit turbofish and
+    /// inference-recovered ones.
+    ///
+    /// Recorded separately from `function_ref.monomorph_info.method_type_args`
+    /// because the blanket-impl branch in `resolve_method_call_with`
+    /// constructs `MonomorphInfo` with `method_type_args: vec![]` even when
+    /// the call site has a non-empty turbofish — the TIR node still receives
+    /// the turbofish args (they pass straight through `build_tir_method_call`),
+    /// so reify needs its own un-zeroed copy to avoid re-resolving the AST
+    /// type-arg list against the current type-param scope.
+    #[allow(dead_code)]
+    pub(crate) method_type_args: Vec<TypeId>,
 }
 
 /// Which sub-coercion [`super::super::Elaborator::try_coerce`] applied at

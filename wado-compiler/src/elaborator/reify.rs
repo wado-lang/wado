@@ -7384,30 +7384,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &self.tysys.type_table,
         );
 
-        // Method-level type args for the TIR `MethodCall` node. The
-        // monomorphizer's `collect_func_instantiation_sites` keys off this
-        // field to queue `Struct^Trait::method<Args>` instances, so it
-        // must carry the *resolved* args — including ones inferred from
-        // argument types when there is no turbofish (`c.transform(42)`
-        // infers `T = i32`). Explicit turbofish resolves against the
-        // current type-param scope; otherwise fall back to the inferred
-        // args the elaborator baked into the recorded `FunctionRef`'s
-        // `monomorph_info` (production passes the same vector as the node
-        // type args at `method_call.rs:817`).
-        let type_args: Vec<TypeId> = if method_call.type_args.is_empty() {
-            dispatch
-                .function_ref
-                .monomorph_info
-                .as_ref()
-                .map(|mi| mi.method_type_args.clone())
-                .unwrap_or_default()
-        } else {
-            method_call
-                .type_args
-                .iter()
-                .map(|ty| self.resolve_type(ty))
-                .collect()
-        };
+        // Method-level type args for the TIR `MethodCall` node — the exact
+        // vector annotate fed into `build_tir_method_call`. The monomorphizer's
+        // `collect_func_instantiation_sites` keys off this field to queue
+        // `Struct^Trait::method<Args>` instances, so it must match what the
+        // combined walk produced byte-for-byte (turbofish-resolved or
+        // inference-recovered). Reading it from `MethodDispatch` keeps the
+        // blanket-impl turbofish case correct (where
+        // `monomorph_info.method_type_args` is zeroed by design).
+        let type_args = dispatch.method_type_args.clone();
 
         // Per-arg `is_mut` comes from the recorded `MethodDispatch`
         // (drained from `lookup_method_param_is_mut` at annotate time).
