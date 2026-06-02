@@ -1,0 +1,36 @@
+// Regression: a method-level generic param on an impl that binds a CONCRETE
+// trait arg (`impl Maker<i32>` binds the trait's `T` to `i32`).
+//
+// `resolve_method` placed the method's own `<U>` at
+// `trait_ctx.type_params.len()`, which counted the bound trait arg `T`, so `U`
+// became TypeParam index 1. But the monomorphizer substitutes method params at
+// `impl_type_params.len() + param.index` (= 0 here), so the index-1 `U` in the
+// body/signature was never substituted and reached codegen as an unsubstituted
+// TypeParam. Fixed by starting method type params at `impl_type_params.len()`.
+
+trait Maker<T> {
+    fn make(&self) -> T;
+    fn echo<U>(&self, u: U) -> U;
+}
+
+struct IntMaker {}
+
+impl Maker<i32> for IntMaker {
+    fn make(&self) -> i32 {
+        return 7;
+    }
+    fn echo<U>(&self, u: U) -> U {
+        let x: U = u;
+        return x;
+    }
+}
+
+test "method generic on concretely-bound trait impl" {
+    let m = IntMaker {};
+    assert m.make() == 7;
+    assert m.echo(true) == true;
+    assert m.echo(42) == 42;
+}
+
+__DATA__
+{"test": {}}

@@ -335,7 +335,7 @@ fn elide_return_only_temps(module: &mut WirPackage, pinned: &IndexSet<u32>) {
     }
 }
 
-fn elide_return_only_temps_in_body(body: &mut Vec<WirInstr>) {
+fn elide_return_only_temps_in_body(body: &mut [WirInstr]) {
     let mut stats: crate::hashmap::IndexMap<String, ReturnTempStats> =
         crate::hashmap::IndexMap::default();
     scan_return_temp_stats(body, &mut stats);
@@ -414,6 +414,7 @@ const RETURN_TEMP_INTERVENING_BUDGET: usize = 32;
 ///   - don't reference `name`,
 ///   - don't write any local that `value` reads, and
 ///   - don't read any local that `value` writes.
+///
 /// Returns `None` when no such return exists within
 /// [`RETURN_TEMP_INTERVENING_BUDGET`] stmts.
 fn find_paired_return(
@@ -546,7 +547,7 @@ fn scan_return_temp_uses_in_expr(
 /// where `name` is in `valid` into `Nop; [intervening]; Return(X)`. The
 /// original `LocalSet`'s value moves into the `Return`; the `LocalSet`
 /// slot becomes a `Nop` so downstream cleanup passes can drop it.
-fn rewrite_return_temp_pairs(instrs: &mut Vec<WirInstr>, valid: &IndexSet<String>) {
+fn rewrite_return_temp_pairs(instrs: &mut [WirInstr], valid: &IndexSet<String>) {
     let mut i = 0;
     while i < instrs.len() {
         // Match the relaxed pair shape: same predicate that

@@ -513,6 +513,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         drop(scope);
 
+        // Record the projected type params (defaults resolved with the scope
+        // alive, above) for reify to read back instead of re-resolving them.
+        self.sem
+            .types
+            .decl_type_params
+            .insert(self.ann_key(struct_decl.id), type_params.clone());
+
         let serde_rename_all = struct_decl.attrs.iter().find_map(|a| {
             if a.name == "serde" {
                 a.kv_value("rename_all").map(str::to_string)
@@ -673,6 +680,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     pub(super) fn resolve_effect_decl(&mut self, decl: &ast::InterfaceDecl) -> TirEffect {
         let operations = self.resolve_effect_ops(&[], &decl.methods, None);
+        // Record the resolved op signatures for reify to read back (single
+        // source of truth = this path) instead of re-resolving them.
+        self.sem
+            .types
+            .effect_ops
+            .insert(self.ann_key(decl.id), operations.clone());
         TirEffect {
             name: decl.name.clone(),
             is_pub: decl.is_pub,
@@ -688,6 +701,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &decl.methods,
             Some((decl.name.as_str(), module_source)),
         );
+        // Record the resolved op signatures for reify to read back (single
+        // source of truth = this path) instead of re-resolving them.
+        self.sem
+            .types
+            .effect_ops
+            .insert(self.ann_key(decl.id), operations.clone());
         TirResource {
             name: decl.name.clone(),
             is_pub: decl.is_pub,
@@ -778,6 +797,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
 
         drop(scope);
+
+        // Record the projected type params (defaults resolved with the scope
+        // alive, above) for reify to read back instead of re-resolving them.
+        self.sem
+            .types
+            .decl_type_params
+            .insert(self.ann_key(variant_decl.id), type_params.clone());
 
         register_variant_compiler_item(
             &self.tysys.type_table,
@@ -1212,6 +1238,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.current_effect_param_decls = old_effect_param_decls;
         drop(scope);
 
+        // Record the resolved signature for reify to read back (single source
+        // of truth = this path): param types in declaration order, the
+        // (post-async-erasure) return type, and the projected TIR type params
+        // (defaults resolved with the type-param scope alive, above).
+        let sig_key = self.ann_key(func.id);
+        self.sem
+            .types
+            .fn_param_types
+            .insert(sig_key.clone(), params.iter().map(|p| p.type_id).collect());
+        self.sem
+            .types
+            .fn_return_types
+            .insert(sig_key.clone(), return_type);
+        self.sem
+            .types
+            .decl_type_params
+            .insert(sig_key, type_params.clone());
+
         Some(TirFunction {
             module_source: ModuleSource::default(),
             name: func.name.clone(),
@@ -1507,6 +1551,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // Record the impl-type-param scheme for reify to read back instead of
+        // recomputing it (single source of truth = this original path). Keyed
+        // via `ann_key` so a default-method body synthesised for several impls
+        // lands under its owning module.
+        let method_key = scope.ann_key(func.id);
+        scope
+            .sem
+            .types
+            .method_impl_type_params
+            .insert(method_key, impl_type_params.clone());
+
         // Populate bounds from the impl block's type_params
         // (inherited from outer scope - second-pass sets these up).
         // The caller sets up bounds BEFORE calling resolve_method, so the saved
@@ -1547,7 +1602,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // function type and do NOT consume a `TypeParam` index slot, so the
         // index space stays dense for real type params. Effect params have
         // their own channel (`current_effect_param_decls`, installed above).
-        let offset = scope.trait_ctx.type_params.len();
+        // Method-level type params start after the impl block's own type
+        // params (`impl_type_params`) — the SAME base the monomorphizer uses
+        // when substituting (`impl_type_params.len() + param.index` in
+        // `func_inst::instantiate_function`). It must NOT count the bound trait
+        // args that `bind_trait_type_params_from_impl` just inserted into
+        // `trait_ctx.type_params` (e.g. the `T` of `impl Maker<i32> for X`):
+        // those are name-resolution bindings, not positional TypeParam slots
+        // the monomorphizer knows about, so counting them would place the
+        // method's `<U>` at an index the substitution map never fills, leaving
+        // an unsubstituted `TypeParam` to reach codegen.
+        let offset = impl_type_params.len();
         let mut next_idx = offset as u32;
         for param in &func.type_params {
             if param.is_effect {
@@ -1806,6 +1871,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.current_effect_param_decls = old_effect_param_decls;
         scope.trait_ctx.self_type = old_self_type;
         drop(scope);
+
+        // Record the resolved param/return types for reify to read back
+        // (single source of truth = this path); `params` is in `func.params`
+        // order including the receiver.
+        let sig_key = self.ann_key(func.id);
+        self.sem
+            .types
+            .fn_param_types
+            .insert(sig_key.clone(), params.iter().map(|p| p.type_id).collect());
+        self.sem.types.fn_return_types.insert(sig_key, return_type);
+        // Record the method-level TIR type params (with defaults resolved while
+        // the type-param scope was still alive, above) for reify to read back
+        // rather than re-projecting them after its scope is torn down.
+        self.sem
+            .types
+            .decl_type_params
+            .insert(self.ann_key(func.id), type_params.clone());
 
         // Store type parameters for generic methods (for call site substitution)
         if !func.type_params.is_empty() {

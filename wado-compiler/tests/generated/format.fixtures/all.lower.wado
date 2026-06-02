@@ -5224,10 +5224,6 @@ fn "u128^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<u1
     return "core::prelude/int128.wado::u128::from_str_radix_range"(s, start, end, 10);
 }
 
-pub fn "u128^FromStr::from_str"(s: &String) -> Result<u128, ParseIntError> {
-    return "core::prelude/int128.wado::u128^FromStr::from_str_range"(s, 0, s.String::len());
-}
-
 pub fn "u128^Display::fmt"(self: &u128, f: &mut Formatter) {
     self.u128::fmt_into(f);
 }
@@ -5445,7 +5441,7 @@ pub fn i128::from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) 
             } else {
                 let pos: i128 = i128 { low: v.u128::low(), high: v.u128::high() as i64 };
                 Result<i128, ParseIntError>::Ok(pos.i128::neg());
-            }
+            };
         } else {
             if (v."u128^Ord::cmp"(&max_pos) == Ordering::Greater) {
                 Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(IntErrorKind::PosOverflow));
@@ -5666,10 +5662,6 @@ fn i128::fmt_base(self: &i128, f: &mut Formatter, base: i32, upper: bool, prefix
 
 fn "i128^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<i128, ParseIntError> {
     return "core::prelude/int128.wado::i128::from_str_radix_range"(s, start, end, 10);
-}
-
-pub fn "i128^FromStr::from_str"(s: &String) -> Result<i128, ParseIntError> {
-    return "core::prelude/int128.wado::i128^FromStr::from_str_range"(s, 0, s.String::len());
 }
 
 pub fn "i128^Display::fmt"(self: &i128, f: &mut Formatter) {
@@ -5932,6 +5924,14 @@ fn "i128^Step::next_step"(self: &i128) -> Option<i128> {
         return null;
     }
     return Option<i128>::Some(*self."i128^Add::add"(&"core::prelude/int128.wado::i128::from_i64"(1)));
+}
+
+pub fn "u128^FromStr::from_str"(s: &String) -> Result<u128, ParseIntError> {
+    return "core::prelude/int128.wado::u128^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+pub fn "i128^FromStr::from_str"(s: &String) -> Result<i128, ParseIntError> {
+    return "core::prelude/int128.wado::i128^FromStr::from_str_range"(s, 0, s.String::len());
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -6352,7 +6352,7 @@ pub fn parse_i64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: 
                 Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(IntErrorKind::NegOverflow));
             } else {
                 Result<i64, ParseIntError>::Ok((0 - v) as i64);
-            }
+            };
         } else {
             if (v > max as u64) {
                 Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(IntErrorKind::PosOverflow));
@@ -7136,7 +7136,7 @@ pub fn char::encode_utf8(self: Box<char>) -> Array<u8> {
             let mut __b: Array<u8> = "core::prelude/array.wado::Array<u8>^SequenceLiteralBuilder::new_literal"(1);
             __b."Array<u8>^SequenceLiteralBuilder::push_literal"(cp as u8);
             break __seq_lit: __b."Array<u8>^SequenceLiteralBuilder::build"();
-        };
+        } as Array<u8>;
     }
     if (cp < 0x800) {
         let mut buf: Array<u8> = "core::prelude/array.wado::Array<u8>::with_capacity"(2);
@@ -7196,10 +7196,6 @@ fn "i8^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<i8, 
     };
 }
 
-pub fn "i8^FromStr::from_str"(s: &String) -> Result<i8, ParseIntError> {
-    return "core::prelude/primitive.wado::i8^FromStr::from_str_range"(s, 0, s.String::len());
-}
-
 pub fn u8::max(a: u8, b: u8) -> u8 {
     return "core::builtin::core/builtin/select<u8>"((a > b), a, b);
 }
@@ -7235,10 +7231,6 @@ fn "u8^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<u8, 
         Ok(v) => Result<u8, ParseIntError>::Ok(v as u8),
         Err(e) => Result<u8, ParseIntError>::Err(e),
     };
-}
-
-pub fn "u8^FromStr::from_str"(s: &String) -> Result<u8, ParseIntError> {
-    return "core::prelude/primitive.wado::u8^FromStr::from_str_range"(s, 0, s.String::len());
 }
 
 pub fn i16::max(a: i16, b: i16) -> i16 {
@@ -7278,10 +7270,6 @@ fn "i16^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<i16
     };
 }
 
-pub fn "i16^FromStr::from_str"(s: &String) -> Result<i16, ParseIntError> {
-    return "core::prelude/primitive.wado::i16^FromStr::from_str_range"(s, 0, s.String::len());
-}
-
 pub fn u16::max(a: u16, b: u16) -> u16 {
     return "core::builtin::core/builtin/select<u16>"((a > b), a, b);
 }
@@ -7317,10 +7305,6 @@ fn "u16^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<u16
         Ok(v) => Result<u16, ParseIntError>::Ok(v as u16),
         Err(e) => Result<u16, ParseIntError>::Err(e),
     };
-}
-
-pub fn "u16^FromStr::from_str"(s: &String) -> Result<u16, ParseIntError> {
-    return "core::prelude/primitive.wado::u16^FromStr::from_str_range"(s, 0, s.String::len());
 }
 
 pub fn i32::max(a: i32, b: i32) -> i32 {
@@ -7384,10 +7368,6 @@ fn "i32^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<i32
     };
 }
 
-pub fn "i32^FromStr::from_str"(s: &String) -> Result<i32, ParseIntError> {
-    return "core::prelude/primitive.wado::i32^FromStr::from_str_range"(s, 0, s.String::len());
-}
-
 pub fn u32::max(a: u32, b: u32) -> u32 {
     return "core::builtin::core/builtin/select<u32>"((a > b), a, b);
 }
@@ -7435,10 +7415,6 @@ fn "u32^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<u32
         Ok(v) => Result<u32, ParseIntError>::Ok(v as u32),
         Err(e) => Result<u32, ParseIntError>::Err(e),
     };
-}
-
-pub fn "u32^FromStr::from_str"(s: &String) -> Result<u32, ParseIntError> {
-    return "core::prelude/primitive.wado::u32^FromStr::from_str_range"(s, 0, s.String::len());
 }
 
 pub fn i64::max(a: i64, b: i64) -> i64 {
@@ -7512,10 +7488,6 @@ pub fn i64::from_str_radix(s: &String, radix: u32) -> Result<i64, ParseIntError>
 
 fn "i64^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<i64, ParseIntError> {
     return "core::prelude/intparse.wado::parse_i64_radix_range"(s, start, end, 10, 9223372036854775807, 9223372036854775808);
-}
-
-pub fn "i64^FromStr::from_str"(s: &String) -> Result<i64, ParseIntError> {
-    return "core::prelude/primitive.wado::i64^FromStr::from_str_range"(s, 0, s.String::len());
 }
 
 pub fn u64::max(a: u64, b: u64) -> u64 {
@@ -7624,10 +7596,6 @@ pub fn u64::from_str_radix(s: &String, radix: u32) -> Result<u64, ParseIntError>
 
 fn "u64^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<u64, ParseIntError> {
     return "core::prelude/intparse.wado::parse_u64_radix_range"(s, start, end, 10, 18446744073709551615);
-}
-
-pub fn "u64^FromStr::from_str"(s: &String) -> Result<u64, ParseIntError> {
-    return "core::prelude/primitive.wado::u64^FromStr::from_str_range"(s, 0, s.String::len());
 }
 
 fn fmt_float_special(f: &mut Formatter, is_neg: bool, kind: SpecialKind, zero_repr: String) {
@@ -7905,10 +7873,6 @@ fn "f32^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<f32
         Ok(v) => Result<f32, ParseFloatError>::Ok(v as f32),
         Err(e) => Result<f32, ParseFloatError>::Err(e),
     };
-}
-
-pub fn "f32^FromStr::from_str"(s: &String) -> Result<f32, ParseFloatError> {
-    return "core::prelude/primitive.wado::f32^FromStr::from_str_range"(s, 0, s.String::len());
 }
 
 fn f64::fmt_into(self: Box<f64>, f: &mut Formatter) {
@@ -8245,10 +8209,6 @@ pub fn f64::from_bits(bits: i64) -> f64 {
 
 fn "f64^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<f64, ParseFloatError> {
     return "core::prelude/intparse.wado::parse_f64_from_str_range"(s, start, end);
-}
-
-pub fn "f64^FromStr::from_str"(s: &String) -> Result<f64, ParseFloatError> {
-    return "core::prelude/primitive.wado::f64^FromStr::from_str_range"(s, 0, s.String::len());
 }
 
 pub fn "()^Display::fmt"(self: &(), f: &mut Formatter) {
@@ -9570,6 +9530,46 @@ pub fn "f32^TryFrom<u64>::try_from"(value: u64) -> Result<f32, ConvertError> {
     return Result<f32, ConvertError>::Ok(value as f32);
 }
 
+pub fn "i8^FromStr::from_str"(s: &String) -> Result<i8, ParseIntError> {
+    return "core::prelude/primitive.wado::i8^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+pub fn "u8^FromStr::from_str"(s: &String) -> Result<u8, ParseIntError> {
+    return "core::prelude/primitive.wado::u8^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+pub fn "i16^FromStr::from_str"(s: &String) -> Result<i16, ParseIntError> {
+    return "core::prelude/primitive.wado::i16^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+pub fn "u16^FromStr::from_str"(s: &String) -> Result<u16, ParseIntError> {
+    return "core::prelude/primitive.wado::u16^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+pub fn "i32^FromStr::from_str"(s: &String) -> Result<i32, ParseIntError> {
+    return "core::prelude/primitive.wado::i32^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+pub fn "u32^FromStr::from_str"(s: &String) -> Result<u32, ParseIntError> {
+    return "core::prelude/primitive.wado::u32^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+pub fn "i64^FromStr::from_str"(s: &String) -> Result<i64, ParseIntError> {
+    return "core::prelude/primitive.wado::i64^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+pub fn "u64^FromStr::from_str"(s: &String) -> Result<u64, ParseIntError> {
+    return "core::prelude/primitive.wado::u64^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+pub fn "f32^FromStr::from_str"(s: &String) -> Result<f32, ParseFloatError> {
+    return "core::prelude/primitive.wado::f32^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+pub fn "f64^FromStr::from_str"(s: &String) -> Result<f64, ParseFloatError> {
+    return "core::prelude/primitive.wado::f64^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
@@ -10345,199 +10345,6 @@ pub fn "StrUtf8ByteIter^Iterator::next"(self: &mut StrUtf8ByteIter) -> Option<u8
     return Option<u8>::Some(byte);
 }
 
-pub fn "StrUtf8ByteIter^Iterator::collect"(self: &mut StrUtf8ByteIter) -> Array<u8> {
-    let mut result: Array<u8> = __seq_lit: {
-        let mut __b: Array<u8> = "core::prelude/array.wado::Array<u8>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."Array<u8>^SequenceLiteralBuilder::build"();
-    };
-    loop {
-        let __match_4: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                result."Array<u8>::push"(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return result;
-}
-
-pub fn "StrUtf8ByteIter^Iterator::count"(self: &mut StrUtf8ByteIter) -> i32 {
-    let mut n: i32 = 0;
-    loop {
-        let __match_2: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        match __match_2 {
-            Some(_) => {
-                n = (n + 1);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return n;
-}
-
-pub fn "StrUtf8ByteIter^Iterator::for_each"(self: &mut StrUtf8ByteIter, f: fn mut(u8) -> ()) {
-    loop {
-        let __match_3: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        match __match_3 {
-            Some(item) => {
-                f(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-}
-
-pub fn "StrUtf8ByteIter^Iterator::find"(self: &mut StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> Option<u8> {
-    loop {
-        let __match_3: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        match __match_3 {
-            Some(item) => {
-                if pred(item) {
-                    return Option<u8>::Some(item);
-                }
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return null;
-}
-
-pub fn "StrUtf8ByteIter^Iterator::any"(self: &mut StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> bool {
-    loop {
-        let __match_3: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        match __match_3 {
-            Some(item) => {
-                if pred(item) {
-                    return true;
-                }
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return false;
-}
-
-pub fn "StrUtf8ByteIter^Iterator::all"(self: &mut StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> bool {
-    loop {
-        let __match_3: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        match __match_3 {
-            Some(item) => {
-                if !pred(item) {
-                    return false;
-                }
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return true;
-}
-
-pub fn "StrUtf8ByteIter^Iterator::last"(self: &mut StrUtf8ByteIter) -> Option<u8> {
-    let mut result: Option<u8> = null;
-    loop {
-        let __match_3: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        match __match_3 {
-            Some(item) => {
-                result = Option<u8>::Some(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return result;
-}
-
-pub fn "StrUtf8ByteIter^Iterator::nth"(self: &mut StrUtf8ByteIter, n: i32) -> Option<u8> {
-    let mut remaining: i32 = n;
-    loop {
-        let __match_4: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                if (remaining <= 0) {
-                    return Option<u8>::Some(item);
-                }
-                remaining = (remaining - 1);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return null;
-}
-
-pub fn "StrUtf8ByteIter^Iterator::position"(self: &mut StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> Option<i32> {
-    let mut idx: i32 = 0;
-    loop {
-        let __match_4: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                if pred(item) {
-                    return Option<i32>::Some(idx);
-                }
-                idx = (idx + 1);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return null;
-}
-
-pub fn "StrUtf8ByteIter^Iterator::reduce"(self: &mut StrUtf8ByteIter, f: fn mut(u8, u8) -> u8) -> Option<u8> {
-    let __match_5: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-    match __match_5 {
-        Some(first) => {
-            let mut acc: u8 = first;
-            loop {
-                let __match_6: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
-                match __match_6 {
-                    Some(item) => {
-                        acc = f(acc, item);
-                    },
-                    _ => {
-                        break;
-                    },
-                };
-            }
-            return Option<u8>::Some(acc);
-        },
-        _ => (),
-    };
-    return null;
-}
-
-pub fn "StrUtf8ByteIter^Iterator::filter"(self: &StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> IterFilter<core:prelude/string.wado/StrUtf8ByteIter> {
-    return IterFilter<core:prelude/string.wado/StrUtf8ByteIter> { inner: *self, pred: pred };
-}
-
-pub fn "StrUtf8ByteIter^Iterator::enumerate"(self: &StrUtf8ByteIter) -> IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter> {
-    return IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter> { inner: *self, count: 0 };
-}
-
-pub fn "StrUtf8ByteIter^Iterator::take"(self: &StrUtf8ByteIter, n: i32) -> IterTake<core:prelude/string.wado/StrUtf8ByteIter> {
-    return IterTake<core:prelude/string.wado/StrUtf8ByteIter> { inner: *self, remaining: n };
-}
-
-pub fn "StrUtf8ByteIter^Iterator::skip"(self: &StrUtf8ByteIter, n: i32) -> IterSkip<core:prelude/string.wado/StrUtf8ByteIter> {
-    return IterSkip<core:prelude/string.wado/StrUtf8ByteIter> { inner: *self, remaining: n };
-}
-
 pub fn "StrCharIter^Iterator::next"(self: &mut StrCharIter) -> Option<char> {
     if (self.byte_index >= self.used) {
         return null;
@@ -10566,199 +10373,6 @@ pub fn "StrCharIter^Iterator::next"(self: &mut StrCharIter) -> Option<char> {
     self.byte_index = (self.byte_index + 3);
     let code: u32 = (((((b0 as u32 & 0x07) << 18) | ((b1 & 0x3F) << 12)) | ((b2 & 0x3F) << 6)) | (b3 & 0x3F));
     return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
-}
-
-pub fn "StrCharIter^Iterator::collect"(self: &mut StrCharIter) -> Array<char> {
-    let mut result: Array<char> = __seq_lit: {
-        let mut __b: Array<char> = "core::prelude/array.wado::Array<char>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."Array<char>^SequenceLiteralBuilder::build"();
-    };
-    loop {
-        let __match_4: Option<char> = self."StrCharIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                result."Array<char>::push"(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return result;
-}
-
-pub fn "StrCharIter^Iterator::count"(self: &mut StrCharIter) -> i32 {
-    let mut n: i32 = 0;
-    loop {
-        let __match_2: Option<char> = self."StrCharIter^Iterator::next"();
-        match __match_2 {
-            Some(_) => {
-                n = (n + 1);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return n;
-}
-
-pub fn "StrCharIter^Iterator::for_each"(self: &mut StrCharIter, f: fn mut(char) -> ()) {
-    loop {
-        let __match_3: Option<char> = self."StrCharIter^Iterator::next"();
-        match __match_3 {
-            Some(item) => {
-                f(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-}
-
-pub fn "StrCharIter^Iterator::find"(self: &mut StrCharIter, pred: fn mut(char) -> bool) -> Option<char> {
-    loop {
-        let __match_3: Option<char> = self."StrCharIter^Iterator::next"();
-        match __match_3 {
-            Some(item) => {
-                if pred(item) {
-                    return Option<char>::Some(item);
-                }
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return null;
-}
-
-pub fn "StrCharIter^Iterator::any"(self: &mut StrCharIter, pred: fn mut(char) -> bool) -> bool {
-    loop {
-        let __match_3: Option<char> = self."StrCharIter^Iterator::next"();
-        match __match_3 {
-            Some(item) => {
-                if pred(item) {
-                    return true;
-                }
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return false;
-}
-
-pub fn "StrCharIter^Iterator::all"(self: &mut StrCharIter, pred: fn mut(char) -> bool) -> bool {
-    loop {
-        let __match_3: Option<char> = self."StrCharIter^Iterator::next"();
-        match __match_3 {
-            Some(item) => {
-                if !pred(item) {
-                    return false;
-                }
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return true;
-}
-
-pub fn "StrCharIter^Iterator::last"(self: &mut StrCharIter) -> Option<char> {
-    let mut result: Option<char> = null;
-    loop {
-        let __match_3: Option<char> = self."StrCharIter^Iterator::next"();
-        match __match_3 {
-            Some(item) => {
-                result = Option<char>::Some(item);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return result;
-}
-
-pub fn "StrCharIter^Iterator::nth"(self: &mut StrCharIter, n: i32) -> Option<char> {
-    let mut remaining: i32 = n;
-    loop {
-        let __match_4: Option<char> = self."StrCharIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                if (remaining <= 0) {
-                    return Option<char>::Some(item);
-                }
-                remaining = (remaining - 1);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return null;
-}
-
-pub fn "StrCharIter^Iterator::position"(self: &mut StrCharIter, pred: fn mut(char) -> bool) -> Option<i32> {
-    let mut idx: i32 = 0;
-    loop {
-        let __match_4: Option<char> = self."StrCharIter^Iterator::next"();
-        match __match_4 {
-            Some(item) => {
-                if pred(item) {
-                    return Option<i32>::Some(idx);
-                }
-                idx = (idx + 1);
-            },
-            _ => {
-                break;
-            },
-        };
-    }
-    return null;
-}
-
-pub fn "StrCharIter^Iterator::reduce"(self: &mut StrCharIter, f: fn mut(char, char) -> char) -> Option<char> {
-    let __match_5: Option<char> = self."StrCharIter^Iterator::next"();
-    match __match_5 {
-        Some(first) => {
-            let mut acc: char = first;
-            loop {
-                let __match_6: Option<char> = self."StrCharIter^Iterator::next"();
-                match __match_6 {
-                    Some(item) => {
-                        acc = f(acc, item);
-                    },
-                    _ => {
-                        break;
-                    },
-                };
-            }
-            return Option<char>::Some(acc);
-        },
-        _ => (),
-    };
-    return null;
-}
-
-pub fn "StrCharIter^Iterator::filter"(self: &StrCharIter, pred: fn mut(char) -> bool) -> IterFilter<core:prelude/string.wado/StrCharIter> {
-    return IterFilter<core:prelude/string.wado/StrCharIter> { inner: *self, pred: pred };
-}
-
-pub fn "StrCharIter^Iterator::enumerate"(self: &StrCharIter) -> IterEnumerate<core:prelude/string.wado/StrCharIter> {
-    return IterEnumerate<core:prelude/string.wado/StrCharIter> { inner: *self, count: 0 };
-}
-
-pub fn "StrCharIter^Iterator::take"(self: &StrCharIter, n: i32) -> IterTake<core:prelude/string.wado/StrCharIter> {
-    return IterTake<core:prelude/string.wado/StrCharIter> { inner: *self, remaining: n };
-}
-
-pub fn "StrCharIter^Iterator::skip"(self: &StrCharIter, n: i32) -> IterSkip<core:prelude/string.wado/StrCharIter> {
-    return IterSkip<core:prelude/string.wado/StrCharIter> { inner: *self, remaining: n };
 }
 
 pub fn String::bytes(self: &String) -> StrUtf8ByteIter {
@@ -11772,6 +11386,562 @@ pub fn "StrSplitIter^Iterator::next"(self: &mut StrSplitIter) -> Option<String> 
     return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
 }
 
+pub fn "StrSplitNIter^Iterator::next"(self: &mut StrSplitNIter) -> Option<String> {
+    if self.finished {
+        return null;
+    }
+    if (self.remaining <= 1) {
+        let len: i32 = (self.used - self.pos);
+        let part: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
+        "core::builtin::core/builtin/array_copy<u8>"(part, 0, self.repr, self.pos, len);
+        self.finished = true;
+        return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
+    }
+    let limit: i32 = (self.used - self.sep_len);
+    let mut i: i32 = self.pos;
+    loop {
+        if !(i <= limit) {
+            break;
+        }
+        let mut matched: bool = true;
+        let mut j: i32 = 0;
+        loop {
+            if !(j < self.sep_len) {
+                break;
+            }
+            __for_0_body: {
+                if (core::builtin::array_get_u8(self.repr, (i + j)) != core::builtin::array_get_u8(self.sep_repr, j)) {
+                    matched = false;
+                    break;
+                }
+            }
+            j = (j + 1);
+        }
+        if matched {
+            let len: i32 = (i - self.pos);
+            let part: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
+            "core::builtin::core/builtin/array_copy<u8>"(part, 0, self.repr, self.pos, len);
+            self.pos = (i + self.sep_len);
+            self.remaining = (self.remaining - 1);
+            return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
+        }
+        i = (i + 1);
+    }
+    let len: i32 = (self.used - self.pos);
+    let part: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
+    "core::builtin::core/builtin/array_copy<u8>"(part, 0, self.repr, self.pos, len);
+    self.finished = true;
+    return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
+}
+
+fn is_ascii_whitespace_byte(b: u8) -> bool {
+    return (((((b == 0x20) || (b == 0x09)) || (b == 0x0A)) || (b == 0x0D)) || (b == 0x0C));
+}
+
+pub fn "StrSplitWhitespaceIter^Iterator::next"(self: &mut StrSplitWhitespaceIter) -> Option<String> {
+    loop {
+        if !((self.pos < self.used) && "core::prelude/string.wado::is_ascii_whitespace_byte"(core::builtin::array_get_u8(self.repr, self.pos))) {
+            break;
+        }
+        self.pos = (self.pos + 1);
+    }
+    if (self.pos >= self.used) {
+        return null;
+    }
+    let start: i32 = self.pos;
+    loop {
+        if !((self.pos < self.used) && !"core::prelude/string.wado::is_ascii_whitespace_byte"(core::builtin::array_get_u8(self.repr, self.pos))) {
+            break;
+        }
+        self.pos = (self.pos + 1);
+    }
+    let len: i32 = (self.pos - start);
+    let part: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
+    "core::builtin::core/builtin/array_copy<u8>"(part, 0, self.repr, start, len);
+    return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
+}
+
+pub fn "StrLinesIter^Iterator::next"(self: &mut StrLinesIter) -> Option<String> {
+    if self.finished {
+        return null;
+    }
+    if (self.pos >= self.used) {
+        self.finished = true;
+        return null;
+    }
+    let start: i32 = self.pos;
+    loop {
+        if !(self.pos < self.used) {
+            break;
+        }
+        let b: u8 = core::builtin::array_get_u8(self.repr, self.pos);
+        if (b == 0x0A) {
+            let len: i32 = (self.pos - start);
+            let part: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
+            "core::builtin::core/builtin/array_copy<u8>"(part, 0, self.repr, start, len);
+            self.pos = (self.pos + 1);
+            return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
+        }
+        if (b == 0x0D) {
+            let len: i32 = (self.pos - start);
+            let part: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
+            "core::builtin::core/builtin/array_copy<u8>"(part, 0, self.repr, start, len);
+            self.pos = (self.pos + 1);
+            if ((self.pos < self.used) && (core::builtin::array_get_u8(self.repr, self.pos) == 0x0A)) {
+                self.pos = (self.pos + 1);
+            }
+            return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
+        }
+        self.pos = (self.pos + 1);
+    }
+    let len: i32 = (self.pos - start);
+    if (len > 0) {
+        let part: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
+        "core::builtin::core/builtin/array_copy<u8>"(part, 0, self.repr, start, len);
+        self.finished = true;
+        return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
+    }
+    self.finished = true;
+    return null;
+}
+
+pub fn "StrCharIndicesIter^Iterator::next"(self: &mut StrCharIndicesIter) -> Option<[i32, char]> {
+    if (self.byte_index >= self.used) {
+        return null;
+    }
+    let idx: i32 = self.byte_index;
+    let b0: u8 = core::builtin::array_get_u8(self.repr, self.byte_index);
+    self.byte_index = (self.byte_index + 1);
+    if (b0 < 0x80) {
+        return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(b0 as u32)]);
+    }
+    if (b0 < 0xE0) {
+        let b1: u32 = core::builtin::array_get_u8(self.repr, self.byte_index) as u32;
+        self.byte_index = (self.byte_index + 1);
+        let code: u32 = (((b0 as u32 & 0x1F) << 6) | (b1 & 0x3F));
+        return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
+    }
+    if (b0 < 0xF0) {
+        let b1: u32 = core::builtin::array_get_u8(self.repr, self.byte_index) as u32;
+        let b2: u32 = core::builtin::array_get_u8(self.repr, (self.byte_index + 1)) as u32;
+        self.byte_index = (self.byte_index + 2);
+        let code: u32 = ((((b0 as u32 & 0x0F) << 12) | ((b1 & 0x3F) << 6)) | (b2 & 0x3F));
+        return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
+    }
+    let b1: u32 = core::builtin::array_get_u8(self.repr, self.byte_index) as u32;
+    let b2: u32 = core::builtin::array_get_u8(self.repr, (self.byte_index + 1)) as u32;
+    let b3: u32 = core::builtin::array_get_u8(self.repr, (self.byte_index + 2)) as u32;
+    self.byte_index = (self.byte_index + 3);
+    let code: u32 = (((((b0 as u32 & 0x07) << 18) | ((b1 & 0x3F) << 12)) | ((b2 & 0x3F) << 6)) | (b3 & 0x3F));
+    return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
+}
+
+pub fn String::split(self: &String, sep: String) -> StrSplitIter {
+    return StrSplitIter { repr: self.repr, used: self.used, pos: 0, sep_repr: sep.String::internal_raw_bytes(), sep_len: sep.String::len(), finished: false };
+}
+
+pub fn String::splitn(self: &String, n: i32, sep: String) -> StrSplitNIter {
+    return StrSplitNIter { repr: self.repr, used: self.used, pos: 0, sep_repr: sep.String::internal_raw_bytes(), sep_len: sep.String::len(), remaining: n, finished: (n <= 0) };
+}
+
+pub fn String::split_whitespace(self: &String) -> StrSplitWhitespaceIter {
+    return StrSplitWhitespaceIter { repr: self.repr, used: self.used, pos: 0 };
+}
+
+pub fn String::lines(self: &String) -> StrLinesIter {
+    return StrLinesIter { repr: self.repr, used: self.used, pos: 0, finished: false };
+}
+
+pub fn String::char_indices(self: &String) -> StrCharIndicesIter {
+    return StrCharIndicesIter { repr: self.repr, used: self.used, byte_index: 0 };
+}
+
+pub fn "StrUtf8ByteIter^Iterator::collect"(self: &mut StrUtf8ByteIter) -> Array<u8> {
+    let mut result: Array<u8> = __seq_lit: {
+        let mut __b: Array<u8> = "core::prelude/array.wado::Array<u8>^SequenceLiteralBuilder::new_literal"(0);
+        break __seq_lit: __b."Array<u8>^SequenceLiteralBuilder::build"();
+    };
+    loop {
+        let __match_4: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __match_4 {
+            Some(item) => {
+                result."Array<u8>::push"(item);
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+    return result;
+}
+
+pub fn "StrUtf8ByteIter^Iterator::count"(self: &mut StrUtf8ByteIter) -> i32 {
+    let mut n: i32 = 0;
+    loop {
+        let __match_2: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __match_2 {
+            Some(_) => {
+                n = (n + 1);
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+    return n;
+}
+
+pub fn "StrUtf8ByteIter^Iterator::for_each"(self: &mut StrUtf8ByteIter, f: fn mut(u8) -> ()) {
+    loop {
+        let __match_3: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __match_3 {
+            Some(item) => {
+                f(item);
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+}
+
+pub fn "StrUtf8ByteIter^Iterator::find"(self: &mut StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> Option<u8> {
+    loop {
+        let __match_3: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __match_3 {
+            Some(item) => {
+                if pred(item) {
+                    return Option<u8>::Some(item);
+                }
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+    return null;
+}
+
+pub fn "StrUtf8ByteIter^Iterator::any"(self: &mut StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> bool {
+    loop {
+        let __match_3: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __match_3 {
+            Some(item) => {
+                if pred(item) {
+                    return true;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+    return false;
+}
+
+pub fn "StrUtf8ByteIter^Iterator::all"(self: &mut StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> bool {
+    loop {
+        let __match_3: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __match_3 {
+            Some(item) => {
+                if !pred(item) {
+                    return false;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+    return true;
+}
+
+pub fn "StrUtf8ByteIter^Iterator::last"(self: &mut StrUtf8ByteIter) -> Option<u8> {
+    let mut result: Option<u8> = null;
+    loop {
+        let __match_3: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __match_3 {
+            Some(item) => {
+                result = Option<u8>::Some(item);
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+    return result;
+}
+
+pub fn "StrUtf8ByteIter^Iterator::nth"(self: &mut StrUtf8ByteIter, n: i32) -> Option<u8> {
+    let mut remaining: i32 = n;
+    loop {
+        let __match_4: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __match_4 {
+            Some(item) => {
+                if (remaining <= 0) {
+                    return Option<u8>::Some(item);
+                }
+                remaining = (remaining - 1);
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+    return null;
+}
+
+pub fn "StrUtf8ByteIter^Iterator::position"(self: &mut StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> Option<i32> {
+    let mut idx: i32 = 0;
+    loop {
+        let __match_4: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+        match __match_4 {
+            Some(item) => {
+                if pred(item) {
+                    return Option<i32>::Some(idx);
+                }
+                idx = (idx + 1);
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+    return null;
+}
+
+pub fn "StrUtf8ByteIter^Iterator::reduce"(self: &mut StrUtf8ByteIter, f: fn mut(u8, u8) -> u8) -> Option<u8> {
+    let __match_5: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+    match __match_5 {
+        Some(first) => {
+            let mut acc: u8 = first;
+            loop {
+                let __match_6: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
+                match __match_6 {
+                    Some(item) => {
+                        acc = f(acc, item);
+                    },
+                    _ => {
+                        break;
+                    },
+                };
+            }
+            return Option<u8>::Some(acc);
+        },
+        _ => (),
+    };
+    return null;
+}
+
+pub fn "StrUtf8ByteIter^Iterator::filter"(self: &StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> IterFilter<core:prelude/string.wado/StrUtf8ByteIter> {
+    return IterFilter<core:prelude/string.wado/StrUtf8ByteIter> { inner: *self, pred: pred };
+}
+
+pub fn "StrUtf8ByteIter^Iterator::enumerate"(self: &StrUtf8ByteIter) -> IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter> {
+    return IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter> { inner: *self, count: 0 };
+}
+
+pub fn "StrUtf8ByteIter^Iterator::take"(self: &StrUtf8ByteIter, n: i32) -> IterTake<core:prelude/string.wado/StrUtf8ByteIter> {
+    return IterTake<core:prelude/string.wado/StrUtf8ByteIter> { inner: *self, remaining: n };
+}
+
+pub fn "StrUtf8ByteIter^Iterator::skip"(self: &StrUtf8ByteIter, n: i32) -> IterSkip<core:prelude/string.wado/StrUtf8ByteIter> {
+    return IterSkip<core:prelude/string.wado/StrUtf8ByteIter> { inner: *self, remaining: n };
+}
+
+pub fn "StrCharIter^Iterator::collect"(self: &mut StrCharIter) -> Array<char> {
+    let mut result: Array<char> = __seq_lit: {
+        let mut __b: Array<char> = "core::prelude/array.wado::Array<char>^SequenceLiteralBuilder::new_literal"(0);
+        break __seq_lit: __b."Array<char>^SequenceLiteralBuilder::build"();
+    };
+    loop {
+        let __match_4: Option<char> = self."StrCharIter^Iterator::next"();
+        match __match_4 {
+            Some(item) => {
+                result."Array<char>::push"(item);
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+    return result;
+}
+
+pub fn "StrCharIter^Iterator::count"(self: &mut StrCharIter) -> i32 {
+    let mut n: i32 = 0;
+    loop {
+        let __match_2: Option<char> = self."StrCharIter^Iterator::next"();
+        match __match_2 {
+            Some(_) => {
+                n = (n + 1);
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+    return n;
+}
+
+pub fn "StrCharIter^Iterator::for_each"(self: &mut StrCharIter, f: fn mut(char) -> ()) {
+    loop {
+        let __match_3: Option<char> = self."StrCharIter^Iterator::next"();
+        match __match_3 {
+            Some(item) => {
+                f(item);
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+}
+
+pub fn "StrCharIter^Iterator::find"(self: &mut StrCharIter, pred: fn mut(char) -> bool) -> Option<char> {
+    loop {
+        let __match_3: Option<char> = self."StrCharIter^Iterator::next"();
+        match __match_3 {
+            Some(item) => {
+                if pred(item) {
+                    return Option<char>::Some(item);
+                }
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+    return null;
+}
+
+pub fn "StrCharIter^Iterator::any"(self: &mut StrCharIter, pred: fn mut(char) -> bool) -> bool {
+    loop {
+        let __match_3: Option<char> = self."StrCharIter^Iterator::next"();
+        match __match_3 {
+            Some(item) => {
+                if pred(item) {
+                    return true;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+    return false;
+}
+
+pub fn "StrCharIter^Iterator::all"(self: &mut StrCharIter, pred: fn mut(char) -> bool) -> bool {
+    loop {
+        let __match_3: Option<char> = self."StrCharIter^Iterator::next"();
+        match __match_3 {
+            Some(item) => {
+                if !pred(item) {
+                    return false;
+                }
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+    return true;
+}
+
+pub fn "StrCharIter^Iterator::last"(self: &mut StrCharIter) -> Option<char> {
+    let mut result: Option<char> = null;
+    loop {
+        let __match_3: Option<char> = self."StrCharIter^Iterator::next"();
+        match __match_3 {
+            Some(item) => {
+                result = Option<char>::Some(item);
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+    return result;
+}
+
+pub fn "StrCharIter^Iterator::nth"(self: &mut StrCharIter, n: i32) -> Option<char> {
+    let mut remaining: i32 = n;
+    loop {
+        let __match_4: Option<char> = self."StrCharIter^Iterator::next"();
+        match __match_4 {
+            Some(item) => {
+                if (remaining <= 0) {
+                    return Option<char>::Some(item);
+                }
+                remaining = (remaining - 1);
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+    return null;
+}
+
+pub fn "StrCharIter^Iterator::position"(self: &mut StrCharIter, pred: fn mut(char) -> bool) -> Option<i32> {
+    let mut idx: i32 = 0;
+    loop {
+        let __match_4: Option<char> = self."StrCharIter^Iterator::next"();
+        match __match_4 {
+            Some(item) => {
+                if pred(item) {
+                    return Option<i32>::Some(idx);
+                }
+                idx = (idx + 1);
+            },
+            _ => {
+                break;
+            },
+        };
+    }
+    return null;
+}
+
+pub fn "StrCharIter^Iterator::reduce"(self: &mut StrCharIter, f: fn mut(char, char) -> char) -> Option<char> {
+    let __match_5: Option<char> = self."StrCharIter^Iterator::next"();
+    match __match_5 {
+        Some(first) => {
+            let mut acc: char = first;
+            loop {
+                let __match_6: Option<char> = self."StrCharIter^Iterator::next"();
+                match __match_6 {
+                    Some(item) => {
+                        acc = f(acc, item);
+                    },
+                    _ => {
+                        break;
+                    },
+                };
+            }
+            return Option<char>::Some(acc);
+        },
+        _ => (),
+    };
+    return null;
+}
+
+pub fn "StrCharIter^Iterator::filter"(self: &StrCharIter, pred: fn mut(char) -> bool) -> IterFilter<core:prelude/string.wado/StrCharIter> {
+    return IterFilter<core:prelude/string.wado/StrCharIter> { inner: *self, pred: pred };
+}
+
+pub fn "StrCharIter^Iterator::enumerate"(self: &StrCharIter) -> IterEnumerate<core:prelude/string.wado/StrCharIter> {
+    return IterEnumerate<core:prelude/string.wado/StrCharIter> { inner: *self, count: 0 };
+}
+
+pub fn "StrCharIter^Iterator::take"(self: &StrCharIter, n: i32) -> IterTake<core:prelude/string.wado/StrCharIter> {
+    return IterTake<core:prelude/string.wado/StrCharIter> { inner: *self, remaining: n };
+}
+
+pub fn "StrCharIter^Iterator::skip"(self: &StrCharIter, n: i32) -> IterSkip<core:prelude/string.wado/StrCharIter> {
+    return IterSkip<core:prelude/string.wado/StrCharIter> { inner: *self, remaining: n };
+}
+
 pub fn "StrSplitIter^Iterator::collect"(self: &mut StrSplitIter) -> Array<String> {
     let mut result: Array<String> = __seq_lit: {
         let mut __b: Array<String> = "core::prelude/array.wado::Array<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(0);
@@ -11963,54 +12133,6 @@ pub fn "StrSplitIter^Iterator::take"(self: &StrSplitIter, n: i32) -> IterTake<co
 
 pub fn "StrSplitIter^Iterator::skip"(self: &StrSplitIter, n: i32) -> IterSkip<core:prelude/string.wado/StrSplitIter> {
     return IterSkip<core:prelude/string.wado/StrSplitIter> { inner: *self, remaining: n };
-}
-
-pub fn "StrSplitNIter^Iterator::next"(self: &mut StrSplitNIter) -> Option<String> {
-    if self.finished {
-        return null;
-    }
-    if (self.remaining <= 1) {
-        let len: i32 = (self.used - self.pos);
-        let part: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-        "core::builtin::core/builtin/array_copy<u8>"(part, 0, self.repr, self.pos, len);
-        self.finished = true;
-        return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
-    }
-    let limit: i32 = (self.used - self.sep_len);
-    let mut i: i32 = self.pos;
-    loop {
-        if !(i <= limit) {
-            break;
-        }
-        let mut matched: bool = true;
-        let mut j: i32 = 0;
-        loop {
-            if !(j < self.sep_len) {
-                break;
-            }
-            __for_0_body: {
-                if (core::builtin::array_get_u8(self.repr, (i + j)) != core::builtin::array_get_u8(self.sep_repr, j)) {
-                    matched = false;
-                    break;
-                }
-            }
-            j = (j + 1);
-        }
-        if matched {
-            let len: i32 = (i - self.pos);
-            let part: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-            "core::builtin::core/builtin/array_copy<u8>"(part, 0, self.repr, self.pos, len);
-            self.pos = (i + self.sep_len);
-            self.remaining = (self.remaining - 1);
-            return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
-        }
-        i = (i + 1);
-    }
-    let len: i32 = (self.used - self.pos);
-    let part: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-    "core::builtin::core/builtin/array_copy<u8>"(part, 0, self.repr, self.pos, len);
-    self.finished = true;
-    return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
 }
 
 pub fn "StrSplitNIter^Iterator::collect"(self: &mut StrSplitNIter) -> Array<String> {
@@ -12206,33 +12328,6 @@ pub fn "StrSplitNIter^Iterator::skip"(self: &StrSplitNIter, n: i32) -> IterSkip<
     return IterSkip<core:prelude/string.wado/StrSplitNIter> { inner: *self, remaining: n };
 }
 
-fn is_ascii_whitespace_byte(b: u8) -> bool {
-    return (((((b == 0x20) || (b == 0x09)) || (b == 0x0A)) || (b == 0x0D)) || (b == 0x0C));
-}
-
-pub fn "StrSplitWhitespaceIter^Iterator::next"(self: &mut StrSplitWhitespaceIter) -> Option<String> {
-    loop {
-        if !((self.pos < self.used) && "core::prelude/string.wado::is_ascii_whitespace_byte"(core::builtin::array_get_u8(self.repr, self.pos))) {
-            break;
-        }
-        self.pos = (self.pos + 1);
-    }
-    if (self.pos >= self.used) {
-        return null;
-    }
-    let start: i32 = self.pos;
-    loop {
-        if !((self.pos < self.used) && !"core::prelude/string.wado::is_ascii_whitespace_byte"(core::builtin::array_get_u8(self.repr, self.pos))) {
-            break;
-        }
-        self.pos = (self.pos + 1);
-    }
-    let len: i32 = (self.pos - start);
-    let part: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-    "core::builtin::core/builtin/array_copy<u8>"(part, 0, self.repr, start, len);
-    return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
-}
-
 pub fn "StrSplitWhitespaceIter^Iterator::collect"(self: &mut StrSplitWhitespaceIter) -> Array<String> {
     let mut result: Array<String> = __seq_lit: {
         let mut __b: Array<String> = "core::prelude/array.wado::Array<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(0);
@@ -12424,50 +12519,6 @@ pub fn "StrSplitWhitespaceIter^Iterator::take"(self: &StrSplitWhitespaceIter, n:
 
 pub fn "StrSplitWhitespaceIter^Iterator::skip"(self: &StrSplitWhitespaceIter, n: i32) -> IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter> {
     return IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: *self, remaining: n };
-}
-
-pub fn "StrLinesIter^Iterator::next"(self: &mut StrLinesIter) -> Option<String> {
-    if self.finished {
-        return null;
-    }
-    if (self.pos >= self.used) {
-        self.finished = true;
-        return null;
-    }
-    let start: i32 = self.pos;
-    loop {
-        if !(self.pos < self.used) {
-            break;
-        }
-        let b: u8 = core::builtin::array_get_u8(self.repr, self.pos);
-        if (b == 0x0A) {
-            let len: i32 = (self.pos - start);
-            let part: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-            "core::builtin::core/builtin/array_copy<u8>"(part, 0, self.repr, start, len);
-            self.pos = (self.pos + 1);
-            return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
-        }
-        if (b == 0x0D) {
-            let len: i32 = (self.pos - start);
-            let part: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-            "core::builtin::core/builtin/array_copy<u8>"(part, 0, self.repr, start, len);
-            self.pos = (self.pos + 1);
-            if ((self.pos < self.used) && (core::builtin::array_get_u8(self.repr, self.pos) == 0x0A)) {
-                self.pos = (self.pos + 1);
-            }
-            return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
-        }
-        self.pos = (self.pos + 1);
-    }
-    let len: i32 = (self.pos - start);
-    if (len > 0) {
-        let part: builtin::array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
-        "core::builtin::core/builtin/array_copy<u8>"(part, 0, self.repr, start, len);
-        self.finished = true;
-        return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
-    }
-    self.finished = true;
-    return null;
 }
 
 pub fn "StrLinesIter^Iterator::collect"(self: &mut StrLinesIter) -> Array<String> {
@@ -12663,37 +12714,6 @@ pub fn "StrLinesIter^Iterator::skip"(self: &StrLinesIter, n: i32) -> IterSkip<co
     return IterSkip<core:prelude/string.wado/StrLinesIter> { inner: *self, remaining: n };
 }
 
-pub fn "StrCharIndicesIter^Iterator::next"(self: &mut StrCharIndicesIter) -> Option<[i32, char]> {
-    if (self.byte_index >= self.used) {
-        return null;
-    }
-    let idx: i32 = self.byte_index;
-    let b0: u8 = core::builtin::array_get_u8(self.repr, self.byte_index);
-    self.byte_index = (self.byte_index + 1);
-    if (b0 < 0x80) {
-        return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(b0 as u32)]);
-    }
-    if (b0 < 0xE0) {
-        let b1: u32 = core::builtin::array_get_u8(self.repr, self.byte_index) as u32;
-        self.byte_index = (self.byte_index + 1);
-        let code: u32 = (((b0 as u32 & 0x1F) << 6) | (b1 & 0x3F));
-        return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
-    }
-    if (b0 < 0xF0) {
-        let b1: u32 = core::builtin::array_get_u8(self.repr, self.byte_index) as u32;
-        let b2: u32 = core::builtin::array_get_u8(self.repr, (self.byte_index + 1)) as u32;
-        self.byte_index = (self.byte_index + 2);
-        let code: u32 = ((((b0 as u32 & 0x0F) << 12) | ((b1 & 0x3F) << 6)) | (b2 & 0x3F));
-        return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
-    }
-    let b1: u32 = core::builtin::array_get_u8(self.repr, self.byte_index) as u32;
-    let b2: u32 = core::builtin::array_get_u8(self.repr, (self.byte_index + 1)) as u32;
-    let b3: u32 = core::builtin::array_get_u8(self.repr, (self.byte_index + 2)) as u32;
-    self.byte_index = (self.byte_index + 3);
-    let code: u32 = (((((b0 as u32 & 0x07) << 18) | ((b1 & 0x3F) << 12)) | ((b2 & 0x3F) << 6)) | (b3 & 0x3F));
-    return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
-}
-
 pub fn "StrCharIndicesIter^Iterator::collect"(self: &mut StrCharIndicesIter) -> Array<[i32, char]> {
     let mut result: Array<[i32, char]> = __seq_lit: {
         let mut __b: Array<[i32, char]> = "core::prelude/array.wado::Array<core:prelude/types.wado/Tuple<i32,char>>^SequenceLiteralBuilder::new_literal"(0);
@@ -12885,26 +12905,6 @@ pub fn "StrCharIndicesIter^Iterator::take"(self: &StrCharIndicesIter, n: i32) ->
 
 pub fn "StrCharIndicesIter^Iterator::skip"(self: &StrCharIndicesIter, n: i32) -> IterSkip<core:prelude/string.wado/StrCharIndicesIter> {
     return IterSkip<core:prelude/string.wado/StrCharIndicesIter> { inner: *self, remaining: n };
-}
-
-pub fn String::split(self: &String, sep: String) -> StrSplitIter {
-    return StrSplitIter { repr: self.repr, used: self.used, pos: 0, sep_repr: sep.String::internal_raw_bytes(), sep_len: sep.String::len(), finished: false };
-}
-
-pub fn String::splitn(self: &String, n: i32, sep: String) -> StrSplitNIter {
-    return StrSplitNIter { repr: self.repr, used: self.used, pos: 0, sep_repr: sep.String::internal_raw_bytes(), sep_len: sep.String::len(), remaining: n, finished: (n <= 0) };
-}
-
-pub fn String::split_whitespace(self: &String) -> StrSplitWhitespaceIter {
-    return StrSplitWhitespaceIter { repr: self.repr, used: self.used, pos: 0 };
-}
-
-pub fn String::lines(self: &String) -> StrLinesIter {
-    return StrLinesIter { repr: self.repr, used: self.used, pos: 0, finished: false };
-}
-
-pub fn String::char_indices(self: &String) -> StrCharIndicesIter {
-    return StrCharIndicesIter { repr: self.repr, used: self.used, byte_index: 0 };
 }
 
 pub fn "StrUtf8ByteIter^Eq::eq"(self: &StrUtf8ByteIter, other: &StrUtf8ByteIter) -> bool {
@@ -19898,6 +19898,23 @@ fn "Array<core:prelude/string.wado/String>^SequenceLiteralBuilder::new_literal"(
     return "core::prelude/array.wado::Array<core:prelude/string.wado/String>::with_capacity"(capacity);
 }
 
+pub fn "Array<char>::push"(self: &mut Array<char>, value: char) with stores[value] {
+    let used: i32 = self.used;
+    if core::builtin::unlikely((used >= core::builtin::array_len(self.repr))) {
+        self."Array<char>::grow"();
+    }
+    core::builtin::array_set::<char>(self.repr, used, value);
+    self.used = (used + 1);
+}
+
+fn "Array<char>^SequenceLiteralBuilder::build"(self: &Array<char>) -> Array<char> {
+    return *self;
+}
+
+fn "Array<char>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<char> {
+    return "core::prelude/array.wado::Array<char>::with_capacity"(capacity);
+}
+
 pub fn "StrCharIter^Iterator::map<char>"(self: &StrCharIter, f: fn mut(char) -> char) -> IterMap<core:prelude/string.wado/StrCharIter,char> {
     return IterMap<core:prelude/string.wado/StrCharIter,char> { inner: *self, f: f };
 }
@@ -19919,23 +19936,6 @@ pub fn "String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.w
         }
     }
     return s;
-}
-
-pub fn "Array<char>::push"(self: &mut Array<char>, value: char) with stores[value] {
-    let used: i32 = self.used;
-    if core::builtin::unlikely((used >= core::builtin::array_len(self.repr))) {
-        self."Array<char>::grow"();
-    }
-    core::builtin::array_set::<char>(self.repr, used, value);
-    self.used = (used + 1);
-}
-
-fn "Array<char>^SequenceLiteralBuilder::build"(self: &Array<char>) -> Array<char> {
-    return *self;
-}
-
-fn "Array<char>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<char> {
-    return "core::prelude/array.wado::Array<char>::with_capacity"(capacity);
 }
 
 fn "core/builtin/array_fill<u8>"(arr: builtin::array<u8>, offset: i32, value: u8, len: i32);
@@ -20038,18 +20038,6 @@ pub fn "Array<u8>::grow"(self: &mut Array<u8>) {
     self.repr = new_repr;
 }
 
-pub fn "Array<char>::with_capacity"(capacity: i32) -> Array<char> {
-    return Array<char> { repr: core::builtin::array_new::<char>(capacity), used: 0 };
-}
-
-pub fn "Array<char>::grow"(self: &mut Array<char>) {
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    let new_capacity: i32 = "core::prelude/array.wado::i32_max"((capacity * 2), 4);
-    let new_repr: builtin::array<char> = core::builtin::array_new::<char>(new_capacity);
-    core::builtin::array_copy::<char>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
 fn "IterMap<core:prelude/string.wado/StrCharIter,char>^Iterator::next"(self: &mut IterMap<core:prelude/string.wado/StrCharIter,char>) -> Option<char> {
     let __match_2: Option<char> = self.inner."StrCharIter^Iterator::next"();
     match __match_2 {
@@ -20063,6 +20051,18 @@ fn "IterMap<core:prelude/string.wado/StrCharIter,char>^Iterator::next"(self: &mu
 
 fn "IterMap<core:prelude/string.wado/StrCharIter,char>^IntoIterator::into_iter"(self: &IterMap<core:prelude/string.wado/StrCharIter,char>) -> IterMap<core:prelude/string.wado/StrCharIter,char> {
     return *self;
+}
+
+pub fn "Array<char>::with_capacity"(capacity: i32) -> Array<char> {
+    return Array<char> { repr: core::builtin::array_new::<char>(capacity), used: 0 };
+}
+
+pub fn "Array<char>::grow"(self: &mut Array<char>) {
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    let new_capacity: i32 = "core::prelude/array.wado::i32_max"((capacity * 2), 4);
+    let new_repr: builtin::array<char> = core::builtin::array_new::<char>(new_capacity);
+    core::builtin::array_copy::<char>(new_repr, 0, self.repr, 0, self.used);
+    self.repr = new_repr;
 }
 
 pub fn "Array<core:prelude/string.wado/String>::grow"(self: &mut Array<String>) {

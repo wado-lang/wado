@@ -104,25 +104,26 @@ macro_rules! reify_annotation_accessors {
             }
         )+
     };
+    // `base { … }`: decl/signature facts that are recorded once per decl and
+    // are NOT part of the per-element tuple-for-of overlay (param/return types,
+    // type params, effect-op signatures). Same canonical keying, no overlay
+    // walk — reify reads them straight from `sem.types`.
+    (base { $($name:ident => $map:ident : $val:ty),+ $(,)? }) => {
+        $(
+            fn $name(&self, id: crate::ast::AstId) -> Option<$val> {
+                let key = crate::symbol::SymbolKey::new(
+                    self.current_module_source.clone(),
+                    id,
+                );
+                self.sem.types.$map.get(&key).cloned()
+            }
+        )+
+    };
 }
 
-/// Per-module reify pass. One instance per loaded module the batch driver
-/// emits TIR for.
-///
-/// Construction is via [`Reify::new`]; the driver hands in the shared
-/// `TypeSystem` (cloned by shallow Rc/Arc copy), the read-only
-/// `ModuleSemantics` for this module, and the per-compile context the
-/// elaborator already threads through.
-///
-/// `#[allow(dead_code)]` on the struct + every method is intentional
-/// until [`crate::elaborator::orchestration`] wires the
-/// `annotate_bodies → reify_modules` pipeline split (the second half of
-/// Stage 5). The skeleton lands first so the membership contract is
 /// One reify-side power-assert capture slot. Independent from
 /// [`super::assert::Capture`] so the two walks don't share state.
-#[allow(dead_code)]
 pub(super) struct ReifyAssertSlot {
-    pub(super) ast_id: AstId,
     /// `__v0`, `__v1`, … — the local the panic template references.
     pub(super) name: String,
     pub(super) label: String,
@@ -142,6 +143,9 @@ pub(super) struct ReifyAssertCaptureContext {
     pub(super) emitted_lets: Vec<TirStmt>,
 }
 
+/// Per-module reify pass: emits a [`TirModule`] from the AST plus the
+/// `ModuleSemantics` that `annotate` populated. One instance per module the
+/// batch driver emits TIR for; constructed via [`Reify::new`].
 pub(crate) struct Reify<'a, H: CompilerHost> {
     /// Pipeline-wide type knowledge. `&mut` only because reify may
     /// intern new monomorphic instances; the trait/impl tables are
@@ -156,11 +160,9 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// private to the callee module).
     pub(crate) all_module_semantics: &'a IndexMap<ModuleSource, ModuleSemantics>,
     /// Symbol table from analyzer (cross-module).
-    #[allow(dead_code)]
     pub(crate) symbols: &'a SymbolTable,
     /// All loaded modules. Used by cross-module lookups (e.g. resolving
     /// the AST of a function referenced by a `FunctionRef`).
-    #[allow(dead_code)]
     pub(crate) loaded_modules: &'a IndexMap<ModuleSource, Module>,
     /// Diagnostics logger.
     pub(crate) logger: &'a Logger<'a, H>,
@@ -170,15 +172,7 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     pub(crate) current_module_items: &'a [Item],
     /// `ModuleSource` interner. Shared with annotate so cross-pass
     /// references resolve to the same `ModuleSource` identity.
-    #[allow(dead_code)]
     pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
-    /// Kiln invocation redirects. Consulted by `use`-resolution paths
-    /// the same way annotate consults them.
-    #[allow(dead_code)]
-    pub(crate) invocations: Rc<crate::kiln::InvocationIndex>,
-    /// Entry module, used for cross-module import dedup.
-    #[allow(dead_code)]
-    pub(crate) entry_module_source: ModuleSource,
     /// Type-parameter names in scope for the function/method body
     /// currently being reified (impl params first, then method-level
     /// params, matching the index layout reify builds in
@@ -213,7 +207,6 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     pub(crate) tuple_overlay_visits: IndexMap<crate::symbol::SymbolKey, usize>,
 }
 
-#[allow(dead_code)]
 impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Construct a per-module `Reify` for the orchestration driver.
     /// The `tysys` clone is the shallow Rc/Arc copy
@@ -235,9 +228,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         symbols: &'a SymbolTable,
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
         logger: &'a Logger<'a, H>,
-        entry_module_source: ModuleSource,
         interner: Rc<RefCell<ModuleSourceInterner>>,
-        invocations: Rc<crate::kiln::InvocationIndex>,
     ) -> Self {
         Self {
             tysys,
@@ -249,8 +240,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             current_module_source: ModuleSource::entry_point_uninitialized(),
             current_module_items: &[],
             interner,
-            invocations,
-            entry_module_source,
             current_type_param_names: Vec::new(),
             current_effect_param_names: Vec::new(),
             tuple_overlay_stack: Vec::new(),
@@ -286,6 +275,38 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ann_sequence_coercions => sequence_coercions: super::sem::types::SequenceCoercionFacts,
         ann_key_value_coercions => key_value_coercions: super::sem::types::KeyValueCoercionFacts,
         ann_index_assign_dispatch => index_assign_dispatch: super::sem::types::OperatorDispatch,
+    }
+
+    /// Read the recorded type of a local binding (keyed by the binding's
+    /// def `AstId`). Unlike the `ann_*` accessors above, `local_types` is not
+    /// part of the per-element tuple-for-of overlay — but reify only consults
+    /// it for *annotated* `let` types, which are written in source and so are
+    /// element-invariant (a for-of binds a value, not a type), making the
+    /// base map's last-write value correct for every unrolled element.
+    fn ann_local_type(&self, id: crate::ast::AstId) -> Option<crate::tir::TypeId> {
+        let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
+        self.sem.types.local_types.get(&key).copied()
+    }
+
+    // Decl/signature facts the combined walk records once per decl (the
+    // single source of truth), read straight from `sem.types` with no overlay
+    // walk:
+    //   - `method_impl_type_params`: the impl-type-param scheme
+    //     `resolve_method` recorded per impl-method `AstId`.
+    //   - `fn_param_types` / `fn_return_types`: a function/method's resolved
+    //     param types (declaration order, receiver included) and
+    //     post-async-erasure return type.
+    //   - `effect_ops`: an effect/resource decl's resolved op signatures.
+    //   - `decl_type_params`: TIR type params per decl (function, method,
+    //     struct, variant), defaults resolved with the scope alive.
+    reify_annotation_accessors! {
+        base {
+            ann_method_impl_type_params => method_impl_type_params: Vec<crate::tir::TirTypeParam>,
+            ann_fn_param_types => fn_param_types: Vec<crate::tir::TypeId>,
+            ann_fn_return_type => fn_return_types: crate::tir::TypeId,
+            ann_effect_ops => effect_ops: Vec<crate::tir::TirEffectOp>,
+            ann_decl_type_params => decl_type_params: Vec<crate::tir::TirTypeParam>,
+        }
     }
 
     /// Build a [`TypeLookup`] view over the current module's import
@@ -436,159 +457,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.tysys.type_table.borrow_mut().intern(rebuilt)
             }
             _ => resolved,
-        }
-    }
-
-    /// Resolve a parameter / return type where some type-param names are
-    /// `<F: fn(...)>` bounds, which the elaborator realises eagerly to the
-    /// bound's function type rather than a `TypeParam` slot (item.rs:1569).
-    /// `fn_bounds` maps each such name to its already-resolved function
-    /// `TypeId`; everything else resolves through the normal scope. Without
-    /// this a param typed `F` reifies to `TypeParam(F)` and reaches codegen
-    /// unsubstituted (monomorph only fills real type-param slots).
-    fn resolve_type_with_fn_bounds(
-        &mut self,
-        ty: &ast::Type,
-        type_params: &[String],
-        fn_bounds: &crate::hashmap::IndexMap<String, TypeId>,
-    ) -> TypeId {
-        match ty {
-            ast::Type::Named(n) if fn_bounds.contains_key(&n.name) => fn_bounds[&n.name],
-            ast::Type::Reference(inner) => {
-                let inner_id = self.resolve_type_with_fn_bounds(inner, type_params, fn_bounds);
-                self.tysys.type_table.borrow_mut().make_ref(inner_id)
-            }
-            ast::Type::MutReference(inner) => {
-                let inner_id = self.resolve_type_with_fn_bounds(inner, type_params, fn_bounds);
-                self.tysys.type_table.borrow_mut().make_mut_ref(inner_id)
-            }
-            _ => self.resolve_type_in_scope(ty, type_params),
-        }
-    }
-
-    /// Like [`Self::resolve_type`] but with an explicit type-parameter
-    /// scope so `T`/`U` in a generic decl's method signature resolve to
-    /// the right `TypeParam` slot. Used by `reify_effect_decl` /
-    /// `reify_resource_decl` for method params and return types, and by
-    /// `reify_variant_decl` for the (unused-here) payload path.
-    fn resolve_type_in_scope(&mut self, ty: &ast::Type, type_params: &[String]) -> TypeId {
-        let lookup = self.type_lookup();
-        let resolved = super::Elaborator::<H>::resolve_type_static_with_params(
-            ty,
-            &mut self.tysys.type_table.borrow_mut(),
-            &lookup,
-            type_params,
-        );
-        self.apply_function_type_effects(ty, resolved)
-    }
-
-    /// Like [`Self::resolve_type_in_scope`] but resolves bare `Self`
-    /// (anywhere in the type tree) to `self_type` and `Self::AssocType`
-    /// to the impl's recorded associated-type binding. Reify has no
-    /// `trait_ctx` equivalent (production: `type_resolution.rs:127`), so
-    /// impl-method param/return types substitute both explicitly.
-    fn resolve_type_with_self(
-        &mut self,
-        ty: &ast::Type,
-        type_params: &[String],
-        self_type: TypeId,
-        assoc_type_bindings: &crate::hashmap::IndexMap<String, TypeId>,
-    ) -> TypeId {
-        match ty {
-            ast::Type::Named(named) if named.name == "Self" => self_type,
-            // `Self::Output` — the impl's `type Output = …;` binding,
-            // resolved by annotate and recorded on `ImplFacts`.
-            ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" => assoc_type_bindings
-                .get(&ns.name)
-                .copied()
-                .unwrap_or_else(|| self.resolve_type_in_scope(ty, type_params)),
-            ast::Type::Reference(inner) => {
-                let inner_id =
-                    self.resolve_type_with_self(inner, type_params, self_type, assoc_type_bindings);
-                self.tysys.type_table.borrow_mut().make_ref(inner_id)
-            }
-            ast::Type::MutReference(inner) => {
-                let inner_id =
-                    self.resolve_type_with_self(inner, type_params, self_type, assoc_type_bindings);
-                self.tysys.type_table.borrow_mut().make_mut_ref(inner_id)
-            }
-            // A generic application (`Option<Self::Item>`,
-            // `Result<T, Self::Error>`) or tuple (`[Self::Item, bool]`)
-            // can mention `Self` / `Self::Assoc` inside its arguments. The
-            // static resolver below has no self / assoc context, so it
-            // would resolve the nested projection to `unknown`. When an
-            // argument mentions `Self`, rebuild the instance from
-            // self-substituted argument ids (mirroring the static
-            // resolver's `Type::Generic` base handling: `Option` special
-            // case, else struct / variant / enum lookup). Self-free types
-            // keep the proven static path unchanged.
-            ast::Type::Generic(generic) if Self::type_mentions_self(ty) => {
-                let arg_ids: Vec<TypeId> = generic
-                    .args
-                    .iter()
-                    .map(|a| {
-                        self.resolve_type_with_self(a, type_params, self_type, assoc_type_bindings)
-                    })
-                    .collect();
-                if generic.name == "Option" && arg_ids.len() == 1 {
-                    return self.tysys.type_table.borrow_mut().make_option(arg_ids[0]);
-                }
-                let module_source = {
-                    let lookup = self.type_lookup();
-                    lookup
-                        .struct_fields(&generic.name)
-                        .map(|i| i.module_source.clone())
-                        .or_else(|| {
-                            lookup
-                                .variant_case(&generic.name)
-                                .map(|i| i.module_source.clone())
-                        })
-                        .or_else(|| {
-                            lookup
-                                .enum_case(&generic.name)
-                                .map(|i| i.module_source.clone())
-                        })
-                };
-                match module_source {
-                    Some(m) => self.tysys.type_table.borrow_mut().make_generic_instance(
-                        generic.name.clone(),
-                        m,
-                        arg_ids,
-                    ),
-                    None => crate::tir::TypeTable::UNKNOWN,
-                }
-            }
-            ast::Type::Tuple(elems) if Self::type_mentions_self(ty) => {
-                let elem_ids: Vec<TypeId> = elems
-                    .iter()
-                    .map(|e| {
-                        self.resolve_type_with_self(e, type_params, self_type, assoc_type_bindings)
-                    })
-                    .collect();
-                self.tysys.type_table.borrow_mut().make_tuple(elem_ids)
-            }
-            _ => self.resolve_type_in_scope(ty, type_params),
-        }
-    }
-
-    /// Syntactic check: does `ty` mention `Self` (bare or as a
-    /// `Self::Assoc` projection) anywhere in its tree? Gates the
-    /// self-substituting reconstruction in [`Self::resolve_type_with_self`]
-    /// so self-free types keep the proven static-resolver path.
-    fn type_mentions_self(ty: &ast::Type) -> bool {
-        match ty {
-            ast::Type::Named(n) => n.name == "Self",
-            ast::Type::NamespacedGeneric(ns) => {
-                ns.namespace == "Self" || ns.args.iter().any(Self::type_mentions_self)
-            }
-            ast::Type::Generic(g) => g.args.iter().any(Self::type_mentions_self),
-            ast::Type::Tuple(elems) => elems.iter().any(Self::type_mentions_self),
-            ast::Type::Reference(i) | ast::Type::MutReference(i) => Self::type_mentions_self(i),
-            ast::Type::Function(f) => {
-                f.params.iter().any(Self::type_mentions_self)
-                    || Self::type_mentions_self(&f.return_type)
-            }
-            ast::Type::TypePackSpread(..) => false,
         }
     }
 
@@ -868,25 +736,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             });
         }
 
-        // Type-param defaults are AST `Type`s — resolve via the
-        // import-aware [`TypeLookup`] view (no use→def re-recording).
-        // The base type-param `TypeId`s themselves were interned at
-        // annotate time and are cached on `field_info.type_param_type_ids`,
-        // but `TirTypeParam` only needs the `default: Option<TypeId>`,
-        // so resolve_type each default directly.
-        let type_params: Vec<crate::tir::TirTypeParam> = struct_decl
-            .type_params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| crate::tir::TirTypeParam {
-                name: p.name.clone(),
-                is_effect: p.is_effect,
-                is_pack: p.is_pack,
-                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
-                index: i as u32,
-            })
-            .collect();
+        // Single source of truth: the combined walk projected these type
+        // params with each default resolved while the decl's type-param scope
+        // was alive; read them back rather than re-resolving the defaults.
+        let type_params = self
+            .ann_decl_type_params(struct_decl.id)
+            .expect("resolve_struct records the type params for every struct reify emits");
 
         let serde_rename_all = struct_decl.attrs.iter().find_map(|a| {
             if a.name == "serde" {
@@ -935,19 +790,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
 
-        let type_params: Vec<crate::tir::TirTypeParam> = variant_decl
-            .type_params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| crate::tir::TirTypeParam {
-                name: p.name.clone(),
-                is_effect: p.is_effect,
-                is_pack: p.is_pack,
-                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
-                index: i as u32,
-            })
-            .collect();
+        // Single source of truth: read the type params the combined walk
+        // projected (defaults resolved with the decl's scope alive) rather
+        // than re-resolving the defaults here.
+        let type_params = self
+            .ann_decl_type_params(variant_decl.id)
+            .expect("resolve_variant_decl records the type params for every variant reify emits");
 
         TirVariantDecl {
             name: variant_decl.name.clone(),
@@ -963,7 +811,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `Self` type — `&self` / `&mut self` on an effect method is a
     /// surface error annotate already diagnosed.
     fn reify_effect_decl(&mut self, decl: &ast::InterfaceDecl) -> tir::TirEffect {
-        let operations = self.reify_effect_ops(&[], &decl.methods, None);
+        // Single source of truth: the combined walk resolved the op
+        // signatures with the decl's type-param / `Self` scope in place and
+        // recorded them; reify reads them back rather than re-resolving.
+        let operations = self
+            .ann_effect_ops(decl.id)
+            .expect("resolve_effect_decl records op signatures for every effect reify emits");
         tir::TirEffect {
             name: decl.name.clone(),
             is_pub: decl.is_pub,
@@ -975,116 +828,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify a `resource R<T> { … }` declaration. Resource methods take
     /// a synthesised `self` parameter (`&Self` or `&mut Self`) at index
     /// 0; for generic resources `Self = GenericResource<…>` with the
-    /// decl's own `TypeParam`s as type args.
+    /// decl's own `TypeParam`s as type args. The op signatures are read
+    /// from the facts the combined walk recorded.
     fn reify_resource_decl(&mut self, decl: &ast::ResourceDecl) -> tir::TirResource {
-        let module_source = self.current_module_source.clone();
-        let operations = self.reify_effect_ops(
-            &decl.type_params,
-            &decl.methods,
-            Some((decl.name.as_str(), module_source)),
-        );
+        let operations = self
+            .ann_effect_ops(decl.id)
+            .expect("resolve_resource_decl records op signatures for every resource reify emits");
         tir::TirResource {
             name: decl.name.clone(),
             is_pub: decl.is_pub,
             operations,
             span: decl.span,
         }
-    }
-
-    /// Translation of `Elaborator::resolve_effect_ops` (item.rs:554–672).
-    /// Decl-level method-list resolution — no body walk, no
-    /// `TypeAnnotations` consumption. Type-param scope is established
-    /// per call; the optional `resource_self` adds a synthesised
-    /// receiver parameter for resource methods.
-    fn reify_effect_ops(
-        &mut self,
-        type_params: &[ast::GenericParam],
-        methods: &[ast::InterfaceMethod],
-        resource_self: Option<(&str, ModuleSource)>,
-    ) -> Vec<tir::TirEffectOp> {
-        use crate::ast::SelfKind;
-
-        let param_names: Vec<String> = type_params.iter().map(|p| p.name.clone()).collect();
-
-        // Construct the resource's `Self` type after the param-name list
-        // is known so a generic resource's `GenericResource` instance
-        // references its own `TypeParam`s.
-        let self_type: Option<TypeId> = resource_self.map(|(name, module)| {
-            if type_params.iter().any(|p| !p.is_effect) {
-                let type_arg_ids: Vec<TypeId> = type_params
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, p)| !p.is_effect)
-                    .map(|(i, p)| {
-                        self.tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_type_param(p.name.clone(), i as u32)
-                    })
-                    .collect();
-                self.tysys.type_table.borrow_mut().intern(
-                    crate::tir::ResolvedType::GenericResource {
-                        name: name.to_string(),
-                        module_source: module,
-                        type_args: type_arg_ids,
-                    },
-                )
-            } else {
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_resource(name.to_string(), module)
-            }
-        });
-
-        let mut ops = Vec::with_capacity(methods.len());
-        for method in methods {
-            let mut params = Vec::with_capacity(method.params.len());
-            let mut next_local: u32 = 0;
-            for p in &method.params {
-                let type_id = match (p.self_kind, self_type) {
-                    (SelfKind::None, _) => self.resolve_type_in_scope(&p.ty, &param_names),
-                    (SelfKind::Ref, Some(self_t)) => {
-                        self.tysys.type_table.borrow_mut().make_ref(self_t)
-                    }
-                    (SelfKind::MutRef, Some(self_t)) => {
-                        self.tysys.type_table.borrow_mut().make_mut_ref(self_t)
-                    }
-                    _ => continue,
-                };
-                let name = if matches!(p.self_kind, SelfKind::None) {
-                    p.name.clone()
-                } else {
-                    "self".to_string()
-                };
-                params.push(tir::TirParam {
-                    name,
-                    type_id,
-                    local_index: next_local,
-                    is_mut: p.is_mut,
-                    default_expr: None,
-                    span: p.span,
-                });
-                next_local += 1;
-            }
-            let return_type = method
-                .return_type
-                .as_ref()
-                .map(|ty| self.resolve_type_in_scope(ty, &param_names))
-                .unwrap_or(crate::tir::TypeTable::UNIT);
-            let cm_name = method
-                .attrs
-                .iter()
-                .find_map(crate::ast::Attribute::cm_identifier);
-            ops.push(tir::TirEffectOp {
-                name: method.name.clone(),
-                params,
-                return_type,
-                span: method.span,
-                cm_name,
-            });
-        }
-        ops
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -1104,13 +859,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// are pure projections that don't depend on the body walk, but
     /// would duplicate `Elaborator` helpers and balloon this file.
     fn reify_function(&mut self, func: &ast::Function) -> Option<TirFunction> {
+        // Single source of truth: read the (post-async-erasure) return type
+        // `resolve_function` resolved, rather than re-reading the fragile
+        // name-keyed `function_return_types` map (shared with call sites and
+        // overwritable by later registrations).
         let return_type = self
-            .sem
-            .decls
-            .function_return_types
-            .get(&func.name)
-            .copied()
-            .unwrap_or(crate::tir::TypeTable::UNIT);
+            .ann_fn_return_type(func.id)
+            .expect("resolve_function records the return type for every function reify emits");
 
         let mut ctx = FunctionContext::new(return_type, func.name.clone());
         if func.is_async {
@@ -1139,28 +894,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let saved_effect_param_names =
             std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
 
-        // `<F: fn(...)>` bounds → the bound's resolved function type,
-        // realised eagerly (item.rs:1569). The signature references the
-        // real type params, so resolve it in their scope.
-        let fn_bound_map: crate::hashmap::IndexMap<String, TypeId> = func
-            .type_params
-            .iter()
-            .filter_map(|p| {
-                let sig = p.bounds.iter().find_map(|b| b.fn_signature.as_ref())?;
-                let ty = self
-                    .resolve_type_in_scope(&ast::Type::Function(sig.clone()), &type_param_names);
-                Some((p.name.clone(), ty))
-            })
-            .collect();
-
         // Publish the body's type-param scope (see `reify_method`).
         let saved_type_param_names =
-            std::mem::replace(&mut self.current_type_param_names, type_param_names.clone());
+            std::mem::replace(&mut self.current_type_param_names, type_param_names);
 
+        // Single source of truth: read the resolved param types
+        // `resolve_function` recorded (in `func.params` order, with `<F: fn>`
+        // bounds already realised), rather than re-resolving each here.
+        let param_types = self
+            .ann_fn_param_types(func.id)
+            .expect("resolve_function records param types for every function reify emits");
         let mut params = Vec::with_capacity(func.params.len());
-        for param in &func.params {
-            let type_id =
-                self.resolve_type_with_fn_bounds(&param.ty, &type_param_names, &fn_bound_map);
+        for (p_idx, param) in func.params.iter().enumerate() {
+            let type_id = *param_types
+                .get(p_idx)
+                .expect("resolve_function records one param type per func.params entry");
             let default_expr = param
                 .default
                 .as_ref()
@@ -1184,30 +932,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.current_type_param_names = saved_type_param_names;
         self.current_effect_param_names = saved_effect_param_names;
 
-        let mut non_effect_non_fn_idx: u32 = 0;
-        let type_params: Vec<crate::tir::TirTypeParam> = func
-            .type_params
-            .iter()
-            .filter_map(|p| {
-                if p.is_effect {
-                    return None;
-                }
-                if p.bounds.iter().any(|b| b.fn_signature.is_some()) {
-                    return None;
-                }
-                let idx = non_effect_non_fn_idx;
-                non_effect_non_fn_idx += 1;
-                let default = p.default.as_ref().map(|ty| self.resolve_type(ty));
-                Some(crate::tir::TirTypeParam {
-                    name: p.name.clone(),
-                    is_effect: p.is_effect,
-                    is_pack: p.is_pack,
-                    bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                    default,
-                    index: idx,
-                })
-            })
-            .collect();
+        // Single source of truth: read the TIR type params `resolve_function`
+        // projected (effect / `fn`-bound params filtered, dense indices,
+        // defaults resolved with the type-param scope alive), rather than
+        // re-projecting them here after the scope is torn down.
+        let type_params = self
+            .ann_decl_type_params(func.id)
+            .expect("resolve_function records the type params for every function reify emits");
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1329,89 +1060,46 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::name::{LocalMethodName, MethodName};
         use crate::tir::TypeTable;
 
-        // Impl type params, rebuilt from the AST self type to mirror the
-        // elaborator's method emission (`item.rs:1370-1462`): every
-        // `Named` arg of a generic self type is a positional impl type
-        // param (`TagMap<Tag, V>` → `Tag@0`, `V@1`), so monomorph's
-        // positional substitution against the recorded `type_arg_ids`
-        // lines up — including the newtype-aliased / concrete args.
-        // Bounds come from the explicit `impl<…>` clause (recorded in
-        // `facts.impl_type_params`) by name. Self-type shapes this does
-        // not model (variadic tuple `[..T]`, …) fall back to the
-        // recorded projection so their behaviour is preserved.
-        let impl_self_inner = match impl_self_ty {
-            ast::Type::Reference(i) | ast::Type::MutReference(i) => i.as_ref(),
-            other => other,
-        };
-        let bounds_for = |name: &str| -> Vec<String> {
-            facts
-                .impl_type_params
-                .iter()
-                .find(|p| p.name == name)
-                .map(|p| p.bounds.clone())
-                .unwrap_or_default()
-        };
-        let impl_type_params: Vec<crate::tir::TirTypeParam> = match impl_self_inner {
-            ast::Type::Generic(generic) => generic
-                .args
-                .iter()
-                .enumerate()
-                .map(|(i, arg)| {
-                    // Every self-type arg occupies a positional impl
-                    // type-param slot so monomorph's positional
-                    // substitution against `type_arg_ids` stays aligned.
-                    // A non-`Named` arg (`Array<String>` in
-                    // `NestedMap<Array<String>, V>`) is concrete in the
-                    // body, so its slot just holds the position with a
-                    // synthesized name that the body never references.
-                    let name = match arg {
-                        ast::Type::Named(named) => named.name.clone(),
-                        _ => format!("__impl_arg{i}"),
-                    };
-                    crate::tir::TirTypeParam {
-                        name: name.clone(),
-                        is_effect: false,
-                        is_pack: false,
-                        bounds: bounds_for(&name),
-                        default: None,
-                        index: i as u32,
-                    }
-                })
-                .collect(),
-            ast::Type::Named(named)
-                if facts.impl_type_params.iter().any(|p| p.name == named.name) =>
-            {
-                // Blanket impl `impl<I: Bound> Trait for I`.
-                facts.impl_type_params.clone()
-            }
-            _ => facts.impl_type_params.clone(),
-        };
+        // Single source of truth: the impl-type-param scheme is computed once
+        // by `Elaborator::resolve_method` and recorded; reify reads it. reify
+        // runs only for the current module's explicitly-written methods in the
+        // same `build_tir_from_state` pass that recorded them (stdlib is
+        // rehydrated from the snapshot's already-reified TIR), so the fact is
+        // always present — a missing entry is a contract violation, not a
+        // fallback case.
+        let impl_type_params: Vec<crate::tir::TirTypeParam> =
+            self.ann_method_impl_type_params(func.id).expect(
+                "resolve_method records the impl-type-param scheme for every \
+                 impl method reify emits",
+            );
 
         // Type-param scope for resolving the method's own param/return
-        // types. Impl params are placed at their declaration index (so
-        // `resolve_type_static_with_params`, which keys by position,
-        // reproduces those indices); concrete / known names (e.g. a
-        // newtype-aliased `Tag`) are left out so they resolve to their
-        // alias, which monomorph then maps to the same concrete type.
-        // Method-level params continue after the impl param count,
-        // matching the elaborator's `next_idx = type_params.len()`.
+        // types. Every impl-self-type arg occupies its positional slot —
+        // including concrete / known-named args (`String` in
+        // `TreeMap<String, V>`) — exactly as the elaborator's
+        // `resolve_method` registers them (item.rs). They are NOT excluded:
+        // doing so was a reify-only divergence that disagreed with the
+        // battle-tested original path; the elaborator treats such an arg as a
+        // positional param and monomorph substitutes it back to the concrete
+        // type by identity. Method-level params continue after the impl param
+        // count, matching `resolve_method`'s `next_idx = impl_type_params.len()`
+        // — the same base the monomorphizer uses
+        // (`impl_type_params.len() + param.index` in
+        // `func_inst::instantiate_function`).
         let mut type_param_names: Vec<String> = Vec::new();
         for p in &impl_type_params {
-            if self.tysys.is_known_type_name(&p.name) {
-                continue;
-            }
             let idx = p.index as usize;
             if type_param_names.len() <= idx {
                 type_param_names.resize(idx + 1, String::new());
             }
-            type_param_names[idx] = p.name.clone();
+            type_param_names[idx].clone_from(&p.name);
         }
         let mut next_idx = impl_type_params.len();
         for p in &func.type_params {
-            // Skip `<F: fn(...)>` bounds: like the elaborator they are
-            // realised eagerly to the bound's function type (built into
-            // `fn_bound_map` below) and must not consume a positional
-            // type-param slot, or the real method params shift index.
+            // Skip `<F: fn(...)>` bounds: the elaborator realises them
+            // eagerly to the bound's function type (already baked into the
+            // recorded param/return types), so they must not consume a
+            // positional type-param slot or the real method params shift index.
             if p.is_effect
                 || p.bounds.iter().any(|b| b.fn_signature.is_some())
                 || type_param_names.iter().any(|n| n == &p.name)
@@ -1421,7 +1109,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             if type_param_names.len() <= next_idx {
                 type_param_names.resize(next_idx + 1, String::new());
             }
-            type_param_names[next_idx] = p.name.clone();
+            type_param_names[next_idx].clone_from(&p.name);
             next_idx += 1;
         }
 
@@ -1436,23 +1124,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect();
         let saved_effect_param_names =
             std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
-
-        // `<F: fn(...)>` method-level bounds → their resolved function
-        // type (resolved with `Self` / assoc bindings in scope).
-        let fn_bound_map: crate::hashmap::IndexMap<String, TypeId> = func
-            .type_params
-            .iter()
-            .filter_map(|p| {
-                let sig = p.bounds.iter().find_map(|b| b.fn_signature.as_ref())?;
-                let ty = self.resolve_type_with_self(
-                    &ast::Type::Function(sig.clone()),
-                    &type_param_names,
-                    facts.self_type,
-                    &facts.assoc_type_bindings,
-                );
-                Some((p.name.clone(), ty))
-            })
-            .collect();
 
         // Derive the mangler's base-struct-name input from the
         // resolved `Self` type. The mangler wants the bare name
@@ -1470,17 +1141,37 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // the monomorphizer's tuple-variadic instantiation path
         // (func_inst.rs:888, gated on `struct_name == TUPLE_TYPE_NAME`)
         // both find the template. Match that here.
-        let base_struct_name = if self.tysys.type_table.borrow().is_tuple(facts.self_type) {
-            TypeTable::TUPLE_TYPE_NAME.to_string()
-        } else {
-            let struct_name_for_mangle: String =
-                self.tysys.type_table.borrow().type_name(facts.self_type);
-            struct_name_for_mangle
-                .split('<')
-                .next()
-                .unwrap_or(&struct_name_for_mangle)
-                .to_string()
+        // A reference impl (`impl<T: Bound> Trait for &T` /
+        // `impl<…> Trait for &Array<T>`) mangles to base struct `&` / `&mut`,
+        // independent of the inner type — production's `get_type_name`
+        // (module.rs:581) returns exactly `"&"` / `"&mut"` for any reference
+        // target, and the monomorphizer / template synthesis look up the
+        // blanket template by that bare name (`&^Inspect::inspect`), keyed off
+        // the inner type via `impl_type_args`. Deriving the name from the
+        // *resolved* self type instead would mangle `&T` → `&T^…`, a name the
+        // monomorphizer never queries, leaving every `&T`-blanket method call
+        // (e.g. `&i32^Inspect::inspect` from `{x:?}` on a reference) unresolved.
+        let base_struct_name = match impl_self_ty {
+            ast::Type::Reference(_) => "&".to_string(),
+            ast::Type::MutReference(_) => "&mut".to_string(),
+            _ if self.tysys.type_table.borrow().is_tuple(facts.self_type) => {
+                TypeTable::TUPLE_TYPE_NAME.to_string()
+            }
+            _ => {
+                let struct_name_for_mangle: String =
+                    self.tysys.type_table.borrow().type_name(facts.self_type);
+                struct_name_for_mangle
+                    .split('<')
+                    .next()
+                    .unwrap_or(&struct_name_for_mangle)
+                    .to_string()
+            }
         };
+        // `#function` display name `Struct::method` (trait omitted), matching
+        // `resolve_method`'s `display_name`; the bare `func.name` would regress
+        // assert / panic messages to drop the type qualifier
+        // (`String::remove` → `remove`).
+        let display_name = MethodName::format_local(&base_struct_name, None, &func.name);
         let mangled_name = MethodName::format_local(
             &base_struct_name,
             facts.trait_name_mangled.as_deref(),
@@ -1499,7 +1190,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // (effect_dispatch.rs:2984); without the args a generic-effect
             // handler is keyed `Future<>` and the `Future<i32>` binding
             // finds no `DispatchPlan`.
-            info.trait_type_args = facts.trait_type_args.clone();
+            info.trait_type_args.clone_from(&facts.trait_type_args);
             if let Some((module, base)) = facts.trait_canonical.clone() {
                 info.base_trait_module = Some(module);
                 info.base_trait_name = Some(base);
@@ -1507,20 +1198,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             info
         };
 
-        let return_type = func
-            .return_type
-            .as_ref()
-            .map(|t| {
-                self.resolve_type_with_self(
-                    t,
-                    &type_param_names,
-                    facts.self_type,
-                    &facts.assoc_type_bindings,
-                )
-            })
-            .unwrap_or(TypeTable::UNIT);
+        // Single source of truth: read the return type `resolve_method`
+        // resolved, rather than re-resolving the return annotation.
+        let return_type = self
+            .ann_fn_return_type(func.id)
+            .expect("resolve_method records the return type for every impl method reify emits");
 
-        let mut ctx = FunctionContext::new(return_type, func.name.clone());
+        let mut ctx = FunctionContext::new(return_type, display_name);
         ctx.in_handler_method = facts.is_handler_method;
         if func.is_async {
             ctx.is_async = true;
@@ -1533,31 +1217,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let saved_type_param_names =
             std::mem::replace(&mut self.current_type_param_names, type_param_names.clone());
 
+        // Single source of truth: read the resolved param types
+        // `resolve_method` recorded (in `func.params` order, receiver
+        // included), rather than re-resolving each here.
+        let param_types = self
+            .ann_fn_param_types(func.id)
+            .expect("resolve_method records param types for every impl method reify emits");
         let mut params = Vec::with_capacity(func.params.len());
-        for p in &func.params {
-            let type_id = match p.self_kind {
-                // A param naming a `<F: fn(...)>` bound resolves to the
-                // realised function type; otherwise resolve with `Self`.
-                SelfKind::None if matches!(&p.ty, ast::Type::Named(n) if fn_bound_map.contains_key(&n.name)) =>
-                {
-                    let ast::Type::Named(n) = &p.ty else {
-                        unreachable!()
-                    };
-                    fn_bound_map[&n.name]
-                }
-                SelfKind::None => self.resolve_type_with_self(
-                    &p.ty,
-                    &type_param_names,
-                    facts.self_type,
-                    &facts.assoc_type_bindings,
-                ),
-                SelfKind::Ref => self.tysys.type_table.borrow_mut().make_ref(facts.self_type),
-                SelfKind::MutRef => self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_mut_ref(facts.self_type),
-            };
+        for (p_idx, p) in func.params.iter().enumerate() {
+            let type_id = *param_types
+                .get(p_idx)
+                .expect("resolve_method records one param type per func.params entry");
             let name = if matches!(p.self_kind, SelfKind::None) {
                 p.name.clone()
             } else {
@@ -1586,32 +1256,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.current_type_param_names = saved_type_param_names;
         self.current_effect_param_names = saved_effect_param_names;
 
-        // Method-level type-param projection: same filter as
-        // `reify_function`'s (skip effect params and `<F: fn(...)>`
-        // bounds, which are realised eagerly).
-        let mut non_effect_non_fn_idx: u32 = 0;
-        let type_params: Vec<crate::tir::TirTypeParam> = func
-            .type_params
-            .iter()
-            .filter_map(|p| {
-                if p.is_effect {
-                    return None;
-                }
-                if p.bounds.iter().any(|b| b.fn_signature.is_some()) {
-                    return None;
-                }
-                let idx = non_effect_non_fn_idx;
-                non_effect_non_fn_idx += 1;
-                Some(crate::tir::TirTypeParam {
-                    name: p.name.clone(),
-                    is_effect: p.is_effect,
-                    is_pack: p.is_pack,
-                    bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                    default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
-                    index: idx,
-                })
-            })
-            .collect();
+        // Single source of truth: read the method-level type params
+        // `resolve_method` projected (effect / `fn`-bound params filtered,
+        // dense indices, defaults resolved with the type-param scope alive),
+        // rather than re-projecting them here after the scope is torn down.
+        let type_params = self.ann_decl_type_params(func.id).expect(
+            "resolve_method records the method type params for every impl method reify emits",
+        );
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -2012,10 +1663,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // recovery path emits an Expr-Unit placeholder to mirror.
         let Some(ast_value) = let_stmt.value.as_ref() else {
             use crate::tir::{TirExprKind, TirStmtKind, TypeTable};
+            // 7-A: same as the initialised case — read the binding's recorded
+            // type (this path always binds a simple `Ident` / `MutIdent`).
+            let binding_id = match &let_stmt.pattern {
+                ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => Some(*id),
+                _ => None,
+            };
             let type_id = let_stmt
                 .ty
                 .as_ref()
-                .map(|t| self.resolve_type(t))
+                .map(|t| {
+                    binding_id
+                        .and_then(|id| self.ann_local_type(id))
+                        .unwrap_or_else(|| self.resolve_type(t))
+                })
                 .unwrap_or(TypeTable::UNKNOWN);
             return match &let_stmt.pattern {
                 ast::Pattern::Ident { id, name, span: _ }
@@ -2049,7 +1710,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             };
         };
 
-        let annotated_type = let_stmt.ty.as_ref().map(|t| self.resolve_type(t));
+        // 7-A (E2-thin): a simple binding's annotated type is the
+        // scope-sensitive type annotate recorded as the local's type; read it
+        // instead of re-resolving the annotation. Destructuring patterns bind
+        // per-element, so they keep re-resolving the whole-pattern annotation.
+        let simple_binding_id = match &let_stmt.pattern {
+            ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => Some(*id),
+            _ => None,
+        };
+        let annotated_type = let_stmt.ty.as_ref().map(|t| {
+            simple_binding_id
+                .and_then(|id| self.ann_local_type(id))
+                .unwrap_or_else(|| self.resolve_type(t))
+        });
         let value = self.reify_expr(ast_value, ctx, annotated_type);
         let type_id = annotated_type.unwrap_or(value.type_id);
 
@@ -2191,7 +1864,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_tuple_literal(tuple_lit, ctx, span)
             }
             ast::Expr::Cast(cast) => {
-                let target_type = self.resolve_type(&cast.target_type);
+                // 7-A (E2-thin): resolving `cast.target_type` is a
+                // scope-sensitive decision annotate already makes and records
+                // as the cast expression's type. Read it instead of
+                // re-resolving; re-resolution remains only as a fallback for
+                // any node annotate did not type, and is dropped once the
+                // contract is proven complete.
+                let target_type = self
+                    .ann_expression_types(cast.id)
+                    .unwrap_or_else(|| self.resolve_type(&cast.target_type));
                 // `expr as i128/u128` lowers to a `from_u64` / `from_i64`
                 // / `from_pair` constructor call rather than a bare cast,
                 // since the 128-bit types are prelude structs. Mirrors
@@ -2721,15 +2402,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Always install the context: an empty `ast_id_to_slot` map
         // intercepts nothing, and the hook is a single Option check.
         let info = self.ann_assert_captures(assert_stmt.id);
-        let (slot_meta, ast_id_to_slot): (Vec<(AstId, String)>, IndexMap<AstId, usize>) =
+        let (slot_labels, ast_id_to_slot): (Vec<String>, IndexMap<AstId, usize>) =
             if let Some(info) = info.as_ref() {
-                let mut meta: Vec<(AstId, String)> = Vec::with_capacity(info.slots.len());
+                let mut labels: Vec<String> = Vec::with_capacity(info.slots.len());
                 let mut map: IndexMap<AstId, usize> = IndexMap::default();
                 for (i, s) in info.slots.iter().enumerate() {
-                    meta.push((s.ast_id, s.capture_label.clone()));
+                    labels.push(s.capture_label.clone());
                     map.insert(s.ast_id, i);
                 }
-                (meta, map)
+                (labels, map)
             } else {
                 (Vec::new(), IndexMap::default())
             };
@@ -2737,11 +2418,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx.enter_scope();
 
         ctx.reify_assert_capture_ctx = Some(ReifyAssertCaptureContext {
-            slots: slot_meta
+            slots: slot_labels
                 .iter()
                 .enumerate()
-                .map(|(i, (ast_id, label))| ReifyAssertSlot {
-                    ast_id: *ast_id,
+                .map(|(i, label)| ReifyAssertSlot {
                     name: format!("__v{i}"),
                     label: label.clone(),
                     emitted: false,
@@ -3355,7 +3035,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         for_of: &ast::ForOfStmt,
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
-        use crate::tir::{ResolvedType, TirStmtKind, TypeTable};
+        use crate::tir::{ResolvedType, TirExprKind, TirStmtKind, TypeTable};
 
         let span = for_of.span;
         let iterable = self.reify_expr(&for_of.iterable, ctx, None);
@@ -3390,8 +3070,64 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let is_mut = for_of.is_mut;
         ctx.enter_scope();
         let binding_local = ctx.add_local(binding_name.clone(), binding_type, is_mut, binding_id);
-        let body = self.reify_block(&for_of.body, ctx, None);
+
+        // Destructured binding (`for let [a, b] of …`): bind each inner
+        // pattern variable to its element type and prepend a field-access
+        // `Let` reading it from the synthetic pair temp, mirroring
+        // `resolve_variadic_for_of` (stmt.rs:2259+). Without this the inner
+        // names (`a`, `b`) never enter scope, so the body resolves them to
+        // `Unknown` — e.g. `a != b` in the variadic `Eq for [..T]` impl
+        // dispatches to a nonexistent `unknown^Eq::eq`.
+        let mut destruct_stmts: Vec<TirStmt> = Vec::new();
+        if let ast::Pattern::Tuple(tp, _) = &for_of.binding {
+            let inner_elems = self
+                .tysys
+                .type_table
+                .borrow()
+                .as_tuple(binding_type)
+                .unwrap_or_else(|| vec![binding_type]);
+            for (i, pat_elem) in tp.iter().enumerate() {
+                if let ast::Pattern::Ident { id, name, .. } = pat_elem {
+                    let elem_type = inner_elems.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
+                    let local_idx = ctx.add_local(name.clone(), elem_type, is_mut, Some(*id));
+                    let field_access = TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(TirExpr::new(
+                                TirExprKind::Local {
+                                    index: binding_local,
+                                    name: binding_name.clone(),
+                                },
+                                binding_type,
+                                span,
+                            )),
+                            field_index: i as u32,
+                            field_name: i.to_string(),
+                        },
+                        elem_type,
+                        span,
+                    );
+                    destruct_stmts.push(TirStmt::new(
+                        TirStmtKind::Let {
+                            name: name.clone(),
+                            local_index: local_idx,
+                            is_mut,
+                            is_reactive: false,
+                            type_id: elem_type,
+                            value: field_access,
+                            skip_value_copy: false,
+                        },
+                        span,
+                    ));
+                }
+            }
+        }
+
+        let mut body = self.reify_block(&for_of.body, ctx, None);
         ctx.exit_scope();
+        if !destruct_stmts.is_empty() {
+            destruct_stmts.extend(body.stmts);
+            body.stmts = destruct_stmts;
+        }
 
         vec![TirStmt::new(
             TirStmtKind::VariadicForOf {
@@ -4442,15 +4178,62 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let read = self.reify_expr(&compound.target, ctx, None);
         let rhs = self.reify_expr(&compound.value, ctx, Some(read.type_id));
         let combined_type = read.type_id;
-        let combined = TirExpr::new(
-            TirExprKind::Binary {
-                left: Box::new(read),
-                op,
-                right: Box::new(rhs),
-            },
-            combined_type,
-            compound.span,
-        );
+        // Operator-overloaded operands (`u128 /= u128`, …): the combined
+        // value dispatches through the trait method (`Div::div`), recorded by
+        // `resolve_compound_assign` under the compound's AstId. Replay that
+        // MethodCall — a raw `Binary` with a primitive `/` on struct operands
+        // would lower to invalid Wasm. Mirrors the `reify_binary` dispatch
+        // path (keyed on `binary.id`).
+        let combined = if let Some(dispatch) = self.ann_operator_dispatch(compound.id) {
+            let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
+                read,
+                dispatch.self_kind,
+                /* is_ref_impl */ false,
+                compound.span,
+                &self.tysys.type_table,
+            );
+            let call_args: Vec<crate::tir::CallArg> = std::iter::once(rhs)
+                .zip(dispatch.arg_ref_wraps.iter().copied())
+                .map(|(arg, wrap)| {
+                    let arg_expr = if wrap {
+                        let arg_ref_type = self
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .intern(crate::tir::ResolvedType::Ref(arg.type_id));
+                        TirExpr::new(
+                            TirExprKind::Unary {
+                                op: crate::tir::TirUnaryOp::Ref,
+                                expr: Box::new(arg),
+                            },
+                            arg_ref_type,
+                            compound.span,
+                        )
+                    } else {
+                        arg
+                    };
+                    crate::tir::CallArg::new(arg_expr, false)
+                })
+                .collect();
+            super::Elaborator::<H>::build_tir_method_call(
+                receiver,
+                dispatch.function_ref,
+                vec![],
+                call_args,
+                dispatch.return_type,
+                compound.span,
+            )
+        } else {
+            TirExpr::new(
+                TirExprKind::Binary {
+                    left: Box::new(read),
+                    op,
+                    right: Box::new(rhs),
+                },
+                combined_type,
+                compound.span,
+            )
+        };
 
         // IndexAssign rewrite for `arr[i] OP= v`: dispatch the
         // assignment side through `index_assign_dispatch` so reify
@@ -6076,34 +5859,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             TypeTable::UNIT,
             with_expr.span,
         )
-    }
-
-    /// Reify-side canonicalisation of a decl name through the
-    /// current module's import context. Mirrors
-    /// `Elaborator::canonical_decl_key`. Used by `reify_with_handler`
-    /// to canonicalise an effect reference's `(module, name)` key.
-    fn canonical_decl_key(&self, name: &str) -> (ModuleSource, String) {
-        if let Some(src) = self.sem.imports.effect_sources.get(name) {
-            let original = self
-                .sem
-                .imports
-                .import_original_names
-                .get(name)
-                .cloned()
-                .unwrap_or_else(|| name.to_string());
-            return (src.clone(), original);
-        }
-        if let Some(src) = self.sem.imports.imported_type_sources.get(name) {
-            let original = self
-                .sem
-                .imports
-                .import_original_names
-                .get(name)
-                .cloned()
-                .unwrap_or_else(|| name.to_string());
-            return (src.clone(), original);
-        }
-        (self.current_module_source.clone(), name.to_string())
     }
 
     /// Reify a `matches!`-style expression: `scrutinee matches { PAT
@@ -7986,7 +7741,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 _ => None,
             })
         {
-            let ty = self.resolve_type(&global_decl.ty);
+            // 7-A: the global's declared type was resolved by `annotate_decls`
+            // and lives on `current_module_globals`; read it back (same source
+            // as `reify_global`), re-resolving only if unrecorded.
+            let ty = self
+                .sem
+                .decls
+                .current_module_globals
+                .get(&ident.name)
+                .map(|(t, _)| *t)
+                .unwrap_or_else(|| self.resolve_type(&global_decl.ty));
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
                     module_source: self.current_module_source.clone(),
@@ -9316,7 +9080,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let indices: Vec<u32> = (0..variant_info.type_param_type_ids.len() as u32).collect();
             (case_data.payload, indices)
         };
-        drop(lookup);
         if type_args.is_empty() {
             return payload;
         }

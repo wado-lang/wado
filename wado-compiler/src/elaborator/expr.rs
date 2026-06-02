@@ -592,17 +592,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check for associated constants (e.g., f64::PI, i32::MAX). The
-        // body re-runs inference here, so the defining module is not needed
-        // on this path (reify does need it — see `reify_ident`).
-        if let Some((_const_module, const_ty, const_expr)) = self
+        // constant's body is *foreign* AST owned by `const_module`. Inference
+        // re-runs here against the consumer's scope (so the emitted TIR stays
+        // identical), but the per-`AstId` facts the walk records are keyed
+        // under `const_module` via `ann_module_override`: a const-body node
+        // and a consumer node sharing the same dense `AstId` would otherwise
+        // collide (e.g. `primitive.wado`'s `INFINITY = 1.0 / 0.0` body,
+        // resolved while compiling `core:json`, overwriting a `core:json`
+        // `i32` literal's type with `f64`). Reify reads these facts under the
+        // same key after `with_const_module_perspective` swaps to `const_module`.
+        if let Some((const_module, const_ty, const_expr)) = self
             .sem
             .decls
             .associated_constants
             .get(&ident.name)
             .cloned()
         {
+            let prev_override = self.ann_module_override.replace(const_module);
             let type_id = self.resolve_type(&const_ty);
             let resolved = self.resolve_expr(&const_expr, ctx, Some(type_id));
+            self.ann_module_override = prev_override;
             return TirExpr::new(resolved.kind, type_id, ident.span);
         }
 

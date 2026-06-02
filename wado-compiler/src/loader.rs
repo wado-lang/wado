@@ -829,7 +829,7 @@ mod tests {
 ///
 /// Each module is parsed and bound at most once per process. The slot
 /// table (path → slot) is built eagerly on first access — that walk is
-/// just `HashMap` inserts of empty [`OnceLock`]s, no parsing — and then
+/// just map inserts of empty [`OnceLock`]s, no parsing — and then
 /// each module's actual parse runs only when [`cached_stdlib_module`]
 /// is called for that import path.
 ///
@@ -845,7 +845,7 @@ struct StdlibSlot {
     module: std::sync::OnceLock<Module>,
 }
 
-type StdlibSlotMap = std::collections::HashMap<&'static str, StdlibSlot, FxBuildHasher>;
+type StdlibSlotMap = crate::hashmap::IndexMap<&'static str, StdlibSlot>;
 
 fn stdlib_slots() -> &'static StdlibSlotMap {
     use std::sync::OnceLock;
@@ -854,7 +854,7 @@ fn stdlib_slots() -> &'static StdlibSlotMap {
     SLOTS.get_or_init(|| {
         let total = stdlib::ALL_CORE_MODULES.len() + stdlib::ALL_WASI_MODULES.len();
         let mut slots: StdlibSlotMap =
-            std::collections::HashMap::with_capacity_and_hasher(total, FxBuildHasher);
+            crate::hashmap::IndexMap::with_capacity_and_hasher(total, FxBuildHasher);
         for &(path, source) in stdlib::ALL_CORE_MODULES
             .iter()
             .chain(stdlib::ALL_WASI_MODULES.iter())

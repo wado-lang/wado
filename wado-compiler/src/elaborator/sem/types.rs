@@ -325,10 +325,40 @@ pub(crate) struct TypeAnnotations {
     /// that annotate resolves once per element in a *different* type
     /// context. Every per-element map below would otherwise be overwritten
     /// so only the last element's facts survive. Annotate captures each
-    /// element's body facts here (only when reify is the consumer — see
-    /// `Elaborator::capture_tuple_overlays`) and reify replays them per
-    /// element. Empty in the production/LSP path.
+    /// element's body facts here (`Elaborator::capture_tuple_overlays`, now
+    /// unconditional since reify is the sole TIR consumer) and reify replays
+    /// them per element. Populated whenever a module has tuple-for-of loops;
+    /// empty only when it has none.
     pub(crate) tuple_overlays: IndexMap<SymbolKey, Vec<Vec<ElementOverlay>>>,
+    /// Impl-level type parameters as `Elaborator::resolve_method` (the
+    /// battle-tested original path) computed them, keyed per impl-method
+    /// `AstId` via `ann_key`. Reify reads this instead of recomputing the
+    /// impl-type-param scheme with its own logic — the single source of truth
+    /// for the scheme is the elaborator. Reify reads it only for
+    /// explicitly-written methods (unique key); default-method bodies land
+    /// under their owning module.
+    pub(crate) method_impl_type_params: IndexMap<SymbolKey, Vec<crate::tir::TirTypeParam>>,
+    /// Resolved parameter types per function/method `AstId`, in declaration
+    /// order (for impl methods, including the receiver `&self` → `&Self`), as
+    /// `resolve_function` / `resolve_method` resolved them. Reify reads these
+    /// instead of re-resolving each param.
+    pub(crate) fn_param_types: IndexMap<SymbolKey, Vec<crate::tir::TypeId>>,
+    /// Resolved (post-async-erasure) return type per function/method `AstId`.
+    /// Reify reads it instead of re-resolving the return annotation.
+    pub(crate) fn_return_types: IndexMap<SymbolKey, crate::tir::TypeId>,
+    /// Resolved operation signatures per effect / resource decl `AstId`
+    /// (params, return type, `cm` name), as the combined walk resolved them
+    /// with the decl's type-param / `Self` scope in place. Reify reads these
+    /// instead of re-resolving the op signatures itself.
+    pub(crate) effect_ops: IndexMap<SymbolKey, Vec<crate::tir::TirEffectOp>>,
+    /// TIR type params per declaration `AstId` (function, method, struct,
+    /// variant), with each `default` resolved while the decl's type-param scope
+    /// was alive (so a default referencing an earlier param resolves
+    /// correctly). Effect / `fn`-bound params are filtered out and indices are
+    /// dense. Reify reads these instead of re-projecting / re-resolving them
+    /// after its own scope is torn down. `AstId` is dense per module across all
+    /// item kinds, so function and decl entries never collide.
+    pub(crate) decl_type_params: IndexMap<SymbolKey, Vec<crate::tir::TirTypeParam>>,
 }
 
 /// One tuple-`for-of` element's slice of the body-level annotation maps.

@@ -110,25 +110,6 @@ pub(crate) struct AnnotateState {
     pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
 }
 
-/// Whether reify (Stage 5) produces the final TIR for `module_source`.
-/// Reify is the default for user modules now that it has full parity with
-/// the production walk (2678/2678 e2e). Stdlib modules
-/// (`Core` / `Wasi` / `Wasm`) and stdlib-snapshot construction still take
-/// the production path: reify does not yet reach parity on stdlib-shaped
-/// constructs (forcing it on panics at WIR, e.g. an unresolved
-/// `builtin::array<u8>^Eq::eq`), so closing that gap is the remainder of
-/// Stage 5. The combined walk survives only for stdlib/snapshot until then;
-/// removing it is Stage 7's cleanup, also gated on Stage 6's liveness pass.
-/// Drives both the orchestration switch and the annotate-time
-/// `capture_tuple_overlays` flag so the two never disagree.
-fn module_uses_reify(module_source: &ModuleSource) -> bool {
-    let is_stdlib = matches!(
-        module_source,
-        ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. }
-    );
-    !crate::stdlib_snapshot::is_building() && !is_stdlib
-}
-
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Run the full resolve pipeline: annotate, then lower to TIR.
     ///
@@ -1214,26 +1195,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 trait_check_stack: RefCell::new(Vec::new()),
                 method_info_cache: IndexMap::default(),
                 default_scope_module: None,
+                ann_module_override: None,
                 invocations: Rc::clone(&state.invocations),
                 interner: Rc::clone(&state.interner),
                 pending_method_dispatch: None,
                 pending_operator_ast_id: None,
-                // Capture per-element tuple-for-of overlays only when reify
-                // will consume them. The production / LSP path leaves this
-                // `false` so its annotation maps are untouched.
-                capture_tuple_overlays: module_uses_reify(module_source),
+                // Reify consumes the per-element tuple-for-of overlays the
+                // body walk captures here, so they are always recorded.
+                capture_tuple_overlays: true,
             };
 
             // Set file context so diagnostics emitted during resolution
             // carry the correct module filename (not the entry module).
             logger.set_file(module_source.diagnostic_filename());
 
-            // Phase 1 — `annotate_bodies`: run the body walk to
-            // populate `ModuleSemantics`. For reify modules the TIR it
-            // produces is discarded and reify produces the final TIR
-            // from the recorded annotations; for stdlib / snapshot
-            // modules (see `module_uses_reify`) the annotate-half's TIR
-            // is used directly until Stage 6/7 removes the combined walk.
+            // Phase 1 — `annotate_bodies`: run the body walk to populate
+            // `ModuleSemantics`. The combined walk's own TIR is discarded;
+            // reify (Phase 2) is the sole source of the final TIR for every
+            // module, stdlib and snapshot included (Stage 7).
             let resolve_result = elaborator.resolve_module(module, module_source.clone());
             let saved_sem = elaborator.sem;
             // Re-install the (now-populated) `ModuleSemantics` even on bail
@@ -1243,37 +1222,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .module_semantics
                 .insert(module_source.clone(), saved_sem);
 
-            // Reify is the default for user modules; stdlib modules and
-            // snapshot construction stay on the production path (see
-            // `module_uses_reify`).
-            let use_reify = module_uses_reify(module_source);
-
-            if let Ok(tir_module) = resolve_result {
-                if use_reify {
-                    // Phase 2 — `reify_modules`: walk the AST +
-                    // `ModuleSemantics` to produce the TIR. The
-                    // annotate-side TirModule is dropped on the
-                    // floor; reify is the source of truth.
-                    let sem_ref = state
-                        .module_semantics
-                        .get(module_source)
-                        .expect("just re-installed above");
-                    let mut reify = super::reify::Reify::new(
-                        state.tysys.clone(),
-                        sem_ref,
-                        &state.module_semantics,
-                        symbols,
-                        modules,
-                        logger,
-                        entry_module_source.clone(),
-                        Rc::clone(&state.interner),
-                        Rc::clone(&state.invocations),
-                    );
-                    if let Ok(reified) = reify.reify_module(module, module_source.clone()) {
-                        result.insert(module_source.clone(), reified);
-                    }
-                } else {
-                    result.insert(module_source.clone(), tir_module);
+            if resolve_result.is_ok() {
+                // Phase 2 — `reify_modules`: walk the AST + `ModuleSemantics`
+                // to produce the TIR. Reify is the source of truth.
+                let sem_ref = state
+                    .module_semantics
+                    .get(module_source)
+                    .expect("just re-installed above");
+                let mut reify = super::reify::Reify::new(
+                    state.tysys.clone(),
+                    sem_ref,
+                    &state.module_semantics,
+                    symbols,
+                    modules,
+                    logger,
+                    Rc::clone(&state.interner),
+                );
+                if let Ok(reified) = reify.reify_module(module, module_source.clone()) {
+                    result.insert(module_source.clone(), reified);
                 }
             }
         }
