@@ -66,7 +66,7 @@ fixture before the guard is loosened.
 
 ### ATN-class grammars
 
-Grammars whose alt selection requires arbitrary-length lookahead through ambiguous prefixes cannot be decided by static FOLLOW + K-prefix. ANTLR4 handles them with a runtime ATN simulator (closure / predict / DFA cache) — see `vendor/antlr4/runtime/Java/src/org/antlr/v4/runtime/atn/ParserATNSimulator.java`. Gale's static path will always have edges.
+Grammars whose alt selection requires arbitrary-length lookahead through ambiguous prefixes cannot be decided by static FOLLOW + K-prefix. ANTLR4 handles them with a runtime ATN simulator (closure / predict / DFA cache; out of scope to inspect, see License hygiene in `AGENTS.md`). Gale's static path will always have edges.
 
 Two complementary directions, neither scoped yet:
 
@@ -107,7 +107,7 @@ Each is marked `[stage_a_todo]` in `status.toml` and lands a `#[TODO]` test. Rou
 ### Parser codegen
 
 - **LR operator-precedence chain.** `Performance/DropLoopEntryBranchInLRRule_4`: Gale picks the wrong precedence chain for an or-then-and expression. This is ATN-class: the inner `expr` of `'between' expr 'and' expr` is parsed at `min_prec=0` (matching ANTLR4, which gives middle refs precedence 0), and ANTLR4 only resolves the greedy binary-`and` capture via full-context adaptive prediction at the LR loop-entry (the "drop loop entry branch" optimisation the descriptor is named after). Gale's static `scan_expr_lr_*` sees `and X2` matches and commits. See the **ATN-class grammars** section above.
-- **Non-greedy `??` prediction layer.** `ParserExec/IfIfElseNonGreedyBinding1`: the emit shape is `Option<T>` (compile-blocker gone) but the dispatch reuses the greedy first-set predictor, so the dangling `else` binds to the inner `if` instead of the outer one ANTLR4 picks. Needs either a follow-guarded Optional dispatcher or runtime ATN simulation.
+- **Non-greedy `??` prediction layer.** `ParserExec/IfIfElseNonGreedyBinding1`: the emit shape is `Option<T>` (compile-blocker gone) but the dispatch reuses the greedy first-set predictor, so the dangling `else` binds to the inner `if` instead of the outer one ANTLR4 picks. Investigated and deferred: the proper fix requires either runtime ATN simulation or per-call-site follow-variant infrastructure for `??`. The latter sits in the same territory as Failed Approaches LL(\*) variant emit attempts 2–3 (multi-token-inner Repeat in `tail_greedy_first`; suffix-nullable RuleRef sites), so its risk profile is high; a global `rule_follow("ifStatement")`-based skip-set is over-broad — it also yields at the outermost call, breaking the parse. Regression fixture: `tests/grammars/ll_optional_non_greedy.g4` + `tests/driver_optional_non_greedy_test.wado` (pins Gale's _current_ wrong tree shape so the assertion flips the moment a fix lands; the correct ANTLR4-oracle shape is recorded as a comment beside the pinned shape). Tracked here, no design picked yet.
 
 ### Lexer codegen
 
