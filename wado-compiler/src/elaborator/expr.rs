@@ -601,7 +601,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // resolved while compiling `core:json`, overwriting a `core:json`
         // `i32` literal's type with `f64`). Reify reads these facts under the
         // same key after `with_const_module_perspective` swaps to `const_module`.
-        if let Some((const_module, const_ty, const_expr)) = self
+        if let Some((const_module, type_id, const_expr)) = self
             .sem
             .decls
             .associated_constants
@@ -609,7 +609,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .cloned()
         {
             let prev_override = self.ann_module_override.replace(const_module);
-            let type_id = self.resolve_type(&const_ty);
             let resolved = self.resolve_expr(&const_expr, ctx, Some(type_id));
             self.ann_module_override = prev_override;
             return TirExpr::new(resolved.kind, type_id, ident.span);

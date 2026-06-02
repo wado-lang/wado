@@ -1254,29 +1254,53 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // module, tagging each with its defining `ModuleSource` so reify can
         // reify the body under the right module perspective (the body's
         // `AstId`s are only unique within that module).
+        //
+        // Resolve the const's type here, in the current module's perspective,
+        // so reify and the combined walk both read a ready `TypeId` instead
+        // of re-running `resolve_type` at every use site. The resolution
+        // context matches what the use sites would use today (assoc-const
+        // types are primitive or `Self`-substituted and resolve uniformly
+        // across modules).
         self.sem.decls.associated_constants.clear();
-        let const_sources = self
+        let assoc_const_inputs: Vec<(ModuleSource, String, ast::Type, ast::Expr)> = self
             .loaded_modules
             .iter()
             .map(|(src, m)| (src.clone(), &m.items))
-            .chain(std::iter::once((module_source.clone(), &module.items)));
-        for (src, module_items) in const_sources {
-            for item in module_items {
-                if let Item::Impl(impl_block) = item {
-                    let type_name = self.get_type_name(&impl_block.ty);
-                    for assoc_const in &impl_block.constants {
-                        let key = MethodName::format_local(&type_name, None, &assoc_const.name);
-                        self.sem.decls.associated_constants.insert(
-                            key,
-                            (
-                                src.clone(),
-                                assoc_const.ty.clone(),
-                                assoc_const.value.clone(),
-                            ),
-                        );
-                    }
-                }
-            }
+            .chain(std::iter::once((module_source.clone(), &module.items)))
+            .flat_map(|(src, module_items)| {
+                module_items
+                    .iter()
+                    .filter_map(|item| {
+                        if let Item::Impl(impl_block) = item {
+                            Some((src.clone(), impl_block))
+                        } else {
+                            None
+                        }
+                    })
+                    .flat_map(|(src, impl_block)| {
+                        let type_name = self.get_type_name(&impl_block.ty);
+                        impl_block
+                            .constants
+                            .iter()
+                            .map(move |assoc_const| {
+                                (
+                                    src.clone(),
+                                    MethodName::format_local(&type_name, None, &assoc_const.name),
+                                    assoc_const.ty.clone(),
+                                    assoc_const.value.clone(),
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        for (src, key, ty, value) in assoc_const_inputs {
+            let type_id = self.resolve_type(&ty);
+            self.sem
+                .decls
+                .associated_constants
+                .insert(key, (src, type_id, value));
         }
 
         // Third pass: resolve functions

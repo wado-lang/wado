@@ -7734,14 +7734,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    static expression in practice), so reify uses the
         //    surrounding `ctx` directly — matches the elaborator's
         //    `resolve_expr(&const_expr, ctx, …)` (expr.rs:594–605).
-        if let Some((const_module, const_ty, const_expr)) = self
+        if let Some((const_module, type_id, const_expr)) = self
             .sem
             .decls
             .associated_constants
             .get(&ident.name)
             .cloned()
         {
-            let type_id = self.resolve_type(&const_ty);
             // The constant's body lives in its *defining* module (e.g.
             // `pub const MAX: i32 = 2147483647;` in primitive.wado). Its
             // `AstId`s index that module's `ModuleSemantics`, not the use
@@ -8383,10 +8382,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             Some(_) => variant_name.to_string(),
         };
 
-        let (const_module, const_ty, const_expr) =
+        let (const_module, type_id, const_expr) =
             self.sem.decls.associated_constants.get(&key).cloned()?;
 
-        let type_id = self.resolve_type(&const_ty);
         // Reify the body under its defining module so colliding cross-module
         // `AstId`s can't mis-type the inlined constant (see `reify_ident`).
         let resolved = self.with_const_module_perspective(&const_module, |this| {
@@ -8461,10 +8459,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 Some(ast::Type::NamespacedGeneric(t)) => format!("{}::{}", t.name, variant_name),
                 Some(_) => variant_name.clone(),
             };
-            if let Some((const_module, const_ty, const_expr)) =
+            if let Some((const_module, type_id, const_expr)) =
                 self.sem.decls.associated_constants.get(&key).cloned()
             {
-                let type_id = self.resolve_type(&const_ty);
                 let resolved = self.with_const_module_perspective(&const_module, |this| {
                     this.reify_expr(&const_expr, ctx, Some(type_id))
                 });
