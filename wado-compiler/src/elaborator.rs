@@ -998,75 +998,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// the returned key uses the *original* declaration name, so the index
     /// (whose key is `(decl_module, decl_name)`) matches.
     pub(crate) fn canonical_decl_key(&self, name: &str) -> (ModuleSource, String) {
-        // Built-in primitive types have inherent impls in
-        // `core:prelude/primitive`. They aren't declared as Wado items
-        // (so the symbol table can't canonicalise them), but they have
-        // a well-known canonical module the build phase shares with
-        // every lookup site. Recognise them explicitly.
-        if is_primitive_type_name(name) {
-            return (ModuleSource::primitive(), name.to_string());
-        }
-        if let Some(src) = self.sem.imports.imported_type_sources.get(name) {
-            let original = self
-                .sem
-                .imports
-                .import_original_names
-                .get(name)
-                .cloned()
-                .unwrap_or_else(|| name.to_string());
-            let canonical = self
-                .symbols
-                .lookup_in_module(src, &original)
-                .map(|sym| sym.defined_at.module.clone())
-                .unwrap_or_else(|| src.clone());
-            return (canonical, original);
-        }
-        if let Some(src) = self.sem.imports.effect_sources.get(name) {
-            // `effect_sources` carries either a local effect / resource
-            // declaration (no alias possible — the local name IS the
-            // declaration name) or a non-aliased import that
-            // `imported_type_sources` above already covered. In both cases
-            // `name` is the original declaration name. Canonicalise through
-            // `lookup_in_module` so re-exports (e.g. `wasi:clocks` re-
-            // exporting `MonotonicClock` from `wasi:clocks/monotonic_clock`)
-            // resolve to the *defining* module's key rather than the
-            // re-exporting one.
-            let canonical = self
-                .symbols
-                .lookup_in_module(src, name)
-                .map(|sym| sym.defined_at.module.clone())
-                .unwrap_or_else(|| src.clone());
-            return (canonical, name.to_string());
-        }
-        if let Some(sym) = self.symbols.lookup(name) {
-            return (sym.defined_at.module.clone(), name.to_string());
-        }
-        // Last-resort fallback: scan the global decl indices for any
-        // declaration with this bare name. Stdlib code (e.g. `core:json`
-        // calling `f64::from_str`) references prelude traits / resources
-        // that aren't carried in `effect_sources` / `imported_type_sources`
-        // — prelude is implicit, not via `use` — and that may not be
-        // registered in the per-module symbol table for non-user modules.
-        // The lookup picks "first registered" when two modules declare
-        // same-named items; this is the legacy bare-name behaviour and is
-        // reachable only when the prior priorities (which DO disambiguate
-        // user-visible cases) all miss.
-        if let Some(key) = self.tysys.trait_env.find_trait_decl_key(name) {
-            return key;
-        }
-        if let Some(key) = self.tysys.trait_env.find_effect_or_resource_decl_key(name) {
-            return key;
-        }
-        // Final fallback: a receiver type name (often a built-in primitive
-        // such as `char` / `i32` / `f64`) that has no `Symbol` entry to
-        // canonicalise through. The static-method index was keyed at
-        // build time by `(impl_module, type_name)`; scanning its keys for
-        // a matching bare name recovers the receiver's canonical module
-        // so the lookup site sees the same key the build phase wrote.
-        if let Some(key) = self.tysys.trait_env.find_static_method_decl_key(name) {
-            return key;
-        }
-        (self.current_module_source.clone(), name.to_string())
+        super::elaborator::trait_query::canonical_decl_key_with(
+            name,
+            &self.current_module_source,
+            &self.sem.imports,
+            self.symbols,
+            &self.tysys.trait_env,
+        )
     }
 
     /// Resolve AST effect names (strings) to TIR `EffectRefs` with module source information.
