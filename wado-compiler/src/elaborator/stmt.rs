@@ -109,6 +109,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Stmt::LabeledBlock(labeled_block) => {
                 vec![self.resolve_labeled_block(labeled_block, ctx)]
             }
+            // Parser error-recovery placeholder: the syntax error was already
+            // reported, so emit nothing.
+            Stmt::Error(_) => Vec::new(),
         }
     }
 
@@ -563,7 +566,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Emits a compile error and returns `false` if the pattern is refutable.
     fn check_irrefutable_pattern(&mut self, pattern: &ast::Pattern, span: Span) -> bool {
         match pattern {
-            Pattern::Ident { .. } | Pattern::MutIdent { .. } | Pattern::Wildcard => true,
+            // `Pattern::Error` is a parser recovery placeholder; treat it as
+            // irrefutable so it does not cascade a second "refutable" error.
+            Pattern::Ident { .. }
+            | Pattern::MutIdent { .. }
+            | Pattern::Wildcard
+            | Pattern::Error(_) => true,
             Pattern::Tuple(patterns, _) => patterns
                 .iter()
                 .all(|p| self.check_irrefutable_pattern(p, span)),
@@ -671,7 +679,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | Type::Tuple(_)
             | Type::Reference(_)
             | Type::MutReference(_)
-            | Type::TypePackSpread(_, _) => false,
+            | Type::TypePackSpread(_, _)
+            | Type::Error(_) => false,
         }
     }
 
@@ -699,7 +708,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | Type::Tuple(_)
             | Type::Reference(_)
             | Type::MutReference(_)
-            | Type::TypePackSpread(_, _) => return variant_name.to_string(),
+            | Type::TypePackSpread(_, _)
+            | Type::Error(_) => return variant_name.to_string(),
         };
         format!("{base}::{variant_name}")
     }
@@ -944,6 +954,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Refutable pattern: error was already emitted by check_irrefutable_pattern.
                 TirPattern::Wildcard
             }
+            // Parser error-recovery placeholder; inert.
+            ast::Pattern::Error(_) => TirPattern::Wildcard,
         }
     }
 
@@ -1905,6 +1917,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 kind,
                 span: range_span,
             } => self.resolve_range_pattern(start, end, *kind, scrutinee_type, *range_span),
+            // Parser error-recovery placeholder; inert.
+            Pattern::Error(_) => TirPattern::Wildcard,
         }
     }
 
@@ -3372,6 +3386,7 @@ fn format_pattern_qualifier_type(ty: &Type) -> String {
         Type::Reference(inner) => format!("&{}", format_pattern_qualifier_type(inner)),
         Type::MutReference(inner) => format!("&mut {}", format_pattern_qualifier_type(inner)),
         Type::TypePackSpread(name, _) => format!("..{name}"),
+        Type::Error(_) => "<error>".to_string(),
     }
 }
 
@@ -3407,7 +3422,7 @@ fn collect_ast_pattern_binding_ids(
                 collect_ast_pattern_binding_ids(first, out);
             }
         }
-        Pattern::Wildcard | Pattern::Literal(_) | Pattern::Range { .. } => {}
+        Pattern::Wildcard | Pattern::Literal(_) | Pattern::Range { .. } | Pattern::Error(_) => {}
     }
 }
 
@@ -3514,7 +3529,8 @@ pub(super) fn primitive_assoc_const_to_i128(
         | Type::Tuple(_)
         | Type::Reference(_)
         | Type::MutReference(_)
-        | Type::TypePackSpread(_, _) => return None,
+        | Type::TypePackSpread(_, _)
+        | Type::Error(_) => return None,
     };
     match (ty_name, const_name) {
         ("i8", "MAX") => Some(i128::from(i8::MAX)),

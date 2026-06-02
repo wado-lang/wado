@@ -317,6 +317,7 @@ fn visit_type(spans: &mut TypeSpans, ty: &Type) {
             visit_type(spans, inner);
         }
         Type::TypePackSpread(_, _) => {}
+        Type::Error(_) => {}
     }
 }
 
@@ -385,6 +386,7 @@ fn visit_stmt(spans: &mut TypeSpans, stmt: &Stmt) {
             }
         }
         Stmt::LabeledBlock(lb) => visit_block(spans, &lb.block),
+        Stmt::Error(_) => {}
     }
 }
 
@@ -519,6 +521,7 @@ fn visit_expr(spans: &mut TypeSpans, expr: &Expr) {
             visit_block(spans, &w.body);
         }
         Expr::Resume(r) => visit_expr(spans, &r.value),
+        Expr::Error(_) => {}
     }
 }
 

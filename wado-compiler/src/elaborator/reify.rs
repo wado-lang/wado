@@ -1703,6 +1703,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Stmt::For(f) => self.reify_for(f, ctx),
             ast::Stmt::Assert(assert_stmt) => self.reify_assert(assert_stmt, ctx),
             ast::Stmt::ForOf(for_of) => self.reify_for_of(for_of, ctx),
+            // `build_tir_from_state` skips reify for modules with syntax
+            // errors, so reify never walks an `Error` placeholder.
+            ast::Stmt::Error(_) => {
+                unreachable!("reify does not run on modules with syntax errors")
+            }
         }
     }
 
@@ -1860,6 +1865,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     "reify_let: refutable pattern {:?} in let binding (annotate should have rejected)",
                     let_stmt.pattern
                 )
+            }
+            // `build_tir_from_state` skips reify for modules with syntax
+            // errors, so reify never walks an `Error` placeholder.
+            ast::Pattern::Error(_) => {
+                unreachable!("reify does not run on modules with syntax errors")
             }
         }
     }
@@ -2282,6 +2292,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
             }
             ast::Expr::WithHandler(with_expr) => self.reify_with_handler(with_expr, ctx),
+            // `build_tir_from_state` skips reify for modules with syntax
+            // errors, so reify never walks an `Error` placeholder.
+            ast::Expr::Error(_) => {
+                unreachable!("reify does not run on modules with syntax errors")
+            }
         }
     }
 
@@ -8645,6 +8660,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 scrutinee_type,
                 ctx,
             ),
+            // `build_tir_from_state` skips reify for modules with syntax
+            // errors, so reify never walks an `Error` placeholder.
+            ast::Pattern::Error(_) => {
+                unreachable!("reify does not run on modules with syntax errors")
+            }
         }
     }
 

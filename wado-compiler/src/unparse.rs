@@ -1214,6 +1214,9 @@ impl<'a> Unparser<'a> {
             Stmt::Continue(_) => self.unparse_continue(),
             Stmt::Assert(a) => self.unparse_assert(a),
             Stmt::LabeledBlock(lb) => self.unparse_labeled_block(lb),
+            // The formatter is fail-fast on syntax errors, so this placeholder
+            // is never reached; emit nothing to keep the match total.
+            Stmt::Error(_) => {}
         }
     }
 
@@ -1567,6 +1570,9 @@ impl<'a> Unparser<'a> {
                 self.output.push_str("resume ");
                 self.unparse_expr(&r.value);
             }
+            // The formatter is fail-fast on syntax errors, so this placeholder
+            // is never reached; emit nothing to keep the match total.
+            Expr::Error(_) => {}
         }
     }
 
@@ -2232,6 +2238,9 @@ impl<'a> Unparser<'a> {
                 }
                 self.unparse_pattern(end);
             }
+            // The formatter is fail-fast on syntax errors, so this placeholder
+            // is never reached; emit nothing to keep the match total.
+            Pattern::Error(_) => {}
         }
     }
 
@@ -2699,6 +2708,7 @@ fn get_stmt_span(stmt: &Stmt) -> Span {
         Stmt::Continue(c) => c.span,
         Stmt::Assert(a) => a.span,
         Stmt::LabeledBlock(lb) => lb.span,
+        Stmt::Error(s) => s.span,
     }
 }
 
@@ -3116,6 +3126,9 @@ fn unparse_expr_into(expr: &Expr, output: &mut String) {
             output.push_str("resume ");
             unparse_expr_into(&r.value, output);
         }
+        // Parser error-recovery placeholder; rendered as an empty marker for
+        // the readability-first preview paths that use this helper.
+        Expr::Error(_) => output.push_str("<error>"),
     }
 }
 
@@ -3279,6 +3292,9 @@ fn unparse_stmt_into(stmt: &Stmt, output: &mut String) {
             output.push_str(": ");
             unparse_block_expr_into(&lb.block, output);
         }
+        // Parser error-recovery placeholder; rendered as an empty marker for the
+        // readability-first preview paths that use this helper.
+        Stmt::Error(_) => output.push_str("<error>;"),
     }
 }
 
@@ -3388,6 +3404,7 @@ fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
             }
             unparse_pattern_into(end, output);
         }
+        Pattern::Error(_) => output.push_str("<error>"),
     }
 }
 
@@ -3454,6 +3471,7 @@ pub fn unparse_type_into(ty: &Type, output: &mut String) {
                 delimited_into("<", ">", &ng.args, output, unparse_type_into);
             }
         }
+        Type::Error(_) => output.push_str("<error>"),
     }
 }
 
