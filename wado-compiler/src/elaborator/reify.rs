@@ -4948,27 +4948,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // the functor signature diverges from the call site, leaving the
         // `__call` method unreachable. Mirrors production's coercion-aware
         // param inference.
+        // Closure param types come from `local_types`, which
+        // `resolve_closure` populated via `record_local_symbol(p.id, …,
+        // type_id)`. Reify is a pure read; the prior fallback over
+        // `resolve_type(ty)` + the expected-fn-type peeling is gone.
         let expected_fn_type = expected_type.map(|t| {
             let table = self.tysys.type_table.borrow();
             table.get_ultimate_base_type(table.peel_refs(t))
         });
-        let expected_fn_params: Option<Vec<TypeId>> =
-            expected_fn_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
-                ResolvedType::Function { params, .. } => Some(params.clone()),
-                _ => None,
-            });
         let params: Vec<(String, TypeId)> = closure
             .params
             .iter()
-            .enumerate()
-            .map(|(i, p)| {
-                let type_id = if let Some(ty) = &p.ty {
-                    self.resolve_type(ty)
-                } else if let Some(ref fn_params) = expected_fn_params {
-                    fn_params.get(i).copied().unwrap_or(TypeTable::UNKNOWN)
-                } else {
-                    TypeTable::UNKNOWN
-                };
+            .map(|p| {
+                let type_id = self
+                    .ann_local_type(p.id)
+                    .unwrap_or(TypeTable::UNKNOWN);
                 closure_ctx.add_local(p.name.clone(), type_id, p.is_mut, Some(p.id));
                 (p.name.clone(), type_id)
             })
