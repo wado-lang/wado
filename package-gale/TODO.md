@@ -95,16 +95,31 @@ Reduces coupling between the codegen walk and the analysis layer; no behaviour c
 
 All 17 `CompositeLexers` / `CompositeParsers` upstream descriptors auto-skip today. The bottleneck is _not_ multi-input plumbing (`extract_antlr4_descriptors.wado`'s `parsed.slave_grammars.len() > 0` short-circuit could be lifted; Kiln already supports multi-input). Every composite descriptor's `[output]` is a host-side artefact — `<writeln(...)>` action-body prints (`S.a`, `M.b`, `T.y`), `Token.toString` dumps (`[@0,0:2='abc',<1>,1:0]`), or empty `[output]`. None survive `normalize_output_for_stage_b`. Re-evaluate this entry once Stage C lands.
 
-## Stage B′ — JVM-oracle integration (in progress)
+## Stage B′ — JVM-oracle integration (ready for first full-corpus run)
 
-Design and infrastructure landed in [`antlr4-compatibility.md`](./antlr4-compatibility.md) "Stage B′ — JVM-oracle-derived expected trees". Remaining tasks to wire it up end-to-end:
+Infrastructure complete:
 
-- **Extract manifest emission.** Teach `extract_antlr4_descriptors.wado` to emit `package-gale/tests/antlr4-compat/oracle-pending.tsv` listing each Stage B′ candidate (descriptor whose `[output]` would auto-skip from Stage B, single-grammar, parser-type, not in `[stage_b_oracle_skip]`). Tab-separated fields: `category`, `name`, `start_rule`, `input` (newlines escaped as `\\n`). Wire the existing `load_triage_maps` to surface `[stage_b_oracle_skip]` and `[stage_b_oracle_force]`.
-- **Shell wrapper oracle loop.** `extract-antlr4-descriptors.sh` reads `oracle-pending.tsv`, calls `scripts/strip-grammar.wado` → `scripts/antlr4-oracle.sh` for each entry, and writes the resulting `(rule …)` tree to `tests/antlr4-compat/stage_b_oracle/<C>/<N>_test.wado` via a heredoc template. Oracle failures emit a stderr warning naming the descriptor so the maintainer can add it to `[stage_b_oracle_skip]` (silent skip is forbidden by design).
-- **status.toml schema.** Add empty `[stage_b_oracle_skip]` and `[stage_b_oracle_force]` sections under the existing `[stage_b_skip]`. Update the header doc-comment to point at the new sections.
-- **Re-extract + commit artefacts.** Re-run `mise run extract-antlr4-descriptors`. The first time it lands, `FullContextParsing/*`, `Performance/*`, `ParserExec/IfIfElse*`, and similar candidates will populate `stage_b_oracle/`. Triage any oracle failures into `[stage_b_oracle_skip]`, any tree-shape mismatches into `[stage_b_oracle_todo]` (TODO: add this state to `status.toml` for parity with `[stage_b_todo]`).
+- Design in [`antlr4-compatibility.md`](./antlr4-compatibility.md) "Stage B′ — JVM-oracle-derived expected trees".
+- `scripts/antlr4-oracle.sh` resolves the latest jar, downloads on demand, runs TestRig, and now derives the working file name from the declared grammar identifier (handles descriptor-named inputs).
+- `scripts/strip-grammar.wado` exposes `src/g4/action_strip.wado` as a CLI for shell-side preprocessing. 16 stripper unit tests in `src/g4/action_strip_test.wado`.
+- `scripts/extract_antlr4_descriptors.wado` emits `tests/antlr4-compat/oracle-pending/<C>/<N>.{input,start}` per Stage B′ candidate. A `--finalize-stage-b-oracle` mode drains the manifest plus shell-produced `<N>.expected` files into `tests/antlr4-compat/stage_b_oracle/<C>/<N>_test.wado`.
+- `scripts/extract-antlr4-descriptors.sh` runs all three phases: Wado extract → oracle loop → Wado finalize. Phase 2 is skipped gracefully when `java`/`javac` is not on PATH.
+- `tests/antlr4-compat/status.toml` has `[stage_b_oracle_skip]` (suppress manifest emission) and `[stage_b_oracle_todo]` (emit `#[TODO]`-marked test). Both empty.
 
-The `IfIfElseNonGreedyBinding1` Stage B′ test (once the loop lands) will sit beside the existing pinned-wrong-shape fixture under `tests/grammars/ll_optional_non_greedy.g4`. Both should flip green simultaneously when a non-greedy `??` fix lands.
+Smoke-tested end-to-end on `ParserExec/IfIfElseNonGreedyBinding1`: oracle produces the canonical non-greedy `??` tree (binds `else` to the outer `ifStatement`); the emitted test compiles, runs, and fails the assertion (as expected — Gale's static prediction doesn't yet handle ATN-class non-greedy decisions). Same blocker as the `[stage_a_todo]` entry for the descriptor.
+
+Remaining one-shot tasks for first full-corpus landing:
+
+- **Run `scripts/extract-antlr4-descriptors.sh` on every category.** Expect ~hundreds of Stage B′ candidates total; oracle codegen + javac take seconds per descriptor, so the run is several minutes long.
+- **Triage `[stage_b_oracle_skip]` entries.** A small set of descriptors fail the oracle even after action stripping because they carry StringTemplate directives outside action bodies — e.g. `ParserExec/ReservedWordsEscaping` declares `returns [<IntArg("")> return_]`, where the type slot itself is a directive the stripper cannot remove (it isn't syntactically an action body). The shell wrapper surfaces the failure with descriptor name + the first lines of the javac error; copy those into `[stage_b_oracle_skip]` reasons.
+- **Triage `[stage_b_oracle_todo]` entries.** Descriptors whose oracle tree differs from Gale's `to_string_tree()` output need `#[TODO]` decoration so the test landing doesn't burst CI. The most common cause is ATN-class prediction gaps (e.g. `IfIfElseNonGreedyBinding1`).
+- **Commit `tests/antlr4-compat/stage_b_oracle/` artefacts.** Each pinned tree is then a long-lived regression: a Gale-side prediction fix flips its descriptor from `#[TODO]` to passing on the next regenerate.
+
+Downstream — surfaced but not blocking the wiring:
+
+- **`wado-compiler` codegen panic on some generated parser sources.** Running multiple Stage B′ tests in one `wado test` invocation triggered `wado-compiler/src/codegen.rs:45` ("WIR pipeline generated invalid core Wasm module") on at least some ParserExec descriptors. The individual Stage A `*_parse_test.wado` for the same descriptors compile fine, so the trigger is in the Gale-emitted-from-Stage-B′ output specifically OR in the parallel-test compile pool. Needs a minimal repro before triaging — likely a separate WEP since it's a wado-compiler concern, not a Gale one.
+
+The `IfIfElseNonGreedyBinding1` Stage B′ test sits beside the existing pinned-wrong-shape fixture under `tests/grammars/ll_optional_non_greedy.g4`. Both should flip green simultaneously when a non-greedy `??` fix lands.
 
 ## Descriptor importer — infrastructure gaps
 
