@@ -24,8 +24,7 @@
 //! 15. `store_load_forward` — store-to-load forwarding.
 //! 16. `const_folding` — partial evaluation via [`crate::niri`] (also drives
 //!     alias-aware field-knowledge tracking; see `alias`).
-//! 17. `const_global_promotion` — re-promote globals that fold to constants.
-//! 18. `const_branch_prune` — constant-condition branch / trivial-block cleanup.
+//! 17. `const_branch_prune` — constant-condition branch / trivial-block cleanup.
 //! 19. `licm` — Loop-Invariant Code Motion.
 //! 20. `condition_implication` — eliminate conditions implied by dominators.
 //! 21. `tmpl_hoist` — hoist template-string backing buffers out of loops.
@@ -47,7 +46,6 @@ mod array_literal;
 mod condition_implication;
 mod const_branch_prune;
 mod const_folding;
-mod const_global_promotion;
 mod container_sroa;
 mod copy_prop;
 mod cse;
@@ -77,7 +75,6 @@ use array_literal::collapse_array_literals;
 use condition_implication::eliminate_implied_conditions;
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
 use const_folding::fold_constants;
-use const_global_promotion::promote_constant_globals;
 use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
 use cse::eliminate_common_subexprs;
@@ -575,7 +572,6 @@ fn run_optimization_passes(
         // value-copy-helper analyses migrated to
         // `optimize::alias`.
         step!("nir/const_fold", fold_constants);
-        step!("nir/const_global_promotion", promote_constant_globals);
         step!("nir/branch_prune", prune_constant_branches);
         step!("nir/licm", apply_licm);
         step!("nir/condition_implication", eliminate_implied_conditions);

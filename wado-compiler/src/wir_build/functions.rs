@@ -578,6 +578,7 @@ fn register_globals(ctx: &mut WirContext<'_>) {
             name: WirName { fq: global_name },
             ty: wir_type,
             mutable: global.mutable,
+            wado_mutable: global.wado_mutable,
             init,
             lazy_init: global.lazy_init,
             meta: WirMeta {
