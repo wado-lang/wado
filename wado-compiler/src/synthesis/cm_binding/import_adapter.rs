@@ -918,14 +918,9 @@ pub(super) fn synthesize_adapter(
                 let wado_fields = cm_interface_registry
                     .get_struct_fields_with_wado_names_by_source(source, &n.name)
                     .expect("struct fields_with_wado_names present when fields are");
-                // Flatten each field per the canonical ABI through the shared
-                // helper: a scalar field passes through, but a String / Option
-                // / nested-record / enum field expands to its own flat slots,
-                // so a record with compound fields — e.g. the kiln-host
-                // `Diagnostic { level, span: Option<SourceSpan>, message:
-                // String }` — matches the import's flattened signature. Same
-                // rule as the nested-field path in
-                // `synthesize_flatten_value_to_flat_args`.
+                // Flatten each field through the shared helper so a String /
+                // Option / nested-record / enum field expands to its own flat
+                // slots, matching the import's flattened signature.
                 flatten_cm_record_fields(
                     wado_fields,
                     param_local,

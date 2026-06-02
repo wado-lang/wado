@@ -823,15 +823,11 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 type_table,
             );
         }
-        // CM record → concatenation of its fields' flat args, in declared
-        // order; otherwise a simple primitive / handle / plain Wado GC struct
-        // passes through directly. The record check keys on the explicit
-        // source interface (set for both `wasi:*` and `core:kiln/*` types by
-        // the registry bootstrap, including nested field types) and resolves
-        // its fields with one registry lookup; a plain Wado struct carries no
-        // `source_interface` and falls through. Reached for a nested record
-        // field — e.g. `SourceSpan` inside `Option<SourceSpan>` — so
-        // arbitrarily nested CM records lower through one recursion.
+        // CM record → its fields' flat args via `flatten_cm_record_fields`,
+        // in declared order; anything else — primitive, handle, or a plain
+        // Wado GC struct (no `source_interface`) — passes through. A single
+        // registry lookup gates it, and recursion handles nested records
+        // (e.g. `SourceSpan` inside `Option<SourceSpan>`).
         _ => {
             if let Type::Named(n) = &resolved
                 && let Some(fields) = n.source_interface.as_deref().and_then(|s| {
