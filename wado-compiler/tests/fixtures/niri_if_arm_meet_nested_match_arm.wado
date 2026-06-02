@@ -1,0 +1,46 @@
+// Stage 2 extension: Match / Switch arms now use the same `join_arms`
+// machinery as if-stmts, so a binding held outside a `match` survives
+// across arms that don't touch it.
+//
+// Without porting Match to `join_arms`, an inner `match` inside one of
+// an outer if's arms would call `clear_fields()` on exit (the pre-
+// Stage-2 behaviour), and the outer if's meet would then run against
+// an empty `snap_then`, collapsing the entire post-if state.
+
+use { println, Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+
+#[inline(never)]
+fn check_match_arm_meet(flag: bool) -> i32 {
+    let arr: Array<u16> = Array::filled(16, 0 as u16);
+    let mut tag: i32 = 0;
+    // Outer if whose then-arm contains an inner match. The match
+    // doesn't touch `arr`, so `arr.used = 16` must survive past both
+    // the match and the surrounding if.
+    if flag {
+        tag = match flag {
+            true => 1,
+            false => 2,
+        };
+    } else {
+        tag = -1;
+    }
+    if builtin::unlikely(1 >= arr.len()) {
+        panic("dead_match_arm_meet_2731");
+    }
+    return arr.len() + tag;
+}
+
+export fn run() with Stdout, MonotonicClock {
+    let now = MonotonicClock::now();
+    let opaque_false: bool = now != now;
+    let a = check_match_arm_meet(!opaque_false);
+    let b = check_match_arm_meet(opaque_false);
+    println(`{a},{b}`);
+}
+
+__DATA__
+{
+    "stdout": "17,15\n",
+    "wir_not_expect:O2": ["dead_match_arm_meet_2731"]
+}

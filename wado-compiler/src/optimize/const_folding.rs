@@ -33,7 +33,7 @@ use crate::nir_visitor::{
     opt_walk_expr, opt_walk_stmt, stmt_has_break_to,
 };
 use crate::niri::{
-    CalleeMap, FieldSnapshot, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible,
+    Arm, CalleeMap, FieldSnapshot, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible,
 };
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -214,36 +214,35 @@ impl NirOptVisitor for ConstFoldVisitor<'_> {
             } => {
                 let mut changed = self.visit_expr(condition);
                 let snap_pre = self.interpreter.snapshot_fields();
+                // Capture fall-through BEFORE the walk: visit_block can
+                // rewrite the trailing expression and its `type_id`,
+                // which would make a post-walk read of `is_never_type`
+                // unreliable.
+                let then_reachable = block_falls_through(then_block, self.type_table);
                 changed |= self.visit_block(then_block);
-                let then_falls_through = block_falls_through(then_block, self.type_table);
                 let snap_then = self.interpreter.snapshot_fields();
                 self.interpreter.restore_fields(snap_pre.clone());
-                let post_state = if let Some(eb) = else_block {
+                let mut arms = vec![Arm {
+                    reachable: then_reachable,
+                    post_state: snap_then,
+                }];
+                if let Some(eb) = else_block {
+                    let else_reachable = block_falls_through(eb, self.type_table);
                     changed |= self.visit_block(eb);
-                    let else_falls_through = block_falls_through(eb, self.type_table);
                     let snap_else = self.interpreter.snapshot_fields();
-                    if_arm_meet(
-                        then_falls_through,
-                        snap_then,
-                        else_falls_through,
-                        snap_else,
-                        snap_pre,
-                    )
+                    arms.push(Arm {
+                        reachable: else_reachable,
+                        post_state: snap_else,
+                    });
                 } else {
-                    // No `else`: implicit else evaluates to the
-                    // pre-if state. The meet between post-then and
-                    // pre-if is the right post-if state when then
-                    // falls through; when then traps, only the
-                    // implicit-else path reaches past the if, so
-                    // post-if = pre-if directly.
-                    if_arm_meet(
-                        then_falls_through,
-                        snap_then,
-                        true,
-                        snap_pre.clone(),
-                        snap_pre,
-                    )
-                };
+                    // No `else`: model the implicit fall-through arm
+                    // as reachable and carrying the pre-if state.
+                    arms.push(Arm {
+                        reachable: true,
+                        post_state: snap_pre.clone(),
+                    });
+                }
+                let post_state = FieldSnapshot::join_arms(snap_pre, arms);
                 self.interpreter.restore_fields(post_state);
                 return changed;
             }
@@ -283,30 +282,29 @@ impl NirOptVisitor for ConstFoldVisitor<'_> {
             } => {
                 let mut changed = self.visit_expr(condition);
                 let snap_pre = self.interpreter.snapshot_fields();
+                let then_reachable = block_falls_through(then_branch, self.type_table);
                 changed |= self.visit_block(then_branch);
-                let then_falls_through = block_falls_through(then_branch, self.type_table);
                 let snap_then = self.interpreter.snapshot_fields();
                 self.interpreter.restore_fields(snap_pre.clone());
-                let post_state = if let Some(eb) = else_branch {
+                let mut arms = vec![Arm {
+                    reachable: then_reachable,
+                    post_state: snap_then,
+                }];
+                if let Some(eb) = else_branch {
+                    let else_reachable = block_falls_through(eb, self.type_table);
                     changed |= self.visit_block(eb);
-                    let else_falls_through = block_falls_through(eb, self.type_table);
                     let snap_else = self.interpreter.snapshot_fields();
-                    if_arm_meet(
-                        then_falls_through,
-                        snap_then,
-                        else_falls_through,
-                        snap_else,
-                        snap_pre,
-                    )
+                    arms.push(Arm {
+                        reachable: else_reachable,
+                        post_state: snap_else,
+                    });
                 } else {
-                    if_arm_meet(
-                        then_falls_through,
-                        snap_then,
-                        true,
-                        snap_pre.clone(),
-                        snap_pre,
-                    )
-                };
+                    arms.push(Arm {
+                        reachable: true,
+                        post_state: snap_pre.clone(),
+                    });
+                }
+                let post_state = FieldSnapshot::join_arms(snap_pre, arms);
                 self.interpreter.restore_fields(post_state);
                 changed |= self.interpreter.reduce_local(expr);
                 return changed;
@@ -316,15 +314,23 @@ impl NirOptVisitor for ConstFoldVisitor<'_> {
                 arms,
             } => {
                 let mut changed = self.visit_expr(scrutinee);
+                let snap_pre = self.interpreter.snapshot_fields();
+                let mut arm_results: Vec<Arm> = Vec::with_capacity(arms.len());
                 for arm in arms {
-                    let snap = self.interpreter.snapshot_fields();
+                    let body_reachable = !is_never_type(arm.body.type_id, self.type_table);
                     if let Some(g) = &mut arm.guard {
                         changed |= self.visit_expr(g);
                     }
                     changed |= self.visit_expr(&mut arm.body);
-                    self.interpreter.restore_fields(snap);
+                    let snap_arm = self.interpreter.snapshot_fields();
+                    self.interpreter.restore_fields(snap_pre.clone());
+                    arm_results.push(Arm {
+                        reachable: body_reachable,
+                        post_state: snap_arm,
+                    });
                 }
-                self.interpreter.clear_fields();
+                let post_state = FieldSnapshot::join_arms(snap_pre, arm_results);
+                self.interpreter.restore_fields(post_state);
                 changed |= self.interpreter.reduce_local(expr);
                 return changed;
             }
@@ -335,13 +341,27 @@ impl NirOptVisitor for ConstFoldVisitor<'_> {
                 ..
             } => {
                 let mut changed = self.visit_expr(scrutinee);
+                let snap_pre = self.interpreter.snapshot_fields();
+                let mut arm_results: Vec<Arm> = Vec::with_capacity(arms.len() + 1);
                 for arm in arms.iter_mut() {
-                    let snap = self.interpreter.snapshot_fields();
+                    let arm_reachable = block_falls_through(arm, self.type_table);
                     changed |= self.visit_block(arm);
-                    self.interpreter.restore_fields(snap);
+                    let snap_arm = self.interpreter.snapshot_fields();
+                    self.interpreter.restore_fields(snap_pre.clone());
+                    arm_results.push(Arm {
+                        reachable: arm_reachable,
+                        post_state: snap_arm,
+                    });
                 }
+                let default_reachable = block_falls_through(default, self.type_table);
                 changed |= self.visit_block(default);
-                self.interpreter.clear_fields();
+                let snap_default = self.interpreter.snapshot_fields();
+                arm_results.push(Arm {
+                    reachable: default_reachable,
+                    post_state: snap_default,
+                });
+                let post_state = FieldSnapshot::join_arms(snap_pre, arm_results);
+                self.interpreter.restore_fields(post_state);
                 changed |= self.interpreter.reduce_local(expr);
                 return changed;
             }
@@ -769,20 +789,46 @@ fn single_producing_tail(expr: &NirExpr) -> Option<&NirExpr> {
 /// don't poison the post-if state — only the implicit-else path
 /// (pre-if state) reaches past the if.
 ///
-/// An empty block falls through trivially. The check only looks at
-/// the last stmt's shape, so a nested `if` whose both arms trap is
-/// conservatively reported as falling through — a later precision
-/// pass could prove non-fall-through there, but reporting
-/// fall-through is always sound (it triggers `clear_fields` which is
-/// the previous behavior).
+/// An empty block falls through trivially. Recurses into the last
+/// stmt: a `Let { value: Never-typed }`, a `LabeledBlock` whose body
+/// doesn't fall through, or an `If` whose both arms don't fall
+/// through all terminate control. `Loop` is conservatively reported
+/// as falling through — proving the loop doesn't break out would
+/// require body analysis the visitor doesn't run here.
+///
+/// Callers MUST invoke this BEFORE the body walk: `visit_block` can
+/// rewrite the trailing expression's `type_id` (e.g. via
+/// `reduce_local` reconstructing a wrapper expression), making a
+/// post-walk read of `is_never_type` unreliable.
 fn block_falls_through(block: &NirBlock, type_table: &TypeTable) -> bool {
     let Some(last) = block.stmts.last() else {
         return true;
     };
-    match &last.kind {
+    stmt_falls_through(last, type_table)
+}
+
+fn stmt_falls_through(stmt: &NirStmt, type_table: &TypeTable) -> bool {
+    match &stmt.kind {
         NirStmtKind::Return { .. } | NirStmtKind::Break { .. } | NirStmtKind::Continue => false,
         NirStmtKind::Expr(expr) => !is_never_type(expr.type_id, type_table),
-        _ => true,
+        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
+            !is_never_type(value.type_id, type_table)
+        }
+        NirStmtKind::LabeledBlock { block, .. } => block_falls_through(block, type_table),
+        NirStmtKind::If {
+            then_block,
+            else_block,
+            ..
+        } => {
+            // Both arms must terminate for the if to terminate. A
+            // missing `else` always falls through via the implicit
+            // empty arm.
+            block_falls_through(then_block, type_table)
+                || else_block
+                    .as_ref()
+                    .is_none_or(|eb| block_falls_through(eb, type_table))
+        }
+        NirStmtKind::Loop { .. } => true,
     }
 }
 
@@ -792,43 +838,6 @@ fn block_falls_through(block: &NirBlock, type_table: &TypeTable) -> bool {
 /// `loop { }`, calls whose return type is `!`).
 fn is_never_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     matches!(type_table.get(type_id), ResolvedType::Never)
-}
-
-/// Compute the post-if `field_env` state from the per-arm snapshots
-/// and each arm's fall-through flag. The result implements the
-/// standard control-flow join: a `(local, field) → value` binding
-/// survives only if every arm reachable past the if agrees on it.
-///
-/// The match below enumerates the four arm-shape combinations
-/// against the pre-if snapshot, where the implicit no-`else` arm
-/// passes `snap_else = snap_pre` and `else_falls_through = true`:
-///
-/// | then ↧ | else ↧ | post-if                       |
-/// | ------ | ------ | ----------------------------- |
-/// |    ✓   |    ✓   | `meet(snap_then, snap_else)`  |
-/// |    ✓   |    ✗   | `snap_then`                   |
-/// |    ✗   |    ✓   | `snap_else`                   |
-/// |    ✗   |    ✗   | unreachable — use `snap_pre`  |
-///
-/// "Falls through" means control can reach the bottom of the arm.
-/// A `Return`, `Break`, `Continue`, or `Never`-typed tail expression
-/// terminates control without reaching post-if; that arm's writes
-/// then don't contribute to the join because they're not observed
-/// after the if-stmt.
-#[must_use]
-fn if_arm_meet(
-    then_falls_through: bool,
-    snap_then: FieldSnapshot,
-    else_falls_through: bool,
-    snap_else: FieldSnapshot,
-    snap_pre: FieldSnapshot,
-) -> FieldSnapshot {
-    match (then_falls_through, else_falls_through) {
-        (true, true) => snap_then.meet(&snap_else),
-        (true, false) => snap_then,
-        (false, true) => snap_else,
-        (false, false) => snap_pre,
-    }
 }
 
 /// True when a `Call`'s callee is a compiler builtin that cannot

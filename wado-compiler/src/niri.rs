@@ -433,6 +433,55 @@ impl FieldSnapshot {
     }
 }
 
+/// A control-flow arm contributing to the meet at a branch
+/// boundary (an `if`'s then / else, a `match` arm, a `switch` arm,
+/// or any future construct that joins multiple post-states).
+///
+/// `reachable = false` arms terminate (`return` / `break` /
+/// `continue` / `panic(…)` / `unreachable()` / call returning `!`)
+/// and so don't contribute to post-branch state — only reachable
+/// arms participate in the meet. See [`FieldSnapshot::join_arms`].
+#[derive(Clone, Debug)]
+pub struct Arm {
+    pub reachable: bool,
+    pub post_state: FieldSnapshot,
+}
+
+impl FieldSnapshot {
+    /// Compute the post-branch field-env state from the per-arm
+    /// snapshots and each arm's reachability flag. Implements the
+    /// standard control-flow join semantics:
+    ///
+    /// - Arms with `reachable = false` are excluded (their writes
+    ///   are not observed past the branch).
+    /// - If no arm is reachable, the post-branch program point is
+    ///   itself unreachable; `snap_pre` is returned as an arbitrary
+    ///   choice — downstream DCE will eliminate the code, so the
+    ///   specific snapshot does not matter.
+    /// - If exactly one arm is reachable, its post-state IS the
+    ///   post-branch state.
+    /// - Otherwise the post-branch state is the lattice meet of
+    ///   every reachable arm's post-state.
+    ///
+    /// Used by the if-stmt / if-expr / match / switch handlers in
+    /// the const-fold visitor; the implicit no-`else` arm is
+    /// modelled as a reachable arm carrying `snap_pre`.
+    #[must_use]
+    pub fn join_arms(snap_pre: FieldSnapshot, arms: impl IntoIterator<Item = Arm>) -> Self {
+        let mut accumulator: Option<FieldSnapshot> = None;
+        for arm in arms {
+            if !arm.reachable {
+                continue;
+            }
+            accumulator = Some(match accumulator {
+                None => arm.post_state,
+                Some(acc) => acc.meet(&arm.post_state),
+            });
+        }
+        accumulator.unwrap_or(snap_pre)
+    }
+}
+
 #[cfg(test)]
 mod field_snapshot_tests {
     use super::{FieldSnapshot, PrimitiveType, Value};
@@ -515,6 +564,63 @@ mod field_snapshot_tests {
         // Single field disagrees → entire local dropped.
         let result = a.meet(&b);
         assert_eq!(extract(&result), vec![]);
+    }
+
+    fn arm(reachable: bool, post: FieldSnapshot) -> super::Arm {
+        super::Arm {
+            reachable,
+            post_state: post,
+        }
+    }
+
+    #[test]
+    fn join_arms_zero_reachable_returns_pre() {
+        let pre = snap(&[(0, &[("used", int(99))])]);
+        let result = FieldSnapshot::join_arms(
+            pre.clone(),
+            vec![
+                arm(false, FieldSnapshot::empty()),
+                arm(false, FieldSnapshot::empty()),
+            ],
+        );
+        assert_eq!(extract(&result), extract(&pre));
+    }
+
+    #[test]
+    fn join_arms_single_reachable_is_that_arms_post_state() {
+        let pre = snap(&[(0, &[("used", int(99))])]);
+        let then = snap(&[(0, &[("used", int(16))])]);
+        let result = FieldSnapshot::join_arms(
+            pre,
+            vec![arm(true, then.clone()), arm(false, FieldSnapshot::empty())],
+        );
+        assert_eq!(extract(&result), extract(&then));
+    }
+
+    #[test]
+    fn join_arms_multiple_reachable_meets_them() {
+        let pre = FieldSnapshot::empty();
+        let then = snap(&[(0, &[("used", int(16)), ("cap", int(32))])]);
+        let els = snap(&[(0, &[("used", int(16)), ("cap", int(64))])]);
+        let result = FieldSnapshot::join_arms(pre, vec![arm(true, then), arm(true, els)]);
+        // `used` agrees → kept; `cap` disagrees → dropped.
+        assert_eq!(
+            extract(&result),
+            vec![(0, vec![("used".to_string(), int(16))])]
+        );
+    }
+
+    #[test]
+    fn join_arms_implicit_else_is_pre_as_a_reachable_arm() {
+        // No-else if encoded as `[then, Arm { reachable: true, snap_pre }]`.
+        let pre = snap(&[(0, &[("used", int(16))])]);
+        let then = snap(&[(0, &[("used", int(16)), ("cap", int(99))])]);
+        let result = FieldSnapshot::join_arms(pre.clone(), vec![arm(true, then), arm(true, pre)]);
+        // Pre's lack-of-cap drops the then-arm's cap; `used = 16` agrees.
+        assert_eq!(
+            extract(&result),
+            vec![(0, vec![("used".to_string(), int(16))])]
+        );
     }
 }
 
