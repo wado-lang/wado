@@ -1,0 +1,356 @@
+//! Action-body stripper for ANTLR4 grammar source.
+//!
+//! The published ANTLR4 jar's Java target faithfully copies action-body
+//! source into the generated parser; it does NOT substitute the
+//! StringTemplate directives the testsuite uses for action bodies
+//! (`<writeln("$text")>`, `<ImportListener(...)>`, etc.). So a grammar
+//! with `ifStatement : ... { <writeln("$text")> };` codegens valid Java
+//! shape but `javac` rejects the body — making the oracle uninvocable.
+//!
+//! `strip_action_bodies` removes these blocks before the grammar is
+//! handed to the oracle. The parse tree is independent of action-body
+//! contents (actions are side-effecting host code; they do not alter
+//! what gets matched), so this is sound for Stage B' use. The result is
+//! a strict subset of the input grammar, never wider.
+//!
+//! What gets stripped:
+//!   * `{ ... }` action blocks inline in rule alternatives
+//!   * `{ ... }?` semantic predicates (entire `{...}?` removed)
+//!   * `@<id> { ... }` and `@<scope>::<id> { ... }` named actions
+//!     (e.g. `@header { ... }`, `@parser::members { ... }`,
+//!      `@init { ... }`, `@after { ... }`) — the `@<...>` prefix and
+//!     its `{...}` body both removed
+//!   * `catch [ ... ] { ... }` and `finally { ... }` rule exception
+//!     handlers
+//!
+//! What stays untouched:
+//!   * `tokens { ... }`, `options { ... }`, `channels { ... }` grammar-
+//!     prequel blocks — recognised by the preceding keyword
+//!   * `{...}` characters inside string literals (`'...'`), character
+//!     classes (`[...]`), single-line comments (`// ...`), block
+//!     comments (`/* ... */`), and rule-arg / locals brackets
+//!   * Everything outside `{...}` blocks
+//!
+//! The stripper is balanced-brace-aware: action bodies can contain
+//! nested `{...}` (Java code blocks), and the inner content is
+//! processed against the same string-literal / comment skip rules so
+//! `"...{...}..."` inside Java does not unbalance the count.
+
+pub fn strip_action_bodies(grammar: &String) -> String {
+    let chars: Array<char> = grammar.chars().collect();
+    let n = chars.len();
+    let mut out = String::with_capacity(grammar.len());
+    let mut i = 0;
+    while i < n {
+        let c = chars[i];
+        // String literal `'...'`: copy verbatim, respecting `\\` escapes.
+        if c == '\'' {
+            out.push(c);
+            i += 1;
+            while i < n {
+                let cc = chars[i];
+                out.push(cc);
+                i += 1;
+                if cc == '\\' && i < n {
+                    out.push(chars[i]);
+                    i += 1;
+                    continue;
+                }
+                if cc == '\'' {
+                    break;
+                }
+            }
+            continue;
+        }
+        // Character class `[...]`.
+        if c == '[' {
+            out.push(c);
+            i += 1;
+            let mut depth = 1;
+            while i < n && depth > 0 {
+                let cc = chars[i];
+                out.push(cc);
+                i += 1;
+                if cc == '\\' && i < n {
+                    out.push(chars[i]);
+                    i += 1;
+                    continue;
+                }
+                if cc == '[' {
+                    depth += 1;
+                } else if cc == ']' {
+                    depth -= 1;
+                }
+            }
+            continue;
+        }
+        // Line comment.
+        if c == '/' && i + 1 < n && chars[i + 1] == '/' {
+            while i < n && chars[i] != '\n' {
+                out.push(chars[i]);
+                i += 1;
+            }
+            continue;
+        }
+        // Block comment.
+        if c == '/' && i + 1 < n && chars[i + 1] == '*' {
+            out.push(chars[i]);
+            out.push(chars[i + 1]);
+            i += 2;
+            while i < n {
+                let cc = chars[i];
+                out.push(cc);
+                i += 1;
+                if cc == '*' && i < n && chars[i] == '/' {
+                    out.push(chars[i]);
+                    i += 1;
+                    break;
+                }
+            }
+            continue;
+        }
+        // Named action `@<id>` or `@<scope>::<id>`.
+        if c == '@' {
+            let saved = i;
+            let mut j = i + 1;
+            if j < n && is_id_start_char(chars[j]) {
+                j += 1;
+                while j < n && is_id_continue_char(chars[j]) {
+                    j += 1;
+                }
+                if j + 1 < n && chars[j] == ':' && chars[j + 1] == ':' {
+                    j += 2;
+                    if j < n && is_id_start_char(chars[j]) {
+                        j += 1;
+                        while j < n && is_id_continue_char(chars[j]) {
+                            j += 1;
+                        }
+                    }
+                }
+                while j < n && is_whitespace_char(chars[j]) {
+                    j += 1;
+                }
+                if j < n && chars[j] == '{' {
+                    let body_end = find_balanced_close(&chars, j);
+                    if body_end > 0 {
+                        i = body_end + 1;
+                        continue;
+                    }
+                }
+            }
+            i = saved;
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        // `catch` / `finally` rule exception handlers.
+        if c == 'c' && starts_with_word(&chars, i, &"catch") {
+            let mut j = i + 5;
+            while j < n && is_whitespace_char(chars[j]) {
+                j += 1;
+            }
+            if j < n && chars[j] == '[' {
+                let bracket_end = find_balanced_close_bracket(&chars, j);
+                if bracket_end > 0 {
+                    let mut k = bracket_end + 1;
+                    while k < n && is_whitespace_char(chars[k]) {
+                        k += 1;
+                    }
+                    if k < n && chars[k] == '{' {
+                        let body_end = find_balanced_close(&chars, k);
+                        if body_end > 0 {
+                            i = body_end + 1;
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+        if c == 'f' && starts_with_word(&chars, i, &"finally") {
+            let mut j = i + 7;
+            while j < n && is_whitespace_char(chars[j]) {
+                j += 1;
+            }
+            if j < n && chars[j] == '{' {
+                let body_end = find_balanced_close(&chars, j);
+                if body_end > 0 {
+                    i = body_end + 1;
+                    continue;
+                }
+            }
+        }
+        // Open brace `{`: action body, predicate, or prequel.
+        if c == '{' {
+            if preceded_by_prequel_keyword(&out) {
+                out.push(c);
+                i += 1;
+                continue;
+            }
+            let body_end = find_balanced_close(&chars, i);
+            if body_end < 0 {
+                out.push(c);
+                i += 1;
+                continue;
+            }
+            let mut k = body_end + 1;
+            if k < n && chars[k] == '?' {
+                k += 1;
+            }
+            i = k;
+            continue;
+        }
+        out.push(c);
+        i += 1;
+    }
+    return out;
+}
+
+fn is_id_start_char(c: char) -> bool {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+}
+
+fn is_id_continue_char(c: char) -> bool {
+    return is_id_start_char(c) || (c >= '0' && c <= '9');
+}
+
+fn is_whitespace_char(c: char) -> bool {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+fn starts_with_word(chars: &Array<char>, i: i32, word: &String) -> bool {
+    let w: Array<char> = word.chars().collect();
+    let wn = w.len();
+    if i + wn > chars.len() {
+        return false;
+    }
+    if i > 0 && is_id_continue_char(chars[i - 1]) {
+        return false;
+    }
+    for let mut k = 0; k < wn; k += 1 {
+        if chars[i + k] != w[k] {
+            return false;
+        }
+    }
+    if i + wn < chars.len() && is_id_continue_char(chars[i + wn]) {
+        return false;
+    }
+    return true;
+}
+
+fn find_balanced_close(chars: &Array<char>, open_idx: i32) -> i32 {
+    let n = chars.len();
+    let mut depth = 1;
+    let mut i = open_idx + 1;
+    while i < n {
+        let c = chars[i];
+        if c == '\'' {
+            i += 1;
+            while i < n {
+                let cc = chars[i];
+                i += 1;
+                if cc == '\\' && i < n {
+                    i += 1;
+                    continue;
+                }
+                if cc == '\'' {
+                    break;
+                }
+            }
+            continue;
+        }
+        if c == '"' {
+            i += 1;
+            while i < n {
+                let cc = chars[i];
+                i += 1;
+                if cc == '\\' && i < n {
+                    i += 1;
+                    continue;
+                }
+                if cc == '"' {
+                    break;
+                }
+            }
+            continue;
+        }
+        if c == '/' && i + 1 < n && chars[i + 1] == '/' {
+            while i < n && chars[i] != '\n' {
+                i += 1;
+            }
+            continue;
+        }
+        if c == '/' && i + 1 < n && chars[i + 1] == '*' {
+            i += 2;
+            while i + 1 < n {
+                if chars[i] == '*' && chars[i + 1] == '/' {
+                    i += 2;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+        if c == '{' {
+            depth += 1;
+        } else if c == '}' {
+            depth -= 1;
+            if depth == 0 {
+                return i;
+            }
+        }
+        i += 1;
+    }
+    return -1;
+}
+
+fn find_balanced_close_bracket(chars: &Array<char>, open_idx: i32) -> i32 {
+    let n = chars.len();
+    let mut depth = 1;
+    let mut i = open_idx + 1;
+    while i < n {
+        let c = chars[i];
+        if c == '\\' && i + 1 < n {
+            i += 2;
+            continue;
+        }
+        if c == '[' {
+            depth += 1;
+        } else if c == ']' {
+            depth -= 1;
+            if depth == 0 {
+                return i;
+            }
+        }
+        i += 1;
+    }
+    return -1;
+}
+
+fn preceded_by_prequel_keyword(out: &String) -> bool {
+    let out_chars: Array<char> = out.chars().collect();
+    let mut j = out_chars.len();
+    while j > 0 && is_whitespace_char(out_chars[j - 1]) {
+        j -= 1;
+    }
+    return ends_with_word(&out_chars, j, &"tokens")
+        || ends_with_word(&out_chars, j, &"options")
+        || ends_with_word(&out_chars, j, &"channels");
+}
+
+fn ends_with_word(chars: &Array<char>, end: i32, word: &String) -> bool {
+    let w: Array<char> = word.chars().collect();
+    let wn = w.len();
+    if end < wn {
+        return false;
+    }
+    let start = end - wn;
+    if start > 0 && is_id_continue_char(chars[start - 1]) {
+        return false;
+    }
+    for let mut k = 0; k < wn; k += 1 {
+        if chars[start + k] != w[k] {
+            return false;
+        }
+    }
+    return true;
+}
