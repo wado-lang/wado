@@ -3,17 +3,19 @@
 //! String templates use backticks and allow interpolation with {expr} syntax.
 //! They also support Python-like format specifiers, e.g., {pi:.2f}
 
-use wado_compiler::{Lexer, Parser};
+use wado_compiler::{Parser, lex};
 
 /// Parse a simple expression and return the AST
 fn parse_expr(source: &str) -> Result<wado_compiler::ast::Module, String> {
     // Wrap the expression in a function to make it a valid module
     let wrapped = format!("fn test() {{ let x = {source}; }}");
 
-    let mut lexer = Lexer::new(&wrapped);
-    let tokens = lexer.tokenize().map_err(|e| e.message)?;
+    let r = lex(&wrapped);
+    if let Some(e) = r.errors.first() {
+        return Err(e.message());
+    }
 
-    let mut parser = Parser::new(tokens);
+    let mut parser = Parser::new(r.tokens);
     parser.parse_strict().map_err(|e| e.message)
 }
 

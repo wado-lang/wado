@@ -446,10 +446,13 @@ async fn build_semantics<H: CompilerHost>(source: &str, filename: &str, host: &H
             return Semantics::empty();
         }
     };
-    // Report each recovered syntax error, then continue with the partial AST
-    // so position queries resolve in the regions outside the error. A
+    // Report each recovered lex/parse error, then continue with the partial
+    // AST so position queries resolve in the regions outside the error. A
     // load/bind failure on the partial AST still degrades to
     // `Semantics::empty()` below; recovery helps only when binding succeeds.
+    for e in &parsed.lex_errors {
+        host.emit_diagnostic(wado_compiler::lex_error_diagnostic(e, Some(filename)));
+    }
     for e in &parsed.errors {
         host.emit_diagnostic(wado_compiler::parse_error_diagnostic(e, Some(filename)));
     }

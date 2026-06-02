@@ -893,15 +893,15 @@ impl CmInterfaceRegistry {
 
     fn build_from_stdlib_inner() -> (Self, crate::world_registry::WorldRegistry) {
         use crate::ast::Module as AstModule;
-        use crate::lexer::Lexer;
+        use crate::lexer::lex;
         use crate::parser::Parser;
         use crate::stdlib;
         use crate::world_registry::WorldRegistry;
 
         fn parse_module(source: &str) -> AstModule {
-            let mut lexer = Lexer::new(source);
-            let tokens = lexer.tokenize().expect("lexer error in stdlib");
-            let mut parser = Parser::new(tokens);
+            let r = lex(source);
+            assert!(r.errors.is_empty(), "lexer error in stdlib: {:?}", r.errors);
+            let mut parser = Parser::new(r.tokens);
             parser.parse_strict().expect("parser error in stdlib")
         }
 

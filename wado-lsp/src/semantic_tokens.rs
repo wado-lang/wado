@@ -1,6 +1,6 @@
 use indexmap::IndexMap;
 use wado_compiler::ast::{self, Expr, Item, Stmt, Type};
-use wado_compiler::lexer::Lexer;
+use wado_compiler::lexer::lex;
 use wado_compiler::token::{Token, TokenKind};
 
 use crate::text::{PositionEncoding, codepoints_to_code_units, line_without_terminator};
@@ -61,13 +61,11 @@ pub struct SemanticToken {
 /// count. [`delta_encode`] later converts both into the negotiated LSP
 /// position encoding.
 pub fn compute(source: &str) -> Vec<SemanticToken> {
-    // 1. Lex
-    let mut lexer = Lexer::new(source);
-    let tokens = match lexer.tokenize() {
-        Ok(t) => t,
-        Err(_) => return Vec::new(),
-    };
-    let (_, comments, _) = lexer.into_parts();
+    // 1. Lex (resilient — always succeeds; malformed input simply yields
+    // recovery tokens which classify_token treats as plain).
+    let lex_result = lex(source);
+    let tokens = lex_result.tokens;
+    let comments = lex_result.comments;
 
     // 2. Parse (best-effort)
     let ast_types = match wado_compiler::parse(source) {

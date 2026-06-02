@@ -778,6 +778,30 @@ pub fn parse_error_diagnostic(
     }
 }
 
+/// Convert a single recovered [`crate::lexer::LexError`] into a
+/// `lexer error: …` [`crate::Diagnostic`], attributing the span to
+/// `filename`. The resilient lexer surfaces one of these per recovered
+/// problem; LSP and batch report them alongside parser diagnostics.
+#[must_use]
+pub fn lex_error_diagnostic(
+    err: &crate::lexer::LexError,
+    filename: Option<&str>,
+) -> crate::Diagnostic {
+    use crate::{Code, Diagnostic, DiagnosticSpan, Severity};
+    Diagnostic {
+        severity: Severity::Error,
+        code: Code::InvalidSyntax,
+        message: format!("lexer error: {}", err.message()),
+        span: filename.map(|f| DiagnosticSpan {
+            file: f.to_string(),
+            line: err.span.line,
+            column: err.span.column,
+            end_line: Some(err.span.end_line),
+            end_column: Some(err.span.end_column),
+        }),
+    }
+}
+
 impl Semantics {
     /// Construct an empty [`Semantics`] with no modules at all. Used when
     /// an upstream phase fails outright (parse error on the entry, load

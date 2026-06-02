@@ -63,8 +63,8 @@ pub use compiler_host::{
 };
 pub use logger::{Bail, Logger};
 pub use semantics::{
-    Cursor, Definition, Semantics, parse_error_diagnostic, parse_failure_diagnostic, semantics,
-    semantics_of,
+    Cursor, Definition, Semantics, lex_error_diagnostic, parse_error_diagnostic,
+    parse_failure_diagnostic, semantics, semantics_of,
 };
 
 #[cfg(test)]
@@ -72,7 +72,7 @@ pub use compiler_host::InMemoryCompilerHost;
 pub use effect_check::{EffectError, check_default_purity, check_effects, check_stores};
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
-pub use lexer::{LexError, Lexer};
+pub use lexer::{LexError, LexErrorKind, LexResult, lex, lex_with_line};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
 pub use lower::lower;
 pub use module_source::ModuleSource;
@@ -726,18 +726,26 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         logger.set_file(f);
     }
 
-    // === Phase 1: Lexer ===
-    let (tokens, tokens_for_dump, comments, data_section, shebang) = {
+    // === Phase 1: Lexer (resilient — never aborts on its own) ===
+    let (tokens, tokens_for_dump, comments, data_section, shebang, lex_errors) = {
         let _span = logger.span("lex");
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().map_err(|e| {
-            let _ = logger.error(e);
-            Bail
-        })?;
-        let (data_section, comments, shebang) = lexer.into_parts();
-        let tokens_for_dump = tokens.clone();
-        (tokens, tokens_for_dump, comments, data_section, shebang)
+        let lex_result = lexer::lex(source);
+        let tokens_for_dump = lex_result.tokens.clone();
+        (
+            lex_result.tokens,
+            tokens_for_dump,
+            lex_result.comments,
+            lex_result.data_section,
+            lex_result.shebang,
+            lex_result.errors,
+        )
     };
+    // Batch path is fail-fast: report any recovered lex error before parsing
+    // so the wire format keeps the `lexer error: …` prefix.
+    if let Some(e) = lex_errors.into_iter().next() {
+        let _ = logger.error(e);
+        return Err(Bail);
+    }
 
     // === Phase 2: Parser ===
     let (ast, trivia) = {
@@ -977,19 +985,24 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
 /// assert!(formatted.contains("use { println }"));
 /// ```
 pub fn format(source: &str) -> Result<String, CompileError> {
-    // Lexer (collect comments, shebang, data section)
-    let mut lexer = Lexer::new(source);
-    let tokens = lexer.tokenize().map_err(|e| CompileError::Lexer {
-        message: e.message,
-        line: e.span.line,
-        column: e.span.column,
-        filename: None,
-    })?;
-    let (data_section, comments, shebang) = lexer.into_parts();
-
-    // Parser (with shebang, data section, and the comment stream so it
-    // can attach leading comments to AST nodes as it allocates ids).
-    let mut parser = Parser::with_trivia(tokens, shebang, data_section, comments);
+    // Lexer (collect comments, shebang, data section). Lexer is resilient;
+    // formatting requires clean input, so lex errors are reported via
+    // `CompileError::Lexer` (the first one wins).
+    let lex_result = lexer::lex(source);
+    if let Some(e) = lex_result.errors.into_iter().next() {
+        return Err(CompileError::Lexer {
+            message: e.message(),
+            line: e.span.line,
+            column: e.span.column,
+            filename: None,
+        });
+    }
+    let mut parser = Parser::with_trivia(
+        lex_result.tokens,
+        lex_result.shebang,
+        lex_result.data_section,
+        lex_result.comments,
+    );
     // Formatting requires a clean parse: reject the first recovered error.
     let ast = parser.parse();
     if let Some(e) = parser.take_errors().first() {
@@ -1012,23 +1025,35 @@ pub fn format(source: &str) -> Result<String, CompileError> {
 
 /// Result of parsing a source file (AST + AstId-keyed trivia, no compilation).
 ///
-/// The parser is error-recovering: `ast` always covers the whole input, and
-/// any syntax errors are collected in `errors` (empty on a clean parse).
-/// Batch/format/doc callers that need the old fail-fast behavior call
+/// Lexing and parsing are both error-recovering: `ast` always covers the
+/// whole input. `lex_errors` and `errors` collect recovered problems in
+/// source order; they stay separate so the wire-format diagnostic prefixes
+/// (`lexer error:` / `parse error:`) stay accurate. Batch/format/doc
+/// callers that need the old fail-fast behavior call
 /// [`ParseResult::into_fail_fast`]; the LSP path uses the partial `ast`.
 pub struct ParseResult {
     pub ast: ast::Module,
     pub trivia: comment::TriviaMap,
-    /// Syntax errors recovered during parsing, in source order.
+    /// Lexer errors recovered while tokenising, in source order.
+    pub lex_errors: Vec<lexer::LexError>,
+    /// Parser errors recovered while building the AST, in source order.
     pub errors: Vec<parser::ParseError>,
 }
 
 impl ParseResult {
-    /// Fail-fast adapter: if parsing recovered any syntax error, return the
-    /// first as the `CompileError::Parser` the parser used to produce;
-    /// otherwise yield the result unchanged. Used by batch compilation,
-    /// `wado doc`, and the formatter, which must reject malformed input.
+    /// Fail-fast adapter: if lexing or parsing recovered any syntax error,
+    /// return the first as a `CompileError`; otherwise yield the result
+    /// unchanged. Used by batch compilation, `wado doc`, and the formatter,
+    /// which must reject malformed input.
     pub fn into_fail_fast(self) -> Result<ParseResult, CompileError> {
+        if let Some(e) = self.lex_errors.first() {
+            return Err(CompileError::Lexer {
+                message: e.message(),
+                line: e.span.line,
+                column: e.span.column,
+                filename: None,
+            });
+        }
         if let Some(e) = self.errors.first() {
             return Err(CompileError::Parser {
                 message: e.message.clone(),
@@ -1069,18 +1094,15 @@ pub async fn load<H: CompilerHost>(
 /// Parse a Wado source file into AST and trivia map.
 /// This is a lightweight operation that only lexes and parses.
 pub fn parse(source: &str) -> Result<ParseResult, CompileError> {
-    let mut lexer = Lexer::new(source);
-    let tokens = lexer.tokenize().map_err(|e| CompileError::Lexer {
-        message: e.message,
-        line: e.span.line,
-        column: e.span.column,
-        filename: None,
-    })?;
-    let (data_section, comments, shebang) = lexer.into_parts();
-    let mut parser = Parser::with_trivia(tokens, shebang, data_section, comments);
-    // The parser is error-recovering and always returns a Module; lexing
-    // remains fail-fast (the `?` above). Syntax errors are surfaced via
-    // `ParseResult::errors` and `into_fail_fast` for callers that need them.
+    let lex_result = lexer::lex(source);
+    let mut parser = Parser::with_trivia(
+        lex_result.tokens,
+        lex_result.shebang,
+        lex_result.data_section,
+        lex_result.comments,
+    );
+    // Both lexing and parsing are resilient and always produce a `Module`;
+    // callers that need fail-fast call `ParseResult::into_fail_fast`.
     let ast = parser.parse();
     let errors = parser.take_errors();
     let mut trivia = parser.take_trivia();
@@ -1089,6 +1111,7 @@ pub fn parse(source: &str) -> Result<ParseResult, CompileError> {
     Ok(ParseResult {
         ast,
         trivia,
+        lex_errors: lex_result.errors,
         errors,
     })
 }

@@ -165,7 +165,6 @@ impl SyntaxDefinition {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer::Lexer;
     use crate::token::TokenKind;
 
     #[test]
@@ -208,11 +207,11 @@ mod tests {
             if contextual_keywords.contains(keyword) {
                 continue;
             }
-            let mut lexer = Lexer::new(keyword);
-            let tokens = lexer.tokenize().expect("should lex keyword");
-            assert!(!tokens.is_empty(), "'{keyword}' produced no tokens");
+            let r = crate::lexer::lex(keyword);
+            assert!(r.errors.is_empty(), "lexer error: {:?}", r.errors);
+            assert!(!r.tokens.is_empty(), "'{keyword}' produced no tokens");
             assert!(
-                !matches!(tokens[0].kind, TokenKind::Ident(_)),
+                !matches!(r.tokens[0].kind, TokenKind::Ident(_)),
                 "'{keyword}' in SyntaxDefinition is not recognized as a keyword by lexer"
             );
         }

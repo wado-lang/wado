@@ -123,6 +123,14 @@ pub enum TokenKind {
     Question,  // ?
 
     // Special
+    /// Lexer-emitted recovery token for an unrecognised character.
+    ///
+    /// Holds the raw source text (typically a single char) so downstream
+    /// consumers (formatter, semantic tokens) can render it. Healthy source
+    /// never produces this variant; it appears only when [`crate::lexer::lex`]
+    /// reports a corresponding [`crate::lexer::LexErrorKind::UnexpectedChar`].
+    Error(String),
+
     Eof,
 }
 
@@ -303,6 +311,10 @@ pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
         StringLit, Struct, TemplateStringLit, Tilde, Trait, True, Type, Unique, Use, Variant,
         While, With, World,
     };
+    // `Error` is excluded: it only appears in resilient lex output for
+    // malformed source. Healthy code (the only thing the canonical hash
+    // sees) never produces it, so omitting it from the encoding keeps the
+    // bytes stable. We assert below.
 
     fn write_str(out: &mut Vec<u8>, tag: u8, name: &str) {
         out.push(tag);
@@ -442,6 +454,17 @@ pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
 
         // Special
         Eof => write_str(out, b'V', "Eof"),
+
+        // Recovery artefacts: not part of the canonical encoding. Source files
+        // tracked by kiln only contain healthy code, so they never carry an
+        // `Error` token, and the sidecar hash stays stable across this variant
+        // being added. Panic in debug builds if this invariant breaks.
+        TokenKind::Error(_) => {
+            debug_assert!(
+                false,
+                "TokenKind::Error must not appear in canonically-hashed token streams"
+            );
+        }
     }
 }
 
