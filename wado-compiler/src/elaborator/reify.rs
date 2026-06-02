@@ -4951,9 +4951,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .params
             .iter()
             .map(|p| {
-                let type_id = self
-                    .ann_local_type(p.id)
-                    .unwrap_or(TypeTable::UNKNOWN);
+                let type_id = self.ann_local_type(p.id).unwrap_or(TypeTable::UNKNOWN);
                 closure_ctx.add_local(p.name.clone(), type_id, p.is_mut, Some(p.id));
                 (p.name.clone(), type_id)
             })
@@ -5982,7 +5980,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `resolve_static_method_call` records the resolved
         // `FunctionRef` for every non-variant static call. Hitting this
         // shape means annotate diagnosed an unresolvable call.
-        TirExpr::new(TirExprKind::Unit, crate::tir::TypeTable::ERROR, static_call.span)
+        TirExpr::new(
+            TirExprKind::Unit,
+            crate::tir::TypeTable::ERROR,
+            static_call.span,
+        )
     }
 
     /// Parameter `(name, default)` list of a free function in
@@ -6366,8 +6368,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // `NewtypeFromUnwrap` on the call and lowers to a `Cast` to
             // the base type; reify replays the shape using the recorded
             // expression type (which is the base type).
-            if self.ann_desugars(call.id)
-                == Some(super::sem::types::DesugarKind::NewtypeFromUnwrap)
+            if self.ann_desugars(call.id) == Some(super::sem::types::DesugarKind::NewtypeFromUnwrap)
             {
                 return TirExpr::new(
                     TirExprKind::Cast {
@@ -6385,9 +6386,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // `NewtypeFromWrap` on the call and lowers to a `Cast` to the
             // newtype; reify replays the shape using the recorded
             // expression type (which is the newtype).
-            if self.ann_desugars(call.id)
-                == Some(super::sem::types::DesugarKind::NewtypeFromWrap)
-            {
+            if self.ann_desugars(call.id) == Some(super::sem::types::DesugarKind::NewtypeFromWrap) {
                 return TirExpr::new(
                     TirExprKind::Cast {
                         expr: Box::new(arg),
@@ -8772,7 +8771,6 @@ fn extract_allocator_tag_attr(attrs: &[crate::ast::Attribute]) -> Option<String>
         .and_then(|a| a.args.first())
         .map(|a| a.as_str().to_string())
 }
-
 
 /// True when `arg` is a closure literal with at least one param that lacks a
 /// type annotation. Reify forwards the recorded callee param type as the

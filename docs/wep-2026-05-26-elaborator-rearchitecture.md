@@ -396,31 +396,54 @@ Trade-offs.
 - [x] **Stage 7a** — routing removed; the combined walk survives only as the
       (still TIR-building) `annotate` fact-recorder.
 - [ ] **Stage 6** — Liveness / DCE. Not started; independent of Stage 7.
-- [ ] **Stage 7** — mechanical reify (7-A) → TIR-free `annotate` (7-B). 7-A
-      decision-bearing items done:
+- [x] **Stage 7-A** — reify is mechanical. Every decision-bearing read goes
+      through a recorded fact:
   - [x] Function / method signatures — params, return, type params, impl
-        type-param scheme, self type — read from recorded facts.
+        type-param scheme, self type, mangled / display names — read from
+        recorded facts.
   - [x] Effect / resource op signatures — read from `effect_ops`.
   - [x] Struct / variant type-param defaults — read from `decl_type_params`.
+  - [x] Struct field types (including `pub use` re-export recovery) — read
+        from `struct_field_types`.
   - [x] Fixed a latent bug the reads exposed: a method generic on an impl that
         binds a concrete trait arg started at the wrong type-param index and
         reached codegen unsubstituted (`trait_method_generic_concrete_trait_arg`).
-  - [x] Body-level method-call type args — `MethodDispatch.method_type_args`
-        carries the resolved vector verbatim; reify drops the turbofish
-        re-resolve and the blanket-impl `monomorph_info` fallback.
-  - [x] Struct-field re-export recovery — `resolve_struct` records per-field
-        resolved types under the struct decl's `AstId`; reify drops the
-        UNKNOWN-fallback `resolve_type` on field annotations.
+  - [x] Method-call type args — `MethodDispatch.method_type_args` carries
+        the resolved vector verbatim (covers the IndexMut rewrite too).
   - [x] Const types — `sem.decls.associated_constants` stores the resolved
-        `TypeId` directly; the use sites (reify + combined walk) drop their
-        `resolve_type` calls on the const's AST type.
-  - [x] Mangled-name class — the decision-bearing slice (impl-method
-        `base_struct_name` and struct-literal mangled name) reads from
-        `ImplFacts.struct_name` and `GenericInstantiation.mangled_name`. The
-        remaining `MethodName::format_local` sites in reify recombine
-        already-recorded fact fields (`SequenceCoercionFacts`,
-        `KeyValueCoercionFacts`, etc.) and are not decision-bearing; they
-        ride along with the 7-B `resolve_*` strip.
+        `TypeId` directly; reify and the combined walk both read it.
+  - [x] Let-statement annotated types — `let_annotated_types` carries the
+        resolved whole-pattern type for destructuring bindings.
+  - [x] Closure param types — read from `local_types` via the binding's
+        `AstId`; the expected-fn-type peel survives only for the body's
+        return-type forwarding.
+  - [x] Cast target types — read from `expression_types[cast.id]`.
+  - [x] Free-function call type args — `generic_instantiations.type_args`
+        is the single source for both turbofish and inferred forms; reify
+        no longer branches on `call.type_args.is_empty()`.
+  - [x] Mangled-name class — `ImplFacts.struct_name`,
+        `GenericInstantiation.mangled_name` (struct literal / range / anon),
+        per-method `MethodNames`, `SequenceCoercionFacts` / `KeyValueCoercionFacts`
+        method names, and `FromCallFacts` (?-op + static `T::from`) all
+        carry the elaborator-computed strings; reify is a pure read.
+  - [x] From-conversion shapes — `DesugarKind::NewtypeFromCollapse` /
+        `NewtypeFromUnwrap` / `NewtypeFromWrap` tag the three "no explicit
+        impl" `from` paths; the bodyless `impl From<X> for T;` synthesis is
+        detected via `from_call_facts[call.id]`. Reify no longer compares
+        `type_name(arg)` against the prefix to recognise them.
+  - [x] Namespace static methods — `ns::Type::method(x)` records
+        `static_method_dispatch` like every other static call; reify's
+        ns-arm in-line reconstruction is gone.
+  - [x] Static-call / Type::method recovery paths in reify deleted (every
+        non-variant static call is dispatched via the recorded
+        `static_method_dispatch` early return).
+- [ ] **Stage 7-B** — `annotate` stops building TIR. Each `resolve_*`
+      returns the resolved type + records facts only; the duplicate
+      `TirExpr` / `TirStmt` / `TirItem` halves of expr.rs / stmt.rs /
+      item.rs / call.rs / method_call.rs / operators.rs / coercion.rs /
+      assert.rs / closure.rs / handlers.rs / matches.rs / template.rs /
+      module.rs are deleted, and `build_tir_from_state` becomes a
+      body-walk pass that returns no TIR. LSP then runs `annotate` only.
 
 ### Landing log
 
