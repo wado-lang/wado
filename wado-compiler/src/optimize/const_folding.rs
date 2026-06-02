@@ -29,7 +29,8 @@ use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind, NirUnaryOp};
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::{
-    NirOptVisitor, NirRefVisitor, opt_walk_block, opt_walk_expr, opt_walk_stmt,
+    NirOptVisitor, NirRefVisitor, block_has_break_to, expr_has_break_to, opt_walk_block,
+    opt_walk_expr, opt_walk_stmt, stmt_has_break_to,
 };
 use crate::niri::{CalleeMap, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible};
 use crate::tir::{TypeId, TypeTable};
@@ -164,23 +165,44 @@ impl NirOptVisitor for ConstFoldVisitor<'_> {
         // so the existing single-walk env handling stays intact.
         match &mut stmt.kind {
             NirStmtKind::Loop { body } => {
-                // Loop back-edge: any local assigned in the body must
-                // be `NonConst` for the body's first walk.
-                self.invalidate_locals_assigned_in(body);
-                // Loops can re-execute and re-assign anything; drop
-                // outer field knowledge entirely.
-                self.interpreter.clear_fields();
+                // Loop back-edge: compute the set of entities the body
+                // could mutate, drop only those, then snapshot the
+                // resulting (loop-invariant) field state. The body
+                // walks against that state; on exit we restore from
+                // the snapshot so:
+                //
+                // - Outer facts the body never touched survive,
+                //   unlike the original blanket `clear_fields()` which
+                //   wiped them.
+                // - Bindings the body added mid-walk (and any
+                //   `clear_fields()` an inner if-stmt invoked) do not
+                //   leak past the loop boundary, since the snapshot is
+                //   taken at the loop-invariant state.
+                //
+                // This is a correct conservative approximation of the
+                // iteration fixpoint: at body entry and at post-loop,
+                // only facts unaffected by the body hold.
+                let writes = collect_loop_write_effects(body);
+                self.apply_loop_invalidations(&writes);
+                let snap = self.interpreter.snapshot_fields();
                 let changed = self.visit_block(body);
-                self.interpreter.clear_fields();
+                self.interpreter.restore_fields(snap);
                 return changed;
             }
-            NirStmtKind::LabeledBlock { block, .. } => {
-                // Sequential scope: outer knowledge flows in, but a
-                // `break label: value` inside could skip writes that
-                // would otherwise have invalidated entries — drop on
-                // exit.
+            NirStmtKind::LabeledBlock { block, label } => {
+                // Sequential scope: outer knowledge flows in and the
+                // body's bottom state flows out, the same way it would
+                // for an unlabeled block. A `break label:` inside has
+                // multiple-exit semantics that the const-fold engine
+                // cannot precisely join in a single walk — fall back
+                // to dropping field knowledge then. A trailing
+                // `break label: value` is the inlined-function shape,
+                // exits at the body bottom, and is fine to walk
+                // straight through.
                 let changed = self.visit_block(block);
-                self.interpreter.clear_fields();
+                if has_non_tail_break_to(label, block) {
+                    self.interpreter.clear_fields();
+                }
                 return changed;
             }
             NirStmtKind::If {
@@ -267,13 +289,6 @@ impl NirOptVisitor for ConstFoldVisitor<'_> {
                 ..
             } => {
                 let mut changed = self.visit_expr(scrutinee);
-                // Each arm sees the pre-Switch state and must not
-                // leak its own writes to siblings; snapshot before
-                // each, restore after. The default arm is just
-                // another sibling — by the end of the arms loop we
-                // are already back to pre-Switch state, so walking
-                // `default` directly and clearing is equivalent and
-                // saves one redundant snapshot/restore round-trip.
                 for arm in arms.iter_mut() {
                     let snap = self.interpreter.snapshot_fields();
                     changed |= self.visit_block(arm);
@@ -285,17 +300,31 @@ impl NirOptVisitor for ConstFoldVisitor<'_> {
                 return changed;
             }
             NirExprKind::Block(b) => {
-                // Sequential scope; outer knowledge flows in. After
-                // the block, an interior `break label: value` could
-                // have skipped some writes, so clear conservatively.
+                // Unlabeled sequential scope: outer knowledge flows in
+                // and the body's bottom state flows out. The block has
+                // no label so no `break label:` can refer to it from
+                // inside, and any invalidation the body performed
+                // legitimately reflects post-block state.
                 let mut changed = self.visit_block(b);
-                self.interpreter.clear_fields();
                 changed |= self.interpreter.reduce_local(expr);
                 return changed;
             }
-            NirExprKind::LabeledBlock { block, .. } => {
+            NirExprKind::LabeledBlock { block, label, .. } => {
+                // Labeled block: same as the unlabeled case when the
+                // only `break label:` (if any) is the trailing stmt
+                // delivering the block's value — that's the shape the
+                // inliner synthesises for an inlined function body, so
+                // post-block state equals body bottom state.
+                //
+                // For richer break shapes (early `break label:` from
+                // mid-body or from inside a nested expression) the
+                // post-block state would be the join of break points
+                // and the bottom — fall back to clearing rather than
+                // computing the join.
                 let mut changed = self.visit_block(block);
-                self.interpreter.clear_fields();
+                if has_non_tail_break_to(label, block) {
+                    self.interpreter.clear_fields();
+                }
                 changed |= self.interpreter.reduce_local(expr);
                 return changed;
             }
@@ -519,6 +548,11 @@ impl ConstFoldVisitor<'_> {
     ///   equivalent to a deep copy. Reference-typed fields stay
     ///   un-forwarded so the shared backing they preserve doesn't
     ///   become a soundness hazard.
+    /// - `Block { …; tail_expr }` / `LabeledBlock { …; break label: tail }`:
+    ///   recurse on the producing tail. This is the shape produced by
+    ///   inlining a constructor (`Array::filled(16, 0)` becomes
+    ///   `__inline_…: { …; break __inline_…: Array<u16> { repr, used: 16 } }`),
+    ///   so the constructor's field knowledge reaches the let target.
     fn update_field_env_from_let(&mut self, local_index: u32, value: &NirExpr) {
         // Unwrap a chained `$value_copy$T<id>(arg)` so the underlying
         // source's knowledge is what we read.
@@ -526,6 +560,13 @@ impl ConstFoldVisitor<'_> {
             Some(arg) => arg,
             None => value,
         };
+        // Peer through Block / LabeledBlock tails: the producing tail
+        // is the final expression of an unlabeled block, or the value
+        // of the sole `break label: value` of a labeled block.
+        if let Some(tail) = single_producing_tail(inner) {
+            self.update_field_env_from_let(local_index, tail);
+            return;
+        }
         match &inner.kind {
             NirExprKind::StructLiteral { fields, .. } => {
                 for f in fields {
@@ -541,20 +582,143 @@ impl ConstFoldVisitor<'_> {
         }
     }
 
-    /// Walk `block` (and every nested expression / statement) collecting
-    /// every `Local` index that appears as the target of an `Assign`,
-    /// then invalidate each in env. Conservative — any mutation inside
-    /// the loop body is treated as making the local non-constant for
-    /// the entire loop, which is the only sound choice without modelling
-    /// loop iteration.
-    fn invalidate_locals_assigned_in(&mut self, block: &NirBlock) {
-        let mut collector = AssignedLocalsCollector {
-            targets: IndexSet::default(),
-        };
-        collector.visit_block(block);
-        for idx in collector.targets {
-            self.interpreter.invalidate_local(idx);
+    /// Apply a [`LoopWriteEffects`] summary to the interpreter,
+    /// invalidating every local / field the body could mutate so the
+    /// pre-body and post-body state reflect a sound abstraction of any
+    /// possible iteration count.
+    fn apply_loop_invalidations(&mut self, writes: &LoopWriteEffects) {
+        for idx in &writes.reassigned_locals {
+            self.interpreter.invalidate_local(*idx);
         }
+        for idx in &writes.mut_borrowed {
+            // A `&mut local` (or `is_mut` call arg) escapes a mutable
+            // reference the callee can store and mutate; drop both
+            // the local's lattice and any field knowledge.
+            self.interpreter.invalidate_local(*idx);
+        }
+        for (idx, field) in &writes.written_fields {
+            self.interpreter.invalidate_field(*idx, field);
+        }
+        if writes.has_external_writes {
+            // Calls / indirect writes inside the body could have
+            // mutated any aliased local's fields. Drop them.
+            self.interpreter.invalidate_aliased_fields();
+        }
+    }
+}
+
+/// True when `block` contains a `break label:` (with or without a
+/// value) other than a trailing `break label: value` as its very last
+/// statement. The "trailing-only" shape is what `inline` synthesises
+/// to deliver a function's return value, and from a field-env point
+/// of view it exits at the body bottom — outer / body facts can flow
+/// through it intact.
+///
+/// A non-tail break, by contrast, is an early exit whose carried
+/// field state may differ from the bottom state. The const-fold
+/// engine cannot precisely join multiple exit states in a single
+/// walk, so the caller drops field knowledge when this returns
+/// `true`.
+fn has_non_tail_break_to(label: &str, block: &NirBlock) -> bool {
+    if !block_has_break_to(label, block) {
+        return false;
+    }
+    let Some(last) = block.stmts.last() else {
+        return false;
+    };
+    let last_is_tail_break_to_self = matches!(
+        &last.kind,
+        NirStmtKind::Break {
+            label: Some(brk_label),
+            ..
+        } if brk_label == label
+    );
+    if !last_is_tail_break_to_self {
+        return true;
+    }
+    // The last stmt is `break label: ...` — any other break-to-label
+    // anywhere else in the block (including inside the trailing
+    // break's carried value) qualifies as non-tail.
+    if block.stmts[..block.stmts.len() - 1]
+        .iter()
+        .any(|s| stmt_has_break_to(label, s))
+    {
+        return true;
+    }
+    if let NirStmtKind::Break {
+        value: Some(value), ..
+    } = &last.kind
+    {
+        return expr_has_break_to(label, value);
+    }
+    false
+}
+
+/// Return the single value-producing tail of `expr` when peering
+/// through `Block` / `LabeledBlock` wrappers is safe — i.e. the wrapper
+/// has exactly one value-producing exit and dropping the wrapper would
+/// not change which value reaches the consumer.
+///
+/// Recognised shapes:
+///
+/// - `Block { stmts; tail_expr }`: the trailing `Expr(tail_expr)` stmt is
+///   the only producer (an unlabeled block has no break target).
+/// - `LabeledBlock { label, block }` whose only reference to `label` is
+///   a trailing `break label: value` stmt: that `value` is the sole
+///   producer. This is the shape `inline` synthesises for a function
+///   call — the only break exits through the label with the function's
+///   return value.
+///
+/// The walk is non-recursive at the call site; callers (currently only
+/// [`ConstFoldVisitor::update_field_env_from_let`]) recurse explicitly so
+/// they can also handle the `$value_copy$T(arg)` / `StructLiteral` /
+/// `Local` shapes that may sit directly inside the wrapper.
+fn single_producing_tail(expr: &NirExpr) -> Option<&NirExpr> {
+    match &expr.kind {
+        NirExprKind::Block(b) => {
+            let last = b.stmts.last()?;
+            let NirStmtKind::Expr(tail) = &last.kind else {
+                return None;
+            };
+            Some(tail)
+        }
+        NirExprKind::LabeledBlock { label, block, .. } => {
+            let last = block.stmts.last()?;
+            let NirStmtKind::Break {
+                label: Some(brk_label),
+                value: Some(value),
+            } = &last.kind
+            else {
+                return None;
+            };
+            if brk_label != label {
+                return None;
+            }
+            // The trailing break is the only producer iff no other
+            // stmt in the block, and no sub-expression of the tail
+            // value, breaks to the same label.
+            if block.stmts[..block.stmts.len() - 1]
+                .iter()
+                .any(|s| stmt_has_break_to(label, s))
+            {
+                return None;
+            }
+            if expr_has_break_to(label, value) {
+                return None;
+            }
+            // Nested labeled blocks that re-use the same label name
+            // would shadow ours; the helpers above already account
+            // for that, but assert the outer block isn't reachable
+            // via a break from itself either.
+            if block_has_break_to(label, block) && !stmt_has_break_to(label, last) {
+                // `stmt_has_break_to` counts the trailing break too;
+                // if the only break to `label` in `block` IS the
+                // trailing one, this branch is unreachable. Defensive.
+                return None;
+            }
+            Some(value)
+        }
+        _ => None,
     }
 }
 
@@ -579,19 +743,107 @@ fn value_captures_aliased_local(expr: &NirExpr, aliased: &IndexSet<u32>) -> bool
     }
 }
 
-/// Read-only walk that records every `Local` index assigned to inside
-/// the visited subtree. Drives the loop back-edge invalidation in
-/// [`ConstFoldVisitor::invalidate_locals_assigned_in`].
-struct AssignedLocalsCollector {
-    targets: IndexSet<u32>,
+/// Summary of every entity a loop body could mutate. Used by
+/// [`ConstFoldVisitor::apply_loop_invalidations`] to drop just those
+/// `(local, field)` and `local` lattice entries before and after the
+/// body walk — facts about entities the body does not touch survive.
+#[derive(Default)]
+struct LoopWriteEffects {
+    /// `local = expr` targets — fully reassigned, so both lattice and
+    /// every recorded field of the local must be dropped.
+    reassigned_locals: IndexSet<u32>,
+    /// `local.field = expr` targets — drop just `(local, field)`.
+    written_fields: IndexSet<(u32, String)>,
+    /// `&mut local` or `is_mut` call argument — callee may store and
+    /// mutate through the reference, so drop the local fully.
+    mut_borrowed: IndexSet<u32>,
+    /// Any expression that could mutate aliased state from outside the
+    /// straight-line walk: `Call`, `MethodCall`, `IndirectCall`,
+    /// `CmRawCall`, or an `Assign` with an opaque target shape
+    /// (`(*p).f = …`, `arr[i] = …`). Triggers
+    /// [`Interpreter::invalidate_aliased_fields`].
+    has_external_writes: bool,
 }
 
-impl NirRefVisitor for AssignedLocalsCollector {
+/// Walk a loop body and collect every write effect that must be
+/// invalidated before and after the walk. See [`LoopWriteEffects`].
+fn collect_loop_write_effects(block: &NirBlock) -> LoopWriteEffects {
+    let mut collector = LoopWriteCollector {
+        effects: LoopWriteEffects::default(),
+    };
+    collector.visit_block(block);
+    collector.effects
+}
+
+struct LoopWriteCollector {
+    effects: LoopWriteEffects,
+}
+
+impl NirRefVisitor for LoopWriteCollector {
     fn visit_expr(&mut self, expr: &NirExpr) {
-        if let NirExprKind::Assign { target, .. } = &expr.kind
-            && let NirExprKind::Local { index, .. } = &target.kind
-        {
-            self.targets.insert(*index);
+        match &expr.kind {
+            NirExprKind::Assign { target, .. } => match &target.kind {
+                NirExprKind::Local { index, .. } => {
+                    self.effects.reassigned_locals.insert(*index);
+                }
+                NirExprKind::FieldAccess {
+                    expr: inner,
+                    field_name,
+                    ..
+                } => match &inner.kind {
+                    NirExprKind::Local { index, .. } => {
+                        self.effects
+                            .written_fields
+                            .insert((*index, field_name.clone()));
+                    }
+                    _ => {
+                        // `(*p).f = …` / `q.outer.inner = …` — opaque
+                        // receiver; conservatively treat as an
+                        // external write so aliased fields drop.
+                        self.effects.has_external_writes = true;
+                    }
+                },
+                _ => {
+                    // Index / Deref / other lvalue shape.
+                    self.effects.has_external_writes = true;
+                }
+            },
+            NirExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: inner,
+            } => {
+                if let NirExprKind::Local { index, .. } = &inner.kind {
+                    self.effects.mut_borrowed.insert(*index);
+                }
+            }
+            NirExprKind::Call { args, .. } => {
+                for arg in args {
+                    if arg.is_mut
+                        && let NirExprKind::Local { index, .. } = &arg.expr.kind
+                    {
+                        self.effects.mut_borrowed.insert(*index);
+                    }
+                }
+                self.effects.has_external_writes = true;
+            }
+            NirExprKind::MethodCall { receiver, args, .. } => {
+                // Auto-ref hides `&mut self`: receiver may be mutated.
+                if let NirExprKind::Local { index, .. } = &receiver.kind {
+                    self.effects.mut_borrowed.insert(*index);
+                }
+                for arg in args {
+                    if arg.is_mut
+                        && let NirExprKind::Local { index, .. } = &arg.expr.kind
+                    {
+                        self.effects.mut_borrowed.insert(*index);
+                    }
+                }
+                self.effects.has_external_writes = true;
+            }
+            NirExprKind::IndirectCall { .. } | NirExprKind::CmRawCall { .. } => {
+                self.effects.has_external_writes = true;
+            }
+            _ => {}
         }
         self.walk_expr(expr);
     }
