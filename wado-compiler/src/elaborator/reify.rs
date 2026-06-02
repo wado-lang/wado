@@ -493,17 +493,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     for tir_func in self.reify_impl(impl_block) {
                         tir_module.add_function(tir_func);
                     }
-                    // Stage 5 completion (transitional dual-emit): also
-                    // synthesise the impl's trait default methods from the
-                    // per-impl `ModuleSemantics` snapshots that the combined
-                    // walk recorded on `sem.default_method_semantics`. The
-                    // existing `pending_default_methods` drain below still
-                    // produces TIR too, so this step intentionally emits the
-                    // same default-method `TirFunction` twice; the
-                    // duplicate-name diagnostic / WIR validation that
-                    // follows is the verification that reify's synthesis
-                    // matches the combined walk's. Step 5 of the migration
-                    // removes the drain.
+                    // Stage 5 completion: reify is the sole producer of
+                    // trait default-method `TirFunction`s, synthesised here
+                    // from the per-impl `ModuleSemantics` snapshots the
+                    // combined walk recorded on `sem.default_method_semantics`.
                     for tir_func in self.reify_impl_default_methods(impl_block) {
                         tir_module.add_function(tir_func);
                     }
@@ -571,17 +564,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             tir_module.add_struct(anon_struct.clone());
         }
 
-        // Stage 5 / Gap 12: forward the per-module synthesis
-        // requests and default-method synthesis output annotate
-        // recorded on `ModuleDecls`. Same shape the existing
-        // combined walk pushes during the `Item::Impl` arm; the
-        // recording side already mirrors both writes so reify
-        // produces the same `TirModule` content.
+        // Stage 5 / Gap 12: forward the per-module synthesis requests
+        // annotate recorded on `ModuleDecls`. Default-method synthesis is
+        // now reify's job (handled per impl by
+        // `reify_impl_default_methods` in the `Item::Impl` arm above) — the
+        // old `pending_default_methods` hand-off is gone with Stage 5.
         for req in &self.sem.decls.pending_synthesis_requests {
             tir_module.synthesis_requests.push(req.clone());
-        }
-        for default_method in &self.sem.decls.pending_default_methods {
-            tir_module.add_function(default_method.clone());
         }
 
         tir_module.wasm_module = module.wasm_module().map(String::from);
