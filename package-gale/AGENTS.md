@@ -31,13 +31,21 @@ The parser must still recognize these constructs (so files containing them parse
 
 When fixing or extending the g4 frontend:
 
-- Cross-check the canonical semantics against `vendor/antlr4/tool/src/org/antlr/v4/parse/ANTLRParser.g` and the curated doc index below.
 - Drive every change with a unit test in `src/g4/{lexer,parser}_test.wado` (TDD: failing test first, then implementation).
-- If an existing test encodes a wrong expectation that diverges from ANTLR4, fix the test — the spec wins.
+- If an existing test encodes a wrong expectation that diverges from ANTLR4, fix the test — the spec wins. Use the published `antlr-4.13.2-complete.jar` as a black-box oracle to confirm the expectation (see "License hygiene" below); do not read ANTLR4's implementation source to figure out what the right answer is.
 
 ## ANTLR4 Reference
 
-The upstream ANTLR4 source — including its full documentation and the `LICENSE.txt` (BSD 3-Clause) — is vendored as a shallow git submodule at `vendor/antlr4/`. Read it directly when you need the canonical semantics of a `.g4` construct; do not duplicate the docs into this repo.
+The upstream ANTLR4 source is vendored as a shallow git submodule at `vendor/antlr4/` for two reasons: (1) the `runtime-testsuite/` descriptor corpus drives Gale's Stage A / Stage B regression tests, and (2) the JVM tool can be built locally as a black-box oracle for behavior verification. The vendored tree is **not** intended as a reading reference for implementation details — see "License hygiene" below.
+
+### License hygiene — what you may read from `vendor/antlr4/`
+
+Gale ships under its own license. ANTLR4 is BSD-3, but copying or paraphrasing its implementation creates a derivative-work risk for Gale. Therefore, while developing Gale:
+
+- **DO NOT read** ANTLR4 implementation source: `vendor/antlr4/tool/**/*.{java,g,g4}` and `vendor/antlr4/runtime/**/*.java` (and the same content under any other path). This includes `ParserATNSimulator.java`, `ATNConfig.java`, `LL1Analyzer.java`, etc. Algorithmic ideas inferred from reading the source belong to ANTLR4, not Gale.
+- **OK to read**: `vendor/antlr4/runtime-testsuite/**/*.txt` (test descriptors — observed input/output, not implementation).
+- **OK to run**: the published `antlr-4.13.2-complete.jar` from antlr.org on grammars + inputs to observe its behavior as a black box. This is clean-room oracle measurement and does not contaminate Gale.
+- **Grey area, minimize**: `vendor/antlr4/doc/*.md` describes ANTLR4 in prose. Treat as a third-party spec; prefer black-box observation when a question can be answered by running the oracle on a small example.
 
 Initialize the submodule (first time only):
 
@@ -62,25 +70,6 @@ package-gale/scripts/extract-antlr4-descriptors.sh
 ```
 
 See [`antlr4-compatibility.md`](./antlr4-compatibility.md) for the pipeline mechanics, triage workflow, and how to interpret results.
-
-### Curated doc index
-
-These are the upstream pages that matter most when working on the g4 parser, the lexer/parser code generator, or the runtime. Read them in roughly this order when ramping up.
-
-| File                                                                                                | Why it matters for Gale                                                                                |
-| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| [`vendor/antlr4/doc/grammars.md`](../vendor/antlr4/doc/grammars.md)                                 | Top-level grammar structure: combined vs. `lexer grammar` / `parser grammar`, `tokens {}`, `import`.   |
-| [`vendor/antlr4/doc/lexer-rules.md`](../vendor/antlr4/doc/lexer-rules.md)                           | Lexer rule semantics: fragments, modes, channels, lexer commands (`skip`, `more`, `pushMode`, `type`). |
-| [`vendor/antlr4/doc/parser-rules.md`](../vendor/antlr4/doc/parser-rules.md)                         | Parser rule semantics: alternatives, EBNF operators, labels, rule arguments and return values.         |
-| [`vendor/antlr4/doc/left-recursion.md`](../vendor/antlr4/doc/left-recursion.md)                     | How ANTLR4 rewrites direct left recursion. Essential context for any parser-generator design choice.   |
-| [`vendor/antlr4/doc/wildcard.md`](../vendor/antlr4/doc/wildcard.md)                                 | Semantics of `.` and non-greedy operators — easy to get wrong in code generation.                      |
-| [`vendor/antlr4/doc/options.md`](../vendor/antlr4/doc/options.md)                                   | Grammar / rule / element options the g4 parser must accept (e.g. `caseInsensitive`, `assoc`).          |
-| [`vendor/antlr4/doc/lexicon.md`](../vendor/antlr4/doc/lexicon.md)                                   | Lexical structure of `.g4` source itself: identifiers, literals, comments, escapes.                    |
-| [`vendor/antlr4/doc/actions.md`](../vendor/antlr4/doc/actions.md)                                   | Action / attribute syntax. Gale skips these, but the parser must recognize and warn on them.           |
-| [`vendor/antlr4/doc/predicates.md`](../vendor/antlr4/doc/predicates.md)                             | Semantic predicate syntax. Same story as actions: must be recognized and skipped.                      |
-| [`vendor/antlr4/doc/target-agnostic-grammars.md`](../vendor/antlr4/doc/target-agnostic-grammars.md) | Best practices for writing host-language-free grammars — exactly the subset Gale targets.              |
-
-For everything else, browse `vendor/antlr4/doc/` directly.
 
 ## Debugging Grammars with `gale dump`
 
@@ -199,9 +188,8 @@ The upstream `runtime-testsuite/` is extracted into per-category Wado tests as a
 ## Generated Lexer Rules
 
 - **No backtracking in lexer codegen either.** ANTLR4's lexer obtains
-  its longest match via NFA→DFA simulation
-  (`vendor/antlr4/doc/lexer-rules.md`, `vendor/antlr4/doc/wildcard.md`).
-  Gale replicates the same single-pass forward DFA with explicit
+  its longest match via NFA→DFA simulation; Gale replicates the
+  same single-pass forward DFA with explicit
   accept-state tracking — never a try-fail-retry loop over remembered
   positions. When a greedy `Plus` / `Star` inner can also match the
   suffix's first character (`'a' ~('b')+ 'c'` is the canonical case from
@@ -323,8 +311,8 @@ each site.
    `tests/grammars/ll_wildcard_alt.g4`.
 
 Beyond what static FOLLOW + K-prefix can decide, runtime ATN
-simulation is the only complete answer
-(`vendor/antlr4/runtime/Java/src/org/antlr/v4/runtime/atn/ParserATNSimulator.java`).
+simulation is the only complete answer (ANTLR4 implements one in
+its runtime; do not read it — see "License hygiene" above).
 Remaining gaps are tracked in [`TODO.md`](./TODO.md).
 
 ## Failed Approaches (Do Not Repeat)
@@ -367,4 +355,4 @@ Remaining gaps are tracked in [`TODO.md`](./TODO.md).
 
 - Static analysis can't distinguish "tail-greedy that should yield to caller" from "tail-greedy that legitimately re-enters." The conservative side is silent failure (variant doesn't fire); the unsound side is broken parses.
 - Each LL repair must be paired with a regression fixture covering the rejection case, not just the hit case — otherwise the next contributor relaxes the guard and quietly breaks `htmlContent` / `selector` again.
-- The ANTLR4 `ParserATNSimulator`'s closure / DFA cache exists precisely because a single global rule cannot decide "should this token be consumed here or by my caller?". A static repair will always have edges; pick the edge that matches today's grammar set and add a fixture so it stays the edge.
+- A single global rule cannot decide "should this token be consumed here or by my caller?" — that's why a runtime simulator (closure / DFA cache, as used in ANTLR4) is the complete answer (out of scope to inspect; see "License hygiene" above). A static repair will always have edges; pick the edge that matches today's grammar set and add a fixture so it stays the edge.
