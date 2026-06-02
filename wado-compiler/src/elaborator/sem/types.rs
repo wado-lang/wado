@@ -169,6 +169,14 @@ pub(crate) struct TypeAnnotations {
     /// `record_local_symbol` call. Consumed by LSP inlay hints via
     /// [`crate::semantics::Semantics::local_type_name`] so `let x = 1` can
     /// render the inferred `: i32` annotation without reaching into TIR.
+    ///
+    /// Part of [`ElementOverlay`]: a tuple-`for-of` body rebinds the same
+    /// pattern `AstId` to a different element type per iteration, so the
+    /// per-iteration overlay keeps each iteration's value pinned to its
+    /// own `ElementOverlay` rather than letting later iterations overwrite
+    /// earlier reads on the base map. Same applies to inner closure
+    /// params / let bindings whose inferred types depend on the iteration's
+    /// element.
     pub(crate) local_types: IndexMap<SymbolKey, TypeId>,
     /// Resolved [`TypeId`] for every expression visited by
     /// [`super::super::Elaborator::resolve_expr`], keyed by the
@@ -394,6 +402,13 @@ pub(crate) struct TypeAnnotations {
     /// destructuring patterns the binding ids carry per-element types so the
     /// whole-pattern annotation has no `local_types` slot to land on, and
     /// reify reads it from here instead of re-resolving the AST annotation.
+    ///
+    /// Part of [`ElementOverlay`] because the `LetStmt::AstId` is shared
+    /// across every iteration of a tuple-`for-of` unrolling, so the
+    /// per-iteration walk would otherwise overwrite earlier entries on
+    /// the base map and reify would read the last iteration's resolution
+    /// for every element. The overlay stack keeps each iteration's value
+    /// pinned to that iteration's `ElementOverlay`.
     pub(crate) let_annotated_types: IndexMap<SymbolKey, TypeId>,
     /// Resolved field types per struct decl `AstId`, in declaration order, as
     /// `resolve_struct` resolved them with the struct's type-param scope and
@@ -423,6 +438,8 @@ pub(crate) struct TypeAnnotations {
 #[allow(dead_code)]
 pub(crate) struct ElementOverlay {
     pub(crate) expression_types: IndexMap<SymbolKey, TypeId>,
+    pub(crate) local_types: IndexMap<SymbolKey, TypeId>,
+    pub(crate) let_annotated_types: IndexMap<SymbolKey, TypeId>,
     pub(crate) method_dispatch: IndexMap<SymbolKey, MethodDispatch>,
     pub(crate) coercions: IndexMap<SymbolKey, CoercionChoice>,
     pub(crate) desugars: IndexMap<SymbolKey, DesugarKind>,
@@ -446,6 +463,8 @@ pub(crate) struct ElementOverlay {
 #[derive(Clone, Copy)]
 pub(crate) struct ElementOverlayLens {
     expression_types: usize,
+    local_types: usize,
+    let_annotated_types: usize,
     method_dispatch: usize,
     coercions: usize,
     desugars: usize,
@@ -468,6 +487,8 @@ impl TypeAnnotations {
     pub(crate) fn overlay_base_lens(&self) -> ElementOverlayLens {
         ElementOverlayLens {
             expression_types: self.expression_types.len(),
+            local_types: self.local_types.len(),
+            let_annotated_types: self.let_annotated_types.len(),
             method_dispatch: self.method_dispatch.len(),
             coercions: self.coercions.len(),
             desugars: self.desugars.len(),
@@ -497,6 +518,8 @@ impl TypeAnnotations {
     pub(crate) fn split_off_overlay(&mut self, base: ElementOverlayLens) -> ElementOverlay {
         ElementOverlay {
             expression_types: self.expression_types.split_off(base.expression_types),
+            local_types: self.local_types.split_off(base.local_types),
+            let_annotated_types: self.let_annotated_types.split_off(base.let_annotated_types),
             method_dispatch: self.method_dispatch.split_off(base.method_dispatch),
             coercions: self.coercions.split_off(base.coercions),
             desugars: self.desugars.split_off(base.desugars),

@@ -39,13 +39,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// fact recording, returns a `WithHandler`-shaped `TirExpr` whose
     /// `bindings` are empty (reify rebuilds them from
     /// `HandlerBindingFacts`) but whose `body` is the real resolved
-    /// `TirBlock`. The `WithHandler` shape (rather than a `Unit`
-    /// placeholder) is required so the combined walk's missing-return
-    /// validator (`expr_always_exits`'s `TirExprKind::WithHandler` arm
-    /// recurses into `body`) keeps recognising
-    /// `fn foo() -> i32 { with E => h do { return X; } }` as a
-    /// definite exit. Reify replaces this shape wholesale with its
-    /// own `WithHandler` built from the recorded facts.
+    /// `TirBlock`.
+    ///
+    /// The retained `WithHandler` shape (rather than a bare `Unit`
+    /// placeholder) is a Stage 7-B holdover: the surrounding combined-
+    /// walk TIR is otherwise dead after Stage 5 (the AST-level
+    /// missing-return analysis in `control_flow.rs` doesn't read it),
+    /// so this shape and the inner body could be reduced to a `Unit`
+    /// placeholder. Kept verbatim to keep this `resolve_with_handler`
+    /// slice byte-identical with the pre-7-B output until the
+    /// downstream `expr.rs` / `stmt.rs` leaves also stop emitting TIR
+    /// — at that point the combined walk's TIR is uniformly dead and
+    /// the shape can be flattened in one pass. Reify replaces this
+    /// expression wholesale with its own `WithHandler` built from the
+    /// recorded facts.
     pub(super) fn resolve_with_handler(
         &mut self,
         with_expr: &ast::WithHandlerExpr,

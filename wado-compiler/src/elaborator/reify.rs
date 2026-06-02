@@ -262,6 +262,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     // list in one place, mirroring `TypeAnnotations::split_off_overlay`.
     reify_annotation_accessors! {
         ann_expression_types => expression_types: crate::tir::TypeId,
+        ann_local_type => local_types: crate::tir::TypeId,
+        ann_let_annotated_type => let_annotated_types: crate::tir::TypeId,
         ann_method_dispatch => method_dispatch: super::sem::types::MethodDispatch,
         ann_coercions => coercions: super::sem::types::CoercionChoice,
         ann_desugars => desugars: super::sem::types::DesugarKind,
@@ -275,17 +277,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ann_sequence_coercions => sequence_coercions: super::sem::types::SequenceCoercionFacts,
         ann_key_value_coercions => key_value_coercions: super::sem::types::KeyValueCoercionFacts,
         ann_index_assign_dispatch => index_assign_dispatch: super::sem::types::OperatorDispatch,
-    }
-
-    /// Read the recorded type of a local binding (keyed by the binding's
-    /// def `AstId`). Unlike the `ann_*` accessors above, `local_types` is not
-    /// part of the per-element tuple-for-of overlay — but reify only consults
-    /// it for *annotated* `let` types, which are written in source and so are
-    /// element-invariant (a for-of binds a value, not a type), making the
-    /// base map's last-write value correct for every unrolled element.
-    fn ann_local_type(&self, id: crate::ast::AstId) -> Option<crate::tir::TypeId> {
-        let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
-        self.sem.types.local_types.get(&key).copied()
     }
 
     // Decl/signature facts the combined walk records once per decl (the
@@ -308,7 +299,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ann_decl_type_params => decl_type_params: Vec<crate::tir::TirTypeParam>,
             ann_struct_field_types => struct_field_types: Vec<crate::tir::TypeId>,
             ann_method_names => method_names: super::sem::types::MethodNames,
-            ann_let_annotated_type => let_annotated_types: crate::tir::TypeId,
         }
     }
 

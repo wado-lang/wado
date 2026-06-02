@@ -123,7 +123,12 @@ pub(super) fn find_return_type_in_block(
 fn find_return_type_in_stmt(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt) -> Option<TypeId> {
     match stmt {
         ast::Stmt::Return(r) => match &r.value {
-            Some(expr) => ctx.type_of(expr).or(Some(TypeTable::UNIT)),
+            // The value's type comes from `expression_types`; if it
+            // isn't recorded (ERROR / UNKNOWN propagation skipped it),
+            // surface `None` so the caller treats this arm as "no return
+            // type found" rather than silently fabricating `Unit` and
+            // producing a misleading missing-return diagnostic.
+            Some(expr) => ctx.type_of(expr),
             None => Some(TypeTable::UNIT),
         },
         ast::Stmt::If(if_stmt) => {
@@ -182,8 +187,11 @@ pub(super) fn find_return_type_in_expr(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr) -
         ast::Expr::WithHandler(wh) => find_return_type_in_block(ctx, &wh.body),
         // `resume value` lowers to `return value` in the MVP, so a
         // body whose tail is `resume X` satisfies missing-return as
-        // if it were `return X`.
-        ast::Expr::Resume(r) => ctx.type_of(&r.value).or(Some(TypeTable::UNIT)),
+        // if it were `return X`. Same `expression_types`-missing
+        // rule as `Stmt::Return` above: yield `None` rather than
+        // synthesising `Unit`, to keep ERROR-recovery diagnostics
+        // free of bogus missing-return reports.
+        ast::Expr::Resume(r) => ctx.type_of(&r.value),
         _ => None,
     }
 }
