@@ -58,6 +58,14 @@ pub struct Parser {
     /// Syntax errors collected during error recovery. Drained via
     /// [`Parser::take_errors`] after [`Parser::parse`].
     errors: Vec<ParseError>,
+    /// True while parsing a statement-level expression non-speculatively (set
+    /// by [`Parser::parse_expr_recovering`]). Enables operand-position recovery
+    /// inside the binary / assignment parsers: a missing right operand becomes
+    /// an [`Expr::Error`] placeholder so the partial expression (`a + <error>`)
+    /// and its statement survive. Left `false` everywhere else — in particular
+    /// during `checkpoint`/`restore` speculation — so a real parse error is
+    /// never masked from a backtracking caller.
+    recovering: bool,
 }
 
 #[derive(Debug)]
@@ -161,6 +169,7 @@ impl Parser {
             comment_cursor: 0,
             trivia: crate::comment::TriviaMap::new(),
             errors: Vec::new(),
+            recovering: false,
         }
     }
 
@@ -644,7 +653,15 @@ impl Parser {
     /// [`Parser::parse_expr`] directly and keep their `Result`.
     fn parse_expr_recovering(&mut self) -> Expr {
         let before = self.pos;
-        match self.parse_expr() {
+        // Enable operand-position recovery inside the binary / assignment
+        // parsers for the duration of this statement-level expression. Saved /
+        // restored so nesting (a block expression statement inside this one)
+        // composes correctly.
+        let prev = self.recovering;
+        self.recovering = true;
+        let result = self.parse_expr();
+        self.recovering = prev;
+        match result {
             Ok(e) => e,
             Err(e) => {
                 self.errors.push(e);
@@ -652,6 +669,31 @@ impl Parser {
                 self.error_expr(span)
             }
         }
+    }
+
+    /// Skip a malformed operand: advance to the next `;`, `,`, closing
+    /// delimiter (`)` / `]` / `}`), hard item keyword, or EOF — none consumed —
+    /// so recovery stays inside the current delimited context (a parenthesised
+    /// sub-expression stops at its `)`, an argument stops at `,` / `)`). Returns
+    /// the span of the skipped run anchored at `before`. Used only for
+    /// operand-position recovery, gated by [`Parser::recovering`].
+    fn sync_operand_boundary(&mut self, before: usize) -> Span {
+        while !self.is_at_end()
+            && !matches!(
+                self.peek_kind(),
+                TokenKind::Semicolon
+                    | TokenKind::Comma
+                    | TokenKind::RParen
+                    | TokenKind::RBracket
+                    | TokenKind::RBrace
+            )
+            && !self.at_hard_item_keyword()
+        {
+            self.advance();
+        }
+        let start = self.tokens[before].span;
+        let end = self.tokens[self.pos.saturating_sub(1)].span;
+        start.merge(&end)
     }
 
     /// Skip a malformed statement-level expression: advance to the next `;`,
@@ -676,14 +718,61 @@ impl Parser {
     /// Parse a comma-separated list of types within angle brackets (`<T1, T2>`).
     /// Assumes the opening `<` has already been consumed.
     /// Handles `>>` splitting for nested generics via `pending_gt`.
+    ///
+    /// Element-locally error-recovering: a malformed argument is reported and
+    /// skipped to the next `,` or the closing `>` and replaced with a
+    /// [`Type::Error`] placeholder, so the surrounding arguments (and the
+    /// generic itself) survive. The closing `>` is still required — a list that
+    /// runs off into `)` / `]` / `;` rather than closing returns an error so the
+    /// enclosing construct recovers at its own boundary. The speculative
+    /// turbofish path (`parse_generic_static_method_call_or_backtrack`) parses
+    /// its types directly, not through here, so its backtracking is unaffected.
     fn parse_type_args(&mut self) -> ParseResult<Vec<Type>> {
-        let mut args = vec![self.parse_type()?];
-        while !self.pending_gt && self.check(&TokenKind::Comma) {
-            self.advance();
-            args.push(self.parse_type()?);
+        let mut args = Vec::new();
+        loop {
+            let before = self.pos;
+            match self.parse_type() {
+                Ok(t) => args.push(t),
+                Err(e) => {
+                    self.errors.push(e);
+                    let span = self.sync_type_arg_boundary(before);
+                    args.push(Type::Error(span));
+                }
+            }
+            if !self.pending_gt && self.check(&TokenKind::Comma) {
+                self.advance();
+                continue;
+            }
+            break;
         }
         self.expect_gt()?;
         Ok(args)
+    }
+
+    /// Skip a malformed type argument: advance to the next `,`, a closing angle
+    /// bracket (`>` / `>>`), an outer closing delimiter, `;`, a hard item
+    /// keyword, or EOF — none consumed — so the type-argument list can resume at
+    /// a stable boundary. Returns the span of the skipped run anchored at
+    /// `before`.
+    fn sync_type_arg_boundary(&mut self, before: usize) -> Span {
+        while !self.is_at_end()
+            && !self.check(&TokenKind::Comma)
+            && !matches!(
+                self.peek_kind(),
+                TokenKind::Gt
+                    | TokenKind::GtGt
+                    | TokenKind::RParen
+                    | TokenKind::RBracket
+                    | TokenKind::RBrace
+                    | TokenKind::Semicolon
+            )
+            && !self.at_hard_item_keyword()
+        {
+            self.advance();
+        }
+        let start = self.tokens[before].span;
+        let end = self.tokens[self.pos.saturating_sub(1)].span;
+        start.merge(&end)
     }
 
     /// Parse a `+`-separated list of trait bounds: `Bound1 + Bound2 + ...`
@@ -2805,7 +2894,8 @@ impl Parser {
         // Check for simple assignment
         if self.check(&TokenKind::Eq) {
             self.advance();
-            let value = self.parse_assignment_expr()?; // Right-associative
+            // Right-associative; recover a missing value operand in place.
+            let value = self.parse_operand_or_recover(&mut Self::parse_assignment_expr)?;
             return Ok(Expr::Assign(Box::new(AssignExpr {
                 id: self.alloc_ast_id(),
                 target: expr,
@@ -2831,7 +2921,8 @@ impl Parser {
 
         if let Some(op) = compound_op {
             self.advance();
-            let value = self.parse_assignment_expr()?; // Right-associative
+            // Right-associative; recover a missing value operand in place.
+            let value = self.parse_operand_or_recover(&mut Self::parse_assignment_expr)?;
             let value_span = value.span();
 
             return Ok(Expr::CompoundAssign(Box::new(CompoundAssignExpr {
@@ -2906,7 +2997,7 @@ impl Parser {
         while let Some(op) = classify(self.peek_kind()) {
             let left_span = left.span();
             self.advance();
-            let right = next(self)?;
+            let right = self.parse_operand_or_recover(&mut next)?;
             let span = left_span.merge(&right.span());
             left = Expr::Binary(Box::new(BinaryExpr {
                 id: self.alloc_ast_id(),
@@ -2917,6 +3008,29 @@ impl Parser {
             }));
         }
         Ok(left)
+    }
+
+    /// Parse a right operand via `next`, recovering on failure when
+    /// [`Parser::recovering`] is set: the error is reported, tokens are skipped
+    /// to the current delimited context's boundary, and an [`Expr::Error`]
+    /// placeholder is returned so the partial expression (`a + <error>`) and its
+    /// statement survive. Outside recovery — the default, and crucially during
+    /// speculative `checkpoint`/`restore` parsing — the error propagates
+    /// unchanged so a backtracking caller still sees it.
+    fn parse_operand_or_recover(
+        &mut self,
+        next: &mut impl FnMut(&mut Self) -> ParseResult<Expr>,
+    ) -> ParseResult<Expr> {
+        let before = self.pos;
+        match next(self) {
+            Ok(e) => Ok(e),
+            Err(e) if self.recovering => {
+                self.errors.push(e);
+                let span = self.sync_operand_boundary(before);
+                Ok(self.error_expr(span))
+            }
+            Err(e) => Err(e),
+        }
     }
 
     fn parse_or_expr(&mut self) -> ParseResult<Expr> {
@@ -7433,6 +7547,36 @@ line 2
     }
 
     #[test]
+    fn recovery_generic_type_argument_keeps_following_args() {
+        // A broken generic type argument becomes a Type::Error placeholder and
+        // the surrounding arguments survive, with the closing `>` still
+        // consumed. `%` cannot start a type.
+        let (module, errors) =
+            parse_recovering("fn f(x: Map<i32, %, bool>) -> i32 {\n    return 0;\n}\n");
+        assert!(
+            !errors.is_empty(),
+            "broken type argument should be reported"
+        );
+        let func = module
+            .items
+            .iter()
+            .find_map(|i| match i {
+                Item::Function(f) if f.name == "f" => Some(f),
+                _ => None,
+            })
+            .expect("fn f should survive recovery");
+        let Type::Generic(g) = &func.params[0].ty else {
+            panic!("expected a generic type, got {:?}", func.params[0].ty);
+        };
+        assert_eq!(g.name, "Map");
+        assert_eq!(g.args.len(), 3, "all three type-argument slots survive");
+        assert!(
+            matches!(g.args[1], Type::Error(_)),
+            "the broken middle type argument is a placeholder",
+        );
+    }
+
+    #[test]
     fn recovery_tuple_pattern_keeps_following_bindings() {
         // A broken element inside a tuple pattern becomes a Pattern::Error
         // placeholder and the surrounding bindings survive. `%` cannot start a
@@ -7592,7 +7736,8 @@ line 2
     #[test]
     fn recovery_let_initializer_with_partial_expr_keeps_binding() {
         // `let x = a + ;` — a binary expression with a missing right operand.
-        // The whole initializer becomes an Expr::Error but the binding survives.
+        // Operand-position recovery keeps the partial structure `a + <error>`
+        // (the right operand is an Expr::Error) and the binding survives.
         let (module, errors) =
             parse_recovering("fn f() -> i32 {\n    let x = a + ;\n    return 0;\n}\n");
         assert!(!errors.is_empty(), "missing operand should be reported");
@@ -7604,13 +7749,18 @@ line 2
                 _ => None,
             })
             .expect("the let binding survives");
-        assert!(matches!(let_stmt.value, Some(Expr::Error(_))));
+        let Some(Expr::Binary(bin)) = &let_stmt.value else {
+            panic!("expected a binary expression, got {:?}", let_stmt.value);
+        };
+        assert!(
+            matches!(bin.right, Expr::Error(_)),
+            "the missing right operand is an Expr::Error placeholder",
+        );
     }
 
     #[test]
     fn recovery_return_value_keeps_statement() {
-        // `return a + ;` — the return survives with an Expr::Error value instead
-        // of being discarded.
+        // `return a + ;` — the return survives, keeping the partial `a + <error>`.
         let (module, errors) = parse_recovering("fn f() -> i32 {\n    return a + ;\n}\n");
         assert!(!errors.is_empty());
         let stmts = fn_f_stmts(&module);
@@ -7621,21 +7771,49 @@ line 2
                 _ => None,
             })
             .expect("the return statement survives");
-        assert!(matches!(ret.value, Some(Expr::Error(_))));
+        let Some(Expr::Binary(bin)) = &ret.value else {
+            panic!("expected a binary expression, got {:?}", ret.value);
+        };
+        assert!(matches!(bin.right, Expr::Error(_)));
+    }
+
+    #[test]
+    fn recovery_operand_skips_garbage_run_in_partial_expr() {
+        // `a + % b;` — the right operand of `+` cannot start at `%` (modulo is
+        // binary-only, never a prefix). Recovery skips the garbage run `% b` to
+        // the statement boundary and substitutes an Expr::Error, so the
+        // statement and the following one survive.
+        let (module, errors) =
+            parse_recovering("fn f() -> i32 {\n    a + % b;\n    return 0;\n}\n");
+        assert!(!errors.is_empty());
+        let stmts = fn_f_stmts(&module);
+        assert!(
+            stmts.iter().any(|s| matches!(
+                s,
+                Stmt::Expr(e) if matches!(&e.expr, Expr::Binary(b) if matches!(b.right, Expr::Error(_)))
+            )),
+            "the broken statement keeps `a + <error>`, got {stmts:?}",
+        );
+        assert!(
+            stmts.iter().any(|s| matches!(s, Stmt::Return(_))),
+            "the following return survives",
+        );
     }
 
     #[test]
     fn recovery_expr_statement_keeps_following_statements() {
-        // `a + ;` as an expression statement becomes a Stmt::Expr wrapping an
-        // Expr::Error; the following statement still parses.
+        // `a + ;` as an expression statement becomes a Stmt::Expr wrapping a
+        // binary expression whose right operand is an Expr::Error; the following
+        // statement still parses.
         let (module, errors) = parse_recovering("fn f() -> i32 {\n    a + ;\n    return 0;\n}\n");
         assert!(!errors.is_empty());
         let stmts = fn_f_stmts(&module);
         assert!(
-            stmts
-                .iter()
-                .any(|s| matches!(s, Stmt::Expr(e) if matches!(e.expr, Expr::Error(_)))),
-            "the broken expression statement survives as Stmt::Expr(Error)",
+            stmts.iter().any(|s| matches!(
+                s,
+                Stmt::Expr(e) if matches!(&e.expr, Expr::Binary(b) if matches!(b.right, Expr::Error(_)))
+            )),
+            "the broken expression statement survives as Stmt::Expr(Binary{{.., Error}})",
         );
         assert!(
             stmts.iter().any(|s| matches!(s, Stmt::Return(_))),
