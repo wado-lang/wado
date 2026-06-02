@@ -4029,7 +4029,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_option {
             self.resolve_question_mark_option(inner, ctx, qm.span)
         } else {
-            self.resolve_question_mark_result(inner, ctx, qm.span)
+            self.resolve_question_mark_result(inner, ctx, qm.span, qm.id)
         }
     }
 
@@ -4125,6 +4125,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         inner: TirExpr,
         ctx: &mut FunctionContext,
         span: Span,
+        qm_id: AstId,
     ) -> TirExpr {
         let inner_type = inner.type_id;
         let return_type = ctx.return_type;
@@ -4199,7 +4200,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let converted_err = if inner_err_type == outer_err_type {
             e_expr
         } else {
-            self.resolve_from_call(outer_err_type, inner_err_type, e_expr, span)
+            self.resolve_from_call(outer_err_type, inner_err_type, e_expr, span, Some(qm_id))
         };
 
         // Build Result::Err(converted_err) with the function's return Result type
@@ -4260,12 +4261,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// Looks up `impl From<from_type> for target_type` and generates
     /// `target_type::from(value)` as a static method call.
+    ///
+    /// `caller_id` is the [`AstId`] of the source-level expression that
+    /// triggered this conversion (the `?` operator, a static `T::from(v)`
+    /// call, etc.). Pass `Some(_)` to record the resolved facts under that
+    /// key so reify can rebuild the same `Call` without re-walking impl
+    /// blocks or re-mangling the method name. Pass `None` for synthetic
+    /// callers that have no source-level handle.
     pub(super) fn resolve_from_call(
         &mut self,
         target_type: TypeId,
         from_type: TypeId,
         value: TirExpr,
         span: Span,
+        caller_id: Option<crate::ast::AstId>,
     ) -> TirExpr {
         let tt = self.tysys.type_table.borrow();
         let target_name = tt.type_name(target_type);
@@ -4283,6 +4292,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Find the module source that provides the From impl
         let module_source = self.find_from_impl_module(&target_name, &from_name);
+
+        if let Some(ast_id) = caller_id {
+            let key = self.ann_key(ast_id);
+            self.sem.types.from_call_facts.insert(
+                key,
+                super::sem::types::FromCallFacts {
+                    module_source: module_source.clone(),
+                    mangled_name: method_name.clone(),
+                    target_name: target_name.clone(),
+                    from_name: from_name.clone(),
+                    from_trait_name: from_trait_name.clone(),
+                },
+            );
+        }
 
         TirExpr::new(
             TirExprKind::Call {

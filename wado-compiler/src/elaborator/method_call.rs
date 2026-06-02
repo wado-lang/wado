@@ -1197,6 +1197,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 args[0].type_id,
                 args.into_iter().next().unwrap(),
                 static_call.span,
+                Some(static_call.id),
             );
         }
 

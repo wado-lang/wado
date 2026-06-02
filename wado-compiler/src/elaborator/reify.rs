@@ -4282,7 +4282,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if is_option {
             self.reify_question_mark_option(inner, ctx, qm.span)
         } else if is_result {
-            self.reify_question_mark_result(inner, ctx, qm.span)
+            self.reify_question_mark_result(inner, ctx, qm.span, qm.id)
         } else {
             // Annotate already diagnosed; produce a Unit-typed
             // placeholder of `ERROR` so downstream phases see the
@@ -4389,6 +4389,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         inner: TirExpr,
         ctx: &mut FunctionContext,
         span: crate::token::Span,
+        qm_id: AstId,
     ) -> TirExpr {
         use crate::tir::{
             ResolvedType, TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind,
@@ -4463,7 +4464,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         );
         let converted_err = if need_from_conversion {
-            self.reify_from_call(outer_err_type, inner_err_type, e_expr, span)
+            self.reify_from_call(
+                outer_err_type,
+                inner_err_type,
+                e_expr,
+                span,
+                Some(qm_id),
+            )
         } else {
             e_expr
         };
@@ -5603,39 +5610,76 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// signature, and finds the impl's home module by walking the
-    /// current module + loaded modules looking for a matching
-    /// `impl From<From> for Target`.
+    /// Synthesise a `From<From>::from(value)` call from the facts the
+    /// combined walk's [`super::Elaborator::resolve_from_call`] recorded
+    /// under `caller_id`. When `caller_id` is `None` (synthetic callers
+    /// without a source-level handle) or the lookup misses (a recovery
+    /// path), falls back to the same in-line reconstruction the
+    /// pre-recording path used: re-derive the names from the operand
+    /// types and re-search for the impl's home module.
     fn reify_from_call(
         &mut self,
         target_type: TypeId,
         from_type: TypeId,
         value: TirExpr,
         span: crate::token::Span,
+        caller_id: Option<AstId>,
     ) -> TirExpr {
         use crate::name::{LocalMethodName, MethodName};
         use crate::tir::{CallArg, FunctionRef, TirExprKind};
 
-        let (target_name, from_name, from_trait_name) = {
-            let tt = self.tysys.type_table.borrow();
-            let target = tt.type_name(target_type);
-            let from = tt.type_name(from_type);
-            let trait_n = tt
-                .compiler_items()
-                .trait_name(crate::compiler_item::CompilerItem::From)
-                .to_string();
-            (target, from, trait_n)
+        let (module_source, mangled_name, target_name, from_name, from_trait_name) = if let Some(
+            facts,
+        ) =
+            caller_id.and_then(|id| {
+                self.sem
+                    .types
+                    .from_call_facts
+                    .get(&crate::symbol::SymbolKey::new(
+                        self.current_module_source.clone(),
+                        id,
+                    ))
+                    .cloned()
+            }) {
+            (
+                facts.module_source,
+                facts.mangled_name,
+                facts.target_name,
+                facts.from_name,
+                facts.from_trait_name,
+            )
+        } else {
+            let (target_name, from_name, from_trait_name) = {
+                let tt = self.tysys.type_table.borrow();
+                let target = tt.type_name(target_type);
+                let from = tt.type_name(from_type);
+                let trait_n = tt
+                    .compiler_items()
+                    .trait_name(crate::compiler_item::CompilerItem::From)
+                    .to_string();
+                (target, from, trait_n)
+            };
+            let from_trait = format!("{from_trait_name}<{from_name}>");
+            let mangled_name =
+                MethodName::format_local(&target_name, Some(&from_trait), "from");
+            let module_source =
+                self.find_from_impl_module(&target_name, &from_name, &from_trait_name);
+            (
+                module_source,
+                mangled_name,
+                target_name,
+                from_name,
+                from_trait_name,
+            )
         };
 
         let from_trait = format!("{from_trait_name}<{from_name}>");
-        let method_name = MethodName::format_local(&target_name, Some(&from_trait), "from");
-        let module_source = self.find_from_impl_module(&target_name, &from_name, &from_trait_name);
 
         TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef {
                     module_source,
-                    name: method_name,
+                    name: mangled_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName {
                         struct_name: target_name.clone(),
@@ -6589,47 +6633,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let arg_type_name = self.tysys.type_table.borrow().type_name(arg_type);
 
             // Bodyless `impl From<X> for Type;` marker impl — production
-            // synthesizes a `From::from` call inline (method_call.rs:1189 →
-            // expr.rs:resolve_from_call) and records no dispatch. Reify
-            // rebuilds the same trait-qualified `Call` so monomorphization
-            // emits the synthesized conversion. Checked before reflexive /
-            // newtype, matching production's order.
-            if let Some(module_source) = self.find_from_synthesis_module(&prefix, &arg_type_name) {
-                let from_trait_name = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .compiler_items()
-                    .trait_name(crate::compiler_item::CompilerItem::From)
-                    .to_string();
-                let from_trait = format!("{from_trait_name}<{arg_type_name}>");
-                let name =
-                    crate::name::MethodName::format_local(&prefix, Some(&from_trait), "from");
-                return TirExpr::new(
-                    TirExprKind::Call {
-                        func: crate::tir::FunctionRef {
-                            module_source,
-                            name,
-                            monomorph_info: None,
-                            method_info: Some(crate::name::LocalMethodName {
-                                struct_name: prefix.clone(),
-                                base_struct_name: prefix.clone(),
-                                trait_name: Some(from_trait),
-                                base_trait_name: Some(from_trait_name),
-                                base_trait_module: None,
-                                trait_type_args: vec![],
-                                method_name: "from".to_string(),
-                                method_type_args: vec![],
-                                is_type_param_receiver: false,
-                                is_ref_impl: false,
-                                cm_name: None,
-                            }),
-                        },
-                        type_args: vec![],
-                        args: vec![CallArg::new(arg, false)],
-                    },
+            // synthesizes a `From::from` call inline (call.rs:768 →
+            // expr.rs:resolve_from_call) and records `FromCallFacts`
+            // under `call.id`. Reify reuses `reify_from_call` so both the
+            // ?-op path and this static-call path emit identical TIR.
+            // The fallback inside `reify_from_call` covers the recovery
+            // path where no facts were recorded.
+            if self.find_from_synthesis_module(&prefix, &arg_type_name).is_some() {
+                return self.reify_from_call(
                     recorded_type,
+                    arg_type,
+                    arg,
                     span,
+                    Some(call.id),
                 );
             }
 

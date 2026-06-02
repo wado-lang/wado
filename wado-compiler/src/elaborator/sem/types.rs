@@ -317,6 +317,13 @@ pub(crate) struct TypeAnnotations {
     /// deterministically.
     #[allow(dead_code)]
     pub(crate) key_value_coercions: IndexMap<SymbolKey, KeyValueCoercionFacts>,
+    /// `From<T>::from` call facts recorded at every site that synthesises
+    /// a conversion call: the `?` operator's err-arm conversion, and the
+    /// bodyless-impl static-call inline path. Keyed by the caller's
+    /// [`crate::ast::AstId`] (the `?` expr / static-call expr). See
+    /// [`FromCallFacts`].
+    #[allow(dead_code)]
+    pub(crate) from_call_facts: IndexMap<SymbolKey, FromCallFacts>,
     /// `IndexAssign` trait dispatch decisions for `arr[i] = v` and
     /// `arr[i] OP= v` shapes whose target is an `Expr::Index`. Keyed
     /// by the **inner [`crate::ast::IndexExpr`]'s [`AstId`]** (the
@@ -416,6 +423,7 @@ pub(crate) struct ElementOverlay {
     pub(crate) static_method_dispatch: IndexMap<SymbolKey, StaticMethodDispatch>,
     pub(crate) sequence_coercions: IndexMap<SymbolKey, SequenceCoercionFacts>,
     pub(crate) key_value_coercions: IndexMap<SymbolKey, KeyValueCoercionFacts>,
+    pub(crate) from_call_facts: IndexMap<SymbolKey, FromCallFacts>,
     pub(crate) index_assign_dispatch: IndexMap<SymbolKey, OperatorDispatch>,
 }
 
@@ -438,6 +446,7 @@ pub(crate) struct ElementOverlayLens {
     static_method_dispatch: usize,
     sequence_coercions: usize,
     key_value_coercions: usize,
+    from_call_facts: usize,
     index_assign_dispatch: usize,
 }
 
@@ -459,6 +468,7 @@ impl TypeAnnotations {
             static_method_dispatch: self.static_method_dispatch.len(),
             sequence_coercions: self.sequence_coercions.len(),
             key_value_coercions: self.key_value_coercions.len(),
+            from_call_facts: self.from_call_facts.len(),
             index_assign_dispatch: self.index_assign_dispatch.len(),
         }
     }
@@ -491,11 +501,40 @@ impl TypeAnnotations {
                 .split_off(base.static_method_dispatch),
             sequence_coercions: self.sequence_coercions.split_off(base.sequence_coercions),
             key_value_coercions: self.key_value_coercions.split_off(base.key_value_coercions),
+            from_call_facts: self.from_call_facts.split_off(base.from_call_facts),
             index_assign_dispatch: self
                 .index_assign_dispatch
                 .split_off(base.index_assign_dispatch),
         }
     }
+}
+
+/// Resolved `From<T>::from` call facts recorded at every site that
+/// invokes the conversion: the `?` operator's error-arm conversion
+/// (`expr.rs:resolve_question_mark_result`), the bodyless
+/// `impl From<X> for T;` static-call inline (`call.rs` /
+/// `method_call.rs`). Reify reads these to rebuild the same
+/// `TirExprKind::Call` without re-walking loaded modules to find the
+/// impl's home or re-mangling the method name.
+#[derive(Clone)]
+#[allow(dead_code)]
+pub(crate) struct FromCallFacts {
+    /// Module that hosts the `impl From<From> for Target` block (or
+    /// the auto-derived synthesis site).
+    pub(crate) module_source: crate::module_source::ModuleSource,
+    /// `MethodName::format_local(target_name, Some(from_trait), "from")` —
+    /// the mangled `Target^From<From>::from` name the monomorphizer
+    /// keys on.
+    pub(crate) mangled_name: String,
+    /// `type_name(target_type)` — the call's struct prefix
+    /// (`LocalMethodName::struct_name` / `base_struct_name`).
+    pub(crate) target_name: String,
+    /// `type_name(from_type)` — the conversion source type's name,
+    /// used to build `LocalMethodName::trait_name`'s `From<…>` form.
+    pub(crate) from_name: String,
+    /// `compiler_items().trait_name(From)` — the bare trait name
+    /// (typically `"From"`).
+    pub(crate) from_trait_name: String,
 }
 
 /// Resolved `SequenceLiteralBuilder` impl data for a tuple-to-sequence
