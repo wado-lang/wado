@@ -550,7 +550,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Emits a compile error and returns `false` if the pattern is refutable.
     fn check_irrefutable_pattern(&mut self, pattern: &ast::Pattern, span: Span) -> bool {
         match pattern {
-            Pattern::Ident { .. } | Pattern::MutIdent { .. } | Pattern::Wildcard => true,
+            // `Pattern::Error` is a parser recovery placeholder; treat it as
+            // irrefutable so it does not cascade a second "refutable" error.
+            Pattern::Ident { .. }
+            | Pattern::MutIdent { .. }
+            | Pattern::Wildcard
+            | Pattern::Error(_) => true,
             Pattern::Tuple(patterns, _) => patterns
                 .iter()
                 .all(|p| self.check_irrefutable_pattern(p, span)),
@@ -933,6 +938,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Refutable pattern: error was already emitted by check_irrefutable_pattern.
                 TirPattern::Wildcard
             }
+            // Parser error-recovery placeholder; inert.
+            ast::Pattern::Error(_) => TirPattern::Wildcard,
         }
     }
 
@@ -1895,6 +1902,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 kind,
                 span: range_span,
             } => self.resolve_range_pattern(start, end, *kind, scrutinee_type, *range_span),
+            // Parser error-recovery placeholder; inert.
+            Pattern::Error(_) => TirPattern::Wildcard,
         }
     }
 
@@ -3398,7 +3407,7 @@ fn collect_ast_pattern_binding_ids(
                 collect_ast_pattern_binding_ids(first, out);
             }
         }
-        Pattern::Wildcard | Pattern::Literal(_) | Pattern::Range { .. } => {}
+        Pattern::Wildcard | Pattern::Literal(_) | Pattern::Range { .. } | Pattern::Error(_) => {}
     }
 }
 

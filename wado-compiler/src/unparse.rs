@@ -2238,6 +2238,9 @@ impl<'a> Unparser<'a> {
                 }
                 self.unparse_pattern(end);
             }
+            // The formatter is fail-fast on syntax errors, so this placeholder
+            // is never reached; emit nothing to keep the match total.
+            Pattern::Error(_) => {}
         }
     }
 
@@ -3401,6 +3404,7 @@ fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
             }
             unparse_pattern_into(end, output);
         }
+        Pattern::Error(_) => output.push_str("<error>"),
     }
 }
 

@@ -1799,6 +1799,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     let_stmt.pattern
                 )
             }
+            // Parser error-recovery placeholder; unreachable on the fail-fast
+            // batch path. Bind nothing, keep the (error-typed) value as an
+            // expression statement so the result stays a valid TirStmt.
+            ast::Pattern::Error(_) => {
+                TirStmt::new(crate::tir::TirStmtKind::Expr(value), let_stmt.span)
+            }
         }
     }
 
@@ -8983,6 +8989,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 scrutinee_type,
                 ctx,
             ),
+            // Parser error-recovery placeholder; unreachable on the fail-fast
+            // batch path. Inert.
+            ast::Pattern::Error(_) => TirPattern::Wildcard,
         }
     }
 

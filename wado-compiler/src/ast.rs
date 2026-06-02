@@ -775,7 +775,7 @@ pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
                 v.visit_pattern(p);
             }
         }
-        Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } => {}
+        Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } | Pattern::Error(_) => {}
     }
 }
 
@@ -2524,6 +2524,11 @@ pub enum Pattern {
         kind: RangeKind,
         span: Span,
     },
+    /// Placeholder for a pattern that failed to parse, emitted by error
+    /// recovery (e.g. a broken element in a tuple pattern or match-arm pattern)
+    /// so the surrounding pattern list survives. Inert in every later phase;
+    /// the batch path is fail-fast and never sees it.
+    Error(Span),
 }
 
 #[derive(Debug, Clone)]

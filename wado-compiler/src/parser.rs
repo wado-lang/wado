@@ -668,7 +668,11 @@ impl Parser {
         name_span: Span,
     ) -> ParseResult<Pattern> {
         self.advance(); // consume (
-        let bindings = self.parse_comma_separated(&TokenKind::RParen, Self::parse_pattern)?;
+        let bindings = self.parse_comma_separated_recovering(
+            &TokenKind::RParen,
+            Self::parse_pattern,
+            |_, span| Pattern::Error(span),
+        );
         let end_span = self.peek().span;
         self.expect(&TokenKind::RParen)?;
         Ok(Pattern::Variant {
@@ -2538,7 +2542,11 @@ impl Parser {
         if self.check(&TokenKind::LParen) {
             // Tuple pattern with parentheses: (a, b, c)
             self.advance();
-            let patterns = self.parse_comma_separated(&TokenKind::RParen, Self::parse_pattern)?;
+            let patterns = self.parse_comma_separated_recovering(
+                &TokenKind::RParen,
+                Self::parse_pattern,
+                |_, span| Pattern::Error(span),
+            );
             self.expect(&TokenKind::RParen)?;
             Ok(Pattern::Tuple(patterns, false))
         } else if self.check(&TokenKind::LBracket) {
@@ -7377,6 +7385,46 @@ line 2
         assert!(
             matches!(elems[1], Type::Error(_)),
             "middle type is a placeholder"
+        );
+    }
+
+    #[test]
+    fn recovery_tuple_pattern_keeps_following_bindings() {
+        // A broken element inside a tuple pattern becomes a Pattern::Error
+        // placeholder and the surrounding bindings survive. `%` cannot start a
+        // pattern.
+        let (module, errors) =
+            parse_recovering("fn f() -> i32 {\n    let (a, %, c) = t;\n    return 0;\n}\n");
+        assert!(
+            !errors.is_empty(),
+            "broken pattern element should be reported"
+        );
+        let func = module
+            .items
+            .iter()
+            .find_map(|i| match i {
+                Item::Function(f) if f.name == "f" => Some(f),
+                _ => None,
+            })
+            .expect("fn f should survive recovery");
+        let let_stmt = func
+            .body
+            .as_ref()
+            .unwrap()
+            .stmts
+            .iter()
+            .find_map(|s| match s {
+                Stmt::Let(l) => Some(l),
+                _ => None,
+            })
+            .expect("the let statement survives");
+        let Pattern::Tuple(elems, _) = &let_stmt.pattern else {
+            panic!("expected a tuple pattern, got {:?}", let_stmt.pattern);
+        };
+        assert_eq!(elems.len(), 3, "all three pattern slots survive");
+        assert!(
+            matches!(elems[1], Pattern::Error(_)),
+            "broken middle pattern is a placeholder",
         );
     }
 
