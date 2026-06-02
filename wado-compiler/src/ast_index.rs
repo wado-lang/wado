@@ -368,12 +368,13 @@ fn record_impl_name_spans(index: &mut AstIndex, imp: &ImplBlock) {
 mod tests {
     use super::*;
     use crate::ast::Stmt;
-    use crate::lexer::Lexer;
+    use crate::lexer::lex;
     use crate::parser::Parser;
 
     fn parse(source: &str) -> Module {
-        let tokens = Lexer::new(source).tokenize().expect("lex");
-        let mut parser = Parser::new(tokens);
+        let r = lex(source);
+        assert!(r.errors.is_empty(), "lex error: {:?}", r.errors);
+        let mut parser = Parser::new(r.tokens);
         parser.parse_strict().expect("parse")
     }
 

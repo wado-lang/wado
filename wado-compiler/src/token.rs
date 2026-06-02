@@ -123,6 +123,15 @@ pub enum TokenKind {
     Question,  // ?
 
     // Special
+    /// Lexer-emitted recovery token for an unrecognised character. Healthy
+    /// source never produces this variant; it appears only when
+    /// [`crate::lexer::lex`] also pushes a
+    /// [`crate::lexer::LexErrorKind::UnexpectedChar`].
+    /// [`crate::parser::Parser::from_lex`] filters it out at construction;
+    /// LSP semantic tokens and other consumers that read the raw token
+    /// stream see it directly.
+    Error(String),
+
     Eof,
 }
 
@@ -303,6 +312,10 @@ pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
         StringLit, Struct, TemplateStringLit, Tilde, Trait, True, Type, Unique, Use, Variant,
         While, With, World,
     };
+    // `Error` is excluded: it only appears in malformed lex output, which
+    // kiln gates out before reaching this function. Omitting it from the
+    // encoding keeps the canonical bytes stable; the arm below panics if
+    // the invariant is ever broken.
 
     fn write_str(out: &mut Vec<u8>, tag: u8, name: &str) {
         out.push(tag);
@@ -442,6 +455,16 @@ pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
 
         // Special
         Eof => write_str(out, b'V', "Eof"),
+
+        // Recovery artefacts have no canonical encoding. The only consumer
+        // (kiln_provider::hash_source) gates on `LexResult::errors.is_empty()`
+        // before reaching this function, so `Error` tokens are unreachable
+        // here; release builds get a loud panic instead of a silent empty
+        // arm that would collide hashes across distinct malformed sources.
+        TokenKind::Error(_) => unreachable!(
+            "TokenKind::Error must not appear in canonically-hashed token streams; \
+             callers must filter on LexResult::errors.is_empty() first",
+        ),
     }
 }
 

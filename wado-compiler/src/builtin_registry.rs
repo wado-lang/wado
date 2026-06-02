@@ -55,7 +55,6 @@ impl BuiltinRegistry {
         use std::sync::OnceLock;
 
         use crate::ast::Module;
-        use crate::lexer::Lexer;
         use crate::parser::Parser;
         use crate::stdlib;
 
@@ -63,9 +62,13 @@ impl BuiltinRegistry {
 
         let module = PARSED_MODULE.get_or_init(|| {
             let source = stdlib::CORE_BUILTIN;
-            let mut lexer = Lexer::new(source);
-            let tokens = lexer.tokenize().expect("lexer error in core:builtin");
-            let mut parser = Parser::new(tokens);
+            let r = crate::lexer::lex(source);
+            assert!(
+                r.errors.is_empty(),
+                "lexer error in core:builtin: {:?}",
+                r.errors
+            );
+            let mut parser = Parser::new(r.tokens);
             parser.parse_strict().expect("parser error in core:builtin")
         });
 
@@ -439,14 +442,13 @@ mod tests {
     #[test]
     fn test_parse_builtin_wado() {
         use crate::ast::Item;
-        use crate::lexer::Lexer;
         use crate::parser::Parser;
         use crate::stdlib::CORE_BUILTIN;
 
         // Parse the actual builtin.wado
-        let mut lexer = Lexer::new(CORE_BUILTIN);
-        let tokens = lexer.tokenize().expect("lexer error");
-        let mut parser = Parser::new(tokens);
+        let r = crate::lexer::lex(CORE_BUILTIN);
+        assert!(r.errors.is_empty(), "lexer error: {:?}", r.errors);
+        let mut parser = Parser::new(r.tokens);
         let module = parser.parse_strict().expect("parser error");
 
         // Build registry with type table

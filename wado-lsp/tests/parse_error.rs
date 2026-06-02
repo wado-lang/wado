@@ -11,8 +11,11 @@
 //!   either side of the error.
 //! - `semantic_tokens` keeps producing lexer-level tokens.
 //!
-//! A lexer error (not a parse error) is still fail-fast; that path is
-//! exercised elsewhere.
+//! Lexer errors are also recovered: a stray character or a malformed numeric
+//! prefix surfaces as a `lexer error: …` diagnostic but does not abort
+//! analysis, so position queries still resolve on the surrounding well-formed
+//! regions. The dedicated test `lexer_error_recovers_around_stray_character`
+//! pins this.
 
 use wado_lsp::test_support::MapHost;
 use wado_lsp::{Diagnostic, Engine, Position, Severity};
@@ -122,6 +125,43 @@ fn semantic_tokens_survive_parse_error() {
         0,
         "semantic_tokens must be a multiple of 5 (deltaLine, deltaStart, length, type, mods)",
     );
+}
+
+/// A stray character is now a recovered *lexer* error, not a fatal one. The
+/// LSP must surface a `lexer error: …` diagnostic and still resolve hovers
+/// elsewhere in the file.
+#[test]
+fn lexer_error_recovers_around_stray_character() {
+    futures::executor::block_on(async {
+        let source = "fn f() -> i32 {\n    let x: i32 = 1;\n    return x;\n}\n@\nfn g() -> i32 { return 2; }\n";
+        let mut engine = Engine::new();
+        engine.open_document(&uri(), source.to_string());
+        let host = MapHost::single(PATH, source);
+
+        let diags = engine.diagnostics(&uri(), &host).await;
+        let lex_errs: Vec<&Diagnostic> = diags
+            .iter()
+            .filter(|d| d.severity == Severity::Error && d.message.starts_with("lexer error:"))
+            .collect();
+        assert!(
+            !lex_errs.is_empty(),
+            "expected a lexer-error diagnostic for the stray '@'",
+        );
+
+        // `x` in `let x: i32 = 1;` still hovers — recovery preserves the
+        // surrounding healthy region.
+        let hover = engine
+            .hover(
+                &uri(),
+                Position {
+                    line: 1,
+                    character: 8,
+                },
+                &host,
+            )
+            .await;
+        assert!(hover.is_some(), "hover should resolve before the lex error");
+    });
 }
 
 /// Re-opening with a fix recovers all semantic features. Sanity check that

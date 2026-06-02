@@ -94,14 +94,15 @@ fn assert_format_preserves_ast(source: &str) {
         .unwrap_or_else(|e| panic!("test source failed to format: {e:?}\n\nSource:\n{source}"));
 
     let original_ast = wado_compiler::parse(source)
+        .into_fail_fast()
         .unwrap_or_else(|e| panic!("test source failed to parse: {e:?}\n\nSource:\n{source}"))
         .ast;
-    let formatted_ast = match wado_compiler::parse(&formatted) {
-        Ok(r) => r.ast,
-        Err(e) => panic!(
+    let formatted_ast = wado_compiler::parse(&formatted)
+        .into_fail_fast()
+        .unwrap_or_else(|e| panic!(
             "formatted code failed to parse: {e:?}\n\nOriginal:\n{source}\n\nFormatted:\n{formatted}"
-        ),
-    };
+        ))
+        .ast;
 
     let original_debug = normalize_ast_debug(&format!("{original_ast:#?}"));
     let formatted_debug = normalize_ast_debug(&format!("{formatted_ast:#?}"));
@@ -2098,11 +2099,11 @@ fn test_roundtrip_ast_all_fixtures() {
             Err(_) => continue,
         };
 
-        let original_ast = match wado_compiler::parse(&source) {
+        let original_ast = match wado_compiler::parse(&source).into_fail_fast() {
             Ok(r) => r.ast,
             Err(_) => continue,
         };
-        let formatted_ast = match wado_compiler::parse(&formatted) {
+        let formatted_ast = match wado_compiler::parse(&formatted).into_fail_fast() {
             Ok(r) => r.ast,
             Err(e) => {
                 failures.push(format!("{filename}: formatted code failed to parse: {e:?}"));
@@ -2217,11 +2218,11 @@ fn test_roundtrip_ast_all_stdlib() {
                 Err(_) => continue,
             };
 
-            let original_ast = match wado_compiler::parse(&source) {
+            let original_ast = match wado_compiler::parse(&source).into_fail_fast() {
                 Ok(r) => r.ast,
                 Err(_) => continue,
             };
-            let formatted_ast = match wado_compiler::parse(&formatted) {
+            let formatted_ast = match wado_compiler::parse(&formatted).into_fail_fast() {
                 Ok(r) => r.ast,
                 Err(e) => {
                     failures.push(format!("{rel}: formatted code failed to parse: {e:?}"));

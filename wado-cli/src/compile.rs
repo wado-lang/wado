@@ -444,7 +444,11 @@ pub fn collect_inline_invocations_for_entry(
     let Ok(source) = fs::read_to_string(entry_file) else {
         return Vec::new();
     };
-    let Ok(parsed) = wado_compiler::parse(&source) else {
+    // `parse` is resilient; if the entry has recovered lex or parse errors
+    // the AST is partial. Refuse to harvest kiln invocations from a partial
+    // tree so a mid-edit source can't trigger surprising codegen side
+    // effects — matches the prior fail-on-parse-error behaviour.
+    let Ok(parsed) = wado_compiler::parse(&source).into_fail_fast() else {
         return Vec::new();
     };
     let mut modules =

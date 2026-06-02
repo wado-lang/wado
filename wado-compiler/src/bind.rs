@@ -1240,13 +1240,13 @@ pub fn bind_module<H: CompilerHost>(module: &Module, logger: &Logger<H>) -> Resu
 mod tests {
     use super::*;
     use crate::compiler_host::{InMemoryCompilerHost, LogLevel, Severity};
-    use crate::lexer::Lexer;
+    use crate::lexer::lex;
     use crate::parser::Parser;
 
     fn parse(source: &str) -> Module {
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().unwrap();
-        let mut parser = Parser::new(tokens);
+        let r = lex(source);
+        assert!(r.errors.is_empty(), "lex error: {:?}", r.errors);
+        let mut parser = Parser::new(r.tokens);
         parser.parse_strict().expect("parse error")
     }
 

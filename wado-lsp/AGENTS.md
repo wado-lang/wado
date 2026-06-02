@@ -58,16 +58,18 @@ checks `Semantics::is_complete()` and aborts on partial results;
 LSP-side queries simply degrade to "no answer" for fields the bailed
 phase would have populated.
 
-When a stage fails outright — entry lex/parse error, or loader bail
-on a missing/broken import — `build_semantics` (`src/lib.rs`) emits
-the failure diagnostic via the host and returns
-[`Semantics::empty`]. Every position-bearing query consequently
-returns `None` / `[]` for that snapshot; semantic-token highlighting
-still works because `semantic_tokens::compute` falls back to
-lexer-only classification when `parse` fails. The current behaviour
-is pinned by `tests/parse_error.rs`. A future error-recovering parser
-should let the position queries resolve in regions outside the
-syntax error; until then, the fail-fast degradation is intentional.
+Both lexing and parsing are error-recovering. Recovered lex errors
+surface as `lexer error: …` diagnostics, parser errors as
+`parse error: …`, and the partial `Semantics` still drives position
+queries on the surrounding healthy regions. The loader path is the
+only remaining hard failure: if a missing/broken import or a
+downstream phase bails, `build_semantics` (`src/lib.rs`) emits the
+failure diagnostic via the host and returns [`Semantics::empty`],
+and every position-bearing query returns `None` / `[]` for that
+snapshot. Semantic-token highlighting still works in that case
+because `semantic_tokens::compute` falls back to lexer-only
+classification. The recovery behaviour is pinned by
+`tests/parse_error.rs`.
 
 ### Position encoding
 

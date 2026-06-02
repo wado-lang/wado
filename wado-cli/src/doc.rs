@@ -228,7 +228,7 @@ fn load_doc(input: &str) -> Result<DocModule, CliExit> {
         .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
 
     let parsed = wado_compiler::parse(&source)
-        .and_then(wado_compiler::ParseResult::into_fail_fast)
+        .into_fail_fast()
         .map_err(|e| CliExit::error(format!("parsing '{}': {e:?}", path.display())))?;
 
     let module_name = path

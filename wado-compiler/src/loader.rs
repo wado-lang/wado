@@ -13,7 +13,6 @@ use rustc_hash::FxBuildHasher;
 use crate::ast::{Item, Module};
 use crate::bind;
 use crate::compiler_host::{CompilerHost, SourceError};
-use crate::lexer::Lexer;
 use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner, WasmAssetKind};
 use crate::name::{normalize_module_path, resolve_module_path};
@@ -59,6 +58,28 @@ pub enum LoadError {
         module_source: ModuleSource,
         message: String,
     },
+}
+
+impl LoadError {
+    /// Build a `LexError` from a recovered [`crate::lexer::LexError`].
+    pub fn from_lex_error(e: &crate::lexer::LexError, module_source: ModuleSource) -> Self {
+        LoadError::LexError {
+            module_source,
+            message: e.to_string(),
+            line: e.span.line,
+            column: e.span.column,
+        }
+    }
+
+    /// Build a `ParseError` from a recovered [`crate::parser::ParseError`].
+    pub fn from_parse_error(e: &crate::parser::ParseError, module_source: ModuleSource) -> Self {
+        LoadError::ParseError {
+            module_source,
+            message: e.message.clone(),
+            line: e.span.line,
+            column: e.span.column,
+        }
+    }
 }
 
 impl std::fmt::Display for LoadError {
@@ -706,8 +727,10 @@ fn format_stdlib_error(
 }
 
 fn parse_bind_stdlib(label: &str, source: &str) -> Module {
-    let mut lexer = Lexer::new(source);
-    let tokens = lexer.tokenize().unwrap_or_else(|e| {
+    let lex_result = crate::lexer::lex(source);
+    if let Some(e) = lex_result.errors.first() {
+        // Bundled stdlib must always lex cleanly; a recovered lex error here
+        // is a compiler bug, so fail loudly rather than degrade.
         panic!(
             "{}",
             format_stdlib_error(
@@ -717,12 +740,11 @@ fn parse_bind_stdlib(label: &str, source: &str) -> Module {
                 e.span.line,
                 e.span.column,
                 Some(e.span.end_column),
-                &e.message,
+                &e.to_string(),
             )
-        )
-    });
-    let (data_section, _comments, shebang) = lexer.into_parts();
-    let mut parser = Parser::with_metadata(tokens, shebang, data_section);
+        );
+    }
+    let mut parser = Parser::from_lex_no_trivia(lex_result);
     let ast = parser.parse();
     if let Some(e) = parser.take_errors().first() {
         // Bundled stdlib must always parse cleanly; a syntax error here is a
@@ -802,14 +824,13 @@ fn parse_stdlib_identity_attribute(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer::Lexer;
+    use crate::lexer::lex;
     use crate::parser::Parser;
 
     fn parse_test_module(source: &str) -> Module {
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().expect("test source must lex");
-        let (data_section, _comments, shebang) = lexer.into_parts();
-        let mut parser = Parser::with_metadata(tokens, shebang, data_section);
+        let r = lex(source);
+        assert!(r.errors.is_empty(), "test source must lex: {:?}", r.errors);
+        let mut parser = Parser::from_lex_no_trivia(r);
         parser.parse_strict().expect("test source must parse")
     }
 
@@ -1525,26 +1546,17 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         source: &str,
         module_source: &ModuleSource,
     ) -> Result<Module, LoadError> {
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().map_err(|e| LoadError::LexError {
-            module_source: module_source.clone(),
-            message: e.message,
-            line: e.span.line,
-            column: e.span.column,
-        })?;
-        let (data_section, _comments, shebang) = lexer.into_parts();
+        let lex_result = crate::lexer::lex(source);
+        if let Some(e) = lex_result.errors.first() {
+            return Err(LoadError::from_lex_error(e, module_source.clone()));
+        }
 
-        let mut parser = Parser::with_metadata(tokens, shebang, data_section);
+        let mut parser = Parser::from_lex_no_trivia(lex_result);
         // Batch loading is fail-fast: report the first recovered syntax error
         // as a load error so compilation never proceeds on a partial AST.
         let ast = parser.parse();
         if let Some(e) = parser.take_errors().first() {
-            return Err(LoadError::ParseError {
-                module_source: module_source.clone(),
-                message: e.message.clone(),
-                line: e.span.line,
-                column: e.span.column,
-            });
+            return Err(LoadError::from_parse_error(e, module_source.clone()));
         }
         Ok(ast)
     }

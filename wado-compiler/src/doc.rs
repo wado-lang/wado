@@ -737,6 +737,25 @@ pub fn resolve_stdlib_source(module_name: &str) -> Option<&'static str> {
     stdlib::get_stdlib_module(module_name)
 }
 
+/// Parse a bundled stdlib source. Bundled stdlib must always parse cleanly;
+/// a recovered lex or parse error here is a compiler bug, so fail loudly
+/// rather than silently produce partial docs (matches `parse_bind_stdlib`
+/// in `loader.rs`).
+fn parse_stdlib_for_doc(label: &str, source: &str) -> crate::ParseResult {
+    let parsed = crate::parse(source);
+    assert!(
+        parsed.lex_errors.is_empty(),
+        "stdlib '{label}' must lex cleanly: {:?}",
+        parsed.lex_errors,
+    );
+    assert!(
+        parsed.errors.is_empty(),
+        "stdlib '{label}' must parse cleanly: {:?}",
+        parsed.errors,
+    );
+    parsed
+}
+
 /// Extract documentation from a stdlib module by name.
 ///
 /// For `core:prelude`, follows `pub use` re-exports and merges items from
@@ -746,7 +765,7 @@ pub fn resolve_stdlib_source(module_name: &str) -> Option<&'static str> {
 /// Returns `None` if the module name is not a known stdlib module.
 pub fn extract_stdlib_doc(module_name: &str) -> Option<DocModule> {
     let source = stdlib::get_stdlib_module(module_name)?;
-    let parsed = crate::parse(source).ok()?;
+    let parsed = parse_stdlib_for_doc(module_name, source);
     let mut doc = extract_doc(&parsed.ast, &parsed.trivia, module_name);
 
     // For modules with pub use re-exports, follow them to get the actual items
@@ -754,9 +773,8 @@ pub fn extract_stdlib_doc(module_name: &str) -> Option<DocModule> {
     if !reexport_sources.is_empty() {
         let exported_names = collect_pub_use_names(&parsed.ast);
         for reexport_source in &reexport_sources {
-            if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source)
-                && let Ok(sub_parsed) = crate::parse(sub_source)
-            {
+            if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source) {
+                let sub_parsed = parse_stdlib_for_doc(reexport_source, sub_source);
                 let sub_doc = extract_doc(&sub_parsed.ast, &sub_parsed.trivia, reexport_source);
                 merge_reexported_items(&mut doc, &sub_doc, &exported_names);
             }
@@ -766,9 +784,8 @@ pub fn extract_stdlib_doc(module_name: &str) -> Option<DocModule> {
     // Follow `use _ from "..."` (side-effect imports) to collect impl blocks on primitive types
     let side_effect_sources = collect_side_effect_import_sources(&parsed.ast);
     for se_source in &side_effect_sources {
-        if let Some(sub_source) = stdlib::get_stdlib_module(se_source)
-            && let Ok(sub_parsed) = crate::parse(sub_source)
-        {
+        if let Some(sub_source) = stdlib::get_stdlib_module(se_source) {
+            let sub_parsed = parse_stdlib_for_doc(se_source, sub_source);
             let prim_types =
                 collect_primitive_types_from_module(&sub_parsed.ast, &sub_parsed.trivia);
             merge_primitive_types(&mut doc.primitive_types, prim_types);
@@ -777,15 +794,13 @@ pub fn extract_stdlib_doc(module_name: &str) -> Option<DocModule> {
 
     // Also collect from any pub use re-export sources that may have primitive impls
     for reexport_source in &reexport_sources {
-        if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source)
-            && let Ok(sub_parsed) = crate::parse(sub_source)
-        {
+        if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source) {
+            let sub_parsed = parse_stdlib_for_doc(reexport_source, sub_source);
             // Recursively follow side-effect imports from re-exported sub-modules
             let sub_se_sources = collect_side_effect_import_sources(&sub_parsed.ast);
             for sub_se in &sub_se_sources {
-                if let Some(se_source) = stdlib::get_stdlib_module(sub_se)
-                    && let Ok(se_parsed) = crate::parse(se_source)
-                {
+                if let Some(se_source) = stdlib::get_stdlib_module(sub_se) {
+                    let se_parsed = parse_stdlib_for_doc(sub_se, se_source);
                     let prim_types =
                         collect_primitive_types_from_module(&se_parsed.ast, &se_parsed.trivia);
                     merge_primitive_types(&mut doc.primitive_types, prim_types);

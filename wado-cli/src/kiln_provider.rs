@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use wado_compiler::kiln::{GeneratorModule, OptionsDescriptor};
-use wado_compiler::lexer::Lexer;
+use wado_compiler::lexer::lex;
 use wado_compiler::token::canonical_token_bytes;
 use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel};
 
@@ -434,26 +434,28 @@ fn hash_source(path: &str, bytes: &[u8]) -> [u8; 32] {
     let Ok(source) = std::str::from_utf8(bytes) else {
         return sha256_of(bytes);
     };
-    let mut lexer = Lexer::new(source);
-    let Ok(tokens) = lexer.tokenize() else {
+    let lex_result = lex(source);
+    // If the lexer recovered any error the source is malformed; fall back to
+    // the byte hash so we don't bake a half-tokenised stream into the cache.
+    if !lex_result.errors.is_empty() {
         return sha256_of(bytes);
-    };
+    }
     // Canonical token bytes ignore spans and (because the lexer peels
     // comments off into a side channel before returning the token list)
     // every line/block/doc comment.
     let mut buf: Vec<u8> = Vec::with_capacity(bytes.len());
     buf.extend_from_slice(b"wado-token-stream-v1\n");
-    for tok in &tokens {
+    for tok in &lex_result.tokens {
         canonical_token_bytes(&mut buf, &tok.kind);
     }
     // Shebang and the `__DATA__` trailer carry semantic content that
     // the parser still sees, so fold them into the hash too.
-    if let Some(shebang) = lexer.shebang() {
+    if let Some(shebang) = &lex_result.shebang {
         buf.push(b'#');
         buf.extend_from_slice(shebang.as_bytes());
         buf.push(0);
     }
-    if let Some(data) = lexer.data_section() {
+    if let Some(data) = &lex_result.data_section {
         buf.push(b'D');
         buf.extend_from_slice(data.as_bytes());
         buf.push(0);
