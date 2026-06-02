@@ -95,6 +95,17 @@ Reduces coupling between the codegen walk and the analysis layer; no behaviour c
 
 All 17 `CompositeLexers` / `CompositeParsers` upstream descriptors auto-skip today. The bottleneck is _not_ multi-input plumbing (`extract_antlr4_descriptors.wado`'s `parsed.slave_grammars.len() > 0` short-circuit could be lifted; Kiln already supports multi-input). Every composite descriptor's `[output]` is a host-side artefact — `<writeln(...)>` action-body prints (`S.a`, `M.b`, `T.y`), `Token.toString` dumps (`[@0,0:2='abc',<1>,1:0]`), or empty `[output]`. None survive `normalize_output_for_stage_b`. Re-evaluate this entry once Stage C lands.
 
+## Stage B′ — JVM-oracle integration (in progress)
+
+Design and infrastructure landed in [`antlr4-compatibility.md`](./antlr4-compatibility.md) "Stage B′ — JVM-oracle-derived expected trees". Remaining tasks to wire it up end-to-end:
+
+- **Extract manifest emission.** Teach `extract_antlr4_descriptors.wado` to emit `package-gale/tests/antlr4-compat/oracle-pending.tsv` listing each Stage B′ candidate (descriptor whose `[output]` would auto-skip from Stage B, single-grammar, parser-type, not in `[stage_b_oracle_skip]`). Tab-separated fields: `category`, `name`, `start_rule`, `input` (newlines escaped as `\\n`). Wire the existing `load_triage_maps` to surface `[stage_b_oracle_skip]` and `[stage_b_oracle_force]`.
+- **Shell wrapper oracle loop.** `extract-antlr4-descriptors.sh` reads `oracle-pending.tsv`, calls `scripts/strip-grammar.wado` → `scripts/antlr4-oracle.sh` for each entry, and writes the resulting `(rule …)` tree to `tests/antlr4-compat/stage_b_oracle/<C>/<N>_test.wado` via a heredoc template. Oracle failures emit a stderr warning naming the descriptor so the maintainer can add it to `[stage_b_oracle_skip]` (silent skip is forbidden by design).
+- **status.toml schema.** Add empty `[stage_b_oracle_skip]` and `[stage_b_oracle_force]` sections under the existing `[stage_b_skip]`. Update the header doc-comment to point at the new sections.
+- **Re-extract + commit artefacts.** Re-run `mise run extract-antlr4-descriptors`. The first time it lands, `FullContextParsing/*`, `Performance/*`, `ParserExec/IfIfElse*`, and similar candidates will populate `stage_b_oracle/`. Triage any oracle failures into `[stage_b_oracle_skip]`, any tree-shape mismatches into `[stage_b_oracle_todo]` (TODO: add this state to `status.toml` for parity with `[stage_b_todo]`).
+
+The `IfIfElseNonGreedyBinding1` Stage B′ test (once the loop lands) will sit beside the existing pinned-wrong-shape fixture under `tests/grammars/ll_optional_non_greedy.g4`. Both should flip green simultaneously when a non-greedy `??` fix lands.
+
 ## Descriptor importer — infrastructure gaps
 
 - **Composite (slave-grammar) descriptors.** 17 descriptors short-circuit on `parsed.slave_grammars.len() > 0`. Kiln's `use t from "<C>/<Name>.g4" with { ... }` directive needs to resolve `import S;` against sibling `<Name>.slaveN.g4` files. Once that lands the short-circuit comes out.
