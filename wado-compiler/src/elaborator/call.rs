@@ -936,22 +936,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.lookup_static_method_param_is_mut(type_name, method_name);
                     let call_args: Vec<CallArg> = args
                         .into_iter()
-                        .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
+                        .zip(param_is_mut.iter().copied().chain(std::iter::repeat(false)))
                         .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
                         .collect();
 
+                    let func_ref = FunctionRef {
+                        module_source: struct_module,
+                        name: final_mangled,
+                        monomorph_info,
+                        method_info: Some(LocalMethodName::new(
+                            type_name.to_string(),
+                            trait_name,
+                            method_name.to_string(),
+                        )),
+                    };
+
+                    // Record so reify replays the same Call shape via its
+                    // `static_method_dispatch` early return — without
+                    // re-running `locate_static_method_impl` /
+                    // `lookup_static_method_*` from the AST alone.
+                    let key = self.ann_key(call.id);
+                    self.sem.types.static_method_dispatch.insert(
+                        key,
+                        super::sem::types::StaticMethodDispatch {
+                            function_ref: func_ref.clone(),
+                            param_is_mut,
+                            type_args: vec![],
+                        },
+                    );
+
                     return TirExpr::new(
                         TirExprKind::Call {
-                            func: FunctionRef {
-                                module_source: struct_module,
-                                name: final_mangled,
-                                monomorph_info,
-                                method_info: Some(LocalMethodName::new(
-                                    type_name.to_string(),
-                                    trait_name,
-                                    method_name.to_string(),
-                                )),
-                            },
+                            func: func_ref,
                             type_args: vec![],
                             args: call_args,
                         },

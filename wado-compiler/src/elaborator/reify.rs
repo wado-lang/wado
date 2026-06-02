@@ -6501,55 +6501,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     );
                 }
 
-                // `ns::Type::method(args)` — a namespace-imported static
-                // method (e.g. `geo::Point::new(x, y)`). Not a variant
-                // case, so build a static-method `Call` against the
-                // namespace module's `Type::method`. Without this the
-                // call reaches the recovery `ERROR` shape, its result type
-                // is lost, and monomorphization prunes the entire
-                // namespace module as unreachable.
-                if self
-                    .tysys
-                    .all_struct_fields
-                    .get(&ns_source)
-                    .is_some_and(|m| m.contains_key(type_name))
-                {
-                    let mangled = crate::name::MethodName::format_local(type_name, None, case_name);
-                    let type_args: Vec<TypeId> = if call.type_args.is_empty() {
-                        self.ann_generic_instantiations(call.id)
-                            .map(|gi| gi.type_args)
-                            .unwrap_or_default()
-                    } else {
-                        call.type_args
-                            .iter()
-                            .map(|ty| self.resolve_type(ty))
-                            .collect()
-                    };
-                    let arg_calls: Vec<CallArg> = call
-                        .args
-                        .iter()
-                        .map(|a| CallArg::new(self.reify_expr(a, ctx, None), false))
-                        .collect();
-                    let method_info = crate::name::LocalMethodName::new(
-                        type_name.to_string(),
-                        None,
-                        case_name.to_string(),
-                    );
-                    return TirExpr::new(
-                        TirExprKind::Call {
-                            func: crate::tir::FunctionRef {
-                                module_source: ns_source,
-                                name: mangled,
-                                monomorph_info: None,
-                                method_info: Some(method_info),
-                            },
-                            type_args,
-                            args: arg_calls,
-                        },
-                        recorded_type,
-                        span,
-                    );
-                }
+                // `ns::Type::method(args)` is handled by the
+                // `static_method_dispatch` early return below — annotate
+                // now records the resolved `FunctionRef` for namespace-
+                // qualified static calls too (see call.rs's ns-static
+                // branch). The fallthrough here is intentional.
+                let _ = (ns_source, type_name, case_name);
             }
         }
 
