@@ -8906,63 +8906,6 @@ fn extract_allocator_tag_attr(attrs: &[crate::ast::Attribute]) -> Option<String>
         .map(|a| a.as_str().to_string())
 }
 
-<<<<<<< HEAD
-/// Return the base name of an AST [`ast::Type`] for impl-block /
-/// method-name mangling. A free-function variant matching the
-/// elaborator's `Elaborator::get_type_name_static` (module.rs).
-/// Used by `Reify::find_from_impl_module` to recognise an
-/// `impl From<Source> for Target` block by its AST shape.
-fn ast_type_name_static(ty: &ast::Type) -> String {
-    use crate::tir::TypeTable;
-    match ty {
-        ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
-        ast::Type::Named(named) => named.name.clone(),
-        ast::Type::Generic(generic) => generic.name.clone(),
-        ast::Type::Reference(_) => "&".to_string(),
-        ast::Type::MutReference(_) => "&mut".to_string(),
-        ast::Type::Tuple(elems) => {
-            if elems.is_empty() {
-                TypeTable::UNIT_TYPE_NAME.to_string()
-            } else {
-                TypeTable::TUPLE_TYPE_NAME.to_string()
-            }
-        }
-        ast::Type::Function(_)
-        | ast::Type::NamespacedGeneric(_)
-        | ast::Type::TypePackSpread(_, _)
-        | ast::Type::Error(_) => "Unknown".to_string(),
-    }
-}
-
-||||||| 7793b34f
-/// Return the base name of an AST [`ast::Type`] for impl-block /
-/// method-name mangling. A free-function variant matching the
-/// elaborator's `Elaborator::get_type_name_static` (module.rs).
-/// Used by `Reify::find_from_impl_module` to recognise an
-/// `impl From<Source> for Target` block by its AST shape.
-fn ast_type_name_static(ty: &ast::Type) -> String {
-    use crate::tir::TypeTable;
-    match ty {
-        ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
-        ast::Type::Named(named) => named.name.clone(),
-        ast::Type::Generic(generic) => generic.name.clone(),
-        ast::Type::Reference(_) => "&".to_string(),
-        ast::Type::MutReference(_) => "&mut".to_string(),
-        ast::Type::Tuple(elems) => {
-            if elems.is_empty() {
-                TypeTable::UNIT_TYPE_NAME.to_string()
-            } else {
-                TypeTable::TUPLE_TYPE_NAME.to_string()
-            }
-        }
-        ast::Type::Function(_)
-        | ast::Type::NamespacedGeneric(_)
-        | ast::Type::TypePackSpread(_, _) => "Unknown".to_string(),
-    }
-}
-
-=======
->>>>>>> origin/main
 /// True when `arg` is a closure literal with at least one param that lacks a
 /// type annotation. Reify forwards the recorded callee param type as the
 /// closure's expected type only in this case: it is what lets an unannotated

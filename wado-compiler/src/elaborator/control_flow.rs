@@ -349,6 +349,8 @@ fn any_in_stmt<P: AstTreeProbe>(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt, probe: &
                     .is_some_and(|m| any_in_expr(ctx, m, probe))
         }
         ast::Stmt::Continue(_) => false,
+        // Parser error-recovery placeholder: nothing to probe.
+        ast::Stmt::Error(_) => false,
     }
 }
 
@@ -452,5 +454,8 @@ fn any_in_expr<P: AstTreeProbe>(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr, probe: &
 
         // Closures stay in their own scope.
         ast::Expr::Closure(_) => false,
+
+        // Parser error-recovery placeholder: nothing to probe.
+        ast::Expr::Error(_) => false,
     }
 }
