@@ -786,21 +786,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.decls.pending_synthesis_requests.push(req);
     }
 
-    /// Record a synthesised default-method `TirFunction` (Gap 12 /
-    /// Stage 5). `reify_module` reads
-    /// [`sem::decls::ModuleDecls::pending_default_methods`] and
-    /// pushes each onto the emitted [`tir::TirModule`]'s function
-    /// list. Decouples the synthesis output from the reify walk so
-    /// reify doesn't re-run the default-method synthesis.
-    ///
-    /// `#[allow(dead_code)]` until the recording site in the
-    /// existing default-method synthesis loop is rerouted
-    /// through here.
-    #[allow(dead_code)]
-    pub(super) fn record_pending_default_method(&mut self, func: tir::TirFunction) {
-        self.sem.decls.pending_default_methods.push(func);
-    }
-
     /// Record a coercion decision for the expression at `ast_id`. Called
     /// from each successful `try_coerce_*` sub-helper so every caller of
     /// those helpers (`try_coerce`, `resolve_cast`, the deferred-coercion
@@ -1570,15 +1555,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         // reify emit a spurious `drop` of a value-less call →
                         // Wasm stack underflow).
                         //
-                        // Stage 5 completion (this commit): we additionally
-                        // snapshot each default method's body walk into a
-                        // full per-impl `ModuleSemantics` stored on
+                        // Stage 5 completion: the body walk's only output
+                        // is a per-impl `ModuleSemantics` snapshot stored on
                         // `ModuleSemantics::default_method_semantics`. Reify
-                        // can then swap `self.sem` to one of those entries
-                        // exactly the way `with_const_module_perspective`
-                        // already swaps between modules — the entry lives
-                        // inside the parent `ModuleSemantics`, so its
-                        // lifetime matches reify's `'a sem` borrow.
+                        // (the sole TIR source) reads those snapshots and
+                        // produces the impl's default-method
+                        // `TirFunction`s. The combined walk no longer builds
+                        // default-method TIR.
                         //
                         // Per-impl snapshots are required because the same
                         // trait body synthesised for many impls would
@@ -1589,12 +1572,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         // `imports` are cloned from the surrounding
                         // (impl-module) `ModuleSemantics` so name resolution
                         // / decl indices work during the body walk.
-                        //
-                        // `pending_default_methods` is still pushed in this
-                        // intermediate step so the existing reify drain keeps
-                        // producing TIR; step 4 of the migration switches
-                        // reify to read `default_method_semantics` and step
-                        // 5 removes this push site entirely.
                         let prev_override =
                             std::mem::replace(&mut self.ann_module_override, trait_module);
 
@@ -1616,9 +1593,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             // synthetic. `resolve_method` writes through
                             // `self.sem` (`record_*` calls, fact insertions)
                             // — they all land in `synthetic`'s fresh maps.
+                            // Its `TirFunction` return is discarded; reify
+                            // emits the authoritative TIR from the recorded
+                            // facts.
                             let saved_sem = std::mem::replace(&mut self.sem, synthetic);
 
-                            let tir_func_opt = self.resolve_method(
+                            let _ = self.resolve_method(
                                 default_method,
                                 &struct_name,
                                 &impl_block.ty,
@@ -1639,33 +1619,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 .pending_anonymous_structs
                                 .append(&mut populated.decls.pending_anonymous_structs);
 
-                            // Stash the synthetic (without its anon-struct
-                            // drain) under the (impl, default_method) key so
-                            // reify can swap `self.sem` to it.
+                            // Stash the populated synthetic under the
+                            // (impl, default_method) key so reify can swap
+                            // `self.sem` to it during its synthesis pass.
                             self.sem.default_method_semantics.insert(
                                 (impl_block.id, default_method.id),
                                 populated,
                             );
-
-                            if let Some(mut tir_func) = tir_func_opt {
-                                tir_func.name = MethodName::format_local(
-                                    &struct_name,
-                                    Some(trait_n),
-                                    &default_method.name,
-                                );
-                                // Default methods from trait declarations are not marked pub
-                                // in the AST, but they should be treated as pub since they are
-                                // part of a trait implementation
-                                tir_func.is_pub = true;
-                                // Transitional: keep the existing
-                                // `pending_default_methods` push site live so
-                                // reify's current drain still produces TIR.
-                                // Step 5 of the migration removes this once
-                                // reify_impl_default_methods is the sole
-                                // source.
-                                self.record_pending_default_method(tir_func.clone());
-                                tir_module.add_function(tir_func);
-                            }
                         }
 
                         self.ann_module_override = prev_override;

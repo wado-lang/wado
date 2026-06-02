@@ -88,20 +88,6 @@ pub(crate) struct ModuleDecls {
     #[allow(dead_code)]
     pub(crate) pending_synthesis_requests: Vec<crate::tir::SynthesisRequest>,
 
-    /// Default-method synthesis output (Gap 12 / Stage 5). When
-    /// an impl omits methods that the trait decl declares with a
-    /// default body, the elaborator synthesises a `TirFunction`
-    /// per missing default and records it here. `reify_module`
-    /// reads this list and pushes each onto the emitted
-    /// `TirModule`'s function list, preserving the existing
-    /// dispatch behaviour without re-running the default-method
-    /// synthesis inside reify.
-    ///
-    /// `#[allow(dead_code)]` for the same reason as
-    /// `pending_synthesis_requests` above.
-    #[allow(dead_code)]
-    pub(crate) pending_default_methods: Vec<crate::tir::TirFunction>,
-
     /// Per-module additions to the type tables, consulted by
     /// [`super::super::types::TypeLookup`] before the shared `all_*` tables.
     /// Populated by [`super::super::Elaborator::collect_types`] and by call
