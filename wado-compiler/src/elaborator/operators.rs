@@ -14,12 +14,14 @@ use super::Elaborator;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 use super::util;
 
-/// Body-walk placeholder for an operator expression. Stage 7-B: the
-/// combined walk records the dispatch decision (`operator_dispatch`) and
-/// typechecks the operands, but no longer assembles the overloaded
-/// operator's `MethodCall` TIR — reify rebuilds it from the recorded
-/// fact + the AST. The returned `TirExpr` only needs the right `type_id`
-/// + `span` for the caller's outer typecheck / `expression_types` recording.
+/// Body-walk placeholder for an operator / assignment expression. Stage
+/// 7-B: the combined walk typechecks the operands and records any dispatch
+/// decision (`operator_dispatch` for an overloaded op, `index_assign_dispatch`
+/// for `arr[i] = v`), but no longer assembles the resulting TIR (the native
+/// `Binary`, the overloaded `MethodCall`, the `Assign` / `GlobalVarSet`, or
+/// the comparison-chain `Block`) — reify rebuilds it from the recorded facts
+/// + the AST. The returned `TirExpr` only needs the right `type_id` + `span`
+/// for the caller's outer typecheck / `expression_types` recording.
 fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
     TirExpr::new(TirExprKind::Unit, type_id, span)
 }

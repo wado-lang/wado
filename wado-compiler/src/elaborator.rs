@@ -212,7 +212,7 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// recorded receiver-adjustment inputs + the resolved `FunctionRef` all
     /// the same (Gap 6 of WEP 2026-05-26 §`Design notes (Stage 5)`).
     /// Since Stage 7-B `resolve_method_call_with` returns only a typed
-    /// placeholder, so the `FunctionRef` travels through this channel rather
+    /// placeholder, the `FunctionRef` travels through this channel rather
     /// than being recovered from the returned `MethodCall` TIR.
     ///
     /// Cleared at the top of `resolve_method_call_with` so a synthetic

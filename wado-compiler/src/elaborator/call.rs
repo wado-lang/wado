@@ -1222,7 +1222,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Stage 7-B: reify (`reify_call`'s indirect-call branch) rebuilds
         // the `IndirectCall` from the AST — resolving the callee, applying
-        // `deref_to_value`, and reifying the args — so the combined walk
+        // `deref_to_value_static`, and reifying the args — so the combined walk
         // projects only the result type. `callee_expr` and `args` were
         // resolved / typechecked above for their fact-recording side effects.
         let _ = (callee_expr, args);
