@@ -750,13 +750,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     BinaryOp::GtEq => ">=",
                     _ => "?",
                 };
-                let (eq_trait_name, ord_trait_name) = {
-                    let items = type_table.compiler_items();
-                    (
-                        items.trait_name(CompilerItem::Eq).to_string(),
-                        items.trait_name(CompilerItem::Ord).to_string(),
-                    )
-                };
                 drop(type_table);
                 if left_name == right_name {
                     // Both operands share a type that lacks the operator's
@@ -772,10 +765,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         BinaryOp::BitXor => "BitXor".to_string(),
                         BinaryOp::Shl => "Shl".to_string(),
                         BinaryOp::Shr => "Shr".to_string(),
-                        BinaryOp::Eq | BinaryOp::NotEq => eq_trait_name,
-                        BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => {
-                            ord_trait_name
-                        }
+                        BinaryOp::Eq | BinaryOp::NotEq => self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .compiler_items()
+                            .trait_name(CompilerItem::Eq)
+                            .to_string(),
+                        BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .compiler_items()
+                            .trait_name(CompilerItem::Ord)
+                            .to_string(),
                         _ => "?".to_string(),
                     };
                     let _ = self.logger.error(TypeError::OperatorNotApplicable {
