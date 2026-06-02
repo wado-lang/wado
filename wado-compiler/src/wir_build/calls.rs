@@ -158,10 +158,10 @@ impl FunctionTranslator<'_, '_> {
     ) -> Option<WirInstr> {
         // Mechanical numeric / SIMD intrinsics map a builtin name onto a
         // fixed `WirInstr` shape with no surrounding context; they are
-        // tabulated in `translate_numeric_builtin`. Everything left here
+        // tabulated in `translate_mechanical_builtin`. Everything left here
         // needs type/context lookups, multi-value wrapping, or special
         // lowering.
-        if let Some(instr) = self.translate_numeric_builtin(builtin_name, args) {
+        if let Some(instr) = self.translate_mechanical_builtin(builtin_name, args) {
             return Some(instr);
         }
 
@@ -571,7 +571,7 @@ impl FunctionTranslator<'_, '_> {
     /// and wrap them in a fixed `WirInstr` variant. Returns `None` for any
     /// name outside this set so `translate_builtin_call` can handle the
     /// context-dependent builtins.
-    fn translate_numeric_builtin(
+    fn translate_mechanical_builtin(
         &mut self,
         builtin_name: &str,
         args: &[CallArg],
