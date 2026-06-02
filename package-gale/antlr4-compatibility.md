@@ -170,10 +170,15 @@ Triage state for Stage B′ lives in `status.toml`:
 - `[stage_b_oracle_skip]` — opt OUT of Stage B′ for a descriptor (the
   oracle crashes, the action stripper would corrupt the grammar, the
   emitted tree comparison is irrelevant for that descriptor, etc.).
-  Free-form value is the human reason.
-- `[stage_b_oracle_force]` — opt IN to Stage B′ even when the
-  descriptor's own `[output]` is a clean tree (rare; used when the
-  testsuite's recorded `[output]` is stale relative to the oracle).
+  Suppresses manifest emission so the shell wrapper never runs the
+  oracle. Free-form value is the human reason.
+- `[stage_b_oracle_todo]` — manifest is emitted, the oracle runs, the
+  test file is emitted with `#[TODO]`. Use for descriptors where the
+  oracle's tree IS the right expected value but Gale's current
+  generated parser produces a different tree (typically an ATN-class
+  decision Gale's static prediction cannot reproduce). Flipping these
+  from `_todo` to unmarked passes is the regression signal that the
+  prediction gap closed.
 
 Defaults: any single-grammar parser descriptor whose `[output]` would
 auto-skip from Stage B becomes a Stage B′ candidate automatically,
