@@ -1750,6 +1750,7 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment {
     let mut emitted_todo = 0;
     let mut swept = 0;
     let mut pending_no_expected = 0;
+    let mut skip_dropped = 0;
     for let category of list_subdirs(&pending_root) {
         let pending_cat = match open_dir(&pending_root, &category, false) {
             Ok(d) => d,
@@ -1802,6 +1803,17 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment {
             };
             let expected_tree = strip_eof_marker(&expected_raw);
             let triage = oracle_triage_map.lookup(&key);
+            // [stage_b_oracle_skip] in status.toml: drop any prior
+            // test file and skip emit. The skip is honoured here as
+            // well as in the extract manifest filter so that a
+            // skip-triage added between extract runs takes effect on
+            // the next `--finalize-stage-b-oracle` without requiring
+            // a full re-extract.
+            if triage matches { Skip(_) } {
+                let _ = remove_file(&oracle_cat, &test_filename);
+                skip_dropped += 1;
+                continue;
+            }
             let src = emit_stage_b_oracle_test_file(
                 &category,
                 &base,
@@ -1830,6 +1842,7 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment {
     }
     println(`finalize: emitted {emitted} Stage B′ test(s) ({emitted_todo} #[TODO])`);
     println(`finalize:           swept {swept} stale test(s)`);
+    println(`finalize:           {skip_dropped} dropped via [stage_b_oracle_skip]`);
     println(`finalize:           {pending_no_expected} pending without .expected (oracle did not produce output)`);
 }
 
