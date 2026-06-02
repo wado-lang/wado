@@ -1571,42 +1571,52 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         // Wasm stack underflow).
                         //
                         // Stage 5 completion (this commit): we additionally
-                        // snapshot each default method's body-walk facts into
-                        // `ModuleSemantics::default_method_facts` so reify can
-                        // synthesise the same `TirFunction` from those facts
-                        // (no `pending_default_methods` horizontal hand-off).
-                        // The snapshot is per-(impl_block.id,
-                        // default_method.id) so the same trait body
-                        // synthesised for many impls stays per-impl-isolated
-                        // — without the swap, each walk would overwrite the
-                        // previous impl's `(trait_module, ast_id)` keys and
-                        // reify would only see the last impl's facts.
+                        // snapshot each default method's body walk into a
+                        // full per-impl `ModuleSemantics` stored on
+                        // `ModuleSemantics::default_method_semantics`. Reify
+                        // can then swap `self.sem` to one of those entries
+                        // exactly the way `with_const_module_perspective`
+                        // already swaps between modules — the entry lives
+                        // inside the parent `ModuleSemantics`, so its
+                        // lifetime matches reify's `'a sem` borrow.
+                        //
+                        // Per-impl snapshots are required because the same
+                        // trait body synthesised for many impls would
+                        // otherwise overwrite its own `(trait_module,
+                        // ast_id)` facts on each iteration. Each impl gets a
+                        // fresh `ModuleSemantics` whose `types` / `bindings`
+                        // capture only this one synthesis; `decls` and
+                        // `imports` are cloned from the surrounding
+                        // (impl-module) `ModuleSemantics` so name resolution
+                        // / decl indices work during the body walk.
                         //
                         // `pending_default_methods` is still pushed in this
                         // intermediate step so the existing reify drain keeps
                         // producing TIR; step 4 of the migration switches
-                        // reify to read `default_method_facts` and step 5
-                        // removes this push site entirely.
+                        // reify to read `default_method_semantics` and step
+                        // 5 removes this push site entirely.
                         let prev_override =
                             std::mem::replace(&mut self.ann_module_override, trait_module);
 
                         for default_method in &default_methods {
-                            // Swap in fresh fact maps so this default method's
-                            // body walk records into its own isolated key
-                            // space. `decls` and `imports` stay shared with
-                            // the surrounding `ModuleSemantics` (the walk
-                            // reads them for name resolution + decl indices,
-                            // and any `pending_anonymous_structs` from an
-                            // anon literal inside the default body must flow
-                            // into the impl module's `TirModule`).
-                            let saved_types = std::mem::replace(
-                                &mut self.sem.types,
-                                super::elaborator::sem::TypeAnnotations::default(),
-                            );
-                            let saved_bindings = std::mem::replace(
-                                &mut self.sem.bindings,
-                                super::elaborator::sem::ModuleBindings::default(),
-                            );
+                            // Build a synthetic `ModuleSemantics` for this
+                            // one (impl, default_method) synthesis. Fresh
+                            // `types` / `bindings` so the body walk's writes
+                            // stay isolated; clone the impl module's `decls`
+                            // / `imports` so the walk's reads see the
+                            // resolved decls + import context.
+                            let synthetic = super::elaborator::sem::ModuleSemantics {
+                                bindings: super::elaborator::sem::ModuleBindings::default(),
+                                imports: self.sem.imports.clone(),
+                                types: super::elaborator::sem::TypeAnnotations::default(),
+                                decls: self.sem.decls.clone(),
+                                default_method_semantics: crate::hashmap::IndexMap::default(),
+                            };
+                            // Swap the elaborator's owned `sem` with the
+                            // synthetic. `resolve_method` writes through
+                            // `self.sem` (`record_*` calls, fact insertions)
+                            // — they all land in `synthetic`'s fresh maps.
+                            let saved_sem = std::mem::replace(&mut self.sem, synthetic);
 
                             let tir_func_opt = self.resolve_method(
                                 default_method,
@@ -1616,20 +1626,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 Some(trait_ast),
                             );
 
-                            // Take the per-impl body facts back out under
-                            // `(impl_block.id, default_method.id)` so reify
-                            // can load them when synthesising this default
-                            // method for this impl.
-                            let body_types =
-                                std::mem::replace(&mut self.sem.types, saved_types);
-                            let body_bindings =
-                                std::mem::replace(&mut self.sem.bindings, saved_bindings);
-                            self.sem.default_method_facts.insert(
+                            // Swap back, take the populated synthetic out.
+                            let mut populated = std::mem::replace(&mut self.sem, saved_sem);
+
+                            // Drain decl-level writes that must flow back
+                            // into the impl module's `TirModule`. The body
+                            // walk's only such write is anon-struct push;
+                            // synthesis-request pushes only happen at the
+                            // decl pass, not inside a method body.
+                            self.sem
+                                .decls
+                                .pending_anonymous_structs
+                                .append(&mut populated.decls.pending_anonymous_structs);
+
+                            // Stash the synthetic (without its anon-struct
+                            // drain) under the (impl, default_method) key so
+                            // reify can swap `self.sem` to it.
+                            self.sem.default_method_semantics.insert(
                                 (impl_block.id, default_method.id),
-                                super::elaborator::sem::DefaultMethodFacts {
-                                    types: body_types,
-                                    bindings: body_bindings,
-                                },
+                                populated,
                             );
 
                             if let Some(mut tir_func) = tir_func_opt {
