@@ -42,8 +42,9 @@ The upstream ANTLR4 source is vendored as a shallow git submodule at `vendor/ant
 
 Gale ships under its own license. ANTLR4 is BSD-3, but copying or paraphrasing its implementation creates a derivative-work risk for Gale. Therefore, while developing Gale:
 
-- **DO NOT read** ANTLR4 implementation source: `vendor/antlr4/tool/**/*.{java,g,g4}` and `vendor/antlr4/runtime/**/*.java` (and the same content under any other path). This includes `ParserATNSimulator.java`, `ATNConfig.java`, `LL1Analyzer.java`, etc. Algorithmic ideas inferred from reading the source belong to ANTLR4, not Gale.
-- **OK to read**: `vendor/antlr4/runtime-testsuite/**/*.txt` (test descriptors — observed input/output, not implementation).
+- **DO NOT read** ANTLR4 implementation source: `vendor/antlr4/tool/**/*.{java,g}` and `vendor/antlr4/runtime/**/*.java` (and the same content under any other path). This includes `ParserATNSimulator.java`, `ATNConfig.java`, `LL1Analyzer.java`, and the bootstrap `.g` grammars under `tool/`. Algorithmic ideas inferred from reading the source belong to ANTLR4, not Gale.
+- **OK to read**: `.g4` files anywhere under `vendor/antlr4/` (test-descriptor grammars, sample grammars). A `.g4` is data in the language Gale targets, not ANTLR4 implementation — reading one teaches you the user-facing grammar language, not how ANTLR4 internally implements parsing.
+- **OK to read**: `vendor/antlr4/runtime-testsuite/**/*.txt` (test descriptors — observed input/output).
 - **OK to run**: the published `antlr-4.13.2-complete.jar` from antlr.org on grammars + inputs to observe its behavior as a black box. This is clean-room oracle measurement and does not contaminate Gale.
 - **OK to read**: `vendor/antlr4/doc/*.md`. These are prose describing the grammar / lexer / parser-rule semantics — effectively a third-party language spec, not implementation code. Refer to them when you need the canonical meaning of a `.g4` construct, but do not copy the text into this repo verbatim.
 
