@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780423344130,
+  "lastUpdate": 1780436911550,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29053,6 +29053,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/14a9dcdd127bbf22f6eb6d01286f6996c011bdfd"
         },
         "date": 1780423343609,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17195,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1aa1cce364d64343fce6e5c139c49ea15c294dc9",
+          "message": "Merge pull request #1275 from wado-lang/claude/wado-compiler-parser-resilience-LhfDT\n\nfeat: make the wado-compiler parser error-recovering",
+          "timestamp": "2026-06-03T06:39:53+09:00",
+          "tree_id": "a88373c7128129064689de553b66ab66f38d6c87",
+          "url": "https://github.com/wado-lang/wado/commit/1aa1cce364d64343fce6e5c139c49ea15c294dc9"
+        },
+        "date": 1780436911034,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
