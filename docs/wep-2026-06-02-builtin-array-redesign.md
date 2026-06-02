@@ -9,15 +9,15 @@ Draft.
 Wado has two array-like types today:
 
 - `builtin::array<T>` — a raw Wasm GC array intrinsic. It is the storage layer
-  behind `String` and the growable vector, but it is exposed only through free
+  behind `String` and the growable sequence, but it is exposed only through free
   functions (`builtin::array_new`, `builtin::array_get`, `builtin::array_set`,
   …). It is **internal** and not meant for users.
-- `Array<T>` — the user-facing growable vector (Rust's `Vec<T>`), implemented as
+- `Array<T>` — the user-facing growable sequence (Rust's `Vec<T>`), implemented as
   `struct Array<T> { repr: builtin::array<T>, used: i32 }`.
 
 This split has accumulated four problems:
 
-1. The two are easy to confuse: a fixed Wasm GC array and a growable vector both
+1. The two are easy to confuse: a fixed Wasm GC array and a growable sequence both
    read as "array".
 2. `builtin::array<T>` is the **only value-typed exception to value semantics**:
    it has reference semantics. Worse, its mutators are free functions that take
@@ -43,7 +43,14 @@ intuition, where _array_ means the fixed `[T; N]` and the growable type is
 | Concept                   | Old name            | New name   |
 | ------------------------- | ------------------- | ---------- |
 | Raw fixed-length GC array | `builtin::array<T>` | `Array<T>` |
-| Growable vector           | `Array<T>`          | `List<T>`  |
+| Growable sequence         | `Array<T>`          | `List<T>`  |
+
+The growable type is named `List<T>`, **not** `Vec` / `Vector`, on purpose. We
+reserve the word _vector_ exclusively for its two domain meanings — the SIMD
+`v128` vector types (see [WEP-2026-01-31](./wep-2026-01-31-simd-v128.md)) and
+mathematical vectors — so a general-purpose growable container must not claim the
+name. `List` carries no such overload and reads correctly across C# / Java /
+Kotlin.
 
 `Array<T>`'s length is a runtime value (`array.len`), not a compile-time
 constant. It is therefore closer to a Java array / `Box<[T]>` than to Rust's
@@ -99,7 +106,7 @@ Two pieces of plumbing follow from this:
   definition-less `type Name<...>;` (resolved to the builtin by its
   `compiler_item`).
 - The `compiler_item("array")` key is reassigned: it now denotes the raw GC
-  array (this declaration) rather than the growable vector. The growable vector
+  array (this declaration) rather than the growable sequence. The growable sequence
   gets a new key, `compiler_item("list")` (see §2).
 
 #### Method surface
@@ -128,7 +135,7 @@ impl<T> IndexAssign<i32> for Array<T> { type Input = T; /* array.set */ }
 Convenience operations (`map`, `filter`, `fold`, …) are reached through `iter()`,
 exactly as for `List<T>`.
 
-### 2. `List<T>` is the growable vector
+### 2. `List<T>` is the growable sequence
 
 `List<T>` is today's `Array<T>`, unchanged in behavior. It is an ordinary
 prelude struct (it has a definition), so it keeps a `#[compiler_item]` — but
@@ -270,14 +277,14 @@ the same change, since the new view API depends on `stores` being real.
 - [ ] Generalize the parser: accept a named definition-less `type Name<...>;`
       declaration, not only the tuple form `type [..T];`.
 - [ ] Reassign the `compiler_item` keys: `"array"` → raw GC array (above), new
-      `"list"` → growable vector. Add `CompilerItem::List` (enum variant, `ALL`,
+      `"list"` → growable sequence. Add `CompilerItem::List` (enum variant, `ALL`,
       `attr_name`, `expected_kind`) in `compiler_item.rs`.
 - [ ] Give `Array<T>` value semantics end to end (it already deep-copies when
       embedded; make it copy as a standalone value too).
 - [ ] Port the `builtin::array_*()` free functions to `Array<T>` methods
       (`new`, `filled`, `len`, `get`, `set`, `fill`, `copy_from`); keep the
       `array.*` WIR lowering.
-- [ ] Rename the growable vector `Array<T>` → `List<T>` (type, stdlib, fixtures,
+- [ ] Rename the growable sequence `Array<T>` → `List<T>` (type, stdlib, fixtures,
       grammar, docs).
 - [ ] Introduce `Slice<T>` and re-base `ArrayIter` / `WindowsIter` / `ChunksIter`
       onto `&Array<T>` borrows with `stores[self]`.
