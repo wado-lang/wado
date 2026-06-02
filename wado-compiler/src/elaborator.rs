@@ -203,22 +203,24 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// instances can `borrow_mut()` it from `&self` contexts (e.g.
     /// `record_use_specifier_references`).
     pub(super) interner: Rc<RefCell<ModuleSourceInterner>>,
-    /// Side-channel populated by [`Self::resolve_method_call_with`]
-    /// immediately before it builds the final `TirExprKind::MethodCall`,
-    /// carrying the `(self_kind, is_ref_impl)` the dispatch resolved.
-    /// Synthetic callers (e.g. for-of's `.into_iter()` / `.next()`) read
-    /// it back to record the dispatch info their own way — they pass
-    /// `call_id == None` so the in-function `record_method_dispatch`
-    /// call is skipped, and reify needs the recorded receiver-adjustment
-    /// inputs all the same (Gap 6 of WEP 2026-05-26 §`Design notes
-    /// (Stage 5)`).
+    /// Side-channel populated by [`Self::resolve_method_call_with`] for the
+    /// successful-dispatch case, carrying the `(self_kind, is_ref_impl,
+    /// FunctionRef)` the dispatch resolved. Synthetic callers (e.g. for-of's
+    /// `.into_iter()` / `.next()`) read it back to record the dispatch info
+    /// their own way — they pass `call_id == None` so the in-function
+    /// `record_method_dispatch` call is skipped, and reify needs the
+    /// recorded receiver-adjustment inputs + the resolved `FunctionRef` all
+    /// the same (Gap 6 of WEP 2026-05-26 §`Design notes (Stage 5)`).
+    /// Since Stage 7-B `resolve_method_call_with` returns only a typed
+    /// placeholder, so the `FunctionRef` travels through this channel rather
+    /// than being recovered from the returned `MethodCall` TIR.
     ///
     /// Cleared at the top of `resolve_method_call_with` so a synthetic
     /// caller never accidentally reads a stale value from a previous
     /// dispatch. `None` means either no dispatch ran (the short-circuit
     /// paths returned early) or the method-not-found recovery branch
     /// took over.
-    pub(super) pending_method_dispatch: Option<(ast::SelfKind, bool)>,
+    pub(super) pending_method_dispatch: Option<(ast::SelfKind, bool, tir::FunctionRef)>,
     /// Side-channel populated by [`Self::resolve_binary`] and the
     /// `Expr::Index` arm of [`Self::resolve_expr`] before they call
     /// the trait-operator dispatcher, carrying the source-level
