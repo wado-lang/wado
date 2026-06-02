@@ -631,6 +631,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             crate::name::mangle_generic_name(&builder_base_name, &type_arg_names)
         };
 
+        let new_mangled_name =
+            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");
+        let insert_mangled_name =
+            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "insert_literal");
+        let build_mangled_name = if use_new_api {
+            Some(MethodName::format_local(
+                &mangled_builder_name,
+                Some(&trait_name),
+                "build",
+            ))
+        } else {
+            None
+        };
+
         // Stage 5 (WEP 2026-05-26): record the resolved
         // `KeyValueLiteralBuilder` impl data so reify can rebuild the
         // same `__kv_lit:` desugar block deterministically.
@@ -649,6 +663,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_arg_ids: type_arg_ids.clone(),
                 type_arg_names: type_arg_names.clone(),
                 use_new_api,
+                new_mangled_name: new_mangled_name.clone(),
+                insert_mangled_name: insert_mangled_name.clone(),
+                build_mangled_name: build_mangled_name.clone(),
             },
         );
 
@@ -668,9 +685,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             "new_literal".to_string(),
         )
         .with_struct_type_args(&type_arg_names);
-
-        let new_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "new_literal");
 
         let capacity = struct_lit.fields.len() as u64;
         let new_args = if use_new_api {
@@ -731,9 +745,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // --- For each field: __b.insert_literal(key, value) ---
         // Use the mangled builder name (with type args) so WIR can resolve the instantiated
         // function directly, which is needed when inlining is blocked (e.g., nested generics).
-        let insert_mangled_name =
-            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "insert_literal");
-
         let insert_method_info = LocalMethodName::new(
             builder_base_name.clone(),
             Some(trait_name.clone()),
@@ -810,11 +821,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span,
         );
 
-        let result_expr = if use_new_api {
-            // Use the mangled builder name (with type args) so WIR can resolve the instantiated
-            // function directly, which is needed when inlining is blocked (e.g., nested generics).
-            let build_mangled_name =
-                MethodName::format_local(&mangled_builder_name, Some(&trait_name), "build");
+        let result_expr = if let Some(build_mangled_name) = build_mangled_name {
             let build_method_info = LocalMethodName::new(
                 builder_base_name.clone(),
                 Some(trait_name),

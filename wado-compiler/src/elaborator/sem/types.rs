@@ -570,6 +570,14 @@ pub(crate) struct KeyValueCoercionFacts {
     /// taking a capacity arg + emitting `__b.build()`); `false` for
     /// the legacy `KeyValueLiteral` shape that breaks with `__b`.
     pub(crate) use_new_api: bool,
+    /// `Builder::new_literal` call's mangled name. Recorded so reify reads it
+    /// instead of running its own `MethodName::format_local`.
+    pub(crate) new_mangled_name: String,
+    /// `Builder::insert_literal` call's mangled name.
+    pub(crate) insert_mangled_name: String,
+    /// `Builder::build` call's mangled name. `None` under the legacy API
+    /// where the block breaks with `__b` directly.
+    pub(crate) build_mangled_name: Option<String>,
 }
 
 /// Static-method call dispatch decision. See
