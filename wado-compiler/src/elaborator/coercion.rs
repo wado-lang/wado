@@ -9,10 +9,19 @@ use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
-    CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt,
-    TirStmtKind, TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable,
 };
 use crate::token::Span;
+
+/// Body-walk placeholder for a successful coercion. The combined walk no
+/// longer builds the coercion's actual TIR (Stage 7-B); reify reads the
+/// recorded `CoercionChoice` + `SequenceCoercionFacts` /
+/// `KeyValueCoercionFacts` and emits the real expansion. The returned
+/// `TirExpr` only needs the right `type_id` + `span` for the caller's
+/// outer typecheck / `expression_types` recording.
+fn placeholder(target_type: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(TirExprKind::Unit, target_type, span)
+}
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Coerce a numeric literal (or negated numeric literal) to the
@@ -64,14 +73,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ),
                     span: lit.span,
                 });
-                return Some(TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: 0,
-                        repr: repr.clone(),
-                    },
-                    target_type,
-                    lit.span,
-                ));
+                return Some(placeholder(target_type, lit.span));
             }
             return Some(match util::parse_u128_literal(repr) {
                 Ok(value) => {
@@ -86,28 +88,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             span: lit.span,
                         });
                     }
-                    TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: value as u64,
-                            repr: repr.clone(),
-                        },
-                        target_type,
-                        lit.span,
-                    )
+                    placeholder(target_type, lit.span)
                 }
                 Err(message) => {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
-                    TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: 0,
-                            repr: repr.clone(),
-                        },
-                        target_type,
-                        lit.span,
-                    )
+                    placeholder(target_type, lit.span)
                 }
             });
         }
@@ -126,14 +114,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ),
                     span: unary.span,
                 });
-                return Some(TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: 0,
-                        repr: format!("-{repr}"),
-                    },
-                    target_type,
-                    unary.span,
-                ));
+                return Some(placeholder(target_type, unary.span));
             }
             return Some(match util::parse_u128_literal(repr) {
                 Ok(value) => {
@@ -148,29 +129,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             span: unary.span,
                         });
                     }
-                    let neg_value = (value as u64 as i64).wrapping_neg().cast_unsigned();
-                    TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: neg_value,
-                            repr: format!("-{repr}"),
-                        },
-                        target_type,
-                        unary.span,
-                    )
+                    placeholder(target_type, unary.span)
                 }
                 Err(message) => {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
-                    TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: 0,
-                            repr: format!("-{repr}"),
-                        },
-                        target_type,
-                        unary.span,
-                    )
+                    placeholder(target_type, unary.span)
                 }
             });
         }
@@ -181,27 +147,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && self.tysys.type_table.borrow().is_float(target_type)
         {
             return Some(match util::parse_float_literal(repr) {
-                Ok(value) => TirExpr::new(
-                    TirExprKind::FloatLiteral {
-                        value,
-                        repr: repr.clone(),
-                    },
-                    target_type,
-                    lit.span,
-                ),
+                Ok(_) => placeholder(target_type, lit.span),
                 Err(message) => {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
-                    TirExpr::new(
-                        TirExprKind::FloatLiteral {
-                            value: 0.0,
-                            repr: repr.clone(),
-                        },
-                        target_type,
-                        lit.span,
-                    )
+                    placeholder(target_type, lit.span)
                 }
             });
         }
@@ -214,27 +166,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && self.tysys.type_table.borrow().is_float(target_type)
         {
             return Some(match util::parse_float_literal(repr) {
-                Ok(value) => TirExpr::new(
-                    TirExprKind::FloatLiteral {
-                        value: -value,
-                        repr: format!("-{repr}"),
-                    },
-                    target_type,
-                    unary.span,
-                ),
+                Ok(_) => placeholder(target_type, unary.span),
                 Err(message) => {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
                     });
-                    TirExpr::new(
-                        TirExprKind::FloatLiteral {
-                            value: 0.0,
-                            repr: format!("-{repr}"),
-                        },
-                        target_type,
-                        unary.span,
-                    )
+                    placeholder(target_type, unary.span)
                 }
             });
         }
@@ -259,15 +197,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
 
                 match parse_result {
-                    Ok(value) => {
-                        return Some(build_int128_literal_call(
-                            &name,
-                            value,
-                            repr,
-                            true,
-                            target_type,
-                            lit.span,
-                        ));
+                    Ok(_) => {
+                        return Some(placeholder(target_type, lit.span));
                     }
                     Err(_) => {
                         let _ = self.logger.error(TypeError::InvalidLiteral {
@@ -295,15 +226,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && name == "i128"
             {
                 let negated_repr = format!("-{repr}");
-                if let Ok(value) = util::parse_i128_literal(&negated_repr) {
-                    return Some(build_int128_literal_call(
-                        &name,
-                        value,
-                        repr,
-                        false,
-                        target_type,
-                        unary.span,
-                    ));
+                if util::parse_i128_literal(&negated_repr).is_ok() {
+                    return Some(placeholder(target_type, unary.span));
                 }
                 let _ = self.logger.error(TypeError::InvalidLiteral {
                     message: format!("invalid i128 literal: -{repr}"),
@@ -406,7 +330,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 super::sem::types::CoercionKind::NullToOption,
                 target_type,
             );
-            return Some(TirExpr::new(TirExprKind::Null, target_type, lit.span));
+            return Some(placeholder(target_type, lit.span));
         }
 
         // String/template literal → String newtype
@@ -433,8 +357,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::Struct { name, .. } if name == &string_struct_name
             ) && target_type != base_id;
             if is_string_newtype {
-                let mut resolved = self.resolve_expr(expr, ctx, None);
-                resolved.type_id = target_type;
+                // Walk the inner literal / template for fact recording.
+                let _ = self.resolve_expr(expr, ctx, None);
                 self.record_coercion(
                     expr.id(),
                     super::sem::types::CoercionKind::StringNewtype,
@@ -442,16 +366,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
                 // The inner resolve_expr wrote expression_types[expr.id]
                 // with the unwrapped String type; overwrite with the
-                // outer target newtype so the map matches the returned
-                // TirExpr's type_id.
+                // outer target newtype so reify reads the newtype here.
                 self.record_expression_type(expr.id(), target_type);
-                return Some(resolved);
+                return Some(placeholder(target_type, expr.span()));
             }
         }
 
-        // Closure literal → fn-type newtype. Resolve the closure against the
-        // unwrapped base fn type (so unannotated params are inferred from the
-        // expected signature) and retag the result with the newtype id.
+        // Closure literal → fn-type newtype. Walk the closure against the
+        // unwrapped base fn type (so unannotated params are inferred from
+        // the expected signature) and retag the recorded expression type.
         if matches!(expr, Expr::Closure(_)) {
             let base_id = self
                 .tysys
@@ -463,8 +386,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::Function { .. }
             ) && target_type != base_id;
             if is_fn_newtype {
-                let mut resolved = self.resolve_expr(expr, ctx, Some(base_id));
-                resolved.type_id = target_type;
+                // Walk the closure for fact recording (param types,
+                // captures, body) under the unwrapped fn type.
+                let _ = self.resolve_expr(expr, ctx, Some(base_id));
                 self.record_coercion(
                     expr.id(),
                     super::sem::types::CoercionKind::ClosureToFnNewtype,
@@ -473,7 +397,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Same pattern as StringNewtype above: overwrite the
                 // map's base-fn-type write with the outer newtype.
                 self.record_expression_type(expr.id(), target_type);
-                return Some(resolved);
+                return Some(placeholder(target_type, expr.span()));
             }
         }
 
@@ -655,103 +579,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 builder_type,
                 value_type,
                 insert_self_kind,
-                trait_name: trait_name.clone(),
+                trait_name,
                 target_type,
-                impl_module_source: impl_module_source.clone(),
-                builder_base_name: builder_base_name.clone(),
-                mangled_builder_name: mangled_builder_name.clone(),
-                type_arg_ids: type_arg_ids.clone(),
-                type_arg_names: type_arg_names.clone(),
+                impl_module_source,
+                builder_base_name,
+                mangled_builder_name,
+                type_arg_ids,
+                type_arg_names,
                 use_new_api,
-                new_mangled_name: new_mangled_name.clone(),
-                insert_mangled_name: insert_mangled_name.clone(),
-                build_mangled_name: build_mangled_name.clone(),
+                new_mangled_name,
+                insert_mangled_name,
+                build_mangled_name,
             },
         );
 
-        // Build LabeledBlock:
-        //   __kv_lit: {
-        //     let mut __b = Builder::new_literal(capacity);
-        //     __b.insert_literal("k", v); ...
-        //     break __kv_lit: __b.build();   // only for new API
-        //   }
-        let label = "__kv_lit".to_string();
+        // Reserve the `__b` builder local on the surrounding scope so
+        // subsequent local-index accounting in the enclosing function
+        // matches reify's expansion. The `string_type` / `i32_type`
+        // intern calls above stay live so reify and downstream phases
+        // see the same canonical `TypeId`s the elaborator picked.
+        let _ = (string_type, i32_type);
         ctx.enter_scope();
+        let _builder_index = ctx.add_local("__b".to_string(), builder_type, true, None);
 
-        // --- Builder::new_literal(capacity) StaticCall ---
-        let new_method_info = LocalMethodName::new(
-            builder_base_name.clone(),
-            Some(trait_name.clone()),
-            "new_literal".to_string(),
-        )
-        .with_struct_type_args(&type_arg_names);
-
-        let capacity = struct_lit.fields.len() as u64;
-        let new_args = if use_new_api {
-            vec![TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: capacity,
-                    repr: (capacity as i64).to_string(),
-                },
-                i32_type,
-                span,
-            )]
-        } else {
-            vec![]
-        };
-
-        let new_call = TirExpr::new(
-            TirExprKind::Call {
-                func: FunctionRef {
-                    module_source: impl_module_source.clone(),
-                    name: new_mangled_name,
-                    monomorph_info: if type_arg_ids.is_empty() {
-                        None
-                    } else {
-                        Some(MonomorphInfo {
-                            generic_name: format!("{builder_base_name}::new_literal"),
-                            impl_type_args: type_arg_ids.clone(),
-                            method_type_args: vec![],
-                            is_blanket: false,
-                        })
-                    },
-                    method_info: Some(new_method_info),
-                },
-                type_args: vec![],
-                args: new_args
-                    .into_iter()
-                    .map(|e| CallArg::new(e, false))
-                    .collect(),
-            },
-            builder_type,
-            span,
-        );
-
-        // let mut __b = Builder::new_literal(capacity);
-        let builder_index = ctx.add_local("__b".to_string(), builder_type, true, None);
-        let mut stmts = vec![TirStmt::new(
-            TirStmtKind::Let {
-                name: "__b".to_string(),
-                local_index: builder_index,
-                is_mut: true,
-                is_reactive: false,
-                type_id: builder_type,
-                value: new_call,
-                skip_value_copy: false,
-            },
-            span,
-        )];
-
-        // --- For each field: __b.insert_literal(key, value) ---
-        // Use the mangled builder name (with type args) so WIR can resolve the instantiated
-        // function directly, which is needed when inlining is blocked (e.g., nested generics).
-        let insert_method_info = LocalMethodName::new(
-            builder_base_name.clone(),
-            Some(trait_name.clone()),
-            "insert_literal".to_string(),
-        );
-
-        // Check for duplicate field names
+        // Walk each field for fact recording + duplicate-field /
+        // value-type diagnostics. Reify rebuilds the `__kv_lit:` desugar
+        // block from the recorded `KeyValueCoercionFacts` + the AST.
         let mut seen_fields: IndexSet<&str> = IndexSet::default();
         for field in &struct_lit.fields {
             if !seen_fields.insert(field.name.as_str()) {
@@ -774,105 +627,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span: field.value.span(),
                 });
             }
-
-            // Build receiver
-            let builder_local = TirExpr::new(
-                TirExprKind::Local {
-                    index: builder_index,
-                    name: "__b".to_string(),
-                },
-                builder_type,
-                span,
-            );
-            let receiver =
-                self.adjust_receiver_for_self_kind(builder_local, insert_self_kind, false, span);
-
-            // Key: string literal from field name
-            let key_expr = TirExpr::new(
-                TirExprKind::StringLiteral(field.name.clone()),
-                string_type,
-                span,
-            );
-
-            let insert_call = Self::build_tir_method_call(
-                receiver,
-                FunctionRef {
-                    module_source: impl_module_source.clone(),
-                    name: insert_mangled_name.clone(),
-                    monomorph_info: None,
-                    method_info: Some(insert_method_info.clone()),
-                },
-                vec![],
-                vec![CallArg::new(key_expr, false), CallArg::new(value, false)],
-                TypeTable::UNIT,
-                span,
-            );
-            stmts.push(TirStmt::new(TirStmtKind::Expr(insert_call), span));
         }
-
-        // For new API: break __kv_lit: __b.build();
-        // For legacy API: break __kv_lit: __b;
-        let builder_local_final = TirExpr::new(
-            TirExprKind::Local {
-                index: builder_index,
-                name: "__b".to_string(),
-            },
-            builder_type,
-            span,
-        );
-
-        let result_expr = if let Some(build_mangled_name) = build_mangled_name {
-            let build_method_info = LocalMethodName::new(
-                builder_base_name.clone(),
-                Some(trait_name),
-                "build".to_string(),
-            );
-            let build_monomorph = if type_arg_ids.is_empty() {
-                None
-            } else {
-                Some(MonomorphInfo {
-                    generic_name: format!("{builder_base_name}::build"),
-                    impl_type_args: type_arg_ids,
-                    method_type_args: vec![],
-                    is_blanket: false,
-                })
-            };
-            Self::build_tir_method_call(
-                builder_local_final,
-                FunctionRef {
-                    module_source: impl_module_source,
-                    name: build_mangled_name,
-                    monomorph_info: build_monomorph,
-                    method_info: Some(build_method_info),
-                },
-                vec![],
-                vec![],
-                target_type,
-                span,
-            )
-        } else {
-            builder_local_final
-        };
-
-        stmts.push(TirStmt::new(
-            TirStmtKind::Break {
-                label: Some(label.clone()),
-                value: Some(result_expr),
-            },
-            span,
-        ));
 
         ctx.exit_scope();
 
-        Some(TirExpr::new(
-            TirExprKind::LabeledBlock {
-                label,
-                block: TirBlock::new(stmts, span),
-                result_type: target_type,
-            },
-            target_type,
-            span,
-        ))
+        Some(placeholder(target_type, span))
     }
 
     /// Try to coerce a tuple/sequence literal `[e0, e1, ...]` to a user-defined type
@@ -1003,81 +762,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 },
                 new_mangled_name: new_mangled_name.clone(),
                 push_mangled_name: push_mangled_name.clone(),
-                build_mangled_name: build_mangled_name.clone(),
+                build_mangled_name,
             },
         );
 
-        let label = "__seq_lit".to_string();
         ctx.enter_scope();
 
-        // --- Builder::new_literal(capacity) ---
-        let new_method_info = LocalMethodName::new(
-            builder_base_name.clone(),
-            Some(trait_name.clone()),
-            "new_literal".to_string(),
-        )
-        .with_struct_type_args(&type_arg_names);
-        let capacity = tuple_lit.elements.len() as u64;
-        let new_call = TirExpr::new(
-            TirExprKind::Call {
-                func: FunctionRef {
-                    module_source: impl_module_source.clone(),
-                    name: new_mangled_name,
-                    monomorph_info: if type_arg_ids.is_empty() {
-                        None
-                    } else {
-                        Some(MonomorphInfo {
-                            generic_name: format!("{builder_base_name}::new_literal"),
-                            impl_type_args: type_arg_ids.clone(),
-                            method_type_args: vec![],
-                            is_blanket: false,
-                        })
-                    },
-                    method_info: Some(new_method_info),
-                },
-                type_args: vec![],
-                args: vec![CallArg::new(
-                    TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: capacity,
-                            repr: (capacity as i64).to_string(),
-                        },
-                        TypeTable::I32,
-                        span,
-                    ),
-                    false,
-                )],
-            },
-            builder_type,
-            span,
-        );
+        // Reserve the `__b` builder slot so subsequent local-index
+        // accounting in the enclosing function stays consistent with
+        // reify's expansion.
+        let _builder_index = ctx.add_local("__b".to_string(), builder_type, true, None);
 
-        let builder_index = ctx.add_local("__b".to_string(), builder_type, true, None);
-        let mut stmts = vec![TirStmt::new(
-            TirStmtKind::Let {
-                name: "__b".to_string(),
-                local_index: builder_index,
-                is_mut: true,
-                is_reactive: false,
-                type_id: builder_type,
-                value: new_call,
-                skip_value_copy: false,
-            },
-            span,
-        )];
-
-        // --- For each element: __b.push_literal(elem) ---
-        let push_method_info = LocalMethodName::new(
-            builder_base_name.clone(),
-            Some(trait_name.clone()),
-            "push_literal".to_string(),
-        )
-        .with_struct_type_args(&type_arg_names);
-
+        // Walk each element for fact recording + heterogeneous-element
+        // diagnostics. Reify rebuilds the `__seq_lit:` desugar block from
+        // the recorded `SequenceCoercionFacts` + the AST.
         for element in &tuple_lit.elements {
             let elem_expr = self.resolve_expr(element, ctx, Some(element_type));
-            // Verify element type is compatible with the expected element type.
-            // Catches heterogeneous literals like `[1, "hello"] as Array<i32>`.
             if elem_expr.type_id != element_type
                 && elem_expr.type_id != TypeTable::UNKNOWN
                 && element_type != TypeTable::UNKNOWN
@@ -1099,111 +799,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span: element.span(),
                 });
             }
-            let builder_local = TirExpr::new(
-                TirExprKind::Local {
-                    index: builder_index,
-                    name: "__b".to_string(),
-                },
-                builder_type,
-                span,
-            );
-            let receiver =
-                self.adjust_receiver_for_self_kind(builder_local, push_self_kind, false, span);
-            let push_call = Self::build_tir_method_call(
-                receiver,
-                FunctionRef {
-                    module_source: impl_module_source.clone(),
-                    name: push_mangled_name.clone(),
-                    monomorph_info: if type_arg_ids.is_empty() {
-                        None
-                    } else {
-                        Some(MonomorphInfo {
-                            generic_name: format!("{builder_base_name}::push_literal"),
-                            impl_type_args: type_arg_ids.clone(),
-                            method_type_args: vec![],
-                            is_blanket: false,
-                        })
-                    },
-                    method_info: Some(push_method_info.clone()),
-                },
-                vec![],
-                vec![CallArg::new(elem_expr, false)],
-                TypeTable::UNIT,
-                span,
-            );
-            stmts.push(TirStmt::new(TirStmtKind::Expr(push_call), span));
         }
-
-        // break __seq_lit: __b.build();
-        let builder_local_final = TirExpr::new(
-            TirExprKind::Local {
-                index: builder_index,
-                name: "__b".to_string(),
-            },
-            builder_type,
-            span,
-        );
-        let build_method_info = LocalMethodName::new(
-            builder_base_name.clone(),
-            Some(trait_name),
-            "build".to_string(),
-        )
-        .with_struct_type_args(&type_arg_names);
-        let build_call = Self::build_tir_method_call(
-            builder_local_final,
-            FunctionRef {
-                module_source: impl_module_source,
-                name: build_mangled_name,
-                monomorph_info: if type_arg_ids.is_empty() {
-                    None
-                } else {
-                    Some(MonomorphInfo {
-                        generic_name: format!("{builder_base_name}::build"),
-                        impl_type_args: type_arg_ids,
-                        method_type_args: vec![],
-                        is_blanket: false,
-                    })
-                },
-                method_info: Some(build_method_info),
-            },
-            vec![],
-            vec![],
-            output_type,
-            span,
-        );
-
-        stmts.push(TirStmt::new(
-            TirStmtKind::Break {
-                label: Some(label.clone()),
-                value: Some(build_call),
-            },
-            span,
-        ));
 
         ctx.exit_scope();
 
-        let block_expr = TirExpr::new(
-            TirExprKind::LabeledBlock {
-                label,
-                block: TirBlock::new(stmts, span),
-                result_type: output_type,
-            },
-            output_type,
-            span,
-        );
-
-        if needs_newtype_cast {
-            Some(TirExpr::new(
-                TirExprKind::Cast {
-                    expr: Box::new(block_expr),
-                    target_type,
-                },
-                target_type,
-                span,
-            ))
+        // Placeholder typed as the coercion's surface result — `target_type`
+        // when newtype-cast, otherwise the builder's `output_type`. The
+        // outer wrapper records `expression_types[expr.id]` from this
+        // value's `type_id`, and reify reads it from the recorded
+        // `SequenceCoercionFacts.newtype_cast_to` / `output_type`.
+        let result_type = if needs_newtype_cast {
+            target_type
         } else {
-            Some(block_expr)
-        }
+            output_type
+        };
+        Some(placeholder(result_type, span))
     }
 }
 
