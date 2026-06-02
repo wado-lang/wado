@@ -1833,27 +1833,31 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment {
     println(`finalize:           {pending_no_expected} pending without .expected (oracle did not produce output)`);
 }
 
-/// Strip the trailing ` <EOF>` marker that ANTLR4 TestRig appends to
-/// every `-tree` output, plus surrounding whitespace. Gale's
-/// `to_string_tree()` omits the EOF token, so we normalise the oracle
-/// side to match.
+/// Strip the trailing ` <EOF>` marker that ANTLR4 TestRig adds when
+/// the start rule references the EOF token explicitly
+/// (`start : x EOF;`), so the oracle output normalises to Gale's
+/// `to_string_tree()` shape (which omits EOF).
 ///
-/// The marker always appears as ` <EOF>` (space-prefixed) immediately
-/// before the closing `)` of the start rule. We strip the first such
-/// occurrence; defensive about there being none (an empty input would
-/// still emit `<EOF>` so this is in practice always present, but the
-/// stripper is total).
+/// The marker is positionally fixed: it appears as the last child of
+/// the start rule, sandwiched between a leading space (sibling
+/// separator) and the start rule's closing `)`. Matching the exact
+/// suffix ` <EOF>)` keeps the stripper from misfiring on token text
+/// that happens to contain `<EOF>` as a literal (defensive — real
+/// `.g4` grammars cannot lex `<` so this case can't arise, but the
+/// invariant is cheap to enforce).
+///
+/// Grammars whose start rule does not reference EOF
+/// (`start : statement+;`) produce trees without the marker; the
+/// stripper passes those through unchanged.
 fn strip_eof_marker(raw: &String) -> String {
     let trimmed = raw.trim();
-    let needle = " <EOF>";
-    match trimmed.find(needle) {
-        Some(idx) => {
-            let prefix = trimmed.substr_bytes(0, idx);
-            let suffix = trimmed.substr_bytes(idx + needle.len(), trimmed.len());
-            return `{prefix}{suffix}`;
-        },
-        None => return trimmed,
+    let suffix = " <EOF>)";
+    if trimmed.ends_with(suffix) {
+        let n = trimmed.len();
+        let prefix = trimmed.substr_bytes(0, n - suffix.len());
+        return `{prefix})`;
     }
+    return trimmed;
 }
 
 fn emit_stage_b_oracle_test_file(
@@ -2313,5 +2317,27 @@ test "stage_a_err_category_eligible: only ParserErrors and LexerErrors" {
     assert stage_a_err_category_eligible(&"SemPredEvalParser") == false;
     assert stage_a_err_category_eligible(&"LexerExec") == false;
     assert stage_a_err_category_eligible(&"") == false;
+}
+
+test "strip_eof_marker: drops trailing ' <EOF>' before closing ')'" {
+    let r = strip_eof_marker(&"(start (statement x) <EOF>)");
+    assert r == "(start (statement x))", `got '{r}'`;
+}
+
+test "strip_eof_marker: trims surrounding whitespace and newlines" {
+    let r = strip_eof_marker(&"  (start (statement x) <EOF>)\n");
+    assert r == "(start (statement x))", `got '{r}'`;
+}
+
+test "strip_eof_marker: passes tree through when no EOF marker is present" {
+    let r = strip_eof_marker(&"(start (statement x))");
+    assert r == "(start (statement x))", `got '{r}'`;
+}
+
+test "strip_eof_marker: does not strip ' <EOF>' that is not at the end" {
+    // Defensive: ` <EOF>` in token-text position (followed by space
+    // rather than the closing ')') stays untouched.
+    let r = strip_eof_marker(&"(start <EOF> x)");
+    assert r == "(start <EOF> x)", `got '{r}'`;
 }
 

@@ -116,6 +116,20 @@ fi
 
 GRAMMAR_NAME="$(basename "$GRAMMAR_PATH" .g4)"
 
+# ANTLR4 enforces that the source file name match the identifier
+# declared on the `grammar`, `lexer grammar`, or `parser grammar`
+# line. Descriptor-derived files in the Gale pipeline are named
+# after the descriptor (e.g. `IfIfElseNonGreedyBinding1.g4`) but
+# may declare a different identifier (e.g. `grammar T;`); the
+# oracle copies the source under the declared name so codegen
+# succeeds regardless of how the caller named the input.
+declared_name=$(grep -E '^[[:space:]]*(lexer[[:space:]]+grammar|parser[[:space:]]+grammar|grammar)[[:space:]]+[A-Za-z_]' "$GRAMMAR_PATH" 2>/dev/null \
+    | head -1 \
+    | sed -E 's/^[[:space:]]*(lexer[[:space:]]+grammar|parser[[:space:]]+grammar|grammar)[[:space:]]+([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*;.*/\2/')
+if [ -n "$declared_name" ]; then
+    GRAMMAR_NAME="$declared_name"
+fi
+
 if [ ! -f "$JAR_PATH" ]; then
     echo "oracle: downloading $ANTLR4_URL → $JAR_PATH" >&2
     if command -v curl >/dev/null 2>&1; then
