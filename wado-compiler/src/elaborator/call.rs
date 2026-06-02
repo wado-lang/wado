@@ -1217,16 +1217,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let callee_expr = self.deref_to_value(callee_expr, call.span);
-
-        TirExpr::new(
-            TirExprKind::IndirectCall {
-                callee: Box::new(callee_expr),
-                args,
-            },
-            return_type,
-            call.span,
-        )
+        // Stage 7-B: reify (`reify_call`'s indirect-call branch) rebuilds
+        // the `IndirectCall` from the AST — resolving the callee, applying
+        // `deref_to_value`, and reifying the args — so the combined walk
+        // projects only the result type. `callee_expr` and `args` were
+        // resolved / typechecked above for their fact-recording side effects.
+        let _ = (callee_expr, args);
+        placeholder(return_type, call.span)
     }
 
     /// Look up the return type of a function
@@ -2785,24 +2782,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.sem.types.static_method_dispatch.insert(
                 key,
                 super::sem::types::StaticMethodDispatch {
-                    function_ref: func_ref.clone(),
+                    function_ref: func_ref,
                     param_is_mut: vec![false; args.len()],
                     type_args: vec![],
                 },
             );
 
-            return TirExpr::new(
-                TirExprKind::Call {
-                    func: func_ref,
-                    type_args: vec![],
-                    args: args
-                        .iter()
-                        .map(|e| CallArg::new(e.clone(), false))
-                        .collect(),
-                },
-                final_return_type,
-                call.span,
-            );
+            // Stage 7-B: reify rebuilds the `T::method(...)` `Call` from the
+            // recorded `static_method_dispatch`; project only the result type.
+            let _ = args;
+            return placeholder(final_return_type, call.span);
         }
 
         let _ = self.logger.error(TypeError::UnknownFunction {

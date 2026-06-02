@@ -1707,12 +1707,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Dereference a receiver until it's a value (non-reference) type
-    pub(super) fn deref_to_value(&self, receiver: TirExpr, span: Span) -> TirExpr {
-        Self::deref_to_value_static(receiver, span, &self.tysys.type_table)
-    }
-
-    /// `&TypeTable`-only version of [`Self::deref_to_value`], paired
+    /// `&TypeTable`-only version of the receiver-deref loop, paired
     /// with [`Self::adjust_receiver_for_self_kind_static`] for Stage 5
     /// reify reuse.
     pub(super) fn deref_to_value_static(
