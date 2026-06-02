@@ -136,7 +136,7 @@ pub async fn run_generator<H: CompilerHost + 'static>(
     component: &Component,
     request: GeneratorRequest,
     policy: KilnRunPolicy,
-) -> Result<GeneratorResponse, GeneratorRunnerError> {
+) -> Result<(GeneratorResponse, Vec<GeneratorDiagnostic>), GeneratorRunnerError> {
     let reads = Arc::new(Mutex::new(Vec::<GeneratorReadRecord>::new()));
     let diagnostics = Arc::new(Mutex::new(Vec::<GeneratorDiagnostic>::new()));
 
@@ -185,20 +185,26 @@ pub async fn run_generator<H: CompilerHost + 'static>(
         .map_err(|e| GeneratorRunnerError::Host(format!("generate call: {e}")))?
         .map_err(|e| GeneratorRunnerError::Host(format!("generate call: {e}")))?;
 
-    for diag in diagnostics.lock().unwrap().drain(..) {
-        relay_diagnostic(host.as_ref(), diag);
-    }
+    // Hand the generator-emitted diagnostics back to the caller rather than
+    // relaying them here: the only host reachable from this function is the
+    // collect-only inner host, so relaying here would never print them. The
+    // CLI host relays them through its printing wrapper instead (see
+    // `FilesystemCompilerHost::run_generator`).
+    let emitted: Vec<GeneratorDiagnostic> = diagnostics.lock().unwrap().drain(..).collect();
 
     match result {
-        Ok(response) => Ok(GeneratorResponse {
-            files: response.files.into_iter().map(lift_output_file).collect(),
-            reads: std::mem::take(&mut *reads.lock().unwrap()),
-        }),
+        Ok(response) => Ok((
+            GeneratorResponse {
+                files: response.files.into_iter().map(lift_output_file).collect(),
+                reads: std::mem::take(&mut *reads.lock().unwrap()),
+            },
+            emitted,
+        )),
         Err(e) => Err(GeneratorRunnerError::Generator(lift_error(e))),
     }
 }
 
-fn relay_diagnostic<H: CompilerHost + ?Sized>(host: &H, diag: GeneratorDiagnostic) {
+pub(crate) fn relay_diagnostic<H: CompilerHost + ?Sized>(host: &H, diag: GeneratorDiagnostic) {
     use wado_compiler::{Code, Diagnostic, DiagnosticSpan, Severity};
     let severity = match diag.level {
         GeneratorDiagnosticLevel::Error => Severity::Error,
