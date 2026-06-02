@@ -28,10 +28,62 @@
 
 set -euo pipefail
 
-ANTLR4_VERSION="4.13.2"
-ANTLR4_URL="https://www.antlr.org/download/antlr-${ANTLR4_VERSION}-complete.jar"
+# We deliberately do NOT pin a specific ANTLR4 jar version. Each
+# extract resolves the current latest release from Maven Central and
+# caches it locally; the resolved version is exposed to the caller via
+# `ORACLE_RESOLVED_VERSION` (set in the env before exec'ing TestRig) so
+# the descriptor extractor can stamp it into the generated test files.
+# Reproducibility is preserved via that comment in the committed test
+# file: any drift in the oracle's answer (caused by an ANTLR4 patch
+# release) surfaces as a diff in the re-extract output, which surfaces
+# in commit history.
+#
+# Override: setting ANTLR4_VERSION in the environment skips the
+# Maven-Central lookup. Useful when offline or to reproduce an older
+# extract.
+
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gale"
+mkdir -p "$CACHE_DIR"
+
+resolve_latest_version() {
+    # Hit Maven Central's REST endpoint. Returns the latest version
+    # number (e.g. "4.13.2") on stdout. Cached for ~24h to avoid
+    # hammering the API on repeated extracts.
+    local cache="$CACHE_DIR/antlr4-latest-version"
+    if [ -f "$cache" ] && [ $(($(date +%s) - $(stat -c %Y "$cache" 2>/dev/null || stat -f %m "$cache" 2>/dev/null || echo 0))) -lt 86400 ]; then
+        cat "$cache"
+        return 0
+    fi
+    local url="https://search.maven.org/solrsearch/select?q=g:%22org.antlr%22+AND+a:%22antlr4%22&rows=1&wt=json"
+    local body
+    if command -v curl >/dev/null 2>&1; then
+        body=$(curl -fsSL "$url") || return 1
+    elif command -v wget >/dev/null 2>&1; then
+        body=$(wget -q -O - "$url") || return 1
+    else
+        return 1
+    fi
+    # Extract `"latestVersion":"X.Y.Z"` without requiring jq.
+    local version
+    version=$(printf '%s' "$body" | sed -n 's/.*"latestVersion":"\([^"]*\)".*/\1/p')
+    if [ -z "$version" ]; then
+        return 1
+    fi
+    printf '%s' "$version" > "$cache"
+    printf '%s' "$version"
+}
+
+ANTLR4_VERSION="${ANTLR4_VERSION:-}"
+if [ -z "$ANTLR4_VERSION" ]; then
+    if ! ANTLR4_VERSION=$(resolve_latest_version); then
+        echo "oracle: cannot resolve latest ANTLR4 version from Maven Central" >&2
+        echo "oracle: set ANTLR4_VERSION in the environment to pin a known version" >&2
+        exit 1
+    fi
+fi
+ANTLR4_URL="https://www.antlr.org/download/antlr-${ANTLR4_VERSION}-complete.jar"
 JAR_PATH="$CACHE_DIR/antlr-${ANTLR4_VERSION}-complete.jar"
+export ORACLE_RESOLVED_VERSION="$ANTLR4_VERSION"
 
 usage() {
     cat >&2 <<EOF
@@ -64,7 +116,6 @@ fi
 
 GRAMMAR_NAME="$(basename "$GRAMMAR_PATH" .g4)"
 
-mkdir -p "$CACHE_DIR"
 if [ ! -f "$JAR_PATH" ]; then
     echo "oracle: downloading $ANTLR4_URL → $JAR_PATH" >&2
     if command -v curl >/dev/null 2>&1; then
