@@ -726,7 +726,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         logger.set_file(f);
     }
 
-    // === Phase 1: Lexer (resilient — never aborts on its own) ===
+    // === Phase 1: Lexer ===
     let mut lex_result = {
         let _span = logger.span("lex");
         lexer::lex(source)
@@ -977,9 +977,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
 /// assert!(formatted.contains("use { println }"));
 /// ```
 pub fn format(source: &str) -> Result<String, CompileError> {
-    // Lexer (collect comments, shebang, data section). Lexer is resilient;
-    // formatting requires clean input, so lex errors are reported via
-    // `CompileError::Lexer` (the first one wins).
+    // Formatting requires a clean parse — the first recovered lex error
+    // becomes a `CompileError::Lexer`.
     let lex_result = lexer::lex(source);
     if let Some(e) = lex_result.errors.first() {
         return Err(CompileError::from_lex_error(e, None));

@@ -123,12 +123,13 @@ pub enum TokenKind {
     Question,  // ?
 
     // Special
-    /// Lexer-emitted recovery token for an unrecognised character.
-    ///
-    /// Holds the raw source text (typically a single char) so downstream
-    /// consumers (formatter, semantic tokens) can render it. Healthy source
-    /// never produces this variant; it appears only when [`crate::lexer::lex`]
-    /// reports a corresponding [`crate::lexer::LexErrorKind::UnexpectedChar`].
+    /// Lexer-emitted recovery token for an unrecognised character. Healthy
+    /// source never produces this variant; it appears only when
+    /// [`crate::lexer::lex`] also pushes a
+    /// [`crate::lexer::LexErrorKind::UnexpectedChar`].
+    /// [`crate::parser::Parser::from_lex`] filters it out at construction;
+    /// LSP semantic tokens and other consumers that read the raw token
+    /// stream see it directly.
     Error(String),
 
     Eof,
@@ -311,10 +312,10 @@ pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
         StringLit, Struct, TemplateStringLit, Tilde, Trait, True, Type, Unique, Use, Variant,
         While, With, World,
     };
-    // `Error` is excluded: it only appears in resilient lex output for
-    // malformed source. Healthy code (the only thing the canonical hash
-    // sees) never produces it, so omitting it from the encoding keeps the
-    // bytes stable. We assert below.
+    // `Error` is excluded: it only appears in malformed lex output, which
+    // kiln gates out before reaching this function. Omitting it from the
+    // encoding keeps the canonical bytes stable; the arm below panics if
+    // the invariant is ever broken.
 
     fn write_str(out: &mut Vec<u8>, tag: u8, name: &str) {
         out.push(tag);

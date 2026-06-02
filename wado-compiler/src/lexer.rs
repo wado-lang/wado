@@ -21,24 +21,18 @@ pub fn is_valid_ident(s: &str) -> bool {
     chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-/// Tokenise `source` with full error recovery.
-///
-/// Always returns a complete [`LexResult`] — never fails. Errors are
-/// collected in [`LexResult::errors`]; downstream consumers (parser, LSP)
-/// continue past them using best-effort tokens.
+/// Tokenise `source`. See module docs for the recovery contract.
 pub fn lex(source: &str) -> LexResult {
     Lexer::new(source).run()
 }
 
-/// Like [`lex`] but starts numbering lines at `start_line`. Used by the
-/// parser when re-lexing the inside of a template-string interpolation so
-/// reported spans line up with the outer source.
+/// Like [`lex`] but starts numbering lines at `start_line` — used by the
+/// parser when re-lexing the inside of a template-string interpolation.
 pub fn lex_with_line(source: &str, start_line: usize) -> LexResult {
     Lexer::with_line(source, start_line).run()
 }
 
-/// Resilient lexer output. Every field is final after [`lex`] returns; the
-/// lexer is consumed in the process.
+/// Bundle of tokens + recovered diagnostics + trivia returned by [`lex`].
 #[derive(Debug)]
 pub struct LexResult {
     pub tokens: Vec<Token>,
@@ -60,8 +54,7 @@ pub(crate) struct Lexer<'a> {
     comments: Vec<Comment>,
     /// Shebang line, if present (e.g., "#!/usr/bin/env wado")
     shebang: Option<String>,
-    /// Errors collected during tokenisation. The lexer never aborts; instead
-    /// it pushes each problem here and emits a best-effort token.
+    /// Recovered errors, in source order. Drained into [`LexResult::errors`].
     errors: Vec<LexError>,
 }
 
@@ -74,22 +67,18 @@ pub struct LexError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LexErrorKind {
-    /// A character that does not begin any valid token. Holds the char itself
-    /// so the error message can render it; the matching [`TokenKind::Error`]
-    /// in the token stream carries the same source text.
+    /// A character that does not begin any valid token. Paired with a
+    /// [`TokenKind::Error`] in the token stream.
     UnexpectedChar(char),
-    /// String literal lacking a closing `"`. The lexer emitted a `StringLit`
-    /// containing everything from the opening `"` to EOF.
+    /// String literal lacking a closing `"`. Paired with a `StringLit`
+    /// holding everything from the opening `"` to EOF.
     UnterminatedString,
     /// Template string (`` `...` ``) lacking its closing backtick.
     UnterminatedTemplateString,
     /// Character literal lacking its closing `'`.
     UnterminatedChar,
     /// Character literal with more than one character between the quotes
-    /// (e.g. `'abc'`). The lexer recovers by greedily consuming up to the
-    /// closing quote, so the elaborator still sees a `CharLit` payload — but
-    /// the diagnostic flags the size violation here rather than letting it
-    /// cascade into a tail of follow-on identifier / unterminated-char errors.
+    /// (e.g. `'abc'`).
     CharLiteralTooLong,
     /// Empty character literal (`''`).
     EmptyCharLiteral,
@@ -152,9 +141,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// Like `new`, but starts numbering lines at `line`. Used when re-lexing
-    /// an embedded sub-expression (e.g. template-string interpolation) so
-    /// reported spans line up with the outer source.
+    /// Like `new`, but starts numbering lines at `line`.
     fn with_line(input: &'a str, line: usize) -> Self {
         Self {
             input,
@@ -169,8 +156,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// Drive the lexer to completion, returning all collected state. The
-    /// lexer never aborts on malformed input — see [`LexResult`].
+    /// Drive the lexer to completion and return the bundled [`LexResult`].
     fn run(mut self) -> LexResult {
         self.skip_shebang();
 
@@ -466,8 +452,8 @@ impl<'a> Lexer<'a> {
 
             _ => {
                 // Unrecognised character: consume it, record an error, and
-                // emit a `TokenKind::Error` carrying its source text so the
-                // parser can step over it without losing forward progress.
+                // emit a `TokenKind::Error` so the source text is preserved
+                // for span lookup and LSP semantic-token rendering.
                 self.advance();
                 let span = self.span_from(start, start_line, start_column);
                 self.errors.push(LexError {
@@ -1225,11 +1211,8 @@ impl<'a> Lexer<'a> {
             return TokenKind::CharLit(raw);
         }
 
-        // No closing quote where one was expected. Scan forward up to the
-        // next `'` (or newline / EOF) so a multi-char literal like `'abc'`
-        // recovers as a single CharLit("abc") + one diagnostic, instead of
-        // cascading into Ident("bc") + a second unterminated char on the
-        // closing quote.
+        // Scan forward to the next `'`, newline, or EOF so the literal
+        // recovers as one CharLit + one diagnostic.
         while let Some((_, ch)) = self.peek() {
             if ch == '\'' || ch == '\n' {
                 break;
