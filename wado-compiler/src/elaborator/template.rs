@@ -1,13 +1,14 @@
-//! Template string resolution.
+//! Template string annotation.
 //!
-//! Resolves sub-expressions and emits `TirExprKind::TemplateString` nodes.
-//! The actual expansion into formatting code happens in the synthesis phase
-//! (pre-monomorphize). Template expansion emits trait method calls that the
-//! monomorphizer resolves to concrete implementations.
+//! The combined walk now only records facts — it walks each interpolation
+//! sub-expression so its types and use→def edges land on `ModuleSemantics`,
+//! and returns a placeholder `TirExpr` whose `type_id` is the template's
+//! result type (`String`). Reify rebuilds the real `TirExprKind::TemplateString`
+//! / `TirExprKind::StringLiteral` shape from the AST and the recorded facts.
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::tir::{TemplateFormatSpec, TirExpr, TirExprKind, TirTemplatePart};
+use crate::tir::{TemplateFormatSpec, TirExpr, TirExprKind};
 
 use super::Elaborator;
 use super::types::FunctionContext;
@@ -19,60 +20,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         let string_type = self.get_string_struct_type();
-        let span = template.span;
 
-        // Fast path: no interpolations → concatenate at compile time
-        let has_interpolation = template
-            .parts
-            .iter()
-            .any(|p| matches!(p, ast::TemplatePart::Interpolation { .. }));
-
-        if !has_interpolation {
-            let mut combined = String::new();
-            for part in &template.parts {
-                if let ast::TemplatePart::String(s) = part {
-                    let unescaped = super::util::unescape_template_string(s).unwrap_or_default();
-                    combined.push_str(&unescaped);
-                }
-            }
-            return TirExpr::new(TirExprKind::StringLiteral(combined), string_type, span);
-        }
-
-        // Fast path: single interpolation, no format spec, already String
-        if template.parts.len() == 1
-            && let ast::TemplatePart::Interpolation { expr, format: None } = &template.parts[0]
-        {
-            let resolved = self.resolve_expr(expr, ctx, None);
-            if resolved.type_id == string_type {
-                return resolved;
-            }
-        }
-
-        // General case: resolve sub-expressions and emit TemplateString node
-        let mut parts = Vec::new();
+        // Walk each interpolation sub-expression so its `expression_types`,
+        // use→def edges, and any nested coercion / dispatch facts land on
+        // `ModuleSemantics`. The returned `TirExpr` is discarded by the
+        // body-walk's caller; reify is the sole TIR source.
         for part in &template.parts {
-            match part {
-                ast::TemplatePart::String(s) => {
-                    if !s.is_empty() {
-                        let unescaped =
-                            super::util::unescape_template_string(s).unwrap_or_default();
-                        if !unescaped.is_empty() {
-                            parts.push(TirTemplatePart::Literal(unescaped));
-                        }
-                    }
-                }
-                ast::TemplatePart::Interpolation { expr, format } => {
-                    let resolved = self.resolve_expr(expr, ctx, None);
-                    let format_spec = format.as_ref().map(|f| parse_format_spec(&f.spec));
-                    parts.push(TirTemplatePart::Interpolation {
-                        expr: Box::new(resolved),
-                        format_spec,
-                    });
-                }
+            if let ast::TemplatePart::Interpolation { expr, .. } = part {
+                let _ = self.resolve_expr(expr, ctx, None);
             }
         }
 
-        TirExpr::new(TirExprKind::TemplateString { parts }, string_type, span)
+        TirExpr::new(TirExprKind::Unit, string_type, template.span)
     }
 }
 
