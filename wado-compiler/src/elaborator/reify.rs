@@ -5986,7 +5986,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::name::{LocalMethodName, MethodName};
         use crate::tir::{CallArg, ResolvedType, TirExprKind, TypeId};
 
         // Reuse the static-method `FunctionRef` annotate resolved
@@ -6125,43 +6124,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
-        let mangled_method_name = MethodName::format_local(&struct_name, None, &static_call.method);
-
-        let explicit_method_type_args: Vec<TypeId> = static_call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
-        let type_args: Vec<TypeId> = if explicit_method_type_args.is_empty() {
-            self.ann_generic_instantiations(static_call.id)
-                .map(|gi| gi.type_args)
-                .unwrap_or_default()
-        } else {
-            explicit_method_type_args
-        };
-
-        let args: Vec<CallArg> = static_call
-            .args
-            .iter()
-            .map(|a| CallArg::new(self.reify_expr(a, ctx, None), false))
-            .collect();
-
-        let method_info = LocalMethodName::new(struct_name, None, static_call.method.clone());
-
-        TirExpr::new(
-            TirExprKind::Call {
-                func: crate::tir::FunctionRef {
-                    module_source: struct_module,
-                    name: mangled_method_name,
-                    monomorph_info: None,
-                    method_info: Some(method_info),
-                },
-                type_args,
-                args,
-            },
-            recorded_type,
-            static_call.span,
-        )
+        // Everything else flows through `static_method_dispatch` above —
+        // `resolve_static_method_call` records the resolved
+        // `FunctionRef` for every non-variant static call. Hitting this
+        // shape means annotate diagnosed an unresolvable call.
+        let _ = (struct_name, struct_module);
+        TirExpr::new(TirExprKind::Unit, crate::tir::TypeTable::ERROR, static_call.span)
     }
 
     /// Parameter `(name, default)` list of a free function in
