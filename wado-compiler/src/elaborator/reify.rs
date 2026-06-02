@@ -493,6 +493,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     for tir_func in self.reify_impl(impl_block) {
                         tir_module.add_function(tir_func);
                     }
+                    // Stage 5 completion (transitional dual-emit): also
+                    // synthesise the impl's trait default methods from the
+                    // per-impl `ModuleSemantics` snapshots that the combined
+                    // walk recorded on `sem.default_method_semantics`. The
+                    // existing `pending_default_methods` drain below still
+                    // produces TIR too, so this step intentionally emits the
+                    // same default-method `TirFunction` twice; the
+                    // duplicate-name diagnostic / WIR validation that
+                    // follows is the verification that reify's synthesis
+                    // matches the combined walk's. Step 5 of the migration
+                    // removes the drain.
+                    for tir_func in self.reify_impl_default_methods(impl_block) {
+                        tir_module.add_function(tir_func);
+                    }
                 }
                 Item::Trait(_) => {
                     // Trait declarations don't lower to TIR; the elaborator
@@ -1022,6 +1036,130 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .iter()
             .filter_map(|method| self.reify_method(method, &facts))
             .collect()
+    }
+
+    /// Synthesise the trait default-method `TirFunction`s for `impl_block`.
+    ///
+    /// Mirrors the combined walk's default-method loop in
+    /// `elaborator.rs`'s `Item::Impl` arm: for each default method on the
+    /// impl's trait that the impl does not override, build a `TirFunction`
+    /// keyed `Struct^Trait::method`. Reify reads the per-impl body-walk
+    /// facts from `sem.default_method_semantics[(impl_block.id,
+    /// default_method.id)]` (recorded by the combined walk) — each entry
+    /// is a full `ModuleSemantics` cloned with the trait module's facts in
+    /// its `types` / `bindings` and the impl module's `decls` / `imports`
+    /// so [`Self::reify_method`] sees both.
+    ///
+    /// The swap pattern is identical to
+    /// [`Self::with_const_module_perspective`]: `self.sem`,
+    /// `self.current_module_source`, and `self.current_module_items` are
+    /// replaced with the trait module's view for the duration of the body
+    /// walk so the `ann_*` accessors' `SymbolKey`s name the trait module
+    /// (where the facts were keyed).
+    fn reify_impl_default_methods(
+        &mut self,
+        impl_block: &ast::ImplBlock,
+    ) -> Vec<TirFunction> {
+        use crate::name::MethodName;
+
+        if impl_block.is_synthesize_request {
+            return Vec::new();
+        }
+        let Some(trait_ast) = impl_block.trait_type.as_ref() else {
+            return Vec::new();
+        };
+        let impl_key =
+            crate::symbol::SymbolKey::new(self.current_module_source.clone(), impl_block.id);
+        let Some(facts) = self.sem.types.impl_facts.get(&impl_key).cloned() else {
+            return Vec::new();
+        };
+        let Some(trait_name_mangled) = facts.trait_name_mangled.clone() else {
+            return Vec::new();
+        };
+        let struct_name = facts.struct_name.clone();
+
+        // Same trait-decl lookup the combined walk does.
+        let trait_decl_name = super::Elaborator::<H>::get_type_name_static(trait_ast);
+        let Some((trait_methods, trait_module)) =
+            super::trait_query::find_trait_decl_methods_with_module_with(
+                &trait_decl_name,
+                &self.current_module_source,
+                self.current_module_items,
+                &self.sem.imports,
+                self.symbols,
+                &self.tysys.trait_env,
+                self.loaded_modules,
+            )
+        else {
+            return Vec::new();
+        };
+        let provided: crate::hashmap::IndexSet<&str> =
+            impl_block.methods.iter().map(|m| m.name.as_str()).collect();
+        let default_methods: Vec<ast::Function> = trait_methods
+            .into_iter()
+            .filter(|m| m.body.is_some() && !provided.contains(m.name.as_str()))
+            .collect();
+
+        let trait_items: &'a [ast::Item] = self
+            .loaded_modules
+            .get(&trait_module)
+            .map(|m| m.items.as_slice())
+            .unwrap_or(&[]);
+
+        let mut out = Vec::with_capacity(default_methods.len());
+        for default_method in &default_methods {
+            // The per-impl `ModuleSemantics` snapshot lives on the parent
+            // `self.sem.default_method_semantics`. Borrow it at `'a` — the
+            // parent is `&'a ModuleSemantics`, so `IndexMap::get` returns
+            // `Option<&'a ModuleSemantics>`, which is exactly what
+            // `self.sem` accepts in the swap.
+            let key = (impl_block.id, default_method.id);
+            let Some(synth_sem) = self.sem.default_method_semantics.get(&key) else {
+                // Combined walk did not record a synthesis for this default
+                // method (e.g. `resolve_method` returned `None` in
+                // error-recovery). Skip — reify produces no TIR for it.
+                continue;
+            };
+
+            // Swap perspective. Both `self.sem` and the swap target carry
+            // lifetime `'a` (from the parent `&'a ModuleSemantics`), so
+            // the `mem::replace` is a pointer swap.
+            let saved_sem = std::mem::replace(&mut self.sem, synth_sem);
+            let saved_module_source = std::mem::replace(
+                &mut self.current_module_source,
+                trait_module.clone(),
+            );
+            let saved_module_items =
+                std::mem::replace(&mut self.current_module_items, trait_items);
+
+            let tir_func_opt = self.reify_method(default_method, &facts);
+
+            self.current_module_items = saved_module_items;
+            self.current_module_source = saved_module_source;
+            self.sem = saved_sem;
+
+            if let Some(mut tir_func) = tir_func_opt {
+                // The combined walk overwrites the name with
+                // `format_local(struct, trait, method)` after
+                // `resolve_method` returns. `reify_method` would have
+                // already read this exact string from
+                // `ann_method_names(func.id)`; the overwrite here is a
+                // safety net for the synthesis path and matches the
+                // combined walk byte-for-byte.
+                tir_func.name = MethodName::format_local(
+                    &struct_name,
+                    Some(&trait_name_mangled),
+                    &default_method.name,
+                );
+                // Default methods from trait declarations are not marked
+                // pub in the AST, but they should be treated as pub since
+                // they are part of a trait implementation.
+                tir_func.is_pub = true;
+                out.push(tir_func);
+            }
+        }
+
+        out
     }
 
     /// Reify a single method inside an `impl` block. The method's
