@@ -53,9 +53,8 @@ changes that move trait/operator diagnostics from `proximate` toward `all`.
 Add `TypeError::OperatorNotApplicable { op, operands, note }` and route every
 operator type error through it. The requires-trait check inspects both
 operands, so a pair that cannot combine under the operator produces one
-symmetric message naming both types regardless of operand order, e.g.
-`` operator `-` cannot be applied to types `i32` and `Array<i32>` ``. The
-misleading "invalid pattern:" prefix is gone.
+symmetric message naming both types regardless of operand order, and the
+misleading "invalid pattern:" prefix is gone (see Examples).
 
 ### Trait-bound reason chains
 
@@ -64,13 +63,8 @@ auto-derive structure (struct fields, generic-struct fields with type-argument
 substitution, and variant payloads), finds the first member that breaks the
 trait, and recurses into it. The result is a step-by-step chain, depth-bounded
 and cycle-guarded, carried on `TraitBoundNotSatisfied` and rendered by default
-as indented `note:` lines beneath the headline at every bound-check site:
-
-```
-error: type 'Outer' does not implement trait 'Ord' required by bound on 'T'
-  note: `Outer` does not implement `Ord` because field `inner` of type `Inner` does not implement `Ord`
-  note: `Inner` does not implement `Ord` because field `f` of type `fn() -> i32` does not implement `Ord`
-```
+as indented `note:` lines beneath the headline at every bound-check site (see
+Examples).
 
 ### Rendering mechanism
 
@@ -80,6 +74,107 @@ in ~85 places and carries a single optional span; adding structured
 secondary-span notes would touch all of them, so it is deferred until the value
 is proven. Substring-matched `compile_error` fixtures keep working because the
 headline is unchanged and notes are appended.
+
+## Examples
+
+All examples are the actual compiler output on the MVP. The location prefix
+(`file:line:col:`) and the leading timestamp are elided for brevity.
+
+### Operator error — symmetry
+
+The same defect under both operand orders previously read as two unrelated
+errors. Source:
+
+```wado
+fn f(a: i32, lst: Array<i32>) -> i32 { return a - lst; }   // and the mirror: lst - a
+```
+
+Before:
+
+```
+// a - lst
+error: type mismatch: expected 'i32', found 'Array<i32>'
+// lst - a
+error: invalid pattern: operator `-` cannot be applied to type `Array<i32>`: type does not implement `Sub`
+```
+
+After:
+
+```
+// a - lst
+error: operator `-` cannot be applied to types `i32` and `Array<i32>`
+// lst - a
+error: operator `-` cannot be applied to types `Array<i32>` and `i32`
+```
+
+### Operator error — same type, missing trait impl
+
+Source:
+
+```wado
+struct V2 { x: i32 }
+let _ = a - b;   // a, b: V2, no `impl Sub for V2`
+```
+
+Before:
+
+```
+error: invalid pattern: operator `-` cannot be applied to type `V2`: type does not implement `Sub`
+```
+
+After:
+
+```
+error: operator `-` cannot be applied to type `V2`: type does not implement `Sub`
+```
+
+### Trait bound — single field
+
+Source:
+
+```wado
+struct Handler { cb: fn(i32) -> i32 }
+fn smallest<T: Ord>(a: T, b: T) -> T { if a < b { return a; } return b; }
+let _ = smallest(Handler { cb: |x: i32| x }, Handler { cb: |x: i32| x });
+```
+
+Before:
+
+```
+error: type 'Handler' does not implement trait 'Ord' required by bound on 'T'
+```
+
+After:
+
+```
+error: type 'Handler' does not implement trait 'Ord' required by bound on 'T'
+  note: `Handler` does not implement `Ord` because field `cb` of type `fn(i32) -> i32` does not implement `Ord`
+```
+
+### Trait bound — recursive chain
+
+Source:
+
+```wado
+struct Inner { f: fn() -> i32 }
+struct Outer { inner: Inner }
+fn smallest<T: Ord>(a: T, b: T) -> T { if a < b { return a; } return b; }
+let _ = smallest(Outer { inner: Inner { f: || 1 } }, Outer { inner: Inner { f: || 2 } });
+```
+
+Before:
+
+```
+error: type 'Outer' does not implement trait 'Ord' required by bound on 'T'
+```
+
+After:
+
+```
+error: type 'Outer' does not implement trait 'Ord' required by bound on 'T'
+  note: `Outer` does not implement `Ord` because field `inner` of type `Inner` does not implement `Ord`
+  note: `Inner` does not implement `Ord` because field `f` of type `fn() -> i32` does not implement `Ord`
+```
 
 ## Consequences
 
