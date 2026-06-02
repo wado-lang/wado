@@ -396,8 +396,8 @@ Trade-offs.
 - [x] **Stage 7a** — routing removed; the combined walk survives only as the
       (still TIR-building) `annotate` fact-recorder.
 - [ ] **Stage 6** — Liveness / DCE. Not started; independent of Stage 7.
-- [ ] **Stage 7** — mechanical reify (7-A) → TIR-free `annotate` (7-B). 7-A in
-      progress:
+- [ ] **Stage 7** — mechanical reify (7-A) → TIR-free `annotate` (7-B). 7-A
+      decision-bearing items done:
   - [x] Function / method signatures — params, return, type params, impl
         type-param scheme, self type — read from recorded facts.
   - [x] Effect / resource op signatures — read from `effect_ops`.
@@ -405,9 +405,22 @@ Trade-offs.
   - [x] Fixed a latent bug the reads exposed: a method generic on an impl that
         binds a concrete trait arg started at the wrong type-param index and
         reached codegen unsubstituted (`trait_method_generic_concrete_trait_arg`).
-  - [ ] Remaining: body-level method-call type args, struct-field re-export
-        recovery, const types, and the mangled-name class (impl identity /
-        struct + method names).
+  - [x] Body-level method-call type args — `MethodDispatch.method_type_args`
+        carries the resolved vector verbatim; reify drops the turbofish
+        re-resolve and the blanket-impl `monomorph_info` fallback.
+  - [x] Struct-field re-export recovery — `resolve_struct` records per-field
+        resolved types under the struct decl's `AstId`; reify drops the
+        UNKNOWN-fallback `resolve_type` on field annotations.
+  - [x] Const types — `sem.decls.associated_constants` stores the resolved
+        `TypeId` directly; the use sites (reify + combined walk) drop their
+        `resolve_type` calls on the const's AST type.
+  - [x] Mangled-name class — the decision-bearing slice (impl-method
+        `base_struct_name` and struct-literal mangled name) reads from
+        `ImplFacts.struct_name` and `GenericInstantiation.mangled_name`. The
+        remaining `MethodName::format_local` sites in reify recombine
+        already-recorded fact fields (`SequenceCoercionFacts`,
+        `KeyValueCoercionFacts`, etc.) and are not decision-bearing; they
+        ride along with the 7-B `resolve_*` strip.
 
 ### Landing log
 
