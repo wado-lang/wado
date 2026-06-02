@@ -6024,63 +6024,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
-        let target_type_id = self.resolve_type(&static_call.target_type);
-        let (struct_name, struct_module): (String, crate::module_source::ModuleSource) = {
-            let tt = self.tysys.type_table.borrow();
-            match tt.get(target_type_id).clone() {
-                ResolvedType::Struct {
-                    name,
-                    module_source,
-                    ..
-                }
-                | ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    ..
-                }
-                | ResolvedType::Newtype {
-                    name,
-                    module_source,
-                    ..
-                }
-                | ResolvedType::Variant {
-                    name,
-                    module_source,
-                }
-                | ResolvedType::Flags {
-                    name,
-                    module_source,
-                }
-                | ResolvedType::Enum {
-                    name,
-                    module_source,
-                }
-                | ResolvedType::Resource {
-                    name,
-                    module_source,
-                }
-                | ResolvedType::GenericResource {
-                    name,
-                    module_source,
-                    ..
-                } => (name, module_source),
-                ResolvedType::Primitive(prim) => (
-                    prim.as_str().to_string(),
-                    crate::module_source::ModuleSource::primitive(),
-                ),
-                _ => (String::new(), self.current_module_source.clone()),
-            }
-        };
-
         // Variant constructor in turbofish form (`Option::<T>::Some(x)`,
-        // `Result::<T, E>::Ok(v)`): the target type is a variant and the
-        // method names one of its cases. Must beat the static-method
-        // dispatch below, which would emit an unresolved `Option::Some`
-        // call. The variant name + instance type come from the call's
-        // recorded expression type (a `GenericInstance` / `Variant`) when
-        // available — reify's own resolution of the turbofish target can
-        // collapse to an empty name for imported / CM args — falling back
-        // to the resolved target type.
+        // `Result::<T, E>::Ok(v)`): annotate's variant-ctor branch in
+        // `resolve_static_method_call` types the expression as the variant
+        // (line 1105+ / 1173+ in method_call.rs), so `recorded_type` is
+        // always the variant instance and reify reads it directly.
         let (variant_name, variant_type, variant_type_args): (String, TypeId, Vec<TypeId>) = {
             let tt = self.tysys.type_table.borrow();
             match tt.get(recorded_type).clone() {
@@ -6088,13 +6036,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name, type_args, ..
                 } => (name, recorded_type, type_args),
                 ResolvedType::Variant { name, .. } => (name, recorded_type, Vec::new()),
-                _ => {
-                    let args = match tt.get(target_type_id).clone() {
-                        ResolvedType::GenericInstance { type_args, .. } => type_args,
-                        _ => Vec::new(),
-                    };
-                    (struct_name.clone(), target_type_id, args)
-                }
+                _ => (String::new(), recorded_type, Vec::new()),
             }
         };
         if let Some(variant_info) = self.type_lookup().variant_case(&variant_name).cloned()
@@ -6130,7 +6072,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `resolve_static_method_call` records the resolved
         // `FunctionRef` for every non-variant static call. Hitting this
         // shape means annotate diagnosed an unresolvable call.
-        let _ = (struct_name, struct_module);
         TirExpr::new(TirExprKind::Unit, crate::tir::TypeTable::ERROR, static_call.span)
     }
 
