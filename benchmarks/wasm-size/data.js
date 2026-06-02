@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780404048593,
+  "lastUpdate": 1780407083104,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -28892,6 +28892,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 17104,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "18abc74f67be5e48623d33c00c9428dda83cf49a",
+          "message": "Merge pull request #1270 from wado-lang/claude/compassionate-ride-8NYul\n\noptimizer(niri): smarter field-env tracking + dead-bounds-check elimination",
+          "timestamp": "2026-06-02T22:22:09+09:00",
+          "tree_id": "58544874ebfa7e99b13eecff09f0ee182ebe85ec",
+          "url": "https://github.com/wado-lang/wado/commit/18abc74f67be5e48623d33c00c9428dda83cf49a"
+        },
+        "date": 1780407082566,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9699,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17195,
             "unit": "bytes"
           },
           {
