@@ -5,8 +5,8 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
-    CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind,
-    TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -1034,6 +1034,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => expr.type_id,
         };
 
+        // NOTE (Stage 7-B): `resolve_unary` still builds its `Unary` TIR.
+        // The `*ptr` / `&x` / `&mut x` shapes are structurally inspected by
+        // `assign_to_target`'s l-value validation and by receiver
+        // adjustment, so the resolved `kind` must stay real until those
+        // consumers read the validity from the AST instead. Converting this
+        // to a placeholder broke `*x = v` ("expression is not assignable").
         TirExpr::new(
             TirExprKind::Unary {
                 op,
@@ -1176,17 +1182,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             },
                         );
 
-                        return Self::build_tir_method_call(
-                            receiver,
-                            func,
-                            vec![],
-                            vec![
-                                CallArg::new(index_resolved, false),
-                                CallArg::new(value_tir, false),
-                            ],
-                            TypeTable::UNIT,
-                            span,
-                        );
+                        // Stage 7-B: reify rebuilds `arr.index_assign(idx,
+                        // value)` from the recorded `index_assign_dispatch` +
+                        // AST; project only the (unit) result type. `receiver`
+                        // / `index_resolved` / `value_tir` were resolved above
+                        // for their fact-recording side effects.
+                        let _ = (receiver, index_resolved, value_tir);
+                        return placeholder(TypeTable::UNIT, span);
                     }
                 }
             }
@@ -1237,16 +1239,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                     return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
                 }
-                // Generate GlobalVarSet instead of Assign
-                return TirExpr::new(
-                    TirExprKind::GlobalVarSet {
-                        module_source: module_source.clone(),
-                        name: name.clone(),
-                        value: Box::new(value_tir),
-                    },
-                    TypeTable::UNIT,
-                    span,
-                );
+                // Stage 7-B: reify rebuilds the `GlobalVarSet` from the AST;
+                // project only the (unit) result type.
+                let _ = value_tir;
+                return placeholder(TypeTable::UNIT, span);
             }
         }
 
@@ -1284,14 +1280,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
         }
 
-        TirExpr::new(
-            TirExprKind::Assign {
-                target: Box::new(target),
-                value: Box::new(value_tir),
-            },
-            TypeTable::UNIT,
-            span,
-        )
+        // Stage 7-B: reify rebuilds the `Assign` from the AST + recorded
+        // target / value types; project only the (unit) result type. The
+        // target + value were resolved above for their side effects, and the
+        // l-value validation / global-mutability checks already ran.
+        let _ = (target, value_tir);
+        placeholder(TypeTable::UNIT, span)
     }
 
     /// Resolve `target op= value` as the equivalent `target = target op value`,
@@ -1359,7 +1353,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         chain: &ast::ComparisonChainExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        use crate::tir::{TirBlock, TirStmt, TirStmtKind};
+        use crate::tir::TirStmt;
 
         if chain.comparisons.is_empty() {
             // Degenerate parse — no chain expansion fires, so this is not
@@ -1439,14 +1433,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         ctx.exit_scope();
 
-        // Wrap the bindings + final && chain in a TIR Block whose value is
-        // the boolean result.
-        stmts.push(TirStmt::new(TirStmtKind::Expr(acc_tir), chain.span));
-        TirExpr::new(
-            TirExprKind::Block(TirBlock::new(stmts, chain.span)),
-            TypeTable::BOOL,
-            chain.span,
-        )
+        // Stage 7-B: reify rebuilds the `(a<b) && (b<c) …` Block (with the
+        // `__mK` middle bindings) from the recorded `ComparisonChain`
+        // desugar + the AST; the combined walk projects only the boolean
+        // result type. The operand resolutions, middle-binding local
+        // allocations, and per-comparison dispatch above ran for their
+        // fact-recording side effects.
+        let _ = (stmts, acc_tir);
+        placeholder(TypeTable::BOOL, chain.span)
     }
 
     /// Helper: bind a comparison-chain middle term to a `__mK` local and
