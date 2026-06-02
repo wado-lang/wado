@@ -58,13 +58,14 @@ pub struct Parser {
     /// Syntax errors collected during error recovery. Drained via
     /// [`Parser::take_errors`] after [`Parser::parse`].
     errors: Vec<ParseError>,
-    /// True while parsing a statement-level expression non-speculatively (set
-    /// by [`Parser::parse_expr_recovering`]). Enables operand-position recovery
-    /// inside the binary / assignment parsers: a missing right operand becomes
-    /// an [`Expr::Error`] placeholder so the partial expression (`a + <error>`)
-    /// and its statement survive. Left `false` everywhere else — in particular
-    /// during `checkpoint`/`restore` speculation — so a real parse error is
-    /// never masked from a backtracking caller.
+    /// Set by [`Parser::parse_expr_recovering`] for the duration of a
+    /// statement-level expression. Enables operand-position recovery inside the
+    /// binary / assignment parsers: a missing right operand becomes an
+    /// [`Expr::Error`] placeholder so the partial expression (`a + <error>`) and
+    /// its statement survive. The `checkpoint`/`restore` speculative paths only
+    /// parse types and patterns, never binary/assignment operands, so they
+    /// never reach the recovery branch — a real parse error is never masked from
+    /// a backtracking caller even when this flag is set across a checkpoint.
     recovering: bool,
 }
 
@@ -658,11 +659,10 @@ impl Parser {
     /// (its `let` binding, `return`, expression-statement node) intact instead
     /// of discarding it, so e.g. `let x = a + ;` still binds `x`.
     ///
-    /// Must only be called from non-speculative statement positions — never
-    /// from inside a `checkpoint`/`restore` — so a real parse error is never
-    /// masked from a backtracking caller. The speculative paths
-    /// (`parse_pattern` / `parse_type` / primary-name `::` lookahead) call
-    /// [`Parser::parse_expr`] directly and keep their `Result`.
+    /// Call only from statement positions. It sets [`Parser::recovering`], which
+    /// turns on operand recovery in the binary / assignment parsers (see that
+    /// field); the `checkpoint`/`restore` speculative paths never reach those,
+    /// so a backtracking caller's error is never masked.
     fn parse_expr_recovering(&mut self) -> Expr {
         let before = self.pos;
         // Enable operand-position recovery inside the binary / assignment
@@ -3024,8 +3024,7 @@ impl Parser {
     /// [`Parser::recovering`] is set: the error is reported, tokens are skipped
     /// to the current delimited context's boundary, and an [`Expr::Error`]
     /// placeholder is returned so the partial expression (`a + <error>`) and its
-    /// statement survive. Outside recovery — the default, and crucially during
-    /// speculative `checkpoint`/`restore` parsing — the error propagates
+    /// statement survive. With recovery off (the default), the error propagates
     /// unchanged so a backtracking caller still sees it.
     fn parse_operand_or_recover(
         &mut self,
@@ -7727,7 +7726,8 @@ line 2
         // missing right before the `if` body. Operand recovery must stop at the
         // body-introducing `{` (not skip into the block), so the `if` keeps both
         // branch blocks and, crucially, the following `return y;` survives.
-        // Regression: previously this collapsed the whole function body.
+        // Without the body-brace stop the recovery swallowed the block and
+        // collapsed the rest of the function body.
         let (module, errors) = parse_recovering(
             "fn f() -> i32 {\n    let y = if a + { 1 } else { 2 };\n    return y;\n}\n",
         );
