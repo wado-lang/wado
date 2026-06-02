@@ -189,6 +189,12 @@ pub enum TypeError {
         type_name: String,
         trait_name: String,
         param_name: String,
+        /// Reason chain explaining *why* `type_name` does not implement
+        /// `trait_name`, walking the auto-derive structure step by step
+        /// (e.g. "`Handler` does not implement `Ord` because field `cb` …").
+        /// Empty when no structural explanation is available. Rendered as
+        /// indented `note:` lines beneath the headline message.
+        reason: Vec<String>,
         span: Span,
     },
 
@@ -404,6 +410,17 @@ pub enum TypeError {
 /// message names one operand type when `operands` has a single entry and
 /// both when it has two, keeping the wording symmetric regardless of which
 /// operand triggered the error.
+/// Append a trait-bound reason chain as indented `note:` lines beneath a
+/// headline message. Shared by the `Display` impl and the `Diagnostic`
+/// conversion so the chain renders identically on every surface.
+pub(super) fn append_reason_chain(mut message: String, reason: &[String]) -> String {
+    for step in reason {
+        message.push_str("\n  note: ");
+        message.push_str(step);
+    }
+    message
+}
+
 pub(super) fn format_operator_not_applicable(
     op: &str,
     operands: &[String],
@@ -504,13 +521,14 @@ impl std::fmt::Display for TypeError {
                 type_name,
                 trait_name,
                 param_name,
+                reason,
                 span,
             } => {
-                write!(
-                    f,
+                let headline = format!(
                     "{}:{}: type '{}' does not implement trait '{}' required by bound on '{}'",
                     span.line, span.column, type_name, trait_name, param_name
-                )
+                );
+                write!(f, "{}", append_reason_chain(headline, reason))
             }
             TypeError::InvalidPattern { message, span } => {
                 write!(
@@ -863,11 +881,15 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 type_name,
                 trait_name,
                 param_name,
+                reason,
                 span,
             } => (
                 Code::TypeMismatch,
-                format!(
-                    "type '{type_name}' does not implement trait '{trait_name}' required by bound on '{param_name}'"
+                append_reason_chain(
+                    format!(
+                        "type '{type_name}' does not implement trait '{trait_name}' required by bound on '{param_name}'"
+                    ),
+                    reason,
                 ),
                 *span,
             ),

@@ -275,6 +275,55 @@ export fn run() { let _ = f(1, [2, 3]); }
     );
 }
 
+#[test]
+fn trait_bound_error_explains_offending_field() {
+    // When a `T: Ord` bound is unsatisfied, the diagnostic must explain WHY:
+    // name the struct field whose type breaks the auto-derive, not just state
+    // that the type "does not implement Ord".
+    let msg = compile_err_contains(
+        r"
+struct Handler { cb: fn(i32) -> i32 }
+fn smallest<T: Ord>(a: T, b: T) -> T {
+    if a < b { return a; }
+    return b;
+}
+export fn run() {
+    let _ = smallest(Handler { cb: |x: i32| x }, Handler { cb: |x: i32| x });
+}
+",
+        "does not implement trait 'Ord'",
+    );
+    assert!(
+        msg.contains("note:") && msg.contains("field `cb`"),
+        "expected a reason chain naming field `cb`, got: {msg}"
+    );
+}
+
+#[test]
+fn trait_bound_error_reason_chain_is_recursive() {
+    // The reason chain unfolds through nested structs: Outer fails because
+    // field `inner: Inner` fails, which in turn fails because field `f` is a
+    // function type.
+    let msg = compile_err_contains(
+        r"
+struct Inner { f: fn() -> i32 }
+struct Outer { inner: Inner }
+fn smallest<T: Ord>(a: T, b: T) -> T {
+    if a < b { return a; }
+    return b;
+}
+export fn run() {
+    let _ = smallest(Outer { inner: Inner { f: || 1 } }, Outer { inner: Inner { f: || 2 } });
+}
+",
+        "does not implement trait 'Ord'",
+    );
+    assert!(
+        msg.contains("field `inner`") && msg.contains("field `f`"),
+        "expected a recursive reason chain (Outer -> inner -> f), got: {msg}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Unary trait operators (Neg, BitNot) go through the same subsystem
 // ---------------------------------------------------------------------------

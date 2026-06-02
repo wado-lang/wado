@@ -3543,10 +3543,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         for bound in bounds {
                             if !self.type_implements_trait(type_arg, bound) {
                                 let type_name = self.type_id_to_string(type_arg);
+                                let reason = self.trait_unimpl_reason_chain(type_arg, bound);
                                 let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                                     type_name,
                                     trait_name: bound.clone(),
                                     param_name: param_name.clone(),
+                                    reason,
                                     span: struct_lit.span,
                                 });
                             }
@@ -4485,10 +4487,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !self.type_implements_trait(element_type, &ord_trait_name)
         {
             let type_name = self.type_id_to_string(element_type);
+            let reason = self.trait_unimpl_reason_chain(element_type, &ord_trait_name);
             let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                 type_name,
                 trait_name: ord_trait_name,
                 param_name: "T".to_string(),
+                reason,
                 span: range.span,
             });
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
