@@ -16,8 +16,6 @@ use t from "../../grammars/ParserExec/IfIfElseNonGreedyBinding1.g4"
         },
     };
 
-#[TODO]
-// triage: parse-accepts-input: emit shape for `(elem)??` now matches the Option<T> CST decl (so the test compiles), but the parser still applies greedy `(elem)?` prediction. ANTLR4's `??` prefers not-matching when the lookahead is ambiguous; the descriptor's expected parse tree binds the `else` to the outer if. Implementing prefer-skip prediction requires either a follow-set guard on the Optional dispatch or a runtime ATN simulator (TODO.md).
 test "stage_a_parse: ParserExec/IfIfElseNonGreedyBinding1" {
     let input = "if y if y x else x";
     let result = t::parse_start(&input);

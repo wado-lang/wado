@@ -35,6 +35,7 @@ use {
 use { ErrorCode } from "wasi:filesystem/types.wado";
 use { CodeWriter } from "../src/wadopoet.wado";
 use { strip_action_bodies } from "../src/g4/action_strip.wado";
+use { to_snake_case } from "../src/ident.wado";
 
 // ===== Constants =====
 
@@ -779,22 +780,16 @@ fn emit_stage_a_parse_test_file(category: &String, name: &String, input: &String
 }
 
 /// Pick the public parser entry to call for a descriptor's `[start]`.
-/// Returns `parse` when no `[start]` is set (the default — Gale's
-/// generated parser enters at the first parser rule), or
-/// `parse_<start>` when `[start]` names a specific rule. The per-rule
-/// entry is emitted by `gen_parse_rule_input_entry` in
-/// `package-gale/src/parser_gen.wado`, so any non-empty `[start]`
-/// resolves to a real public function in the generated module.
-///
-/// Parser-rule identifiers in ANTLR4 grammars start with a lowercase
-/// letter and never contain dashes, so the raw `[start]` value is
-/// already a valid snake-case Wado identifier — no conversion needed.
+/// Returns `parse` (the first-rule alias) when no `[start]` is set, or
+/// `parse_<snake_case(start)>` otherwise — Gale's codegen normalises
+/// rule names to snake_case (e.g. `cppCompilationUnit` →
+/// `parse_cpp_compilation_unit`).
 fn parse_call_for_start(start: &String) -> String {
     let trimmed = start.trim();
     if trimmed.is_empty() {
         return "parse";
     }
-    return `parse_{trimmed}`;
+    return `parse_{to_snake_case(&trimmed)}`;
 }
 
 /// Categories whose descriptors are emitted as Stage A claim (c)
