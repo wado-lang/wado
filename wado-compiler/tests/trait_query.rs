@@ -222,6 +222,59 @@ export fn run() {
     );
 }
 
+#[test]
+fn operator_error_is_not_labeled_invalid_pattern() {
+    // Operator type errors must read as operator errors, not as
+    // "invalid pattern:" — the latter is reserved for actual pattern
+    // contexts (match arms, `if let`, destructuring). Routing operator
+    // errors through `InvalidPattern` mislabeled them.
+    let msg = compile_err_contains(
+        r#"
+export fn run() {
+    let _ = "x" - 3;
+}
+"#,
+        "cannot be applied",
+    );
+    assert!(
+        !msg.contains("invalid pattern"),
+        "operator error must not be labeled `invalid pattern`, got: {msg}"
+    );
+}
+
+#[test]
+fn operator_mismatch_is_symmetric_in_operand_order() {
+    // A binary operator applied to two incompatible types must produce
+    // the same kind of message regardless of which operand is the
+    // non-primitive one. Previously `a - lst` (primitive lhs) reported a
+    // `TypeMismatch` while `lst - a` (non-primitive lhs) reported an
+    // operator error, so the same defect read completely differently
+    // depending on operand order.
+    let left_primitive = compile_err_contains(
+        r"
+fn f(a: i32, lst: Array<i32>) -> i32 { return a - lst; }
+export fn run() { let _ = f(1, [2, 3]); }
+",
+        "cannot be applied",
+    );
+    let left_non_primitive = compile_err_contains(
+        r"
+fn f(a: i32, lst: Array<i32>) -> i32 { return lst - a; }
+export fn run() { let _ = f(1, [2, 3]); }
+",
+        "cannot be applied",
+    );
+    // Both name the two operand types.
+    assert!(
+        left_primitive.contains("i32") && left_primitive.contains("Array<i32>"),
+        "expected both operand types, got: {left_primitive}"
+    );
+    assert!(
+        left_non_primitive.contains("i32") && left_non_primitive.contains("Array<i32>"),
+        "expected both operand types, got: {left_non_primitive}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Unary trait operators (Neg, BitNot) go through the same subsystem
 // ---------------------------------------------------------------------------

@@ -195,6 +195,22 @@ pub enum TypeError {
     /// Invalid pattern in context
     InvalidPattern { message: String, span: Span },
 
+    /// A unary or binary operator cannot be applied to its operand type(s).
+    ///
+    /// Replaces the former practice of routing operator errors through
+    /// `InvalidPattern`, which mislabeled them with an "invalid pattern:"
+    /// prefix. `operands` holds one type name when both operands share a
+    /// type (or for unary operators) and two names when a binary operator
+    /// is applied to two differing types; `note` carries an optional
+    /// explanation appended after a colon (e.g. "type does not implement
+    /// `Sub`").
+    OperatorNotApplicable {
+        op: String,
+        operands: Vec<String>,
+        note: Option<String>,
+        span: Span,
+    },
+
     /// Invalid type cast
     InvalidCast {
         from: String,
@@ -381,6 +397,29 @@ pub enum TypeError {
     },
 }
 
+/// Render the human-readable body of an [`TypeError::OperatorNotApplicable`].
+///
+/// Shared by the `Display` impl and the `From<TypeError> for Diagnostic`
+/// conversion so both surfaces phrase operator errors identically. The
+/// message names one operand type when `operands` has a single entry and
+/// both when it has two, keeping the wording symmetric regardless of which
+/// operand triggered the error.
+pub(super) fn format_operator_not_applicable(
+    op: &str,
+    operands: &[String],
+    note: Option<&str>,
+) -> String {
+    let base = match operands {
+        [t] => format!("operator `{op}` cannot be applied to type `{t}`"),
+        [l, r] => format!("operator `{op}` cannot be applied to types `{l}` and `{r}`"),
+        _ => format!("operator `{op}` cannot be applied"),
+    };
+    match note {
+        Some(note) => format!("{base}: {note}"),
+        None => base,
+    }
+}
+
 impl std::fmt::Display for TypeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -478,6 +517,20 @@ impl std::fmt::Display for TypeError {
                     f,
                     "{}:{}: invalid pattern: {}",
                     span.line, span.column, message
+                )
+            }
+            TypeError::OperatorNotApplicable {
+                op,
+                operands,
+                note,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: {}",
+                    span.line,
+                    span.column,
+                    format_operator_not_applicable(op, operands, note.as_deref())
                 )
             }
             TypeError::InvalidCast {
@@ -821,6 +874,16 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
             TypeError::InvalidPattern { message, span } => (
                 Code::InvalidSyntax,
                 format!("invalid pattern: {message}"),
+                *span,
+            ),
+            TypeError::OperatorNotApplicable {
+                op,
+                operands,
+                note,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format_operator_not_applicable(op, operands, note.as_deref()),
                 *span,
             ),
             TypeError::InvalidCast {

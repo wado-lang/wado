@@ -137,6 +137,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// True when an operand type has no native Wasm binary-op instruction
+    /// and must therefore dispatch through a trait implementation. Used to
+    /// detect operator misuse symmetrically: either operand being such a
+    /// type means the operator cannot fall through to a primitive
+    /// instruction.
+    fn binop_operand_requires_trait(&self, type_id: TypeId) -> bool {
+        let tt = self.tysys.type_table.borrow();
+        match tt.get(type_id) {
+            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
+            ResolvedType::Newtype { base_type, .. } => {
+                let ultimate = tt.get_ultimate_base_type(*base_type);
+                matches!(
+                    tt.get(ultimate),
+                    ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. }
+                )
+            }
+            // Types with no native Wasm binary-op support and no prelude
+            // trait impl. Without rejection, codegen emits `ref.eq` /
+            // `i32.eq` against a GC reference and fails validation.
+            ResolvedType::Function { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::Reactive(_)
+            | ResolvedType::AssocTypeProjection { .. } => true,
+            _ => false,
+        }
+    }
+
     /// Build a binary-op `TirExpr` given pre-resolved operands.
     ///
     /// Shared between [`Self::resolve_binary`] (the user-AST entry point)
@@ -219,8 +247,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     BinaryOp::Or => "||",
                     _ => unreachable!(),
                 };
-                let _ = self.logger.error(TypeError::InvalidPattern {
-                    message: format!("operator `{op_str}` cannot be applied to type `{type_name}`"),
+                let _ = self.logger.error(TypeError::OperatorNotApplicable {
+                    op: op_str.to_string(),
+                    operands: vec![type_name],
+                    note: None,
                     span,
                 });
                 return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
@@ -285,10 +315,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ) else {
                         let type_name = self.tysys.type_table.borrow().type_name(left.type_id);
                         let op_str = if op == BinaryOp::Eq { "==" } else { "!=" };
-                        let _ = self.logger.error(TypeError::InvalidPattern {
-                            message: format!(
-                                "operator `{op_str}` cannot be applied to type `{type_name}` (does not implement Eq trait)"
-                            ),
+                        let _ = self.logger.error(TypeError::OperatorNotApplicable {
+                            op: op_str.to_string(),
+                            operands: vec![type_name],
+                            note: Some("type does not implement `Eq`".to_string()),
                             span,
                         });
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
@@ -339,10 +369,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             BinaryOp::GtEq => ">=",
                             _ => unreachable!(),
                         };
-                        let _ = self.logger.error(TypeError::InvalidPattern {
-                            message: format!(
-                                "operator `{op_str}` cannot be applied to type `{type_name}` (does not implement Ord trait)"
-                            ),
+                        let _ = self.logger.error(TypeError::OperatorNotApplicable {
+                            op: op_str.to_string(),
+                            operands: vec![type_name],
+                            note: Some("type does not implement `Ord`".to_string()),
                             span,
                         });
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
@@ -644,9 +674,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     BinaryOp::Mod => "%",
                     _ => unreachable!(),
                 };
-                let _ = self.logger.error(TypeError::InvalidPattern {
-                    message: format!(
-                        "arithmetic operator `{op_char}` is not allowed on flags types; use bitwise operators (`|`, `&`, `^`) instead"
+                let type_name = self.tysys.type_table.borrow().type_name(left.type_id);
+                let _ = self.logger.error(TypeError::OperatorNotApplicable {
+                    op: op_char.to_string(),
+                    operands: vec![type_name],
+                    note: Some(
+                        "flags types support only bitwise operators (`|`, `&`, `^`)".to_string(),
                     ),
                     span,
                 });
@@ -668,52 +701,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ResolvedType::Primitive(PrimitiveType::F32) => "f32",
                     _ => "f64",
                 };
-                let _ = self.logger.error(TypeError::InvalidPattern {
-                    message: format!(
-                        "operator `%` is not supported on `{type_name}`; use `{type_name}::fmod(a, b)` instead"
-                    ),
+                let _ = self.logger.error(TypeError::OperatorNotApplicable {
+                    op: "%".to_string(),
+                    operands: vec![type_name.to_string()],
+                    note: Some(format!("use `{type_name}::fmod(a, b)` instead")),
                     span,
                 });
                 return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
             }
         }
 
-        // If the left operand is a non-primitive type that cannot fall through
-        // to a native Wasm binary instruction, it must dispatch through a
-        // trait implementation.  Reaching here with such a type means no
-        // matching trait impl was found — emit a diagnostic before we can
-        // accidentally build a TIR `Binary` node that would crash codegen
-        // with "type mismatch: expected ... found (ref $type)" on Wasm
-        // validation (see regression fixture `typecheck_binop_fn_eq.wado`).
+        // If either operand is a non-primitive type that cannot fall through
+        // to a native Wasm binary instruction, the operator must dispatch
+        // through a trait implementation. Reaching here means no matching
+        // impl was found — emit a diagnostic before we accidentally build a
+        // TIR `Binary` node that would crash codegen with "type mismatch:
+        // expected ... found (ref $type)" on Wasm validation (see regression
+        // fixture `typecheck_binop_fn_eq.wado`). Checking both operands keeps
+        // the message symmetric: `a - lst` and `lst - a` report the same
+        // error regardless of which side is the non-primitive one.
         {
-            let requires_trait = match &left_type {
-                ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
-                ResolvedType::Newtype { base_type, .. } => {
-                    let tt = self.tysys.type_table.borrow();
-                    let ultimate = tt.get_ultimate_base_type(*base_type);
-                    matches!(
-                        tt.get(ultimate),
-                        ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. }
-                    )
-                }
-                // Types with no native Wasm binary-op support and no trait
-                // implementation in the prelude.  Without this rejection,
-                // codegen emits `ref.eq` / `i32.eq` against a GC reference
-                // and fails validation.
-                ResolvedType::Function { .. }
-                | ResolvedType::Resource { .. }
-                | ResolvedType::GenericResource { .. }
-                | ResolvedType::Reactive(_)
-                | ResolvedType::AssocTypeProjection { .. } => true,
-                _ => false,
-            };
-            if requires_trait
+            let left_requires = self.binop_operand_requires_trait(left.type_id);
+            let right_requires = self.binop_operand_requires_trait(right.type_id);
+            if (left_requires || right_requires)
                 && !matches!(op, BinaryOp::And | BinaryOp::Or)
                 && left.type_id != TypeTable::ERROR
                 && right.type_id != TypeTable::ERROR
             {
                 let type_table = self.tysys.type_table.borrow();
-                let type_name = type_table.type_name(left.type_id);
+                let left_name = type_table.type_name(left.type_id);
+                let right_name = type_table.type_name(right.type_id);
                 let op_char = match op {
                     BinaryOp::Add => "+",
                     BinaryOp::Sub => "-",
@@ -740,28 +757,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         items.trait_name(CompilerItem::Ord).to_string(),
                     )
                 };
-                let trait_name: String = match op {
-                    BinaryOp::Add => "Add".to_string(),
-                    BinaryOp::Sub => "Sub".to_string(),
-                    BinaryOp::Mul => "Mul".to_string(),
-                    BinaryOp::Div => "Div".to_string(),
-                    BinaryOp::Mod => "Rem".to_string(),
-                    BinaryOp::BitAnd => "BitAnd".to_string(),
-                    BinaryOp::BitOr => "BitOr".to_string(),
-                    BinaryOp::BitXor => "BitXor".to_string(),
-                    BinaryOp::Shl => "Shl".to_string(),
-                    BinaryOp::Shr => "Shr".to_string(),
-                    BinaryOp::Eq | BinaryOp::NotEq => eq_trait_name,
-                    BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => ord_trait_name,
-                    _ => "?".to_string(),
-                };
                 drop(type_table);
-                let _ = self.logger.error(TypeError::InvalidPattern {
-                    message: format!(
-                        "operator `{op_char}` cannot be applied to type `{type_name}`: type does not implement `{trait_name}`"
-                    ),
-                    span,
-                });
+                if left_name == right_name {
+                    // Both operands share a type that lacks the operator's
+                    // trait impl (e.g. `Point - Point` with no `Sub`).
+                    let trait_name: String = match op {
+                        BinaryOp::Add => "Add".to_string(),
+                        BinaryOp::Sub => "Sub".to_string(),
+                        BinaryOp::Mul => "Mul".to_string(),
+                        BinaryOp::Div => "Div".to_string(),
+                        BinaryOp::Mod => "Rem".to_string(),
+                        BinaryOp::BitAnd => "BitAnd".to_string(),
+                        BinaryOp::BitOr => "BitOr".to_string(),
+                        BinaryOp::BitXor => "BitXor".to_string(),
+                        BinaryOp::Shl => "Shl".to_string(),
+                        BinaryOp::Shr => "Shr".to_string(),
+                        BinaryOp::Eq | BinaryOp::NotEq => eq_trait_name,
+                        BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => {
+                            ord_trait_name
+                        }
+                        _ => "?".to_string(),
+                    };
+                    let _ = self.logger.error(TypeError::OperatorNotApplicable {
+                        op: op_char.to_string(),
+                        operands: vec![left_name],
+                        note: Some(format!("type does not implement `{trait_name}`")),
+                        span,
+                    });
+                } else {
+                    // Mixed operand types that cannot combine under this
+                    // operator (e.g. `i32 - Array<i32>`). Reported the same
+                    // way regardless of which operand is non-primitive.
+                    let _ = self.logger.error(TypeError::OperatorNotApplicable {
+                        op: op_char.to_string(),
+                        operands: vec![left_name, right_name],
+                        note: None,
+                        span,
+                    });
+                }
                 return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
             }
         }
