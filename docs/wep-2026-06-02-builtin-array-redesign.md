@@ -267,8 +267,7 @@ and the VS Code grammar.
 - [x] Rename the growable `Array<T>` → `List<T>` everywhere — type, `compiler_item`
       key `"array"` → `"list"`, `CompilerItem::Array` → `List`, stdlib, fixtures,
       grammar, docs — regenerate the WIR snapshots, and gate on green across `-O`
-      levels. Done: `mise run test` and `mise run test-wado` both green; the raw
-      `builtin::array` intrinsic and its WIR ops are untouched, awaiting Phase 1.
+      levels.
 
 ### Phase 1 — Reference-typed `builtin::array` operations (unblocking fix)
 
@@ -279,17 +278,7 @@ work** the hazard was holding up (e.g. const-global globalization).
 
 - [x] Give the `builtin::array_*` mutators `&mut` / readers `&` first parameters,
       fix their call sites in `List` / `String`, and confirm the optimizer now sees
-      the mutation. Done: 9 intrinsic signatures take `&` / `&mut` in
-      `lib/core/builtin.wado`; every call site in `lib/core/**` and the
-      hand-written test fixtures / benchmarks passes `&` / `&mut` explicitly (no
-      auto-ref); `BuiltinRegistry::resolve_type` learns the reference types so
-      monomorphization still pins `T`; the `$value_copy$T` synthesizer wraps the
-      array-clone arg in `Ref` to match the new signature. Downstream consumers
-      that pattern-matched on the by-value shape were updated: WIR-level
-      `array_element_copy_func` peels `Ref` / `MutRef` before discovering the
-      per-element copy helper, and `value_copy_demote` peels the same wrapper for
-      spine-builtin args so a `&mut self.repr` handoff is not misread as element
-      escape. `mise run test` and `mise run test-wado` both green.
+      the mutation.
 
 ### Phase 2 — Expose the raw GC array as a public `Array<T>`
 
@@ -300,36 +289,8 @@ the lowering.
 
 - [x] Declare the definition-less `Array<T>` (`compiler_item("array")`), generalize
       the parser for named definition-less types, re-type the `builtin::array_*`
-      intrinsics, give `Array<T>` standalone value semantics, add the wrapper `impl`,
-      and point `List`'s `repr` at it. Done across three commits:
-      - Value semantics: `needs_value_copy` returns `true` for the raw array and the
-      `$value_copy$T` synthesizer emits `array_clone::<T>(&v)` (the same intrinsic
-      that deep-copies a `List`/`String` `repr`); the stdlib sites that relied on
-      the old hidden aliasing (`List::sort_by` / `copy_within_append`) operate on
-      `self.repr` directly.
-      - A–C: a named definition-less `pub type Name<...>;` parses to a new
-      `Item::BuiltinTypeDecl`; `Array<T>` (`#[compiler_item("array")]`,
-      `core:prelude/array.wado`) resolves to `ResolvedType::BuiltinArray` in all
-      three type resolvers (elaborator, builtin registry, orchestration static
-      pre-pass); type display / WIR mangle / method-name spelling all read
-      `Array<T>`; every `builtin::array<T>` field/parameter in `lib/core/**` and
-      the fixtures migrates to `Array<T>`, with `List` / `String` `repr` pointed
-      at it. The `builtin::array_*` free-function intrinsics keep their names.
-      - D: `impl Array<T>` adds `new` / `filled` / `len` / `get` / `set` / `fill` /
-      `copy_from` plus `IndexValue<i32>` / `IndexAssign<i32>` (`arr[i]` /
-      `arr[i] = v`); the method/monomorphization machinery learns that the raw
-      array's method-owner base name is `Array`, and a named definition-less type
-      registers a `SymbolKind::BuiltinType` (LSP declaration site, `pub use`,
-      prelude collision protection).
-
-      P0 fix surfaced en route: the orchestration static type resolver did not
-      recognise the `Array<T>` spelling, so `String.repr` resolved to `Unknown`
-      (→ `i32`) in the struct-field registry; LICM then hoisted the field access
-      with the wrong type, producing an invalid core module ("expected i32, found
-      (ref …)") at `-O2` only (struct deserialization / kiln generators). Adding the
-      `"Array"` arm to the static resolver closes it; pinned by the
-      `serde_json_struct_deser_o2` fixture. `mise run test` and `mise run test-wado`
-      both green; `Array<T>` is covered by `lib/core/prelude/array_test.wado`.
+      intrinsics, give `Array<T>` standalone value semantics, add the wrapper `impl`
+      + indexing traits, and point `List`'s `repr` at it.
 
 ### Phase 3 — Reference views
 
