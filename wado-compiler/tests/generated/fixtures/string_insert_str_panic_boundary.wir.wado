@@ -102,7 +102,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/string_insert_str_panic_boundary.wado/__cm_export__run"() {
     let s: ref "core:prelude/string.wado//String";
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("日本語"), used: 9 };
-    "core:prelude/string.wado/String::insert_str"(s, 2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("X"), used: 1 });
+    "core:prelude/string.wado/String::insert_str"(s, 2, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(88), used: 1 });
     "wasi/task-return"(0);
 }
 
@@ -352,7 +352,7 @@ fn "core:prelude/string.wado/String::insert_str"(self, byte_index, s) {
         "core:internal/panic"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(189), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("String::insert_str"), used: 18 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado"), used: 24 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_10 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(881, f_10); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("insert_str index not on UTF-8 character boundary"), used: 48 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: self.is_char_boundary(byte_index)
 "), used: 46 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self.is_char_boundary(byte_index): "), used: 35 }); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_15 = __local_6; "core:prelude/format.wado/Formatter::pad"(f_15, (if __v0 -> ref "core:prelude/string.wado//String" {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("true"), used: 4 };
+            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         })); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
@@ -439,9 +439,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

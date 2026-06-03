@@ -214,7 +214,6 @@ fn "wado-compiler/tests/fixtures/var_uninit_valid.wado/__test_9_string_uninit_as
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let f_10: ref "core:prelude/format.wado//Formatter";
     let f_15: ref "core:prelude/format.wado//Formatter";
-    drop(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hi!"), used: 3 });
     __v0 = 3;
     __cond = __v0 == 3;
     if __cond == 0 {
@@ -583,9 +582,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

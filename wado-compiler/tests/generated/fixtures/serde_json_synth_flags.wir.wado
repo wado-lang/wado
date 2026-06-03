@@ -347,7 +347,7 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/__test_2_flags_seri
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms>"(p);
     if __sroa_r_discriminant == 0 {
         json = ref.as_non_null(__sroa_r_case0_payload_0);
-        __cond = "core:prelude/string.wado/String^Eq::eq"(json, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("[]"), used: 2 });
+        __cond = "core:prelude/string.wado/String^Eq::eq"(json, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(91, 93), used: 2 });
         if __cond == 0 {
             "core:internal/panic"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(121), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_2_flags_serialize_none"), used: 29 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_synth_flags.wado"), used: 56 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_10 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(37, f_10); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: json == `[]`
@@ -755,15 +755,15 @@ fn "core:json/write_escaped_string"(buf, s) {
             multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(__iter_2);
             if __sroa___match_7_discriminant == 0 {
                 if __sroa___match_7_payload_0 == 34 {
-                    "core:prelude/string.wado/String::push_str"(buf, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\\\""), used: 2 });
+                    "core:prelude/string.wado/String::push_str"(buf, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 34), used: 2 });
                 } else if __sroa___match_7_payload_0 == 92 {
-                    "core:prelude/string.wado/String::push_str"(buf, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\\\\"), used: 2 });
+                    "core:prelude/string.wado/String::push_str"(buf, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 92), used: 2 });
                 } else if __sroa___match_7_payload_0 == 10 {
-                    "core:prelude/string.wado/String::push_str"(buf, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\\n"), used: 2 });
+                    "core:prelude/string.wado/String::push_str"(buf, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 110), used: 2 });
                 } else if __sroa___match_7_payload_0 == 13 {
-                    "core:prelude/string.wado/String::push_str"(buf, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\\r"), used: 2 });
+                    "core:prelude/string.wado/String::push_str"(buf, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 114), used: 2 });
                 } else if __sroa___match_7_payload_0 == 9 {
-                    "core:prelude/string.wado/String::push_str"(buf, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\\t"), used: 2 });
+                    "core:prelude/string.wado/String::push_str"(buf, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 116), used: 2 });
                 } else if __sroa___match_7_payload_0 <u 32 {
                     "core:prelude/string.wado/String::push_str"(buf, __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; "core:prelude/string.wado/String::push"(__local_5, 92); "core:prelude/string.wado/String::push"(__local_5, 117); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 48, align: 2, sign_plus: 0, zero_pad: 1, width: 4, precision: -2, indent: 0, buf: __local_5 }; "core:prelude/primitive.wado/i32^LowerHex::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: __sroa___match_7_payload_0 }, __local_6); __local_5);
                 } else {
@@ -1417,9 +1417,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
@@ -1542,7 +1542,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
     if truncated {
-        s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("..."), used: 3 };
+        s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
         "core:prelude/string.wado/String::push_str"(f.buf, s);
     }
 }
@@ -1559,7 +1559,7 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Serialize::se
     "core:prelude/string.wado/String::push"(s.buf, 91);
     __fused_payload_4 = struct.new "core:json//JsonSeqSerializer" { buf: s.buf, count: 0 };
     if (self.value & 1) != 0 {
-        drop("core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(__fused_payload_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Read"), used: 4 }));
+        drop("core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(__fused_payload_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 97, 100), used: 4 }));
     }
     if (self.value & 2) != 0 {
         drop("core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(__fused_payload_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Write"), used: 5 }));
@@ -1599,7 +1599,7 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Deserialize::
                 if __sroa___local_4_discriminant == 0 {
                     if ref.is_null(__sroa___local_4_case0_payload_0) == 0 {
                         __local_6 = ref.as_non_null(__sroa___local_4_case0_payload_0);
-                        if "core:prelude/string.wado/String^Eq::eq"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Read"), used: 4 }) {
+                        if "core:prelude/string.wado/String^Eq::eq"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 97, 100), used: 4 }) {
                             __local_3_3 = __local_3_3 | 1;
                             continue l176;
                         }

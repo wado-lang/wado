@@ -260,16 +260,16 @@ fn "wado-compiler/tests/fixtures/serde_json_struct_deser_o2.wado/run"() with Std
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let f_8: ref "core:prelude/format.wado//Formatter";
-    let self_9: i32;
     let f_13: ref "core:prelude/format.wado//Formatter";
-    let self_14: i32;
+    let __sroa_self_value_16: i32;
+    let __sroa_self_value_17: i32;
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "wado-compiler/tests/fixtures/serde_json_struct_deser_o2.wado//Point";
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_string<wado-compiler/tests/fixtures/serde_json_struct_deser_o2.wado/Point>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"x\":3,\"y\":4}"), used: 13 });
     if __sroa_r_discriminant == 0 {
         p = ref.as_non_null(__sroa_r_case0_payload_0);
-        "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_8 = __local_3; self_9 = p.x; "core:prelude/primitive.wado/i32::fmt_decimal"(self_9, f_8); "core:prelude/string.wado/String::push"(__local_2, 44); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_13 = __local_3; self_14 = p.y; "core:prelude/primitive.wado/i32::fmt_decimal"(self_14, f_13); __local_2);
+        "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; __sroa_self_value_16 = p.x; f_8 = __local_3; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_16, f_8); "core:prelude/string.wado/String::push"(__local_2, 44); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; __sroa_self_value_17 = p.y; f_13 = __local_3; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_17, f_13); __local_2);
     } else {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("deserialize Point failed"), used: 24 });
         unreachable;
@@ -1935,9 +1935,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

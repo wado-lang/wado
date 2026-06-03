@@ -132,6 +132,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "core:prelude/int128.wado//u128" = struct.new "core:prelude/int128.wado//u128" { low: 1000_i64, high: 0_i64 };
+global global:__const_obj_1: ref null "core:prelude/int128.wado//i128" = struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 };
+
 fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_args"() with Stdout {
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
@@ -163,8 +166,6 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary"() 
 }
 
 fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i128"() with Stdout {
-    let x_u128: ref "core:prelude/int128.wado//u128";
-    let x_i128: ref "core:prelude/int128.wado//i128";
     let a1: ref "core:prelude/int128.wado//u128";
     let a2: ref "core:prelude/int128.wado//u128";
     let a3: ref "core:prelude/int128.wado//i128";
@@ -201,9 +202,7 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
     let label_88: ref "core:prelude/string.wado//String";
     let cond_95: bool;
     let label_96: ref "core:prelude/string.wado//String";
-    x_u128 = struct.new "core:prelude/int128.wado//u128" { low: 1000_i64, high: 0_i64 };
-    x_i128 = struct.new "core:prelude/int128.wado//i128" { low: -500_i64, high: -1_i64 };
-    a1 = "core:prelude/int128.wado/u128^Add::add"(x_u128, struct.new "core:prelude/int128.wado//u128" { low: 42_i64, high: 0_i64 });
+    a1 = "core:prelude/int128.wado/u128^Add::add"(global:__const_obj_0, struct.new "core:prelude/int128.wado//u128" { low: 42_i64, high: 0_i64 });
     cond_18 = (if a1.low == 1042_i64 -> i32 {
         a1.high == 0_i64;
     } else {
@@ -214,7 +213,7 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_19);
         unreachable;
     }
-    a2 = "core:prelude/int128.wado/u128^Add::add"(struct.new "core:prelude/int128.wado//u128" { low: 42_i64, high: 0_i64 }, x_u128);
+    a2 = "core:prelude/int128.wado/u128^Add::add"(struct.new "core:prelude/int128.wado//u128" { low: 42_i64, high: 0_i64 }, global:__const_obj_0);
     cond_24 = (if a2.low == 1042_i64 -> i32 {
         a2.high == 0_i64;
     } else {
@@ -225,7 +224,7 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_25);
         unreachable;
     }
-    a3 = "core:prelude/int128.wado/i128^Add::add"(x_i128, struct.new "core:prelude/int128.wado//i128" { low: 100_i64, high: 0_i64 });
+    a3 = "core:prelude/int128.wado/i128^Add::add"(global:__const_obj_1, struct.new "core:prelude/int128.wado//i128" { low: 100_i64, high: 0_i64 });
     cond_31 = (if a3.low == -400_i64 -> i32 {
         a3.high == -1_i64;
     } else {
@@ -236,7 +235,7 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_32);
         unreachable;
     }
-    a4 = "core:prelude/int128.wado/i128^Add::add"(struct.new "core:prelude/int128.wado//i128" { low: 100_i64, high: 0_i64 }, x_i128);
+    a4 = "core:prelude/int128.wado/i128^Add::add"(struct.new "core:prelude/int128.wado//i128" { low: 100_i64, high: 0_i64 }, global:__const_obj_1);
     cond_39 = (if a4.low == -400_i64 -> i32 {
         a4.high == -1_i64;
     } else {
@@ -247,7 +246,7 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_40);
         unreachable;
     }
-    b1 = "core:prelude/int128.wado/u128^Sub::sub"(x_u128, struct.new "core:prelude/int128.wado//u128" { low: 100_i64, high: 0_i64 });
+    b1 = "core:prelude/int128.wado/u128^Sub::sub"(global:__const_obj_0, struct.new "core:prelude/int128.wado//u128" { low: 100_i64, high: 0_i64 });
     cond_46 = (if b1.low == 900_i64 -> i32 {
         b1.high == 0_i64;
     } else {
@@ -258,7 +257,7 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_47);
         unreachable;
     }
-    b2 = "core:prelude/int128.wado/u128^Sub::sub"(struct.new "core:prelude/int128.wado//u128" { low: 2000_i64, high: 0_i64 }, x_u128);
+    b2 = "core:prelude/int128.wado/u128^Sub::sub"(struct.new "core:prelude/int128.wado//u128" { low: 2000_i64, high: 0_i64 }, global:__const_obj_0);
     cond_52 = (if b2.low == 1000_i64 -> i32 {
         b2.high == 0_i64;
     } else {
@@ -269,7 +268,7 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_53);
         unreachable;
     }
-    b3 = "core:prelude/int128.wado/i128^Sub::sub"(x_i128, struct.new "core:prelude/int128.wado//i128" { low: 100_i64, high: 0_i64 });
+    b3 = "core:prelude/int128.wado/i128^Sub::sub"(global:__const_obj_1, struct.new "core:prelude/int128.wado//i128" { low: 100_i64, high: 0_i64 });
     cond_59 = (if b3.low == -600_i64 -> i32 {
         b3.high == -1_i64;
     } else {
@@ -280,7 +279,7 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_60);
         unreachable;
     }
-    b4 = "core:prelude/int128.wado/i128^Sub::sub"(struct.new "core:prelude/int128.wado//i128" { low: 100_i64, high: 0_i64 }, x_i128);
+    b4 = "core:prelude/int128.wado/i128^Sub::sub"(struct.new "core:prelude/int128.wado//i128" { low: 100_i64, high: 0_i64 }, global:__const_obj_1);
     cond_67 = (if b4.low == 600_i64 -> i32 {
         b4.high == 0_i64;
     } else {
@@ -291,7 +290,7 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_68);
         unreachable;
     }
-    c1 = "core:prelude/int128.wado/u128^Mul::mul"(x_u128, struct.new "core:prelude/int128.wado//u128" { low: 3_i64, high: 0_i64 });
+    c1 = "core:prelude/int128.wado/u128^Mul::mul"(global:__const_obj_0, struct.new "core:prelude/int128.wado//u128" { low: 3_i64, high: 0_i64 });
     cond_74 = (if c1.low == 3000_i64 -> i32 {
         c1.high == 0_i64;
     } else {
@@ -302,7 +301,7 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_75);
         unreachable;
     }
-    c2 = "core:prelude/int128.wado/u128^Mul::mul"(struct.new "core:prelude/int128.wado//u128" { low: 3_i64, high: 0_i64 }, x_u128);
+    c2 = "core:prelude/int128.wado/u128^Mul::mul"(struct.new "core:prelude/int128.wado//u128" { low: 3_i64, high: 0_i64 }, global:__const_obj_0);
     cond_80 = (if c2.low == 3000_i64 -> i32 {
         c2.high == 0_i64;
     } else {
@@ -313,7 +312,7 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_81);
         unreachable;
     }
-    c3 = "core:prelude/int128.wado/i128^Mul::mul"(x_i128, struct.new "core:prelude/int128.wado//i128" { low: 2_i64, high: 0_i64 });
+    c3 = "core:prelude/int128.wado/i128^Mul::mul"(global:__const_obj_1, struct.new "core:prelude/int128.wado//i128" { low: 2_i64, high: 0_i64 });
     cond_87 = (if c3.low == -1000_i64 -> i32 {
         c3.high == -1_i64;
     } else {
@@ -324,7 +323,7 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_88);
         unreachable;
     }
-    c4 = "core:prelude/int128.wado/i128^Mul::mul"(struct.new "core:prelude/int128.wado//i128" { low: 2_i64, high: 0_i64 }, x_i128);
+    c4 = "core:prelude/int128.wado/i128^Mul::mul"(struct.new "core:prelude/int128.wado//i128" { low: 2_i64, high: 0_i64 }, global:__const_obj_1);
     cond_95 = (if c4.low == -1000_i64 -> i32 {
         c4.high == -1_i64;
     } else {
@@ -335,7 +334,7 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i12
         "core:internal/panic"(label_96);
         unreachable;
     }
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
 fn "wado-compiler/tests/fixtures/coerce_int_1.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -346,7 +345,7 @@ fn "wado-compiler/tests/fixtures/coerce_int_1.wado/__cm_export__run"() {
     "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_args"();
     "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary"();
     "wado-compiler/tests/fixtures/coerce_int_1.wado/coerce_int_literal_binary_i128"();
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
     "wasi/task-return"(0);
 }
 
@@ -780,9 +779,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

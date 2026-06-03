@@ -771,7 +771,7 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/process"(io_ok, valid) {
     let __match_scrut_0: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,wado-compiler/tests/fixtures/try_merged.wado/IoError>";
     __match_scrut_0 = __inline_read_data_0: block -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,wado-compiler/tests/fixtures/try_merged.wado/IoError>" {
         if io_ok {
-            break __inline_read_data_0: struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,wado-compiler/tests/fixtures/try_merged.wado/IoError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("42"), used: 2 } };
+            break __inline_read_data_0: struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,wado-compiler/tests/fixtures/try_merged.wado/IoError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(52, 50), used: 2 } };
         }
         break __inline_read_data_0: struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,wado-compiler/tests/fixtures/try_merged.wado/IoError>::Err" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/try_merged.wado//IoError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("disk error"), used: 10 } } };
     };
@@ -787,9 +787,9 @@ fn "wado-compiler/tests/fixtures/try_merged.wado/process"(io_ok, valid) {
         s = (if valid -> ref "core:prelude/string.wado//String" {
             raw;
         } else {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bad"), used: 3 };
+            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 97, 100), used: 3 };
         });
-        if "core:prelude/string.wado/String^Eq::eq"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("42"), used: 2 }) {
+        if "core:prelude/string.wado/String^Eq::eq"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(52, 50), used: 2 }) {
             break __inline_parse_number_2: struct.new "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/try_merged.wado/ParseError>::Ok" { discriminant: 0, payload_0: 42 };
         }
         break __inline_parse_number_2: struct.new "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/try_merged.wado/ParseError>::Err" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/try_merged.wado//ParseError" { input: s } };
@@ -873,7 +873,7 @@ condition: inner.message == \"disk error\"
         if ref.test "wado-compiler/tests/fixtures/try_merged.wado//AppError::Parse"(e_10) {
             inner_11 = ref.cast "wado-compiler/tests/fixtures/try_merged.wado//AppError::Parse"(e_10).payload_0;
             __v0_12 = inner_11.input;
-            __cond_13 = "core:prelude/string.wado/String^Eq::eq"(__v0_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("bad"), used: 3 });
+            __cond_13 = "core:prelude/string.wado/String^Eq::eq"(__v0_12, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 97, 100), used: 3 });
             if __cond_13 == 0 {
                 "core:internal/panic"(__local_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(136), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_try_op_variant_from"), used: 24 }); "core:prelude/string.wado/String::push"(__local_18, 32); "core:prelude/string.wado/String::push"(__local_18, 97); "core:prelude/string.wado/String::push"(__local_18, 116); "core:prelude/string.wado/String::push"(__local_18, 32); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/try_merged.wado"), used: 44 }); "core:prelude/string.wado/String::push"(__local_18, 58); __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_18 }; f_41 = __local_19; "core:prelude/primitive.wado/i32::fmt_decimal"(233, f_41); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: inner.input == \"bad\"
@@ -1318,9 +1318,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
@@ -1443,7 +1443,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
     if truncated {
-        s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("..."), used: 3 };
+        s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
         "core:prelude/string.wado/String::push_str"(f.buf, s);
     }
 }

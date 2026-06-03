@@ -118,13 +118,13 @@ fn "wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado/run"() with S
     let __b_1: ref "core:prelude//List<wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado/Widget>";
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
-    let self_17: i32;
+    let __sroa_self_value: i32;
     w = struct.new "wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado//Widget" { id: 7 };
     __b_1 = struct.new "core:prelude//List<wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado/Widget>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado//Widget">(w), used: 1 };
-    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; self_17 = if builtin::unlikely(0 >= __b_1.used) {
+    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; __sroa_self_value = if builtin::unlikely(0 >= __b_1.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado//Widget">(__b_1.repr, 0).id; "core:prelude/primitive.wado/i32::fmt_decimal"(self_17, __local_4); __local_3);
+    }; builtin::array_get<ref "wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado//Widget">(__b_1.repr, 0).id; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value, __local_4); __local_3);
 }
 
 fn "wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -406,9 +406,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

@@ -97,11 +97,10 @@ fn "wado-compiler/tests/fixtures/loop_basic.wado/run"() with Stdout {
     let count: i32;
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
-    let self_8: i32;
     count = 0;
     b0: block {
         l1: loop {
-            "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }; "core:prelude/string.wado/String::push"(__local_1, 99); "core:prelude/string.wado/String::push"(__local_1, 111); "core:prelude/string.wado/String::push"(__local_1, 117); "core:prelude/string.wado/String::push"(__local_1, 110); "core:prelude/string.wado/String::push"(__local_1, 116); "core:prelude/string.wado/String::push"(__local_1, 58); "core:prelude/string.wado/String::push"(__local_1, 32); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; self_8 = count; "core:prelude/primitive.wado/i32::fmt_decimal"(self_8, __local_2); __local_1);
+            "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }; "core:prelude/string.wado/String::push"(__local_1, 99); "core:prelude/string.wado/String::push"(__local_1, 111); "core:prelude/string.wado/String::push"(__local_1, 117); "core:prelude/string.wado/String::push"(__local_1, 110); "core:prelude/string.wado/String::push"(__local_1, 116); "core:prelude/string.wado/String::push"(__local_1, 58); "core:prelude/string.wado/String::push"(__local_1, 32); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(count, __local_2); __local_1);
             count = count + 1;
             if count >= 3 {
                 break b0;
@@ -109,7 +108,7 @@ fn "wado-compiler/tests/fixtures/loop_basic.wado/run"() with Stdout {
             continue l1;
         };
     };
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("done"), used: 4 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 });
 }
 
 fn "wado-compiler/tests/fixtures/loop_basic.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -357,9 +356,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
