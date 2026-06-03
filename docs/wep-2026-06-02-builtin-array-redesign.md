@@ -71,14 +71,23 @@ public, with two changes:
   surface). These attach to its declaration site in the prelude (see
   Declaration).
 
-`Array<T>` is the public spelling of the existing `builtin::array<T>` intrinsic —
-the same underlying GC array type, now with a name, a declaration site, and an
-`impl`. The low-level `builtin::array_*()` intrinsics stay exactly as they are and
-remain the lowering layer (they emit `array.new` / `array.get` / `array.set` /
-`array.len` / `array.copy` / `array.fill`). `Array<T>`'s methods are thin Wado
-wrappers that call those intrinsics. The redesign adds a public interface; it does
-not re-implement the lowering, and it does not remove the internal
-`builtin::array_*` layer — users simply stop calling it directly.
+`Array<T>` is the renamed type: the GC array intrinsic spelled `builtin::array<T>`
+today becomes simply `Array<T>`, with a name, a declaration site, and an `impl`.
+The `builtin::array_*()` operations stay as free-function intrinsics — they remain
+the lowering layer that emits `array.new` / `array.get` / `array.set` /
+`array.len` / `array.copy` / `array.fill` — but they are now typed in terms of
+`Array<T>` and the Phase 1 borrows, e.g.
+
+```wado
+builtin::array_get<T>(arr: &Array<T>, index: i32) -> T
+builtin::array_set<T>(arr: &mut Array<T>, index: i32, value: T)
+```
+
+`Array<T>`'s methods are thin Wado wrappers over these intrinsics (`get` calls
+`builtin::array_get(self, index)`, and so on). The redesign renames the type and
+adds a public interface; it does not re-implement the lowering, and it keeps the
+`builtin::array_*` functions as the internal primitive layer — users call the
+methods instead of the free functions.
 
 The only type with reference semantics is now the reference itself (`&T` /
 `&mut T`). The hidden "value type that is secretly a reference" is gone.
@@ -383,23 +392,27 @@ after the rename because it is the minimal step that unblocks other tracks.
 
 ### Phase 2 — Expose the raw GC array as a public `Array<T>`
 
-`builtin::array<T>` and its `builtin::array_*()` intrinsics stay; this phase adds
-the public `Array<T>` spelling and a Wado `impl` over them. It is an
-interface-tidying phase, not a re-implementation of the lowering.
+The GC array intrinsic is renamed `builtin::array<T>` → `Array<T>`; its
+`builtin::array_*()` operations stay as free-function intrinsics, now typed
+against `&Array<T>` / `&mut Array<T>`. This phase adds the `Array<T>` type and a
+Wado `impl` of wrapper methods over those intrinsics — interface tidying, not a
+re-implementation of the lowering.
 
 - [ ] Declare `Array<T>` in the prelude as a definition-less
       `#[compiler_item("array")] pub type Array<T>;`, binding the builtin to
-      `core:prelude` and giving it a declaration site for impls and LSP.
+      `core:prelude` and giving it a declaration site for impls and LSP. This is
+      the type-level rename `builtin::array<T>` → `Array<T>`.
+- [ ] Re-type the `builtin::array_*()` intrinsic signatures to spell `Array<T>`
+      (e.g. `array_get<T>(arr: &Array<T>, index: i32) -> T`).
 - [ ] Generalize the parser: accept a named definition-less `type Name<...>;`
       declaration, not only the tuple form `type [..T];`.
 - [ ] Give `Array<T>` value semantics end to end (it already deep-copies when
       embedded; make it copy as a standalone value too).
 - [ ] Add `impl<T> Array<T>` in Wado whose methods (`new`, `filled`, `len`,
-      `get`, `set`, `fill`, `copy_from`) are thin wrappers calling the existing
-      `builtin::array_*()` intrinsics — the intrinsics and the `builtin::array<T>`
-      spelling stay as the lowering layer. The Phase 1 `&` / `&mut` first
-      parameters line up with `&self` / `&mut self`. Point `List<T>`'s `repr` at
-      `Array<T>`.
+      `get`, `set`, `fill`, `copy_from`) are thin wrappers calling the
+      `builtin::array_*()` intrinsics — the intrinsics stay as the lowering layer.
+      The Phase 1 `&` / `&mut` first parameters line up with `&self` /
+      `&mut self`. Point `List<T>`'s `repr` at `Array<T>`.
 
 ### Phase 3 — Borrowing views
 
