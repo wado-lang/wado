@@ -40,8 +40,8 @@ static CORE_ALLOCATOR: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("a
 static NAME_CLI: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("cli"));
 static CORE_PRELUDE_STRING: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/string.wado"));
-static CORE_PRELUDE_ARRAY: LazyLock<Arc<str>> =
-    LazyLock::new(|| Arc::<str>::from("prelude/array.wado"));
+static CORE_PRELUDE_LIST: LazyLock<Arc<str>> =
+    LazyLock::new(|| Arc::<str>::from("prelude/list.wado"));
 static CORE_PRELUDE_FORMAT: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/format.wado"));
 static CORE_PRELUDE_INT128: LazyLock<Arc<str>> =
@@ -76,7 +76,7 @@ fn well_known_arcs() -> Vec<Arc<str>> {
         CORE_ALLOCATOR.clone(),
         NAME_CLI.clone(),
         CORE_PRELUDE_STRING.clone(),
-        CORE_PRELUDE_ARRAY.clone(),
+        CORE_PRELUDE_LIST.clone(),
         CORE_PRELUDE_FORMAT.clone(),
         CORE_PRELUDE_INT128.clone(),
         CORE_PRELUDE_PRIMITIVE.clone(),
@@ -413,8 +413,8 @@ impl ModuleSource {
         pub fn prelude() = Core { name: CORE_PRELUDE },
         /// `core:prelude/string.wado` — the String type.
         pub fn string() = Core { name: CORE_PRELUDE_STRING },
-        /// `core:prelude/array.wado` — the Array type.
-        pub fn array() = Core { name: CORE_PRELUDE_ARRAY },
+        /// `core:prelude/list.wado` — the List type.
+        pub fn list() = Core { name: CORE_PRELUDE_LIST },
         /// `core:prelude/format.wado` — format trait helpers.
         pub fn format() = Core { name: CORE_PRELUDE_FORMAT },
         /// `core:prelude/int128.wado` — 128-bit integer types.
@@ -779,7 +779,7 @@ mod tests {
             (ModuleSource::allocator(), i.core("allocator")),
             (ModuleSource::cli(), i.core("cli")),
             (ModuleSource::string(), i.core("prelude/string.wado")),
-            (ModuleSource::array(), i.core("prelude/array.wado")),
+            (ModuleSource::list(), i.core("prelude/list.wado")),
             (ModuleSource::format(), i.core("prelude/format.wado")),
             (ModuleSource::int128(), i.core("prelude/int128.wado")),
             (ModuleSource::primitive(), i.core("prelude/primitive.wado")),

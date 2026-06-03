@@ -1,12 +1,12 @@
 use { println, Stdout } from "core:cli";
 
 // ref_mut
-fn append_elements(arr: &mut Array<i32>) {
+fn append_elements(arr: &mut List<i32>) {
     arr.push(4);
     arr.push(5);
 }
 
-fn double_all(arr: &mut Array<i32>) {
+fn double_all(arr: &mut List<i32>) {
     for let mut i = 0; i < arr.len(); i += 1 {
         arr[i] = arr[i] * 2;
     }
@@ -70,7 +70,7 @@ fn get_inner_value(o: &Outer) -> i32 {
 }
 
 // ref_mut_array_append_complex
-fn process(arr: &mut Array<u8>, input: &Array<u8>, count: i32) {
+fn process(arr: &mut List<u8>, input: &List<u8>, count: i32) {
     let mut i = 0;
     while i < count {
         let val = input[i];
@@ -87,7 +87,7 @@ fn process(arr: &mut Array<u8>, input: &Array<u8>, count: i32) {
 }
 
 fn ref_mut_array_ops() with Stdout {
-    let mut nums: Array<i32> = [1, 2, 3];
+    let mut nums: List<i32> = [1, 2, 3];
     println(`len: {nums.len()}`);
 
     append_elements(&mut nums);
@@ -163,8 +163,8 @@ fn ref_nested_mut_write_test() with Stdout {
 }
 
 fn ref_mut_array_append_complex_test() with Stdout {
-    let mut out: Array<u8> = [];
-    let input: Array<u8> = [65, 66, 67, 130];
+    let mut out: List<u8> = [];
+    let input: List<u8> = [65, 66, 67, 130];
     process(&mut out, &input, 4);
     println(`len: {out.len()}`);
     for let mut i = 0; i < out.len(); i += 1 {

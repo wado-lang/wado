@@ -47,8 +47,8 @@ pub use { Method } from "wasi:http";
 /// fields point at shared empty singletons.
 pub struct PathParams {
     path: &String,
-    names: &Array<String>,
-    ranges: &Array<i32>,
+    names: &List<String>,
+    ranges: &List<i32>,
 }
 
 impl PathParams {
@@ -120,21 +120,21 @@ struct MethodEntry {
 }
 
 struct DfaState {
-    literals: Array<LiteralEdge>,
+    literals: List<LiteralEdge>,
     param_target: i32,
     param_name: String,
-    wildcard_methods: Array<MethodEntry>,
+    wildcard_methods: List<MethodEntry>,
     wildcard_any_idx: i32,
     wildcard_name: String,
-    terminal_methods: Array<MethodEntry>,
+    terminal_methods: List<MethodEntry>,
     terminal_any_idx: i32,
     /// Captured param names from root to this state (in capture order).
     /// Shared by all routes that end at this terminal.
-    terminal_names: Array<String>,
+    terminal_names: List<String>,
     /// Captured param names for a wildcard match at this state — equal to
     /// `terminal_names` extended with `wildcard_name`. Pre-built so a
     /// wildcard match does not have to allocate a names array per call.
-    wildcard_names: Array<String>,
+    wildcard_names: List<String>,
 }
 
 fn new_state() -> DfaState {
@@ -161,8 +161,8 @@ struct StaticEntry<H> {
 
 /// Shared singletons for `PathParams` with no captures.
 global EMPTY_STR: String = "";
-global EMPTY_NAMES: Array<String> = [];
-global EMPTY_RANGES: Array<i32> = [];
+global EMPTY_NAMES: List<String> = [];
+global EMPTY_RANGES: List<i32> = [];
 
 fn empty_path_params() -> PathParams {
     return PathParams {
@@ -174,9 +174,9 @@ fn empty_path_params() -> PathParams {
 
 /// Generic HTTP path router.
 pub struct Router<H> {
-    static_entries: Array<StaticEntry<H>>,
-    states: Array<DfaState>,
-    handlers: Array<H>,
+    static_entries: List<StaticEntry<H>>,
+    states: List<DfaState>,
+    handlers: List<H>,
 }
 
 impl<H> Router<H> {
@@ -267,9 +267,9 @@ impl<H> Router<H> {
         self.static_entries.insert(pos, new_entry);
     }
 
-    fn insert_dynamic(&mut self, method_opt: &Option<Method>, segs: &Array<Segment>, handler: H) with stores[handler] {
+    fn insert_dynamic(&mut self, method_opt: &Option<Method>, segs: &List<Segment>, handler: H) with stores[handler] {
         let mut cur: i32 = 0;
-        let mut names: Array<String> = [];
+        let mut names: List<String> = [];
         let nseg = segs.len();
         for let mut i = 0; i < nseg; i += 1 {
             let seg = &segs[i];
@@ -278,7 +278,7 @@ impl<H> Router<H> {
                     let existing = self.states[cur].wildcard_name;
                     if existing.is_empty() {
                         self.states[cur].wildcard_name = *name;
-                        let mut wnames: Array<String> = [];
+                        let mut wnames: List<String> = [];
                         let nn = names.len();
                         for let mut k = 0; k < nn; k += 1 {
                             wnames.push(names[k]);
@@ -387,7 +387,7 @@ impl<H> Router<H> {
         let plen = path.len();
         let mut pos = if plen > 0 && path.get_byte_unchecked(0) == '/' as u8 { 1 } else { 0 };
         let mut state: i32 = 0;
-        let mut ranges: Array<i32> = [];
+        let mut ranges: List<i32> = [];
         while pos < plen {
             let mut end = pos;
             while end < plen && path.get_byte_unchecked(end) != '/' as u8 {
@@ -483,11 +483,11 @@ impl<H> Router<H> {
 
     /// Returns the specific methods registered for `path`. `any` does not
     /// contribute. Empty array on a 404 or when only `any` is registered.
-    pub fn allowed_methods(&self, path: &String) -> Array<Method> {
+    pub fn allowed_methods(&self, path: &String) -> List<Method> {
         // Static side first.
         let [lo, hi] = bsearch_pattern_range(&self.static_entries, path);
         if lo < hi {
-            let mut out: Array<Method> = [];
+            let mut out: List<Method> = [];
             for let mut i = lo; i < hi; i += 1 {
                 if let Some(m) = self.static_entries[i].method {
                     out.push(m);
@@ -499,7 +499,7 @@ impl<H> Router<H> {
         return self.allowed_methods_dynamic(path);
     }
 
-    fn allowed_methods_dynamic(&self, path: &String) -> Array<Method> {
+    fn allowed_methods_dynamic(&self, path: &String) -> List<Method> {
         let plen = path.len();
         let mut pos = if plen > 0 && path.get_byte_unchecked(0) == '/' as u8 { 1 } else { 0 };
         let mut state: i32 = 0;
@@ -552,7 +552,7 @@ impl<H> Router<H> {
     }
 }
 
-fn is_static_pattern(segs: &Array<Segment>) -> bool {
+fn is_static_pattern(segs: &List<Segment>) -> bool {
     let n = segs.len();
     for let mut i = 0; i < n; i += 1 {
         match &segs[i] {
@@ -613,7 +613,7 @@ fn method_rank(m: &Option<Method>) -> i32 {
 }
 
 /// Find the [lo, hi) range of entries whose `pattern` equals `path`.
-fn bsearch_pattern_range<H>(entries: &Array<StaticEntry<H>>, path: &String) -> [i32, i32] {
+fn bsearch_pattern_range<H>(entries: &List<StaticEntry<H>>, path: &String) -> [i32, i32] {
     let n = entries.len();
     // Lower bound
     let mut lo = 0;
@@ -651,15 +651,15 @@ fn has_wildcard(s: &DfaState) -> bool {
     return !s.wildcard_methods.is_empty() || s.wildcard_any_idx >= 0;
 }
 
-fn collect_methods(entries: &Array<MethodEntry>) -> Array<Method> {
-    let mut out: Array<Method> = [];
+fn collect_methods(entries: &List<MethodEntry>) -> List<Method> {
+    let mut out: List<Method> = [];
     for let e of entries {
         out.push(e.method);
     }
     return out;
 }
 
-fn pick_handler(entries: &Array<MethodEntry>, any_idx: i32, method: &Method) -> i32 {
+fn pick_handler(entries: &List<MethodEntry>, any_idx: i32, method: &Method) -> i32 {
     let n = entries.len();
     for let mut i = 0; i < n; i += 1 {
         if entries[i].method == *method {
@@ -669,7 +669,7 @@ fn pick_handler(entries: &Array<MethodEntry>, any_idx: i32, method: &Method) -> 
     return any_idx;
 }
 
-fn set_method_specific(entries: &mut Array<MethodEntry>, method: Method, handler_idx: i32) {
+fn set_method_specific(entries: &mut List<MethodEntry>, method: Method, handler_idx: i32) {
     let n = entries.len();
     for let mut i = 0; i < n; i += 1 {
         if entries[i].method == method {
@@ -693,7 +693,7 @@ fn strip_query(s: String) -> String {
 
 /// Parse a route pattern path into a list of segments. Panics on
 /// malformed input.
-fn parse_pattern(path: &String) -> Array<Segment> {
+fn parse_pattern(path: &String) -> List<Segment> {
     let bytes = path.len();
     if bytes == 0 || path.get_byte_unchecked(0) != '/' as u8 {
         panic("route pattern must start with '/'");
@@ -701,7 +701,7 @@ fn parse_pattern(path: &String) -> Array<Segment> {
     if bytes > 1 && path.get_byte_unchecked(bytes - 1) == '/' as u8 {
         panic("route pattern must not contain empty segments (no '//' or trailing '/')");
     }
-    let mut out: Array<Segment> = [];
+    let mut out: List<Segment> = [];
     let mut wildcard_seen = false;
     let mut i = 1;
     while i < bytes {
@@ -740,7 +740,7 @@ fn parse_pattern(path: &String) -> Array<Segment> {
     return out;
 }
 
-fn bsearch_label(edges: &Array<LiteralEdge>, key: &String) -> [i32, bool] {
+fn bsearch_label(edges: &List<LiteralEdge>, key: &String) -> [i32, bool] {
     let mut lo = 0;
     let mut hi = edges.len();
     while lo < hi {
@@ -760,7 +760,7 @@ fn bsearch_label(edges: &Array<LiteralEdge>, key: &String) -> [i32, bool] {
     return [lo, false];
 }
 
-fn bsearch_target_by_bytes(edges: &Array<LiteralEdge>, path: &String, start: i32, end: i32) -> i32 {
+fn bsearch_target_by_bytes(edges: &List<LiteralEdge>, path: &String, start: i32, end: i32) -> i32 {
     let mut lo = 0;
     let mut hi = edges.len();
     while lo < hi {

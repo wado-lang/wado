@@ -10,7 +10,7 @@ struct FullStruct {
     age: i32,
     score: f64,
     active: bool,
-    tags: Array<String>,
+    tags: List<String>,
     address: Option<String>,
     rating: Option<i32>,
 }
@@ -131,17 +131,17 @@ test "nested struct roundtrip" {
     }
 }
 
-// --- Array of structs ---
+// --- List of structs ---
 
 test "array of structs roundtrip" {
-    let items: Array<Inner> = [
+    let items: List<Inner> = [
         Inner { value: 1, label: "a" },
         Inner { value: 2, label: "b" },
         Inner { value: 3, label: "c" },
     ];
-    let json_r = to_string::<Array<Inner>>(&items);
+    let json_r = to_string::<List<Inner>>(&items);
     if let Ok(json) = json_r {
-        let parsed_r = from_string::<Array<Inner>>(json);
+        let parsed_r = from_string::<List<Inner>>(json);
         if let Ok(arr) = parsed_r {
             assert arr.len() == 3;
             assert arr[0].value == 1;
@@ -157,11 +157,11 @@ test "array of structs roundtrip" {
 }
 
 test "empty array roundtrip" {
-    let items: Array<Inner> = [];
-    let json_r = to_string::<Array<Inner>>(&items);
+    let items: List<Inner> = [];
+    let json_r = to_string::<List<Inner>>(&items);
     if let Ok(json) = json_r {
         assert json == "[]";
-        let parsed_r = from_string::<Array<Inner>>(json);
+        let parsed_r = from_string::<List<Inner>>(json);
         if let Ok(arr) = parsed_r {
             assert arr.len() == 0;
         } else {
@@ -301,13 +301,13 @@ test "enum roundtrip" {
 }
 
 test "all enum variants roundtrip" {
-    let variants: Array<Direction> = [
+    let variants: List<Direction> = [
         Direction::North,
         Direction::South,
         Direction::East,
         Direction::West,
     ];
-    let names: Array<String> = ["North", "South", "East", "West"];
+    let names: List<String> = ["North", "South", "East", "West"];
     for let mut i = 0; i < 4; i += 1 {
         let json_r = to_string::<Direction>(&variants[i]);
         if let Ok(json) = json_r {
@@ -464,14 +464,14 @@ test "string with newlines roundtrip" {
     }
 }
 
-// --- Option<Array<T>> roundtrip ---
+// --- Option<List<T>> roundtrip ---
 
-test "Option Some Array roundtrip" {
-    let v = Option::<Array<i32>>::Some([1, 2, 3]);
-    let json_r = to_string::<Option<Array<i32>>>(&v);
+test "Option Some List roundtrip" {
+    let v = Option::<List<i32>>::Some([1, 2, 3]);
+    let json_r = to_string::<Option<List<i32>>>(&v);
     if let Ok(json) = json_r {
         assert json == "[1,2,3]";
-        let parsed_r = from_string::<Option<Array<i32>>>(json);
+        let parsed_r = from_string::<Option<List<i32>>>(json);
         if let Ok(p) = parsed_r {
             if let Some(arr) = p {
                 assert arr.len() == 3;
@@ -480,19 +480,19 @@ test "Option Some Array roundtrip" {
                 panic("expected Some");
             }
         } else {
-            panic("deserialize Option Array failed");
+            panic("deserialize Option List failed");
         }
     } else {
-        panic("serialize Option Array failed");
+        panic("serialize Option List failed");
     }
 }
 
-test "Option None Array roundtrip" {
-    let v: Option<Array<i32>> = null;
-    let json_r = to_string::<Option<Array<i32>>>(&v);
+test "Option None List roundtrip" {
+    let v: Option<List<i32>> = null;
+    let json_r = to_string::<Option<List<i32>>>(&v);
     if let Ok(json) = json_r {
         assert json == "null";
-        let parsed_r = from_string::<Option<Array<i32>>>(json);
+        let parsed_r = from_string::<Option<List<i32>>>(json);
         if let Ok(p) = parsed_r {
             if let None = p {
                 // OK
@@ -500,25 +500,25 @@ test "Option None Array roundtrip" {
                 panic("expected None");
             }
         } else {
-            panic("deserialize Option None Array failed");
+            panic("deserialize Option None List failed");
         }
     } else {
-        panic("serialize Option None Array failed");
+        panic("serialize Option None List failed");
     }
 }
 
-// --- Array<Option<T>> roundtrip ---
+// --- List<Option<T>> roundtrip ---
 
-test "Array of Options roundtrip" {
-    let v: Array<Option<i32>> = [
+test "List of Options roundtrip" {
+    let v: List<Option<i32>> = [
         Option::<i32>::Some(1),
         null,
         Option::<i32>::Some(3),
     ];
-    let json_r = to_string::<Array<Option<i32>>>(&v);
+    let json_r = to_string::<List<Option<i32>>>(&v);
     if let Ok(json) = json_r {
         assert json == "[1,null,3]";
-        let parsed_r = from_string::<Array<Option<i32>>>(json);
+        let parsed_r = from_string::<List<Option<i32>>>(json);
         if let Ok(arr) = parsed_r {
             assert arr.len() == 3;
             if let Some(n) = arr[0] {
@@ -537,10 +537,10 @@ test "Array of Options roundtrip" {
                 panic("expected Some at 2");
             }
         } else {
-            panic("deserialize Array Options failed");
+            panic("deserialize List Options failed");
         }
     } else {
-        panic("serialize Array Options failed");
+        panic("serialize List Options failed");
     }
 }
 

@@ -27,7 +27,7 @@ struct wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point
 
 array builtin::array<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point> (mut ref "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point");  // TypeId(4)
 
-struct core:prelude//Array<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point> {  // TypeId(5)
+struct core:prelude//List<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point> {  // TypeId(5)
     mut repr: ref "builtin::array<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>",
     mut used: i32,
 }
@@ -94,9 +94,9 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
 
-type "functype//core:prelude/array.wado/Array<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>::push" = fn(ref "core:prelude//Array<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>", ref "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point");  // TypeId(37)
+type "functype//core:prelude/list.wado/List<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>::push" = fn(ref "core:prelude//List<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>", ref "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point");  // TypeId(37)
 
-type "functype//core:prelude/array.wado/Array<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>::grow" = fn(ref "core:prelude//Array<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>");  // TypeId(38)
+type "functype//core:prelude/list.wado/List<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>::grow" = fn(ref "core:prelude//List<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>");  // TypeId(38)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
@@ -133,7 +133,7 @@ fn "wado-compiler/tests/fixtures/newtype_generic_container_return.wado/run"() wi
     let self_18: i32;
     let f_22: ref "core:prelude/format.wado//Formatter";
     let self_23: i32;
-    let __b_26: ref "core:prelude//Array<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>";
+    let __b_26: ref "core:prelude//List<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>";
     let self_36: i32;
     let f_43: ref "core:prelude/format.wado//Formatter";
     let self_44: i32;
@@ -146,8 +146,8 @@ fn "wado-compiler/tests/fixtures/newtype_generic_container_return.wado/run"() wi
         "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(44), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("option: ("), used: 9 }); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_17 = __local_6; self_18 = l.x; "core:prelude/primitive.wado/i32::fmt_decimal"(self_18, f_17); "core:prelude/string.wado/String::push"(__local_5, 44); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_22 = __local_6; self_23 = l.y; "core:prelude/primitive.wado/i32::fmt_decimal"(self_23, f_22); "core:prelude/string.wado/String::push"(__local_5, 41); __local_5);
     } else {
     }
-    __b_26 = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>" { repr: builtin::array_new<ref "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point">(0), used: 0 };
-    "core:prelude/array.wado/Array<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>::push"(__b_26, struct.new "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point" { x: loc.x, y: loc.y });
+    __b_26 = struct.new "core:prelude//List<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>" { repr: builtin::array_new<ref "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point">(0), used: 0 };
+    "core:prelude/list.wado/List<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>::push"(__b_26, struct.new "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point" { x: loc.x, y: loc.y });
     "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array len: "), used: 11 }); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; self_36 = __b_26.used; "core:prelude/primitive.wado/i32::fmt_decimal"(self_36, __local_8); __local_7);
     if builtin::unlikely(0 >= __b_26.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -503,17 +503,17 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>::push"(self, value) {
+fn "core:prelude/list.wado/List<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>::grow"(self);
+        "core:prelude/list.wado/List<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>::grow"(self);
     }
     builtin::array_set<ref "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>::grow"(self) {
+fn "core:prelude/list.wado/List<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "builtin::array<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>";

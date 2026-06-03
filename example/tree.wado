@@ -42,7 +42,7 @@ struct Stats {
     files: i32,
 }
 
-fn parse_args(arguments: Array<String>) -> Result<Options, String> {
+fn parse_args(arguments: List<String>) -> Result<Options, String> {
     let mut opts = Options {
         max_depth: -1,
         show_hidden: false,
@@ -93,8 +93,8 @@ fn print_help() with Stdout {
     println("  -h      show this help");
 }
 
-fn collect_entries(dir: &Descriptor, opts: &Options) -> Array<DirectoryEntry> {
-    let mut out: Array<DirectoryEntry> = [];
+fn collect_entries(dir: &Descriptor, opts: &Options) -> List<DirectoryEntry> {
+    let mut out: List<DirectoryEntry> = [];
     let [stream, done] = dir.read_directory();
     loop {
         let chunk = stream.read(64);

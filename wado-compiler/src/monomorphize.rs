@@ -170,7 +170,7 @@ pub fn monomorphize(flat: &mut FlatPackage) {
 fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Option<ModuleSource> {
     match type_table.get(type_id) {
         ResolvedType::Primitive(_) => Some(ModuleSource::primitive()),
-        ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
+        ResolvedType::BuiltinArray(_) => Some(ModuleSource::list()),
         ResolvedType::Struct { module_source, .. }
         | ResolvedType::GenericInstance { module_source, .. }
         | ResolvedType::Enum { module_source, .. }

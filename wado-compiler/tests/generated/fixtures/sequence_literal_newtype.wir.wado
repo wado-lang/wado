@@ -21,7 +21,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
 }
 
 struct wado-compiler/tests/fixtures/sequence_literal_newtype.wado//Vec3Builder {  // TypeId(3)
-    mut values: ref "core:prelude//Array<f64>",
+    mut values: ref "core:prelude//List<f64>",
 }
 
 struct wado-compiler/tests/fixtures/sequence_literal_newtype.wado//Vec3 {  // TypeId(4)
@@ -34,12 +34,12 @@ array builtin::array<f64> (mut f64);  // TypeId(5)
 
 array builtin::array<u64> (mut u64);  // TypeId(6)
 
-struct core:prelude//Array<f64> {  // TypeId(7)
+struct core:prelude//List<f64> {  // TypeId(7)
     mut repr: ref builtin::array<f64>,
     mut used: i32,
 }
 
-struct core:prelude//Array<u64> {  // TypeId(8)
+struct core:prelude//List<u64> {  // TypeId(8)
     mut repr: ref builtin::array<u64>,
     mut used: i32,
 }
@@ -172,7 +172,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:core::prelude/fpfmt.wado::POW10: ref null "core:prelude//Array<u64>" = ref.null none;
+global mut global:core::prelude/fpfmt.wado::POW10: ref null "core:prelude//List<u64>" = ref.null none;
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/sequence_literal_newtype.wado/run"() with Stdout {
@@ -211,7 +211,7 @@ fn "wado-compiler/tests/fixtures/sequence_literal_newtype.wado/run"() with Stdou
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    __b_0 = struct.new "wado-compiler/tests/fixtures/sequence_literal_newtype.wado//Vec3Builder" { values: struct.new "core:prelude//Array<f64>" { repr: array.new_fixed<f64>(1, 2, 3), used: 3 } };
+    __b_0 = struct.new "wado-compiler/tests/fixtures/sequence_literal_newtype.wado//Vec3Builder" { values: struct.new "core:prelude//List<f64>" { repr: array.new_fixed<f64>(1, 2, 3), used: 3 } };
     p = "wado-compiler/tests/fixtures/sequence_literal_newtype.wado/Vec3Builder^SequenceLiteralBuilder::build"(__b_0);
     __v0_2 = p.x;
     __cond_3 = __v0_2 == 1;
@@ -237,7 +237,7 @@ condition: p.z == 3.0
 "), used: 23 }); "core:prelude/string.wado/String::push"(__local_16, 112); "core:prelude/string.wado/String::push"(__local_16, 46); "core:prelude/string.wado/String::push"(__local_16, 122); "core:prelude/string.wado/String::push"(__local_16, 58); "core:prelude/string.wado/String::push"(__local_16, 32); __local_17 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_16 }; f_54 = __local_17; "core:prelude/primitive.wado/f64::inspect_into"(__v0_6, f_54); "core:prelude/string.wado/String::push"(__local_16, 10); __local_16);
         unreachable;
     }
-    __b_8 = struct.new "wado-compiler/tests/fixtures/sequence_literal_newtype.wado//Vec3Builder" { values: struct.new "core:prelude//Array<f64>" { repr: array.new_fixed<f64>(4, 5, 6), used: 3 } };
+    __b_8 = struct.new "wado-compiler/tests/fixtures/sequence_literal_newtype.wado//Vec3Builder" { values: struct.new "core:prelude//List<f64>" { repr: array.new_fixed<f64>(4, 5, 6), used: 3 } };
     v = "wado-compiler/tests/fixtures/sequence_literal_newtype.wado/Vec3Builder^SequenceLiteralBuilder::build"(__b_8);
     __v0_10 = v.x;
     __cond_11 = __v0_10 == 4;
@@ -719,8 +719,8 @@ fn "core:prelude/fpfmt.wado/fixed_width_for_prec"(f, precision) {
     let u_33: u64;
     let n_34: i32;
     let u_39: u64;
-    let self_40: ref "core:prelude//Array<u64>";
-    let self_42: ref "core:prelude//Array<u64>";
+    let self_40: ref "core:prelude//List<u64>";
+    let self_42: ref "core:prelude//List<u64>";
     let unpack_mv_mantissa: u64;
     let unpack_mv_exponent: i32;
     multivalue_bind [unpack_mv_mantissa, unpack_mv_exponent] = "core:prelude/fpfmt.wado/unpack64"(f);
@@ -1213,8 +1213,8 @@ fn "core:prelude/primitive.wado/fmt_float_special"(f, is_neg, kind, zero_repr) {
 }
 
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
-    let __b: ref "core:prelude//Array<u64>";
-    __b = struct.new "core:prelude//Array<u64>" { repr: array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64), used: 20 };
+    let __b: ref "core:prelude//List<u64>";
+    __b = struct.new "core:prelude//List<u64>" { repr: array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64), used: 20 };
     global:core::prelude/fpfmt.wado::POW10 = __b;
 }
 
@@ -1239,7 +1239,7 @@ fn "core:prelude/primitive.wado/f64::inspect_into"(self, f) {
     let nd_15: i32;
     let x_16: i32;
     let self_20: ref "core:prelude/string.wado//String";
-    let self_23: ref "core:prelude//Array<u64>";
+    let self_23: ref "core:prelude//List<u64>";
     if f.precision >= 0 {
         "core:prelude/primitive.wado/f64::fmt_fixed"(self, f.precision, f);
         return;
@@ -1295,7 +1295,7 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
     let nd_20: i32;
     let x_21: i32;
     let self_25: ref "core:prelude/string.wado//String";
-    let self_28: ref "core:prelude//Array<u64>";
+    let self_28: ref "core:prelude//List<u64>";
     let __pattern_temp_0_mv_0: bool;
     let __pattern_temp_0_mv_1: bool;
     let __pattern_temp_0_mv_2: "core:prelude/fpfmt.wado//enum:SpecialKind";

@@ -101,7 +101,7 @@ test "iterates in insertion order" {
     s.insert(30);
     s.insert(10);
     s.insert(20);
-    let mut result: Array<i32> = [];
+    let mut result: List<i32> = [];
     for let x of s {
         result.push(x);
     }
@@ -117,7 +117,7 @@ test "duplicate insert does not change order" {
     s.insert(1);
     s.insert(2);
     s.insert(1);
-    let mut result: Array<i32> = [];
+    let mut result: List<i32> = [];
     for let x of s {
         result.push(x);
     }
@@ -134,7 +134,7 @@ test "remove and re-insert appends to end" {
     s.insert(3);
     s.remove(1);
     assert s.insert(1);
-    let mut result: Array<i32> = [];
+    let mut result: List<i32> = [];
     for let x of s {
         result.push(x);
     }
@@ -150,7 +150,7 @@ test "iteration skips removed elements" {
     s.insert(20);
     s.insert(30);
     s.remove(20);
-    let mut result: Array<i32> = [];
+    let mut result: List<i32> = [];
     for let x of s {
         result.push(x);
     }
@@ -186,11 +186,11 @@ test "iterate same set twice" {
     s.insert(1);
     s.insert(2);
     s.insert(3);
-    let mut first: Array<i32> = [];
+    let mut first: List<i32> = [];
     for let x of s {
         first.push(x);
     }
-    let mut second: Array<i32> = [];
+    let mut second: List<i32> = [];
     for let x of s {
         second.push(x);
     }
@@ -220,7 +220,7 @@ test "negative integers" {
     assert s.contains(-2);
     assert s.contains(-3);
     assert !s.contains(0);
-    let mut result: Array<i32> = [];
+    let mut result: List<i32> = [];
     for let x of s {
         result.push(x);
     }
@@ -235,7 +235,7 @@ test "sequence literal coercion preserves insertion order" {
     assert s.contains(10);
     assert s.contains(20);
     assert s.contains(30);
-    let mut result: Array<i32> = [];
+    let mut result: List<i32> = [];
     for let x of s {
         result.push(x);
     }
@@ -247,7 +247,7 @@ test "sequence literal coercion preserves insertion order" {
 test "sequence literal coercion deduplicates" {
     let s = [1, 2, 1, 3, 2] as TreeSet<i32>;
     assert s.len() == 3;
-    let mut result: Array<i32> = [];
+    let mut result: List<i32> = [];
     for let x of s {
         result.push(x);
     }
@@ -279,7 +279,7 @@ test "string set insertion order" {
     s.insert("c");
     s.insert("a");
     s.insert("b");
-    let mut result: Array<String> = [];
+    let mut result: List<String> = [];
     for let x of s {
         result.push(x);
     }
@@ -356,7 +356,7 @@ test "compaction after many removals" {
     assert s.contains(49);
     assert !s.contains(0);
     assert !s.contains(39);
-    let mut result: Array<i32> = [];
+    let mut result: List<i32> = [];
     for let x of s {
         result.push(x);
     }

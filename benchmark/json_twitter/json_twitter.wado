@@ -41,13 +41,13 @@ struct Url {
     expanded_url: String,
     #[serde(rename = "display_url")]
     display_url: String,
-    indices: Array<i32>,
+    indices: List<i32>,
 }
 impl Deserialize for Url;
 
 struct Hashtag {
     text: String,
-    indices: Array<i32>,
+    indices: List<i32>,
 }
 impl Deserialize for Hashtag;
 
@@ -58,15 +58,15 @@ struct UserMention {
     id: i64,
     #[serde(rename = "id_str")]
     id_str: String,
-    indices: Array<i32>,
+    indices: List<i32>,
 }
 impl Deserialize for UserMention;
 
 struct StatusEntities {
-    hashtags: Array<Hashtag>,
-    urls: Array<Url>,
+    hashtags: List<Hashtag>,
+    urls: List<Url>,
     #[serde(rename = "user_mentions")]
-    user_mentions: Array<UserMention>,
+    user_mentions: List<UserMention>,
 }
 impl Deserialize for StatusEntities;
 
@@ -80,7 +80,7 @@ impl Deserialize for UserEntities;
 
 struct UserEntityUrls {
     #[serde(default)]
-    urls: Array<Url>,
+    urls: List<Url>,
 }
 impl Deserialize for UserEntityUrls;
 
@@ -132,7 +132,7 @@ struct Status {
 impl Deserialize for Status;
 
 struct TwitterResponse {
-    statuses: Array<Status>,
+    statuses: List<Status>,
     #[serde(rename = "search_metadata")]
     search_metadata: SearchMetadata,
 }

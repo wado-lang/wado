@@ -1154,10 +1154,10 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// Register Array<T> wrapper structs for all `GenericInstance("Array", [T])` types
+/// Register Array<T> wrapper structs for all `GenericInstance("List", [T])` types
 /// found in any module's type table.
 ///
-/// In the TIR, `Array<T>` is `GenericInstance { name: "Array", type_args: [T] }`,
+/// In the TIR, `Array<T>` is `GenericInstance { name: "List", type_args: [T] }`,
 /// not a struct definition. We create wrapper structs here to provide the
 /// underlying GC array types that the WIR emitter needs.
 ///
@@ -1177,7 +1177,7 @@ fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
             if let ResolvedType::GenericInstance {
                 name, type_args, ..
             } = type_table.get(type_id)
-                && name == "Array"
+                && name == "List"
                 && type_args.len() == 1
             {
                 if type_table.contains_type_param(type_args[0]) {
@@ -1207,7 +1207,7 @@ fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
     let mut leaf: Vec<(crate::tir::TypeId, String)> = Vec::new();
     let mut nested: Vec<(crate::tir::TypeId, String)> = Vec::new();
     for (elem_tid, elem_name) in &array_elem_types {
-        if matches!(tt.get(*elem_tid), ResolvedType::GenericInstance { name, .. } if name == "Array")
+        if matches!(tt.get(*elem_tid), ResolvedType::GenericInstance { name, .. } if name == "List")
         {
             nested.push((*elem_tid, elem_name.clone()));
         } else {
@@ -1235,8 +1235,7 @@ fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
 /// Register a single `Array<T>` wrapper struct given the element's mangled name.
 fn register_array_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
     let elem_name_string = elem_name.to_string();
-    let mangled =
-        crate::name::mangle_generic_name("Array", std::slice::from_ref(&elem_name_string));
+    let mangled = crate::name::mangle_generic_name("List", std::slice::from_ref(&elem_name_string));
 
     let raw_array_type_id = ctx.array_type_by_name.get(elem_name).cloned();
     let Some(raw_type) = raw_array_type_id else {
@@ -1274,7 +1273,7 @@ fn register_array_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
                 ..WirMeta::default()
             },
             generic_origin: Some(WirGenericOrigin {
-                base_name: "Array".to_string(),
+                base_name: "List".to_string(),
                 type_args: vec![elem_name.to_string()],
             }),
             newtype_origin: None,

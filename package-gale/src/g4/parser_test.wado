@@ -1132,7 +1132,7 @@ expr : op = ( '+' | '-' ) ;";
 }
 
 test "block label list" {
-    // `+=` form of block label: collect each match into an Array.
+    // `+=` form of block label: collect each match into an List.
     let input = "grammar Test;
 expr : ops += ( '+' | '-' )* ;";
     let g = parse(input).unwrap();
@@ -1635,7 +1635,7 @@ fn assert_option_int(opt: &GrammarOption, expected: i64) {
     }
 }
 
-fn assert_option_qualified(opt: &GrammarOption, expected: Array<String>) {
+fn assert_option_qualified(opt: &GrammarOption, expected: List<String>) {
     if let Qualified(parts) = &opt.value {
         assert parts.len() == expected.len(), `option '{opt.name}': expected {expected.len()} parts, got {parts.len()}`;
         for let mut i = 0; i < parts.len(); i += 1 {

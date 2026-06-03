@@ -63,8 +63,8 @@ struct Factory<T> {
 }
 
 impl<T> Factory<T> {
-    pub fn make_array<U>(first: U, second: U) -> Array<U> {
-        let mut arr: Array<U> = [];
+    pub fn make_array<U>(first: U, second: U) -> List<U> {
+        let mut arr: List<U> = [];
         arr.push(first);
         arr.push(second);
         return arr;
@@ -72,7 +72,7 @@ impl<T> Factory<T> {
 }
 
 impl<T> Factory<T> {
-    pub fn wrap_array(arr: Array<T>) -> Array<T> {
+    pub fn wrap_array(arr: List<T>) -> List<T> {
         return arr;
     }
 }
@@ -133,8 +133,8 @@ test "literal coercion with generic static method" {
 }
 
 test "nested generic types with static methods" {
-    let arr: Array<i32> = [1, 2, 3];
-    let boxed_arr = WrapBox::<Array<i32>>::new(arr);
+    let arr: List<i32> = [1, 2, 3];
+    let boxed_arr = WrapBox::<List<i32>>::new(arr);
     let inner = boxed_arr.get();
     assert inner.len() == 3;
     assert inner[0] == 1;

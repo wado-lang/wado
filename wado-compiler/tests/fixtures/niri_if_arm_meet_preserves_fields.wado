@@ -4,9 +4,9 @@
 // `clear_fields()` that dropped facts neither arm touched (e.g. an
 // `arr.used` binding held outside the if).
 //
-// We use `Array<u16>` rather than a plain struct because SROA would
+// We use `List<u16>` rather than a plain struct because SROA would
 // scalarize a plain struct into per-field locals, bypassing the
-// field-env path entirely. `Array<T>`'s `repr` is an opaque
+// field-env path entirely. `List<T>`'s `repr` is an opaque
 // `builtin::array<T>` so SROA leaves the struct intact and `arr.used`
 // stays as a tracked field — the exact shape zlib's loop-carried
 // arrays take.
@@ -20,7 +20,7 @@ use { MonotonicClock } from "wasi:clocks";
 
 #[inline(never)]
 fn check_two_arm_meet(flag: bool) -> i32 {
-    let arr: Array<u16> = Array::filled(16, 0 as u16);
+    let arr: List<u16> = List::filled(16, 0 as u16);
     let mut x: i32 = 0;
     // Both arms write `x` but neither touches `arr`. Meet of
     // post-then and post-else preserves `arr.used = 16`.
@@ -37,7 +37,7 @@ fn check_two_arm_meet(flag: bool) -> i32 {
 
 #[inline(never)]
 fn check_no_else_falling_through(flag: bool) -> i32 {
-    let arr: Array<u16> = Array::filled(32, 0 as u16);
+    let arr: List<u16> = List::filled(32, 0 as u16);
     let mut x: i32 = 0;
     // No-else if, then-arm falls through (writes `x` and continues).
     // The implicit-else equals the pre-if state, so the meet
@@ -53,7 +53,7 @@ fn check_no_else_falling_through(flag: bool) -> i32 {
 
 #[inline(never)]
 fn check_arm_writes_diverge(flag: bool) -> i32 {
-    let mut arr: Array<u16> = Array::filled(16, 0 as u16);
+    let mut arr: List<u16> = List::filled(16, 0 as u16);
     // Then-arm mutates `arr` (push pulls .used); else-arm leaves it.
     // Post-arm bindings disagree → meet drops `arr.used` from
     // field_env. The function must reflect the runtime length.

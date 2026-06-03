@@ -1460,7 +1460,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .compiler_items()
-            .struct_name(crate::compiler_item::CompilerItem::Array)
+            .struct_name(crate::compiler_item::CompilerItem::List)
             .to_string();
         if let Type::Named(named) = ty
             && named.name == string_struct_name

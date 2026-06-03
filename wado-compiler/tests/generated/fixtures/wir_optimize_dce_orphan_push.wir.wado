@@ -26,7 +26,7 @@ struct wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado//Widget { 
 
 array builtin::array<wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado/Widget> (mut ref "wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado//Widget");  // TypeId(4)
 
-struct core:prelude//Array<wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado/Widget> {  // TypeId(5)
+struct core:prelude//List<wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado/Widget> {  // TypeId(5)
     mut repr: ref "builtin::array<wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado/Widget>",
     mut used: i32,
 }
@@ -115,12 +115,12 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado/run"() with Stdout {
     let w: ref "wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado//Widget";
-    let __b_1: ref "core:prelude//Array<wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado/Widget>";
+    let __b_1: ref "core:prelude//List<wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado/Widget>";
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let self_17: i32;
     w = struct.new "wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado//Widget" { id: 7 };
-    __b_1 = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado/Widget>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado//Widget">(w), used: 1 };
+    __b_1 = struct.new "core:prelude//List<wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado/Widget>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado//Widget">(w), used: 1 };
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; self_17 = if builtin::unlikely(0 >= __b_1.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;

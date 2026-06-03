@@ -1,25 +1,25 @@
-/// Auto-derived Inspect for struct with &Array<T> field generates invalid Wasm.
+/// Auto-derived Inspect for struct with &List<T> field generates invalid Wasm.
 /// The compiler emits a type mismatch: expected (ref null $type), found (ref $type).
 ///
 /// The bug is in the auto-derived Inspect implementation — when a struct field
-/// is a reference to a generic type like &Array<T>, the generated Wasm code
+/// is a reference to a generic type like &List<T>, the generated Wasm code
 /// misassigns the dereferenced value to a local of incompatible type.
 ///
 /// This fixture also pins the contract that the monomorphizer must consult
 /// `TraitEnv::concrete_impl_module_for` (concrete-only impls) — not the broader
 /// `impl_module_for` — when redirecting a substituted trait-method call to its
-/// owning module. If a generic impl (`impl<T> Inspect for Array<T>`) leaks into
+/// owning module. If a generic impl (`impl<T> Inspect for List<T>`) leaks into
 /// the lookup, `call_rewrite`'s ref-blanket path-2alt collapses
-/// `&Array<i32>^Inspect::inspect` to `Array<i32>::inspect` and the leading `&`
+/// `&List<i32>^Inspect::inspect` to `List<i32>::inspect` and the leading `&`
 /// disappears from the output. See `monomorphize/state.rs::FuncInstState::impl_module`.
 use { println, Stdout } from "core:cli";
 
 struct Wrapper {
-    data: &Array<i32>,
+    data: &List<i32>,
 }
 
 export fn run() with Stdout {
-    let arr: Array<i32> = [1, 2, 3];
+    let arr: List<i32> = [1, 2, 3];
     let w = Wrapper { data: &arr };
     println(`{w:?}`);
 }

@@ -1,5 +1,5 @@
 // Reproduce: &mut TreeSet<String> mutations lost when passed through recursive variant traversal
-// with two mutable ref params of different types (TreeSet + Array<struct>)
+// with two mutable ref params of different types (TreeSet + List<struct>)
 use { println } from "core:cli";
 use { TreeSet } from "core:collections";
 
@@ -7,7 +7,7 @@ variant Elem {
     Tok(String),
     Lit(String),
     Ref(String),
-    Group(Array<Array<Elem>>),
+    Group(List<List<Elem>>),
     Repeat(RepeatElem),
 }
 
@@ -20,7 +20,7 @@ struct LitToken {
     const_name: String,
 }
 
-fn collect_lits(elem: &Elem, seen: &mut TreeSet<String>, result: &mut Array<LitToken>) {
+fn collect_lits(elem: &Elem, seen: &mut TreeSet<String>, result: &mut List<LitToken>) {
     if let Lit(text) = elem {
         if !seen.contains(*text) {
             seen.insert(*text);
@@ -37,14 +37,14 @@ fn collect_lits(elem: &Elem, seen: &mut TreeSet<String>, result: &mut Array<LitT
     }
 }
 
-fn collect_lits_from_elements(elems: &Array<Elem>, seen: &mut TreeSet<String>, result: &mut Array<LitToken>) {
+fn collect_lits_from_elements(elems: &List<Elem>, seen: &mut TreeSet<String>, result: &mut List<LitToken>) {
     for let elem of elems {
         collect_lits(elem, seen, result);
     }
 }
 
 export fn run() with Stdout {
-    let elems: Array<Elem> = [
+    let elems: List<Elem> = [
         Elem::Lit(","),
         Elem::Group([
             [Elem::Lit(","), Elem::Ref("foo")],
@@ -55,7 +55,7 @@ export fn run() with Stdout {
     ];
 
     let mut seen = TreeSet::<String>::new();
-    let mut result: Array<LitToken> = [];
+    let mut result: List<LitToken> = [];
     collect_lits_from_elements(&elems, &mut seen, &mut result);
 
     // Should have exactly [",", ";"] — no duplicates

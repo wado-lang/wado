@@ -5,7 +5,7 @@
 //! compiler — Rust-side — needs to reference directly: types it
 //! instantiates (`Option<T>`, `Box<T>`), traits whose impls it
 //! synthesises (`Default`, `From`, `Serialize`), or methods it lowers
-//! into calls (`String::push_str`, `Array::push`). Each item is bound
+//! into calls (`String::push_str`, `List::push`). Each item is bound
 //! to its resolution by a `#[compiler_item("...")]` attribute on the
 //! Wado-side declaration; the elaborator populates the
 //! [`CompilerItems`] registry during the annotate phase and downstream
@@ -45,10 +45,10 @@ use crate::module_source::ModuleSource;
 #[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum CompilerItem {
     // ── Types (structs / generic structs) ────────────────────────────
-    /// `Array<T>` — the heap-backed sequence struct. Recognised by
+    /// `List<T>` — the heap-backed sequence struct. Recognised by
     /// the CM lift, value-copy synthesis, and serde codegen so the
-    /// compiler always points at the right concrete `Array` struct.
-    Array,
+    /// compiler always points at the right concrete `List` struct.
+    List,
     /// `Box<T>` — boxes primitive values into a struct that
     /// participates in GC tracing.
     Box,
@@ -220,10 +220,10 @@ pub enum CompilerItem {
     AlignmentRight,
 
     // ── Methods (impl-block functions) ────────────────────────────────
-    /// `Array<T>::push` — recognised by the WIR optimiser to collapse
-    /// `Array::new` + a sequence of `.push(...)` calls into
+    /// `List<T>::push` — recognised by the WIR optimiser to collapse
+    /// `List::new` + a sequence of `.push(...)` calls into
     /// `array.new_fixed`.
-    ArrayPush,
+    ListPush,
     /// `String::push_str` — recognised by the WIR optimiser for
     /// string-building inlining.
     StringPushStr,
@@ -259,7 +259,7 @@ impl CompilerItem {
     /// Every variant, in declaration order. Used by validation passes
     /// that need to check the full registry.
     pub const ALL: &'static [CompilerItem] = &[
-        Self::Array,
+        Self::List,
         Self::Box,
         Self::I128,
         Self::U128,
@@ -319,7 +319,7 @@ impl CompilerItem {
         Self::AlignmentLeft,
         Self::AlignmentCenter,
         Self::AlignmentRight,
-        Self::ArrayPush,
+        Self::ListPush,
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringGetByteUnchecked,
@@ -341,7 +341,7 @@ impl CompilerItem {
     /// references must agree.
     pub fn attr_name(self) -> &'static str {
         match self {
-            Self::Array => "array",
+            Self::List => "list",
             Self::Box => "box",
             Self::I128 => "i128",
             Self::U128 => "u128",
@@ -401,7 +401,7 @@ impl CompilerItem {
             Self::AlignmentLeft => "alignment_left",
             Self::AlignmentCenter => "alignment_center",
             Self::AlignmentRight => "alignment_right",
-            Self::ArrayPush => "array_push",
+            Self::ListPush => "list_push",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringGetByteUnchecked => "string_get_byte_unchecked",
@@ -441,7 +441,7 @@ impl CompilerItem {
     pub fn is_required(self, world: &str) -> bool {
         match self {
             // Always loaded — `core:prelude` is auto-imported.
-            Self::Array
+            Self::List
             | Self::Box
             | Self::I128
             | Self::U128
@@ -455,7 +455,7 @@ impl CompilerItem {
             | Self::Eq
             | Self::Ord
             | Self::From
-            | Self::ArrayPush
+            | Self::ListPush
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringGetByteUnchecked
@@ -530,7 +530,7 @@ impl CompilerItem {
     /// `#[compiler_item("option")]` on a trait.
     pub fn expected_kind(self) -> CompilerItemKind {
         match self {
-            Self::Array
+            Self::List
             | Self::Box
             | Self::I128
             | Self::U128
@@ -572,7 +572,7 @@ impl CompilerItem {
             | Self::UpperHexAlt
             | Self::LowerExp
             | Self::UpperExp => CompilerItemKind::Trait,
-            Self::ArrayPush
+            Self::ListPush
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringGetByteUnchecked
@@ -1537,7 +1537,7 @@ mod tests {
             CompilerItem::Eq,
             CompilerItem::From,
             CompilerItem::String,
-            CompilerItem::Array,
+            CompilerItem::List,
             CompilerItem::I128,
             CompilerItem::U128,
         ] {

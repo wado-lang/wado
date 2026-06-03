@@ -1,4 +1,4 @@
-// Regression: `Array<Variant>.iter().map(...).collect()` previously
+// Regression: `List<Variant>.iter().map(...).collect()` previously
 // ICEd the WIR pipeline with
 //   Validation error: type mismatch:
 //     expected (ref null $type), found (ref $type)
@@ -9,7 +9,7 @@
 // the same. Other paths (`get_type_name_info` for `GenericInstance`)
 // already used `mangle_type_arg_for_generic`, which qualifies variants
 // with their declaring `ModuleSource`. Result: the same monomorphized
-// struct (e.g. `IterMap<ArrayIter<Color>, String>`) was registered with
+// struct (e.g. `IterMap<ListIter<Color>, String>`) was registered with
 // an unqualified name from one side and looked up with a qualified name
 // from the other, producing two distinct wasm-GC type ids for the same
 // struct and the validation failure above.
@@ -30,8 +30,8 @@ fn name(c: Color) -> String {
 }
 
 export fn run() with Stdout {
-    let colors: Array<Color> = [Color::Red, Color::Green];
-    let names: Array<String> = colors.iter().map(|c: Color| name(c)).collect();
+    let colors: List<Color> = [Color::Red, Color::Green];
+    let names: List<String> = colors.iter().map(|c: Color| name(c)).collect();
     println(names.join(", "));
 }
 

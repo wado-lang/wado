@@ -1,4 +1,4 @@
-// Array<Newtype>.sort() requires Newtype to satisfy the Ord trait bound.
+// List<Newtype>.sort() requires Newtype to satisfy the Ord trait bound.
 // Newtypes inherit Ord from their base type, so this works.
 
 use { println, Stdout } from "core:cli";
@@ -6,13 +6,13 @@ use { println, Stdout } from "core:cli";
 type Score = i32;
 
 export fn run() with Stdout {
-    let mut scores: Array<Score> = [50, 10, 90, 30];
+    let mut scores: List<Score> = [50, 10, 90, 30];
     scores.sort();
     // Score displays as "N as Score"; cast to i32 for cleaner output
     println(`{scores[0] as i32}, {scores[1] as i32}, {scores[2] as i32}, {scores[3] as i32}`);
 
     // sorted() returns a new sorted array, leaving original intact
-    let orig: Array<Score> = [3, 1, 2];
+    let orig: List<Score> = [3, 1, 2];
     let sorted = orig.sorted();
     println(`sorted: {sorted[0] as i32}, {sorted[1] as i32}, {sorted[2] as i32}`);
 }

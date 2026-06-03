@@ -1,10 +1,10 @@
-// Test: monomorphized Array methods should be correctly attributed to their
+// Test: monomorphized List methods should be correctly attributed to their
 // defining module, enabling cross-module inlining. When the elaborator correctly
 // sets module_source on FunctionRef and monomorphize preserves defining_module,
 // the inline pass can match candidates across modules.
 
 export fn run() {
-    let mut arr: Array<i32> = [10, 20, 30];
+    let mut arr: List<i32> = [10, 20, 30];
     arr.push(40);
     assert arr.len() == 4;
 }
@@ -13,6 +13,6 @@ __DATA__
 {
     "stdout": "",
     "wir_expect:O0": [
-        "Array<i32>::push\"(self, value) {"
+        "List<i32>::push\"(self, value) {"
     ]
 }

@@ -68,7 +68,7 @@ impl CmStdlibNames {
         let (_, _, err_name, err_index) = items.require_variant_case(CompilerItem::ResultErr);
         Self {
             string: items.struct_name(CompilerItem::String).to_string(),
-            array: items.struct_name(CompilerItem::Array).to_string(),
+            array: items.struct_name(CompilerItem::List).to_string(),
             option: items.variant_name(CompilerItem::Option).to_string(),
             result: items.variant_name(CompilerItem::Result).to_string(),
             some_name: some_name.to_string(),
@@ -90,7 +90,7 @@ impl CmStdlibNames {
     pub fn for_tests() -> Self {
         Self {
             string: "String".to_string(),
-            array: "Array".to_string(),
+            array: "List".to_string(),
             option: "Option".to_string(),
             result: "Result".to_string(),
             some_name: "Some".to_string(),
@@ -199,7 +199,7 @@ pub fn cm_type_to_type_id(
         Type::Generic(g) => {
             let array_name = type_table
                 .compiler_items()
-                .struct_name(crate::compiler_item::CompilerItem::Array)
+                .struct_name(crate::compiler_item::CompilerItem::List)
                 .to_string();
             if g.name.as_str() == array_name && g.args.len() == 1 {
                 let elem_type = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);

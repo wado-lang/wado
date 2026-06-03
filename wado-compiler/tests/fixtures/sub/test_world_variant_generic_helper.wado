@@ -6,12 +6,12 @@ pub variant CstChild {
 pub struct TokenData {
     pub kind: i32,
     pub text: String,
-    pub leading: Array<TokenData>,
+    pub leading: List<TokenData>,
 }
 
 pub struct NodeData {
     pub name: String,
-    pub children: Array<CstChild>,
+    pub children: List<CstChild>,
 }
 
 pub trait Visitor {
@@ -57,6 +57,6 @@ pub fn to_tree(node: &NodeData) -> NodeData {
 pub fn make_test_tree() -> NodeData {
     let tok = TokenData { kind: 1, text: "x", leading: [] };
     let leaf = CstChild::TokenChild(tok);
-    let children: Array<CstChild> = [leaf];
+    let children: List<CstChild> = [leaf];
     return NodeData { name: "root", children };
 }

@@ -109,7 +109,7 @@ fn synthesize_lift_inner(
                 .struct_name(crate::compiler_item::CompilerItem::String)
                 .to_string(),
             items
-                .struct_name(crate::compiler_item::CompilerItem::Array)
+                .struct_name(crate::compiler_item::CompilerItem::List)
                 .to_string(),
             items
                 .variant_name(crate::compiler_item::CompilerItem::Option)
@@ -635,7 +635,7 @@ fn synthesize_lift_list(
         let array_tid = tt.make_array(elem_tid);
         let array_name = tt
             .compiler_items()
-            .struct_name(crate::compiler_item::CompilerItem::Array)
+            .struct_name(crate::compiler_item::CompilerItem::List)
             .to_string();
         (elem_tid, array_tid, array_name)
     };
@@ -668,7 +668,7 @@ fn synthesize_lift_list(
         generic_static_call(
             &array_struct_name,
             "with_capacity",
-            ModuleSource::array(),
+            ModuleSource::list(),
             vec![elem_type_id],
             vec![local_ref(count_local, "__count", TypeTable::I32)],
             array_type_id,
@@ -727,7 +727,7 @@ fn synthesize_lift_list(
         local_ref(result_local, "__result", array_type_id),
         &array_struct_name,
         "push",
-        ModuleSource::array(),
+        ModuleSource::list(),
         vec![lifted_elem],
         TypeTable::UNIT,
     )));

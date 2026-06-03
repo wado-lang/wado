@@ -43,7 +43,7 @@ pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
 pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
     let items = type_table.compiler_items();
     let box_name = items.struct_name(crate::compiler_item::CompilerItem::Box);
-    let array_name = items.struct_name(crate::compiler_item::CompilerItem::Array);
+    let array_name = items.struct_name(crate::compiler_item::CompilerItem::List);
     match type_table.get(type_id) {
         // Concrete structs need a field-by-field deep copy, except for
         // the `Box<T>` shortcut whose semantics intentionally share

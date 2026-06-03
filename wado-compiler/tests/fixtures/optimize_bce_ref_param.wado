@@ -1,7 +1,7 @@
 // Bounds check elimination with reference parameter.
 // The loop guard uses input.len() (= input.used) and the index check also uses input.used,
 // but they may be different locals after LICM.
-fn sum_all(input: &Array<u8>) -> i32 {
+fn sum_all(input: &List<u8>) -> i32 {
     let input_len = input.len();
     let mut sum = 0;
     for let mut i = 0; i < input_len; i += 1 {
@@ -11,7 +11,7 @@ fn sum_all(input: &Array<u8>) -> i32 {
 }
 
 export fn run() {
-    let arr: Array<u8> = Array::<u8>::filled(100, 42);
+    let arr: List<u8> = List::<u8>::filled(100, 42);
     let s = sum_all(&arr);
     assert s == 4200;
 }

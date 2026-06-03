@@ -14,8 +14,8 @@ use { TreeMap } from "core:collections";
 
 use { to_string, to_string_pretty, to_bytes, from_string, write_escaped_string, PrettyJsonSerializer } from "core:json";
 
-fn assert_bytes_eq_string(bytes: &Array<u8>, s: &String) {
-    let expected: Array<u8> = s.bytes().collect();
+fn assert_bytes_eq_string(bytes: &List<u8>, s: &String) {
+    let expected: List<u8> = s.bytes().collect();
     assert bytes.len() == expected.len();
     for let mut i = 0; i < bytes.len(); i += 1 {
         assert bytes[i] == expected[i];
@@ -116,26 +116,26 @@ test "serialize Option None" {
     assert r matches { Ok(s) && s == "null" };
 }
 
-test "serialize Array<i32>" {
-    let v: Array<i32> = [1, 2, 3];
+test "serialize List<i32>" {
+    let v: List<i32> = [1, 2, 3];
     let r = to_string(&v);
     assert r matches { Ok(s) && s == "[1,2,3]" };
 }
 
-test "serialize empty Array" {
-    let v: Array<i32> = [];
+test "serialize empty List" {
+    let v: List<i32> = [];
     let r = to_string(&v);
     assert r matches { Ok(s) && s == "[]" };
 }
 
-test "serialize Array<String>" {
-    let v: Array<String> = ["hello", "world"];
+test "serialize List<String>" {
+    let v: List<String> = ["hello", "world"];
     let r = to_string(&v);
     assert r matches { Ok(s) && s == `["hello","world"]` };
 }
 
-test "serialize nested Array" {
-    let v: Option<Array<i32>> = Option::Some([10, 20]);
+test "serialize nested List" {
+    let v: Option<List<i32>> = Option::Some([10, 20]);
     let r = to_string(&v);
     assert r matches { Ok(s) && s == "[10,20]" };
 }
@@ -158,8 +158,8 @@ test "to_bytes string with escapes matches to_string" {
     assert_bytes_eq_string(&bytes, &to_string(&v).unwrap());
 }
 
-test "to_bytes Array<String> matches to_string" {
-    let v: Array<String> = ["hello", "世界"];
+test "to_bytes List<String> matches to_string" {
+    let v: List<String> = ["hello", "世界"];
     let bytes = to_bytes(&v).unwrap();
     assert_bytes_eq_string(&bytes, &to_string(&v).unwrap());
 }
@@ -185,7 +185,7 @@ test "serialize pretty struct with default indent" {
 }
 
 test "serialize pretty with custom indent field" {
-    let v: Array<Array<i32>> = [
+    let v: List<List<i32>> = [
         [1],
         [2, 3],
     ];
@@ -210,7 +210,7 @@ test "serialize pretty with custom indent field" {
 }
 
 test "serialize pretty empty array" {
-    let v: Array<i32> = [];
+    let v: List<i32> = [];
     let r = to_string_pretty(&v);
     assert r matches { Ok(s) && s == "[]" };
 }

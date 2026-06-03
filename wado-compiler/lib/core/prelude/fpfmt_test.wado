@@ -429,7 +429,7 @@ test "parse_text overflow underflow" {
 
 test "parse roundtrip via short" {
     // Verify that parse(short(f).digits, short(f).exponent) == f
-    let values: Array<f64> = [1.0, 2.5, 3.14, 0.1, 100.0, 0.001, 1234567.89];
+    let values: List<f64> = [1.0, 2.5, 3.14, 0.1, 100.0, 0.001, 1234567.89];
     for let v of values {
         let r = short(v);
         let reconstructed = parse(r.digits, r.exponent);
@@ -478,7 +478,7 @@ test "short32 pi" {
 
 test "short32 roundtrip" {
     // Verify parse(short32(f).digits, short32(f).exponent) as f32 == f
-    let values: Array<f32> = [1.0, 2.5, 3.14, 0.1, 100.0];
+    let values: List<f32> = [1.0, 2.5, 3.14, 0.1, 100.0];
     for let v of values {
         let r = short32(v);
         let reconstructed = parse(r.digits, r.exponent) as f32;

@@ -211,7 +211,7 @@ fn lower_to_flat_inner(
                     local_ref(arr_local, "__arr_val", type_id),
                     &names.array,
                     "len",
-                    ModuleSource::array(),
+                    ModuleSource::list(),
                     vec![],
                     TypeTable::I32,
                 ),
@@ -293,7 +293,7 @@ fn lower_to_flat_inner(
                     TirExprKind::method_call(
                         Box::new(local_ref(arr_local, "__arr_val", type_id)),
                         FunctionRef {
-                            module_source: ModuleSource::array(),
+                            module_source: ModuleSource::list(),
                             name: iv_mangled,
                             monomorph_info: None,
                             method_info: Some(iv_info),

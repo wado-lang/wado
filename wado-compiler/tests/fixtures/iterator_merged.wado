@@ -1,5 +1,5 @@
 test "basic next" {
-    let arr: Array<i32> = [10, 20, 30];
+    let arr: List<i32> = [10, 20, 30];
     let mut iter = arr.iter();
 
     if let Some(a) = iter.next() {
@@ -24,14 +24,14 @@ test "basic next" {
 }
 
 test "empty" {
-    let arr: Array<i32> = [];
+    let arr: List<i32> = [];
     let mut iter = arr.iter();
     assert iter.next() matches { None };
     assert iter.next() matches { None };
 }
 
 test "into_iter" {
-    let arr: Array<i32> = [1, 2, 3];
+    let arr: List<i32> = [1, 2, 3];
     let mut iter = arr.into_iter();
     let mut sum = 0;
     loop {
@@ -45,7 +45,7 @@ test "into_iter" {
 }
 
 test "strings" {
-    let arr: Array<String> = ["hello", "world", "!"];
+    let arr: List<String> = ["hello", "world", "!"];
     let mut iter = arr.iter();
 
     if let Some(s) = iter.next() {

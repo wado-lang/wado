@@ -255,7 +255,7 @@ test "generate repeat fields" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"    pub item_list: Array<ItemNode>,");
+    assert str_contains(&output, &"    pub item_list: List<ItemNode>,");
     assert str_contains(&output, &"    pub comma: Option<Token>,");
 }
 
@@ -342,7 +342,7 @@ test "generate group variant type for repeated group" {
     assert str_contains(&output, &"pub variant StmtOrErrorGroup {");
     assert str_contains(&output, &"    Stmt(StmtNode),");
     assert str_contains(&output, &"    Error(ErrorNode),");
-    assert str_contains(&output, &"    pub stmt_or_error_list: Array<StmtOrErrorGroup>,");
+    assert str_contains(&output, &"    pub stmt_or_error_list: List<StmtOrErrorGroup>,");
 }
 
 test "generate wildcard element" {
@@ -453,7 +453,7 @@ test "generate list label field" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"    pub items: Array<ItemNode>,");
+    assert str_contains(&output, &"    pub items: List<ItemNode>,");
 }
 
 test "generate standalone group as optional field" {
@@ -836,7 +836,7 @@ test "LR helper wraps left into an array when the recursive-position label uses 
     // `b+=expr ',' b+=expr` declares `b` as a list-label (`+=`). After LR
     // rewriting the recursive `b+=expr` is consumed into the helper's `left`
     // parameter, but the generated struct field `b` keeps its
-    // `Array<ExprNode>` type (the `+=` semantics) — the helper must build
+    // `List<ExprNode>` type (the `+=` semantics) — the helper must build
     // `[left]` instead of bare `left`, otherwise the struct literal mismatches
     // the field type and the generated parser fails to compile.
     let input = "grammar Test;
@@ -848,7 +848,7 @@ WS : [ \\t\\n]+ -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     let helper = extract_fn_body(&output, &"fn _parse_expr__inner_lr_");
-    assert str_contains(&helper, &"b: [left] as Array<ExprNode>,");
+    assert str_contains(&helper, &"b: [left] as List<ExprNode>,");
 }
 
 test "LR helper stamps min_prec on a self-ref nested inside a Repeat group" {
@@ -1263,7 +1263,7 @@ WS : [ \\t\\n\\r]+ -> skip ;
     assert str_contains(&output, &"first_char == 'B'");
 }
 
-test "set list-label `name+=(A | B)*` emits Array<Token> + match_set" {
+test "set list-label `name+=(A | B)*` emits List<Token> + match_set" {
     let input = "grammar T;
 b : ID val+=(INT | FLOAT)* ;
 ID : 'a'..'z'+ ;
@@ -1274,7 +1274,7 @@ WS : (' '|'\\n') -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_b__inner(");
-    assert str_contains(&body, &"let mut val: Array<Token>");
+    assert str_contains(&body, &"let mut val: List<Token>");
     assert str_contains(&body, &"p.match_set([TK_INT, TK_FLOAT])");
     assert str_contains(&body, &"val.push(");
 }
@@ -1288,7 +1288,7 @@ ifStmt : 'if' 'y' statement ('else' statement)?? ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"lit_else_statement: Option<");
-    assert !str_contains(&output, &"lit_else_statement: Array<");
+    assert !str_contains(&output, &"lit_else_statement: List<");
     let body = extract_fn_body(&output, &"fn _parse_if_stmt__inner(");
     assert str_contains(&body, &"if p.peek_kind() == TK_LIT_ELSE");
     assert !str_contains(&body, &"while p.peek_kind() == TK_LIT_ELSE");

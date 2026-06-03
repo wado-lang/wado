@@ -18,7 +18,7 @@ pub struct KindSetEntry {
     pub id: i32,
     /// Canonical (sorted, unique) token list. Tokens are `TK_*` global
     /// constants in the generated source.
-    pub tokens: Array<String>,
+    pub tokens: List<String>,
 }
 
 /// Maximum K-prefix depth carried into `intern_follow_variant` for the
@@ -44,7 +44,7 @@ pub struct FollowVariantEntry {
     /// ∩ caller_follow`. Stored as `TK_*` constant names for stability
     /// across runs and to share variants across call sites that produce
     /// the same intersection.
-    pub mask: Array<String>,
+    pub mask: List<String>,
     /// Caller's K-token prefix at the call site. `k_prefix_mask[d]` is
     /// the set of valid tokens at depth `d`. Used by the variant body
     /// to gate iter dispatch on a multi-token peek — the multi-token
@@ -52,7 +52,7 @@ pub struct FollowVariantEntry {
     /// variant was registered through the single-token path only (the
     /// caller's K-prefix degenerated to K=1 or the caller's
     /// continuation could not be statically resolved past depth 0).
-    pub k_prefix_mask: Array<Array<String>>,
+    pub k_prefix_mask: List<List<String>>,
     /// Set when at least one scan-side call site uses the variant.
     pub scan_used: bool,
     /// Set when at least one parse-side call site uses the variant.
@@ -67,10 +67,10 @@ pub struct FollowVariantEntry {
 /// rule name, etc.) is threaded as an explicit parameter through
 /// the lowering and emission call chains.
 pub struct GenContext {
-    pub parser_rules: Array<ParserRule>,
-    pub lit_tokens: Array<LitToken>,
+    pub parser_rules: List<ParserRule>,
+    pub lit_tokens: List<LitToken>,
     rule_index: TreeMap<String, i32>,
-    first_cache: TreeMap<String, Array<String>>,
+    first_cache: TreeMap<String, List<String>>,
     single_token_cache: TreeMap<String, bool>,
     nullable_cache: TreeMap<String, bool>,
     scannable_cache: TreeMap<String, bool>,
@@ -82,7 +82,7 @@ pub struct GenContext {
     /// the same input grammar always produces the same helper names.
     kind_set_registry: TreeMap<String, KindSetEntry>,
     /// Cache of `tail_greedy_first(rule)` keyed by rule name.
-    tail_greedy_cache: TreeMap<String, Array<String>>,
+    tail_greedy_cache: TreeMap<String, List<String>>,
     /// Cache of `tail_greedy_k_prefix(rule, max_k)`. Outer array is
     /// indexed by `max_k` (so `cache[k][name]` is the K=k prefix for
     /// `name`); inner TreeMap is keyed by rule name. An array of maps —
@@ -90,7 +90,7 @@ pub struct GenContext {
     /// the hot lookup path free of per-call `String` allocation.
     /// `max_k` is bounded by `FOLLOW_VARIANT_MAX_K`, so the outer array
     /// stays small (slot `0` is unused; slots are grown on first use).
-    tail_greedy_k_prefix_cache: Array<TreeMap<String, Array<Array<String>>>>,
+    tail_greedy_k_prefix_cache: List<TreeMap<String, List<List<String>>>>,
     /// Registry of follow-aware rule variants keyed by `rule_name + ':'
     /// + canonical_mask`. IDs are assigned in insertion order. See
     /// `FollowVariantEntry`.
@@ -99,16 +99,16 @@ pub struct GenContext {
     /// returns entries in this order so generated source is stable
     /// across runs. Each key directly indexes
     /// `follow_variant_registry`, giving an O(n) walk.
-    follow_variant_order: Array<String>,
+    follow_variant_order: List<String>,
     /// Prediction-strategy diagnostics raised during lowering, in the
     /// order lowering walked the rules. Drained into
     /// `LoweredGrammar.diagnostics` by `lower_with_ctx`. See
     /// `Diagnostic` in `gir.wado`.
-    diagnostics: Array<Diagnostic>,
+    diagnostics: List<Diagnostic>,
 }
 
 impl GenContext {
-    pub fn new(parser_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) -> GenContext {
+    pub fn new(parser_rules: &List<ParserRule>, lit_tokens: &List<LitToken>) -> GenContext {
         let mut rule_index = TreeMap::<String, i32>::new();
         for let mut i = 0; i < parser_rules.len(); i += 1 {
             rule_index[parser_rules[i].name] = i;
@@ -118,13 +118,13 @@ impl GenContext {
             parser_rules: *parser_rules,
             lit_tokens: *lit_tokens,
             rule_index,
-            first_cache: TreeMap::<String, Array<String>>::new(),
+            first_cache: TreeMap::<String, List<String>>::new(),
             single_token_cache: TreeMap::<String, bool>::new(),
             nullable_cache: TreeMap::<String, bool>::new(),
             scannable_cache: TreeMap::<String, bool>::new(),
             single_alt_owner,
             kind_set_registry: TreeMap::<String, KindSetEntry>::new(),
-            tail_greedy_cache: TreeMap::<String, Array<String>>::new(),
+            tail_greedy_cache: TreeMap::<String, List<String>>::new(),
             tail_greedy_k_prefix_cache: [],
             follow_variant_registry: TreeMap::<String, FollowVariantEntry>::new(),
             follow_variant_order: [],
@@ -155,7 +155,7 @@ impl GenContext {
     /// semantics; `self` keeps its own). `lower_with_ctx` reads them
     /// exactly once into `LoweredGrammar.diagnostics`, so the copy is
     /// harmless.
-    pub fn take_diagnostics(&self) -> Array<Diagnostic> {
+    pub fn take_diagnostics(&self) -> List<Diagnostic> {
         return self.diagnostics;
     }
 
@@ -167,7 +167,7 @@ impl GenContext {
         return null;
     }
 
-    pub fn first_of_rule(&mut self, name: &String, visiting: &mut Array<String>) -> Array<String> {
+    pub fn first_of_rule(&mut self, name: &String, visiting: &mut List<String>) -> List<String> {
         let cached = self.first_cache.get(*name);
         if let Some(result) = cached {
             return result;
@@ -180,7 +180,7 @@ impl GenContext {
         let is_top_level = visiting.is_empty();
         visiting.push(*name);
 
-        let mut result: Array<String> = [];
+        let mut result: List<String> = [];
 
         let rule = self.find_rule(name);
         if let Some(rule) = rule {
@@ -199,13 +199,13 @@ impl GenContext {
         return result;
     }
 
-    pub fn first_of_element(&mut self, elem: &Element, visiting: &mut Array<String>) -> Array<String> {
+    pub fn first_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> List<String> {
         return match elem {
             TokenRef(t) => [`TK_{t.name}`],
             Literal(l) => [literal_const_name(&l.text)],
             RuleRef(r) => self.first_of_rule(&r.name, visiting),
             Group(g) => {
-                let mut result: Array<String> = [];
+                let mut result: List<String> = [];
                 for let alt of &g.alternatives {
                     let af = self.first_of_alt(alt, visiting);
                     extend_dedup(&mut result, &af);
@@ -224,8 +224,8 @@ impl GenContext {
         };
     }
 
-    pub fn first_of_alt(&mut self, alt: &Alternative, visiting: &mut Array<String>) -> Array<String> {
-        let mut result: Array<String> = [];
+    pub fn first_of_alt(&mut self, alt: &Alternative, visiting: &mut List<String>) -> List<String> {
+        let mut result: List<String> = [];
 
         for let elem of &alt.elements {
             let elem_first = self.first_of_element(elem, visiting);
@@ -237,11 +237,11 @@ impl GenContext {
         return result;
     }
 
-    pub fn first_of_elements_from(&mut self, elements: &Array<Element>, start: i32) -> Array<String> {
-        let mut result: Array<String> = [];
+    pub fn first_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<String> {
+        let mut result: List<String> = [];
 
         for let mut i = start; i < elements.len(); i += 1 {
-            let mut visiting: Array<String> = [];
+            let mut visiting: List<String> = [];
             let elem_first = self.first_of_element(&elements[i], &mut visiting);
             extend_dedup(&mut result, &elem_first);
             if !is_nullable(&elements[i]) {
@@ -265,7 +265,7 @@ impl GenContext {
     /// Thin wrapper around [`position_first_sets_from`] with `start = 0` —
     /// the generic form supports computing FIRST sets at an arbitrary
     /// suffix offset (the multi-token follow-mask path).
-    pub fn alt_position_first_sets(&mut self, alt: &Alternative, max_depth: i32) -> Array<Array<String>> {
+    pub fn alt_position_first_sets(&mut self, alt: &Alternative, max_depth: i32) -> List<List<String>> {
         return self.position_first_sets_from(&alt.elements, 0, max_depth);
     }
 
@@ -289,8 +289,8 @@ impl GenContext {
     /// to follow the suffix past the walk (e.g.
     /// [`compute_call_site_k_prefix_mask`]'s tail-nullable check)
     /// must use the element count, not the depth count.
-    pub fn deep_position_first_sets_from(&mut self, elements: &Array<Element>, start: i32, max_depth: i32, visiting: &mut Array<String>) -> [Array<Array<String>>, i32] {
-        let mut result: Array<Array<String>> = [];
+    pub fn deep_position_first_sets_from(&mut self, elements: &List<Element>, start: i32, max_depth: i32, visiting: &mut List<String>) -> [List<List<String>>, i32] {
+        let mut result: List<List<String>> = [];
         let final_cursor = self.deep_position_walk(elements, start, max_depth, &mut result, visiting);
         return [result, final_cursor - start];
     }
@@ -302,7 +302,7 @@ impl GenContext {
     /// return value tells callers whether subsequent elements can be
     /// safely indexed (when fully consumed) or whether the walk hit a
     /// non-deterministic position (halted).
-    fn deep_position_walk(&mut self, elements: &Array<Element>, start: i32, max_depth: i32, result: &mut Array<Array<String>>, visiting: &mut Array<String>) -> i32 {
+    fn deep_position_walk(&mut self, elements: &List<Element>, start: i32, max_depth: i32, result: &mut List<List<String>>, visiting: &mut List<String>) -> i32 {
         let mut cursor = start;
         while result.len() < max_depth && cursor < elements.len() {
             // Suffix from `cursor` must consume ≥1 token — otherwise the
@@ -313,7 +313,7 @@ impl GenContext {
             let elem = &elements[cursor];
             match elem {
                 TokenRef(_) | Literal(_) => {
-                    let mut fv: Array<String> = [];
+                    let mut fv: List<String> = [];
                     let first = self.first_of_element(elem, &mut fv);
                     if first.is_empty() {
                         return cursor;
@@ -329,7 +329,7 @@ impl GenContext {
                     // must halt too — otherwise we'd keep consuming
                     // subsequent surface elements at depths that no
                     // longer align with the un-fully-walked label.
-                    let single: Array<Element> = [lab.element];
+                    let single: List<Element> = [lab.element];
                     let inner_final = self.deep_position_walk(&single, 0, max_depth, result, visiting);
                     if inner_final < single.len() {
                         return cursor;
@@ -384,8 +384,8 @@ impl GenContext {
     /// multi-token element — preserving the input-offset alignment that
     /// makes the result a sound lookahead predictor. See
     /// [`alt_position_first_sets`] for the invariant details.
-    pub fn position_first_sets_from(&mut self, elements: &Array<Element>, start: i32, max_depth: i32) -> Array<Array<String>> {
-        let mut result: Array<Array<String>> = [];
+    pub fn position_first_sets_from(&mut self, elements: &List<Element>, start: i32, max_depth: i32) -> List<List<String>> {
+        let mut result: List<List<String>> = [];
         let mut cursor = start;
         while result.len() < max_depth && cursor < elements.len() {
             // If the tail from `cursor` onwards is entirely nullable, the
@@ -406,7 +406,7 @@ impl GenContext {
 
             // Advance past element[cursor] only if it consumes exactly 1 token;
             // otherwise result[d+1] would not align with input offset d+1.
-            let mut visiting: Array<String> = [];
+            let mut visiting: List<String> = [];
             if !self.element_is_single_token(&elements[cursor], &mut visiting) {
                 break;
             }
@@ -417,13 +417,13 @@ impl GenContext {
 
     /// Like `first_of_elements_from` but uses deep nullability so it correctly
     /// flows through `RuleRef`s whose underlying rule matches zero tokens.
-    pub fn deep_first_of_elements_from(&mut self, elements: &Array<Element>, start: i32) -> Array<String> {
-        let mut result: Array<String> = [];
+    pub fn deep_first_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<String> {
+        let mut result: List<String> = [];
         for let mut i = start; i < elements.len(); i += 1 {
-            let mut fv: Array<String> = [];
+            let mut fv: List<String> = [];
             let elem_first = self.first_of_element(&elements[i], &mut fv);
             extend_dedup(&mut result, &elem_first);
-            let mut nv: Array<String> = [];
+            let mut nv: List<String> = [];
             if !self.element_is_nullable_deep(&elements[i], &mut nv) {
                 break;
             }
@@ -438,9 +438,9 @@ impl GenContext {
     /// Used both as "is the suffix from `start` nullable?" (by alt
     /// walkers gating follow propagation) and as "is the rule body
     /// nullable?" (by tail-greedy analysis).
-    pub fn tail_is_nullable_deep(&mut self, elements: &Array<Element>, start: i32) -> bool {
+    pub fn tail_is_nullable_deep(&mut self, elements: &List<Element>, start: i32) -> bool {
         for let mut i = start; i < elements.len(); i += 1 {
-            let mut visiting: Array<String> = [];
+            let mut visiting: List<String> = [];
             if !self.element_is_nullable_deep(&elements[i], &mut visiting) {
                 return false;
             }
@@ -448,7 +448,7 @@ impl GenContext {
         return true;
     }
 
-    pub fn element_is_nullable_deep(&mut self, elem: &Element, visiting: &mut Array<String>) -> bool {
+    pub fn element_is_nullable_deep(&mut self, elem: &Element, visiting: &mut List<String>) -> bool {
         return match elem {
             TokenRef(_) => false,
             Literal(_) => false,
@@ -480,7 +480,7 @@ impl GenContext {
         };
     }
 
-    pub fn rule_is_nullable(&mut self, name: &String, visiting: &mut Array<String>) -> bool {
+    pub fn rule_is_nullable(&mut self, name: &String, visiting: &mut List<String>) -> bool {
         let cached = self.nullable_cache.get(*name);
         if let Some(val) = cached {
             return val;
@@ -522,7 +522,7 @@ impl GenContext {
 
     /// True if the element always consumes exactly 1 input token on match.
     /// Used to keep `alt_position_first_sets` element-to-input-position aligned.
-    pub fn element_is_single_token(&mut self, elem: &Element, visiting: &mut Array<String>) -> bool {
+    pub fn element_is_single_token(&mut self, elem: &Element, visiting: &mut List<String>) -> bool {
         return match elem {
             TokenRef(_) => true,
             Literal(_) => true,
@@ -557,7 +557,7 @@ impl GenContext {
         return match elem {
             TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => true,
             RuleRef(r) => {
-                let mut visiting: Array<String> = [];
+                let mut visiting: List<String> = [];
                 self.rule_is_single_token(&r.name, &mut visiting);
             },
             Label(lab) => self.element_is_first_exact(&lab.element),
@@ -584,7 +584,7 @@ impl GenContext {
     /// preceding `RuleRef`'s caller-follow when the suffix is
     /// deep-nullable. See `element_is_first_exact` for the semantic
     /// argument.
-    pub fn deep_suffix_is_first_exact(&mut self, elements: &Array<Element>, start: i32) -> bool {
+    pub fn deep_suffix_is_first_exact(&mut self, elements: &List<Element>, start: i32) -> bool {
         for let mut i = start; i < elements.len(); i += 1 {
             if !self.element_is_first_exact(&elements[i]) {
                 return false;
@@ -615,7 +615,7 @@ impl GenContext {
     /// `outer_follow` is the surrounding variant's mask (`[]` for
     /// regular non-variant bodies). Threaded from `lower`'s call chain
     /// rather than read from walker state.
-    pub fn compute_call_site_follow(&mut self, elements: &Array<Element>, i: i32, outer_follow: &Array<String>) -> Array<String> {
+    pub fn compute_call_site_follow(&mut self, elements: &List<Element>, i: i32, outer_follow: &List<String>) -> List<String> {
         return self.compute_call_site_follow_and_mask(elements, i, outer_follow).0;
     }
 
@@ -638,8 +638,8 @@ impl GenContext {
     /// Returns `[]` when neither source contributes a prefix.
     /// Bounded by `max_k` (small constant; the variant's runtime peek
     /// pays for each depth checked).
-    pub fn compute_call_site_k_prefix_mask(&mut self, elements: &Array<Element>, i: i32, max_k: i32, variant_k_prefix_mask: &Array<Array<String>>) -> Array<Array<String>> {
-        let mut visiting: Array<String> = [];
+    pub fn compute_call_site_k_prefix_mask(&mut self, elements: &List<Element>, i: i32, max_k: i32, variant_k_prefix_mask: &List<List<String>>) -> List<List<String>> {
+        let mut visiting: List<String> = [];
         let [local, consumed_elements] = self.deep_position_first_sets_from(elements, i + 1, max_k, &mut visiting);
         // If the local walk filled the whole budget, the variant's
         // mask is dead beyond what we already have.
@@ -682,7 +682,7 @@ impl GenContext {
     /// otherwise. Used by lower's per-position loop to populate
     /// `RepeatOp.k_prefix_mask` at tail-greedy Repeats inside a
     /// variant body.
-    pub fn compute_k_prefix_position_mask(&mut self, elements: &Array<Element>, i: i32, variant_k_prefix_mask: &Array<Array<String>>) -> Array<Array<String>> {
+    pub fn compute_k_prefix_position_mask(&mut self, elements: &List<Element>, i: i32, variant_k_prefix_mask: &List<List<String>>) -> List<List<String>> {
         if variant_k_prefix_mask.is_empty() {
             return [];
         }
@@ -700,8 +700,8 @@ impl GenContext {
     /// suffix twice in `lower`'s per-position loop (which would
     /// otherwise call `inner_follow_at` + `position_mask_at`
     /// back-to-back).
-    pub fn compute_call_site_follow_and_mask(&mut self, elements: &Array<Element>, i: i32, outer_follow: &Array<String>) -> [Array<String>, Array<String>] {
-        let empty: Array<String> = [];
+    pub fn compute_call_site_follow_and_mask(&mut self, elements: &List<Element>, i: i32, outer_follow: &List<String>) -> [List<String>, List<String>] {
+        let empty: List<String> = [];
         let first = self.first_of_elements_from(elements, i + 1);
         if !self.tail_is_nullable_deep(elements, i + 1) {
             return [first, empty];
@@ -712,7 +712,7 @@ impl GenContext {
         return [*outer_follow, *outer_follow];
     }
 
-    pub fn rule_is_single_token(&mut self, name: &String, visiting: &mut Array<String>) -> bool {
+    pub fn rule_is_single_token(&mut self, name: &String, visiting: &mut List<String>) -> bool {
         let cached = self.single_token_cache.get(*name);
         if let Some(val) = cached {
             return val;
@@ -786,7 +786,7 @@ impl GenContext {
     /// match here. See `AGENTS.md` "Failed Approaches: Removing the LR
     /// Gate ... 2026-04" for the historical context that ruled out a naive
     /// gate removal.
-    pub fn is_rule_scannable(&mut self, name: &String, visiting: &mut Array<String>) -> bool {
+    pub fn is_rule_scannable(&mut self, name: &String, visiting: &mut List<String>) -> bool {
         let cached = self.scannable_cache.get(*name);
         if let Some(val) = cached {
             return val;
@@ -822,7 +822,7 @@ impl GenContext {
     }
 
     /// Returns true if every element in the sequence is scannable.
-    pub fn is_alt_scannable(&mut self, elements: &Array<Element>, visiting: &mut Array<String>) -> bool {
+    pub fn is_alt_scannable(&mut self, elements: &List<Element>, visiting: &mut List<String>) -> bool {
         for let elem of elements {
             if !self.is_element_scannable(elem, visiting) {
                 return false;
@@ -832,7 +832,7 @@ impl GenContext {
     }
 
     /// Returns true if a single element is scannable.
-    pub fn is_element_scannable(&mut self, elem: &Element, visiting: &mut Array<String>) -> bool {
+    pub fn is_element_scannable(&mut self, elem: &Element, visiting: &mut List<String>) -> bool {
         return match elem {
             TokenRef(_) | Literal(_) => true,
             RuleRef(r) => self.is_rule_scannable(&r.name, visiting),
@@ -870,7 +870,7 @@ impl GenContext {
     /// Intern a token-kind set. The same set (regardless of input order
     /// or duplicates) maps to a single `id`. Helper IDs are assigned in
     /// first-seen order across the codegen pass.
-    pub fn intern_kind_set(&mut self, tokens: &Array<String>) -> i32 {
+    pub fn intern_kind_set(&mut self, tokens: &List<String>) -> i32 {
         let canonical = canonical_kind_set(tokens);
         let key = join_pipe(&canonical);
         if let Some(entry) = self.kind_set_registry.get(key) {
@@ -883,7 +883,7 @@ impl GenContext {
 
     /// All interned kind sets in helper-ID order (i.e. insertion order).
     /// Consumed by `gen_kind_set_helpers` to emit the helper functions.
-    pub fn kind_sets(&self) -> Array<KindSetEntry> {
+    pub fn kind_sets(&self) -> List<KindSetEntry> {
         return self.kind_set_registry.values();
     }
 
@@ -897,7 +897,7 @@ impl GenContext {
     /// Multi-element sets always go through the helper indirection so
     /// duplicate sets across the grammar share a single function body
     /// in the generated wasm.
-    pub fn kind_check_str(&mut self, tokens: &Array<String>, expr: &String) -> String {
+    pub fn kind_check_str(&mut self, tokens: &List<String>, expr: &String) -> String {
         if tokens.is_empty() {
             return "true";
         }
@@ -909,7 +909,7 @@ impl GenContext {
     }
 
     /// Sugar for `kind_check_str` against `p.peek_kind()`.
-    pub fn first_check_str(&mut self, first_set: &Array<String>) -> String {
+    pub fn first_check_str(&mut self, first_set: &List<String>) -> String {
         return self.kind_check_str(first_set, &"p.peek_kind()");
     }
 
@@ -922,7 +922,7 @@ impl GenContext {
     /// call site's caller-local `FOLLOW` does not intersect this set,
     /// the callee's tail-greedy elements cannot collide with the
     /// caller's expectations and no variant is needed.
-    pub fn tail_greedy_first_of_rule(&mut self, name: &String, visiting: &mut Array<String>) -> Array<String> {
+    pub fn tail_greedy_first_of_rule(&mut self, name: &String, visiting: &mut List<String>) -> List<String> {
         let cached = self.tail_greedy_cache.get(*name);
         if let Some(result) = cached {
             return result;
@@ -935,7 +935,7 @@ impl GenContext {
         let is_top_level = visiting.is_empty();
         visiting.push(*name);
 
-        let mut result: Array<String> = [];
+        let mut result: List<String> = [];
         let rule = self.find_rule(name);
         if let Some(rule) = rule {
             for let alt of &rule.alternatives {
@@ -958,14 +958,14 @@ impl GenContext {
     /// `Repeat (Optional|Star|Plus)` contributes `first_of_element(inner)`.
     /// A nested `Group` recurses per alt. A `RuleRef` to a rule with a
     /// non-empty `tail_greedy_first` contributes that set transitively.
-    fn tail_greedy_first_of_elements(&mut self, elements: &Array<Element>, visiting: &mut Array<String>) -> Array<String> {
-        let mut result: Array<String> = [];
+    fn tail_greedy_first_of_elements(&mut self, elements: &List<Element>, visiting: &mut List<String>) -> List<String> {
+        let mut result: List<String> = [];
         let mut i = elements.len() - 1;
         while i >= 0 {
             let elem = &elements[i];
             let tg = self.tail_greedy_first_of_element(elem, visiting);
             extend_dedup(&mut result, &tg);
-            let mut nv: Array<String> = [];
+            let mut nv: List<String> = [];
             if !self.element_is_nullable_deep(elem, &mut nv) {
                 break;
             }
@@ -974,7 +974,7 @@ impl GenContext {
         return result;
     }
 
-    fn tail_greedy_first_of_element(&mut self, elem: &Element, visiting: &mut Array<String>) -> Array<String> {
+    fn tail_greedy_first_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> List<String> {
         return match elem {
             Repeat(rep) => {
                 // Only count Repeats whose inner consumes EXACTLY one
@@ -989,18 +989,18 @@ impl GenContext {
                 // static analysis cannot. Restricting to single-token
                 // inners keeps the LL repair (`Y?` in `a : X Y?`)
                 // working without breaking those grammars.
-                let mut stv: Array<String> = [];
+                let mut stv: List<String> = [];
                 let single = self.element_is_single_token(&rep.element, &mut stv);
-                let result: Array<String> = if !single {
+                let result: List<String> = if !single {
                     [];
                 } else {
-                    let mut fv: Array<String> = [];
+                    let mut fv: List<String> = [];
                     self.first_of_element(&rep.element, &mut fv);
                 };
                 result;
             },
             Group(g) => {
-                let mut acc: Array<String> = [];
+                let mut acc: List<String> = [];
                 for let alt of &g.alternatives {
                     let inner = self.tail_greedy_first_of_elements(&alt.elements, visiting);
                     extend_dedup(&mut acc, &inner);
@@ -1032,7 +1032,7 @@ impl GenContext {
     /// case) doesn't trigger spurious yields. Multi-alt Group inners
     /// halt at depth 0 (per-depth alignment unknown across alts) —
     /// conservative but sound.
-    pub fn tail_greedy_k_prefix_of_rule(&mut self, name: &String, max_k: i32, visiting: &mut Array<String>) -> Array<Array<String>> {
+    pub fn tail_greedy_k_prefix_of_rule(&mut self, name: &String, max_k: i32, visiting: &mut List<String>) -> List<List<String>> {
         if max_k >= 0 && max_k < self.tail_greedy_k_prefix_cache.len() {
             let cached = self.tail_greedy_k_prefix_cache[max_k].get(*name);
             if let Some(result) = cached {
@@ -1047,7 +1047,7 @@ impl GenContext {
         let is_top_level = visiting.is_empty();
         visiting.push(*name);
 
-        let mut result: Array<Array<String>> = [];
+        let mut result: List<List<String>> = [];
         let rule = self.find_rule(name);
         if let Some(rule) = rule {
             for let alt of &rule.alternatives {
@@ -1060,7 +1060,7 @@ impl GenContext {
 
         if is_top_level && max_k >= 0 {
             while self.tail_greedy_k_prefix_cache.len() <= max_k {
-                self.tail_greedy_k_prefix_cache.push(TreeMap::<String, Array<Array<String>>>::new());
+                self.tail_greedy_k_prefix_cache.push(TreeMap::<String, List<List<String>>>::new());
             }
             self.tail_greedy_k_prefix_cache[max_k][*name] = result;
         }
@@ -1072,14 +1072,14 @@ impl GenContext {
     /// contributions from tail-position Repeats. Stops at the first
     /// non-deeply-nullable element. Mirrors `tail_greedy_first_of_elements`
     /// but returns multi-depth prefix sets.
-    fn tail_greedy_k_prefix_of_elements(&mut self, elements: &Array<Element>, max_k: i32, visiting: &mut Array<String>) -> Array<Array<String>> {
-        let mut result: Array<Array<String>> = [];
+    fn tail_greedy_k_prefix_of_elements(&mut self, elements: &List<Element>, max_k: i32, visiting: &mut List<String>) -> List<List<String>> {
+        let mut result: List<List<String>> = [];
         let mut i = elements.len() - 1;
         while i >= 0 {
             let elem = &elements[i];
             let tg = self.tail_greedy_k_prefix_of_element(elem, max_k, visiting);
             result = union_k_prefix(&result, &tg);
-            let mut nv: Array<String> = [];
+            let mut nv: List<String> = [];
             if !self.element_is_nullable_deep(elem, &mut nv) {
                 break;
             }
@@ -1088,11 +1088,11 @@ impl GenContext {
         return result;
     }
 
-    fn tail_greedy_k_prefix_of_element(&mut self, elem: &Element, max_k: i32, visiting: &mut Array<String>) -> Array<Array<String>> {
+    fn tail_greedy_k_prefix_of_element(&mut self, elem: &Element, max_k: i32, visiting: &mut List<String>) -> List<List<String>> {
         return match elem {
             Repeat(rep) => self.iter_k_prefix(&rep.element, max_k),
             Group(g) => {
-                let mut acc: Array<Array<String>> = [];
+                let mut acc: List<List<String>> = [];
                 for let alt of &g.alternatives {
                     let inner = self.tail_greedy_k_prefix_of_elements(&alt.elements, max_k, visiting);
                     acc = union_k_prefix(&acc, &inner);
@@ -1126,7 +1126,7 @@ impl GenContext {
     /// so a `(X Y)` body yields `[{X}, {Y}]`. Multi-alt Groups and other
     /// shapes fall back to the single-element walk (K=1 in the common
     /// case).
-    fn iter_k_prefix(&mut self, repeat_inner: &Element, max_k: i32) -> Array<Array<String>> {
+    fn iter_k_prefix(&mut self, repeat_inner: &Element, max_k: i32) -> List<List<String>> {
         return match repeat_inner {
             Group(g) => if g.alternatives.len() == 1 {
                 self.position_first_sets_from(&g.alternatives[0].elements, 0, max_k);
@@ -1135,7 +1135,7 @@ impl GenContext {
                 // Walk each alt separately and union per depth. For most
                 // grammars the alts diverge past depth 0, so this yields
                 // K=1 (a depth-0 union of each alt's first token).
-                let mut acc: Array<Array<String>> = [];
+                let mut acc: List<List<String>> = [];
                 for let alt of &g.alternatives {
                     let a_pre = self.position_first_sets_from(&alt.elements, 0, max_k);
                     acc = union_k_prefix(&acc, &a_pre);
@@ -1144,7 +1144,7 @@ impl GenContext {
             },
             Label(lab) => self.iter_k_prefix(&lab.element, max_k),
             _ => {
-                let single: Array<Element> = [*repeat_inner];
+                let single: List<Element> = [*repeat_inner];
                 self.position_first_sets_from(&single, 0, max_k);
             },
         };
@@ -1168,7 +1168,7 @@ impl GenContext {
     /// next K tokens match the caller's deterministic continuation —
     /// closes the multi-token tail-greedy gap (TODO.md) for shapes like
     /// `a : N (X Y)+ ;` with caller `c : X Y Z`.
-    pub fn intern_follow_variant(&mut self, rule_name: &String, caller_follow: &Array<String>, caller_k_prefix: &Array<Array<String>>, is_scan: bool) -> Option<i32> {
+    pub fn intern_follow_variant(&mut self, rule_name: &String, caller_follow: &List<String>, caller_k_prefix: &List<List<String>>, is_scan: bool) -> Option<i32> {
         // Phase 5 step 6: every rule shape — single-alt, multi-alt, and
         // left-recursive — now routes variant emit through the unified
         // `gen_parse_fn_named` / `gen_scan_function_named` path. The
@@ -1179,9 +1179,9 @@ impl GenContext {
         if rule_opt matches { None } {
             return null;
         }
-        let mut visiting: Array<String> = [];
+        let mut visiting: List<String> = [];
         let tg = self.tail_greedy_first_of_rule(rule_name, &mut visiting);
-        let mut intersection: Array<String> = [];
+        let mut intersection: List<String> = [];
         if !tg.is_empty() && !caller_follow.is_empty() {
             for let tk of &tg {
                 if caller_follow.contains(tk) {
@@ -1198,9 +1198,9 @@ impl GenContext {
         // restrictive as a K-prefix gate keyed on the same depth-0
         // tokens — emitting a parallel K-prefix variant would just
         // duplicate the body and bloat the generated parser.
-        let mut k_prefix_canonical: Array<Array<String>> = [];
+        let mut k_prefix_canonical: List<List<String>> = [];
         if intersection.is_empty() && !caller_k_prefix.is_empty() {
-            let mut k_visiting: Array<String> = [];
+            let mut k_visiting: List<String> = [];
             let max_k_for_iter = caller_k_prefix.len();
             let iter_kp = self.tail_greedy_k_prefix_of_rule(rule_name, max_k_for_iter, &mut k_visiting);
             if !iter_kp.is_empty() && !caller_k_prefix[0].is_empty() {
@@ -1254,8 +1254,8 @@ impl GenContext {
     /// Consumed by `emit_follow_variant` via the fixed-point loop in
     /// `gen_parser`. O(n) — each `follow_variant_order`
     /// entry is the registry key, so we look up directly.
-    pub fn follow_variants(&self) -> Array<FollowVariantEntry> {
-        let mut out: Array<FollowVariantEntry> = [];
+    pub fn follow_variants(&self) -> List<FollowVariantEntry> {
+        let mut out: List<FollowVariantEntry> = [];
         for let key of &self.follow_variant_order {
             if let Some(entry) = self.follow_variant_registry.get(*key) {
                 out.push(entry);
@@ -1267,7 +1267,7 @@ impl GenContext {
     /// Render the negation of a token-set membership check —
     /// `!_gale_kind_set_<id>(<expr>)` for ≥2 tokens, else
     /// `<expr> != TK_X`. Used by non-greedy emit sites.
-    pub fn kind_negate_check_str(&mut self, tokens: &Array<String>, expr: &String) -> String {
+    pub fn kind_negate_check_str(&mut self, tokens: &List<String>, expr: &String) -> String {
         if tokens.is_empty() {
             return "false";
         }
@@ -1283,10 +1283,10 @@ impl GenContext {
 /// canonical representative of the set. Two `matches { ... }` checks
 /// over equal sets (regardless of order or repeated elements) collapse
 /// to the same canonical form and therefore the same helper id.
-fn canonical_kind_set(tokens: &Array<String>) -> Array<String> {
+fn canonical_kind_set(tokens: &List<String>) -> List<String> {
     let mut sorted = *tokens;
     sorted.sort();
-    let mut out: Array<String> = [];
+    let mut out: List<String> = [];
     for let mut i = 0; i < sorted.len(); i += 1 {
         if i == 0 || sorted[i] != sorted[i - 1] {
             out.push(sorted[i]);
@@ -1298,7 +1298,7 @@ fn canonical_kind_set(tokens: &Array<String>) -> Array<String> {
 /// Join an already-canonicalised token list with `|`. The resulting
 /// string is the registry key. `|` cannot appear in `TK_*` identifiers
 /// so this is unambiguous.
-fn join_pipe(tokens: &Array<String>) -> String {
+fn join_pipe(tokens: &List<String>) -> String {
     let mut s = String::with_capacity(64);
     for let mut i = 0; i < tokens.len(); i += 1 {
         if i > 0 {
@@ -1311,7 +1311,7 @@ fn join_pipe(tokens: &Array<String>) -> String {
 
 /// Build a map from single-alt group type name to the first rule that contains it.
 /// This ensures parser gen uses the same type names as the type gen for shared groups.
-fn build_single_alt_owner_map(parser_rules: &Array<ParserRule>) -> TreeMap<String, String> {
+fn build_single_alt_owner_map(parser_rules: &List<ParserRule>) -> TreeMap<String, String> {
     let mut map = TreeMap::<String, String>::new();
     for let rule of parser_rules {
         for let alt of &rule.alternatives {
@@ -1321,7 +1321,7 @@ fn build_single_alt_owner_map(parser_rules: &Array<ParserRule>) -> TreeMap<Strin
     return map;
 }
 
-fn scan_elements_for_single_alt_groups(elements: &Array<Element>, rule_name: &String, map: &mut TreeMap<String, String>) {
+fn scan_elements_for_single_alt_groups(elements: &List<Element>, rule_name: &String, map: &mut TreeMap<String, String>) {
     for let elem of elements {
         scan_element_for_single_alt_groups(elem, rule_name, map);
     }
@@ -1354,7 +1354,7 @@ fn scan_element_for_single_alt_groups(elem: &Element, rule_name: &String, map: &
     }
 }
 
-fn extract_group_alts_for_scan(elem: &Element) -> Option<&Array<Alternative>> {
+fn extract_group_alts_for_scan(elem: &Element) -> Option<&List<Alternative>> {
     if let Group(g) = elem {
         return Option::Some(&g.alternatives);
     }
@@ -1375,7 +1375,7 @@ pub fn is_nullable(elem: &Element) -> bool {
     return false;
 }
 
-pub fn sets_overlap(a: &Array<String>, b: &Array<String>) -> bool {
+pub fn sets_overlap(a: &List<String>, b: &List<String>) -> bool {
     for let x of a {
         if b.contains(x) {
             return true;
@@ -1384,7 +1384,7 @@ pub fn sets_overlap(a: &Array<String>, b: &Array<String>) -> bool {
     return false;
 }
 
-pub fn is_simple_token_group(alts: &Array<Alternative>) -> bool {
+pub fn is_simple_token_group(alts: &List<Alternative>) -> bool {
     for let alt of alts {
         if alt.elements.len() != 1 {
             return false;
@@ -1398,7 +1398,7 @@ pub fn is_simple_token_group(alts: &Array<Alternative>) -> bool {
     return true;
 }
 
-fn extend_dedup(target: &mut Array<String>, source: &Array<String>) {
+fn extend_dedup(target: &mut List<String>, source: &List<String>) {
     for let item of source {
         if !target.contains(item) {
             target.push(*item);
@@ -1409,8 +1409,8 @@ fn extend_dedup(target: &mut Array<String>, source: &Array<String>) {
 /// Canonicalise a K-prefix mask: sort each depth's token list so two
 /// otherwise-identical masks share the same registry key regardless of
 /// the order in which the underlying analysis discovered the tokens.
-fn canonicalize_k_prefix(prefix: &Array<Array<String>>) -> Array<Array<String>> {
-    let mut result: Array<Array<String>> = [];
+fn canonicalize_k_prefix(prefix: &List<List<String>>) -> List<List<String>> {
+    let mut result: List<List<String>> = [];
     for let depth_set of prefix {
         result.push(canonical_kind_set(depth_set));
     }
@@ -1420,7 +1420,7 @@ fn canonicalize_k_prefix(prefix: &Array<Array<String>>) -> Array<Array<String>> 
 /// String form of a K-prefix mask for use as a registry key.
 /// Depths joined with `;`; tokens within a depth joined with `|`.
 /// Empty mask → empty string (no key fragment).
-fn canonical_k_prefix_key(prefix: &Array<Array<String>>) -> String {
+fn canonical_k_prefix_key(prefix: &List<List<String>>) -> String {
     if prefix.is_empty() {
         return "";
     }
@@ -1441,11 +1441,11 @@ fn canonical_k_prefix_key(prefix: &Array<Array<String>>) -> String {
 /// length, the other side's set is taken as-is. Used by the
 /// `tail_greedy_k_prefix_of_*` family to combine contributions across
 /// alts, groups, and stacked tail-position Repeats.
-pub fn union_k_prefix(a: &Array<Array<String>>, b: &Array<Array<String>>) -> Array<Array<String>> {
+pub fn union_k_prefix(a: &List<List<String>>, b: &List<List<String>>) -> List<List<String>> {
     let max_len = if a.len() > b.len() { a.len() } else { b.len() };
-    let mut result: Array<Array<String>> = [];
+    let mut result: List<List<String>> = [];
     for let mut d = 0; d < max_len; d += 1 {
-        let mut depth_set: Array<String> = [];
+        let mut depth_set: List<String> = [];
         if d < a.len() {
             extend_dedup(&mut depth_set, &a[d]);
         }
@@ -1462,9 +1462,9 @@ pub fn union_k_prefix(a: &Array<Array<String>>, b: &Array<Array<String>>) -> Arr
 /// implementation for every union-of-FIRST/FOLLOW sets in lower and
 /// emit; the grammar sets that pass through here are bounded by the
 /// rule's first/follow size (small in practice), so the linear
-/// `Array::contains` is fine.
-pub fn union_kind_arrays(a: &Array<String>, b: &Array<String>) -> Array<String> {
-    let mut result: Array<String> = [];
+/// `List::contains` is fine.
+pub fn union_kind_arrays(a: &List<String>, b: &List<String>) -> List<String> {
+    let mut result: List<String> = [];
     for let tk of a {
         result.push(*tk);
     }
@@ -1476,8 +1476,8 @@ pub fn union_kind_arrays(a: &Array<String>, b: &Array<String>) -> Array<String> 
     return result;
 }
 
-fn remove_from_visiting(visiting: &mut Array<String>, name: &String) {
-    let mut new_arr: Array<String> = [];
+fn remove_from_visiting(visiting: &mut List<String>, name: &String) {
+    let mut new_arr: List<String> = [];
     for let v of visiting {
         if *v != *name {
             new_arr.push(*v);

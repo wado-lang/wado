@@ -325,9 +325,9 @@ test "GlobalSpec pub mut" {
 test "struct + impl + fn composition" {
     let mut w = CodeWriter::new();
 
-    // struct Lexer { chars: Array<char>, pos: i32, }
+    // struct Lexer { chars: List<char>, pos: i32, }
     let mut s = StructSpec::new("Lexer");
-    s.add_field(&"chars", &"Array<char>");
+    s.add_field(&"chars", &"List<char>");
     s.add_field(&"pos", &"i32");
     s.emit(&mut w);
     w.blank();
@@ -352,7 +352,7 @@ test "struct + impl + fn composition" {
 
     w.end();
 
-    let expected = "struct Lexer {\n    chars: Array<char>,\n    pos: i32,\n}\n\nimpl Lexer {\n    fn new(input: &String) -> Lexer {\n        return Lexer { chars: input.chars().collect(), pos: 0 };\n    }\n\n    fn at_end(&self) -> bool {\n        return self.pos >= self.chars.len();\n    }\n}\n";
+    let expected = "struct Lexer {\n    chars: List<char>,\n    pos: i32,\n}\n\nimpl Lexer {\n    fn new(input: &String) -> Lexer {\n        return Lexer { chars: input.chars().collect(), pos: 0 };\n    }\n\n    fn at_end(&self) -> bool {\n        return self.pos >= self.chars.len();\n    }\n}\n";
     assert w.to_string() == expected, `got: {w.to_string()}`;
 }
 

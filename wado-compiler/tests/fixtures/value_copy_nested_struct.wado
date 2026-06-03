@@ -1,16 +1,16 @@
 // Wado has value semantics: `let b = a` for any value-typed `a` produces
 // a deep, independent copy. The only reference type that aliases on
-// assignment is the raw `builtin::array<T>`; its holders (`Array<T>`,
+// assignment is the raw `builtin::array<T>`; its holders (`List<T>`,
 // `String`) deep-copy by emitting `array_clone` on their `repr` field.
 //
 // Three previously-buggy regressions in the value-copy machinery are
 // pinned here, each through a different layer:
 //
-// 1. **Nested value-semantic struct field** (`Holder { items: Array<i32> }`).
+// 1. **Nested value-semantic struct field** (`Holder { items: List<i32> }`).
 //    A struct field whose type is itself value-semantic used to get a
 //    one-level shallow copy — the synthesized helper emitted
-//    `return Holder { items: v.items };` and the inner `Array<i32>`'s
-//    own deep-copy via `$value_copy$Array$i32` never fired. Fix: in
+//    `return Holder { items: v.items };` and the inner `List<i32>`'s
+//    own deep-copy via `$value_copy$List$i32` never fired. Fix: in
 //    `lower::plan::value_copy::synthesize::make_field_copy`, fields
 //    whose type is value-semantic are wrapped in
 //    `builtin::copy_value::<FieldT>(...)`; the TIR → NIR translator's
@@ -21,14 +21,14 @@
 //    gets its own helper.
 //
 // 2. **Two levels of nested value-semantic structs**
-//    (`Outer { mid: Mid { inner: Array<i32> } }`). Same defect, but
+//    (`Outer { mid: Mid { inner: List<i32> } }`). Same defect, but
 //    the inner struct is itself a custom struct rather than an
-//    `Array<...>`. Pinned separately because the fix is only correct
+//    `List<...>`. Pinned separately because the fix is only correct
 //    if the helper-synthesis closure terminates — this case
 //    exercises three helper synthesizations in one chain.
 //
-// 3. **Array of struct elements**
-//    (`ArrayHolder { cells: Array<Inner> }`). When `T` in `Array<T>`
+// 3. **List of struct elements**
+//    (`ArrayHolder { cells: List<Inner> }`). When `T` in `List<T>`
 //    is itself a value-typed struct, Wasm GC's plain
 //    `array.set(dst, i, array.get(src, i))` still stores the *same*
 //    struct ref into both arrays — unsound for a deep copy.
@@ -45,15 +45,15 @@
 // value-copy contract.
 
 struct Holder {
-    items: Array<i32>,
+    items: List<i32>,
 }
 
 struct Inner {
-    boxed: Array<i32>,
+    boxed: List<i32>,
 }
 
 struct ArrayHolder {
-    cells: Array<Inner>,
+    cells: List<Inner>,
 }
 
 export fn run() {
@@ -61,10 +61,10 @@ export fn run() {
     a.items.push(1);
     let mut b = a;
     b.items.push(2);
-    assert a.items.len() == 1, "outer-struct copy did not deep-copy the inner Array";
+    assert a.items.len() == 1, "outer-struct copy did not deep-copy the inner List";
     assert b.items.len() == 2, "b lost its push";
 
-    // Two levels deep: `Outer { mid: Mid { inner: Array<i32> } }`.
+    // Two levels deep: `Outer { mid: Mid { inner: List<i32> } }`.
     let mut o = Outer { mid: Mid { inner: [] } };
     o.mid.inner.push(10);
     let mut o2 = o;
@@ -72,7 +72,7 @@ export fn run() {
     assert o.mid.inner.len() == 1, "two-level nested vcopy didn't recurse";
     assert o2.mid.inner.len() == 2;
 
-    // Array of structs: each element of `cells` is itself
+    // List of structs: each element of `cells` is itself
     // value-semantic and must be deep-copied so that mutating
     // `h2.cells[0].boxed` does not alias `h.cells[0].boxed`.
     let mut h = ArrayHolder { cells: [Inner { boxed: [100] }] };
@@ -83,7 +83,7 @@ export fn run() {
 }
 
 struct Mid {
-    inner: Array<i32>,
+    inner: List<i32>,
 }
 
 struct Outer {

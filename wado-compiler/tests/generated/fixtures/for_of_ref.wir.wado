@@ -33,30 +33,30 @@ array builtin::array<i32> (mut i32);  // TypeId(5)
 
 array builtin::array<wado-compiler/tests/fixtures/for_of_ref.wado/Point> (mut ref "wado-compiler/tests/fixtures/for_of_ref.wado//Point");  // TypeId(6)
 
-struct core:prelude/array.wado//ArrayIter<i32> {  // TypeId(7)
+struct core:prelude/list.wado//ListIter<i32> {  // TypeId(7)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
     mut index: i32,
 }
 
-struct core:prelude/array.wado//ArrayRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point> {  // TypeId(8)
+struct core:prelude/list.wado//ListRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point> {  // TypeId(8)
     mut repr: ref "builtin::array<wado-compiler/tests/fixtures/for_of_ref.wado/Point>",
     mut used: i32,
     mut index: i32,
 }
 
-struct core:prelude/array.wado//ArrayRefIter<i32> {  // TypeId(9)
+struct core:prelude/list.wado//ListRefIter<i32> {  // TypeId(9)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
     mut index: i32,
 }
 
-struct core:prelude//Array<i32> {  // TypeId(10)
+struct core:prelude//List<i32> {  // TypeId(10)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
 
-struct core:prelude//Array<wado-compiler/tests/fixtures/for_of_ref.wado/Point> {  // TypeId(11)
+struct core:prelude//List<wado-compiler/tests/fixtures/for_of_ref.wado/Point> {  // TypeId(11)
     mut repr: ref "builtin::array<wado-compiler/tests/fixtures/for_of_ref.wado/Point>",
     mut used: i32,
 }
@@ -129,9 +129,9 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(45)
 
-type "functype//core:prelude/array.wado/ArrayRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>") -> ref null "wado-compiler/tests/fixtures/for_of_ref.wado//Point";  // TypeId(46)
+type "functype//core:prelude/list.wado/ListRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>^Iterator::next" = fn(ref "core:prelude/list.wado//ListRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>") -> ref null "wado-compiler/tests/fixtures/for_of_ref.wado//Point";  // TypeId(46)
 
-type "functype//core:prelude/array.wado/ArrayRefIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayRefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(47)
+type "functype//core:prelude/list.wado/ListRefIter<i32>^Iterator::next" = fn(ref "core:prelude/list.wado//ListRefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(47)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(48)
 
@@ -139,7 +139,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(49)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(50)
 
-type "functype//core:prelude/array.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(51)
+type "functype//core:prelude/list.wado/ListIter<i32>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<i32>") -> [i32, i32];  // TypeId(51)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -156,9 +156,9 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/for_of_ref.wado/test_for_of_ref_array"() with Stdout {
-    let __b: ref "core:prelude//Array<i32>";
+    let __b: ref "core:prelude//List<i32>";
     let sum: i32;
-    let __iter_3: ref "core:prelude/array.wado//ArrayRefIter<i32>";
+    let __iter_3: ref "core:prelude/list.wado//ListRefIter<i32>";
     let x: ref "core:prelude/types.wado//Box<i32>";
     let __v0: i32;
     let __cond: bool;
@@ -167,12 +167,12 @@ fn "wado-compiler/tests/fixtures/for_of_ref.wado/test_for_of_ref_array"() with S
     let __match_9: ref null "core:prelude/types.wado//Box<i32>";
     let f_24: ref "core:prelude/format.wado//Formatter";
     let f_29: ref "core:prelude/format.wado//Formatter";
-    __b = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
+    __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
     sum = 0;
-    __iter_3 = struct.new "core:prelude/array.wado//ArrayRefIter<i32>" { repr: __b.repr, used: 3, index: 0 };
+    __iter_3 = struct.new "core:prelude/list.wado//ListRefIter<i32>" { repr: __b.repr, used: 3, index: 0 };
     b0: block {
         l1: loop {
-            __match_9 = "core:prelude/array.wado/ArrayRefIter<i32>^Iterator::next"(__iter_3);
+            __match_9 = "core:prelude/list.wado/ListRefIter<i32>^Iterator::next"(__iter_3);
             if ref.is_null(__match_9) == 0 {
                 x = ref.as_non_null(__match_9);
                 sum = sum + x.value;
@@ -194,9 +194,9 @@ condition: sum == 60
 }
 
 fn "wado-compiler/tests/fixtures/for_of_ref.wado/test_for_of_ref_struct"() with Stdout {
-    let __b: ref "core:prelude//Array<wado-compiler/tests/fixtures/for_of_ref.wado/Point>";
+    let __b: ref "core:prelude//List<wado-compiler/tests/fixtures/for_of_ref.wado/Point>";
     let sum: i32;
-    let __iter_3: ref "core:prelude/array.wado//ArrayRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>";
+    let __iter_3: ref "core:prelude/list.wado//ListRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>";
     let p: ref "wado-compiler/tests/fixtures/for_of_ref.wado//Point";
     let __v0: i32;
     let __cond: bool;
@@ -205,12 +205,12 @@ fn "wado-compiler/tests/fixtures/for_of_ref.wado/test_for_of_ref_struct"() with 
     let __match_9: ref null "wado-compiler/tests/fixtures/for_of_ref.wado//Point";
     let f_22: ref "core:prelude/format.wado//Formatter";
     let f_27: ref "core:prelude/format.wado//Formatter";
-    __b = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/for_of_ref.wado/Point>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/for_of_ref.wado//Point">(struct.new "wado-compiler/tests/fixtures/for_of_ref.wado//Point" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/for_of_ref.wado//Point" { x: 3, y: 4 }), used: 2 };
+    __b = struct.new "core:prelude//List<wado-compiler/tests/fixtures/for_of_ref.wado/Point>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/for_of_ref.wado//Point">(struct.new "wado-compiler/tests/fixtures/for_of_ref.wado//Point" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/for_of_ref.wado//Point" { x: 3, y: 4 }), used: 2 };
     sum = 0;
-    __iter_3 = struct.new "core:prelude/array.wado//ArrayRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>" { repr: __b.repr, used: 2, index: 0 };
+    __iter_3 = struct.new "core:prelude/list.wado//ListRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>" { repr: __b.repr, used: 2, index: 0 };
     b4: block {
         l5: loop {
-            __match_9 = "core:prelude/array.wado/ArrayRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>^Iterator::next"(__iter_3);
+            __match_9 = "core:prelude/list.wado/ListRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>^Iterator::next"(__iter_3);
             if ref.is_null(__match_9) == 0 {
                 p = ref.as_non_null(__match_9);
                 sum = sum + (p.x + p.y);
@@ -232,9 +232,9 @@ condition: sum == 10
 }
 
 fn "wado-compiler/tests/fixtures/for_of_ref.wado/test_for_of_ref_var"() with Stdout {
-    let __b: ref "core:prelude//Array<i32>";
+    let __b: ref "core:prelude//List<i32>";
     let sum: i32;
-    let __iter_4: ref "core:prelude/array.wado//ArrayRefIter<i32>";
+    let __iter_4: ref "core:prelude/list.wado//ListRefIter<i32>";
     let x: ref "core:prelude/types.wado//Box<i32>";
     let __v0: i32;
     let __cond: bool;
@@ -243,12 +243,12 @@ fn "wado-compiler/tests/fixtures/for_of_ref.wado/test_for_of_ref_var"() with Std
     let __match_10: ref null "core:prelude/types.wado//Box<i32>";
     let f_25: ref "core:prelude/format.wado//Formatter";
     let f_30: ref "core:prelude/format.wado//Formatter";
-    __b = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     sum = 0;
-    __iter_4 = struct.new "core:prelude/array.wado//ArrayRefIter<i32>" { repr: __b.repr, used: 3, index: 0 };
+    __iter_4 = struct.new "core:prelude/list.wado//ListRefIter<i32>" { repr: __b.repr, used: 3, index: 0 };
     b8: block {
         l9: loop {
-            __match_10 = "core:prelude/array.wado/ArrayRefIter<i32>^Iterator::next"(__iter_4);
+            __match_10 = "core:prelude/list.wado/ListRefIter<i32>^Iterator::next"(__iter_4);
             if ref.is_null(__match_10) == 0 {
                 x = ref.as_non_null(__match_10);
                 sum = sum + x.value;
@@ -270,23 +270,23 @@ condition: sum == 6
 }
 
 fn "wado-compiler/tests/fixtures/for_of_ref.wado/test_for_of_value_unchanged"() with Stdout {
-    let __b: ref "core:prelude//Array<i32>";
+    let __b: ref "core:prelude//List<i32>";
     let sum: i32;
-    let __iter_3: ref "core:prelude/array.wado//ArrayIter<i32>";
+    let __iter_3: ref "core:prelude/list.wado//ListIter<i32>";
     let __v0: i32;
     let __cond: bool;
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let f_23: ref "core:prelude/format.wado//Formatter";
     let f_28: ref "core:prelude/format.wado//Formatter";
-    __b = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     sum = 0;
-    __iter_3 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: __b.repr, used: 3, index: 0 };
+    __iter_3 = struct.new "core:prelude/list.wado//ListIter<i32>" { repr: __b.repr, used: 3, index: 0 };
     b12: block {
         l13: loop {
             let __sroa___match_9_discriminant: i32;
             let __sroa___match_9_payload_0: i32;
-            multivalue_bind [__sroa___match_9_discriminant, __sroa___match_9_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_3);
+            multivalue_bind [__sroa___match_9_discriminant, __sroa___match_9_payload_0] = "core:prelude/list.wado/ListIter<i32>^Iterator::next"(__iter_3);
             if __sroa___match_9_discriminant == 0 {
                 sum = sum + __sroa___match_9_payload_0;
             } else {
@@ -655,7 +655,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
+fn "core:prelude/list.wado/ListIter<i32>^Iterator::next"(self) {
     let item: i32;
     if self.index >= self.used {
         return 1, 0;
@@ -665,7 +665,7 @@ fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
     return 0, item;
 }
 
-fn "core:prelude/array.wado/ArrayRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>^Iterator::next"(self) {
+fn "core:prelude/list.wado/ListRefIter<wado-compiler/tests/fixtures/for_of_ref.wado/Point>^Iterator::next"(self) {
     let val: ref "wado-compiler/tests/fixtures/for_of_ref.wado//Point";
     if self.index >= self.used {
         return ref.null none;
@@ -675,7 +675,7 @@ fn "core:prelude/array.wado/ArrayRefIter<wado-compiler/tests/fixtures/for_of_ref
     return val;
 }
 
-fn "core:prelude/array.wado/ArrayRefIter<i32>^Iterator::next"(self) {
+fn "core:prelude/list.wado/ListRefIter<i32>^Iterator::next"(self) {
     let val: ref "core:prelude/types.wado//Box<i32>";
     if self.index >= self.used {
         return ref.null none;

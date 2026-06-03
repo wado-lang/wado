@@ -644,7 +644,7 @@ pub enum WirAttribute {
 /// Generic instantiation origin (e.g., `Array<i32>` from `Array<T>`).
 #[derive(Debug, Clone)]
 pub struct WirGenericOrigin {
-    /// Base generic name (e.g., "Array", "Box").
+    /// Base generic name (e.g., "List", "Box").
     pub base_name: String,
     /// Type arguments used for instantiation (e.g., ["i32"]).
     pub type_args: Vec<String>,

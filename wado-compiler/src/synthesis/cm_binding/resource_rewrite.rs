@@ -316,10 +316,10 @@ fn synthesize_stream_read_func(
     let empty_arr = TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
-                module_source: ModuleSource::array(),
+                module_source: ModuleSource::list(),
                 name: format!("{array_struct_name}<{elem_name}>::with_capacity"),
                 monomorph_info: Some(MonomorphInfo {
-                    generic_name: "Array::with_capacity".to_string(),
+                    generic_name: "List::with_capacity".to_string(),
                     impl_type_args: vec![elem_type_id],
                     method_type_args: vec![],
                     is_blanket: false,
@@ -420,10 +420,10 @@ fn synthesize_stream_read_func(
         TirExprKind::method_call(
             Box::new(local_ref(arr_idx, "arr", array_type_id)),
             FunctionRef {
-                module_source: ModuleSource::array(),
+                module_source: ModuleSource::list(),
                 name: format!("{array_struct_name}<{elem_name}>::push"),
                 monomorph_info: Some(MonomorphInfo {
-                    generic_name: "Array::push".to_string(),
+                    generic_name: "List::push".to_string(),
                     impl_type_args: vec![elem_type_id],
                     method_type_args: vec![],
                     is_blanket: false,
@@ -838,5 +838,5 @@ fn pascal_to_kebab(name: &str) -> String {
 /// Check if a `TypeId` represents `Array<u8>`.
 fn is_u8_array_type(type_id: TypeId, tt: &TypeTable) -> bool {
     let name = tt.type_name(type_id);
-    name == "Array<u8>"
+    name == "List<u8>"
 }

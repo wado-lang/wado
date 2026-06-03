@@ -4,7 +4,7 @@
 // `fn <: fn mut` sub-typing.
 
 test "fold can accumulate via outer mut" {
-    let nums: Array<i32> = [1, 2, 3, 4, 5];
+    let nums: List<i32> = [1, 2, 3, 4, 5];
 
     // Side-channel accumulation through a captured mut binding.
     let mut side_total = 0;
@@ -17,7 +17,7 @@ test "fold can accumulate via outer mut" {
 }
 
 test "for_each method runs side effects" {
-    let nums: Array<i32> = [10, 20, 30];
+    let nums: List<i32> = [10, 20, 30];
 
     let mut total = 0;
     nums.iter().for_each(|x: i32| {
@@ -27,7 +27,7 @@ test "for_each method runs side effects" {
 }
 
 test "pure fn still accepted via sub-typing" {
-    let nums: Array<i32> = [1, 2, 3];
+    let nums: List<i32> = [1, 2, 3];
     let doubled = nums.iter().map(|x: i32| x * 2).collect();
     assert doubled[0] == 2;
     assert doubled[2] == 6;

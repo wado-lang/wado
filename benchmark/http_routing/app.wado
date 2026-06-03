@@ -19,29 +19,29 @@ use json from "core:json";
 /// comparable on both sides.
 struct ApiResponse {
     route: String,
-    params: Array<String>,
+    params: List<String>,
 }
 impl Serialize for ApiResponse;
 
 struct RouteResponse {
     status: StatusCode,
-    body: Array<u8>,
+    body: List<u8>,
 }
 
 type Handler = fn(Request, PathParams) -> RouteResponse;
 
-fn body_for(route: String, params: Array<String>) -> Array<u8> {
+fn body_for(route: String, params: List<String>) -> List<u8> {
     return json::to_bytes(&ApiResponse { route, params }).unwrap();
 }
 
 /// 200 response for a parametric route.
-fn ok(route: String, params: Array<String>) -> RouteResponse {
+fn ok(route: String, params: List<String>) -> RouteResponse {
     return RouteResponse { status: 200, body: body_for(route, params) };
 }
 
 /// 200 response for a static route (no captured parameters).
 fn ok0(route: String) -> RouteResponse {
-    return ok(route, [] as Array<String>);
+    return ok(route, [] as List<String>);
 }
 
 // Hono's official router benchmark route set
@@ -71,7 +71,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let resp = if let Some(m) = ROUTER.match_request(&request) {
         (m.handler)(request, m.params);
     } else {
-        RouteResponse { status: 404, body: body_for("not-found", [] as Array<String>) };
+        RouteResponse { status: 404, body: body_for("not-found", [] as List<String>) };
     };
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();

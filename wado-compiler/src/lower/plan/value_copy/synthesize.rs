@@ -287,7 +287,7 @@ fn build_copy_return_expr(
     let array_name = type_table
         .borrow()
         .compiler_items()
-        .struct_name(crate::compiler_item::CompilerItem::Array)
+        .struct_name(crate::compiler_item::CompilerItem::List)
         .to_string();
     if let ResolvedType::GenericInstance {
         name, type_args, ..
@@ -495,7 +495,7 @@ fn is_synth_safe_element(
                 let items = tt.compiler_items();
                 (
                     items
-                        .struct_name(crate::compiler_item::CompilerItem::Array)
+                        .struct_name(crate::compiler_item::CompilerItem::List)
                         .to_string(),
                     items
                         .struct_name(crate::compiler_item::CompilerItem::String)

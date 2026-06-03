@@ -1,5 +1,5 @@
 /// Regression test for a P0 compiler bug: `for let item of expr.enumerate()`
-/// where `expr` is a non-tuple iterable (Array, etc.).
+/// where `expr` is a non-tuple iterable (List, etc.).
 ///
 /// The bug: `resolve_iterator_for_of` stripped the user-written `.enumerate()`
 /// from `for_of.iterable` (into `actual_iterable`) for type-check purposes,
@@ -13,7 +13,7 @@
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
-    let arr: Array<i32> = [10, 20, 30];
+    let arr: List<i32> = [10, 20, 30];
     let mut sum: i32 = 0;
     let mut count: i32 = 0;
     for let [i, v] of arr.iter().enumerate() {

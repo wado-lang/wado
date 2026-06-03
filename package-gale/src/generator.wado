@@ -48,7 +48,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
     // `inputs` (e.g. a sibling lexer grammar for a split parser grammar).
     // `merge_grammars` handles the single-grammar case by returning the
     // input unchanged, so the fast path stays fast.
-    let mut grammars: Array<Grammar> = [];
+    let mut grammars: List<Grammar> = [];
     match parse(req.primary.content) {
         Ok(g) => grammars.push(g),
         Err(e) => {
@@ -106,7 +106,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
     // `use { X } from "./path/to/grammar.g4"` redirect that the Kiln
     // pipeline installs.
     let entry_name = to_snake_case(&grammar.name);
-    let files: Array<OutputFile> = [
+    let files: List<OutputFile> = [
         OutputFile {
             path: `{entry_name}.wado`,
             content: wado_source,

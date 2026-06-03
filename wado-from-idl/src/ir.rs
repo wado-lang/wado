@@ -267,7 +267,7 @@ pub enum WadoType {
         ok: Option<Box<WadoType>>,
         err: Option<Box<WadoType>>,
     },
-    Array(Box<WadoType>),
+    List(Box<WadoType>),
     Tuple(Vec<WadoType>),
     Stream(Box<WadoType>),
     Future(Box<WadoType>),

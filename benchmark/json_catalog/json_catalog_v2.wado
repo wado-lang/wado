@@ -18,10 +18,10 @@ struct Event {
     id: i64,
     logo: Option<String>,
     name: String,
-    sub_topic_ids: Array<i64>,
+    sub_topic_ids: List<i64>,
     subject_code: Option<String>,
     subtitle: Option<String>,
-    topic_ids: Array<i64>,
+    topic_ids: List<i64>,
 }
 
 struct Price {
@@ -32,11 +32,11 @@ struct Price {
 
 struct Area {
     area_id: i64,
-    block_ids: Array<i64>,
+    block_ids: List<i64>,
 }
 
 struct SeatCategory {
-    areas: Array<Area>,
+    areas: List<Area>,
     seat_category_id: i64,
 }
 
@@ -45,8 +45,8 @@ struct Performance {
     id: i64,
     logo: Option<String>,
     name: Option<String>,
-    prices: Array<Price>,
-    seat_categories: Array<SeatCategory>,
+    prices: List<Price>,
+    seat_categories: List<SeatCategory>,
     seat_map_image: Option<String>,
     start: i64,
     venue_code: String,
@@ -57,12 +57,12 @@ struct CitmCatalog {
     audience_sub_category_names: TreeMap<String, String>,
     block_names: TreeMap<String, String>,
     events: TreeMap<String, Event>,
-    performances: Array<Performance>,
+    performances: List<Performance>,
     seat_category_names: TreeMap<String, String>,
     sub_topic_names: TreeMap<String, String>,
     subject_names: TreeMap<String, String>,
     topic_names: TreeMap<String, String>,
-    topic_sub_topics: TreeMap<String, Array<i64>>,
+    topic_sub_topics: TreeMap<String, List<i64>>,
     venue_names: TreeMap<String, String>,
 }
 
@@ -396,7 +396,7 @@ impl P {
         return Option::Some(self.read_string());
     }
 
-    fn parse_array_i64(&mut self) -> Array<i64> {
+    fn parse_array_i64(&mut self) -> List<i64> {
         self.expect_byte('[' as i32);
         self.skip_ws();
         let raw = self.repr;
@@ -406,7 +406,7 @@ impl P {
             self.pos = pos + 1;
             return [];
         }
-        let mut arr: Array<i64> = Array::with_capacity(4);
+        let mut arr: List<i64> = List::with_capacity(4);
         loop {
             // skip ws
             while pos < len {
@@ -471,10 +471,10 @@ impl P {
         let mut id: i64 = 0;
         let mut logo: Option<String> = null;
         let mut name: String = "";
-        let mut sub_topic_ids: Array<i64> = [];
+        let mut sub_topic_ids: List<i64> = [];
         let mut subject_code: Option<String> = null;
         let mut subtitle: Option<String> = null;
-        let mut topic_ids: Array<i64> = [];
+        let mut topic_ids: List<i64> = [];
 
         self.skip_ws();
         if self.peek() == '}' as i32 {
@@ -596,14 +596,14 @@ impl P {
         unreachable();
     }
 
-    fn parse_array_price(&mut self) -> Array<Price> {
+    fn parse_array_price(&mut self) -> List<Price> {
         self.expect_byte('[' as i32);
         self.skip_ws();
         if self.peek() == ']' as i32 {
             self.pos += 1;
             return [];
         }
-        let mut arr: Array<Price> = Array::with_capacity(8);
+        let mut arr: List<Price> = List::with_capacity(8);
         loop {
             arr.push(self.parse_price());
             self.skip_ws();
@@ -642,7 +642,7 @@ impl P {
         pos += 1;
 
         let mut area_id: i64 = 0;
-        let mut block_ids: Array<i64> = [];
+        let mut block_ids: List<i64> = [];
 
         // skip ws (peek for '}')
         while pos < len {
@@ -750,14 +750,14 @@ impl P {
         unreachable();
     }
 
-    fn parse_array_area(&mut self) -> Array<Area> {
+    fn parse_array_area(&mut self) -> List<Area> {
         self.expect_byte('[' as i32);
         self.skip_ws();
         if self.peek() == ']' as i32 {
             self.pos += 1;
             return [];
         }
-        let mut arr: Array<Area> = Array::with_capacity(4);
+        let mut arr: List<Area> = List::with_capacity(4);
         loop {
             arr.push(self.parse_area());
             self.skip_ws();
@@ -776,7 +776,7 @@ impl P {
 
     fn parse_seat_category(&mut self) -> SeatCategory {
         self.expect_byte('{' as i32);
-        let mut areas: Array<Area> = [];
+        let mut areas: List<Area> = [];
         let mut seat_category_id: i64 = 0;
         self.skip_ws();
         if self.peek() == '}' as i32 {
@@ -819,14 +819,14 @@ impl P {
         unreachable();
     }
 
-    fn parse_array_seat_category(&mut self) -> Array<SeatCategory> {
+    fn parse_array_seat_category(&mut self) -> List<SeatCategory> {
         self.expect_byte('[' as i32);
         self.skip_ws();
         if self.peek() == ']' as i32 {
             self.pos += 1;
             return [];
         }
-        let mut arr: Array<SeatCategory> = Array::with_capacity(8);
+        let mut arr: List<SeatCategory> = List::with_capacity(8);
         loop {
             arr.push(self.parse_seat_category());
             self.skip_ws();
@@ -849,8 +849,8 @@ impl P {
         let mut id: i64 = 0;
         let mut logo: Option<String> = null;
         let mut name: Option<String> = null;
-        let mut prices: Array<Price> = [];
-        let mut seat_categories: Array<SeatCategory> = [];
+        let mut prices: List<Price> = [];
+        let mut seat_categories: List<SeatCategory> = [];
         let mut seat_map_image: Option<String> = null;
         let mut start: i64 = 0;
         let mut venue_code: String = "";
@@ -944,14 +944,14 @@ impl P {
         unreachable();
     }
 
-    fn parse_array_performance(&mut self) -> Array<Performance> {
+    fn parse_array_performance(&mut self) -> List<Performance> {
         self.expect_byte('[' as i32);
         self.skip_ws();
         if self.peek() == ']' as i32 {
             self.pos += 1;
             return [];
         }
-        let mut arr: Array<Performance> = Array::with_capacity(256);
+        let mut arr: List<Performance> = List::with_capacity(256);
         loop {
             arr.push(self.parse_performance());
             self.skip_ws();
@@ -1025,10 +1025,10 @@ impl P {
         unreachable();
     }
 
-    fn parse_topic_subtopics(&mut self) -> TreeMap<String, Array<i64>> {
+    fn parse_topic_subtopics(&mut self) -> TreeMap<String, List<i64>> {
         self.expect_byte('{' as i32);
         self.skip_ws();
-        let mut m: TreeMap<String, Array<i64>> = {};
+        let mut m: TreeMap<String, List<i64>> = {};
         if self.peek() == '}' as i32 {
             self.pos += 1;
             return m;
@@ -1059,12 +1059,12 @@ impl P {
         let mut audience_sub_category_names: TreeMap<String, String> = {};
         let mut block_names: TreeMap<String, String> = {};
         let mut events: TreeMap<String, Event> = {};
-        let mut performances: Array<Performance> = [];
+        let mut performances: List<Performance> = [];
         let mut seat_category_names: TreeMap<String, String> = {};
         let mut sub_topic_names: TreeMap<String, String> = {};
         let mut subject_names: TreeMap<String, String> = {};
         let mut topic_names: TreeMap<String, String> = {};
-        let mut topic_sub_topics: TreeMap<String, Array<i64>> = {};
+        let mut topic_sub_topics: TreeMap<String, List<i64>> = {};
         let mut venue_names: TreeMap<String, String> = {};
 
         self.skip_ws();

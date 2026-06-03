@@ -82,7 +82,7 @@ pub trait HasBoundedAssocType {
 
 /// Generic struct for bounded impl test
 struct MyArray<T> {
-    items: Array<T>,
+    items: List<T>,
 }
 
 /// Inherent impl: compact form with bounds inlined
@@ -364,10 +364,10 @@ fn tuple_array_literals() {
     let t = [1, "hello", true];
     let pair = [42, 0];
 
-    let a: Array<i32> = [1, 2, 3];
-    let b = [1, 2, 3] as Array<i32>;
-    let empty: Array<i32> = [];
-    let nested: Array<Array<i32>> = [[1, 2], [3, 4]];
+    let a: List<i32> = [1, 2, 3];
+    let b = [1, 2, 3] as List<i32>;
+    let empty: List<i32> = [];
+    let nested: List<List<i32>> = [[1, 2], [3, 4]];
 }
 
 /// Destructuring: struct, tuple, in loops
@@ -387,7 +387,7 @@ fn destructuring_examples() {
 
     let _ = x + y + px + py + hx + vy + dx + a + b + c + first + a2 + b2;
 
-    let points: Array<Point> = [];
+    let points: List<Point> = [];
     for let { x, y } of points {
         let _ = x + y;
     }
@@ -406,7 +406,7 @@ fn match_as_stmt(color: Color, opt: Option<i32>) {
 }
 
 /// Key-value list: array of 2-element tuples should be formatted one entry per line
-fn kv_list_long(entries: Array<[String, i32]>) {
+fn kv_list_long(entries: List<[String, i32]>) {
     let long = [["first-key", 100], ["second-key", 200], ["third-key", 300], ["fourth-key", 400], ["fifth-key", 500], ["sixth-key", 600]];
     let _ = long;
 }
@@ -445,7 +445,7 @@ fn ref_cast_parens(x: i32) {
 }
 
 /// Deref with postfix: (*p)[i] and (*p).field must keep parens
-fn deref_postfix_parens(data: &Array<i32>,  p: &Array<i32>) {
+fn deref_postfix_parens(data: &List<i32>,  p: &List<i32>) {
     let _ = (*data)[0];
     let _ =  (*p)[1];
 }

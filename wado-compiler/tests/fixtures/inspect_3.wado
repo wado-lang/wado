@@ -9,16 +9,16 @@ struct PrettyLine {
 }
 
 test "pretty array" {
-    let empty: Array<i32> = [];
+    let empty: List<i32> = [];
     assert `{empty:#?}` == "[]";
 
-    let nums: Array<i32> = [1, 2, 3];
+    let nums: List<i32> = [1, 2, 3];
     assert `{nums:#?}` == "[\n  1,\n  2,\n  3,\n]";
 
-    let points: Array<PrettyPoint> = [
+    let points: List<PrettyPoint> = [
         PrettyPoint { x: 1, y: 2 },
         PrettyPoint { x: 3, y: 4 },
-    ] as Array<PrettyPoint>;
+    ] as List<PrettyPoint>;
     assert `{points:#?}` == "[\n  PrettyPoint {\n    x: 1,\n    y: 2,\n  },\n  PrettyPoint {\n    x: 3,\n    y: 4,\n  },\n]";
 }
 
@@ -75,7 +75,7 @@ test "no display" {
     assert `{none:?}` == "Option::None";
     let opt_p: Option<PrettyPoint> = Option::<PrettyPoint>::Some(PrettyPoint { x: 10, y: 20 });
     assert `{opt_p:?}` == "Option::Some(PrettyPoint { x: 10, y: 20 })";
-    let arr: Array<PrettyPoint> = [PrettyPoint { x: 1, y: 2 }, PrettyPoint { x: 3, y: 4 }];
+    let arr: List<PrettyPoint> = [PrettyPoint { x: 1, y: 2 }, PrettyPoint { x: 3, y: 4 }];
     assert `{arr:?}` == "[PrettyPoint { x: 1, y: 2 }, PrettyPoint { x: 3, y: 4 }]";
     let f = |x: i32| x * 2;
     assert `{f:?}` == "|i32| -> i32";

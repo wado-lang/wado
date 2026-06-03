@@ -22,7 +22,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
 
 array builtin::array<i32> (mut i32);  // TypeId(3)
 
-struct core:prelude//Array<i32> {  // TypeId(4)
+struct core:prelude//List<i32> {  // TypeId(4)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
@@ -77,17 +77,17 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(29)
 
-type "functype//wado-compiler/tests/fixtures/inline_array_append_nested.wado/Container::add_items" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(30)
+type "functype//wado-compiler/tests/fixtures/inline_array_append_nested.wado/Container::add_items" = fn(ref "core:prelude//List<i32>", i32);  // TypeId(30)
 
-type "functype//wado-compiler/tests/fixtures/inline_array_append_nested.wado/Container::process" = fn(ref "core:prelude//Array<i32>");  // TypeId(31)
+type "functype//wado-compiler/tests/fixtures/inline_array_append_nested.wado/Container::process" = fn(ref "core:prelude//List<i32>");  // TypeId(31)
 
 type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(32)
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(33)
 
-type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(34)
+type "functype//core:prelude/list.wado/List<i32>::push" = fn(ref "core:prelude//List<i32>", i32);  // TypeId(34)
 
-type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(35)
+type "functype//core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(35)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(36)
 
@@ -109,11 +109,11 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/inline_array_append_nested.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//Array<i32>";
+    let __b_0: ref "core:prelude//List<i32>";
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let self_13: i32;
-    __b_0 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    __b_0 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     "wado-compiler/tests/fixtures/inline_array_append_nested.wado/Container::add_items"(__b_0, 3);
     "wado-compiler/tests/fixtures/inline_array_append_nested.wado/Container::process"(__b_0);
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }; "core:prelude/string.wado/String::push"(__local_2, 108); "core:prelude/string.wado/String::push"(__local_2, 101); "core:prelude/string.wado/String::push"(__local_2, 110); "core:prelude/string.wado/String::push"(__local_2, 61); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; self_13 = __b_0.used; "core:prelude/primitive.wado/i32::fmt_decimal"(self_13, __local_3); __local_2);
@@ -342,8 +342,8 @@ fn "wado-compiler/tests/fixtures/inline_array_append_nested.wado/Container::add_
             if i >= count {
                 break b21;
             }
-            "core:prelude/array.wado/Array<i32>::push"(self, i);
-            "core:prelude/array.wado/Array<i32>::push"(self, i * 2);
+            "core:prelude/list.wado/List<i32>::push"(self, i);
+            "core:prelude/list.wado/List<i32>::push"(self, i * 2);
             i = i + 1;
             continue l22;
         };
@@ -351,7 +351,7 @@ fn "wado-compiler/tests/fixtures/inline_array_append_nested.wado/Container::add_
 }
 
 fn "wado-compiler/tests/fixtures/inline_array_append_nested.wado/Container::process"(self) {
-    let __b: ref "core:prelude//Array<i32>";
+    let __b: ref "core:prelude//List<i32>";
     let i: i32;
     let val: i32;
     let j: i32;
@@ -359,7 +359,7 @@ fn "wado-compiler/tests/fixtures/inline_array_append_nested.wado/Container::proc
     let _licm_repr_16: ref builtin::array<i32>;
     let _licm_used_17: i32;
     let _licm_repr_18: ref builtin::array<i32>;
-    __b = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    __b = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     i = 0;
     _licm_used_15 = self.used;
     _licm_repr_16 = self.repr;
@@ -370,7 +370,7 @@ fn "wado-compiler/tests/fixtures/inline_array_append_nested.wado/Container::proc
             }
             val = builtin::array_get<i32>(_licm_repr_16, i);
             if (val % 2) == 0 {
-                "core:prelude/array.wado/Array<i32>::push"(__b, val);
+                "core:prelude/list.wado/List<i32>::push"(__b, val);
             }
             i = i + 1;
             continue l25;
@@ -384,7 +384,7 @@ fn "wado-compiler/tests/fixtures/inline_array_append_nested.wado/Container::proc
             if j >= _licm_used_17 {
                 break b28;
             }
-            "core:prelude/array.wado/Array<i32>::push"(self, builtin::array_get<i32>(_licm_repr_18, j) + 100);
+            "core:prelude/list.wado/List<i32>::push"(self, builtin::array_get<i32>(_licm_repr_18, j) + 100);
             j = j + 1;
             continue l29;
         };
@@ -488,17 +488,17 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
+fn "core:prelude/list.wado/List<i32>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<i32>::grow"(self);
+        "core:prelude/list.wado/List<i32>::grow"(self);
     }
     builtin::array_set<i32>(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<i32>::grow"(self) {
+fn "core:prelude/list.wado/List<i32>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<i32>;

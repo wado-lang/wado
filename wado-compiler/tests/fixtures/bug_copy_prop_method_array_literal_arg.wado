@@ -1,5 +1,5 @@
 // Regression: `tir/copy_prop` at -O3 drops the side effect of a `&mut self`
-// method call whose argument is an `Array<T>` literal built via
+// method call whose argument is an `List<T>` literal built via
 // `SequenceLiteralBuilder` and whose `Result<T, E>` return value is consumed
 // via the `?` operator.
 //
@@ -26,7 +26,7 @@ struct Err {
 }
 
 struct State {
-    tokens: Array<Token>,
+    tokens: List<Token>,
     pos: i32,
 }
 
@@ -37,7 +37,7 @@ impl State {
         return tok;
     }
 
-    fn match_set(&mut self, included: Array<i32>) -> Result<Token, Err> {
+    fn match_set(&mut self, included: List<i32>) -> Result<Token, Err> {
         let k = self.tokens[self.pos].kind;
         for let x of included {
             if x == k {
@@ -59,7 +59,7 @@ fn drive(s: &mut State) -> Result<Token, Err> {
 }
 
 export fn run() {
-    let tokens: Array<Token> = [Token { kind: 2 }, Token { kind: 9 }];
+    let tokens: List<Token> = [Token { kind: 2 }, Token { kind: 9 }];
     let mut s = State { tokens, pos: 0 };
     let r = drive(&mut s);
     if let Err(e) = &r {

@@ -26,7 +26,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
 
 array builtin::array<core:prelude/types.wado/Box<i32>> (mut ref "core:prelude/types.wado//Box<i32>");  // TypeId(4)
 
-struct core:prelude//Array<core:prelude/types.wado/Box<i32>> {  // TypeId(5)
+struct core:prelude//List<core:prelude/types.wado/Box<i32>> {  // TypeId(5)
     mut repr: ref "builtin::array<core:prelude/types.wado/Box<i32>>",
     mut used: i32,
 }
@@ -127,7 +127,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/trait_bound_1.wado/trait_bound_array_of_ref"() with Stdout {
     let a: ref "core:prelude/types.wado//Box<i32>";
     let b: ref "core:prelude/types.wado//Box<i32>";
-    let __b: ref "core:prelude//Array<core:prelude/types.wado/Box<i32>>";
+    let __b: ref "core:prelude//List<core:prelude/types.wado/Box<i32>>";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/string.wado//String";
@@ -136,7 +136,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_1.wado/trait_bound_array_of_ref"() 
     let self_29: i32;
     a = struct.new "core:prelude/types.wado//Box<i32>" { value: 10 };
     b = struct.new "core:prelude/types.wado//Box<i32>" { value: 20 };
-    __b = struct.new "core:prelude//Array<core:prelude/types.wado/Box<i32>>" { repr: array.new_fixed<ref "core:prelude/types.wado//Box<i32>">(a, b), used: 2 };
+    __b = struct.new "core:prelude//List<core:prelude/types.wado/Box<i32>>" { repr: array.new_fixed<ref "core:prelude/types.wado//Box<i32>">(a, b), used: 2 };
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; self_21 = if builtin::unlikely(0 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;

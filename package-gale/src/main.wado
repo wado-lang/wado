@@ -12,7 +12,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     let arguments = args();
 
     if arguments.len() >= 2 && arguments[0] == "gen" {
-        let mut paths: Array<String> = [];
+        let mut paths: List<String> = [];
         let mut options = GenerateOptions { highlight: false };
         for let mut i = 1; i < arguments.len(); i += 1 {
             if arguments[i] == "--highlight" {
@@ -26,7 +26,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     }
 
     if arguments.len() >= 2 && arguments[0] == "dump" {
-        let mut paths: Array<String> = [];
+        let mut paths: List<String> = [];
         for let mut i = 1; i < arguments.len(); i += 1 {
             paths.push(arguments[i]);
         }
@@ -38,7 +38,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     eprintln("       gale dump <grammar.g4> [grammar2.g4 ...]");
 }
 
-fn cmd_gen(paths: Array<String>, options: &GenerateOptions) with Stdout, Stderr, Preopens {
+fn cmd_gen(paths: List<String>, options: &GenerateOptions) with Stdout, Stderr, Preopens {
     let dirs = Preopens::get_directories();
     if dirs.len() == 0 {
         eprintln("gale: no preopened directories available (try without --no-dir)");
@@ -46,7 +46,7 @@ fn cmd_gen(paths: Array<String>, options: &GenerateOptions) with Stdout, Stderr,
     }
     let root = dirs[0].0;
 
-    let mut grammars: Array<Grammar> = [];
+    let mut grammars: List<Grammar> = [];
     for let path of paths {
         let open_result = root.open_at(
             PathFlags::none(),
@@ -103,7 +103,7 @@ fn cmd_gen(paths: Array<String>, options: &GenerateOptions) with Stdout, Stderr,
     print(generated.source);
 }
 
-fn cmd_dump(paths: Array<String>) with Stdout, Stderr, Preopens {
+fn cmd_dump(paths: List<String>) with Stdout, Stderr, Preopens {
     if paths.len() == 0 {
         eprintln("gale dump: no grammar files given");
         return;
@@ -115,7 +115,7 @@ fn cmd_dump(paths: Array<String>) with Stdout, Stderr, Preopens {
     }
     let root = dirs[0].0;
 
-    let mut grammars: Array<Grammar> = [];
+    let mut grammars: List<Grammar> = [];
     for let path of paths {
         let open_result = root.open_at(
             PathFlags::none(),
@@ -160,9 +160,9 @@ fn cmd_dump(paths: Array<String>) with Stdout, Stderr, Preopens {
     print(render_dump(&merged, &lowered, &mut ctx));
 }
 
-fn read_all(file: &Descriptor) -> Array<u8> {
+fn read_all(file: &Descriptor) -> List<u8> {
     let [read_stream, _done] = file.read_via_stream(0 as Filesize);
-    let mut result: Array<u8> = [];
+    let mut result: List<u8> = [];
     loop {
         let chunk = read_stream.read(4096);
         if chunk.len() == 0 {

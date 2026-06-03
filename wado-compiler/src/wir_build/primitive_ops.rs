@@ -139,13 +139,13 @@ impl FunctionTranslator<'_, '_> {
 
         // Look up Array<u8> wrapper struct type
         let mangled =
-            crate::name::mangle_generic_name("Array", std::slice::from_ref(&"u8".to_string()));
+            crate::name::mangle_generic_name("List", std::slice::from_ref(&"u8".to_string()));
         let array_struct_name = crate::name::StructName::new(ModuleSource::prelude(), mangled);
         let array_struct_type = self.ctx.struct_type_map.get(&array_struct_name).cloned();
 
         let (Some(gc_array_type_id), Some(struct_type_id)) = (u8_array_type, array_struct_type)
         else {
-            panic!("[WIR] Bytes literal: u8 array or Array<u8> struct type not registered");
+            panic!("[WIR] Bytes literal: u8 array or List<u8> struct type not registered");
         };
 
         if byte_len == 0 {
@@ -599,7 +599,7 @@ impl FunctionTranslator<'_, '_> {
         } = array_struct_wir
         else {
             panic!(
-                "[WIR] build_array_get: expected Ref Array<T> struct, got {array_struct_wir:?} (array_type_id={array_type_id:?})"
+                "[WIR] build_array_get: expected Ref List<T> struct, got {array_struct_wir:?} (array_type_id={array_type_id:?})"
             );
         };
 

@@ -32,8 +32,8 @@ array builtin::array<core:collections/TreeMapNode<core:prelude/string.wado/Strin
 
 struct core:collections//TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String> {  // TypeId(6)
     mut root: ref "core:prelude/types.wado//Option<i32>",
-    mut nodes: ref "core:prelude//Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>",
-    mut entries: ref "core:prelude//Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>",
+    mut nodes: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>",
+    mut entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>",
     mut size: i32,
     mut deleted_count: i32,
 }
@@ -62,12 +62,12 @@ struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(10)
     payload_0: i32,
 }
 
-struct core:prelude//Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> {  // TypeId(11)
+struct core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>> {  // TypeId(11)
     mut repr: ref "builtin::array<core:collections/TreeMapNode<core:prelude/string.wado/String>>",
     mut used: i32,
 }
 
-struct core:prelude//Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>> {  // TypeId(12)
+struct core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>> {  // TypeId(12)
     mut repr: ref "builtin::array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>",
     mut used: i32,
 }
@@ -150,17 +150,17 @@ type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:pr
 
 type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::insert_node" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>", ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(51)
 
-type "functype//core:prelude/array.wado/Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>::push" = fn(ref "core:prelude//Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>", ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>");  // TypeId(52)
+type "functype//core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>::push" = fn(ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>", ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>");  // TypeId(52)
 
-type "functype//core:prelude/array.wado/Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow" = fn(ref "core:prelude//Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>");  // TypeId(53)
+type "functype//core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow" = fn(ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>");  // TypeId(53)
 
-type "functype//core:prelude/array.wado/Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>::push" = fn(ref "core:prelude//Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>", ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(54)
+type "functype//core:prelude/list.wado/List<core:collections/TreeMapNode<core:prelude/string.wado/String>>::push" = fn(ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>", ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(54)
 
 type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::split" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>", ref "core:prelude/types.wado//Option<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(55)
 
 type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::skew" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>", ref "core:prelude/types.wado//Option<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(56)
 
-type "functype//core:prelude/array.wado/Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>::grow" = fn(ref "core:prelude//Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>");  // TypeId(57)
+type "functype//core:prelude/list.wado/List<core:collections/TreeMapNode<core:prelude/string.wado/String>>::grow" = fn(ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>");  // TypeId(57)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(58)
 
@@ -202,8 +202,8 @@ fn "wado-compiler/tests/fixtures/treemap_literal_string_values.wado/run"() with 
     let __local_15: ref "core:prelude/format.wado//Formatter";
     let __local_16: ref "core:prelude/string.wado//String";
     let __local_17: ref "core:prelude/format.wado//Formatter";
-    let __b_20: ref "core:prelude//Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
-    let __b_21: ref "core:prelude//Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
+    let __b_20: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
+    let __b_21: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
     let key_23: ref "core:prelude/string.wado//String";
     let value_24: ref "core:prelude/string.wado//String";
     let key_26: ref "core:prelude/string.wado//String";
@@ -221,7 +221,7 @@ fn "wado-compiler/tests/fixtures/treemap_literal_string_values.wado/run"() with 
     let other_73: ref "core:prelude/string.wado//String";
     let len_a_74: i32;
     let f_82: ref "core:prelude/format.wado//Formatter";
-    __b_0 = struct.new "core:collections//TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: ref.as_non_null(__b_20 = struct.new "core:prelude//Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(0), used: 0 }; __b_20), entries: ref.as_non_null(__b_21 = struct.new "core:prelude//Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>">(0), used: 0 }; __b_21), size: 0, deleted_count: 0 };
+    __b_0 = struct.new "core:collections//TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: ref.as_non_null(__b_20 = struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(0), used: 0 }; __b_20), entries: ref.as_non_null(__b_21 = struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>">(0), used: 0 }; __b_21), size: 0, deleted_count: 0 };
     key_23 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("red"), used: 3 };
     value_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("#FF0000"), used: 7 };
     "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::insert"(__b_0, key_23, value_24);
@@ -824,7 +824,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string
     }
     new_index = self.entries.used;
     entry = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>" { key: key, value: value, deleted: 0 };
-    "core:prelude/array.wado/Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>::push"(self.entries, entry);
+    "core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>::push"(self.entries, entry);
     self.root = ref.as_non_null("core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::insert_node"(self, self.root, key, new_index));
     self.size = self.size + 1;
 }
@@ -835,8 +835,8 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string
     let n: ref "core:collections//TreeMapNode<core:prelude/string.wado/String>";
     let entry: ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>";
     let index_12: i32;
-    let _licm_nodes_13: ref "core:prelude//Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
-    let _licm_entries_14: ref "core:prelude//Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
+    let _licm_nodes_13: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
+    let _licm_entries_14: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
     let _licm_used_15: i32;
     let _licm_repr_16: ref "builtin::array<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
     let _licm_used_17: i32;
@@ -950,21 +950,21 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string
     } else {
     }
     new_idx = self.nodes.used;
-    "core:prelude/array.wado/Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>::push"(self.nodes, struct.new "core:collections//TreeMapNode<core:prelude/string.wado/String>" { key: key, index: index, level: 1, left: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, right: struct.new "core:prelude/types.wado//Option<i32>" { 1 } });
+    "core:prelude/list.wado/List<core:collections/TreeMapNode<core:prelude/string.wado/String>>::push"(self.nodes, struct.new "core:collections//TreeMapNode<core:prelude/string.wado/String>" { key: key, index: index, level: 1, left: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, right: struct.new "core:prelude/types.wado//Option<i32>" { 1 } });
     return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: new_idx };
 }
 
-fn "core:prelude/array.wado/Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>::push"(self, value) {
+fn "core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow"(self);
+        "core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow"(self);
     }
     builtin::array_set<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow"(self) {
+fn "core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "builtin::array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
@@ -977,11 +977,11 @@ fn "core:prelude/array.wado/Array<core:collections/TreeMapEntry<core:prelude/str
     self.repr = new_repr;
 }
 
-fn "core:prelude/array.wado/Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>::push"(self, value) {
+fn "core:prelude/list.wado/List<core:collections/TreeMapNode<core:prelude/string.wado/String>>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>::grow"(self);
+        "core:prelude/list.wado/List<core:collections/TreeMapNode<core:prelude/string.wado/String>>::grow"(self);
     }
     builtin::array_set<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(self.repr, used, value);
     self.used = used + 1;
@@ -1084,7 +1084,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string
     return struct.new "core:prelude/types.wado//Option<i32>" { 1 };
 }
 
-fn "core:prelude/array.wado/Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>::grow"(self) {
+fn "core:prelude/list.wado/List<core:collections/TreeMapNode<core:prelude/string.wado/String>>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "builtin::array<core:collections/TreeMapNode<core:prelude/string.wado/String>>";

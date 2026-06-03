@@ -1044,7 +1044,7 @@ impl FunctionTranslator<'_, '_> {
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, array_type_id);
         let WirType::Ref { type_id, .. } = wir_type else {
             panic!(
-                "[WIR] ArrayLiteral expected Ref WirType for Array<T> struct, got {wir_type:?} (type_id={array_type_id:?})"
+                "[WIR] ArrayLiteral expected Ref WirType for List<T> struct, got {wir_type:?} (type_id={array_type_id:?})"
             );
         };
         // The `repr` field is a non-nullable ref to the raw `builtin::array<T>`.
@@ -1053,7 +1053,7 @@ impl FunctionTranslator<'_, '_> {
             ..
         } = self.struct_field_wir_type(&type_id, "repr")
         else {
-            panic!("[WIR] ArrayLiteral: Array<T> struct {type_id:?} has no `repr` array field");
+            panic!("[WIR] ArrayLiteral: List<T> struct {type_id:?} has no `repr` array field");
         };
         let element_instrs: Vec<WirInstr> =
             elements.iter().map(|e| self.translate_expr(e)).collect();

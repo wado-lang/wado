@@ -17,7 +17,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let has_host = headers.has("host" as FieldName);
     // has() returns bool, no error — fine on immutable
     let vals = headers.get("host" as FieldName);
-    // get() returns Array<FieldValue>, no error — fine on immutable
+    // get() returns List<FieldValue>, no error — fine on immutable
 
     // append on immutable → Err
     let append_result = headers.append(
@@ -27,7 +27,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     assert append_result matches { Err(_) };
 
     // set on immutable → Err
-    let values: Array<FieldValue> = ["val".bytes().collect() as FieldValue];
+    let values: List<FieldValue> = ["val".bytes().collect() as FieldValue];
     let set_result = headers.set("host" as FieldName, values);
     assert set_result matches { Err(_) };
 

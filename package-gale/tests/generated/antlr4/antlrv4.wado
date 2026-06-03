@@ -36,17 +36,17 @@ impl Eq for Span {
 /// LexerSlice is a lazy reference to a range of characters in the source input.
 /// It avoids allocating a String for every token during tokenization.
 pub struct LexerSlice {
-    pub chars: &Array<char>,
+    pub chars: &List<char>,
     pub start: i32,
     pub end: i32,
 }
 
 impl LexerSlice {
-    pub fn new(chars: &Array<char>, start: i32, end: i32) -> LexerSlice with stores[chars] {
+    pub fn new(chars: &List<char>, start: i32, end: i32) -> LexerSlice with stores[chars] {
         return LexerSlice { chars, start, end };
     }
 
-    pub fn empty(chars: &Array<char>) -> LexerSlice with stores[chars] {
+    pub fn empty(chars: &List<char>) -> LexerSlice with stores[chars] {
         return LexerSlice { chars, start: 0, end: 0 };
     }
 
@@ -127,7 +127,7 @@ pub struct Token {
     pub kind: i32,
     pub text: LexerSlice,
     pub span: Span,
-    pub leading_trivia: Array<Token>,
+    pub leading_trivia: List<Token>,
     pub channel: i32,
 }
 
@@ -136,11 +136,11 @@ impl Token {
         return Token { kind, text, span, leading_trivia: [], channel: 0 };
     }
 
-    pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>) -> Token {
+    pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: List<Token>) -> Token {
         return Token { kind, text, span, leading_trivia, channel: 0 };
     }
 
-    pub fn with_channel(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>, channel: i32) -> Token {
+    pub fn with_channel(kind: i32, text: LexerSlice, span: Span, leading_trivia: List<Token>, channel: i32) -> Token {
         return Token { kind, text, span, leading_trivia, channel };
     }
 }
@@ -164,20 +164,20 @@ impl Token {
 pub struct ParseError {
     pub message: String,
     pub span: Span,
-    pub expected: Array<String>,
+    pub expected: List<String>,
     pub line: i32 = 1,
     pub col: i32 = 0,
-    pub rule_stack: Array<String> = [],
+    pub rule_stack: List<String> = [],
 }
 
 impl ParseError {
-    pub fn new(message: String, span: Span, expected: Array<String>) -> ParseError {
+    pub fn new(message: String, span: Span, expected: List<String>) -> ParseError {
         return ParseError { message, span, expected };
     }
 
     /// Construct a ParseError whose position is already resolved. Used by
     /// `Parser::error`, which has the source on hand to compute line/col.
-    pub fn at(message: String, span: Span, expected: Array<String>, line: i32, col: i32) -> ParseError {
+    pub fn at(message: String, span: Span, expected: List<String>, line: i32, col: i32) -> ParseError {
         return ParseError { message, span, expected, line, col, rule_stack: [] };
     }
 
@@ -224,7 +224,7 @@ pub variant CstChild {
 pub struct CstNode {
     pub name: String,
     pub span: Span,
-    pub children: Array<CstChild>,
+    pub children: List<CstChild>,
 }
 
 impl CstNode {
@@ -327,8 +327,8 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// Text escaping follows `CommonToken.toString` (`vendor/antlr4/runtime/
 /// Java/src/org/antlr/v4/runtime/CommonToken.java`): only `\n`, `\r`,
 /// `\t` are escaped; backslashes and quotes pass through unchanged.
-pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
-    let chars: Array<char> = input.chars().collect();
+pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
+    let chars: List<char> = input.chars().collect();
     let mut out = String::with_capacity(tokens.len() * 32);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
@@ -357,7 +357,7 @@ pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> 
 /// `to_lexer_string` for both main-stream tokens and interleaved
 /// non-default-channel trivia. `channel=N` is printed only for non-default
 /// channels, matching ANTLR4.
-fn emit_lexer_token(out: &mut String, tok: &Token, chars: &Array<char>, index: i32, eof_kind: i32) {
+fn emit_lexer_token(out: &mut String, tok: &Token, chars: &List<char>, index: i32, eof_kind: i32) {
     let is_eof = tok.kind == eof_kind;
     let mut text_buf = String::with_capacity(16);
     if is_eof {
@@ -384,7 +384,7 @@ fn emit_lexer_token(out: &mut String, tok: &Token, chars: &Array<char>, index: i
 
 /// Compute (line, column) at a 0-based char index in `chars`, with
 /// 1-based line and 0-based column to match ANTLR4's `Token` getters.
-fn line_col_at(chars: &Array<char>, pos: i32) -> [i32, i32] {
+fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
     let mut line = 1;
     let mut col = 0;
     let cap = if pos < chars.len() { pos } else { chars.len() };
@@ -413,9 +413,9 @@ pub struct HighlightOverride {
 /// passes to `Visitor::enter_rule`. The generator emits the names in
 /// parser-rule declaration order; index = rule id.
 pub struct HighlightMapping {
-    pub defaults: Array<String>,
-    pub rule_names: Array<String>,
-    pub overrides: Array<HighlightOverride>,
+    pub defaults: List<String>,
+    pub rule_names: List<String>,
+    pub overrides: List<HighlightOverride>,
 }
 
 /// A single highlight capture: a named range in the source text.
@@ -435,15 +435,15 @@ struct ResolvedOverride {
 
 /// HighlightVisitor collects highlight captures during a CST walk.
 pub struct HighlightVisitor {
-    defaults: Array<String>,
-    overrides: Array<ResolvedOverride>,
-    rule_stack: Array<i32>,
-    pub captures: Array<HighlightCapture>,
+    defaults: List<String>,
+    overrides: List<ResolvedOverride>,
+    rule_stack: List<i32>,
+    pub captures: List<HighlightCapture>,
 }
 
 impl HighlightVisitor {
     pub fn new(mapping: HighlightMapping) -> HighlightVisitor {
-        let mut overrides: Array<ResolvedOverride> = Array::with_capacity(mapping.overrides.len());
+        let mut overrides: List<ResolvedOverride> = List::with_capacity(mapping.overrides.len());
         for let ov of &mapping.overrides {
             let mut id: i32 = -1;
             for let mut i = 0; i < mapping.rule_names.len(); i += 1 {
@@ -557,7 +557,7 @@ fn push_class(out: &mut String, capture: &String) {
 
 /// Produce a highlighted HTML fragment from source text and captures.
 /// Captures must be sorted by start position (as produced by HighlightVisitor).
-pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> String {
+pub fn highlight_html(source: &String, captures: &List<HighlightCapture>) -> String {
     let mut out = String::with_capacity(source.len() * 5);
     let mut pos = 0;
     let mut iter = source.chars();
@@ -586,7 +586,7 @@ pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> St
     return out;
 }
 
-fn substr(chars: &Array<char>, start: i32, end: i32) -> String {
+fn substr(chars: &List<char>, start: i32, end: i32) -> String {
     let mut out = String::with_capacity(end - start);
     let mut i = start;
     while i < end && i < chars.len() {
@@ -615,7 +615,7 @@ pub trait Visitor {
 
 /// TreeRecorder is a Visitor that records events for building a CstNode tree.
 pub struct TreeRecorder {
-    events: Array<TreeEvent>,
+    events: List<TreeEvent>,
 }
 
 variant TreeEvent {
@@ -654,10 +654,10 @@ impl Visitor for TreeRecorder {
     }
 }
 
-fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
+fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
     if let Enter(info) = events[*pos] {
         *pos += 1;
-        let mut children: Array<CstChild> = [];
+        let mut children: List<CstChild> = [];
         loop {
             if *pos >= events.len() {
                 break;
@@ -768,9 +768,9 @@ pub enum TokenKind {
 pub struct GrammarSpecNode {
     pub span: Span,
     pub grammar_decl: GrammarDeclNode,
-    pub prequel_construct_list: Array<PrequelConstructNode>,
+    pub prequel_construct_list: List<PrequelConstructNode>,
     pub rules: RulesNode,
-    pub mode_spec_list: Array<ModeSpecNode>,
+    pub mode_spec_list: List<ModeSpecNode>,
     pub eof: Token,
 }
 
@@ -845,7 +845,7 @@ pub struct OptionSemiItem {
 pub struct OptionsSpecNode {
     pub span: Span,
     pub options: Token,
-    pub option_semi_list: Array<OptionSemiItem>,
+    pub option_semi_list: List<OptionSemiItem>,
     pub rbrace: Token,
 }
 
@@ -871,7 +871,7 @@ pub struct DotIdentifierItem {
 pub struct OptionValueAlt0 {
     pub span: Span,
     pub identifier: IdentifierNode,
-    pub dot_identifier_list: Array<DotIdentifierItem>,
+    pub dot_identifier_list: List<DotIdentifierItem>,
 }
 
 pub struct OptionValueAlt1 {
@@ -898,7 +898,7 @@ pub struct DelegateGrammarsNode {
     pub span: Span,
     pub import_: Token,
     pub delegate_grammar: DelegateGrammarNode,
-    pub comma_delegate_grammar_list: Array<CommaDelegateGrammarItem>,
+    pub comma_delegate_grammar_list: List<CommaDelegateGrammarItem>,
     pub semi: Token,
 }
 
@@ -941,7 +941,7 @@ pub struct CommaIdentifierItem {
 pub struct IdListNode {
     pub span: Span,
     pub identifier: IdentifierNode,
-    pub comma_identifier_list: Array<CommaIdentifierItem>,
+    pub comma_identifier_list: List<CommaIdentifierItem>,
     pub comma: Option<Token>,
 }
 
@@ -987,7 +987,7 @@ pub struct ActionBlockNode {
 pub struct ArgActionBlockNode {
     pub span: Span,
     pub begin_argument: Token,
-    pub argument_content_list: Array<Token>,
+    pub argument_content_list: List<Token>,
     pub end_argument: Token,
 }
 
@@ -996,12 +996,12 @@ pub struct ModeSpecNode {
     pub mode: Token,
     pub identifier: IdentifierNode,
     pub semi: Token,
-    pub lexer_rule_spec_list: Array<LexerRuleSpecNode>,
+    pub lexer_rule_spec_list: List<LexerRuleSpecNode>,
 }
 
 pub struct RulesNode {
     pub span: Span,
-    pub rule_spec_list: Array<RuleSpecNode>,
+    pub rule_spec_list: List<RuleSpecNode>,
 }
 
 pub variant RuleSpecNode {
@@ -1027,7 +1027,7 @@ pub struct ParserRuleSpecNode {
     pub rule_returns: Option<RuleReturnsNode>,
     pub throws_spec: Option<ThrowsSpecNode>,
     pub locals_spec: Option<LocalsSpecNode>,
-    pub rule_prequel_list: Array<RulePrequelNode>,
+    pub rule_prequel_list: List<RulePrequelNode>,
     pub colon: Token,
     pub rule_block: RuleBlockNode,
     pub semi: Token,
@@ -1036,7 +1036,7 @@ pub struct ParserRuleSpecNode {
 
 pub struct ExceptionGroupNode {
     pub span: Span,
-    pub exception_handler_list: Array<ExceptionHandlerNode>,
+    pub exception_handler_list: List<ExceptionHandlerNode>,
     pub finally_clause: Option<FinallyClauseNode>,
 }
 
@@ -1083,7 +1083,7 @@ pub struct ThrowsSpecNode {
     pub span: Span,
     pub throws: Token,
     pub qualified_identifier: QualifiedIdentifierNode,
-    pub comma_qualified_identifier_list: Array<CommaQualifiedIdentifierItem>,
+    pub comma_qualified_identifier_list: List<CommaQualifiedIdentifierItem>,
 }
 
 pub struct LocalsSpecNode {
@@ -1101,7 +1101,7 @@ pub struct RuleActionNode {
 
 pub struct RuleModifiersNode {
     pub span: Span,
-    pub rule_modifier_list: Array<RuleModifierNode>,
+    pub rule_modifier_list: List<RuleModifierNode>,
 }
 
 pub variant RuleModifierNode {
@@ -1144,7 +1144,7 @@ pub struct OrLabeledAltItem {
 pub struct RuleAltListNode {
     pub span: Span,
     pub labeled_alt: LabeledAltNode,
-    pub or_labeled_alt_list: Array<OrLabeledAltItem>,
+    pub or_labeled_alt_list: List<OrLabeledAltItem>,
 }
 
 pub struct PoundIdentifierItem {
@@ -1181,7 +1181,7 @@ pub struct OrLexerAltItem {
 pub struct LexerAltListNode {
     pub span: Span,
     pub lexer_alt: LexerAltNode,
-    pub or_lexer_alt_list: Array<OrLexerAltItem>,
+    pub or_lexer_alt_list: List<OrLexerAltItem>,
 }
 
 pub variant LexerAltNode {
@@ -1206,7 +1206,7 @@ pub variant LexerElementsNode {
 
 pub struct LexerElementsAlt0 {
     pub span: Span,
-    pub lexer_element_list: Array<LexerElementNode>,
+    pub lexer_element_list: List<LexerElementNode>,
 }
 
 pub struct LexerElementsAlt1 {
@@ -1253,7 +1253,7 @@ pub struct LexerCommandsNode {
     pub span: Span,
     pub rarrow: Token,
     pub lexer_command: LexerCommandNode,
-    pub comma_lexer_command_list: Array<CommaLexerCommandItem>,
+    pub comma_lexer_command_list: List<CommaLexerCommandItem>,
 }
 
 pub variant LexerCommandNode {
@@ -1312,7 +1312,7 @@ pub struct OrAlternativeItem {
 pub struct AltListNode {
     pub span: Span,
     pub alternative: AlternativeNode,
-    pub or_alternative_list: Array<OrAlternativeItem>,
+    pub or_alternative_list: List<OrAlternativeItem>,
 }
 
 pub variant AlternativeNode {
@@ -1323,7 +1323,7 @@ pub variant AlternativeNode {
 pub struct AlternativeAlt0 {
     pub span: Span,
     pub element_options: Option<ElementOptionsNode>,
-    pub element_list: Array<ElementNode>,
+    pub element_list: List<ElementNode>,
 }
 
 pub struct AlternativeAlt1 {
@@ -1394,7 +1394,7 @@ pub struct PredicateOptionsNode {
     pub span: Span,
     pub lt: Token,
     pub predicate_option: PredicateOptionNode,
-    pub comma_predicate_option_list: Array<CommaPredicateOptionItem>,
+    pub comma_predicate_option_list: List<CommaPredicateOptionItem>,
     pub gt: Token,
 }
 
@@ -1572,7 +1572,7 @@ pub struct BlockSetNode {
     pub span: Span,
     pub lparen: Token,
     pub set_element: SetElementNode,
-    pub or_set_element_list: Array<OrSetElementItem>,
+    pub or_set_element_list: List<OrSetElementItem>,
     pub rparen: Token,
 }
 
@@ -1607,7 +1607,7 @@ pub struct SetElementAlt3 {
 
 pub struct OptionsSpecOptRuleActionListColonItem {
     pub options_spec: Option<OptionsSpecNode>,
-    pub rule_action_list: Array<RuleActionNode>,
+    pub rule_action_list: List<RuleActionNode>,
     pub colon: Token,
 }
 
@@ -1659,7 +1659,7 @@ pub struct ElementOptionsNode {
     pub span: Span,
     pub lt: Token,
     pub element_option: ElementOptionNode,
-    pub comma_element_option_list: Array<CommaElementOptionItem>,
+    pub comma_element_option_list: List<CommaElementOptionItem>,
     pub gt: Token,
 }
 
@@ -1716,7 +1716,7 @@ pub struct IdentifierAlt1 {
 pub struct QualifiedIdentifierNode {
     pub span: Span,
     pub identifier: IdentifierNode,
-    pub dot_identifier_list: Array<DotIdentifierItem>,
+    pub dot_identifier_list: List<DotIdentifierItem>,
 }
 
 global TK_DOC_COMMENT: i32 = 0;
@@ -1803,7 +1803,7 @@ global TK_EOF: i32 = 80;
 global TK_ERROR: i32 = 81;
 
 struct Lexer {
-    chars: Array<char>,
+    chars: List<char>,
     pos: i32,
 }
 
@@ -1821,7 +1821,7 @@ impl Lexer {
     }
 }
 
-fn try_doc_comment(chars: &Array<char>, start: i32) -> i32 {
+fn try_doc_comment(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
@@ -1863,7 +1863,7 @@ fn try_doc_comment(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_block_comment(chars: &Array<char>, start: i32) -> i32 {
+fn try_block_comment(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
@@ -1903,7 +1903,7 @@ fn try_block_comment(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_line_comment(chars: &Array<char>, start: i32) -> i32 {
+fn try_line_comment(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
@@ -1923,7 +1923,7 @@ fn try_line_comment(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_int(chars: &Array<char>, start: i32) -> i32 {
+fn try_int(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_5 = pos;
     let mut alts_ok_5 = false;
@@ -1957,7 +1957,7 @@ fn try_int(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_string_literal(chars: &Array<char>, start: i32) -> i32 {
+fn try_string_literal(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
     pos += 1;
@@ -2061,7 +2061,7 @@ fn try_string_literal(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_unterminated_string_literal(chars: &Array<char>, start: i32) -> i32 {
+fn try_unterminated_string_literal(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
     pos += 1;
@@ -2163,21 +2163,21 @@ fn try_unterminated_string_literal(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_begin_argument(chars: &Array<char>, start: i32) -> i32 {
+fn try_begin_argument(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '[' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_action(chars: &Array<char>, start: i32) -> i32 {
+fn try_action(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     pos = try_nested_action(chars, pos);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn try_nested_action(chars: &Array<char>, start: i32) -> i32 {
+fn try_nested_action(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '{' { return -1; }
     pos += 1;
@@ -2659,7 +2659,7 @@ fn try_nested_action(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_options(chars: &Array<char>, start: i32) -> i32 {
+fn try_options(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'o' { return -1; }
     pos += 1;
@@ -2690,7 +2690,7 @@ fn try_options(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_tokens(chars: &Array<char>, start: i32) -> i32 {
+fn try_tokens(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 't' { return -1; }
     pos += 1;
@@ -2719,7 +2719,7 @@ fn try_tokens(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_channels(chars: &Array<char>, start: i32) -> i32 {
+fn try_channels(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
     pos += 1;
@@ -2752,7 +2752,7 @@ fn try_channels(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_import(chars: &Array<char>, start: i32) -> i32 {
+fn try_import(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'i' { return -1; }
     pos += 1;
@@ -2769,7 +2769,7 @@ fn try_import(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_fragment(chars: &Array<char>, start: i32) -> i32 {
+fn try_fragment(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'f' { return -1; }
     pos += 1;
@@ -2790,7 +2790,7 @@ fn try_fragment(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lexer(chars: &Array<char>, start: i32) -> i32 {
+fn try_lexer(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'l' { return -1; }
     pos += 1;
@@ -2805,7 +2805,7 @@ fn try_lexer(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_parser(chars: &Array<char>, start: i32) -> i32 {
+fn try_parser(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'p' { return -1; }
     pos += 1;
@@ -2822,7 +2822,7 @@ fn try_parser(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_grammar(chars: &Array<char>, start: i32) -> i32 {
+fn try_grammar(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'g' { return -1; }
     pos += 1;
@@ -2841,7 +2841,7 @@ fn try_grammar(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_protected(chars: &Array<char>, start: i32) -> i32 {
+fn try_protected(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'p' { return -1; }
     pos += 1;
@@ -2864,7 +2864,7 @@ fn try_protected(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_public(chars: &Array<char>, start: i32) -> i32 {
+fn try_public(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'p' { return -1; }
     pos += 1;
@@ -2881,7 +2881,7 @@ fn try_public(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_private(chars: &Array<char>, start: i32) -> i32 {
+fn try_private(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'p' { return -1; }
     pos += 1;
@@ -2900,7 +2900,7 @@ fn try_private(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_returns(chars: &Array<char>, start: i32) -> i32 {
+fn try_returns(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'r' { return -1; }
     pos += 1;
@@ -2919,7 +2919,7 @@ fn try_returns(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_locals(chars: &Array<char>, start: i32) -> i32 {
+fn try_locals(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'l' { return -1; }
     pos += 1;
@@ -2936,7 +2936,7 @@ fn try_locals(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_throws(chars: &Array<char>, start: i32) -> i32 {
+fn try_throws(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 't' { return -1; }
     pos += 1;
@@ -2953,7 +2953,7 @@ fn try_throws(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_catch(chars: &Array<char>, start: i32) -> i32 {
+fn try_catch(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
     pos += 1;
@@ -2968,7 +2968,7 @@ fn try_catch(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_finally(chars: &Array<char>, start: i32) -> i32 {
+fn try_finally(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'f' { return -1; }
     pos += 1;
@@ -2987,7 +2987,7 @@ fn try_finally(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_mode(chars: &Array<char>, start: i32) -> i32 {
+fn try_mode(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'm' { return -1; }
     pos += 1;
@@ -3000,14 +3000,14 @@ fn try_mode(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_colon(chars: &Array<char>, start: i32) -> i32 {
+fn try_colon(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ':' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_coloncolon(chars: &Array<char>, start: i32) -> i32 {
+fn try_coloncolon(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ':' { return -1; }
     pos += 1;
@@ -3016,42 +3016,42 @@ fn try_coloncolon(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_comma(chars: &Array<char>, start: i32) -> i32 {
+fn try_comma(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ',' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_semi(chars: &Array<char>, start: i32) -> i32 {
+fn try_semi(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ';' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_lparen(chars: &Array<char>, start: i32) -> i32 {
+fn try_lparen(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '(' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_rparen(chars: &Array<char>, start: i32) -> i32 {
+fn try_rparen(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ')' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_rbrace(chars: &Array<char>, start: i32) -> i32 {
+fn try_rbrace(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '}' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_rarrow(chars: &Array<char>, start: i32) -> i32 {
+fn try_rarrow(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '-' { return -1; }
     pos += 1;
@@ -3060,42 +3060,42 @@ fn try_rarrow(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lt(chars: &Array<char>, start: i32) -> i32 {
+fn try_lt(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '<' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_gt(chars: &Array<char>, start: i32) -> i32 {
+fn try_gt(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '>' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_assign(chars: &Array<char>, start: i32) -> i32 {
+fn try_assign(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_question(chars: &Array<char>, start: i32) -> i32 {
+fn try_question(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '?' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_star(chars: &Array<char>, start: i32) -> i32 {
+fn try_star(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '*' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_plus_assign(chars: &Array<char>, start: i32) -> i32 {
+fn try_plus_assign(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '+' { return -1; }
     pos += 1;
@@ -3104,28 +3104,28 @@ fn try_plus_assign(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_plus(chars: &Array<char>, start: i32) -> i32 {
+fn try_plus(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '+' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_or(chars: &Array<char>, start: i32) -> i32 {
+fn try_or(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '|' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_dollar(chars: &Array<char>, start: i32) -> i32 {
+fn try_dollar(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '$' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_range(chars: &Array<char>, start: i32) -> i32 {
+fn try_range(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '.' { return -1; }
     pos += 1;
@@ -3134,35 +3134,35 @@ fn try_range(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_dot(chars: &Array<char>, start: i32) -> i32 {
+fn try_dot(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '.' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_at(chars: &Array<char>, start: i32) -> i32 {
+fn try_at(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_pound(chars: &Array<char>, start: i32) -> i32 {
+fn try_pound(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '#' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_not(chars: &Array<char>, start: i32) -> i32 {
+fn try_not(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '~' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_id(chars: &Array<char>, start: i32) -> i32 {
+fn try_id(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_51 = pos;
     let mut alts_ok_51 = false;
@@ -3432,7 +3432,7 @@ fn try_id(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ws(chars: &Array<char>, start: i32) -> i32 {
+fn try_ws(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == 'f') { return -1; }
@@ -3451,14 +3451,14 @@ fn try_ws(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_nested_argument(chars: &Array<char>, start: i32) -> i32 {
+fn try_nested_argument(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '[' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_argument_escape(chars: &Array<char>, start: i32) -> i32 {
+fn try_argument_escape(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '\\' { return -1; }
     pos += 1;
@@ -3467,7 +3467,7 @@ fn try_argument_escape(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_argument_string_literal(chars: &Array<char>, start: i32) -> i32 {
+fn try_argument_string_literal(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '"' { return -1; }
     pos += 1;
@@ -3574,34 +3574,34 @@ fn try_argument_string_literal(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_argument_char_literal(chars: &Array<char>, start: i32) -> i32 {
+fn try_argument_char_literal(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     pos = try_string_literal(chars, pos);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn try_end_argument(chars: &Array<char>, start: i32) -> i32 {
+fn try_end_argument(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ']' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_unterminated_argument(chars: &Array<char>, start: i32) -> i32 {
+fn try_unterminated_argument(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos < chars.len() { return -1; }
     return pos;
 }
 
-fn try_argument_content(chars: &Array<char>, start: i32) -> i32 {
+fn try_argument_content(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_lexer_char_set_body(chars: &Array<char>, start: i32) -> i32 {
+fn try_lexer_char_set_body(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_64 = pos;
     let mut alts_ok_64 = false;
@@ -3654,25 +3654,25 @@ fn try_lexer_char_set_body(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lexer_char_set(chars: &Array<char>, start: i32) -> i32 {
+fn try_lexer_char_set(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ']' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_unterminated_char_set(chars: &Array<char>, start: i32) -> i32 {
+fn try_unterminated_char_set(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos < chars.len() { return -1; }
     return pos;
 }
 
-pub fn tokenize(input: &String) -> Array<Token> {
+pub fn tokenize(input: &String) -> List<Token> {
     let mut lexer = Lexer::new(input);
-    let mut tokens: Array<Token> = Array::with_capacity(lexer.chars.len() / 4 + 1);
-    let mut trivia: Array<Token> = [];
+    let mut tokens: List<Token> = List::with_capacity(lexer.chars.len() / 4 + 1);
+    let mut trivia: List<Token> = [];
     let mut more_start: i32 = -1;
-    let mut mode_stack: Array<i32> = [];
+    let mut mode_stack: List<i32> = [];
     let mut current_mode: i32 = 0;
     while !lexer.at_end() {
         let start = lexer.pos;
@@ -3938,17 +3938,17 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 struct Parser {
-    tokens: Array<Token>,
+    tokens: List<Token>,
     pos: i32,
-    chars: Array<char>,
+    chars: List<char>,
 }
 
 impl Parser {
-    fn new(tokens: Array<Token>, chars: Array<char>) -> Parser {
+    fn new(tokens: List<Token>, chars: List<char>) -> Parser {
         return Parser { tokens, pos: 0, chars };
     }
 
-    fn error(&self, message: String, span: Span, expected: Array<String>) -> ParseError {
+    fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
         let lc = line_col_at(&self.chars, span.start);
         return ParseError::at(message, span, expected, lc.0, lc.1);
     }
@@ -4015,7 +4015,7 @@ impl Parser {
         ));
     }
 
-    fn match_not(&mut self, excluded: Array<i32>) -> Result<Token, ParseError> {
+    fn match_not(&mut self, excluded: List<i32>) -> Result<Token, ParseError> {
         let k = self.tokens[self.pos].kind;
         if k != TK_EOF {
             let mut blocked = false;
@@ -4037,7 +4037,7 @@ impl Parser {
         ));
     }
 
-    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+    fn match_set(&mut self, included: List<i32>) -> Result<Token, ParseError> {
         let k = self.tokens[self.pos].kind;
         for let x of included {
             if x == k {
@@ -4056,7 +4056,7 @@ impl Parser {
     }
 }
 
-fn scan_grammar_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_grammar_spec(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_grammar_decl(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -4079,7 +4079,7 @@ fn scan_grammar_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     return pos;
 }
 
-fn scan_grammar_decl(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_grammar_decl(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_grammar_type(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -4090,7 +4090,7 @@ fn scan_grammar_decl(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     return pos;
 }
 
-fn scan_grammar_type(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_grammar_type(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -4130,7 +4130,7 @@ fn scan_grammar_type(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     return pos;
 }
 
-fn scan_prequel_construct(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_prequel_construct(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -4182,7 +4182,7 @@ fn scan_prequel_construct(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     return pos;
 }
 
-fn scan_options_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_options_spec(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_OPTIONS { return -1; }
     pos += 1;
@@ -4206,7 +4206,7 @@ fn scan_options_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     return pos;
 }
 
-fn scan_option(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_option(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -4217,7 +4217,7 @@ fn scan_option(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_option_value(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_option_value(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -4276,7 +4276,7 @@ fn scan_option_value(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     return pos;
 }
 
-fn scan_delegate_grammars(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_delegate_grammars(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_IMPORT { return -1; }
     pos += 1;
@@ -4302,7 +4302,7 @@ fn scan_delegate_grammars(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     return pos;
 }
 
-fn scan_delegate_grammar(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_delegate_grammar(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -4334,7 +4334,7 @@ fn scan_delegate_grammar(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     return pos;
 }
 
-fn scan_tokens_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_tokens_spec(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_TOKENS { return -1; }
     pos += 1;
@@ -4348,7 +4348,7 @@ fn scan_tokens_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_channels_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_channels_spec(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_CHANNELS { return -1; }
     pos += 1;
@@ -4362,7 +4362,7 @@ fn scan_channels_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     return pos;
 }
 
-fn scan_id_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_id_list(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -4389,7 +4389,7 @@ fn scan_id_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_action_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_action_(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_AT { return -1; }
     pos += 1;
@@ -4414,7 +4414,7 @@ fn scan_action_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_action_scope_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_action_scope_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -4450,14 +4450,14 @@ fn scan_action_scope_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     return pos;
 }
 
-fn scan_action_block(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_action_block(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ACTION { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_arg_action_block(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_arg_action_block(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_BEGIN_ARGUMENT { return -1; }
     pos += 1;
@@ -4472,7 +4472,7 @@ fn scan_arg_action_block(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     return pos;
 }
 
-fn scan_mode_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_mode_spec(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_MODE { return -1; }
     pos += 1;
@@ -4489,7 +4489,7 @@ fn scan_mode_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_rules(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_rules(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _gale_kind_set_4(tokens[pos].kind) {
         let sp = pos;
@@ -4500,7 +4500,7 @@ fn scan_rules(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_rule_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_rule_spec(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -4544,7 +4544,7 @@ fn scan_rule_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_parser_rule_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_parser_rule_spec(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_5(tokens[pos].kind) {
         let sp = pos;
@@ -4590,7 +4590,7 @@ fn scan_parser_rule_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     return pos;
 }
 
-fn scan_exception_group(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_exception_group(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos].kind == TK_CATCH {
         let sp = pos;
@@ -4606,7 +4606,7 @@ fn scan_exception_group(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i
     return pos;
 }
 
-fn scan_exception_handler(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_exception_handler(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_CATCH { return -1; }
     pos += 1;
@@ -4617,7 +4617,7 @@ fn scan_exception_handler(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     return pos;
 }
 
-fn scan_finally_clause(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_finally_clause(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_FINALLY { return -1; }
     pos += 1;
@@ -4626,7 +4626,7 @@ fn scan_finally_clause(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     return pos;
 }
 
-fn scan_rule_prequel(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_rule_prequel(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -4654,7 +4654,7 @@ fn scan_rule_prequel(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     return pos;
 }
 
-fn scan_rule_returns(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_rule_returns(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_RETURNS { return -1; }
     pos += 1;
@@ -4663,7 +4663,7 @@ fn scan_rule_returns(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     return pos;
 }
 
-fn scan_throws_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_throws_spec(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_THROWS { return -1; }
     pos += 1;
@@ -4687,7 +4687,7 @@ fn scan_throws_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_locals_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_locals_spec(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LOCALS { return -1; }
     pos += 1;
@@ -4696,7 +4696,7 @@ fn scan_locals_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_rule_action(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_rule_action(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_AT { return -1; }
     pos += 1;
@@ -4707,7 +4707,7 @@ fn scan_rule_action(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_rule_modifiers(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_rule_modifiers(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_rule_modifier(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -4720,21 +4720,21 @@ fn scan_rule_modifiers(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     return pos;
 }
 
-fn scan_rule_modifier(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_rule_modifier(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_5(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_rule_block(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_rule_block(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_rule_alt_list(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_rule_alt_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_rule_alt_list(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_labeled_alt(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -4756,7 +4756,7 @@ fn scan_rule_alt_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     return pos;
 }
 
-fn scan_labeled_alt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_labeled_alt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_alternative(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -4777,7 +4777,7 @@ fn scan_labeled_alt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_lexer_rule_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_rule_spec(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_FRAGMENT {
         let sp = pos;
@@ -4800,14 +4800,14 @@ fn scan_lexer_rule_spec(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i
     return pos;
 }
 
-fn scan_lexer_rule_block(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_rule_block(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_lexer_alt_list(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_lexer_alt_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_alt_list(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_lexer_alt(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -4829,7 +4829,7 @@ fn scan_lexer_alt_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     return pos;
 }
 
-fn scan_lexer_alt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_alt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -4856,7 +4856,7 @@ fn scan_lexer_alt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_lexer_elements(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_elements(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -4892,7 +4892,7 @@ fn scan_lexer_elements(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     return pos;
 }
 
-fn scan_lexer_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_element(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -4943,7 +4943,7 @@ fn scan_lexer_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     return pos;
 }
 
-fn scan_lexer_block(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_block(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
     pos += 1;
@@ -4954,7 +4954,7 @@ fn scan_lexer_block(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_lexer_commands(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_commands(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_RARROW { return -1; }
     pos += 1;
@@ -4978,7 +4978,7 @@ fn scan_lexer_commands(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     return pos;
 }
 
-fn scan_lexer_command(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_command(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -5012,7 +5012,7 @@ fn scan_lexer_command(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     return pos;
 }
 
-fn scan_lexer_command_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_command_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -5040,7 +5040,7 @@ fn scan_lexer_command_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
     return pos;
 }
 
-fn scan_lexer_command_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_command_expr(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -5068,7 +5068,7 @@ fn scan_lexer_command_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
     return pos;
 }
 
-fn scan_alt_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_alt_list(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_alternative(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -5090,7 +5090,7 @@ fn scan_alt_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_alternative(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_alternative(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -5131,7 +5131,7 @@ fn scan_alternative(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_element(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -5244,7 +5244,7 @@ fn scan_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_predicate_options(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_predicate_options(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LT { return -1; }
     pos += 1;
@@ -5270,7 +5270,7 @@ fn scan_predicate_options(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     return pos;
 }
 
-fn scan_predicate_option(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_predicate_option(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -5325,7 +5325,7 @@ fn scan_predicate_option(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     return pos;
 }
 
-fn scan_labeled_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_labeled_element(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -5367,7 +5367,7 @@ fn scan_labeled_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i
     return pos;
 }
 
-fn scan_ebnf(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_ebnf(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_block(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -5379,14 +5379,14 @@ fn scan_ebnf(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_block_suffix(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_block_suffix(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_ebnf_suffix(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_ebnf_suffix(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_ebnf_suffix(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -5437,7 +5437,7 @@ fn scan_ebnf_suffix(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_lexer_atom(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_atom(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -5497,7 +5497,7 @@ fn scan_lexer_atom(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_atom(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_atom(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -5541,7 +5541,7 @@ fn scan_atom(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_wildcard(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_wildcard(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_DOT { return -1; }
     pos += 1;
@@ -5553,7 +5553,7 @@ fn scan_wildcard(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_not_set(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_not_set(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -5585,7 +5585,7 @@ fn scan_not_set(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_block_set(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_block_set(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
     pos += 1;
@@ -5611,7 +5611,7 @@ fn scan_block_set(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_set_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_set_element(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -5665,7 +5665,7 @@ fn scan_set_element(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_block(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_block(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LPAREN { return -1; }
     pos += 1;
@@ -5699,7 +5699,7 @@ fn scan_block(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_ruleref(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_ruleref(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_RULE_REF { return -1; }
     pos += 1;
@@ -5716,7 +5716,7 @@ fn scan_ruleref(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_character_range(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_character_range(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { return -1; }
     pos += 1;
@@ -5727,7 +5727,7 @@ fn scan_character_range(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i
     return pos;
 }
 
-fn scan_terminal_def(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_terminal_def(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -5765,7 +5765,7 @@ fn scan_terminal_def(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     return pos;
 }
 
-fn scan_element_options(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_element_options(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LT { return -1; }
     pos += 1;
@@ -5791,7 +5791,7 @@ fn scan_element_options(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i
     return pos;
 }
 
-fn scan_element_option(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_element_option(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -5846,14 +5846,14 @@ fn scan_element_option(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     return pos;
 }
 
-fn scan_identifier(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_identifier(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_qualified_identifier(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_qualified_identifier(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -5878,7 +5878,7 @@ fn scan_qualified_identifier(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
 fn _parse_grammar_spec__inner(p: &mut Parser) -> Result<GrammarSpecNode, ParseError> {
     let start = p.peek().span.start;
     let grammar_decl = _parse_grammar_decl(p)?;
-    let mut prequel_construct_list: Array<PrequelConstructNode> = [];
+    let mut prequel_construct_list: List<PrequelConstructNode> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -5894,7 +5894,7 @@ fn _parse_grammar_spec__inner(p: &mut Parser) -> Result<GrammarSpecNode, ParseEr
         prequel_construct_list.push(prequel_construct);
     }
     let rules = _parse_rules(p)?;
-    let mut mode_spec_list: Array<ModeSpecNode> = [];
+    let mut mode_spec_list: List<ModeSpecNode> = [];
     loop {
         let mut rep_scan_pos_2: i32 = -1;
         rep_scan_2: {
@@ -6052,7 +6052,7 @@ fn _parse_prequel_construct(p: &mut Parser) -> Result<PrequelConstructNode, Pars
 fn _parse_options_spec__inner(p: &mut Parser) -> Result<OptionsSpecNode, ParseError> {
     let start = p.peek().span.start;
     let options = p.expect(TK_OPTIONS)?;
-    let mut option_semi_list: Array<OptionSemiItem> = [];
+    let mut option_semi_list: List<OptionSemiItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -6125,7 +6125,7 @@ fn _parse_option_value__inner(p: &mut Parser) -> Result<OptionValueNode, ParseEr
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
         let identifier = _parse_identifier(p)?;
-        let mut dot_identifier_list: Array<DotIdentifierItem> = [];
+        let mut dot_identifier_list: List<DotIdentifierItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -6200,7 +6200,7 @@ fn _parse_delegate_grammars__inner(p: &mut Parser) -> Result<DelegateGrammarsNod
     let start = p.peek().span.start;
     let import_ = p.expect(TK_IMPORT)?;
     let delegate_grammar = _parse_delegate_grammar(p)?;
-    let mut comma_delegate_grammar_list: Array<CommaDelegateGrammarItem> = [];
+    let mut comma_delegate_grammar_list: List<CommaDelegateGrammarItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -6256,7 +6256,7 @@ fn _parse_delegate_grammar__inner_bt_1(p: &mut Parser) -> Result<DelegateGrammar
     }));
 }
 
-fn _parse_delegate_grammar__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_delegate_grammar__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -6276,7 +6276,7 @@ fn _parse_delegate_grammar__inner_bt_0(p: &mut Parser) -> Result<DelegateGrammar
     }));
 }
 
-fn _parse_delegate_grammar__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_delegate_grammar__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -6388,7 +6388,7 @@ fn _parse_channels_spec(p: &mut Parser) -> Result<ChannelsSpecNode, ParseError> 
 fn _parse_id_list__inner(p: &mut Parser) -> Result<IdListNode, ParseError> {
     let start = p.peek().span.start;
     let identifier = _parse_identifier(p)?;
-    let mut comma_identifier_list: Array<CommaIdentifierItem> = [];
+    let mut comma_identifier_list: List<CommaIdentifierItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -6544,7 +6544,7 @@ fn _parse_action_block(p: &mut Parser) -> Result<ActionBlockNode, ParseError> {
 fn _parse_arg_action_block__inner(p: &mut Parser) -> Result<ArgActionBlockNode, ParseError> {
     let start = p.peek().span.start;
     let begin_argument = p.expect(TK_BEGIN_ARGUMENT)?;
-    let mut argument_content_list: Array<Token> = [];
+    let mut argument_content_list: List<Token> = [];
     while p.peek_kind() == TK_ARGUMENT_CONTENT {
         let argument_content = p.expect(TK_ARGUMENT_CONTENT)?;
         argument_content_list.push(argument_content);
@@ -6572,7 +6572,7 @@ fn _parse_mode_spec__inner(p: &mut Parser) -> Result<ModeSpecNode, ParseError> {
     let mode = p.expect(TK_MODE)?;
     let identifier = _parse_identifier(p)?;
     let semi = p.expect(TK_SEMI)?;
-    let mut lexer_rule_spec_list: Array<LexerRuleSpecNode> = [];
+    let mut lexer_rule_spec_list: List<LexerRuleSpecNode> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -6607,7 +6607,7 @@ fn _parse_mode_spec(p: &mut Parser) -> Result<ModeSpecNode, ParseError> {
 
 fn _parse_rules__inner(p: &mut Parser) -> Result<RulesNode, ParseError> {
     let start = p.peek().span.start;
-    let mut rule_spec_list: Array<RuleSpecNode> = [];
+    let mut rule_spec_list: List<RuleSpecNode> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -6646,7 +6646,7 @@ fn _parse_rule_spec__inner_bt_1(p: &mut Parser) -> Result<RuleSpecNode, ParseErr
     }));
 }
 
-fn _parse_rule_spec__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_rule_spec__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_lexer_rule_spec(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -6662,7 +6662,7 @@ fn _parse_rule_spec__inner_bt_0(p: &mut Parser) -> Result<RuleSpecNode, ParseErr
     }));
 }
 
-fn _parse_rule_spec__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_rule_spec__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_parser_rule_spec(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -6734,7 +6734,7 @@ fn _parse_parser_rule_spec__inner(p: &mut Parser) -> Result<ParserRuleSpecNode, 
     } else {
         null
     };
-    let mut rule_prequel_list: Array<RulePrequelNode> = [];
+    let mut rule_prequel_list: List<RulePrequelNode> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -6780,7 +6780,7 @@ fn _parse_parser_rule_spec(p: &mut Parser) -> Result<ParserRuleSpecNode, ParseEr
 
 fn _parse_exception_group__inner(p: &mut Parser) -> Result<ExceptionGroupNode, ParseError> {
     let start = p.peek().span.start;
-    let mut exception_handler_list: Array<ExceptionHandlerNode> = [];
+    let mut exception_handler_list: List<ExceptionHandlerNode> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -6916,7 +6916,7 @@ fn _parse_throws_spec__inner(p: &mut Parser) -> Result<ThrowsSpecNode, ParseErro
     let start = p.peek().span.start;
     let throws = p.expect(TK_THROWS)?;
     let qualified_identifier = _parse_qualified_identifier(p)?;
-    let mut comma_qualified_identifier_list: Array<CommaQualifiedIdentifierItem> = [];
+    let mut comma_qualified_identifier_list: List<CommaQualifiedIdentifierItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -7005,7 +7005,7 @@ fn _parse_rule_action(p: &mut Parser) -> Result<RuleActionNode, ParseError> {
 
 fn _parse_rule_modifiers__inner(p: &mut Parser) -> Result<RuleModifiersNode, ParseError> {
     let start = p.peek().span.start;
-    let mut rule_modifier_list: Array<RuleModifierNode> = [];
+    let mut rule_modifier_list: List<RuleModifierNode> = [];
     let mut _plus_first = true;
     loop {
         if !_plus_first {
@@ -7107,7 +7107,7 @@ fn _parse_rule_block(p: &mut Parser) -> Result<RuleBlockNode, ParseError> {
 fn _parse_rule_alt_list__inner(p: &mut Parser) -> Result<RuleAltListNode, ParseError> {
     let start = p.peek().span.start;
     let labeled_alt = _parse_labeled_alt(p)?;
-    let mut or_labeled_alt_list: Array<OrLabeledAltItem> = [];
+    let mut or_labeled_alt_list: List<OrLabeledAltItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -7240,7 +7240,7 @@ fn _parse_lexer_rule_block(p: &mut Parser) -> Result<LexerRuleBlockNode, ParseEr
 fn _parse_lexer_alt_list__inner(p: &mut Parser) -> Result<LexerAltListNode, ParseError> {
     let start = p.peek().span.start;
     let lexer_alt = _parse_lexer_alt(p)?;
-    let mut or_lexer_alt_list: Array<OrLexerAltItem> = [];
+    let mut or_lexer_alt_list: List<OrLexerAltItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -7326,7 +7326,7 @@ fn _parse_lexer_elements__inner(p: &mut Parser) -> Result<LexerElementsNode, Par
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if _gale_kind_set_7(kind) {
-        let mut lexer_element_list: Array<LexerElementNode> = [];
+        let mut lexer_element_list: List<LexerElementNode> = [];
         let mut _plus_first = true;
         loop {
             if !_plus_first {
@@ -7458,7 +7458,7 @@ fn _parse_lexer_commands__inner(p: &mut Parser) -> Result<LexerCommandsNode, Par
     let start = p.peek().span.start;
     let rarrow = p.expect(TK_RARROW)?;
     let lexer_command = _parse_lexer_command(p)?;
-    let mut comma_lexer_command_list: Array<CommaLexerCommandItem> = [];
+    let mut comma_lexer_command_list: List<CommaLexerCommandItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -7512,7 +7512,7 @@ fn _parse_lexer_command__inner_bt_1(p: &mut Parser) -> Result<LexerCommandNode, 
     }));
 }
 
-fn _parse_lexer_command__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_lexer_command__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_lexer_command_name(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -7534,7 +7534,7 @@ fn _parse_lexer_command__inner_bt_0(p: &mut Parser) -> Result<LexerCommandNode, 
     }));
 }
 
-fn _parse_lexer_command__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_lexer_command__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_lexer_command_name(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -7660,7 +7660,7 @@ fn _parse_lexer_command_expr(p: &mut Parser) -> Result<LexerCommandExprNode, Par
 fn _parse_alt_list__inner(p: &mut Parser) -> Result<AltListNode, ParseError> {
     let start = p.peek().span.start;
     let alternative = _parse_alternative(p)?;
-    let mut or_alternative_list: Array<OrAlternativeItem> = [];
+    let mut or_alternative_list: List<OrAlternativeItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -7714,7 +7714,7 @@ fn _parse_alternative__inner(p: &mut Parser) -> Result<AlternativeNode, ParseErr
         } else {
             null
         };
-        let mut element_list: Array<ElementNode> = [];
+        let mut element_list: List<ElementNode> = [];
         let mut _plus_first = true;
         loop {
             if !_plus_first {
@@ -7782,7 +7782,7 @@ fn _parse_element__inner_bt_0(p: &mut Parser) -> Result<ElementNode, ParseError>
     }));
 }
 
-fn _parse_element__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_element__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_labeled_element(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -7828,7 +7828,7 @@ fn _parse_element__inner_bt_1(p: &mut Parser) -> Result<ElementNode, ParseError>
     }));
 }
 
-fn _parse_element__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_element__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_atom(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -7930,7 +7930,7 @@ fn _parse_predicate_options__inner(p: &mut Parser) -> Result<PredicateOptionsNod
     let start = p.peek().span.start;
     let lt = p.expect(TK_LT)?;
     let predicate_option = _parse_predicate_option(p)?;
-    let mut comma_predicate_option_list: Array<CommaPredicateOptionItem> = [];
+    let mut comma_predicate_option_list: List<CommaPredicateOptionItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -7986,7 +7986,7 @@ fn _parse_predicate_option__inner_bt_0(p: &mut Parser) -> Result<PredicateOption
     }));
 }
 
-fn _parse_predicate_option__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_predicate_option__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_element_option(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -8024,7 +8024,7 @@ fn _parse_predicate_option__inner_bt_1(p: &mut Parser) -> Result<PredicateOption
     }));
 }
 
-fn _parse_predicate_option__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_predicate_option__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -8246,7 +8246,7 @@ fn _parse_lexer_atom__inner_bt_0(p: &mut Parser) -> Result<LexerAtomNode, ParseE
     }));
 }
 
-fn _parse_lexer_atom__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_lexer_atom__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_character_range(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -8262,7 +8262,7 @@ fn _parse_lexer_atom__inner_bt_1(p: &mut Parser) -> Result<LexerAtomNode, ParseE
     }));
 }
 
-fn _parse_lexer_atom__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_lexer_atom__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_terminal_def(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -8403,7 +8403,7 @@ fn _parse_not_set__inner_bt_0(p: &mut Parser) -> Result<NotSetNode, ParseError> 
     }));
 }
 
-fn _parse_not_set__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_not_set__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_NOT { return -1; }
     pos += 1;
@@ -8423,7 +8423,7 @@ fn _parse_not_set__inner_bt_1(p: &mut Parser) -> Result<NotSetNode, ParseError> 
     }));
 }
 
-fn _parse_not_set__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_not_set__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_NOT { return -1; }
     pos += 1;
@@ -8473,7 +8473,7 @@ fn _parse_block_set__inner(p: &mut Parser) -> Result<BlockSetNode, ParseError> {
     let start = p.peek().span.start;
     let lparen = p.expect(TK_LPAREN)?;
     let set_element = _parse_set_element(p)?;
-    let mut or_set_element_list: Array<OrSetElementItem> = [];
+    let mut or_set_element_list: List<OrSetElementItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -8536,7 +8536,7 @@ fn _parse_set_element__inner_bt_1(p: &mut Parser) -> Result<SetElementNode, Pars
     }));
 }
 
-fn _parse_set_element__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_set_element__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { return -1; }
     pos += 1;
@@ -8557,7 +8557,7 @@ fn _parse_set_element__inner_bt_2(p: &mut Parser) -> Result<SetElementNode, Pars
     }));
 }
 
-fn _parse_set_element__inner_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_set_element__inner_scan_2(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_character_range(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -8658,7 +8658,7 @@ fn _parse_block__inner(p: &mut Parser) -> Result<BlockNode, ParseError> {
         } else {
             null
         };
-        let mut rule_action_list: Array<RuleActionNode> = [];
+        let mut rule_action_list: List<RuleActionNode> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -8808,7 +8808,7 @@ fn _parse_element_options__inner(p: &mut Parser) -> Result<ElementOptionsNode, P
     let start = p.peek().span.start;
     let lt = p.expect(TK_LT)?;
     let element_option = _parse_element_option(p)?;
-    let mut comma_element_option_list: Array<CommaElementOptionItem> = [];
+    let mut comma_element_option_list: List<CommaElementOptionItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -8864,7 +8864,7 @@ fn _parse_element_option__inner_bt_0(p: &mut Parser) -> Result<ElementOptionNode
     }));
 }
 
-fn _parse_element_option__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_element_option__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_qualified_identifier(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -8902,7 +8902,7 @@ fn _parse_element_option__inner_bt_1(p: &mut Parser) -> Result<ElementOptionNode
     }));
 }
 
-fn _parse_element_option__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_element_option__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -9016,7 +9016,7 @@ fn _parse_identifier(p: &mut Parser) -> Result<IdentifierNode, ParseError> {
 fn _parse_qualified_identifier__inner(p: &mut Parser) -> Result<QualifiedIdentifierNode, ParseError> {
     let start = p.peek().span.start;
     let identifier = _parse_identifier(p)?;
-    let mut dot_identifier_list: Array<DotIdentifierItem> = [];
+    let mut dot_identifier_list: List<DotIdentifierItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -9060,7 +9060,7 @@ fn _parse_qualified_identifier(p: &mut Parser) -> Result<QualifiedIdentifierNode
     return r;
 }
 
-fn scan_rule_modifiers__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_rule_modifiers__follow_0(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_rule_modifier(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -9069,7 +9069,7 @@ fn scan_rule_modifiers__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 
 
 fn _parse_rule_modifiers__follow_0__inner(p: &mut Parser) -> Result<RuleModifiersNode, ParseError> {
     let start = p.peek().span.start;
-    let mut rule_modifier_list: Array<RuleModifierNode> = [];
+    let mut rule_modifier_list: List<RuleModifierNode> = [];
     let mut _plus_first = true;
     loop {
         if !_plus_first {
@@ -9103,7 +9103,7 @@ fn _parse_rule_modifiers__follow_0(p: &mut Parser) -> Result<RuleModifiersNode, 
     return r;
 }
 
-fn scan_ebnf_suffix__follow_1(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_ebnf_suffix__follow_1(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -9185,7 +9185,7 @@ fn _parse_ebnf_suffix__follow_1(p: &mut Parser) -> Result<EbnfSuffixNode, ParseE
     return r;
 }
 
-fn scan_block_suffix__follow_2(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_block_suffix__follow_2(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_ebnf_suffix__follow_1(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -9212,469 +9212,469 @@ fn _parse_block_suffix__follow_2(p: &mut Parser) -> Result<BlockSuffixNode, Pars
 
 pub fn parse_grammar_spec(input: &String) -> Result<GrammarSpecNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_grammar_spec(&mut parser);
 }
 
 pub fn parse_grammar_decl(input: &String) -> Result<GrammarDeclNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_grammar_decl(&mut parser);
 }
 
 pub fn parse_grammar_type(input: &String) -> Result<GrammarTypeNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_grammar_type(&mut parser);
 }
 
 pub fn parse_prequel_construct(input: &String) -> Result<PrequelConstructNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_prequel_construct(&mut parser);
 }
 
 pub fn parse_options_spec(input: &String) -> Result<OptionsSpecNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_options_spec(&mut parser);
 }
 
 pub fn parse_option(input: &String) -> Result<OptionNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_option(&mut parser);
 }
 
 pub fn parse_option_value(input: &String) -> Result<OptionValueNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_option_value(&mut parser);
 }
 
 pub fn parse_delegate_grammars(input: &String) -> Result<DelegateGrammarsNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_delegate_grammars(&mut parser);
 }
 
 pub fn parse_delegate_grammar(input: &String) -> Result<DelegateGrammarNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_delegate_grammar(&mut parser);
 }
 
 pub fn parse_tokens_spec(input: &String) -> Result<TokensSpecNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_tokens_spec(&mut parser);
 }
 
 pub fn parse_channels_spec(input: &String) -> Result<ChannelsSpecNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_channels_spec(&mut parser);
 }
 
 pub fn parse_id_list(input: &String) -> Result<IdListNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_id_list(&mut parser);
 }
 
 pub fn parse_action_(input: &String) -> Result<ActionNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_action_(&mut parser);
 }
 
 pub fn parse_action_scope_name(input: &String) -> Result<ActionScopeNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_action_scope_name(&mut parser);
 }
 
 pub fn parse_action_block(input: &String) -> Result<ActionBlockNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_action_block(&mut parser);
 }
 
 pub fn parse_arg_action_block(input: &String) -> Result<ArgActionBlockNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_arg_action_block(&mut parser);
 }
 
 pub fn parse_mode_spec(input: &String) -> Result<ModeSpecNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_mode_spec(&mut parser);
 }
 
 pub fn parse_rules(input: &String) -> Result<RulesNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_rules(&mut parser);
 }
 
 pub fn parse_rule_spec(input: &String) -> Result<RuleSpecNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_rule_spec(&mut parser);
 }
 
 pub fn parse_parser_rule_spec(input: &String) -> Result<ParserRuleSpecNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_parser_rule_spec(&mut parser);
 }
 
 pub fn parse_exception_group(input: &String) -> Result<ExceptionGroupNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_exception_group(&mut parser);
 }
 
 pub fn parse_exception_handler(input: &String) -> Result<ExceptionHandlerNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_exception_handler(&mut parser);
 }
 
 pub fn parse_finally_clause(input: &String) -> Result<FinallyClauseNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_finally_clause(&mut parser);
 }
 
 pub fn parse_rule_prequel(input: &String) -> Result<RulePrequelNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_rule_prequel(&mut parser);
 }
 
 pub fn parse_rule_returns(input: &String) -> Result<RuleReturnsNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_rule_returns(&mut parser);
 }
 
 pub fn parse_throws_spec(input: &String) -> Result<ThrowsSpecNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_throws_spec(&mut parser);
 }
 
 pub fn parse_locals_spec(input: &String) -> Result<LocalsSpecNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_locals_spec(&mut parser);
 }
 
 pub fn parse_rule_action(input: &String) -> Result<RuleActionNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_rule_action(&mut parser);
 }
 
 pub fn parse_rule_modifiers(input: &String) -> Result<RuleModifiersNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_rule_modifiers(&mut parser);
 }
 
 pub fn parse_rule_modifier(input: &String) -> Result<RuleModifierNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_rule_modifier(&mut parser);
 }
 
 pub fn parse_rule_block(input: &String) -> Result<RuleBlockNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_rule_block(&mut parser);
 }
 
 pub fn parse_rule_alt_list(input: &String) -> Result<RuleAltListNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_rule_alt_list(&mut parser);
 }
 
 pub fn parse_labeled_alt(input: &String) -> Result<LabeledAltNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_labeled_alt(&mut parser);
 }
 
 pub fn parse_lexer_rule_spec(input: &String) -> Result<LexerRuleSpecNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_lexer_rule_spec(&mut parser);
 }
 
 pub fn parse_lexer_rule_block(input: &String) -> Result<LexerRuleBlockNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_lexer_rule_block(&mut parser);
 }
 
 pub fn parse_lexer_alt_list(input: &String) -> Result<LexerAltListNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_lexer_alt_list(&mut parser);
 }
 
 pub fn parse_lexer_alt(input: &String) -> Result<LexerAltNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_lexer_alt(&mut parser);
 }
 
 pub fn parse_lexer_elements(input: &String) -> Result<LexerElementsNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_lexer_elements(&mut parser);
 }
 
 pub fn parse_lexer_element(input: &String) -> Result<LexerElementNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_lexer_element(&mut parser);
 }
 
 pub fn parse_lexer_block(input: &String) -> Result<LexerBlockNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_lexer_block(&mut parser);
 }
 
 pub fn parse_lexer_commands(input: &String) -> Result<LexerCommandsNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_lexer_commands(&mut parser);
 }
 
 pub fn parse_lexer_command(input: &String) -> Result<LexerCommandNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_lexer_command(&mut parser);
 }
 
 pub fn parse_lexer_command_name(input: &String) -> Result<LexerCommandNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_lexer_command_name(&mut parser);
 }
 
 pub fn parse_lexer_command_expr(input: &String) -> Result<LexerCommandExprNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_lexer_command_expr(&mut parser);
 }
 
 pub fn parse_alt_list(input: &String) -> Result<AltListNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_alt_list(&mut parser);
 }
 
 pub fn parse_alternative(input: &String) -> Result<AlternativeNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_alternative(&mut parser);
 }
 
 pub fn parse_element(input: &String) -> Result<ElementNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_element(&mut parser);
 }
 
 pub fn parse_predicate_options(input: &String) -> Result<PredicateOptionsNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_predicate_options(&mut parser);
 }
 
 pub fn parse_predicate_option(input: &String) -> Result<PredicateOptionNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_predicate_option(&mut parser);
 }
 
 pub fn parse_labeled_element(input: &String) -> Result<LabeledElementNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_labeled_element(&mut parser);
 }
 
 pub fn parse_ebnf(input: &String) -> Result<EbnfNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_ebnf(&mut parser);
 }
 
 pub fn parse_block_suffix(input: &String) -> Result<BlockSuffixNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_block_suffix(&mut parser);
 }
 
 pub fn parse_ebnf_suffix(input: &String) -> Result<EbnfSuffixNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_ebnf_suffix(&mut parser);
 }
 
 pub fn parse_lexer_atom(input: &String) -> Result<LexerAtomNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_lexer_atom(&mut parser);
 }
 
 pub fn parse_atom(input: &String) -> Result<AtomNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_atom(&mut parser);
 }
 
 pub fn parse_wildcard(input: &String) -> Result<WildcardNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_wildcard(&mut parser);
 }
 
 pub fn parse_not_set(input: &String) -> Result<NotSetNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_not_set(&mut parser);
 }
 
 pub fn parse_block_set(input: &String) -> Result<BlockSetNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_block_set(&mut parser);
 }
 
 pub fn parse_set_element(input: &String) -> Result<SetElementNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_set_element(&mut parser);
 }
 
 pub fn parse_block(input: &String) -> Result<BlockNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_block(&mut parser);
 }
 
 pub fn parse_ruleref(input: &String) -> Result<RulerefNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_ruleref(&mut parser);
 }
 
 pub fn parse_character_range(input: &String) -> Result<CharacterRangeNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_character_range(&mut parser);
 }
 
 pub fn parse_terminal_def(input: &String) -> Result<TerminalDefNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_terminal_def(&mut parser);
 }
 
 pub fn parse_element_options(input: &String) -> Result<ElementOptionsNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_element_options(&mut parser);
 }
 
 pub fn parse_element_option(input: &String) -> Result<ElementOptionNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_element_option(&mut parser);
 }
 
 pub fn parse_identifier(input: &String) -> Result<IdentifierNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_identifier(&mut parser);
 }
 
 pub fn parse_qualified_identifier(input: &String) -> Result<QualifiedIdentifierNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_qualified_identifier(&mut parser);
 }

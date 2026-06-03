@@ -1,9 +1,9 @@
-// Precision specifier as max-length for String and Array.
+// Precision specifier as max-length for String and List.
 //
 // - Display (`{s:.N}`) truncates to N characters with no marker.
 // - Inspect (`{s:.N?}`) truncates to the same N characters and appends a
 //   `...` marker (outside the quotes) when truncation actually happened.
-// - Array Inspect (`{a:.N?}`) keeps at most N elements and appends `, ...`.
+// - List Inspect (`{a:.N?}`) keeps at most N elements and appends `, ...`.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
@@ -18,13 +18,13 @@ export fn run() with Stdout {
     // Inspect: precision >= length, so no marker.
     println(`{s:.20?}`);
 
-    let a: Array<i32> = [1, 2, 3, 4, 5];
+    let a: List<i32> = [1, 2, 3, 4, 5];
 
-    // Array Inspect: keep 3 elements, mark the rest.
+    // List Inspect: keep 3 elements, mark the rest.
     println(`{a:.3?}`);
-    // Array Inspect: precision >= length, no marker.
+    // List Inspect: precision >= length, no marker.
     println(`{a:.10?}`);
-    // Array Display: keep 3 elements, no marker.
+    // List Display: keep 3 elements, no marker.
     println(`{a:.3}`);
 }
 

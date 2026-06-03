@@ -32,7 +32,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     }
     let file = open_result.unwrap();
     let [read_stream, _done] = file.read_via_stream(0 as Filesize);
-    let mut bytes: Array<u8> = [];
+    let mut bytes: List<u8> = [];
     loop {
         let chunk = read_stream.read(4096);
         if chunk.len() == 0 {

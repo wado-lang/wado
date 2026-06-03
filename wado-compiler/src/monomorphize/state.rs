@@ -296,7 +296,7 @@ impl Monomorphizer {
                 method_info.trait_name.as_deref(),
             )
         } else {
-            // Normal: append type args: "Array" → "Array<i32>"
+            // Normal: append type args: "List" → "List<i32>"
             MethodName::format_struct_with_args(
                 &method_info.struct_name,
                 &impl_arg_names,
@@ -317,7 +317,7 @@ impl Monomorphizer {
     }
 
     /// Get the struct name from a `type_id`, unwrapping references if needed
-    /// For generic instances, returns the mangled name with type args (e.g., "Array<i32>")
+    /// For generic instances, returns the mangled name with type args (e.g., "List<i32>")
     pub fn get_struct_name_from_type(
         &self,
         type_id: TypeId,
@@ -332,7 +332,7 @@ impl Monomorphizer {
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {
-                // Return the mangled name with type args (e.g., "Array<i32>", "Box<String>")
+                // Return the mangled name with type args (e.g., "List<i32>", "Box<String>")
                 let args: Vec<String> = type_args
                     .iter()
                     .map(|arg| type_table.mangle_type_arg_for_generic(*arg))
@@ -341,7 +341,7 @@ impl Monomorphizer {
             }
             ResolvedType::BuiltinArray(elem) => {
                 let arg = type_table.mangle_type_name(*elem);
-                Some(mangle_generic_name("Array", &[arg]))
+                Some(mangle_generic_name("List", &[arg]))
             }
             // Newtypes are transparent for method lookup — unwrap to base type,
             // same as Ref/MutRef. The elaborator already resolves methods through
@@ -366,7 +366,7 @@ impl Monomorphizer {
     ) -> Option<(String, Vec<TypeId>)> {
         match type_table.get(type_id) {
             ResolvedType::Struct { name, .. } => {
-                // For monomorphized structs with names like "Array<i32>", look up the
+                // For monomorphized structs with names like "List<i32>", look up the
                 // original InstantiationKey to get the base name and type_args
                 if let Some(key) = self.structs.mangled_to_key.get(name) {
                     Some((key.name.clone(), key.impl_type_args.clone()))

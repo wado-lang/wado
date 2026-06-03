@@ -216,7 +216,7 @@ impl CmFunctionInfo {
     /// Check if a parameter type requires Memory + Realloc in canon lower.
     fn type_requires_memory(ty: &Type) -> bool {
         match ty {
-            Type::Generic(g) => matches!(g.name.as_str(), "Stream" | "Array"),
+            Type::Generic(g) => matches!(g.name.as_str(), "Stream" | "List"),
             Type::Named(named) => named.name == "String",
             _ => false,
         }
@@ -252,7 +252,7 @@ impl CmFunctionInfo {
             Type::Named(named) => named.name == "String",
             Type::Generic(generic) => matches!(
                 generic.name.as_str(),
-                "Array" | "Option" | "Result" | "Tuple" | "Stream" | "Future"
+                "List" | "Option" | "Result" | "Tuple" | "Stream" | "Future"
             ),
             Type::Tuple(elems) => !elems.is_empty(),
             _ => false,
@@ -2563,7 +2563,7 @@ impl CmInstanceTypeGen {
                 panic!("unsupported reference type for CM instance: {ty:?}")
             }
             Type::Generic(generic) => match generic.name.as_str() {
-                "Array" => {
+                "List" => {
                     let elem_cm = self.ast_type_to_cm(
                         &generic.args[0],
                         instance_type,
@@ -2719,7 +2719,7 @@ pub fn cm_type_to_valtype(ty: &Type) -> ValType {
             // Tuple types map to i32 for simplicity (struct pointer)
             "Tuple" => ValType::I32,
             // Array<T> is represented as a GC array reference (handled as i32 in WASI context)
-            "Array" => ValType::I32,
+            "List" => ValType::I32,
             // Option<T> is represented as i32 discriminant
             "Option" => ValType::I32,
             other => panic!("unknown generic type in cm_type_to_valtype: {other}"),
@@ -2848,7 +2848,7 @@ pub fn flatten_cm_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &CmInt
         },
         Type::Generic(generic) => match generic.name.as_str() {
             // list<T> is lowered to (ptr: i32, len: i32) in CM core ABI
-            "Array" => {
+            "List" => {
                 out.push(ValType::I32); // ptr
                 out.push(ValType::I32); // len
             }
@@ -2952,7 +2952,7 @@ fn is_param_type_supported_with_types(
         Type::Generic(generic) => {
             matches!(
                 generic.name.as_str(),
-                "Stream" | "Result" | "Future" | "Option" | "Array"
+                "Stream" | "Result" | "Future" | "Option" | "List"
             )
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
@@ -3015,7 +3015,7 @@ fn is_return_type_supported_with_types(
                         is_return_type_supported_with_types(arg, enums, resources, structs)
                     })
                 }
-                "Array" | "Option" => {
+                "List" | "Option" => {
                     // Recursively check that inner types are supported primitives
                     generic
                         .args
@@ -3153,7 +3153,7 @@ pub fn return_type_requires_outptr(ty: &Type) -> bool {
             {
                 false
             }
-            "Array" | "Option" | "Result" | "Tuple" => true,
+            "List" | "Option" | "Result" | "Tuple" => true,
             _ => false,
         },
         // Tuple types [...] require outptr (non-empty tuples only)
@@ -3683,7 +3683,7 @@ mod tests {
         // Array<String> should be supported
         let array_string = Type::Generic(GenericType {
             id: crate::ast::AstId::fresh(),
-            name: "Array".to_string(),
+            name: "List".to_string(),
             args: vec![Type::Named(NamedType {
                 id: crate::ast::AstId::fresh(),
                 name: "String".to_string(),
@@ -3694,7 +3694,7 @@ mod tests {
         });
         assert!(
             is_return_type_supported(&array_string),
-            "Array<String> should be supported"
+            "List<String> should be supported"
         );
 
         // Array<Tuple<String, String>> should be supported
@@ -3719,13 +3719,13 @@ mod tests {
         });
         let array_tuple = Type::Generic(GenericType {
             id: crate::ast::AstId::fresh(),
-            name: "Array".to_string(),
+            name: "List".to_string(),
             args: vec![tuple_ss],
             span: make_span(),
         });
         assert!(
             is_return_type_supported(&array_tuple),
-            "Array<Tuple<String, String>> should be supported"
+            "List<Tuple<String, String>> should be supported"
         );
 
         // Option<String> should be supported

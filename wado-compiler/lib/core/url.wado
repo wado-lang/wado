@@ -122,7 +122,7 @@ pub fn percent_encode(input: String) -> String {
 /// Returns Err if the input contains invalid percent-encoding or invalid UTF-8.
 pub fn percent_decode(input: String) -> Result<String, ParseError> {
     let len = input.len();
-    let mut bytes: Array<u8> = Array::with_capacity(len);
+    let mut bytes: List<u8> = List::with_capacity(len);
     let mut i = 0;
     while i < len {
         let c = input.get_byte_unchecked(i) as char;
@@ -167,7 +167,7 @@ fn percent_encode_query_component(input: &String) -> String {
 
 fn percent_decode_query_component(input: &String) -> String {
     let len = input.len();
-    let mut bytes: Array<u8> = Array::with_capacity(len);
+    let mut bytes: List<u8> = List::with_capacity(len);
     let mut i = 0;
     while i < len {
         let c = input.get_byte_unchecked(i) as char;
@@ -239,7 +239,7 @@ pub fn format_query(params: TreeMap<String, String>) -> String {
 
 fn remove_dot_segments(path: String) -> String {
     let segments = path.split("/");
-    let mut stack: Array<String> = [];
+    let mut stack: List<String> = [];
     for let seg of segments {
         if seg == ".." {
             if stack.len() > 1 {
@@ -680,8 +680,8 @@ impl Url {
 
     /// Returns all values for the given query parameter key.
     /// Computed from the raw query string to preserve duplicate keys.
-    pub fn query_get_all(&self, key: String) -> Array<String> {
-        let mut result: Array<String> = [];
+    pub fn query_get_all(&self, key: String) -> List<String> {
+        let mut result: List<String> = [];
         if let Some(q) = self.query {
             for let part of q.split("&") {
                 if part.is_empty() {

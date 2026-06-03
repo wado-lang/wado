@@ -16,7 +16,7 @@ fn maybe_double(n: i32) -> Option<i32> {
     return null;
 }
 
-fn first_positive(arr: Array<i32>) -> Option<i32> {
+fn first_positive(arr: List<i32>) -> Option<i32> {
     for let x of arr {
         if x > 0 {
             return Option::Some(x);
@@ -36,13 +36,13 @@ export fn run() with Stdout {
     assert b matches { None };
 
     // Loop: first_positive uses for-of which inlines iterator methods
-    let arr: Array<i32> = [-1, -2, 3, 4];
+    let arr: List<i32> = [-1, -2, 3, 4];
     let c = first_positive(arr);
     if let Some(v) = c {
         assert v == 3;
     }
 
-    let empty: Array<i32> = [];
+    let empty: List<i32> = [];
     let d = first_positive(empty);
     assert d matches { None };
 

@@ -20,7 +20,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude//Array<u8> {  // TypeId(3)
+struct core:prelude//List<u8> {  // TypeId(3)
     mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
@@ -43,7 +43,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/optimize_bce_ref_param.wado/sum_all" = fn(ref "core:prelude//Array<u8>") -> i32;  // TypeId(13)
+type "functype//wado-compiler/tests/fixtures/optimize_bce_ref_param.wado/sum_all" = fn(ref "core:prelude//List<u8>") -> i32;  // TypeId(13)
 
 type "functype//wado-compiler/tests/fixtures/optimize_bce_ref_param.wado/run" = fn();  // TypeId(14)
 
@@ -123,7 +123,7 @@ fn "wado-compiler/tests/fixtures/optimize_bce_ref_param.wado/sum_all"(input) {
 }
 
 fn "wado-compiler/tests/fixtures/optimize_bce_ref_param.wado/run"() {
-    let arr: ref "core:prelude//Array<u8>";
+    let arr: ref "core:prelude//List<u8>";
     let s: i32;
     let __cond: bool;
     let __local_4: ref "core:prelude/string.wado//String";
@@ -133,7 +133,7 @@ fn "wado-compiler/tests/fixtures/optimize_bce_ref_param.wado/run"() {
     let f_18: ref "core:prelude/format.wado//Formatter";
     repr = builtin::array_new<u8>(100);
     builtin::array_fill<u8>(repr, 0, 42, 100);
-    arr = struct.new "core:prelude//Array<u8>" { repr: repr, used: 100 };
+    arr = struct.new "core:prelude//List<u8>" { repr: repr, used: 100 };
     s = "wado-compiler/tests/fixtures/optimize_bce_ref_param.wado/sum_all"(arr);
     __cond = s == 4200;
     if __cond == 0 {

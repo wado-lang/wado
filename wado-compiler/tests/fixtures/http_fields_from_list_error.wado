@@ -7,19 +7,19 @@ use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, HeaderError, 
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // Valid from_list → Ok
-    let valid_entries: Array<[FieldName, FieldValue]> = [
+    let valid_entries: List<[FieldName, FieldValue]> = [
         ["x-valid" as FieldName, "value".bytes().collect() as FieldValue],
     ];
     let valid_result = Fields::from_list(valid_entries);
     assert valid_result matches { Ok(_) };
 
     // Invalid header name with null byte → should be Err
-    let null_byte: Array<u8> = [0 as u8];
+    let null_byte: List<u8> = [0 as u8];
     let null_name = match String::from_utf8(null_byte) {
         Ok(s) => s,
         Err(_) => panic("failed to create string with null byte"),
     };
-    let invalid_entries: Array<[FieldName, FieldValue]> = [
+    let invalid_entries: List<[FieldName, FieldValue]> = [
         [null_name as FieldName, "value".bytes().collect() as FieldValue],
     ];
     let invalid_result = Fields::from_list(invalid_entries);

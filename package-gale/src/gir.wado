@@ -58,31 +58,31 @@ pub struct LoweredGrammar {
     pub name: String,
     /// `.g4` source paths the grammar was assembled from. Round-tripped
     /// into the generated header's `#![generated(... sources = [...])]`.
-    pub source_files: Array<String>,
+    pub source_files: List<String>,
     /// Grammar-level options from `options { ... }` prequels. Only
     /// surfaced as a comment block by `gen_grammar_metadata`; carried
     /// for round-trip visibility.
-    pub options: Array<GrammarOption>,
+    pub options: List<GrammarOption>,
     /// Grammar-level `@name { ... }` actions. Same comment-block
     /// passthrough as `options`.
-    pub named_actions: Array<NamedAction>,
+    pub named_actions: List<NamedAction>,
     /// Lexer rules in source order. Lexer emission consumes these
     /// directly (no per-rule lowering performed in v1). The vector
     /// includes `is_virtual = true` entries from `tokens { }` blocks.
-    pub lexer_rules: Array<LexerRule>,
+    pub lexer_rules: List<LexerRule>,
     /// Mode names indexed by `LexerRule.mode` / `set_mode` /
     /// `push_mode`. Index 0 is always `DEFAULT_MODE`.
-    pub mode_names: Array<String>,
+    pub mode_names: List<String>,
     /// Channel registry from `channels { }` blocks plus the
     /// implicit defaults. Carried for lexer emission.
-    pub channels: Array<String>,
+    pub channels: List<String>,
     /// Literal tokens (`'foo'` occurrences in parser rules) collected
     /// and assigned `LIT_<id>` constants. Computed once during
     /// lowering and reused by both lexer and parser emission.
-    pub lit_tokens: Array<LitToken>,
+    pub lit_tokens: List<LitToken>,
     /// Lowered parser rules in source order. `parser_rules[0]` is the
     /// start rule (per ANTLR4 convention) and seeds `gen_parse_entry`.
-    pub parser_rules: Array<Rule>,
+    pub parser_rules: List<Rule>,
     /// Follow-aware variant rules registered during lowering.
     /// Variants are emitted as additional `parse_<rule>__follow_<id>`
     /// / `scan_<rule>__follow_<id>` functions; their bodies are
@@ -90,12 +90,12 @@ pub struct LoweredGrammar {
     /// Distinct from `parser_rules` so emit can iterate variants
     /// without filtering and so the regular-rule emission order is
     /// stable regardless of variant registration.
-    pub variant_rules: Array<Rule>,
+    pub variant_rules: List<Rule>,
     /// Interned multi-element token-kind sets. `lower` rewrites every
     /// `<expr> matches { TK_X | TK_Y | ... }` decision into a
     /// `_gale_kind_set_<id>(<expr>)` call; this list drives the
     /// helper-function emission.
-    pub kind_sets: Array<KindSet>,
+    pub kind_sets: List<KindSet>,
     /// Prediction-strategy diagnostics raised while lowering picked a
     /// dispatch strategy. These are advisory warnings, not errors:
     /// lowering always produces a usable grammar, but a warning flags a
@@ -104,7 +104,7 @@ pub struct LoweredGrammar {
     /// author can question their own grammar before blaming Gale.
     /// Surfaced on stderr by `gale gen` and inline by `gale dump`. In
     /// the order lowering raised them, deduped on `(rule, message)`.
-    pub diagnostics: Array<Diagnostic>,
+    pub diagnostics: List<Diagnostic>,
 }
 
 /// A prediction-strategy diagnostic attached to a single decision site.
@@ -191,7 +191,7 @@ pub struct RuleHeader {
     pub variant_of: Option<FollowVariant>,
     /// Cached `case_names_for_rule(&rule.alternatives)`. Empty for
     /// `Simple`. Indexed by alt position in the original rule body.
-    pub case_names: Array<String>,
+    pub case_names: List<String>,
 }
 
 /// Single-alternative rule. The body is emitted directly inside
@@ -212,10 +212,10 @@ pub struct MultiAltRule {
     /// runs parallel to the alt index; multi-alt dispatch refers to
     /// alts by their original index, not by the order of appearance
     /// in any group.
-    pub alts: Array<AltBody>,
+    pub alts: List<AltBody>,
     /// Scan-side counterpart of `alts`, again indexed by original
     /// alt index.
-    pub scan_alts: Array<ScanBody>,
+    pub scan_alts: List<ScanBody>,
     /// Parse-side dispatch shape between the alternatives.
     pub dispatch: MultiAltDispatch,
     /// Scan-side dispatch shape. Frequently differs from `dispatch`:
@@ -241,7 +241,7 @@ pub struct LeftRecursiveRule {
     /// self-ref to this rule), in original source order. Each carries
     /// its own precedence assignment, conflict bound, last self-ref
     /// position, and suffix first-set.
-    pub lr_alts: Array<LrAlt>,
+    pub lr_alts: List<LrAlt>,
     /// Precedence-aware dispatch metadata for the LR suffix loop.
     /// Captures the overlap groups between LR suffix first-sets and
     /// the second-token disambiguation needed when first-tokens
@@ -286,7 +286,7 @@ pub struct LrAlt {
     /// First set of the LR suffix (i.e. the tokens that begin
     /// `elements[1..]`). Drives the precedence-aware dispatch
     /// in the LR loop.
-    pub suffix_first: Array<String>,
+    pub suffix_first: List<String>,
     /// True for `<assoc=right>` alts (driven by the alt option
     /// block, not source order). Affects how `own_prec` is reused
     /// for the trailing self-ref.
@@ -306,10 +306,10 @@ pub struct LrDispatchData {
     /// Indices into `LeftRecursiveRule.lr_alts` of the alternatives
     /// that have a non-empty suffix. The degenerate `expr : expr`
     /// case is filtered out.
-    pub valid_lr_alts: Array<i32>,
+    pub valid_lr_alts: List<i32>,
     /// Overlap groups between the suffix first-sets. Each inner
     /// array lists indices into `valid_lr_alts`.
-    pub groups: Array<Array<i32>>,
+    pub groups: List<List<i32>>,
 }
 
 /// Metadata for one follow-aware variant of a rule. Variants exist
@@ -331,7 +331,7 @@ pub struct FollowVariant {
     /// and `tail_greedy_first(rule)` at the call sites that
     /// triggered registration. Drives suppression in
     /// `RepeatStrategy::WithFollowSubtraction` and friends.
-    pub mask: Array<String>,
+    pub mask: List<String>,
     /// True when the variant has at least one scan-side caller.
     /// Drives whether `scan_<rule>__follow_<id>` is emitted.
     pub scan_used: bool,
@@ -388,11 +388,11 @@ pub struct DirectDispatch {
     /// `tokens` is the alt's first-set; `alt_index` is the original
     /// alt position. Branches with overlapping `tokens` are not
     /// permitted — those land in `Tournament` instead.
-    pub branches: Array<DispatchBranch>,
+    pub branches: List<DispatchBranch>,
 }
 
 pub struct DispatchBranch {
-    pub tokens: Array<String>,
+    pub tokens: List<String>,
     pub alt_index: i32,
 }
 
@@ -401,7 +401,7 @@ pub struct TournamentDispatch {
     /// Original alt indices in dispatch order
     /// (`sort_group_by_element_count`). The longest-match scan
     /// winner triggers the corresponding `parse_<rule>_bt_<idx>`.
-    pub alts: Array<i32>,
+    pub alts: List<i32>,
 }
 
 // ==========================================================================
@@ -430,10 +430,10 @@ pub struct AltBody {
     /// already chosen; `Group` shapes are already chosen; `Label`
     /// nodes have been collapsed into the wrapped op's `field`
     /// attribute.
-    pub ops: Array<Op>,
+    pub ops: List<Op>,
     /// CST struct field declarations in struct order. Includes the
     /// `span: Span` field as the first entry.
-    pub fields: Array<FieldDecl>,
+    pub fields: List<FieldDecl>,
     /// `min_prec` to pass to a self-recursive `RuleCall` inside this
     /// body. 0 when the alt is not a prefix-LR alt; positive value
     /// when ANTLR4's left-recursion rewrite assigns a precedence to
@@ -484,7 +484,7 @@ pub variant Op {
     /// a general variant, or a transparent inlining.
     Group(GroupOp),
     /// `name+=elem` list-label that is NOT wrapped in a Repeat. The
-    /// outer struct field surfaces as `Array<inner_type>` even
+    /// outer struct field surfaces as `List<inner_type>` even
     /// though a single `+=` only contributes once per execution;
     /// emit's runtime construction (still surface-IR-driven in
     /// parser_gen) pre-allocates the array and `push`es the matched
@@ -559,7 +559,7 @@ pub struct WildcardOp {
 pub struct ExcludedOp {
     /// Exclusion set. emit renders this as a literal token-array
     /// passed to `p.match_not([...])`.
-    pub kinds: Array<String>,
+    pub kinds: List<String>,
     pub field: String,
     /// Pre-dedup base name (`not_element_field_name(&ne.element)`).
     /// See `TokenOp.dedup_base` for the role.
@@ -567,12 +567,12 @@ pub struct ExcludedOp {
 }
 
 /// `name+=elem` outside of a Repeat. The outer CST struct lays out
-/// the field as `Array<inner_type>`; emit pushes the matched value
+/// the field as `List<inner_type>`; emit pushes the matched value
 /// into a list even though a single `+=` only contributes once.
 pub struct ListLabelOp {
     /// Inner op the label wraps. Carries the runtime match shape
     /// (Token / RuleCall / Group / …); the wrapper exists only to
-    /// surface the `Array<>` typing.
+    /// surface the `List<>` typing.
     pub inner: Op,
     /// Outer CST struct field name (the label's name, deduped).
     pub field: String,
@@ -609,7 +609,7 @@ pub struct RepeatOp {
     /// (subtract from inner first to gate the optional fire) and
     /// non-greedy (continue/exit disambiguation). Empty when the
     /// Repeat is at the alt's tail.
-    pub caller_follow_first: Array<String>,
+    pub caller_follow_first: List<String>,
     /// Surrounding variant's mask when this Repeat's outer
     /// alt-position tail is deep-nullable; `[]` otherwise (and
     /// always `[]` for non-variant bodies). Mirrors what
@@ -619,7 +619,7 @@ pub struct RepeatOp {
     /// caller-supplied follow (which `inner_walker_follow_for_repeat`
     /// can legitimately clear to `[]` for inner greedy Optionals)
     /// before subtracting from the body first set.
-    pub position_mask: Array<String>,
+    pub position_mask: List<String>,
     /// Multi-token follow mask installed when this `Repeat` sits at a
     /// position whose surrounding suffix is deep-nullable AND the
     /// enclosing variant carries a K-prefix mask (see
@@ -634,7 +634,7 @@ pub struct RepeatOp {
     /// soundness invariant from the single-token path is preserved
     /// structurally by the per-depth check (HTMLParser's nested-tag
     /// inputs differ from the closing-tag mask at depth ≥ 1).
-    pub k_prefix_mask: Array<Array<String>>,
+    pub k_prefix_mask: List<List<String>>,
     /// True iff the inner element is fully scannable (has a complete
     /// `scan_<rule>` / inline scan equivalent). Drives emit's choice
     /// between `loop` + scan-guard and `while` + first-check loop
@@ -646,7 +646,7 @@ pub struct RepeatOp {
     /// `subtract_sets(first, follow)` Optional+RuleCall gate, and
     /// `compute_iter_follow`'s iter-follow union. Precomputed so
     /// emit doesn't re-run `ctx.first_of_element` at each dispatch.
-    pub body_first_set: Array<String>,
+    pub body_first_set: List<String>,
     /// True iff the inner element is a single-alt `Group` — i.e.
     /// `compute_iter_follow` should union the body's first set with
     /// the outer follow rather than using outer alone. Mirrors the
@@ -655,7 +655,7 @@ pub struct RepeatOp {
     pub body_is_single_alt_group: bool,
     /// True iff the inner element contributes a CST field — i.e.
     /// emit's Repeat surfaces a storable `Option<T>` (`Optional`) or
-    /// `Array<T>` (`Star` / `Plus`) field. False for `Transparent`
+    /// `List<T>` (`Star` / `Plus`) field. False for `Transparent`
     /// groups and other non-storable shapes. Equal to
     /// `body_shape != TransparentGroup`; kept as a denormalised flag
     /// to avoid threading the enum through every call site that just
@@ -676,7 +676,7 @@ pub struct RepeatOp {
     /// second sub-position when the next element is itself a Repeat
     /// over a single-alt Group of ≥ 2 elements. Empty when 1-token
     /// follow suffices. Consumed by `gen_repeat_non_greedy`.
-    pub caller_follow_second: Array<String>,
+    pub caller_follow_second: List<String>,
     /// Inner second-position first set for non-greedy 2-token
     /// disambiguation. When the inner element is a single-alt `Group`
     /// of ≥ 2 elements (the `(',' x)*?` body shape), this is
@@ -684,7 +684,7 @@ pub struct RepeatOp {
     /// Empty otherwise. Consumed by `gen_repeat_non_greedy`'s
     /// `peek_at(1)` disambiguation arm so emit doesn't re-walk the
     /// surface inner.
-    pub body_second_position_first: Array<String>,
+    pub body_second_position_first: List<String>,
 }
 
 pub struct GroupOp {
@@ -692,9 +692,9 @@ pub struct GroupOp {
     /// Alts inside the group, lowered in their own AltBody form.
     /// For `Transparent` shape there is exactly one alt and its body
     /// inlines into the surrounding sequence at emit.
-    pub alts: Array<AltBody>,
+    pub alts: List<AltBody>,
     /// Scan-side mirror.
-    pub scan_alts: Array<ScanBody>,
+    pub scan_alts: List<ScanBody>,
     /// Parse-time dispatch when the group has multiple alts. For
     /// single-alt groups this is `MultiAltDispatch::Direct` with one
     /// branch.
@@ -724,7 +724,7 @@ pub variant RepeatBodyShape {
     /// `Op::Group` with shape `SingleAlt` / `TokenOnly` / `SimpleCst`
     /// / `General`. The group itself contributes a CST field; emit
     /// pushes the inner binding into the surrounding `Option<T>` /
-    /// `Array<T>` slot.
+    /// `List<T>` slot.
     StorableGroup,
     /// `Op::Group` with shape `Transparent`. The group has no own
     /// field; the inner alt's elements inline into the surrounding
@@ -773,29 +773,29 @@ pub variant RepeatStrategy {
 pub struct WithFollowSubtractionStrategy {
     /// First-set of the inner, already with the caller-local FOLLOW
     /// subtracted. emit guards on `peek_kind() ∈ effective_first`.
-    pub effective_first: Array<String>,
+    pub effective_first: List<String>,
 }
 
 pub struct NonGreedyStrategy {
     /// Tokens that may follow the loop. Drives the exit condition
     /// `peek_kind() ∉ exit_first ∨ further-lookahead`.
-    pub exit_first: Array<String>,
+    pub exit_first: List<String>,
     /// Second-token disambiguation when `exit_first` overlaps with
     /// the inner's first. Empty when not needed.
-    pub exit_second: Array<String>,
+    pub exit_second: List<String>,
 }
 
 pub struct OptionalLookaheadStrategy {
     /// Per-position kind sets that the inner's fixed-token prefix
     /// guarantees. `sig.len()` is the lookahead depth; `sig[i]` is
     /// the allowed kind set at `peek_at(i)`.
-    pub sig: Array<Array<String>>,
+    pub sig: List<List<String>>,
 }
 
 pub struct OptionalShapeLookaheadStrategy {
     /// One entry per shape, longest-first (so the first matching
     /// shape is the longest match).
-    pub shapes: Array<OptionalLookaheadShape>,
+    pub shapes: List<OptionalLookaheadShape>,
 }
 
 pub struct OptionalLookaheadShape {
@@ -804,11 +804,11 @@ pub struct OptionalLookaheadShape {
     /// each index in `positions` it dispatches the corresponding op,
     /// and for absent positions it emits the absent-Optional field
     /// declaration.
-    pub positions: Array<i32>,
+    pub positions: List<i32>,
     /// Per-virtual-position kind sets — feeds the lookahead guard.
     /// `sig[d]` is the kind set required at `peek_at(d)` for this
     /// shape.
-    pub sig: Array<Array<String>>,
+    pub sig: List<List<String>>,
 }
 
 /// How a `(...)` group is realised in the CST and at parse time.
@@ -860,7 +860,7 @@ pub struct GeneralShape {
     /// `<RuleName>Group<idx>` variant type name.
     pub variant_type: String,
     /// Per-alt struct names (`<RuleName>Group<idx>Alt<j>`).
-    pub alt_struct_names: Array<String>,
+    pub alt_struct_names: List<String>,
     pub field: String,
     /// Group counter id, stable across runs and matching the
     /// `gen_cst_types` enumeration order.
@@ -877,7 +877,7 @@ pub struct GeneralShape {
 /// new `pos` (or `-1` for failure). The IR is symmetric to the
 /// parse side but drops the storage decisions.
 pub struct ScanBody {
-    pub elements: Array<ScanElement>,
+    pub elements: List<ScanElement>,
 }
 
 pub variant ScanElement {
@@ -914,7 +914,7 @@ pub struct ScanRuleCallElem {
 }
 
 pub struct ScanExcludedElem {
-    pub kinds: Array<String>,
+    pub kinds: List<String>,
 }
 
 pub struct ScanRepeatElem {
@@ -926,7 +926,7 @@ pub struct ScanRepeatElem {
     /// loop guards (Plain strategy) and for Plus's mandatory-first
     /// iteration condition. WithFollowSubtraction carries the
     /// effective (mask-subtracted) first separately in its payload.
-    pub inner_first: Array<String>,
+    pub inner_first: List<String>,
     /// Scan-side mirror of `RepeatOp.caller_follow_first`. Default is
     /// the variant-aware `outer_follow` at construction time; alt-level
     /// scan walkers override it with `first_of_elements_from(elements,
@@ -935,12 +935,12 @@ pub struct ScanRepeatElem {
     /// when the outer next-token is a caller-side follow token (the
     /// pre-Phase-2-F `gen_scan_repeat_optional_with_follow` contract).
     /// Empty when the Repeat is at the alt's tail.
-    pub caller_follow_first: Array<String>,
+    pub caller_follow_first: List<String>,
     /// Scan-side mirror of `RepeatOp.k_prefix_mask`. Same semantics:
     /// when non-empty, the scan-side emit gates iter entry on a K-token
     /// peek so scan-driven dispatch stays consistent with the parse-side
     /// variant body's yield decision.
-    pub k_prefix_mask: Array<Array<String>>,
+    pub k_prefix_mask: List<List<String>>,
 }
 
 pub variant ScanRepeatStrategy {
@@ -951,7 +951,7 @@ pub variant ScanRepeatStrategy {
 
 pub struct ScanGroupElem {
     /// Multi-alt scan dispatch.
-    pub alts: Array<ScanBody>,
+    pub alts: List<ScanBody>,
     pub dispatch: MultiAltDispatch,
     /// True for "lenient" groups whose dispatch may bail out
     /// without advancing on no match (used for `?`-over-group).
@@ -960,7 +960,7 @@ pub struct ScanGroupElem {
     /// ambiguity detection (`sets_overlap` between any two alts)
     /// and the lenient gate. Cached at lower time so emit's
     /// `gen_scan_op_group` doesn't re-call `ctx.first_of_alt`.
-    pub alt_first_sets: Array<Array<String>>,
+    pub alt_first_sets: List<List<String>>,
     /// Indices into `alts` of every wildcard-led alt (its first
     /// non-nullable element is `.`). A wildcard alt matches any
     /// non-EOF token, so the lenient first-set gate must be
@@ -971,19 +971,19 @@ pub struct ScanGroupElem {
     /// iteration order must visit wildcard alts last so a more
     /// specific concrete alt still wins when its full body
     /// matches.
-    pub wildcard_alt_indices: Array<i32>,
+    pub wildcard_alt_indices: List<i32>,
 }
 
 pub struct ScanOptionalLookaheadElem {
     /// Per-shape lookahead signature: `sigs[s][position]` is the
     /// kind set for position `position` of shape `s`. emit emits
     /// `if peek_match(sigs[0]) { /* shape 0 body */ } else if ...`.
-    pub sigs: Array<Array<Array<String>>>,
+    pub sigs: List<List<List<String>>>,
     /// Per-shape scan body: `bodies[s]` is the sequence of
     /// `ScanElement`s emit scans when shape `s`'s sig matches. Each
     /// shape selects a subset of the surface alt's elements (the
     /// optional sub-elements that are "on" in this shape).
-    pub bodies: Array<ScanBody>,
+    pub bodies: List<ScanBody>,
 }
 
 // ==========================================================================
@@ -997,7 +997,7 @@ pub struct FieldDecl {
     /// Final field name including dedup suffix (`x`, `x_2`, ...).
     pub name: String,
     /// Type string as it should appear in the emitted struct
-    /// (`Token`, `Option<ExprNode>`, `Array<StmtNode>`, etc.).
+    /// (`Token`, `Option<ExprNode>`, `List<StmtNode>`, etc.).
     pub type_str: String,
     /// Field role. `Plain` for required fields, `Optional` for
     /// `e?` / unstorable groups, `List` for `e*` / `e+` and `+=`
@@ -1019,7 +1019,7 @@ pub variant FieldKind {
 pub struct KindSet {
     pub id: i32,
     /// Canonical (sorted, unique) token kinds.
-    pub tokens: Array<String>,
+    pub tokens: List<String>,
 }
 
 // ==========================================================================
@@ -1065,7 +1065,7 @@ pub fn rule_alt_body(rule: &Rule, alt_idx: i32) -> Option<&AltBody> with stores[
     };
 }
 
-fn find_alt_body_in_array(alts: &Array<AltBody>, alt_idx: i32) -> Option<&AltBody> with stores[alts] {
+fn find_alt_body_in_array(alts: &List<AltBody>, alt_idx: i32) -> Option<&AltBody> with stores[alts] {
     for let a of alts {
         if a.alt_index == alt_idx {
             return Option::<&AltBody>::Some(a);
@@ -1099,7 +1099,7 @@ pub fn rule_alt_scan_body(rule: &Rule, alt_idx: i32) -> Option<&ScanBody> with s
     };
 }
 
-fn find_scan_body_in_array(alts: &Array<AltBody>, scan_alts: &Array<ScanBody>, alt_idx: i32) -> Option<&ScanBody> with stores[scan_alts] {
+fn find_scan_body_in_array(alts: &List<AltBody>, scan_alts: &List<ScanBody>, alt_idx: i32) -> Option<&ScanBody> with stores[scan_alts] {
     for let mut i = 0; i < alts.len(); i += 1 {
         if alts[i].alt_index == alt_idx {
             return Option::<&ScanBody>::Some(&scan_alts[i]);

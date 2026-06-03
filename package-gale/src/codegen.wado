@@ -37,7 +37,7 @@ pub struct GenerateOptions {
 /// module text (the Kiln generator entry, unit tests) read `source`.
 pub struct GeneratedOutput {
     pub source: String,
-    pub diagnostics: Array<Diagnostic>,
+    pub diagnostics: List<Diagnostic>,
 }
 
 pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOutput {
@@ -89,7 +89,7 @@ fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
     // grammar has no recorded source files (e.g. constructed directly in a
     // unit test), fall back to `{name}.g4` so existing tests still see a
     // sensible provenance entry.
-    let mut sources: Array<String> = [];
+    let mut sources: List<String> = [];
     if grammar.source_files.is_empty() {
         sources.push(`{grammar.name}.g4`);
     } else {
@@ -162,7 +162,7 @@ fn format_option_value(v: &OptionValue) -> String {
 }
 
 
-fn gen_token_kind(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>) {
+fn gen_token_kind(w: &mut CodeWriter, lexer_rules: &List<LexerRule>) {
     let mut e = EnumSpec::new("TokenKind");
     e.set_pub();
     for let rule of lexer_rules {
@@ -194,13 +194,13 @@ fn gen_token_kind(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>) {
 /// emit reads these decisions verbatim — no surface-IR walk, no
 /// re-classification, no group-counter bookkeeping.
 fn gen_cst_types(w: &mut CodeWriter, lowered: &LoweredGrammar) {
-    let mut emitted: Array<String> = [];
+    let mut emitted: List<String> = [];
     for let rule of &lowered.parser_rules {
         gen_rule_cst_type(w, rule, &mut emitted);
     }
 }
 
-fn gen_rule_cst_type(w: &mut CodeWriter, rule: &Rule, emitted: &mut Array<String>) {
+fn gen_rule_cst_type(w: &mut CodeWriter, rule: &Rule, emitted: &mut List<String>) {
     return match *rule {
         Simple(s) => {
             gen_ops_nested_types(w, &s.body.ops, &s.header.name, emitted);
@@ -211,7 +211,7 @@ fn gen_rule_cst_type(w: &mut CodeWriter, rule: &Rule, emitted: &mut Array<String
     };
 }
 
-fn gen_multi_alt_cst(w: &mut CodeWriter, rule_name: &String, type_name: &String, alts: &Array<AltBody>, emitted: &mut Array<String>) {
+fn gen_multi_alt_cst(w: &mut CodeWriter, rule_name: &String, type_name: &String, alts: &List<AltBody>, emitted: &mut List<String>) {
     let mut v = VariantSpec::new(type_name);
     v.set_pub();
     for let alt of alts {
@@ -225,7 +225,7 @@ fn gen_multi_alt_cst(w: &mut CodeWriter, rule_name: &String, type_name: &String,
     }
 }
 
-fn gen_lr_cst(w: &mut CodeWriter, rule_name: &String, type_name: &String, atom_alts: &Array<AltBody>, lr_alts: &Array<LrAlt>, emitted: &mut Array<String>) {
+fn gen_lr_cst(w: &mut CodeWriter, rule_name: &String, type_name: &String, atom_alts: &List<AltBody>, lr_alts: &List<LrAlt>, emitted: &mut List<String>) {
     // The variant cases follow original source order. Each
     // `AltBody.alt_index` / `LrAlt.alt_index` is the position of the
     // alt in the surface rule, so iterating `0..total` and looking
@@ -244,7 +244,7 @@ fn gen_lr_cst(w: &mut CodeWriter, rule_name: &String, type_name: &String, atom_a
     }
 }
 
-fn find_lr_alt_names(atom_alts: &Array<AltBody>, lr_alts: &Array<LrAlt>, idx: i32) -> [String, String] {
+fn find_lr_alt_names(atom_alts: &List<AltBody>, lr_alts: &List<LrAlt>, idx: i32) -> [String, String] {
     for let a of atom_alts {
         if a.alt_index == idx {
             return [a.case_name, a.struct_name];
@@ -258,7 +258,7 @@ fn find_lr_alt_names(atom_alts: &Array<AltBody>, lr_alts: &Array<LrAlt>, idx: i3
     panic(`gen_lr_cst: no atom / lr alt has alt_index = {idx}`);
 }
 
-fn emit_lr_alt_struct(w: &mut CodeWriter, atom_alts: &Array<AltBody>, lr_alts: &Array<LrAlt>, idx: i32, rule_name: &String, emitted: &mut Array<String>) {
+fn emit_lr_alt_struct(w: &mut CodeWriter, atom_alts: &List<AltBody>, lr_alts: &List<LrAlt>, idx: i32, rule_name: &String, emitted: &mut List<String>) {
     for let a of atom_alts {
         if a.alt_index == idx {
             gen_ops_nested_types(w, &a.ops, rule_name, emitted);
@@ -273,7 +273,7 @@ fn emit_lr_alt_struct(w: &mut CodeWriter, atom_alts: &Array<AltBody>, lr_alts: &
             // field — `l.suffix.fields` only carries the right-hand
             // side, so prepend the prefix decl (preserving the
             // leading `span` entry).
-            let mut combined: Array<FieldDecl> = [];
+            let mut combined: List<FieldDecl> = [];
             for let mut i = 0; i < l.suffix.fields.len(); i += 1 {
                 combined.push(l.suffix.fields[i]);
                 if i == 0 {
@@ -291,7 +291,7 @@ fn emit_lr_alt_struct(w: &mut CodeWriter, atom_alts: &Array<AltBody>, lr_alts: &
 /// The leading `span: Span` field is part of the `FieldDecl` list
 /// (`FieldKind::Span`) when the struct is a rule-level alt body;
 /// nested SingleAlt / General-group alt structs omit it.
-fn emit_alt_struct(w: &mut CodeWriter, type_name: &String, fields: &Array<FieldDecl>) {
+fn emit_alt_struct(w: &mut CodeWriter, type_name: &String, fields: &List<FieldDecl>) {
     let mut s = StructSpec::new(type_name);
     s.set_pub();
     for let f of fields {
@@ -301,13 +301,13 @@ fn emit_alt_struct(w: &mut CodeWriter, type_name: &String, fields: &Array<FieldD
     w.blank();
 }
 
-fn gen_ops_nested_types(w: &mut CodeWriter, ops: &Array<Op>, rule_name: &String, emitted: &mut Array<String>) {
+fn gen_ops_nested_types(w: &mut CodeWriter, ops: &List<Op>, rule_name: &String, emitted: &mut List<String>) {
     for let op of ops {
         gen_op_nested_types(w, op, rule_name, emitted);
     }
 }
 
-fn gen_op_nested_types(w: &mut CodeWriter, op: &Op, rule_name: &String, emitted: &mut Array<String>) {
+fn gen_op_nested_types(w: &mut CodeWriter, op: &Op, rule_name: &String, emitted: &mut List<String>) {
     return match *op {
         Group(g) => gen_group_nested_types(w, &g, rule_name, emitted),
         Repeat(r) => gen_op_nested_types(w, &r.body, rule_name, emitted),
@@ -317,7 +317,7 @@ fn gen_op_nested_types(w: &mut CodeWriter, op: &Op, rule_name: &String, emitted:
     };
 }
 
-fn gen_group_nested_types(w: &mut CodeWriter, g: &GroupOp, rule_name: &String, emitted: &mut Array<String>) {
+fn gen_group_nested_types(w: &mut CodeWriter, g: &GroupOp, rule_name: &String, emitted: &mut List<String>) {
     return match &g.shape {
         Transparent => {
             // Transparent groups have one alt with one inner op (the
@@ -335,7 +335,7 @@ fn gen_group_nested_types(w: &mut CodeWriter, g: &GroupOp, rule_name: &String, e
     };
 }
 
-fn emit_simple_cst_enum_if_new(w: &mut CodeWriter, scst: &SimpleCstShape, alts: &Array<AltBody>, emitted: &mut Array<String>) {
+fn emit_simple_cst_enum_if_new(w: &mut CodeWriter, scst: &SimpleCstShape, alts: &List<AltBody>, emitted: &mut List<String>) {
     if has_emitted(emitted, &scst.type_name) {
         return;
     }
@@ -357,7 +357,7 @@ fn emit_simple_cst_enum_if_new(w: &mut CodeWriter, scst: &SimpleCstShape, alts: 
     w.blank();
 }
 
-fn emit_single_alt_struct_if_new(w: &mut CodeWriter, sa: &SingleAltShape, alts: &Array<AltBody>, emitted: &mut Array<String>) {
+fn emit_single_alt_struct_if_new(w: &mut CodeWriter, sa: &SingleAltShape, alts: &List<AltBody>, emitted: &mut List<String>) {
     if has_emitted(emitted, &sa.struct_name) {
         return;
     }
@@ -371,7 +371,7 @@ fn emit_single_alt_struct_if_new(w: &mut CodeWriter, sa: &SingleAltShape, alts: 
     emit_alt_struct(w, &sa.struct_name, &alts[0].fields);
 }
 
-fn emit_general_group_types_if_new(w: &mut CodeWriter, gen: &GeneralShape, alts: &Array<AltBody>, rule_name: &String, emitted: &mut Array<String>) {
+fn emit_general_group_types_if_new(w: &mut CodeWriter, gen: &GeneralShape, alts: &List<AltBody>, rule_name: &String, emitted: &mut List<String>) {
     if has_emitted(emitted, &gen.variant_type) {
         return;
     }
@@ -394,7 +394,7 @@ fn emit_general_group_types_if_new(w: &mut CodeWriter, gen: &GeneralShape, alts:
     }
 }
 
-fn has_emitted(emitted: &Array<String>, name: &String) -> bool {
+fn has_emitted(emitted: &List<String>, name: &String) -> bool {
     for let e of emitted {
         if *e == *name {
             return true;

@@ -49,9 +49,9 @@ pub fn alt_is_wildcard_led(alt: &Alternative) -> bool {
 /// matches, even if that alt's deeper structure cannot succeed —
 /// `(assign | .)` over an `ID` not followed by `=` is the canonical
 /// example.
-pub fn compute_overlap_groups_with_wildcard(alts: &Array<Alternative>, first_sets: &Array<Array<String>>) -> Array<Array<i32>> {
+pub fn compute_overlap_groups_with_wildcard(alts: &List<Alternative>, first_sets: &List<List<String>>) -> List<List<i32>> {
     let n = alts.len();
-    let mut is_wild: Array<bool> = [];
+    let mut is_wild: List<bool> = [];
     let mut any_wild = false;
     for let alt of alts {
         let w = alt_is_wildcard_led(alt);
@@ -64,7 +64,7 @@ pub fn compute_overlap_groups_with_wildcard(alts: &Array<Alternative>, first_set
     if !any_wild {
         return groups;
     }
-    let mut merge_set: Array<i32> = [];
+    let mut merge_set: List<i32> = [];
     for let mut i = 0; i < n; i += 1 {
         if is_wild[i] || !first_sets[i].is_empty() {
             merge_set.push(i);
@@ -73,8 +73,8 @@ pub fn compute_overlap_groups_with_wildcard(alts: &Array<Alternative>, first_set
     if merge_set.len() < 2 {
         return groups;
     }
-    let mut new_groups: Array<Array<i32>> = [];
-    let mut merged: Array<i32> = [];
+    let mut new_groups: List<List<i32>> = [];
+    let mut merged: List<i32> = [];
     for let g of groups {
         let mut absorbed = false;
         for let idx of &g {
@@ -102,9 +102,9 @@ pub fn compute_overlap_groups_with_wildcard(alts: &Array<Alternative>, first_set
     return new_groups;
 }
 
-pub fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<i32>> {
+pub fn compute_overlap_groups(first_sets: &List<List<String>>) -> List<List<i32>> {
     let n = first_sets.len();
-    let mut group_ids: Array<i32> = [];
+    let mut group_ids: List<i32> = [];
     for let mut i = 0; i < n; i += 1 {
         group_ids.push(i);
     }
@@ -123,8 +123,8 @@ pub fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<
             }
         }
     }
-    let mut seen_ids: Array<i32> = [];
-    let mut groups: Array<Array<i32>> = [];
+    let mut seen_ids: List<i32> = [];
+    let mut groups: List<List<i32>> = [];
     for let mut i = 0; i < n; i += 1 {
         let gid = group_ids[i];
         let mut found = -1;
@@ -144,7 +144,7 @@ pub fn compute_overlap_groups(first_sets: &Array<Array<String>>) -> Array<Array<
     return groups;
 }
 
-pub fn has_multi_alt_groups(groups: &Array<Array<i32>>) -> bool {
+pub fn has_multi_alt_groups(groups: &List<List<i32>>) -> bool {
     for let group of groups {
         if group.len() > 1 {
             return true;
@@ -153,7 +153,7 @@ pub fn has_multi_alt_groups(groups: &Array<Array<i32>>) -> bool {
     return false;
 }
 
-pub fn sort_group_by_specificity(group: &mut Array<i32>, first_sets: &Array<Array<String>>) {
+pub fn sort_group_by_specificity(group: &mut List<i32>, first_sets: &List<List<String>>) {
     // Sort by first set size ascending: smaller first set = more specific = try first.
     // Ties broken by original order (stable-ish bubble sort).
     for let mut i = 0; i < group.len(); i += 1 {
@@ -228,7 +228,7 @@ pub fn alt_sort_priority(alt: &Alternative) -> i32 {
 /// length and falls through to priority — which prefers the single-
 /// RuleRef catch-all the way ANTLR4's full-context fallback does for
 /// SQLite-style `( tor (',' tor)* | join_clause )` groupings.
-pub fn sort_group_by_mandatory_count_desc(group: &mut Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext) {
+pub fn sort_group_by_mandatory_count_desc(group: &mut List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) {
     for let mut i = 0; i < group.len(); i += 1 {
         for let mut j = i + 1; j < group.len(); j += 1 {
             let li = ll_match_length(&alts[group[i]], ctx);
@@ -286,7 +286,7 @@ pub fn ll_match_length(alt: &Alternative, ctx: &mut GenContext) -> i32 {
     let mut count: i32 = 0;
     let mut seen_mandatory: bool = false;
     for let elem of &alt.elements {
-        let mut visiting: Array<String> = [];
+        let mut visiting: List<String> = [];
         if !ctx.element_is_nullable_deep(elem, &mut visiting) {
             count += 1;
             seen_mandatory = true;
@@ -297,7 +297,7 @@ pub fn ll_match_length(alt: &Alternative, ctx: &mut GenContext) -> i32 {
     return count;
 }
 
-pub fn sort_group_by_element_count(group: &mut Array<i32>, alts: &Array<Alternative>) {
+pub fn sort_group_by_element_count(group: &mut List<i32>, alts: &List<Alternative>) {
     for let mut i = 0; i < group.len(); i += 1 {
         for let mut j = i + 1; j < group.len(); j += 1 {
             let pi = alt_sort_priority(&alts[group[i]]);

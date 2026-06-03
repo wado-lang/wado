@@ -41,9 +41,9 @@ use {
     GZIP_FORMAT,
 } from "core:zlib";
 
-fn read_all_stdin() -> Array<u8> with Stdin {
+fn read_all_stdin() -> List<u8> with Stdin {
     let [stdin_stream, _done] = Stdin::read_via_stream();
-    let mut buf: Array<u8> = [];
+    let mut buf: List<u8> = [];
     loop {
         let chunk = stdin_stream.read(65536);
         if chunk.len() == 0 {
@@ -57,7 +57,7 @@ fn read_all_stdin() -> Array<u8> with Stdin {
     return buf;
 }
 
-fn print_bytes(data: &Array<u8>) with Stdout {
+fn print_bytes(data: &List<u8>) with Stdout {
     for let mut i = 0; i < data.len(); i += 1 {
         if i > 0 {
             print(" ");
@@ -67,11 +67,11 @@ fn print_bytes(data: &Array<u8>) with Stdout {
     println("");
 }
 
-fn read_be_u32(buf: &Array<u8>, offset: i32) -> u32 {
+fn read_be_u32(buf: &List<u8>, offset: i32) -> u32 {
     return buf[offset] as u32 << 24 | buf[offset + 1] as u32 << 16 | buf[offset + 2] as u32 << 8 | buf[offset + 3] as u32;
 }
 
-fn read_be_i32(buf: &Array<u8>, offset: i32) -> i32 {
+fn read_be_i32(buf: &List<u8>, offset: i32) -> i32 {
     return read_be_u32(buf, offset) as i32;
 }
 
@@ -87,7 +87,7 @@ export fn run() with Stdout, Stdin {
     if cmd == 0 {
         // compress2: level=input[1], data=input[2..]
         let level = input[1] as i32;
-        let mut data: Array<u8> = [];
+        let mut data: List<u8> = [];
         for let mut i = 2; i < input.len(); i += 1 {
             data.push(input[i]);
         }
@@ -96,7 +96,7 @@ export fn run() with Stdout, Stdin {
     } else if cmd == 1 {
         // deflate_raw2: level=input[1], data=input[2..]
         let level = input[1] as i32;
-        let mut data: Array<u8> = [];
+        let mut data: List<u8> = [];
         for let mut i = 2; i < input.len(); i += 1 {
             data.push(input[i]);
         }
@@ -105,7 +105,7 @@ export fn run() with Stdout, Stdin {
     } else if cmd == 2 {
         // gzip_compress2: level=input[1], data=input[2..]
         let level = input[1] as i32;
-        let mut data: Array<u8> = [];
+        let mut data: List<u8> = [];
         for let mut i = 2; i < input.len(); i += 1 {
             data.push(input[i]);
         }
@@ -113,7 +113,7 @@ export fn run() with Stdout, Stdin {
         print_bytes(&result);
     } else if cmd == 3 {
         // zlib_compress_stored: data=input[1..]
-        let mut data: Array<u8> = [];
+        let mut data: List<u8> = [];
         for let mut i = 1; i < input.len(); i += 1 {
             data.push(input[i]);
         }
@@ -123,7 +123,7 @@ export fn run() with Stdout, Stdin {
         // compress_with_strategy: level=input[1], strategy=input[2], data=input[3..]
         let level = input[1] as i32;
         let strategy = input[2] as i32;
-        let mut data: Array<u8> = [];
+        let mut data: List<u8> = [];
         for let mut i = 3; i < input.len(); i += 1 {
             data.push(input[i]);
         }
@@ -131,7 +131,7 @@ export fn run() with Stdout, Stdin {
         print_bytes(&result);
     } else if cmd == 5 {
         // checksums: data=input[1..]
-        let mut data: Array<u8> = [];
+        let mut data: List<u8> = [];
         for let mut i = 1; i < input.len(); i += 1 {
             data.push(input[i]);
         }
@@ -163,7 +163,7 @@ export fn run() with Stdout, Stdin {
     } else if cmd == 10 {
         // adler32_incremental: split=BE i32 at 1, data=input[5..]
         let split = read_be_i32(&input, 1);
-        let mut data: Array<u8> = [];
+        let mut data: List<u8> = [];
         for let mut i = 5; i < input.len(); i += 1 {
             data.push(input[i]);
         }
@@ -174,7 +174,7 @@ export fn run() with Stdout, Stdin {
     } else if cmd == 11 {
         // crc32_incremental: split=BE i32 at 1, data=input[5..]
         let split = read_be_i32(&input, 1);
-        let mut data: Array<u8> = [];
+        let mut data: List<u8> = [];
         for let mut i = 5; i < input.len(); i += 1 {
             data.push(input[i]);
         }
@@ -185,7 +185,7 @@ export fn run() with Stdout, Stdin {
     } else if cmd == 12 {
         // deflate_stream_zlib: level=input[1], data=input[2..]
         let level = input[1] as i32;
-        let mut data: Array<u8> = [];
+        let mut data: List<u8> = [];
         for let mut i = 2; i < input.len(); i += 1 {
             data.push(input[i]);
         }
@@ -195,7 +195,7 @@ export fn run() with Stdout, Stdin {
     } else if cmd == 13 {
         // deflate_stream_raw: level=input[1], data=input[2..]
         let level = input[1] as i32;
-        let mut data: Array<u8> = [];
+        let mut data: List<u8> = [];
         for let mut i = 2; i < input.len(); i += 1 {
             data.push(input[i]);
         }
@@ -205,7 +205,7 @@ export fn run() with Stdout, Stdin {
     } else if cmd == 14 {
         // deflate_stream_gzip: level=input[1], data=input[2..]
         let level = input[1] as i32;
-        let mut data: Array<u8> = [];
+        let mut data: List<u8> = [];
         for let mut i = 2; i < input.len(); i += 1 {
             data.push(input[i]);
         }

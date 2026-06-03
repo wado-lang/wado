@@ -17,7 +17,7 @@ struct Stats {
 }
 
 // Compute summary statistics using SIMD-accelerated accumulation
-fn compute_stats(data: &Array<f64>) -> Stats {
+fn compute_stats(data: &List<f64>) -> Stats {
     let len = data.len();
     if len == 0 {
         return Stats { count: 0, sum: 0.0, mean: 0.0, variance: 0.0, min: 0.0, max: 0.0 };
@@ -79,11 +79,11 @@ fn std_dev(s: &Stats) -> f64 {
 }
 
 // Normalize data to zero mean, unit variance (z-score)
-fn normalize(data: &Array<f64>) -> Array<f64> {
+fn normalize(data: &List<f64>) -> List<f64> {
     let s = compute_stats(data);
     let sd = std_dev(&s);
     let len = data.len();
-    let mut result: Array<f64> = [];
+    let mut result: List<f64> = [];
 
     let mean_vec = f64x2::splat(s.mean);
     let sd_vec = f64x2::splat(sd);
@@ -105,7 +105,7 @@ fn normalize(data: &Array<f64>) -> Array<f64> {
 }
 
 // Compute dot product of two arrays using SIMD
-fn dot_product(a: &Array<f64>, b: &Array<f64>) -> f64 {
+fn dot_product(a: &List<f64>, b: &List<f64>) -> f64 {
     let len = i32::min(a.len(), b.len());
     let mut sum_vec = f64x2::splat(0.0);
 
@@ -132,7 +132,7 @@ fn approx_eq(a: f64, b: f64) -> bool {
 // --- Tests ---
 
 test "basic stats" {
-    let data: Array<f64> = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
+    let data: List<f64> = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
     let s = compute_stats(&data);
     assert s.count == 8;
     assert approx_eq(s.sum, 40.0);
@@ -144,7 +144,7 @@ test "basic stats" {
 }
 
 test "stats single element" {
-    let data: Array<f64> = [42.0];
+    let data: List<f64> = [42.0];
     let s = compute_stats(&data);
     assert s.count == 1;
     assert approx_eq(s.mean, 42.0);
@@ -154,7 +154,7 @@ test "stats single element" {
 }
 
 test "stats odd count" {
-    let data: Array<f64> = [1.0, 2.0, 3.0, 4.0, 5.0];
+    let data: List<f64> = [1.0, 2.0, 3.0, 4.0, 5.0];
     let s = compute_stats(&data);
     assert approx_eq(s.mean, 3.0);
     assert approx_eq(s.min, 1.0);
@@ -162,13 +162,13 @@ test "stats odd count" {
 }
 
 test "stats empty" {
-    let data: Array<f64> = [];
+    let data: List<f64> = [];
     let s = compute_stats(&data);
     assert s.count == 0;
 }
 
 test "normalize" {
-    let data: Array<f64> = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
+    let data: List<f64> = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
     let norm = normalize(&data);
     // mean=5, stddev=2, so first element: (2-5)/2 = -1.5
     assert approx_eq(norm[0], -1.5);
@@ -181,15 +181,15 @@ test "normalize" {
 }
 
 test "dot product" {
-    let a: Array<f64> = [1.0, 2.0, 3.0];
-    let b: Array<f64> = [4.0, 5.0, 6.0];
+    let a: List<f64> = [1.0, 2.0, 3.0];
+    let b: List<f64> = [4.0, 5.0, 6.0];
     // 1*4 + 2*5 + 3*6 = 4 + 10 + 18 = 32
     assert approx_eq(dot_product(&a, &b), 32.0);
 }
 
 test "dot product even" {
-    let a: Array<f64> = [1.0, 0.0, 0.0, 1.0];
-    let b: Array<f64> = [0.0, 1.0, 1.0, 0.0];
+    let a: List<f64> = [1.0, 0.0, 0.0, 1.0];
+    let b: List<f64> = [0.0, 1.0, 1.0, 0.0];
     assert approx_eq(dot_product(&a, &b), 0.0);  // orthogonal
 }
 
@@ -200,7 +200,7 @@ export fn run() with Stdout {
     println("");
 
     // Sample data: daily temperatures (Celsius)
-    let temps: Array<f64> = [22.1, 23.4, 19.8, 25.2, 24.0, 21.5, 26.3, 20.7, 23.9, 25.8, 18.4, 27.1, 22.0, 24.5, 21.2];
+    let temps: List<f64> = [22.1, 23.4, 19.8, 25.2, 24.0, 21.5, 26.3, 20.7, 23.9, 25.8, 18.4, 27.1, 22.0, 24.5, 21.2];
 
     let s = compute_stats(&temps);
     println("Daily temperatures (15 days):");
@@ -222,7 +222,7 @@ export fn run() with Stdout {
 
     // Dot product (correlation-like computation)
     println("");
-    let weights: Array<f64> = [0.05, 0.05, 0.05, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.05, 0.02, 0.02, 0.03, 0.03];
+    let weights: List<f64> = [0.05, 0.05, 0.05, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.05, 0.02, 0.02, 0.03, 0.03];
     let weighted_avg = dot_product(&temps, &weights);
     println(`Weighted average temp: {weighted_avg:0.2f}`);
 }

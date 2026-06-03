@@ -22,7 +22,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
 
 array builtin::array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(3)
 
-struct core:prelude//Array<core:prelude/string.wado/String> {  // TypeId(4)
+struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(4)
     mut repr: ref "builtin::array<core:prelude/string.wado/String>",
     mut used: i32,
 }
@@ -51,7 +51,7 @@ type "functype//wado-compiler/tests/fixtures/cli_args.wado/run" = fn();  // Type
 
 type "functype//wado-compiler/tests/fixtures/cli_args.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/cli_args.wado/__cm_binding__Environment_get_arguments" = fn() -> ref "core:prelude//Array<core:prelude/string.wado/String>";  // TypeId(17)
+type "functype//wado-compiler/tests/fixtures/cli_args.wado/__cm_binding__Environment_get_arguments" = fn() -> ref "core:prelude//List<core:prelude/string.wado/String>";  // TypeId(17)
 
 type "functype//wado-compiler/tests/fixtures/cli_args.wado/__cm_export__run" = fn();  // TypeId(18)
 
@@ -87,9 +87,9 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(34)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(35)
+type "functype//core:prelude/list.wado/List<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//List<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(35)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>");  // TypeId(36)
+type "functype//core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(36)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(37)
 
@@ -112,7 +112,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/cli_args.wado/run"() with Stdout, Environment {
-    let arguments: ref "core:prelude//Array<core:prelude/string.wado/String>";
+    let arguments: ref "core:prelude//List<core:prelude/string.wado/String>";
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let self_9: i32;
@@ -128,7 +128,7 @@ fn "wado-compiler/tests/fixtures/cli_args.wado/__cm_binding__Environment_get_arg
     let __outptr: i32;
     let __base: i32;
     let __count: i32;
-    let __result: ref "core:prelude//Array<core:prelude/string.wado/String>";
+    let __result: ref "core:prelude//List<core:prelude/string.wado/String>";
     let __i: i32;
     let __elem_addr: i32;
     let ptr: i32;
@@ -138,7 +138,7 @@ fn "wado-compiler/tests/fixtures/cli_args.wado/__cm_binding__Environment_get_arg
     "wasi/wasi:cli/Environment::get_arguments"(__outptr);
     __base = builtin::load_i32(__outptr);
     __count = builtin::load_i32(__outptr + 4);
-    __result = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(__count), used: 0 };
+    __result = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(__count), used: 0 };
     __i = 0;
     b0: block {
         l1: loop {
@@ -146,7 +146,7 @@ fn "wado-compiler/tests/fixtures/cli_args.wado/__cm_binding__Environment_get_arg
                 break b0;
             }
             __elem_addr = __base + (__i * 8);
-            "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(__result, ptr = builtin::load_i32(__elem_addr); len_8 = builtin::load_i32(__elem_addr + 4); arr = "core:internal/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 });
+            "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__result, ptr = builtin::load_i32(__elem_addr); len_8 = builtin::load_i32(__elem_addr + 4); arr = "core:internal/memory_to_gc_array"(ptr, len_8); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_8 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr), builtin::load_i32(__elem_addr + 4), 1, 0));
             __i = __i + 1;
             continue l1;
@@ -485,17 +485,17 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(self, value) {
+fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self);
+        "core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self);
     }
     builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self) {
+fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "builtin::array<core:prelude/string.wado/String>";

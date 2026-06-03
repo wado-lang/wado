@@ -64,13 +64,13 @@ struct wado-compiler/tests/fixtures/tuple_2.wado//TupleValue::Text {  // TypeId(
 
 array builtin::array<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>> (mut ref "tuple//[i32, String]");  // TypeId(11)
 
-struct core:prelude/array.wado//ArrayIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>> {  // TypeId(12)
+struct core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>> {  // TypeId(12)
     mut repr: ref "builtin::array<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>",
     mut used: i32,
     mut index: i32,
 }
 
-struct core:prelude//Array<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>> {  // TypeId(13)
+struct core:prelude//List<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>> {  // TypeId(13)
     mut repr: ref "builtin::array<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>",
     mut used: i32,
 }
@@ -153,7 +153,7 @@ type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(52)
 
-type "functype//core:prelude/array.wado/ArrayIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>") -> ref null "tuple//[i32, String]";  // TypeId(53)
+type "functype//core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>") -> ref null "tuple//[i32, String]";  // TypeId(53)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(54)
 
@@ -308,21 +308,21 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_basic"() with Stdout {
 }
 
 fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_for_of"() with Stdout {
-    let __b: ref "core:prelude//Array<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>";
-    let __iter_2: ref "core:prelude/array.wado//ArrayIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>";
+    let __b: ref "core:prelude//List<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>";
+    let __iter_2: ref "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>";
     let num: i32;
     let name_4: ref "core:prelude/string.wado//String";
-    let __iter_5: ref "core:prelude/array.wado//ArrayIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>";
+    let __iter_5: ref "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>";
     let name_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let __match_9: ref null "tuple//[i32, String]";
     let __match_10: ref null "tuple//[i32, String]";
-    __b = struct.new "core:prelude//Array<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>" { repr: array.new_fixed<ref "tuple//[i32, String]">(struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("one"), used: 3 } }, struct.new "tuple//[i32, String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("two"), used: 3 } }, struct.new "tuple//[i32, String]" { 0: 3, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("three"), used: 5 } }), used: 3 };
-    __iter_2 = struct.new "core:prelude/array.wado//ArrayIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>" { repr: __b.repr, used: 3, index: 0 };
+    __b = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>" { repr: array.new_fixed<ref "tuple//[i32, String]">(struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("one"), used: 3 } }, struct.new "tuple//[i32, String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("two"), used: 3 } }, struct.new "tuple//[i32, String]" { 0: 3, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("three"), used: 5 } }), used: 3 };
+    __iter_2 = struct.new "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>" { repr: __b.repr, used: 3, index: 0 };
     b13: block {
         l14: loop {
-            __match_9 = "core:prelude/array.wado/ArrayIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>^Iterator::next"(__iter_2);
+            __match_9 = "core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>^Iterator::next"(__iter_2);
             if ref.is_null(__match_9) == 0 {
                 let __variant_payload_1: ref "tuple//[i32, String]";
                 __variant_payload_1 = ref.as_non_null(__match_9);
@@ -335,10 +335,10 @@ fn "wado-compiler/tests/fixtures/tuple_2.wado/destruct_for_of"() with Stdout {
             continue l14;
         };
     };
-    __iter_5 = struct.new "core:prelude/array.wado//ArrayIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>" { repr: __b.repr, used: 3, index: 0 };
+    __iter_5 = struct.new "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>" { repr: __b.repr, used: 3, index: 0 };
     b16: block {
         l17: loop {
-            __match_10 = "core:prelude/array.wado/ArrayIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>^Iterator::next"(__iter_5);
+            __match_10 = "core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>^Iterator::next"(__iter_5);
             if ref.is_null(__match_10) == 0 {
                 let __variant_payload_2: ref "tuple//[i32, String]";
                 __variant_payload_2 = ref.as_non_null(__match_10);
@@ -1007,7 +1007,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/ArrayIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>^Iterator::next"(self) {
+fn "core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>^Iterator::next"(self) {
     let item: ref "tuple//[i32, String]";
     if self.index >= self.used {
         return ref.null none;

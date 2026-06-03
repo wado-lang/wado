@@ -19,7 +19,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     assert !has_before;
 
     // 3. append() a header value
-    let bytes: Array<u8> = [104 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8];
+    let bytes: List<u8> = [104 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8];
     let value = bytes as FieldValue;  // "hello" in UTF-8
     let append_result = fields.append("x-test" as FieldName, value);
     if let Err(e) = append_result {

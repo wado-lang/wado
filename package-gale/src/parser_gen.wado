@@ -136,7 +136,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     gen_parse_entry(w, lowered);
 }
 
-fn join_kinds(kinds: &Array<String>) -> String {
+fn join_kinds(kinds: &List<String>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < kinds.len(); i += 1 {
         if i > 0 {
@@ -195,19 +195,19 @@ fn emit_follow_variant_from_gir(w: &mut CodeWriter, variant_rule: &Rule, ctx: &m
 
 fn gen_parser_struct(w: &mut CodeWriter) {
     let mut s = StructSpec::new("Parser");
-    s.add_field(&"tokens", &"Array<Token>");
+    s.add_field(&"tokens", &"List<Token>");
     s.add_field(&"pos", &"i32");
     // Source characters, kept so error sites can resolve a byte/char offset
     // (`span.start`) into a human-readable `line:col` via `line_col_at`.
-    s.add_field(&"chars", &"Array<char>");
+    s.add_field(&"chars", &"List<char>");
     s.emit(w);
     w.blank();
 
     ImplSpec::new("Parser").emit_begin(w);
 
     let mut f = FnSpec::new("new");
-    f.add_param(&"tokens", &"Array<Token>");
-    f.add_param(&"chars", &"Array<char>");
+    f.add_param(&"tokens", &"List<Token>");
+    f.add_param(&"chars", &"List<char>");
     f.set_return_type(&"Parser");
     f.emit_begin(w);
     w.line(&"return Parser { tokens, pos: 0, chars };");
@@ -221,7 +221,7 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     fe.set_receiver(&"&self");
     fe.add_param(&"message", &"String");
     fe.add_param(&"span", &"Span");
-    fe.add_param(&"expected", &"Array<String>");
+    fe.add_param(&"expected", &"List<String>");
     fe.set_return_type(&"ParseError");
     fe.emit_begin(w);
     w.line(&"let lc = line_col_at(&self.chars, span.start);");
@@ -343,10 +343,10 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     // `p.match_not([TK_A, TK_B, ...])` — consumes one token whose kind is
     // not in the exclusion set (for parser-side `~ X`). Fails at EOF or when
     // the current token is in the exclusion set. The exclusion set is passed
-    // by value so the caller can use tuple-to-Array coercion on a literal.
+    // by value so the caller can use tuple-to-List coercion on a literal.
     let mut f10 = FnSpec::new("match_not");
     f10.set_receiver(&"&mut self");
-    f10.add_param(&"excluded", &"Array<i32>");
+    f10.add_param(&"excluded", &"List<i32>");
     f10.set_return_type(&"Result<Token, ParseError>");
     f10.emit_begin(w);
     w.line(&"let k = self.tokens[self.pos].kind;");
@@ -382,7 +382,7 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     // past the sentinel.
     let mut f11 = FnSpec::new("match_set");
     f11.set_receiver(&"&mut self");
-    f11.add_param(&"included", &"Array<i32>");
+    f11.add_param(&"included", &"List<i32>");
     f11.set_return_type(&"Result<Token, ParseError>");
     f11.emit_begin(w);
     w.line(&"let k = self.tokens[self.pos].kind;");
@@ -415,10 +415,10 @@ fn gen_parser_struct(w: &mut CodeWriter) {
 
 /// Returns the number of leading elements in the alternative that are scannable.
 /// Stops at the first unscannable element (e.g., a RuleRef to `expr`).
-fn scannable_prefix_len(elements: &Array<Element>, ctx: &mut GenContext) -> i32 {
+fn scannable_prefix_len(elements: &List<Element>, ctx: &mut GenContext) -> i32 {
     let mut count: i32 = 0;
     for let elem of elements {
-        let mut visiting: Array<String> = [];
+        let mut visiting: List<String> = [];
         if !ctx.is_element_scannable(elem, &mut visiting) {
             break;
         }
@@ -445,7 +445,7 @@ fn gen_bt_scan_if_possible(w: &mut CodeWriter, alt: &Alternative, lowered_rule: 
     let scan_name = `{*fn_name}_scan_{alt_idx}`;
 
     let mut f = FnSpec::new(&scan_name);
-    f.add_param(&"tokens", &"&Array<Token>");
+    f.add_param(&"tokens", &"&List<Token>");
     f.add_param(&"pos", &"i32");
     f.set_return_type(&"i32");
     f.emit_begin(w);
@@ -465,13 +465,13 @@ fn gen_bt_scan_if_possible(w: &mut CodeWriter, alt: &Alternative, lowered_rule: 
 }
 
 /// Returns true if the alternative has a generated scan function (has scannable prefix).
-fn alt_has_scan(elements: &Array<Element>, ctx: &mut GenContext) -> bool {
+fn alt_has_scan(elements: &List<Element>, ctx: &mut GenContext) -> bool {
     return scannable_prefix_len(elements, ctx) > 0;
 }
 
 /// Returns true if the scan function covers the entire alternative (all elements are scannable).
 /// When true, a scan success guarantees parse success so no fallthrough is needed.
-fn alt_scan_is_full(elements: &Array<Element>, ctx: &mut GenContext) -> bool {
+fn alt_scan_is_full(elements: &List<Element>, ctx: &mut GenContext) -> bool {
     return scannable_prefix_len(elements, ctx) == elements.len();
 }
 
@@ -501,7 +501,7 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
             // LR rule: project the atom's alt indices into the
             // surface-rule numbering so `gen_scan_lr_functions` can
             // walk surface alts for the atom-side scan body.
-            let mut non_lr_indices: Array<i32> = [];
+            let mut non_lr_indices: List<i32> = [];
             for let alt of &l.atom.alts {
                 non_lr_indices.push(alt.alt_index);
             }
@@ -511,7 +511,7 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
     }
 
     let mut f = FnSpec::new(fn_name);
-    f.add_param(&"tokens", &"&Array<Token>");
+    f.add_param(&"tokens", &"&List<Token>");
     f.add_param(&"pos", &"i32");
     // Accept (and ignore) min_prec so call sites pass it uniformly
     // regardless of whether the target rule is left-recursive. See
@@ -551,7 +551,7 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
         // the longest-match tournament: every alt consumes exactly one
         // token, so longest-match and first-success-wins both pick whatever
         // alt's token equals `tokens[pos].kind`.
-        let mut firsts: Array<String> = [];
+        let mut firsts: List<String> = [];
         for let alt of &rule.alternatives {
             let t = single_token_first(&alt.elements[0]);
             if !first_contains(&firsts, &t) {
@@ -585,7 +585,7 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
 
 /// Returns true if every alt in `alts` is a single TokenRef or Literal
 /// element. Such rules collapse to a one-token kind check at scan time.
-fn all_alts_are_single_token(alts: &Array<Alternative>) -> bool {
+fn all_alts_are_single_token(alts: &List<Alternative>) -> bool {
     for let alt of alts {
         if alt.elements.len() != 1 {
             return false;
@@ -624,16 +624,16 @@ fn single_token_first(elem: &Element) -> String {
 ///   - scan_X(tokens, pos, min_prec = 0): atom + precedence-aware LR-suffix
 ///     loop with token-kind dispatch and second-token overlap resolution.
 ///     Callers without a precedence context omit min_prec and get 0.
-fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<LrAlt>, lr_dispatch: &LrDispatchData, non_lr_indices: &Array<i32>, atom_scan_alts: &Array<ScanBody>, ctx: &mut GenContext, fn_name: &String) {
+fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData, non_lr_indices: &List<i32>, atom_scan_alts: &List<ScanBody>, ctx: &mut GenContext, fn_name: &String) {
     let atom_name = `{*fn_name}_atom`;
 
     // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
     let mut fa = FnSpec::new(&atom_name);
-    fa.add_param(&"tokens", &"&Array<Token>");
+    fa.add_param(&"tokens", &"&List<Token>");
     fa.add_param(&"pos", &"i32");
     fa.set_return_type(&"i32");
     fa.emit_begin(w);
-    let mut non_lr_alts: Array<Alternative> = [];
+    let mut non_lr_alts: List<Alternative> = [];
     for let idx of non_lr_indices {
         non_lr_alts.push(rule.alternatives[*idx]);
     }
@@ -655,7 +655,7 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<
 
     // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
     let mut f2 = FnSpec::new(fn_name);
-    f2.add_param(&"tokens", &"&Array<Token>");
+    f2.add_param(&"tokens", &"&List<Token>");
     f2.add_param(&"pos", &"i32");
     f2.add_param_spec(ParamSpec {
         name: "min_prec",
@@ -677,7 +677,7 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<
 /// recursive calls compile to `scan_X(tokens, pos, prec)` with the same
 /// precedence value the parse side uses; the precedence is baked onto
 /// `ScanRuleCallElem.min_prec_arg` by `stamp_lr_self_ref_min_prec`.
-fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<LrAlt>, ctx: &mut GenContext, fn_name: &String) {
+fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &List<LrAlt>, ctx: &mut GenContext, fn_name: &String) {
     for let lr_alt of lr_alts {
         let lr_idx = lr_alt.alt_index;
         let alt = &rule.alternatives[lr_idx];
@@ -687,7 +687,7 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &A
         let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
 
         let mut f = FnSpec::new(&suffix_fn);
-        f.add_param(&"tokens", &"&Array<Token>");
+        f.add_param(&"tokens", &"&List<Token>");
         f.add_param(&"pos", &"i32");
         f.set_return_type(&"i32");
         f.emit_begin(w);
@@ -715,7 +715,7 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &A
 /// side, with p.peek_kind() replaced by an inline bounds-checked read into
 /// `suffix_kind` and `result = fn(p, ...)?` replaced by `pos = fn(tokens, pos);
 /// if pos < 0 { return -1; }`.
-fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &Array<LrAlt>, lr_dispatch: &LrDispatchData, ctx: &mut GenContext, fn_name: &String) {
+fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData, ctx: &mut GenContext, fn_name: &String) {
     let projected = project_lr_dispatch(lr_alts, lr_dispatch);
     let valid_lr_indices = projected.0;
     let lr_precs = projected.1;
@@ -728,7 +728,7 @@ fn gen_scan_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &
     for let mut g = 0; g < lr_dispatch.groups.len(); g += 1 {
         let group = &lr_dispatch.groups[g];
 
-        let mut union_first: Array<String> = [];
+        let mut union_first: List<String> = [];
         for let idx of group {
             dedup_append_arr(&mut union_first, &suffix_first_sets[*idx]);
         }
@@ -792,7 +792,7 @@ fn gen_scan_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32)
 /// group, dispatches by first token then by second token (peek_at(1)) to the
 /// correct LR alternative — exactly like the parse side, so scan and parse
 /// agree on which alt applies at every position.
-fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRule, group: &Array<i32>, valid_lr_indices: &Array<i32>, lr_precs: &Array<i32>, suffix_first_sets: &Array<Array<String>>, ctx: &mut GenContext) {
+fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &ParserRule, group: &List<i32>, valid_lr_indices: &List<i32>, lr_precs: &List<i32>, suffix_first_sets: &List<List<String>>, ctx: &mut GenContext) {
     let mut emitted = TreeSet::<String>::new();
     let mut first_branch = true;
 
@@ -830,7 +830,7 @@ fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &Par
     }
 
     // Second pass: shared-token branches with second-token sub-dispatch.
-    let mut shared_tokens: Array<String> = [];
+    let mut shared_tokens: List<String> = [];
     let mut shared_seen = TreeSet::<String>::new();
     for let mut k = 0; k < group.len(); k += 1 {
         let sfs = &suffix_first_sets[group[k]];
@@ -907,10 +907,10 @@ fn gen_scan_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, rule: &Par
 /// try block fails, return -1. Alts with empty FIRST (e.g. starting with
 /// Wildcard or a rule whose FIRST is unenumerable) are attempted
 /// unconditionally as fallbacks.
-fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, scan_alts: &Array<ScanBody>, ctx: &mut GenContext) {
+fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &List<Alternative>, scan_alts: &List<ScanBody>, ctx: &mut GenContext) {
     let n = alts.len();
     let max_k = 5;
-    let mut all_pos_sets: Array<Array<Array<String>>> = [];
+    let mut all_pos_sets: List<List<List<String>>> = [];
     for let alt of alts {
         all_pos_sets.push(ctx.alt_position_first_sets(alt, max_k));
     }
@@ -941,8 +941,8 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, scan_alts: 
     // ride along as tournament candidates in every partition and in the
     // fall-through default, matching the existing fallback semantics.
 
-    let mut guarded_idx: Array<i32> = [];
-    let mut unguarded_idx: Array<i32> = [];
+    let mut guarded_idx: List<i32> = [];
+    let mut unguarded_idx: List<i32> = [];
     for let mut i = 0; i < n; i += 1 {
         if all_pos_sets[i].len() >= 1 {
             guarded_idx.push(i);
@@ -951,7 +951,7 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, scan_alts: 
         }
     }
 
-    let mut union_tokens: Array<String> = [];
+    let mut union_tokens: List<String> = [];
     for let i of &guarded_idx {
         let depth0 = &all_pos_sets[*i][0];
         for let t of depth0 {
@@ -961,11 +961,11 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, scan_alts: 
         }
     }
 
-    let mut groups_alts: Array<Array<i32>> = [];
-    let mut groups_tokens: Array<Array<String>> = [];
+    let mut groups_alts: List<List<i32>> = [];
+    let mut groups_tokens: List<List<String>> = [];
 
     for let t of &union_tokens {
-        let mut claiming: Array<i32> = [];
+        let mut claiming: List<i32> = [];
         for let i of &guarded_idx {
             if first_contains(&all_pos_sets[*i][0], t) {
                 claiming.push(*i);
@@ -982,7 +982,7 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, scan_alts: 
             groups_tokens[found].push(*t);
         } else {
             groups_alts.push(claiming);
-            let mut seed: Array<String> = [];
+            let mut seed: List<String> = [];
             seed.push(*t);
             groups_tokens.push(seed);
         }
@@ -1019,7 +1019,7 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, scan_alts: 
     }
 
     if unguarded_idx.len() > 0 {
-        let empty_alts: Array<i32> = [];
+        let empty_alts: List<i32> = [];
         if first_branch {
             emit_scan_partition_body(w, &empty_alts, &unguarded_idx, scan_alts, ctx);
         } else {
@@ -1057,7 +1057,7 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &Array<Alternative>, scan_alts: 
 /// match is the longer `path '(' ... ')'`. The two are not
 /// correctness-equivalent (the bug fixed in #1245), so the tournament
 /// keeps the longest end rather than the first hit.
-fn emit_scan_partition_body(w: &mut CodeWriter, guarded_alts: &Array<i32>, unguarded_alts: &Array<i32>, scan_alts: &Array<ScanBody>, ctx: &mut GenContext) {
+fn emit_scan_partition_body(w: &mut CodeWriter, guarded_alts: &List<i32>, unguarded_alts: &List<i32>, scan_alts: &List<ScanBody>, ctx: &mut GenContext) {
     let total = guarded_alts.len() + unguarded_alts.len();
     if total == 1 {
         let i = if guarded_alts.len() == 1 { guarded_alts[0] } else { unguarded_alts[0] };
@@ -1074,7 +1074,7 @@ fn emit_scan_partition_body(w: &mut CodeWriter, guarded_alts: &Array<i32>, ungua
     // Longest-match tournament (see the function doc): try each from
     // `start`, keep the greatest successful end.
     w.line(&"let mut best: i32 = -1;");
-    let mut all_idx: Array<i32> = [];
+    let mut all_idx: List<i32> = [];
     for let i of guarded_alts {
         all_idx.push(*i);
     }
@@ -1094,7 +1094,7 @@ fn emit_scan_partition_body(w: &mut CodeWriter, guarded_alts: &Array<i32>, ungua
     w.line(&"return -1;");
 }
 
-fn i32_arrays_equal(a: &Array<i32>, b: &Array<i32>) -> bool {
+fn i32_arrays_equal(a: &List<i32>, b: &List<i32>) -> bool {
     if a.len() != b.len() {
         return false;
     }
@@ -1114,7 +1114,7 @@ fn i32_arrays_equal(a: &Array<i32>, b: &Array<i32>) -> bool {
 /// loop will consume the trailing tokens. Inner self-refs are
 /// bounded by surrounding tokens (e.g. `K_WHEN expr K_THEN expr`
 /// inside `case_expr`) and need a full scan.
-fn gen_bt_scan_op_elements(w: &mut CodeWriter, scan_elems: &Array<ScanElement>, end: i32, rule_name: &String, ctx: &mut GenContext) {
+fn gen_bt_scan_op_elements(w: &mut CodeWriter, scan_elems: &List<ScanElement>, end: i32, rule_name: &String, ctx: &mut GenContext) {
     for let mut i = 0; i < end; i += 1 {
         let se = &scan_elems[i];
         let is_last_self_ref = i == end - 1 && is_self_ref_scan_call(se, rule_name);
@@ -1142,8 +1142,8 @@ fn is_self_ref_scan_call(se: &ScanElement, rule_name: &String) -> bool {
 /// `ctx.kind_check_str` so they collapse to a `_gale_kind_set_<id>(...)`
 /// helper call; otherwise a 120-keyword set inlined at every dispatch
 /// site bloats the generated wasm by hundreds of KB.
-fn gen_scan_lookahead_condition(ctx: &mut GenContext, sig: &Array<Array<String>>) -> String {
-    let mut parts: Array<String> = [];
+fn gen_scan_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -> String {
+    let mut parts: List<String> = [];
     for let mut d = 0; d < sig.len(); d += 1 {
         let kinds = &sig[d];
         let idx_expr = if d == 0 { `pos` } else { `pos + {d}` };
@@ -1200,7 +1200,7 @@ fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContex
         return;
     }
     if let Excluded(e) = se {
-        let mut check_parts: Array<String> = [];
+        let mut check_parts: List<String> = [];
         for let k of &e.kinds {
             check_parts.push(`tokens[pos].kind == {*k}`);
         }
@@ -1260,7 +1260,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         return;
     }
     if let Excluded(e) = se {
-        let mut check_parts: Array<String> = [];
+        let mut check_parts: List<String> = [];
         for let k of &e.kinds {
             check_parts.push(`tokens[pos].kind == {*k}`);
         }
@@ -1297,11 +1297,11 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
 /// Scan-side mirror of [`k_prefix_match_expr`]: builds the K-token
 /// peek expression in the `tokens[pos…]` form scan helpers use.
 /// Returns `""` when the mask is empty so callers skip emission.
-fn k_prefix_match_expr_scan(mask: &Array<Array<String>>, ctx: &mut GenContext) -> String {
+fn k_prefix_match_expr_scan(mask: &List<List<String>>, ctx: &mut GenContext) -> String {
     if mask.is_empty() {
         return "";
     }
-    let mut parts: Array<String> = [];
+    let mut parts: List<String> = [];
     for let mut d = 0; d < mask.len(); d += 1 {
         let depth_set = &mask[d];
         if depth_set.is_empty() {
@@ -1443,7 +1443,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
 /// `gen_scan_group` semantics: ambiguity detection (alts sharing a
 /// first token enter longest-match commit), lenient gate, and the
 /// `sg_<gc>_done` / `sg_<gc>` block structure.
-fn is_wildcard_alt(indices: &Array<i32>, alt_idx: i32) -> bool {
+fn is_wildcard_alt(indices: &List<i32>, alt_idx: i32) -> bool {
     for let idx of indices {
         if *idx == alt_idx {
             return true;
@@ -1490,7 +1490,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
     let n = ge.alts.len();
     let first_sets = &ge.alt_first_sets;
 
-    let mut is_ambiguous: Array<bool> = [];
+    let mut is_ambiguous: List<bool> = [];
     for let mut i = 0; i < n; i += 1 {
         is_ambiguous.push(false);
     }
@@ -1513,7 +1513,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
     }
 
     let has_wildcard = !ge.wildcard_alt_indices.is_empty();
-    let mut union_first: Array<String> = [];
+    let mut union_first: List<String> = [];
     if lenient && !has_wildcard {
         for let fs of first_sets {
             dedup_append_arr(&mut union_first, fs);
@@ -1539,7 +1539,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElem, ctx: &mut GenContex
     // the end mirrors `gen_general_group_dispatch`'s
     // `sort_group_by_mandatory_count_desc` ordering on the parse
     // side, so scan and parse agree on the winner.
-    let mut iter_order: Array<i32> = [];
+    let mut iter_order: List<i32> = [];
     for let mut i = 0; i < n; i += 1 {
         if !is_wildcard_alt(&ge.wildcard_alt_indices, i) {
             iter_order.push(i);
@@ -1614,7 +1614,7 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
 /// points (Simple rule scan_body, LR atom scan_alts, LR suffix
 /// scan_suffix) once the corresponding `ScanBody` is in hand.
 /// Failures route through `fail_stmt`.
-fn gen_scan_op_elements(w: &mut CodeWriter, scan_elems: &Array<ScanElement>, start: i32, end: i32, ctx: &mut GenContext, fail_stmt: &String) {
+fn gen_scan_op_elements(w: &mut CodeWriter, scan_elems: &List<ScanElement>, start: i32, end: i32, ctx: &mut GenContext, fail_stmt: &String) {
     for let mut i = start; i < end; i += 1 {
         gen_scan_op_element(w, &scan_elems[i], ctx, fail_stmt);
     }
@@ -1623,7 +1623,7 @@ fn gen_scan_op_elements(w: &mut CodeWriter, scan_elems: &Array<ScanElement>, sta
 /// `gen_scan_op_elements` variant that routes failures through a
 /// labeled `break {label};` so the sequence can be nested in a
 /// labeled block.
-fn gen_scan_op_elements_in_block(w: &mut CodeWriter, scan_elems: &Array<ScanElement>, start: i32, end: i32, ctx: &mut GenContext, label: &String) {
+fn gen_scan_op_elements_in_block(w: &mut CodeWriter, scan_elems: &List<ScanElement>, start: i32, end: i32, ctx: &mut GenContext, label: &String) {
     let fail = `break {*label};`;
     for let mut i = start; i < end; i += 1 {
         gen_scan_op_element(w, &scan_elems[i], ctx, &fail);
@@ -1762,7 +1762,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
     // Project the lowered rule's alt partition into surface alt
     // indices. For LR rules, atom alts are non-LR; for `Simple` /
     // `MultiAlt` rules every alt is non-LR.
-    let mut non_lr_indices: Array<i32> = [];
+    let mut non_lr_indices: List<i32> = [];
     match lowered_rule {
         Simple(_) => {
             non_lr_indices.push(0);
@@ -1779,9 +1779,9 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         },
     }
 
-    let mut first_sets: Array<Array<String>> = [];
+    let mut first_sets: List<List<String>> = [];
     for let idx of non_lr_indices {
-        let mut visiting: Array<String> = [];
+        let mut visiting: List<String> = [];
         first_sets.push(ctx.first_of_alt(&rule.alternatives[idx], &mut visiting));
     }
     let mut groups = compute_overlap_groups(&first_sets);
@@ -1791,16 +1791,16 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         for let mut g = 0; g < groups.len(); g += 1 {
             if groups[g].len() > 1 {
                 sort_group_by_specificity(&mut groups[g], &first_sets);
-                let mut mapped_alts: Array<Alternative> = [];
+                let mut mapped_alts: List<Alternative> = [];
                 for let gi of groups[g] {
                     mapped_alts.push(rule.alternatives[non_lr_indices[gi]]);
                 }
-                let mut local_indices: Array<i32> = [];
+                let mut local_indices: List<i32> = [];
                 for let mut i = 0; i < groups[g].len(); i += 1 {
                     local_indices.push(i);
                 }
                 sort_group_by_element_count(&mut local_indices, &mapped_alts);
-                let mut reordered: Array<i32> = [];
+                let mut reordered: List<i32> = [];
                 for let li of local_indices {
                     reordered.push(groups[g][li]);
                 }
@@ -1962,7 +1962,7 @@ fn gen_alt_body(w: &mut CodeWriter, type_name: &String, variant_case: Option<Str
 /// is lower's canonical struct shape (matches what
 /// `codegen.wado::gen_cst_types` emits), so the struct literal stays
 /// in lockstep with the type definition.
-fn emit_field_assignments_from_fields(w: &mut CodeWriter, fields: &Array<FieldDecl>) {
+fn emit_field_assignments_from_fields(w: &mut CodeWriter, fields: &List<FieldDecl>) {
     for let mut i = 0; i < fields.len(); i += 1 {
         if let Span = &fields[i].kind {
             continue;
@@ -1974,7 +1974,7 @@ fn emit_field_assignments_from_fields(w: &mut CodeWriter, fields: &Array<FieldDe
 fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Option<String>, struct_name: Option<String>, alt: &Alternative, body: &AltBody, ctx: &mut GenContext, skip: i32) {
     // Parse elements from `skip` onward (prefix already consumed).
     // Replay name counter for consumed elements so dedup_name stays in sync.
-    let mut name_counts: Array<[String, i32]> = [];
+    let mut name_counts: List<[String, i32]> = [];
     for let mut i = 0; i < skip; i += 1 {
         replay_element_names(&alt.elements[i], &mut name_counts);
     }
@@ -2027,10 +2027,10 @@ fn gen_alt_body_skip(w: &mut CodeWriter, type_name: &String, variant_case: Optio
     }
 }
 
-fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, non_lr_indices: &Array<i32>) {
+fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, non_lr_indices: &List<i32>) {
 
     let max_k = 5;
-    let mut all_pos_sets: Array<Array<Array<String>>> = [];
+    let mut all_pos_sets: List<List<List<String>>> = [];
     for let idx of non_lr_indices {
         all_pos_sets.push(ctx.alt_position_first_sets(&rule.alternatives[*idx], max_k));
     }
@@ -2098,7 +2098,7 @@ fn peel_scalar_label(elem: &Element) -> &Element {
     return cur;
 }
 
-fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<Op>, ctx: &mut GenContext) {
+fn gen_alt_elements(w: &mut CodeWriter, elements: &List<Element>, ops: &List<Op>, ctx: &mut GenContext) {
     // gen_alt_elements requires 1:1 correspondence between
     // `elements` and `ops` — full-alt bodies (Simple / MultiAlt /
     // LR atom). LR-suffix bodies strip the leading self-ref op and
@@ -2116,7 +2116,7 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<O
     // (today's g4 parser keeps the `*` outside the label, so this
     // arm is defensive — see `peel_scalar_label` for the contract).
     assert ops.len() == elements.len(), "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies must use gen_alt_body_skip";
-    let mut name_counts: Array<[String, i32]> = [];
+    let mut name_counts: List<[String, i32]> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
         let op = &ops[i];
@@ -2147,7 +2147,7 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<O
 /// ListLabel ops dispatch through `gen_op_leaf` / `gen_op_group` /
 /// `gen_op_list_label`; Repeat / Label / Not still flow through the
 /// surface `gen_repeat*` helpers (Phase 2-C migrates the Repeat arm).
-fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, ops: &Array<Op>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
+fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &List<Element>, ops: &List<Op>, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, outer_follow: &List<String>) {
     assert ops.len() == elements.len(), "gen_elements_with_non_greedy: ops / elements length mismatch";
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
@@ -2198,7 +2198,7 @@ fn gen_elements_with_non_greedy(w: &mut CodeWriter, elements: &Array<Element>, o
 /// remainder of the surrounding element list is nullable (so the
 /// next-iteration FIRST union picks up tokens that would otherwise
 /// exit the outer construct).
-fn inner_walker_follow_for_repeat(rep: &RepeatElement, rep_op: &RepeatOp, elements: &Array<Element>, i: i32, outer_follow: &Array<String>, ctx: &mut GenContext) -> Array<String> {
+fn inner_walker_follow_for_repeat(rep: &RepeatElement, rep_op: &RepeatOp, elements: &List<Element>, i: i32, outer_follow: &List<String>, ctx: &mut GenContext) -> List<String> {
     let is_greedy_optional = if let Optional = rep.kind {
         !rep.non_greedy;
     } else {
@@ -2261,7 +2261,7 @@ fn op_is_rulecall(op: &Op) -> bool {
 /// emitted field name comes from `op.field` exclusively — `dedup_base`
 /// is consulted only for the sync. The sync goes away entirely once
 /// every emit path consumes `Op`.
-fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     sync_name_counts_for_op_leaf(op, name_counts);
     return match *op {
         Token(t) => w.line(&`let {t.field} = p.expect({t.kind})?;`),
@@ -2320,7 +2320,7 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &
 /// The caller must have already verified storability —
 /// `TransparentGroup` bodies are handled by
 /// `gen_op_repeat_with_follow_override`'s non-storable Group arm.
-fn gen_op_inner_for_storable_repeat(w: &mut CodeWriter, rep_op: &RepeatOp, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
+fn gen_op_inner_for_storable_repeat(w: &mut CodeWriter, rep_op: &RepeatOp, elem: &Element, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, outer_follow: &List<String>) {
     let op = &rep_op.body;
     // `lower_repeat_op`'s list-label branch unwraps `Label(Group)` on
     // the body op; mirror the unwrap on the surface side so
@@ -2347,7 +2347,7 @@ fn gen_op_inner_for_storable_repeat(w: &mut CodeWriter, rep_op: &RepeatOp, elem:
 /// `gen_op_inner_for_storable_repeat`. Splits on `GroupShape`; lower
 /// guarantees the body op is `Op::Group(_)` with a non-Transparent
 /// shape, so the match below is exhaustive over the storable shapes.
-fn gen_op_storable_group_inner(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
+fn gen_op_storable_group_inner(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, outer_follow: &List<String>) {
     let g_op = if let Group(g) = op {
         g;
     } else {
@@ -2396,7 +2396,7 @@ fn gen_op_storable_group_inner(w: &mut CodeWriter, op: &Op, elem: &Element, ctx:
 /// Used by `emit_op_optional_with_shape_lookahead_*` so each shape's
 /// per-element parse routes through op-driven helpers instead of the
 /// surface `gen_element` graph.
-fn gen_op_dispatch_element(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_op_dispatch_element(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     if op_is_leaf(op) {
         gen_op_leaf(w, op, ctx, name_counts);
         return;
@@ -2425,12 +2425,12 @@ fn gen_op_dispatch_element(w: &mut CodeWriter, op: &Op, elem: &Element, ctx: &mu
 /// surface `gen_absent_optional_field`: when a shape elides an
 /// `Optional` / list-label / `Star` / `Plus` element, the struct
 /// still needs the corresponding field in scope (`null` for `Option`,
-/// empty `Array` for list / `Star` / `Plus`) so the alt-struct
+/// empty `List` for list / `Star` / `Plus`) so the alt-struct
 /// construction below can name it. Leaf ops never appear in an
 /// absent shape branch — only nullable shapes (Optional Repeats and
 /// list labels) get elided from the shape's parse path. The caller
 /// is `emit_op_optional_with_shape_lookahead_storable`.
-fn gen_op_absent_optional_field(w: &mut CodeWriter, op: &Op, name_counts: &mut Array<[String, i32]>) {
+fn gen_op_absent_optional_field(w: &mut CodeWriter, op: &Op, name_counts: &mut List<[String, i32]>) {
     if let Repeat(rep_op) = op {
         if !rep_op.body_has_field {
             return;
@@ -2439,14 +2439,14 @@ fn gen_op_absent_optional_field(w: &mut CodeWriter, op: &Op, name_counts: &mut A
         let _ = dedup_name(&rep_op.field, name_counts);
         match rep_op.kind {
             Optional => w.line(&`let {rep_op.field}: Option<{inner_type}> = null;`),
-            Star | Plus => w.line(&`let mut {rep_op.field}: Array<{inner_type}> = [];`),
+            Star | Plus => w.line(&`let mut {rep_op.field}: List<{inner_type}> = [];`),
         }
         return;
     }
     if let ListLabel(ll) = op {
         let inner_type = op_field_type(&ll.inner);
         let _ = dedup_name(&ll.field, name_counts);
-        w.line(&`let mut {ll.field}: Array<{inner_type}> = [];`);
+        w.line(&`let mut {ll.field}: List<{inner_type}> = [];`);
     }
     // Leaves never appear absent — they're always required.
 }
@@ -2476,7 +2476,7 @@ fn unwrap_optional_op(op: &Op) -> &Op with stores[op] {
 /// dispatch (lower bakes these on `ScanGroupElem.alt_first_sets` but
 /// the `GroupOp` itself does not surface them — recomputing matches
 /// what `lower_scan_group` does).
-fn emit_op_opt_scan_guard_for_group(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) -> String {
+fn emit_op_opt_scan_guard_for_group(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) -> String {
     let scan_pos_var = dedup_name(&"opt_scan_pos", name_counts);
     let scan_label = dedup_name(&"opt_scan", name_counts);
     w.line(&`let mut {scan_pos_var}: i32 = -1;`);
@@ -2488,11 +2488,11 @@ fn emit_op_opt_scan_guard_for_group(w: &mut CodeWriter, g_op: &GroupOp, g_elem: 
         let body = &g_op.scan_alts[0];
         gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &scan_label);
     } else {
-        let mut alt_first_sets: Array<Array<String>> = [];
-        let mut wildcard_indices: Array<i32> = [];
+        let mut alt_first_sets: List<List<String>> = [];
+        let mut wildcard_indices: List<i32> = [];
         for let mut ai = 0; ai < g_elem.alternatives.len(); ai += 1 {
             let alt = &g_elem.alternatives[ai];
-            let mut visiting: Array<String> = [];
+            let mut visiting: List<String> = [];
             alt_first_sets.push(ctx.first_of_alt(alt, &mut visiting));
             if alt_is_wildcard_led(alt) {
                 wildcard_indices.push(ai);
@@ -2526,7 +2526,7 @@ fn emit_op_opt_scan_guard_for_group(w: &mut CodeWriter, g_op: &GroupOp, g_elem: 
 /// In every case the inner parse routes through op-driven helpers
 /// (`gen_op_inner_for_storable_repeat`, `gen_op_dispatch_element` /
 /// `gen_op_absent_optional_field`).
-fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let opt_field = rep_op.field;
     let inner_type = op_field_type(&rep_op.body);
     let inner_field = op_field(&rep_op.body);
@@ -2607,7 +2607,7 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
 /// NOT match at this position), or the unchanged `cond` otherwise.
 /// Mirrors the parse-side `gen_op_repeat_optional_*` wrapping used for
 /// leaf bodies but for the Group-bodied Optional emit paths.
-fn gate_cond_with_k_prefix(cond: &String, mask: &Array<Array<String>>, ctx: &mut GenContext) -> String {
+fn gate_cond_with_k_prefix(cond: &String, mask: &List<List<String>>, ctx: &mut GenContext) -> String {
     let k_match = k_prefix_match_expr(mask, ctx);
     if k_match.is_empty() {
         return *cond;
@@ -2621,8 +2621,8 @@ fn gate_cond_with_k_prefix(cond: &String, mask: &Array<Array<String>>, ctx: &mut
 /// `body_first_set`, scan-pos check, etc.).
 fn emit_op_storable_optional_with_first(w: &mut CodeWriter, rep_op: &RepeatOp, inner_elem: &Element, ctx: &mut GenContext, opt_field: &String, inner_type: &String, inner_field: &String, cond: &String) {
     w.begin(&`let {*opt_field}: Option<{*inner_type}> = if {*cond}`);
-    let mut nc: Array<[String, i32]> = [];
-    gen_op_inner_for_storable_repeat(w, rep_op, inner_elem, ctx, &mut nc, &([] as Array<String>));
+    let mut nc: List<[String, i32]> = [];
+    gen_op_inner_for_storable_repeat(w, rep_op, inner_elem, ctx, &mut nc, &([] as List<String>));
     w.line(&`Option::<{*inner_type}>::Some({*inner_field})`);
     w.else_begin(&"else");
     w.line(&"null");
@@ -2635,7 +2635,7 @@ fn emit_op_storable_optional_with_first(w: &mut CodeWriter, rep_op: &RepeatOp, i
 /// `pick_optional_specialised` plus the mask-aware fallback (`Plain`
 /// / `WithFollowSubtraction`). No outer `Option<T>` wrapping; each
 /// branch inlines the inner alt directly.
-fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let _ = dedup_name(&rep_op.field, name_counts);
 
     return match &rep_op.strategy {
@@ -2688,7 +2688,7 @@ fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
 /// the gate condition.
 fn emit_op_transparent_optional_with_cond(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, cond: &String) {
     w.begin(&`if {*cond}`);
-    let mut nc: Array<[String, i32]> = [];
+    let mut nc: List<[String, i32]> = [];
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
@@ -2703,7 +2703,7 @@ fn emit_op_transparent_optional_with_cond(w: &mut CodeWriter, g_op: &GroupOp, g_
 /// (`gen_op_dispatch_element` / `gen_op_absent_optional_field`), and
 /// the struct construction reads `body.fields` (lower's canonical
 /// field list).
-fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, opt_field: &String, inner_type: &String, inner_field: &String, k_prefix_mask: &Array<Array<String>>) {
+fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, opt_field: &String, inner_type: &String, inner_field: &String, k_prefix_mask: &List<List<String>>) {
     let sa = if let SingleAlt(sas) = &g_op.shape {
         sas;
     } else {
@@ -2726,7 +2726,7 @@ fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &Gro
             w.else_begin(&`else if {cond}`);
         }
 
-        let mut nc: Array<[String, i32]> = [];
+        let mut nc: List<[String, i32]> = [];
         for let mut i = 0; i < elements.len(); i += 1 {
             let mut in_shape = false;
             for let mut k = 0; k < entry.positions.len(); k += 1 {
@@ -2761,7 +2761,7 @@ fn emit_op_optional_with_shape_lookahead_storable(w: &mut CodeWriter, g_op: &Gro
 /// `unwrap_optional` / `unwrap_optional_op` so the inner parse is
 /// dispatched directly at the unwrapped op shape (the shape already
 /// promised the optional fires). No struct construction.
-fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, k_prefix_mask: &Array<Array<String>>) {
+fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &GroupOp, g_elem: &GroupElement, s: &OptionalShapeLookaheadStrategy, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, k_prefix_mask: &List<List<String>>) {
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
     let elements = &alt.elements;
@@ -2780,7 +2780,7 @@ fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &
             w.else_begin(&`else if {cond}`);
         }
 
-        let mut nc: Array<[String, i32]> = [];
+        let mut nc: List<[String, i32]> = [];
         for let mut k = 0; k < entry.positions.len(); k += 1 {
             let idx = entry.positions[k];
             let elem = &elements[idx];
@@ -2828,7 +2828,7 @@ fn emit_op_optional_with_shape_lookahead_transparent(w: &mut CodeWriter, g_op: &
 /// inner element's binding from emit, so the only name that surfaces
 /// is the label's, and bumping the inner base would drift from
 /// what's actually in scope.
-fn sync_name_counts_for_op_leaf(op: &Op, name_counts: &mut Array<[String, i32]>) {
+fn sync_name_counts_for_op_leaf(op: &Op, name_counts: &mut List<[String, i32]>) {
     let _ = dedup_name(&op_leaf_dedup_base(op), name_counts);
 }
 
@@ -2862,7 +2862,7 @@ fn op_leaf_dedup_base(op: &Op) -> String {
 /// dedup so siblings continue to see lower-consistent state. The
 /// surface fallback in `gen_element`'s Group arm remains until every
 /// caller routes through `gen_op_group` (Phase 2-B follow-ups).
-fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     // Scalar `name=(a | b | …)` lowers via `rebind_op_field` so the
     // resulting op is `Op::Group` even though the surface element is
     // `Label(Group(...))`. Peel here — the single canonical site —
@@ -2881,7 +2881,7 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
                 &g_elem.alternatives[0],
                 ctx,
                 name_counts,
-                &([] as Array<String>),
+                &([] as List<String>),
             ),
             SimpleCst(scst) => gen_consume_group_store_optional_op(
                 w,
@@ -2908,7 +2908,7 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
                 // wrapper.
                 let body = &g_op.alts[0];
                 let alt = &g_elem.alternatives[0];
-                gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, &([] as Array<String>));
+                gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, &([] as List<String>));
             },
         };
     } else {
@@ -2924,7 +2924,7 @@ fn gen_op_group(w: &mut CodeWriter, g_op: &GroupOp, elem: &Element, ctx: &mut Ge
 /// `p.advance()` on a `match_set` check so a token outside the group
 /// fails cleanly instead of being silently consumed. ANTLR4 reports a
 /// `NoViableAltException` at the same site.
-fn gen_consume_token_group_op(w: &mut CodeWriter, to: &TokenOnlyShape, alts: &Array<Alternative>, name_counts: &mut Array<[String, i32]>) {
+fn gen_consume_token_group_op(w: &mut CodeWriter, to: &TokenOnlyShape, alts: &List<Alternative>, name_counts: &mut List<[String, i32]>) {
     let _ = dedup_name(&token_group_field_name(alts), name_counts);
     let kinds = collect_token_only_kinds(alts);
     w.line(&`let {to.field} = p.match_set([{kinds}])?;`);
@@ -2933,7 +2933,7 @@ fn gen_consume_token_group_op(w: &mut CodeWriter, to: &TokenOnlyShape, alts: &Ar
 /// Render the comma-separated list of token-kind constants for a
 /// token-only group's alternatives. Each alt has exactly one element
 /// (a `TokenRef` or `Literal`), guaranteed by `is_token_only_group`.
-fn collect_token_only_kinds(alts: &Array<Alternative>) -> String {
+fn collect_token_only_kinds(alts: &List<Alternative>) -> String {
     let mut out = String::with_capacity(32);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i > 0 {
@@ -2959,7 +2959,7 @@ fn collect_token_only_kinds(alts: &Array<Alternative>) -> String {
 /// same shape). Inner element parsing still walks surface IR via
 /// `gen_elements_with_non_greedy` for now; that walker migrates to
 /// consume `body.ops` in a later (2) slice.
-fn gen_consume_single_alt_group_op(w: &mut CodeWriter, sa: &SingleAltShape, body: &AltBody, alt: &Alternative, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, outer_follow: &Array<String>) {
+fn gen_consume_single_alt_group_op(w: &mut CodeWriter, sa: &SingleAltShape, body: &AltBody, alt: &Alternative, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, outer_follow: &List<String>) {
     let _ = dedup_name(&single_alt_group_field_name(alt), name_counts);
     // Nested General-group emitters consume `GeneralShape.variant_type`
     // / `alt_struct_names` baked by `lower_single_alt_group` under
@@ -2980,7 +2980,7 @@ fn gen_consume_single_alt_group_op(w: &mut CodeWriter, sa: &SingleAltShape, body
 /// — consulted only by `sync_name_counts_for_label` to keep the
 /// outer scope's dedup counters consistent with surface emitters that
 /// still inspect `name_counts`.
-fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let lab = if let Label(l) = elem {
         l;
     } else {
@@ -2995,7 +2995,7 @@ fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: 
         // through GIR rather than surface `gen_element`.
         sync_name_counts_for_op_list_label(ll, name_counts);
         let inner_type = op_field_type(&ll.inner);
-        w.line(&`let mut {ll.field}: Array<{inner_type}> = [];`);
+        w.line(&`let mut {ll.field}: List<{inner_type}> = [];`);
         let inner_field = op_field(&ll.inner);
         gen_op_group(w, g_op, &lab.element, ctx, name_counts);
         w.line(&`{ll.field}.push({inner_field});`);
@@ -3010,7 +3010,7 @@ fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: 
     }
     sync_name_counts_for_op_list_label(ll, name_counts);
     let inner_type = op_field_type(&ll.inner);
-    w.line(&`let mut {ll.field}: Array<{inner_type}> = [];`);
+    w.line(&`let mut {ll.field}: List<{inner_type}> = [];`);
     // Non-Repeat list label emits both lines in the alt's outer
     // scope, so the per-iter binding must differ from the container.
     // When lower already chose the same name for both (e.g. `if+=IF`
@@ -3032,7 +3032,7 @@ fn gen_op_list_label(w: &mut CodeWriter, ll: &ListLabelOp, elem: &Element, ctx: 
 /// bump for the label's own name (`ll.dedup_base`) and recurse into
 /// the inner leaf so any sibling that still routes through the
 /// surface walker observes lower-consistent dedup state.
-fn sync_name_counts_for_op_list_label(ll: &ListLabelOp, name_counts: &mut Array<[String, i32]>) {
+fn sync_name_counts_for_op_list_label(ll: &ListLabelOp, name_counts: &mut List<[String, i32]>) {
     let _ = dedup_name(&ll.dedup_base, name_counts);
     if op_is_leaf(&ll.inner) {
         sync_name_counts_for_op_leaf(&ll.inner, name_counts);
@@ -3063,7 +3063,7 @@ fn op_field(op: &Op) -> String {
 /// Type string the op contributes to its containing struct field.
 /// Mirrors `element_field_info`'s second return value for the matching
 /// surface element. Today this is consulted by `gen_op_list_label`'s
-/// `Array<…>` declaration; other call sites read the FieldDecl directly.
+/// `List<…>` declaration; other call sites read the FieldDecl directly.
 fn op_field_type(op: &Op) -> String {
     return match op {
         Token(_) | Literal(_) | Wildcard(_) | Excluded(_) => "Token",
@@ -3076,7 +3076,7 @@ fn op_field_type(op: &Op) -> String {
             Transparent => panic("op_field_type: Transparent groups have no own field type"),
         },
         Repeat(_) => panic("op_field_type: Repeat ops do not surface as a single typed field at this site"),
-        ListLabel(ll) => `Array<{op_field_type(&ll.inner)}>`,
+        ListLabel(ll) => `List<{op_field_type(&ll.inner)}>`,
     };
 }
 
@@ -3096,7 +3096,7 @@ fn emit_op_excluded_call(e: &ExcludedOp) -> String {
     return `p.match_not([{list}])`;
 }
 
-fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     if let TokenRef(t) = elem {
         let const_name = `TK_{t.name}`;
         let field_name = dedup_name(&t.field_name, name_counts);
@@ -3161,7 +3161,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
             // once, and push. Repeats wrap this via gen_repeat below.
             let inner_info = element_field_info(&lab.element);
             let lab_name = dedup_name(&lab.field_name, name_counts);
-            w.line(&`let mut {lab_name}: Array<{inner_info.1}> = [];`);
+            w.line(&`let mut {lab_name}: List<{inner_info.1}> = [];`);
             let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
             gen_element(w, &lab.element, ctx, name_counts);
             w.line(&`{lab_name}.push({predicted_inner});`);
@@ -3192,7 +3192,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
 /// existing emit helpers using the baked data, with one specialised
 /// short-circuit for `RepeatStrategy::Suppressed` on `Optional` and
 /// `Star` (mask-suppressed loops emit just the storage decl).
-fn gen_op_repeat(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_op_repeat(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     gen_op_repeat_with_follow_override(w, rep, rep_op, ctx, name_counts, &rep_op.caller_follow_first);
 }
 
@@ -3202,7 +3202,7 @@ fn gen_op_repeat(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx
 /// — that propagation isn't expressible through lower's per-alt-body
 /// `caller_follow_first` computation alone (lower doesn't see the
 /// outer iter_follow at group-alt time).
-fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
+fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, follow: &List<String>) {
     // Suppressed short-circuit. Plus is mandatory (must consume ≥ 1),
     // so even with a covering mask its loop must still emit — fall
     // through to the Star/Plus arm in that case.
@@ -3242,7 +3242,7 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
 /// Star → empty list) when the body contributes a CST field. Plus is
 /// mandatory, so a `Suppressed` strategy on Plus is a lower-side bug
 /// and the caller's later panic will surface it.
-fn gen_op_repeat_suppressed(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, name_counts: &mut Array<[String, i32]>) {
+fn gen_op_repeat_suppressed(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, name_counts: &mut List<[String, i32]>) {
     if !rep_op.body_has_field {
         return;
     }
@@ -3253,7 +3253,7 @@ fn gen_op_repeat_suppressed(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
         return;
     }
     if let Star = rep.kind {
-        w.line(&`let mut {rep_op.field}: Array<{inner_type}> = [];`);
+        w.line(&`let mut {rep_op.field}: List<{inner_type}> = [];`);
         return;
     }
 }
@@ -3266,7 +3266,7 @@ fn gen_op_repeat_suppressed(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
 /// driven now: Wildcard / Not detection reads the body op shape, and
 /// the inner second-position first set is baked on
 /// `rep_op.body_second_position_first`.
-fn gen_op_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
+fn gen_op_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, follow: &List<String>) {
     let follow_second = &rep_op.caller_follow_second;
     let while_cond = compute_non_greedy_condition(rep_op, follow, follow_second, ctx);
     return match rep_op.body_shape {
@@ -3285,34 +3285,34 @@ fn gen_op_repeat_non_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
 /// Storable-body arm of `gen_op_repeat_non_greedy`. The body
 /// produces a per-iteration value bound to `op.field`; we collect
 /// those into a list field of the surrounding alt's CST struct.
-fn gen_op_repeat_non_greedy_storable(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, while_cond: &String) {
+fn gen_op_repeat_non_greedy_storable(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, while_cond: &String) {
     let inner = &rep.element;
     let is_plus = if let Plus = rep.kind {
         true;
     } else {
         false;
     };
-    let iter_follow_unused = [] as Array<String>;
+    let iter_follow_unused = [] as List<String>;
     let inner_field = op_field(&rep_op.body);
     let inner_type = op_field_type(&rep_op.body);
     let list_field = rep_op.field;
     let _ = dedup_name(&list_field, name_counts);
     if is_plus {
-        let mut nc: Array<[String, i32]> = [];
+        let mut nc: List<[String, i32]> = [];
         gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow_unused);
-        w.line(&`let mut {list_field}: Array<{inner_type}> = [{inner_field}];`);
+        w.line(&`let mut {list_field}: List<{inner_type}> = [{inner_field}];`);
         if *while_cond != "false" {
             w.begin(&`while {*while_cond}`);
-            let mut nc2: Array<[String, i32]> = [];
+            let mut nc2: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc2, &iter_follow_unused);
             w.line(&`{list_field}.push({inner_field});`);
             w.end();
         }
     } else {
-        w.line(&`let mut {list_field}: Array<{inner_type}> = [];`);
+        w.line(&`let mut {list_field}: List<{inner_type}> = [];`);
         if *while_cond != "false" {
             w.begin(&`while {*while_cond}`);
-            let mut nc: Array<[String, i32]> = [];
+            let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow_unused);
             w.line(&`{list_field}.push({inner_field});`);
             w.end();
@@ -3331,7 +3331,7 @@ fn gen_op_repeat_non_greedy_storable(w: &mut CodeWriter, rep: &RepeatElement, re
 /// here makes the dispatch exhaustive on `RepeatBodyShape` and keeps
 /// emit a structural translation of the lowered classifier rather
 /// than relying on lower never producing the shape.
-fn gen_op_repeat_non_greedy_transparent(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, while_cond: &String) {
+fn gen_op_repeat_non_greedy_transparent(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, while_cond: &String) {
     let g_op = if let Group(g) = &rep_op.body {
         g;
     } else {
@@ -3345,12 +3345,12 @@ fn gen_op_repeat_non_greedy_transparent(w: &mut CodeWriter, rep: &RepeatElement,
     };
     let _ = dedup_name(&rep_op.field, name_counts);
     if is_plus {
-        let mut nc: Array<[String, i32]> = [];
+        let mut nc: List<[String, i32]> = [];
         gen_op_group(w, g_op, inner, ctx, &mut nc);
     }
     if *while_cond != "false" {
         w.begin(&`while {*while_cond}`);
-        let mut nc: Array<[String, i32]> = [];
+        let mut nc: List<[String, i32]> = [];
         gen_op_group(w, g_op, inner, ctx, &mut nc);
         w.end();
     }
@@ -3364,7 +3364,7 @@ fn gen_op_repeat_non_greedy_transparent(w: &mut CodeWriter, rep: &RepeatElement,
 /// `inner_first` with the mask subtraction baked into
 /// `WithFollowSubtraction`. The `match` is exhaustive — lower asserts
 /// at construction time that no other body shape reaches here.
-fn gen_op_repeat_optional_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
+fn gen_op_repeat_optional_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, follow: &List<String>) {
     return match rep_op.body_shape {
         LeafRuleCall => gen_op_repeat_optional_rulecall(w, rep, rep_op, ctx, name_counts, follow),
         LeafOther => gen_op_repeat_optional_leaf(w, rep, rep_op, ctx, name_counts),
@@ -3378,7 +3378,7 @@ fn gen_op_repeat_optional_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op
 /// surface element is `Element::Group(_)` by lower's invariant; the
 /// match destructures both with explicit error markers in case a
 /// future lower regression desynchronises them.
-fn gen_op_repeat_optional_group(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_op_repeat_optional_group(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let g_op = if let Group(g) = &rep_op.body {
         g;
     } else {
@@ -3411,7 +3411,7 @@ fn gen_op_repeat_optional_group(w: &mut CodeWriter, rep: &RepeatElement, rep_op:
 /// clear `follow` to `[]` for inner greedy Optionals where the next
 /// sibling's first overlaps the inner's first by design (e.g.
 /// `accessibilityModifier?` inside `optionalParameter`).
-fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
+fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, follow: &List<String>) {
     let raw_first = rep_op.body_first_set;
     let combined_follow = if rep_op.position_mask.is_empty() {
         *follow;
@@ -3442,7 +3442,7 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
         w.begin(&`let {opt_field}: Option<{inner_type}> = if {k_prefix_match}`);
         w.line(&"null");
         w.else_begin(&`else if {ctx.first_check_str(&first)}`);
-        let mut nc: Array<[String, i32]> = [];
+        let mut nc: List<[String, i32]> = [];
         gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
         w.line(&`Option::<{inner_type}>::Some({inner_field})`);
         w.else_begin(&"else");
@@ -3451,7 +3451,7 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
         return;
     }
     w.begin(&`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&first)}`);
-    let mut nc: Array<[String, i32]> = [];
+    let mut nc: List<[String, i32]> = [];
     gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
     w.line(&`Option::<{inner_type}>::Some({inner_field})`);
     w.else_begin(&"else");
@@ -3466,7 +3466,7 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
 /// so we gate only on `inner_first - mask`. Lower's `RepeatStrategy`
 /// already bakes the mask subtraction as `WithFollowSubtraction` when
 /// it applies.
-fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
         s.effective_first;
     } else {
@@ -3484,7 +3484,7 @@ fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
         w.begin(&`let {opt_field}: Option<{inner_type}> = if {k_prefix_match}`);
         w.line(&"null");
         w.else_begin(&`else if {ctx.first_check_str(&loop_first)}`);
-        let mut nc: Array<[String, i32]> = [];
+        let mut nc: List<[String, i32]> = [];
         gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
         w.line(&`Option::<{inner_type}>::Some({inner_field})`);
         w.else_begin(&"else");
@@ -3493,7 +3493,7 @@ fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
         return;
     }
     w.begin(&`let {opt_field}: Option<{inner_type}> = if {ctx.first_check_str(&loop_first)}`);
-    let mut nc: Array<[String, i32]> = [];
+    let mut nc: List<[String, i32]> = [];
     gen_op_leaf(w, &rep_op.body, ctx, &mut nc);
     w.line(&`Option::<{inner_type}>::Some({inner_field})`);
     w.else_begin(&"else");
@@ -3511,11 +3511,11 @@ fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
 /// which wraps this in `if {expr} { break; }`) and the Optional
 /// emit (`gen_op_repeat_optional_*`, which threads this into the
 /// `if … { Some(...) } else { null }` conditional).
-fn k_prefix_match_expr(mask: &Array<Array<String>>, ctx: &mut GenContext) -> String {
+fn k_prefix_match_expr(mask: &List<List<String>>, ctx: &mut GenContext) -> String {
     if mask.is_empty() {
         return "";
     }
-    let mut parts: Array<String> = [];
+    let mut parts: List<String> = [];
     for let mut d = 0; d < mask.len(); d += 1 {
         let depth_set = &mask[d];
         if depth_set.is_empty() {
@@ -3553,7 +3553,7 @@ fn k_prefix_match_expr(mask: &Array<Array<String>>, ctx: &mut GenContext) -> Str
 /// without disturbing the K=1 path: a `mask` of `[]` skips emission
 /// entirely, and a single-depth mask reduces to the same `peek_kind`
 /// check the existing subtraction encodes implicitly via `if first`.
-fn emit_k_prefix_yield_gate(w: &mut CodeWriter, mask: &Array<Array<String>>, ctx: &mut GenContext) {
+fn emit_k_prefix_yield_gate(w: &mut CodeWriter, mask: &List<List<String>>, ctx: &mut GenContext) {
     let condition = k_prefix_match_expr(mask, ctx);
     if condition.is_empty() {
         return;
@@ -3566,7 +3566,7 @@ fn emit_k_prefix_yield_gate(w: &mut CodeWriter, mask: &Array<Array<String>>, ctx
 /// inlines the inner alt); the storable shapes (`LeafRuleCall`,
 /// `LeafOther`, `StorableGroup`) push every iteration's inner
 /// binding into a list field. Match is exhaustive.
-fn gen_op_repeat_star_plus_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
+fn gen_op_repeat_star_plus_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, follow: &List<String>) {
     return match rep_op.body_shape {
         TransparentGroup => {
             let g_op = if let Group(g) = &rep_op.body {
@@ -3592,7 +3592,7 @@ fn gen_op_repeat_star_plus_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_o
 /// iteration's inner emit discards its binding (Transparent groups
 /// inline the single alt's elements). `rep_op.field` was deduped at
 /// lower time; bump emit's `name_counts` to stay in sync.
-fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let inner = &rep.element;
     let inner_first = rep_op.body_first_set;
     let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
@@ -3611,13 +3611,13 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
             emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(&`if {scan_pos} < 0 \{ break; \}`);
-            let mut nc: Array<[String, i32]> = [];
+            let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
             w.end();
         } else {
             w.begin(&`while {ctx.first_check_str(&loop_first)}`);
             emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
-            let mut nc: Array<[String, i32]> = [];
+            let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
             w.end();
         }
@@ -3636,7 +3636,7 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
             w.line(&`if {scan_pos} < 0 \{ break; \}`);
             w.end();
             w.line(&`{plus_flag} = false;`);
-            let mut nc: Array<[String, i32]> = [];
+            let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
             w.end();
         } else {
@@ -3649,7 +3649,7 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
             if !rep_op.k_prefix_mask.is_empty() {
                 emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             }
-            let mut nc: Array<[String, i32]> = [];
+            let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
             w.end();
         }
@@ -3657,13 +3657,13 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
 }
 
 /// Star / Plus + storable body (every leaf, every storable
-/// `Op::Group` shape). Emits a `let <field>: Array<T> = [];` then a
+/// `Op::Group` shape). Emits a `let <field>: List<T> = [];` then a
 /// scan-guarded `loop { … }` (when the body is scannable) or a
 /// `while peek ∈ loop_first { … }` (otherwise). The Plus first-
 /// iteration uses a `_plus_first` flag or, for the non-scannable case,
 /// folds the mandatory iteration into the while condition via
 /// `while plus_first || …`.
-fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, follow: &Array<String>) {
+fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, follow: &List<String>) {
     let inner = &rep.element;
     let inner_first = rep_op.body_first_set;
     let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
@@ -3680,7 +3680,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
     let _ = dedup_name(&list_field, name_counts);
 
     if let Star = rep.kind {
-        w.line(&`let mut {list_field}: Array<{inner_type}> = [];`);
+        w.line(&`let mut {list_field}: List<{inner_type}> = [];`);
         if rep_op.body_scannable {
             w.begin(&"loop");
             // K-prefix yield gate: when the caller's deterministic
@@ -3690,7 +3690,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(&`if {scan_pos} < 0 \{ break; \}`);
-            let mut nc: Array<[String, i32]> = [];
+            let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
             w.line(&`{list_field}.push({inner_field});`);
             w.end();
@@ -3698,7 +3698,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             w.begin(&`while {ctx.first_check_str(&loop_first)}`);
             // Same K-prefix gate for the non-scannable while loop.
             emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
-            let mut nc: Array<[String, i32]> = [];
+            let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
             w.line(&`{list_field}.push({inner_field});`);
             w.end();
@@ -3707,7 +3707,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
     }
 
     if let Plus = rep.kind {
-        w.line(&`let mut {list_field}: Array<{inner_type}> = [];`);
+        w.line(&`let mut {list_field}: List<{inner_type}> = [];`);
         if rep_op.body_scannable {
             let plus_flag = dedup_name(&"_plus_first", name_counts);
             w.line(&`let mut {plus_flag} = true;`);
@@ -3722,7 +3722,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             w.line(&`if {scan_pos} < 0 \{ break; \}`);
             w.end();
             w.line(&`{plus_flag} = false;`);
-            let mut nc: Array<[String, i32]> = [];
+            let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
             w.line(&`{list_field}.push({inner_field});`);
             w.end();
@@ -3740,7 +3740,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
                 w.end();
             }
             w.line(&`{plus_flag} = false;`);
-            let mut nc: Array<[String, i32]> = [];
+            let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
             w.line(&`{list_field}.push({inner_field});`);
             w.end();
@@ -3749,11 +3749,11 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
 }
 
 
-fn wildcard_non_greedy_condition(ctx: &mut GenContext, follow_first: &Array<String>) -> String {
+fn wildcard_non_greedy_condition(ctx: &mut GenContext, follow_first: &List<String>) -> String {
     // Continue while peek is not EOF and not in the follow set. `follow_first`
     // may already contain TK_EOF (e.g. when the follow is the final `EOF`
     // token). Dedup into a single exclusion set so we emit one check.
-    let mut excluded: Array<String> = ["TK_EOF"];
+    let mut excluded: List<String> = ["TK_EOF"];
     for let tk of follow_first {
         let mut seen = false;
         for let e of &excluded {
@@ -3769,7 +3769,7 @@ fn wildcard_non_greedy_condition(ctx: &mut GenContext, follow_first: &Array<Stri
     return ctx.kind_negate_check_str(&excluded, &"p.peek_kind()");
 }
 
-fn compute_non_greedy_condition(rep_op: &RepeatOp, follow_first: &Array<String>, follow_second: &Array<String>, ctx: &mut GenContext) -> String {
+fn compute_non_greedy_condition(rep_op: &RepeatOp, follow_first: &List<String>, follow_second: &List<String>, ctx: &mut GenContext) -> String {
     let raw_first = &rep_op.body_first_set;
 
     // Wildcard (`.*?`) and Not (`~TOK*?`) inner: their match set is
@@ -3814,8 +3814,8 @@ fn compute_non_greedy_condition(rep_op: &RepeatOp, follow_first: &Array<String>,
     return "false";
 }
 
-fn subtract_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
-    let mut result: Array<String> = [];
+fn subtract_sets(a: &List<String>, b: &List<String>) -> List<String> {
+    let mut result: List<String> = [];
     for let x of a {
         if !b.contains(x) {
             result.push(*x);
@@ -3824,8 +3824,8 @@ fn subtract_sets(a: &Array<String>, b: &Array<String>) -> Array<String> {
     return result;
 }
 
-fn gen_lookahead_condition(ctx: &mut GenContext, sig: &Array<Array<String>>) -> String {
-    let mut parts: Array<String> = [];
+fn gen_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -> String {
+    let mut parts: List<String> = [];
     for let mut d = 0; d < sig.len(); d += 1 {
         let tokens = &sig[d];
         let check_expr = if d == 0 { `p.peek_kind()` } else { `p.peek_at({d})` };
@@ -3872,11 +3872,11 @@ fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
 /// Same shape as emit_opt_scan_guard but uses `rep_scan_*` naming. Requires
 /// the scan to advance at least one token; 0-advance is treated as failure
 /// so lenient scans of LR rules (which can no-op at EOF) don't loop forever.
-fn emit_rep_scan_guard(w: &mut CodeWriter, scan_inner: &ScanElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) -> String {
+fn emit_rep_scan_guard(w: &mut CodeWriter, scan_inner: &ScanElement, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) -> String {
     return emit_scan_guard_with_prefix(w, scan_inner, ctx, name_counts, &"rep_scan_pos", &"rep_scan", true);
 }
 
-fn emit_scan_guard_with_prefix(w: &mut CodeWriter, scan_inner: &ScanElement, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>, pos_prefix: &String, label_prefix: &String, require_advance: bool) -> String {
+fn emit_scan_guard_with_prefix(w: &mut CodeWriter, scan_inner: &ScanElement, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, pos_prefix: &String, label_prefix: &String, require_advance: bool) -> String {
     let scan_pos_var = dedup_name(pos_prefix, name_counts);
     let scan_label = dedup_name(label_prefix, name_counts);
     w.line(&`let mut {scan_pos_var}: i32 = -1;`);
@@ -3893,7 +3893,7 @@ fn emit_scan_guard_with_prefix(w: &mut CodeWriter, scan_inner: &ScanElement, ctx
     return scan_pos_var;
 }
 
-/// literal that coerces to `Array<i32>` at the call site.
+/// literal that coerces to `List<i32>` at the call site.
 fn not_match_call(inner: &Element) -> String {
     if let TokenRef(t) = inner {
         let const_name = `TK_{t.name}`;
@@ -3904,7 +3904,7 @@ fn not_match_call(inner: &Element) -> String {
         return `p.match_not([{const_name}])`;
     }
     if let Group(g) = inner {
-        let mut kinds: Array<String> = [];
+        let mut kinds: List<String> = [];
         if collect_not_set_tokens(&g.alternatives, &mut kinds) {
             let mut list = String::with_capacity(32);
             for let mut i = 0; i < kinds.len(); i += 1 {
@@ -3922,7 +3922,7 @@ fn not_match_call(inner: &Element) -> String {
 
 /// Collect terminal token constants from a `~ ( ... )` group's alternatives.
 /// Returns false if any alternative is not a simple terminal (unsupported).
-fn collect_not_set_tokens(alts: &Array<Alternative>, out: &mut Array<String>) -> bool {
+fn collect_not_set_tokens(alts: &List<Alternative>, out: &mut List<String>) -> bool {
     for let alt of alts {
         if alt.elements.len() != 1 {
             return false;
@@ -3939,7 +3939,7 @@ fn collect_not_set_tokens(alts: &Array<Alternative>, out: &mut Array<String>) ->
     return true;
 }
 
-fn rule_ref_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext) -> bool {
+fn rule_ref_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
     if sorted_group.len() < 2 {
         return false;
     }
@@ -3949,7 +3949,7 @@ fn rule_ref_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternat
             return false;
         }
         if let RuleRef(r) = &alt.elements[0] {
-            let mut visiting: Array<String> = [];
+            let mut visiting: List<String> = [];
             if !ctx.is_rule_scannable(&r.name, &mut visiting) {
                 return false;
             }
@@ -3970,7 +3970,7 @@ fn rule_ref_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternat
 ///
 /// `scan_alts` drives the scan via the op-driven walker against the
 /// lowered `ScanBody`.
-fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32>, alts: &Array<Alternative>, g_op_alts: &Array<AltBody>, scan_alts: &Array<ScanBody>, opt_var: &String, type_name: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &List<i32>, alts: &List<Alternative>, g_op_alts: &List<AltBody>, scan_alts: &List<ScanBody>, opt_var: &String, type_name: &String, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let winner_var = dedup_name(&"gd_winner", name_counts);
     let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
     w.line(&`let mut {winner_var}: i32 = -1;`);
@@ -4029,14 +4029,14 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &Array<i32
     w.end();
 }
 
-fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_alts: &Array<AltBody>, g_op_scan_alts: &Array<ScanBody>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_alts: &List<AltBody>, g_op_scan_alts: &List<ScanBody>, alts: &List<Alternative>, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let _ = dedup_name(&group_field_base_name(alts), name_counts);
     let var_name = scst.field;
     let type_name = scst.type_name;
 
-    let mut first_sets: Array<Array<String>> = [];
+    let mut first_sets: List<List<String>> = [];
     for let alt of alts {
-        let mut visiting: Array<String> = [];
+        let mut visiting: List<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
     }
 
@@ -4083,7 +4083,7 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
         for let mut g = 0; g < groups.len(); g += 1 {
             let group = &groups[g];
 
-            let mut union_first: Array<String> = [];
+            let mut union_first: List<String> = [];
             for let idx of group {
                 dedup_append_arr(&mut union_first, &first_sets[*idx]);
             }
@@ -4149,14 +4149,14 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
 /// field). The retired surface-IR fallback (when `scst`/`g_op_alts`
 /// were `null`) flowed from `gen_element`'s Group arm — that path no
 /// longer exists post Phase 2-G.
-fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_alts: &Array<AltBody>, g_op_scan_alts: &Array<ScanBody>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_alts: &List<AltBody>, g_op_scan_alts: &List<ScanBody>, alts: &List<Alternative>, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let _ = dedup_name(&group_field_base_name(alts), name_counts);
     let var_name = scst.field;
     let type_name = scst.type_name;
 
-    let mut first_sets: Array<Array<String>> = [];
+    let mut first_sets: List<List<String>> = [];
     for let alt of alts {
-        let mut visiting: Array<String> = [];
+        let mut visiting: List<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
     }
 
@@ -4172,7 +4172,7 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape
     for let mut g = 0; g < groups.len(); g += 1 {
         let group = &groups[g];
 
-        let mut union_first: Array<String> = [];
+        let mut union_first: List<String> = [];
         for let idx of group {
             dedup_append_arr(&mut union_first, &first_sets[*idx]);
         }
@@ -4226,14 +4226,14 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape
 }
 
 
-fn gen_consume_token_group(w: &mut CodeWriter, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_consume_token_group(w: &mut CodeWriter, alts: &List<Alternative>, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let var_name = dedup_name(&token_group_field_name(alts), name_counts);
     let kinds = collect_token_only_kinds(alts);
     w.line(&`let {var_name} = p.match_set([{kinds}])?;`);
 }
 
 /// Generate a general group store with Option wrapper (standalone Group in an alternative).
-fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: &Array<AltBody>, g_op_scan_alts: &Array<ScanBody>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: &List<AltBody>, g_op_scan_alts: &List<ScanBody>, alts: &List<Alternative>, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let group_index = gs.group_index;
     let _ = dedup_name(&general_group_field_name(group_index), name_counts);
     let var_name = gs.field;
@@ -4245,9 +4245,9 @@ fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: 
     // in lock-step with CST type emit.
     let type_name = gs.variant_type;
 
-    let mut first_sets: Array<Array<String>> = [];
+    let mut first_sets: List<List<String>> = [];
     for let alt of alts {
-        let mut visiting: Array<String> = [];
+        let mut visiting: List<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
     }
 
@@ -4302,7 +4302,7 @@ fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: 
                 }
             }
 
-            let mut union_first: Array<String> = [];
+            let mut union_first: List<String> = [];
             if !group_has_wildcard {
                 for let idx of group {
                     dedup_append_arr(&mut union_first, &first_sets[*idx]);
@@ -4360,7 +4360,7 @@ fn gen_general_group_store_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: 
 /// graph. The retired surface-IR fallback (when `gs`/`g_op_alts` were
 /// `null`) flowed from `gen_element`'s Group arm — that path no longer
 /// exists post Phase 2-G.
-fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: &Array<AltBody>, g_op_scan_alts: &Array<ScanBody>, alts: &Array<Alternative>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: &GeneralShape, g_op_alts: &List<AltBody>, g_op_scan_alts: &List<ScanBody>, alts: &List<Alternative>, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let group_index = gs.group_index;
     let _ = dedup_name(&general_group_field_name(group_index), name_counts);
     let var_name = gs.field;
@@ -4369,9 +4369,9 @@ fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: &GeneralShape, g_
     // name so emit and CST type emit agree on the General type.
     let type_name = gs.variant_type;
 
-    let mut first_sets: Array<Array<String>> = [];
+    let mut first_sets: List<List<String>> = [];
     for let alt of alts {
-        let mut visiting: Array<String> = [];
+        let mut visiting: List<String> = [];
         first_sets.push(ctx.first_of_alt(alt, &mut visiting));
     }
 
@@ -4397,7 +4397,7 @@ fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: &GeneralShape, g_
             }
         }
 
-        let mut union_first: Array<String> = [];
+        let mut union_first: List<String> = [];
         if !group_has_wildcard {
             for let idx of group {
                 dedup_append_arr(&mut union_first, &first_sets[*idx]);
@@ -4447,12 +4447,12 @@ fn gen_general_group_store_optional_op(w: &mut CodeWriter, gs: &GeneralShape, g_
 }
 
 /// Generate a general group store without Option wrapper (required, inside Repeat).
-fn gen_general_alt_parse_and_store(w: &mut CodeWriter, alts: &Array<Alternative>, body: &AltBody, alt_idx: i32, type_name: &String, alt_struct_names: &Array<String>, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_general_alt_parse_and_store(w: &mut CodeWriter, alts: &List<Alternative>, body: &AltBody, alt_idx: i32, type_name: &String, alt_struct_names: &List<String>, inner_var: &String, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let alt = &alts[alt_idx];
     let struct_name = alt_struct_names[alt_idx];
 
-    let mut nc: Array<[String, i32]> = [];
-    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as Array<String>));
+    let mut nc: List<[String, i32]> = [];
+    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as List<String>));
     w.line(&`{inner_var} = Option::<{type_name}>::Some({type_name}::Alt{alt_idx}({struct_name} \{`);
     w.indent();
     emit_field_assignments_from_fields(w, &body.fields);
@@ -4461,12 +4461,12 @@ fn gen_general_alt_parse_and_store(w: &mut CodeWriter, alts: &Array<Alternative>
 }
 
 /// Parse one alt's elements and return as variant value (for if/else expression).
-fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, body: &AltBody, alt_idx: i32, type_name: &String, alt_struct_names: &Array<String>, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_general_alt_construct(w: &mut CodeWriter, alts: &List<Alternative>, body: &AltBody, alt_idx: i32, type_name: &String, alt_struct_names: &List<String>, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let alt = &alts[alt_idx];
     let struct_name = alt_struct_names[alt_idx];
 
-    let mut nc: Array<[String, i32]> = [];
-    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as Array<String>));
+    let mut nc: List<[String, i32]> = [];
+    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as List<String>));
     w.line(&`{type_name}::Alt{alt_idx}({struct_name} \{`);
     w.indent();
     emit_field_assignments_from_fields(w, &body.fields);
@@ -4478,7 +4478,7 @@ fn gen_general_alt_construct(w: &mut CodeWriter, alts: &Array<Alternative>, body
 /// alts. Asserts that every alt is fully scannable, then delegates to
 /// `gen_general_group_scan_dispatch`. Backtracking has been removed; an
 /// unscannable alt is a codegen-time error.
-fn gen_general_group_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, g_op_alts: &Array<AltBody>, g_op_scan_alts: &Array<ScanBody>, sorted_group: &Array<i32>, type_name: &String, alt_struct_names: &Array<String>, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_general_group_dispatch(w: &mut CodeWriter, alts: &List<Alternative>, g_op_alts: &List<AltBody>, g_op_scan_alts: &List<ScanBody>, sorted_group: &List<i32>, type_name: &String, alt_struct_names: &List<String>, inner_var: &String, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     assert general_group_all_scannable(sorted_group, alts, ctx), "general group has unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
     gen_general_group_scan_dispatch(
         w,
@@ -4497,7 +4497,7 @@ fn gen_general_group_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, g_o
 /// Returns true iff every alt in `sorted_group` has at least one element
 /// and all its elements are scannable. Used as the precondition for
 /// `gen_general_group_dispatch` (non-RuleRef-only overlapping groups).
-fn general_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternative>, ctx: &mut GenContext) -> bool {
+fn general_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
     if sorted_group.len() < 2 {
         return false;
     }
@@ -4507,7 +4507,7 @@ fn general_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternati
             return false;
         }
         for let elem of &alt.elements {
-            let mut visiting: Array<String> = [];
+            let mut visiting: List<String> = [];
             if !ctx.is_element_scannable(elem, &mut visiting) {
                 return false;
             }
@@ -4523,7 +4523,7 @@ fn general_group_all_scannable(sorted_group: &Array<i32>, alts: &Array<Alternati
 /// longest-first sort plus first-success commit matches what a longest-
 /// match tournament would have picked while skipping the remaining scans,
 /// which matters when an alt's scan recurses through an LR rule.
-fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>, g_op_alts: &Array<AltBody>, g_op_scan_alts: &Array<ScanBody>, sorted_group: &Array<i32>, type_name: &String, alt_struct_names: &Array<String>, inner_var: &String, ctx: &mut GenContext, name_counts: &mut Array<[String, i32]>) {
+fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &List<Alternative>, g_op_alts: &List<AltBody>, g_op_scan_alts: &List<ScanBody>, sorted_group: &List<i32>, type_name: &String, alt_struct_names: &List<String>, inner_var: &String, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let winner_var = dedup_name(&"gd_winner", name_counts);
     let dispatch_label = dedup_name(&"gd_dispatch", name_counts);
     w.line(&`let mut {winner_var}: i32 = -1;`);
@@ -4576,7 +4576,7 @@ fn gen_general_group_scan_dispatch(w: &mut CodeWriter, alts: &Array<Alternative>
     w.end();
 }
 
-fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_alts: &Array<LrAlt>, ctx: &mut GenContext, fn_name: &String) {
+fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_alts: &List<LrAlt>, ctx: &mut GenContext, fn_name: &String) {
     for let lr_alt of lr_alts {
         let lr_idx = lr_alt.alt_index;
         let alt = &rule.alternatives[lr_idx];
@@ -4594,12 +4594,12 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         f.set_return_type(&`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
 
-        let mut name_counts: Array<[String, i32]> = [];
+        let mut name_counts: List<[String, i32]> = [];
         // Reserve the binding the bt-side parse function uses for the
         // self-reference (the label name for `a=e`, the rule's own
         // field_name for the bare `e` form) so subsequent dedup matches.
         // `first_is_list_label` is true for ANTLR4's `+=` form, where the
-        // resulting struct field has type `Array<T>` rather than `T` —
+        // resulting struct field has type `List<T>` rather than `T` —
         // the helper must build `[left]` so the literal matches the field.
         let first_binding = lr_alt.prefix_self_ref.name;
         let first_is_list_label = lr_alt.prefix_self_ref.kind matches { List };
@@ -4625,7 +4625,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
             } else if let Label(lab) = elem {
                 // Labeled self-recursive call: use precedence the same way
                 // as the bare-RuleRef arm above, then re-bind to the label.
-                // List labels (`+=`) declare an `Array<T>` field; wrap the
+                // List labels (`+=`) declare an `List<T>` field; wrap the
                 // single per-iteration value to match the field type.
                 if let RuleRef(rr) = &lab.element {
                     if rr.name == rule.name {
@@ -4635,8 +4635,8 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                         w.line(&`let {inner_name} = {*fn_name}(p, {prec})?;`);
                         if lab.list {
                             // Type-annotate the local so `[inner]` parses as
-                            // `Array<T>` rather than a 1-tuple `[T]`.
-                            w.line(&`let {lab_name}: Array<{type_name}> = [{inner_name}];`);
+                            // `List<T>` rather than a 1-tuple `[T]`.
+                            w.line(&`let {lab_name}: List<{type_name}> = [{inner_name}];`);
                         } else {
                             w.line(&`let {lab_name} = {inner_name};`);
                         }
@@ -4693,9 +4693,9 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         w.indent();
         emit_clamped_span_field(w);
         if first_is_list_label {
-            // Cast so `[left]` matches the `Array<T>` field type rather
+            // Cast so `[left]` matches the `List<T>` field type rather
             // than the inferred 1-tuple `[T]`.
-            w.line(&`{first_field}: [left] as Array<{type_name}>,`);
+            w.line(&`{first_field}: [left] as List<{type_name}>,`);
         } else {
             w.line(&`{first_field}: left,`);
         }
@@ -4728,14 +4728,14 @@ fn lookup_baked_min_prec(op: &Op) -> i32 {
     return 0;
 }
 
-fn compute_lr_second_token(shared_token: &String, elements: &Array<Element>, ctx: &mut GenContext) -> Array<String> {
+fn compute_lr_second_token(shared_token: &String, elements: &List<Element>, ctx: &mut GenContext) -> List<String> {
     // Find what token follows the shared_token in this alternative's suffix.
     // Walk suffix elements (starting at index 1) to find the shared token,
     // then return the first set of the next element.
     for let mut i = 1; i < elements.len(); i += 1 {
         let elem = &elements[i];
         // Check if this element contains the shared token
-        let mut visiting: Array<String> = [];
+        let mut visiting: List<String> = [];
         let elem_first = ctx.first_of_element(elem, &mut visiting);
         if !first_contains(&elem_first, shared_token) {
             continue;
@@ -4760,7 +4760,7 @@ fn compute_lr_second_token(shared_token: &String, elements: &Array<Element>, ctx
                 if alt.elements.len() < 1 {
                     continue;
                 }
-                let mut v2: Array<String> = [];
+                let mut v2: List<String> = [];
                 let alt_first = ctx.first_of_element(&alt.elements[0], &mut v2);
                 if first_contains(&alt_first, shared_token) && alt.elements.len() >= 2 {
                     return ctx.first_of_elements_from(&alt.elements, 1);
@@ -4801,7 +4801,7 @@ fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, scan_suffix_fn:
     }
 }
 
-fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &String, rule: &ParserRule, group: &Array<i32>, valid_lr_indices: &Array<i32>, lr_precs: &Array<i32>, suffix_first_sets: &Array<Array<String>>, ctx: &mut GenContext, use_prec: bool) {
+fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &String, rule: &ParserRule, group: &List<i32>, valid_lr_indices: &List<i32>, lr_precs: &List<i32>, suffix_first_sets: &List<List<String>>, ctx: &mut GenContext, use_prec: bool) {
     // For each token in the group, find which alternatives match it.
     // Unique token → dispatch directly. Shared token → sub-dispatch via peek_at(1).
     let mut emitted = TreeSet::<String>::new();
@@ -4842,7 +4842,7 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &
     }
 
     // Second pass: shared-token branches with peek_at(1) sub-dispatch
-    let mut shared_tokens: Array<String> = [];
+    let mut shared_tokens: List<String> = [];
     let mut shared_seen = TreeSet::<String>::new();
     for let mut k = 0; k < group.len(); k += 1 {
         let sfs = &suffix_first_sets[group[k]];
@@ -4913,10 +4913,10 @@ fn gen_lr_overlap_dispatch(w: &mut CodeWriter, fn_name: &String, scan_fn_name: &
 /// per-alt precedence, per-alt suffix first set. Used by the suffix-
 /// dispatch and overlap-dispatch helpers that still reference alt
 /// indices directly.
-fn project_lr_dispatch(lr_alts: &Array<LrAlt>, lr_dispatch: &LrDispatchData) -> [Array<i32>, Array<i32>, Array<Array<String>>] {
-    let mut valid_lr_indices: Array<i32> = [];
-    let mut lr_precs: Array<i32> = [];
-    let mut suffix_first_sets: Array<Array<String>> = [];
+fn project_lr_dispatch(lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData) -> [List<i32>, List<i32>, List<List<String>>] {
+    let mut valid_lr_indices: List<i32> = [];
+    let mut lr_precs: List<i32> = [];
+    let mut suffix_first_sets: List<List<String>> = [];
     for let v of &lr_dispatch.valid_lr_alts {
         let lr = &lr_alts[*v];
         valid_lr_indices.push(lr.alt_index);
@@ -4926,7 +4926,7 @@ fn project_lr_dispatch(lr_alts: &Array<LrAlt>, lr_dispatch: &LrDispatchData) -> 
     return [valid_lr_indices, lr_precs, suffix_first_sets];
 }
 
-fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_alts: &Array<LrAlt>, lr_dispatch: &LrDispatchData, ctx: &mut GenContext, use_prec: bool, fn_name: &String, scan_fn_name: &String) {
+fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData, ctx: &mut GenContext, use_prec: bool, fn_name: &String, scan_fn_name: &String) {
     let projected = project_lr_dispatch(lr_alts, lr_dispatch);
     let valid_lr_indices = projected.0;
     let lr_precs = projected.1;
@@ -4939,7 +4939,7 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
     for let mut g = 0; g < lr_dispatch.groups.len(); g += 1 {
         let group = &lr_dispatch.groups[g];
 
-        let mut union_first: Array<String> = [];
+        let mut union_first: List<String> = [];
         for let idx of group {
             dedup_append_arr(&mut union_first, &suffix_first_sets[*idx]);
         }
@@ -4984,12 +4984,12 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
     w.end();  // loop
 }
 
-fn gen_prediction_code(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &Array<Alternative>, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext) {
-    let mut nc: Array<[String, i32]> = [];
+fn gen_prediction_code(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &List<Alternative>, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext) {
+    let mut nc: List<[String, i32]> = [];
     gen_prediction_code_inner(w, node, fn_name, alts, lowered_rule, type_name, ctx, 0, &mut nc);
 }
 
-fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &Array<Alternative>, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, skip: i32, name_counts: &mut Array<[String, i32]>) {
+fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &List<Alternative>, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, skip: i32, name_counts: &mut List<[String, i32]>) {
     if let Leaf(idx) = node {
         if skip == 0 {
             w.line(&`return {*fn_name}_bt_{idx}(p);`);
@@ -5208,12 +5208,12 @@ fn elements_match(consumed: &Element, expected: &Element) -> bool {
 /// when emitted from the variant pass. Without this threading the
 /// variant body silently delegates to the non-variant helpers and
 /// the variant's per-element mask never runs.
-fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, groups: &Array<Array<i32>>, first_sets: &Array<Array<String>>, non_lr_indices: &Array<i32>, fn_name: &String) {
+fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, groups: &List<List<i32>>, first_sets: &List<List<String>>, non_lr_indices: &List<i32>, fn_name: &String) {
     w.line(&"let kind = p.peek_kind();");
 
     for let mut g = 0; g < groups.len(); g += 1 {
         let group = &groups[g];
-        let mut union_first: Array<String> = [];
+        let mut union_first: List<String> = [];
         for let idx of group {
             dedup_append_arr(&mut union_first, &first_sets[*idx]);
         }
@@ -5238,8 +5238,8 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
             // Sort group by specificity before building prediction tree.
             let mut sorted_group = group.sorted();
             sort_group_by_specificity(&mut sorted_group, first_sets);
-            let mut pred_indices: Array<i32> = [];
-            let mut pred_elements: Array<Array<Element>> = [];
+            let mut pred_indices: List<i32> = [];
+            let mut pred_elements: List<List<Element>> = [];
             for let mut k = 0; k < sorted_group.len(); k += 1 {
                 let idx = sorted_group[k];
                 let real_idx = non_lr_indices[idx];
@@ -5296,7 +5296,7 @@ fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule) {
     f.set_return_type(&`Result<{header.type_name}, ParseError>`);
     f.emit_begin(w);
     w.line(&"let tokens = tokenize(input);");
-    w.line(&"let chars: Array<char> = input.chars().collect();");
+    w.line(&"let chars: List<char> = input.chars().collect();");
     w.line(&"let mut parser = Parser::new(tokens, chars);");
     if rule_takes_min_prec(rule) {
         w.line(&`return _parse_{header.snake_name}(&mut parser, 0);`);
@@ -5352,7 +5352,7 @@ pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &
     }
 }
 
-fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &Array<String>) {
+fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &List<String>) {
     let mut f = FnSpec::new(&`_gale_kind_set_{id}`);
     f.add_param(&"k", &"i32");
     f.set_return_type(&"bool");
@@ -5371,7 +5371,7 @@ fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &Array<String>) 
     w.blank();
 }
 
-fn build_lookahead_condition(ctx: &mut GenContext, pos_sets: &Array<Array<String>>, depth: i32) -> String {
+fn build_lookahead_condition(ctx: &mut GenContext, pos_sets: &List<List<String>>, depth: i32) -> String {
     let mut cond = String::with_capacity(128);
     for let mut d = 0; d < depth; d += 1 {
         if d > 0 {
@@ -5385,9 +5385,9 @@ fn build_lookahead_condition(ctx: &mut GenContext, pos_sets: &Array<Array<String
 }
 
 fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String, ctx: &mut GenContext) {
-    let mut expected: Array<String> = [];
+    let mut expected: List<String> = [];
     for let alt of rule.alternatives {
-        let mut visiting: Array<String> = [];
+        let mut visiting: List<String> = [];
         let first = ctx.first_of_alt(&alt, &mut visiting);
         dedup_append_arr(&mut expected, &first);
     }
@@ -5409,7 +5409,7 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
     w.line(&"));");
 }
 
-fn find_needed_depth(all_position_sets: &Array<Array<Array<String>>>) -> i32 {
+fn find_needed_depth(all_position_sets: &List<List<List<String>>>) -> i32 {
     let max_k = 5;
     for let mut depth = 1; depth <= max_k; depth += 1 {
         let mut all_ok = true;

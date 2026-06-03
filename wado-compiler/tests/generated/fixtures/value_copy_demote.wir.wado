@@ -22,7 +22,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
 
 array builtin::array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(3)
 
-struct core:prelude//Array<core:prelude/string.wado/String> {  // TypeId(4)
+struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(4)
     mut repr: ref "builtin::array<core:prelude/string.wado/String>",
     mut used: i32,
 }
@@ -49,7 +49,7 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_demote.wado/distinct_count" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>") -> i32;  // TypeId(16)
+type "functype//wado-compiler/tests/fixtures/value_copy_demote.wado/distinct_count" = fn(ref "core:prelude//List<core:prelude/string.wado/String>") -> i32;  // TypeId(16)
 
 type "functype//wado-compiler/tests/fixtures/value_copy_demote.wado/run" = fn();  // TypeId(17)
 
@@ -97,7 +97,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(39)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_demote.wado/Array<core:prelude/string.wado/String>::sort_by$__Closure_2" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>");  // TypeId(40)
+type "functype//wado-compiler/tests/fixtures/value_copy_demote.wado/List<core:prelude/string.wado/String>::sort_by$__Closure_2" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(40)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
 
@@ -120,7 +120,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/value_copy_demote.wado/distinct_count"(tokens) {
-    let sorted: ref "core:prelude//Array<core:prelude/string.wado/String>";
+    let sorted: ref "core:prelude//List<core:prelude/string.wado/String>";
     let n: i32;
     let i: i32;
     let index_10: i32;
@@ -129,8 +129,8 @@ fn "wado-compiler/tests/fixtures/value_copy_demote.wado/distinct_count"(tokens) 
     let len_a: i32;
     let _licm_used_14: i32;
     let _licm_repr_15: ref "builtin::array<core:prelude/string.wado/String>";
-    sorted = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone<ref "core:prelude/string.wado//String">(tokens.repr)), used: tokens.used };
-    "wado-compiler/tests/fixtures/value_copy_demote.wado/Array<core:prelude/string.wado/String>::sort_by$__Closure_2"(sorted);
+    sorted = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone<ref "core:prelude/string.wado//String">(tokens.repr)), used: tokens.used };
+    "wado-compiler/tests/fixtures/value_copy_demote.wado/List<core:prelude/string.wado/String>::sort_by$__Closure_2"(sorted);
     n = 0;
     i = 0;
     _licm_used_14 = sorted.used;
@@ -168,11 +168,11 @@ fn "wado-compiler/tests/fixtures/value_copy_demote.wado/distinct_count"(tokens) 
 }
 
 fn "wado-compiler/tests/fixtures/value_copy_demote.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//Array<core:prelude/string.wado/String>";
+    let __b_0: ref "core:prelude//List<core:prelude/string.wado/String>";
     let n: i32;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
-    __b_0 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("pear"), used: 4 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("pear"), used: 4 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fig"), used: 3 }), used: 4 };
+    __b_0 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("pear"), used: 4 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("pear"), used: 4 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fig"), used: 3 }), used: 4 };
     n = "wado-compiler/tests/fixtures/value_copy_demote.wado/distinct_count"(__b_0);
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/i32::fmt_decimal"(n, __local_4); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, if builtin::unlikely(0 >= __b_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -588,7 +588,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "wado-compiler/tests/fixtures/value_copy_demote.wado/Array<core:prelude/string.wado/String>::sort_by$__Closure_2"(self) {
+fn "wado-compiler/tests/fixtures/value_copy_demote.wado/List<core:prelude/string.wado/String>::sort_by$__Closure_2"(self) {
     let n: i32;
     let src: ref "builtin::array<core:prelude/string.wado/String>";
     let buf: ref "builtin::array<core:prelude/string.wado/String>";

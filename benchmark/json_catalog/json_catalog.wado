@@ -20,13 +20,13 @@ struct Event {
     logo: Option<String>,
     name: String,
     #[serde(rename = "subTopicIds")]
-    sub_topic_ids: Array<i64>,
+    sub_topic_ids: List<i64>,
     #[serde(default, rename = "subjectCode")]
     subject_code: Option<String>,
     #[serde(default)]
     subtitle: Option<String>,
     #[serde(rename = "topicIds")]
-    topic_ids: Array<i64>,
+    topic_ids: List<i64>,
 }
 impl Deserialize for Event;
 
@@ -43,12 +43,12 @@ struct Area {
     #[serde(rename = "areaId")]
     area_id: i64,
     #[serde(rename = "blockIds")]
-    block_ids: Array<i64>,
+    block_ids: List<i64>,
 }
 impl Deserialize for Area;
 
 struct SeatCategory {
-    areas: Array<Area>,
+    areas: List<Area>,
     #[serde(rename = "seatCategoryId")]
     seat_category_id: i64,
 }
@@ -62,9 +62,9 @@ struct Performance {
     logo: Option<String>,
     #[serde(default)]
     name: Option<String>,
-    prices: Array<Price>,
+    prices: List<Price>,
     #[serde(rename = "seatCategories")]
-    seat_categories: Array<SeatCategory>,
+    seat_categories: List<SeatCategory>,
     #[serde(default, rename = "seatMapImage")]
     seat_map_image: Option<String>,
     start: i64,
@@ -81,7 +81,7 @@ struct CitmCatalog {
     #[serde(rename = "blockNames")]
     block_names: TreeMap<String, String>,
     events: TreeMap<String, Event>,
-    performances: Array<Performance>,
+    performances: List<Performance>,
     #[serde(rename = "seatCategoryNames")]
     seat_category_names: TreeMap<String, String>,
     #[serde(rename = "subTopicNames")]
@@ -91,7 +91,7 @@ struct CitmCatalog {
     #[serde(rename = "topicNames")]
     topic_names: TreeMap<String, String>,
     #[serde(rename = "topicSubTopics")]
-    topic_sub_topics: TreeMap<String, Array<i64>>,
+    topic_sub_topics: TreeMap<String, List<i64>>,
     #[serde(rename = "venueNames")]
     venue_names: TreeMap<String, String>,
 }

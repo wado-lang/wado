@@ -683,7 +683,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Build monomorph_info for method calls on generic types or with method type args
         let monomorph_info = if let Some(ref blanket_param) = blanket_type_param {
             // For blanket impls, the template function uses the type param name (e.g., "I").
-            // The call site uses the concrete receiver (e.g., "ArrayIter<i32>").
+            // The call site uses the concrete receiver (e.g., "ListIter<i32>").
             // monomorph_info maps from the concrete name back to the template.
             let generic_name =
                 MethodName::format_local(blanket_param, trait_name.as_deref(), method_name);
@@ -755,7 +755,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ResolvedType::Primitive(_) | ResolvedType::Unit => {
                             Some(ModuleSource::primitive())
                         }
-                        ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
+                        ResolvedType::BuiltinArray(_) => Some(ModuleSource::list()),
                         _ => None,
                     }
                 })

@@ -42,17 +42,17 @@ pub struct AccessRequest {
 ///   - 5 wildcard
 /// Most routes share the `/api/v1/...` prefix so prefix-compressing
 /// engines (radix tree) can exercise their strength.
-pub fn build_routes() -> Array<RoutePattern> {
-    let mut routes: Array<RoutePattern> = [];
+pub fn build_routes() -> List<RoutePattern> {
+    let mut routes: List<RoutePattern> = [];
     let mut id = 0;
 
-    let static_shallow: Array<String> = [
+    let static_shallow: List<String> = [
         "/health", "/version", "/metrics", "/ping", "/robots.txt", "/favicon.ico", "/api/v1/health", "/api/v1/version",
         "/api/v1/status", "/api/v1/metrics", "/api/v2/health", "/api/v2/version", "/admin/login", "/admin/logout",
         "/admin/dashboard", "/auth/login", "/auth/logout", "/auth/refresh", "/docs", "/openapi.json",
     ];
 
-    let static_medium: Array<String> = [
+    let static_medium: List<String> = [
         "/api/v1/users/list", "/api/v1/users/create", "/api/v1/users/search", "/api/v1/users/me", "/api/v1/posts/list",
         "/api/v1/posts/create", "/api/v1/posts/search", "/api/v1/posts/popular", "/api/v1/products/list",
         "/api/v1/products/create", "/api/v1/products/search", "/api/v1/products/featured", "/api/v1/orders/list",
@@ -63,7 +63,7 @@ pub fn build_routes() -> Array<RoutePattern> {
         "/api/v1/admin/stats/orders", "/api/v1/admin/stats/revenue", "/api/v1/admin/stats/traffic",
     ];
 
-    let static_deep: Array<String> = [
+    let static_deep: List<String> = [
         "/api/v1/admin/users/sessions/active", "/api/v1/admin/users/sessions/expired",
         "/api/v1/admin/users/permissions/list", "/api/v1/admin/users/permissions/create",
         "/api/v1/admin/posts/comments/flagged", "/api/v1/admin/posts/comments/deleted",
@@ -75,13 +75,13 @@ pub fn build_routes() -> Array<RoutePattern> {
         "/api/v1/admin/system/jobs/failed", "/api/v1/admin/system/cache/stats", "/api/v1/admin/system/cache/clear",
     ];
 
-    let param1: Array<String> = [
+    let param1: List<String> = [
         "/api/v1/users/:id", "/api/v1/posts/:id", "/api/v1/products/:id", "/api/v1/orders/:id", "/api/v1/comments/:id",
         "/api/v1/categories/:slug", "/api/v1/tags/:tag", "/api/v1/profile/:username", "/api/v1/auth/sessions/:token",
         "/api/v1/files/:filename",
     ];
 
-    let param2: Array<String> = [
+    let param2: List<String> = [
         "/api/v1/users/:id/posts/:pid", "/api/v1/users/:id/comments/:cid", "/api/v1/users/:id/orders/:oid",
         "/api/v1/users/:id/profile/:section", "/api/v1/posts/:id/comments/:cid", "/api/v1/posts/:id/reactions/:rid",
         "/api/v1/products/:id/reviews/:rid", "/api/v1/products/:id/variants/:vid", "/api/v1/orders/:id/items/:item_id",
@@ -96,13 +96,13 @@ pub fn build_routes() -> Array<RoutePattern> {
     // name and disagree with the linear engine that stores each route
     // independently. The cross-engine `verify_engines_agree` check would
     // catch such a mismatch — see the bench driver.
-    let param3: Array<String> = [
+    let param3: List<String> = [
         "/api/v1/users/:id/posts/:pid/comments/:cid", "/api/v1/users/:id/posts/:pid/reactions/:rid",
         "/api/v1/products/:id/variants/:vid/reviews/:rid", "/api/v1/orders/:id/items/:item_id/refunds/:rid",
         "/api/v1/categories/:slug/products/:pid/reviews/:rid",
     ];
 
-    let wildcards: Array<String> = [
+    let wildcards: List<String> = [
         "/static/*path", "/files/:bucket/*key", "/assets/*path", "/downloads/:user/*path", "/uploads/*path",
     ];
 
@@ -140,7 +140,7 @@ pub fn build_routes() -> Array<RoutePattern> {
 /// 9 hits + 1 miss, exercising every shape from the route set.
 /// `expected_handler_id` is `-1` for the miss and otherwise refers to
 /// the index assigned by `build_routes()`.
-pub fn build_access_pattern() -> Array<AccessRequest> {
+pub fn build_access_pattern() -> List<AccessRequest> {
     return [
         AccessRequest { method: Method::Get, path: "/api/v1/health", expected_handler_id: 6 },
         AccessRequest { method: Method::Get, path: "/api/v1/users/list", expected_handler_id: 20 },
@@ -152,7 +152,7 @@ pub fn build_access_pattern() -> Array<AccessRequest> {
         AccessRequest { method: Method::Get, path: "/api/v1/products/list", expected_handler_id: 28 },
         AccessRequest { method: Method::Get, path: "/api/v1/users/12345/profile/email", expected_handler_id: 83 },
         AccessRequest { method: Method::Get, path: "/api/v1/does/not/exist", expected_handler_id: -1 },
-    ] as Array<AccessRequest>;
+    ] as List<AccessRequest>;
 }
 
 /// Parsed segment of a route pattern, shared between engines.
@@ -166,8 +166,8 @@ pub variant Segment {
 /// `/foo/:bar/*baz` -> [Literal("foo"), Param("bar"), Wildcard("baz")].
 /// `/` (the empty pattern, which terminates at the root) yields `[]`.
 /// Panics when the pattern is empty or does not start with `/`.
-pub fn parse_pattern(path: &String) -> Array<Segment> {
-    let mut out: Array<Segment> = [];
+pub fn parse_pattern(path: &String) -> List<Segment> {
+    let mut out: List<Segment> = [];
     let bytes = path.len();
     if bytes == 0 || path.get_byte_unchecked(0) != '/' as u8 {
         panic("route pattern must start with '/'");

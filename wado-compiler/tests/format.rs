@@ -1282,7 +1282,7 @@ fn test_format_long_signature_wraps_params() {
     // A function signature whose inline form exceeds the 120-col width must
     // wrap its parameters one-per-line, like every other comma list, instead
     // of emitting a single over-width line.
-    let source = "fn keyword_carrier_admits(kw: KeywordInfo, kw_index: i32, carrier_indices: Array<i32>, carrier_first_chars: Array<Array<char>>, carrier_is_wildcard: Array<bool>) -> bool {\n    return true;\n}\n";
+    let source = "fn keyword_carrier_admits(kw: KeywordInfo, kw_index: i32, carrier_indices: List<i32>, carrier_first_chars: List<List<char>>, carrier_is_wildcard: List<bool>) -> bool {\n    return true;\n}\n";
     let formatted = wado_compiler::format(source).expect("format failed");
     for line in formatted.lines() {
         assert!(
@@ -1344,7 +1344,7 @@ fn test_format_long_world_export_fn_wraps_params() {
 #[test]
 fn test_format_deref_index_preserves_parens() {
     // (*p)[i] must keep parens — *p[i] means *(p[i])
-    let source = r"fn foo(data: &Array<i32>) -> i32 {
+    let source = r"fn foo(data: &List<i32>) -> i32 {
     return (*data)[0];
 }
 ";
@@ -1375,7 +1375,7 @@ fn test_format_deref_field_preserves_parens() {
 #[test]
 fn test_format_deref_method_preserves_parens() {
     // (*p).method() must keep parens
-    let source = r"fn foo(data: &Array<i32>) -> i32 {
+    let source = r"fn foo(data: &List<i32>) -> i32 {
     return (*data).len();
 }
 ";
@@ -1886,7 +1886,7 @@ fn run() {
 fn test_roundtrip_ast_deref_parens() {
     assert_format_preserves_ast(
         r"
-fn foo(data: &Array<i32>, p: &Point) -> i32 {
+fn foo(data: &List<i32>, p: &Point) -> i32 {
     let a = (*data)[0];
     let b = (*p).x;
     let c = (*data).len();

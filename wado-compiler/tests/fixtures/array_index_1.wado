@@ -2,8 +2,8 @@ use { println, Stdout } from "core:cli";
 
 // from array_index_inline_btree.wado
 struct Node<K> {
-    keys: Array<K>,
-    deleted: Array<bool>,
+    keys: List<K>,
+    deleted: List<bool>,
 }
 
 impl<K> Node<K> {
@@ -56,7 +56,7 @@ impl<K> Tree<K> {
 }
 
 // from array_index_inline_compare.wado
-fn find_key_index(keys: &Array<String>, key: &String) -> i32 {
+fn find_key_index(keys: &List<String>, key: &String) -> i32 {
     let mut i = 0;
     while i < keys.len() && keys[i] < *key {
         i += 1;
@@ -66,12 +66,12 @@ fn find_key_index(keys: &Array<String>, key: &String) -> i32 {
 
 // from array_index_inline_generic.wado
 struct Container<T> {
-    items: Array<T>,
+    items: List<T>,
 }
 
 // from array_index_inline.wado
 fn array_index_inline() with Stdout {
-    let mut arr: Array<i32> = [10, 20, 30];
+    let mut arr: List<i32> = [10, 20, 30];
 
     // Read via IndexValue trait (arr[i])
     let first = arr[0];
@@ -100,7 +100,7 @@ fn array_index_inline_btree() with Stdout {
 
 // from array_index_inline_compare.wado
 fn array_index_inline_compare() with Stdout {
-    let keys: Array<String> = ["apple", "banana", "cherry", "date"];
+    let keys: List<String> = ["apple", "banana", "cherry", "date"];
     let result = find_key_index(&keys, &"cherry");
     println(`index: {result}`);
 }
@@ -119,7 +119,7 @@ fn array_index_inline_generic() with Stdout {
 
 // from array_index_inline_loop.wado
 fn array_index_inline_loop() with Stdout {
-    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let arr: List<i32> = [10, 20, 30, 40, 50];
     let mut sum = 0;
 
     // Loop with array read
@@ -130,7 +130,7 @@ fn array_index_inline_loop() with Stdout {
     println(`sum: {sum}`);
 
     // Loop with array write
-    let mut arr2: Array<i32> = [0, 0, 0];
+    let mut arr2: List<i32> = [0, 0, 0];
     for let mut i = 0; i < 3; i += 1 {
         arr2[i] = i * 10;
     }

@@ -253,7 +253,7 @@ struct core:prelude/types.wado//Option<Stream<u8>>::Some {  // TypeId(39)
     payload_0: i32,
 }
 
-struct core:prelude//Array<u8> {  // TypeId(40)
+struct core:prelude//List<u8> {  // TypeId(40)
     mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
@@ -292,7 +292,7 @@ type "functype//wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_bin
 
 type "functype//wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(57)
 
-type "functype//wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Fields_append" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//Array<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(58)
+type "functype//wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Fields_append" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(58)
 
 type "functype//wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Fields_has" = fn(i32, ref "core:prelude/string.wado//String") -> bool;  // TypeId(59)
 
@@ -374,7 +374,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/http_drop_value_block.wado/handle"(request) {
     let probe: i32;
-    let __b_2: ref "core:prelude//Array<u8>";
+    let __b_2: ref "core:prelude//List<u8>";
     let probe_count: i32;
     let __cond: bool;
     let headers: i32;
@@ -523,7 +523,7 @@ fn "wado-compiler/tests/fixtures/http_drop_value_block.wado/handle"(request) {
     __match_scrut_0 = "wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Request_get_method"(request);
     probe_count = (if __match_scrut_0.discriminant == 0 -> i32 {
         probe = "wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Fields_new"();
-        __b_2 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(118), used: 1 };
+        __b_2 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(118), used: 1 };
         drop("wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Fields_append"(probe, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-probe"), used: 7 }, __b_2));
         __block_v_14 = (if "wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Fields_has"(probe, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-probe"), used: 7 }) -> i32 {
             7;

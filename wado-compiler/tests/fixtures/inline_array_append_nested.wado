@@ -1,10 +1,10 @@
-// Test Array::append inlining in nested contexts
+// Test List::append inlining in nested contexts
 // Mimics treemap patterns that cause issues
 
 use { println, Stdout } from "core:cli";
 
 struct Container {
-    items: Array<i32>,
+    items: List<i32>,
 }
 
 impl Container {
@@ -17,7 +17,7 @@ impl Container {
     }
 
     fn process(&mut self) {
-        let mut temp: Array<i32> = [];
+        let mut temp: List<i32> = [];
 
         // Nested loop with conditionals
         for let mut i = 0; i < self.items.len(); i += 1 {

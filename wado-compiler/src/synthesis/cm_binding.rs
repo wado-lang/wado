@@ -661,10 +661,10 @@ mod tests {
             },
         );
         let _ = tt.compiler_items_mut().register(
-            CompilerItem::Array,
+            CompilerItem::List,
             Resolved::Struct {
-                module_source: ModuleSource::array(),
-                name: "Array".to_string(),
+                module_source: ModuleSource::list(),
+                name: "List".to_string(),
             },
         );
     }
@@ -876,7 +876,7 @@ mod tests {
         let mut stmts = Vec::new();
         let mut locals = Vec::new();
         let mut next_local = 0_u32;
-        let list_ty = cm_abi::generic_type("Array", vec![named_type("i32")]);
+        let list_ty = cm_abi::generic_type("List", vec![named_type("i32")]);
         let expr = synthesize_lift(
             &list_ty,
             i32_const(100),
@@ -1034,7 +1034,7 @@ mod tests {
             cm_package: "sockets",
             interner: &interner,
         };
-        let list_ty = cm_abi::generic_type("Array", vec![elem_ty]);
+        let list_ty = cm_abi::generic_type("List", vec![elem_ty]);
         let mut stmts = Vec::new();
         let mut locals = Vec::new();
         let mut next_local = 0_u32;
@@ -1290,7 +1290,7 @@ mod tests {
     fn param_needs_lifting_array() {
         let mut tt = TypeTable::new();
         let arr = tt.intern(crate::tir::ResolvedType::GenericInstance {
-            name: "Array".to_string(),
+            name: "List".to_string(),
             module_source: ModuleSource::prelude(),
             type_args: vec![TypeTable::I32],
         });

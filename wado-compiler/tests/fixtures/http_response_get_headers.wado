@@ -7,7 +7,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
 
     let headers = Fields::new();
-    let v: Array<u8> = [121 as u8, 101 as u8, 115 as u8]; // "yes"
+    let v: List<u8> = [121 as u8, 101 as u8, 115 as u8]; // "yes"
     let _ = headers.append("x-check" as FieldName, v as FieldValue);
 
     let [response, _tx_future] = Response::new(headers, null, trailers_future);

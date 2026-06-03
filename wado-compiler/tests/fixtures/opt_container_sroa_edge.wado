@@ -1,4 +1,4 @@
-// Test: Container SROA (P0a) — edge cases for Array<UserStruct>:
+// Test: Container SROA (P0a) — edge cases for List<UserStruct>:
 //   * Generic struct Pair<A, B> monomorphized to Pair<i32, i64>
 //   * Struct with private fields used within its own module
 //   * Minimal single-field wrapper struct
@@ -8,11 +8,11 @@
 // the element type at -O2 while producing the correct result.
 use { println, Stdout } from "core:cli";
 
-// Force monomorphization of the per-field Array<T_k> method families the
+// Force monomorphization of the per-field List<T_k> method families the
 // rewrite depends on.
 #[inline("never")]
 fn _force_array_i32_monomorphization() -> i32 {
-    let mut x: Array<i32> = Array::<i32>::with_capacity(4);
+    let mut x: List<i32> = List::<i32>::with_capacity(4);
     x.push(1);
     x.push(2);
     x[0] = 10;
@@ -23,7 +23,7 @@ fn _force_array_i32_monomorphization() -> i32 {
 
 #[inline("never")]
 fn _force_array_i64_monomorphization() -> i64 {
-    let mut x: Array<i64> = Array::<i64>::with_capacity(4);
+    let mut x: List<i64> = List::<i64>::with_capacity(4);
     x.push(1 as i64);
     x.push(2 as i64);
     x[0] = 10 as i64;
@@ -41,7 +41,7 @@ struct Pair<A, B> {
 fn generic_struct_monomorphized() -> i64 {
     // A generic struct instantiated as Pair<i32, i64>. The pass should treat
     // the monomorphized Pair//[i32, i64] exactly like a concrete struct.
-    let mut v: Array<Pair<i32, i64>> = [];
+    let mut v: List<Pair<i32, i64>> = [];
     v.push(Pair { first: 1, second: 100 as i64 });
     v.push(Pair { first: 2, second: 200 as i64 });
     v.push(Pair { first: 3, second: 300 as i64 });
@@ -64,9 +64,9 @@ struct Hidden {
 #[inline("never")]
 fn private_fields_same_module() -> i32 {
     // Struct with private fields used only within the declaring module. The
-    // pass should decompose Array<Hidden> regardless of field visibility,
+    // pass should decompose List<Hidden> regardless of field visibility,
     // since visibility is a module-boundary concept.
-    let mut v: Array<Hidden> = [];
+    let mut v: List<Hidden> = [];
     v.push(Hidden { a: 1, b: 10 });
     v.push(Hidden { a: 2, b: 20 });
     v.push(Hidden { a: 3, b: 30 });
@@ -84,10 +84,10 @@ struct Wrap {
 
 #[inline("never")]
 fn single_field_wrapper() -> i32 {
-    // Minimal one-field struct. Array<Wrap> decomposes to a single
-    // Array<i32>; the optimization should still trigger even for a trivial
+    // Minimal one-field struct. List<Wrap> decomposes to a single
+    // List<i32>; the optimization should still trigger even for a trivial
     // wrapper.
-    let mut v: Array<Wrap> = Array::<Wrap>::with_capacity(4);
+    let mut v: List<Wrap> = List::<Wrap>::with_capacity(4);
     v.push(Wrap { value: 5 });
     v.push(Wrap { value: 10 });
     v.push(Wrap { value: 15 });
@@ -109,7 +109,7 @@ struct Triple {
 fn three_field_mixed() -> i64 {
     // Three fields with heterogeneous widths — this catches any regression
     // in the per-field-index catalog lookup.
-    let mut v: Array<Triple> = [];
+    let mut v: List<Triple> = [];
     v.push(Triple { x: 1, y: 10 as i64, z: 100 });
     v.push(Triple { x: 2, y: 20 as i64, z: 200 });
     v.push(Triple { x: 3, y: 30 as i64, z: 300 });

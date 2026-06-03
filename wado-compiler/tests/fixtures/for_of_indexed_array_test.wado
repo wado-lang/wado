@@ -2,8 +2,8 @@
 /// The desugarer was incorrectly transforming `continue` into `break __for_N_body`,
 /// breaking out of the outer loop body instead of continuing the inner for-of.
 
-fn for_of_with_continue(data: &Array<Array<i32>>) -> Array<i32> {
-    let mut result: Array<i32> = [];
+fn for_of_with_continue(data: &List<List<i32>>) -> List<i32> {
+    let mut result: List<i32> = [];
     for let mut k = 0; k < data.len(); k += 1 {
         for let item of data[k] {
             if item % 2 == 0 {
@@ -15,8 +15,8 @@ fn for_of_with_continue(data: &Array<Array<i32>>) -> Array<i32> {
     return result;
 }
 
-fn for_of_with_break(data: &Array<Array<i32>>) -> Array<i32> {
-    let mut result: Array<i32> = [];
+fn for_of_with_break(data: &List<List<i32>>) -> List<i32> {
+    let mut result: List<i32> = [];
     for let mut k = 0; k < data.len(); k += 1 {
         for let item of data[k] {
             if item > 2 {
@@ -29,7 +29,7 @@ fn for_of_with_break(data: &Array<Array<i32>>) -> Array<i32> {
 }
 
 test "continue in for-of inside c-style for" {
-    let data: Array<Array<i32>> = [[1, 2, 3], [4, 5, 6]];
+    let data: List<List<i32>> = [[1, 2, 3], [4, 5, 6]];
     let result = for_of_with_continue(&data);
     // Odd numbers only: 1, 3, 5
     assert result.len() == 3, `expected 3, got {result.len()}`;
@@ -39,7 +39,7 @@ test "continue in for-of inside c-style for" {
 }
 
 test "break in for-of inside c-style for" {
-    let data: Array<Array<i32>> = [[1, 2, 3], [4, 5, 6]];
+    let data: List<List<i32>> = [[1, 2, 3], [4, 5, 6]];
     let result = for_of_with_break(&data);
     // First inner: 1, 2 (break at 3). Second inner: empty (break at 4).
     assert result.len() == 2, `expected 2, got {result.len()}`;
@@ -48,9 +48,9 @@ test "break in for-of inside c-style for" {
 }
 
 test "continue with double-indexed access" {
-    let data: Array<Array<i32>> = [[10, 20, 30], [40, 50, 60]];
-    let indices: Array<i32> = [0, 1];
-    let mut result: Array<i32> = [];
+    let data: List<List<i32>> = [[10, 20, 30], [40, 50, 60]];
+    let indices: List<i32> = [0, 1];
+    let mut result: List<i32> = [];
     for let mut k = 0; k < indices.len(); k += 1 {
         for let item of data[indices[k]] {
             if item % 20 == 0 {

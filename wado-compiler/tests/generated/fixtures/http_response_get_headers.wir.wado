@@ -235,7 +235,7 @@ struct core:prelude/types.wado//Option<Stream<u8>>::Some {  // TypeId(37)
     payload_0: i32,
 }
 
-struct core:prelude//Array<u8> {  // TypeId(38)
+struct core:prelude//List<u8> {  // TypeId(38)
     mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
@@ -272,7 +272,7 @@ type "functype//wado-compiler/tests/fixtures/http_response_get_headers.wado/hand
 
 type "functype//wado-compiler/tests/fixtures/http_response_get_headers.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(54)
 
-type "functype//wado-compiler/tests/fixtures/http_response_get_headers.wado/__cm_binding__Fields_append" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//Array<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(55)
+type "functype//wado-compiler/tests/fixtures/http_response_get_headers.wado/__cm_binding__Fields_append" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(55)
 
 type "functype//wado-compiler/tests/fixtures/http_response_get_headers.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(56)
 
@@ -358,7 +358,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/http_response_get_headers.wado/handle"(request) {
     let headers: i32;
-    let __b_4: ref "core:prelude//Array<u8>";
+    let __b_4: ref "core:prelude//List<u8>";
     let response: i32;
     let resp_headers: i32;
     let __v0: bool;
@@ -507,7 +507,7 @@ fn "wado-compiler/tests/fixtures/http_response_get_headers.wado/handle"(request)
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
     headers = "wado-compiler/tests/fixtures/http_response_get_headers.wado/__cm_binding__Fields_new"();
-    __b_4 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(121, 101, 115), used: 3 };
+    __b_4 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(121, 101, 115), used: 3 };
     drop("wado-compiler/tests/fixtures/http_response_get_headers.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-check"), used: 7 }, __b_4));
     __pattern_temp_1 = "wado-compiler/tests/fixtures/http_response_get_headers.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __mv_lo_1);
     response = __pattern_temp_1.0;

@@ -748,7 +748,7 @@ pub(super) fn synthesize_adapter(
                         local_ref(param_local, param_name, array_type_id),
                         &names.array,
                         "len",
-                        ModuleSource::array(),
+                        ModuleSource::list(),
                         vec![],
                         TypeTable::I32,
                     ),
@@ -836,7 +836,7 @@ pub(super) fn synthesize_adapter(
                         TirExprKind::method_call(
                             Box::new(local_ref(param_local, param_name, array_type_id)),
                             FunctionRef {
-                                module_source: ModuleSource::array(),
+                                module_source: ModuleSource::list(),
                                 name: iv_mangled,
                                 monomorph_info: None,
                                 method_info: Some(iv_info),

@@ -1,5 +1,5 @@
-// Test: Serialize implementation for Array<T>
-// Array<T> serializes as a sequence
+// Test: Serialize implementation for List<T>
+// List<T> serializes as a sequence
 use { println, Stdout } from "core:cli";
 
 struct SerializeError {
@@ -84,8 +84,8 @@ impl Serialize for String {
     }
 }
 
-// Serialize for Array<T> — bounded impl
-impl<T: Serialize> Serialize for Array<T> {
+// Serialize for List<T> — bounded impl
+impl<T: Serialize> Serialize for List<T> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         let mut seq = s.begin_seq(self.len());
         if let Ok(mut seq) = seq {
@@ -101,20 +101,20 @@ impl<T: Serialize> Serialize for Array<T> {
 export fn run() with Stdout {
     let mut ser = JsonSerializer { buf: "" };
 
-    let nums: Array<i32> = [10, 20, 30];
+    let nums: List<i32> = [10, 20, 30];
     nums.serialize::<JsonSerializer>(&mut ser);
-    println(`Array<i32>: {ser.buf}`);
+    println(`List<i32>: {ser.buf}`);
 
     ser.buf = "";
-    let strs: Array<String> = ["hello", "world"];
+    let strs: List<String> = ["hello", "world"];
     strs.serialize::<JsonSerializer>(&mut ser);
-    println(`Array<String>: {ser.buf}`);
+    println(`List<String>: {ser.buf}`);
 
     ser.buf = "";
-    let empty: Array<i32> = [];
+    let empty: List<i32> = [];
     empty.serialize::<JsonSerializer>(&mut ser);
     println(`Empty: {ser.buf}`);
 }
 
 __DATA__
-{"stdout": "Array<i32>: [10,20,30]\nArray<String>: [\"hello\",\"world\"]\nEmpty: []\n"}
+{"stdout": "List<i32>: [10,20,30]\nArray<String>: [\"hello\",\"world\"]\nEmpty: []\n"}

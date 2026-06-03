@@ -127,7 +127,7 @@ impl Monomorphizer {
             } => {
                 // Skip Array and Tuple - they have special codegen handling and should remain
                 // as GenericInstance, not be rewritten to Struct
-                if name == "Array" || TypeTable::is_tuple_type(&name, &module_source) {
+                if name == "List" || TypeTable::is_tuple_type(&name, &module_source) {
                     let new_args: Vec<TypeId> = type_args
                         .iter()
                         .map(|&id| self.rewrite_type_id(id, type_table))
@@ -182,7 +182,7 @@ impl Monomorphizer {
 
                 // Skip Array - it has special codegen handling and should not be
                 // monomorphized as a regular struct
-                if name == "Array" {
+                if name == "List" {
                     continue;
                 }
 

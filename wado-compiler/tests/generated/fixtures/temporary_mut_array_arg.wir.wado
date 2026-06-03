@@ -27,7 +27,7 @@ struct tuple//[String, i32] {  // TypeId(3)
 
 array builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>> (mut ref "tuple//[String, i32]");  // TypeId(4)
 
-struct core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>> {  // TypeId(5)
+struct core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>> {  // TypeId(5)
     mut repr: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>",
     mut used: i32,
 }
@@ -50,7 +50,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/helper" = fn(ref "core:prelude/string.wado//String", ref "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>") -> ref "core:prelude/string.wado//String";  // TypeId(15)
+type "functype//wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/helper" = fn(ref "core:prelude/string.wado//String", ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>") -> ref "core:prelude/string.wado//String";  // TypeId(15)
 
 type "functype//wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
@@ -88,9 +88,9 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(33)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::push" = fn(ref "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>", ref "tuple//[String, i32]");  // TypeId(34)
+type "functype//core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::push" = fn(ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>", ref "tuple//[String, i32]");  // TypeId(34)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::grow" = fn(ref "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>");  // TypeId(35)
+type "functype//core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::grow" = fn(ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>");  // TypeId(35)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(36)
 
@@ -147,7 +147,7 @@ fn "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/helper"(name, coun
             continue l1;
         };
     };
-    "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::push"(counts, struct.new "tuple//[String, i32]" { 0: name, 1: 1 });
+    "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::push"(counts, struct.new "tuple//[String, i32]" { 0: name, 1: 1 });
     return name;
 }
 
@@ -156,9 +156,9 @@ fn "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/__cm_binding__Stdo
 }
 
 fn "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/__cm_export__run"() {
-    let __b_1: ref "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
+    let __b_1: ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
     let result: ref "core:prelude/string.wado//String";
-    result = "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/helper"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("foo"), used: 3 }, __b_1 = struct.new "core:prelude//Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>" { repr: builtin::array_new<ref "tuple//[String, i32]">(0), used: 0 }; __b_1);
+    result = "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/helper"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("foo"), used: 3 }, __b_1 = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>" { repr: builtin::array_new<ref "tuple//[String, i32]">(0), used: 0 }; __b_1);
     "core:cli/println"(result);
     "wasi/task-return"(0);
 }
@@ -484,17 +484,17 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::push"(self, value) {
+fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::grow"(self);
+        "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::grow"(self);
     }
     builtin::array_set<ref "tuple//[String, i32]">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::grow"(self) {
+fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "builtin::array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";

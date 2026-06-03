@@ -14,7 +14,7 @@
 // an `IndexMap<u32, RefInfo>` keyed by local index, so the second arm's
 // RefInfo silently overwrote the first arm's. Every later use of
 // `__fused_payload_N` (or anything that Pattern-2-inherited from it,
-// e.g. an inlined `Array::len`'s shadow) was substituted with the
+// e.g. an inlined `List::len`'s shadow) was substituted with the
 // LAST-registered referent — which in the first arm pointed at an
 // uninitialised `g`. The runtime trap surfaces as "out of bounds array
 // access" on whatever junk that `g.alternatives.used` produces.
@@ -27,11 +27,11 @@ variant Element {
 }
 
 struct GroupElement {
-    alternatives: Array<i32>,
+    alternatives: List<i32>,
 }
 
 impl GroupElement {
-    fn new(alternatives: Array<i32>) -> GroupElement {
+    fn new(alternatives: List<i32>) -> GroupElement {
         return GroupElement { alternatives };
     }
 }
@@ -47,7 +47,7 @@ impl RepeatElement {
 }
 
 #[inline(always)]
-fn extract(elem: &Element) -> Option<&Array<i32>> {
+fn extract(elem: &Element) -> Option<&List<i32>> {
     if let Group(g) = elem {
         return Option::Some(&g.alternatives);
     }

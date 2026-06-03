@@ -37,12 +37,12 @@ struct core:prelude/format.wado//Formatter {  // TypeId(5)
 struct ./sub/test_world_variant_generic_helper.wado//TokenData {  // TypeId(6)
     mut kind: i32,
     mut text: ref "core:prelude/string.wado//String",
-    mut leading: ref "core:prelude//Array<./sub/test_world_variant_generic_helper.wado/TokenData>",
+    mut leading: ref "core:prelude//List<./sub/test_world_variant_generic_helper.wado/TokenData>",
 }
 
 struct ./sub/test_world_variant_generic_helper.wado//NodeData {  // TypeId(7)
     mut name: ref "core:prelude/string.wado//String",
-    mut children: ref "core:prelude//Array<./sub/test_world_variant_generic_helper.wado/CstChild>",
+    mut children: ref "core:prelude//List<./sub/test_world_variant_generic_helper.wado/CstChild>",
 }
 
 variant ./sub/test_world_variant_generic_helper.wado//CstChild {  // TypeId(8)
@@ -64,18 +64,18 @@ array builtin::array<./sub/test_world_variant_generic_helper.wado/CstChild> (mut
 
 array builtin::array<./sub/test_world_variant_generic_helper.wado/TokenData> (mut ref "./sub/test_world_variant_generic_helper.wado//TokenData");  // TypeId(12)
 
-struct core:prelude/array.wado//ArrayRefIter<./sub/test_world_variant_generic_helper.wado/CstChild> {  // TypeId(13)
+struct core:prelude/list.wado//ListRefIter<./sub/test_world_variant_generic_helper.wado/CstChild> {  // TypeId(13)
     mut repr: ref "builtin::array<./sub/test_world_variant_generic_helper.wado/CstChild>",
     mut used: i32,
     mut index: i32,
 }
 
-struct core:prelude//Array<./sub/test_world_variant_generic_helper.wado/TokenData> {  // TypeId(14)
+struct core:prelude//List<./sub/test_world_variant_generic_helper.wado/TokenData> {  // TypeId(14)
     mut repr: ref "builtin::array<./sub/test_world_variant_generic_helper.wado/TokenData>",
     mut used: i32,
 }
 
-struct core:prelude//Array<./sub/test_world_variant_generic_helper.wado/CstChild> {  // TypeId(15)
+struct core:prelude//List<./sub/test_world_variant_generic_helper.wado/CstChild> {  // TypeId(15)
     mut repr: ref "builtin::array<./sub/test_world_variant_generic_helper.wado/CstChild>",
     mut used: i32,
 }
@@ -120,7 +120,7 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(35)
 
-type "functype//./sub/test_world_variant_generic_helper.wado/to_tree" = fn(ref "./sub/test_world_variant_generic_helper.wado//NodeData") -> [ref "core:prelude/string.wado//String", ref "core:prelude//Array<./sub/test_world_variant_generic_helper.wado/CstChild>"];  // TypeId(36)
+type "functype//./sub/test_world_variant_generic_helper.wado/to_tree" = fn(ref "./sub/test_world_variant_generic_helper.wado//NodeData") -> [ref "core:prelude/string.wado//String", ref "core:prelude//List<./sub/test_world_variant_generic_helper.wado/CstChild>"];  // TypeId(36)
 
 type "functype//./sub/test_world_variant_generic_helper.wado/make_test_tree" = fn() -> ref "./sub/test_world_variant_generic_helper.wado//NodeData";  // TypeId(37)
 
@@ -144,7 +144,7 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(47)
 
-type "functype//core:prelude/array.wado/ArrayRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>") -> ref null "core:prelude/types.wado//Box<CstChild>";  // TypeId(48)
+type "functype//core:prelude/list.wado/ListRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>^Iterator::next" = fn(ref "core:prelude/list.wado//ListRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>") -> ref null "core:prelude/types.wado//Box<CstChild>";  // TypeId(48)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(49)
 
@@ -177,7 +177,7 @@ fn "wado-compiler/tests/fixtures/test_world_variant_generic_run.wado/run"() {
     let f_17: ref "core:prelude/format.wado//Formatter";
     node = "./sub/test_world_variant_generic_helper.wado/make_test_tree"();
     let result_mv_name: ref "core:prelude/string.wado//String";
-    let result_mv_children: ref "core:prelude//Array<./sub/test_world_variant_generic_helper.wado/CstChild>";
+    let result_mv_children: ref "core:prelude//List<./sub/test_world_variant_generic_helper.wado/CstChild>";
     multivalue_bind [result_mv_name, result_mv_children] = "./sub/test_world_variant_generic_helper.wado/to_tree"(node);
     __cond = __inline_String_Eq__eq_2: block -> bool {
         other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("counted:2"), used: 9 };
@@ -330,38 +330,38 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
 
 fn "./sub/test_world_variant_generic_helper.wado/to_tree"(node) {
     let rec: ref "./sub/test_world_variant_generic_helper.wado//Recorder";
-    let __b: ref "core:prelude//Array<./sub/test_world_variant_generic_helper.wado/CstChild>";
+    let __b: ref "core:prelude//List<./sub/test_world_variant_generic_helper.wado/CstChild>";
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let self_9: i32;
     rec = struct.new "./sub/test_world_variant_generic_helper.wado//Recorder" { count: 0 };
     "./sub/test_world_variant_generic_helper.wado/./sub/test_world_variant_generic_helper.wado/walk_node<./sub/test_world_variant_generic_helper.wado/Recorder>"(rec, node);
-    return ref.as_non_null(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }; "core:prelude/string.wado/String::push"(__local_3, 99); "core:prelude/string.wado/String::push"(__local_3, 111); "core:prelude/string.wado/String::push"(__local_3, 117); "core:prelude/string.wado/String::push"(__local_3, 110); "core:prelude/string.wado/String::push"(__local_3, 116); "core:prelude/string.wado/String::push"(__local_3, 101); "core:prelude/string.wado/String::push"(__local_3, 100); "core:prelude/string.wado/String::push"(__local_3, 58); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; self_9 = rec.count; "core:prelude/primitive.wado/i32::fmt_decimal"(self_9, __local_4); __local_3), ref.as_non_null(__b = struct.new "core:prelude//Array<./sub/test_world_variant_generic_helper.wado/CstChild>" { repr: builtin::array_new<ref "./sub/test_world_variant_generic_helper.wado//CstChild">(0), used: 0 }; __b);
+    return ref.as_non_null(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }; "core:prelude/string.wado/String::push"(__local_3, 99); "core:prelude/string.wado/String::push"(__local_3, 111); "core:prelude/string.wado/String::push"(__local_3, 117); "core:prelude/string.wado/String::push"(__local_3, 110); "core:prelude/string.wado/String::push"(__local_3, 116); "core:prelude/string.wado/String::push"(__local_3, 101); "core:prelude/string.wado/String::push"(__local_3, 100); "core:prelude/string.wado/String::push"(__local_3, 58); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; self_9 = rec.count; "core:prelude/primitive.wado/i32::fmt_decimal"(self_9, __local_4); __local_3), ref.as_non_null(__b = struct.new "core:prelude//List<./sub/test_world_variant_generic_helper.wado/CstChild>" { repr: builtin::array_new<ref "./sub/test_world_variant_generic_helper.wado//CstChild">(0), used: 0 }; __b);
 }
 
 fn "./sub/test_world_variant_generic_helper.wado/make_test_tree"() {
-    let __b_0: ref "core:prelude//Array<./sub/test_world_variant_generic_helper.wado/TokenData>";
+    let __b_0: ref "core:prelude//List<./sub/test_world_variant_generic_helper.wado/TokenData>";
     let tok: ref "./sub/test_world_variant_generic_helper.wado//TokenData";
     let leaf: ref "./sub/test_world_variant_generic_helper.wado//CstChild";
-    let __b_3: ref "core:prelude//Array<./sub/test_world_variant_generic_helper.wado/CstChild>";
-    tok = struct.new "./sub/test_world_variant_generic_helper.wado//TokenData" { kind: 1, text: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x"), used: 1 }, leading: ref.as_non_null(__b_0 = struct.new "core:prelude//Array<./sub/test_world_variant_generic_helper.wado/TokenData>" { repr: builtin::array_new<ref "./sub/test_world_variant_generic_helper.wado//TokenData">(0), used: 0 }; __b_0) };
+    let __b_3: ref "core:prelude//List<./sub/test_world_variant_generic_helper.wado/CstChild>";
+    tok = struct.new "./sub/test_world_variant_generic_helper.wado//TokenData" { kind: 1, text: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x"), used: 1 }, leading: ref.as_non_null(__b_0 = struct.new "core:prelude//List<./sub/test_world_variant_generic_helper.wado/TokenData>" { repr: builtin::array_new<ref "./sub/test_world_variant_generic_helper.wado//TokenData">(0), used: 0 }; __b_0) };
     leaf = struct.new "./sub/test_world_variant_generic_helper.wado//CstChild::TokenChild" { discriminant: 0, payload_0: tok };
-    __b_3 = struct.new "core:prelude//Array<./sub/test_world_variant_generic_helper.wado/CstChild>" { repr: array.new_fixed<ref "./sub/test_world_variant_generic_helper.wado//CstChild">(leaf), used: 1 };
+    __b_3 = struct.new "core:prelude//List<./sub/test_world_variant_generic_helper.wado/CstChild>" { repr: array.new_fixed<ref "./sub/test_world_variant_generic_helper.wado//CstChild">(leaf), used: 1 };
     return struct.new "./sub/test_world_variant_generic_helper.wado//NodeData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("root"), used: 4 }, children: __b_3 };
 }
 
 fn "./sub/test_world_variant_generic_helper.wado/./sub/test_world_variant_generic_helper.wado/walk_node<./sub/test_world_variant_generic_helper.wado/Recorder>"(v, node) {
-    let __iter_2: ref "core:prelude/array.wado//ArrayRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>";
+    let __iter_2: ref "core:prelude/list.wado//ListRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>";
     let child: ref "core:prelude/types.wado//Box<CstChild>";
     let n: ref "./sub/test_world_variant_generic_helper.wado//NodeData";
     let __match_6: ref null "core:prelude/types.wado//Box<CstChild>";
-    let self_9: ref "core:prelude//Array<./sub/test_world_variant_generic_helper.wado/CstChild>";
+    let self_9: ref "core:prelude//List<./sub/test_world_variant_generic_helper.wado/CstChild>";
     v.count = v.count + 1;
     self_9 = node.children;
-    __iter_2 = struct.new "core:prelude/array.wado//ArrayRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>" { repr: self_9.repr, used: self_9.used, index: 0 };
+    __iter_2 = struct.new "core:prelude/list.wado//ListRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>" { repr: self_9.repr, used: self_9.used, index: 0 };
     b15: block {
         l16: loop {
-            __match_6 = "core:prelude/array.wado/ArrayRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>^Iterator::next"(__iter_2);
+            __match_6 = "core:prelude/list.wado/ListRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>^Iterator::next"(__iter_2);
             if ref.is_null(__match_6) == 0 {
                 child = ref.as_non_null(__match_6);
                 let __match_scrut_1: ref "./sub/test_world_variant_generic_helper.wado//CstChild";
@@ -684,7 +684,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     }
 }
 
-fn "core:prelude/array.wado/ArrayRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>^Iterator::next"(self) {
+fn "core:prelude/list.wado/ListRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>^Iterator::next"(self) {
     let val: ref "core:prelude/types.wado//Box<CstChild>";
     if self.index >= self.used {
         return ref.null none;

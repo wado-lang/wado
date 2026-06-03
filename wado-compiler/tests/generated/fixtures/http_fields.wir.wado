@@ -235,7 +235,7 @@ struct core:prelude/types.wado//Option<Stream<u8>>::Some {  // TypeId(37)
     payload_0: i32,
 }
 
-struct core:prelude//Array<u8> {  // TypeId(38)
+struct core:prelude//List<u8> {  // TypeId(38)
     mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
@@ -276,7 +276,7 @@ type "functype//wado-compiler/tests/fixtures/http_fields.wado/__cm_binding__Fiel
 
 type "functype//wado-compiler/tests/fixtures/http_fields.wado/__cm_binding__Fields_has" = fn(i32, ref "core:prelude/string.wado//String") -> bool;  // TypeId(56)
 
-type "functype//wado-compiler/tests/fixtures/http_fields.wado/__cm_binding__Fields_append" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//Array<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(57)
+type "functype//wado-compiler/tests/fixtures/http_fields.wado/__cm_binding__Fields_append" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(57)
 
 type "functype//wado-compiler/tests/fixtures/http_fields.wado/__cm_binding__Fields_clone" = fn(i32) -> i32;  // TypeId(58)
 
@@ -365,7 +365,7 @@ fn "wado-compiler/tests/fixtures/http_fields.wado/handle"(request) {
     let fields: i32;
     let has_before: bool;
     let __cond_4: bool;
-    let __b_5: ref "core:prelude//Array<u8>";
+    let __b_5: ref "core:prelude//List<u8>";
     let append_result: ref null "wasi:http/types.wado//HeaderError";
     let has_after: bool;
     let cloned: i32;
@@ -544,7 +544,7 @@ condition: !has_before
         })); "core:prelude/string.wado/String::push"(__local_30, 10); __local_30);
         unreachable;
     }
-    __b_5 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
+    __b_5 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
     append_result = "wado-compiler/tests/fixtures/http_fields.wado/__cm_binding__Fields_append"(fields, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-test"), used: 6 }, __b_5);
     if ref.is_null(append_result) == 0 {
         drop(ref.as_non_null(append_result));

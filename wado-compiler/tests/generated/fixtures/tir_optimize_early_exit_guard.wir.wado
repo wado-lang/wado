@@ -26,7 +26,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
 
 array builtin::array<char> (mut char);  // TypeId(4)
 
-struct core:prelude//Array<char> {  // TypeId(5)
+struct core:prelude//List<char> {  // TypeId(5)
     mut repr: ref builtin::array<char>,
     mut used: i32,
 }
@@ -49,7 +49,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/safe_get" = fn(ref "core:prelude//Array<char>", i32) -> char;  // TypeId(15)
+type "functype//wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/safe_get" = fn(ref "core:prelude//List<char>", i32) -> char;  // TypeId(15)
 
 type "functype//wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/run" = fn();  // TypeId(16)
 
@@ -108,12 +108,12 @@ fn "wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/safe_get"(ar
 }
 
 fn "wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//Array<char>";
+    let __b_0: ref "core:prelude//List<char>";
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    __b_0 = struct.new "core:prelude//Array<char>" { repr: array.new_fixed<char>(97, 98, 99), used: 3 };
+    __b_0 = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(97, 98, 99), used: 3 };
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/char^Display::fmt"(struct.new "core:prelude/types.wado//Box<char>" { value: "wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/safe_get"(__b_0, 1) }, __local_3); __local_2);
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/char^Display::fmt"(struct.new "core:prelude/types.wado//Box<char>" { value: "wado-compiler/tests/fixtures/tir_optimize_early_exit_guard.wado/safe_get"(__b_0, 10) }, __local_5); __local_4);
 }

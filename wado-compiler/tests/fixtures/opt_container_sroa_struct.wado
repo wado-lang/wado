@@ -1,15 +1,15 @@
-// Test: Container SROA (P0a) — decomposes Array<UserStruct> locals into N
-// parallel Array<T_k> locals, eliminating struct.new for the element payload
+// Test: Container SROA (P0a) — decomposes List<UserStruct> locals into N
+// parallel List<T_k> locals, eliminating struct.new for the element payload
 // (AoS → SoA). Tuples and user structs are both GC structs at the Wasm level,
-// so this pass treats Array<Point> the same as Array<[i32, i32]>.
+// so this pass treats List<Point> the same as List<[i32, i32]>.
 use { println, Stdout } from "core:cli";
 
-// Ensure Array<i32> and Array<i64> methods are monomorphized so the per-field
+// Ensure List<i32> and List<i64> methods are monomorphized so the per-field
 // rewrite has somewhere to dispatch to. Without these, the pass conservatively
 // skips the candidate.
 #[inline("never")]
 fn _force_array_i32_monomorphization() -> i32 {
-    let mut x: Array<i32> = Array::<i32>::with_capacity(4);
+    let mut x: List<i32> = List::<i32>::with_capacity(4);
     x.push(1);
     x.push(2);
     x[0] = 10;
@@ -20,7 +20,7 @@ fn _force_array_i32_monomorphization() -> i32 {
 
 #[inline("never")]
 fn _force_array_i64_monomorphization() -> i64 {
-    let mut x: Array<i64> = Array::<i64>::with_capacity(4);
+    let mut x: List<i64> = List::<i64>::with_capacity(4);
     x.push(1 as i64);
     x.push(2 as i64);
     x[0] = 10 as i64;
@@ -41,7 +41,7 @@ struct Row {
 
 #[inline("never")]
 fn build_and_sum_points() -> i32 {
-    let mut v: Array<Point> = [];
+    let mut v: List<Point> = [];
     v.push(Point { x: 1, y: 10 });
     v.push(Point { x: 2, y: 20 });
     v.push(Point { x: 3, y: 30 });
@@ -55,7 +55,7 @@ fn build_and_sum_points() -> i32 {
 #[inline("never")]
 fn slot_copy_points() -> i32 {
     // Insertion-sort-style slot copy: v[2] = v[1].
-    let mut v: Array<Point> = [];
+    let mut v: List<Point> = [];
     v.push(Point { x: 1, y: 100 });
     v.push(Point { x: 2, y: 200 });
     v.push(Point { x: 3, y: 300 });
@@ -67,7 +67,7 @@ fn slot_copy_points() -> i32 {
 
 #[inline("never")]
 fn with_capacity_points() -> i32 {
-    let mut v: Array<Point> = Array::<Point>::with_capacity(4);
+    let mut v: List<Point> = List::<Point>::with_capacity(4);
     v.push(Point { x: 1, y: 10 });
     v.push(Point { x: 2, y: 20 });
     let mut sum = 0;
@@ -80,11 +80,11 @@ fn with_capacity_points() -> i32 {
 #[inline("never")]
 fn cross_candidate_points() -> i32 {
     // Two candidates whose elements flow between them via v.push(w[i]).
-    let mut w: Array<Point> = [];
+    let mut w: List<Point> = [];
     w.push(Point { x: 10, y: 100 });
     w.push(Point { x: 20, y: 200 });
     w.push(Point { x: 30, y: 300 });
-    let mut v: Array<Point> = [];
+    let mut v: List<Point> = [];
     v.push(w[0]);
     v.push(w[1]);
     v.push(w[2]);
@@ -94,8 +94,8 @@ fn cross_candidate_points() -> i32 {
 #[inline("never")]
 fn mixed_field_types() -> i64 {
     // Struct with heterogeneous field types (i64 + i32). The pass must emit
-    // one Array<i64> and one Array<i32>, not two Array<i64>.
-    let mut rows: Array<Row> = [];
+    // one List<i64> and one List<i32>, not two List<i64>.
+    let mut rows: List<Row> = [];
     rows.push(Row { id: 100 as i64, value: 1 });
     rows.push(Row { id: 200 as i64, value: 2 });
     rows.push(Row { id: 300 as i64, value: 3 });
@@ -114,7 +114,7 @@ fn field_order_shorthand() -> i32 {
     // same StructLiteral shape, but fields may be listed in a different order
     // depending on the parser. The pass must reorder by field_index, not
     // source position.
-    let mut v: Array<Point> = [];
+    let mut v: List<Point> = [];
     let x = 7;
     let y = 13;
     // Explicit out-of-declaration-order literal.

@@ -1,8 +1,8 @@
 //! Segment-level tagged DFA HTTP router.
 //!
 //! Routes are split at '/' boundaries, and each segment becomes a single
-//! transition. States are stored in a flat arena `Array<DfaState>`.
-//! Each state's literal transitions live in a sorted `Array<DfaLiteralEdge>`
+//! transition. States are stored in a flat arena `List<DfaState>`.
+//! Each state's literal transitions live in a sorted `List<DfaLiteralEdge>`
 //! looked up by binary search; parametric and wildcard transitions are
 //! stored on the parent state. Matching is a deterministic loop with no
 //! backtracking: at each state, literal first, then param, then wildcard.
@@ -21,7 +21,7 @@ struct DfaLiteralEdge {
 }
 
 struct DfaState {
-    literals: Array<DfaLiteralEdge>,
+    literals: List<DfaLiteralEdge>,
     param_target: i32,  // -1 if no param child
     param_name: String,
     wildcard_handler: i32,  // -1 if no wildcard route at this state
@@ -45,11 +45,11 @@ fn new_state() -> DfaState {
 }
 
 pub struct DfaRouter {
-    states: Array<DfaState>,
+    states: List<DfaState>,
 }
 
 impl DfaRouter {
-    pub fn build(patterns: &Array<RoutePattern>) -> DfaRouter {
+    pub fn build(patterns: &List<RoutePattern>) -> DfaRouter {
         let mut r = DfaRouter { states: [] };
         r.states.push(new_state());
         for let p of patterns {
@@ -161,7 +161,7 @@ impl DfaRouter {
 /// Binary search for `key` in a sorted edges array. Returns
 /// `[index, found]`: when `found` is true `index` is the matched
 /// position; otherwise `index` is the insertion point.
-fn bsearch_label(edges: &Array<DfaLiteralEdge>, key: &String) -> [i32, bool] {
+fn bsearch_label(edges: &List<DfaLiteralEdge>, key: &String) -> [i32, bool] {
     let mut lo = 0;
     let mut hi = edges.len();
     while lo < hi {
@@ -184,7 +184,7 @@ fn bsearch_label(edges: &Array<DfaLiteralEdge>, key: &String) -> [i32, bool] {
 /// Binary search variant that compares edge labels against `path[start..end]`
 /// directly, with no intermediate `String` allocation. Returns the matched
 /// edge's target state id, or -1 on miss.
-fn bsearch_target_by_bytes(edges: &Array<DfaLiteralEdge>, path: &String, start: i32, end: i32) -> i32 {
+fn bsearch_target_by_bytes(edges: &List<DfaLiteralEdge>, path: &String, start: i32, end: i32) -> i32 {
     let mut lo = 0;
     let mut hi = edges.len();
     while lo < hi {
@@ -235,7 +235,7 @@ test "dfa: static routes" {
         RoutePattern { method: Method::Get, path: "/health", handler_id: 1 },
         RoutePattern { method: Method::Get, path: "/api/v1/users/list", handler_id: 2 },
         RoutePattern { method: Method::Get, path: "/api/v1/users/me", handler_id: 3 },
-    ] as Array<RoutePattern>;
+    ] as List<RoutePattern>;
     let r = DfaRouter::build(&routes);
     assert r.match_path(Method::Get, &"/health").handler_id == 1;
     assert r.match_path(Method::Get, &"/api/v1/users/list").handler_id == 2;
@@ -249,7 +249,7 @@ test "dfa: param + literal sibling (literal wins)" {
         RoutePattern { method: Method::Get, path: "/users/list", handler_id: 1 },
         RoutePattern { method: Method::Get, path: "/users/:id", handler_id: 2 },
         RoutePattern { method: Method::Get, path: "/users/:id/profile", handler_id: 3 },
-    ] as Array<RoutePattern>;
+    ] as List<RoutePattern>;
     let r = DfaRouter::build(&routes);
 
     assert r.match_path(Method::Get, &"/users/list").handler_id == 1;
@@ -266,7 +266,7 @@ test "dfa: param + literal sibling (literal wins)" {
 test "dfa: wildcard catch-all" {
     let routes = [
         RoutePattern { method: Method::Get, path: "/static/*path", handler_id: 9 },
-    ] as Array<RoutePattern>;
+    ] as List<RoutePattern>;
     let r = DfaRouter::build(&routes);
     let m = r.match_path(Method::Get, &"/static/css/main.css");
     assert m.handler_id == 9;
@@ -276,7 +276,7 @@ test "dfa: wildcard catch-all" {
 test "dfa: deep param chain" {
     let routes = [
         RoutePattern { method: Method::Get, path: "/api/v1/users/:uid/posts/:pid/comments/:cid", handler_id: 90 },
-    ] as Array<RoutePattern>;
+    ] as List<RoutePattern>;
     let r = DfaRouter::build(&routes);
     let m = r.match_path(Method::Get, &"/api/v1/users/12/posts/34/comments/56");
     assert m.handler_id == 90;
@@ -292,7 +292,7 @@ test "dfa: bsearch keeps array sorted across many inserts" {
         RoutePattern { method: Method::Get, path: "/mango", handler_id: 3 },
         RoutePattern { method: Method::Get, path: "/banana", handler_id: 4 },
         RoutePattern { method: Method::Get, path: "/cherry", handler_id: 5 },
-    ] as Array<RoutePattern>;
+    ] as List<RoutePattern>;
     let r = DfaRouter::build(&routes);
     assert r.match_path(Method::Get, &"/zoo").handler_id == 1;
     assert r.match_path(Method::Get, &"/apple").handler_id == 2;
@@ -305,7 +305,7 @@ test "dfa: bsearch keeps array sorted across many inserts" {
 test "dfa: method mismatch is a miss" {
     let routes = [
         RoutePattern { method: Method::Post, path: "/login", handler_id: 1 },
-    ] as Array<RoutePattern>;
+    ] as List<RoutePattern>;
     let r = DfaRouter::build(&routes);
     assert r.match_path(Method::Get, &"/login").handler_id == -1;
     assert r.match_path(Method::Post, &"/login").handler_id == 1;
@@ -315,7 +315,7 @@ test "dfa: root pattern matches /" {
     let routes = [
         RoutePattern { method: Method::Get, path: "/", handler_id: 7 },
         RoutePattern { method: Method::Get, path: "/foo", handler_id: 8 },
-    ] as Array<RoutePattern>;
+    ] as List<RoutePattern>;
     let r = DfaRouter::build(&routes);
     assert r.match_path(Method::Get, &"/").handler_id == 7;
     assert r.match_path(Method::Get, &"/foo").handler_id == 8;

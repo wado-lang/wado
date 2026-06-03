@@ -232,10 +232,10 @@ test "struct wrong field type" {
     }
 }
 
-// --- Array deserialization errors ---
+// --- List deserialization errors ---
 
 test "array malformed" {
-    let r = from_string::<Array<i32>>("[1,2,");
+    let r = from_string::<List<i32>>("[1,2,");
     if let Err(_) = r {
         // expected
     } else {
@@ -244,7 +244,7 @@ test "array malformed" {
 }
 
 test "array wrong element type" {
-    let r = from_string::<Array<i32>>(`[1,"two",3]`);
+    let r = from_string::<List<i32>>(`[1,"two",3]`);
     if let Err(_) = r {
         // expected
     } else {

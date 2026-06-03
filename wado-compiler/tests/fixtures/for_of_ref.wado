@@ -7,7 +7,7 @@ struct Point {
 
 fn test_for_of_ref_array() with Stdout {
     // for let x of &arr should give x: &i32
-    let arr: Array<i32> = [10, 20, 30];
+    let arr: List<i32> = [10, 20, 30];
     let mut sum = 0;
     for let x of &arr {
         sum += *x;
@@ -18,7 +18,7 @@ fn test_for_of_ref_array() with Stdout {
 
 fn test_for_of_ref_struct() with Stdout {
     // for let p of &points should give p: &Point
-    let points: Array<Point> = [
+    let points: List<Point> = [
         Point { x: 1, y: 2 },
         Point { x: 3, y: 4 },
     ];
@@ -31,12 +31,12 @@ fn test_for_of_ref_struct() with Stdout {
 }
 
 fn test_for_of_ref_var() with Stdout {
-    // When the variable itself has type &Array<T>
-    let arr: Array<i32> = [1, 2, 3];
+    // When the variable itself has type &List<T>
+    let arr: List<i32> = [1, 2, 3];
     let ra = &arr;
     let mut sum = 0;
     for let x of ra {
-        // x should be &i32 because ra is &Array<i32>
+        // x should be &i32 because ra is &List<i32>
         sum += *x;
     }
     assert sum == 6;
@@ -45,7 +45,7 @@ fn test_for_of_ref_var() with Stdout {
 
 fn test_for_of_value_unchanged() with Stdout {
     // Regular for-of should still yield T (not &T)
-    let arr: Array<i32> = [1, 2, 3];
+    let arr: List<i32> = [1, 2, 3];
     let mut sum = 0;
     for let x of arr {
         sum += x;

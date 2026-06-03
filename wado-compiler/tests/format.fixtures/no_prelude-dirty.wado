@@ -26,19 +26,19 @@ variant Shape {
 }
 
 /// Inherent impl: compact form with bounds inlined
-impl Array<T: Ord> {
+impl List<T: Ord> {
     /// Sort method
     fn sort(&mut self) {
     }
 
     /// Sorted method
-    fn sorted(&self) -> Array<T> {
+    fn sorted(&self) -> List<T> {
         return self.sorted();
     }
 }
 
 /// Trait impl: type params at impl level (expected, not compact)
-impl<T: Ord> Iterator for Array<T> {
+impl<T: Ord> Iterator for List<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -58,9 +58,9 @@ resource Handle;
 /// Resource: pub with methods, self: &Self normalized
 pub resource Stream {
     /// Read data from stream
-    fn read(self: &Self, len: u64) -> Array<u8>;
+    fn read(self: &Self, len: u64) -> List<u8>;
     /// Write data to stream
-    async fn write(self: &Self, data: Array<u8>);
+    async fn write(self: &Self, data: List<u8>);
     /// Close the stream
     fn close(self: &Self);
 }
@@ -104,7 +104,7 @@ struct DnsError {
 
 // Block comment /* */ before impl
 /* inherent impl with trait bound */
-impl Array<T: Ord> {
+impl List<T: Ord> {
     /* sort in ascending order */
     fn sort(&mut self) {
     }
@@ -113,7 +113,7 @@ impl Array<T: Ord> {
 // async methods in effect
 interface FileIO {
     /* read bytes */
-    async fn read(path: String) -> Array<u8>;
+    async fn read(path: String) -> List<u8>;
     /* write bytes */
-    fn write(path: String, data: Array<u8>);
+    fn write(path: String, data: List<u8>);
 }

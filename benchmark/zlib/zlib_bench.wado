@@ -13,7 +13,7 @@ use { zlib_compress, inflate_zlib } from "core:zlib";
 use { Preopens, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { Benchmark } from "core:benchmark";
 
-fn read_file_bytes(path: String) -> Array<u8> with Preopens {
+fn read_file_bytes(path: String) -> List<u8> with Preopens {
     let dirs = Preopens::get_directories();
     let root = dirs[0].0;
     let file = match root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait() {
@@ -21,7 +21,7 @@ fn read_file_bytes(path: String) -> Array<u8> with Preopens {
         Err(_) => panic(`failed to open {path}`),
     };
     let [stream, _done] = file.read_via_stream(0 as Filesize);
-    let mut buf: Array<u8> = [];
+    let mut buf: List<u8> = [];
     loop {
         let chunk = stream.read(65536);
         if chunk.len() == 0 {
@@ -37,7 +37,7 @@ fn read_file_bytes(path: String) -> Array<u8> with Preopens {
 
 test "smoke" {
     // Round-trip a tiny in-memory buffer; no Preopens needed.
-    let data: Array<u8> = [
+    let data: List<u8> = [
         72 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8, 44 as u8, 32 as u8, 87 as u8, 111 as u8, 114 as u8,
         108 as u8, 100 as u8, 33 as u8,
     ];

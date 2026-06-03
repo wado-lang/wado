@@ -23,7 +23,7 @@
 //! single-use element temps between them (see `pure_temp_binding`), and
 //! pushes to distinct array fields may interleave (see `try_collapse_at`).
 //!
-//! `Array::push` is identified by its [`CompilerItem::ArrayPush`] marker, not
+//! `Array::push` is identified by its [`CompilerItem::ListPush`] marker, not
 //! by a canonical path, mirroring `string_push`. `array_new` is identified by
 //! its builtin name.
 //!
@@ -67,7 +67,7 @@ pub fn collapse_array_literals(project: &mut NirPackage) -> bool {
 }
 
 /// Collect the mangled names of every `Array<T>::push` monomorphization by
-/// their shared [`CompilerItem::ArrayPush`] marker. Each element type produces
+/// their shared [`CompilerItem::ListPush`] marker. Each element type produces
 /// a distinct `NirFunction` (`Array<i32>::push`, `Array<String>::push`, …), so
 /// call sites are matched by membership in this set rather than against one
 /// reference.
@@ -77,7 +77,7 @@ fn resolve_array_push_names(project: &NirPackage) -> IndexSet<String> {
         .iter()
         .filter_map(|f| {
             let func = f.borrow();
-            (func.compiler_item == Some(CompilerItem::ArrayPush)).then(|| func.name.clone())
+            (func.compiler_item == Some(CompilerItem::ListPush)).then(|| func.name.clone())
         })
         .collect()
 }

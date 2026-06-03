@@ -35,17 +35,17 @@ impl Eq for Span {
 /// LexerSlice is a lazy reference to a range of characters in the source input.
 /// It avoids allocating a String for every token during tokenization.
 pub struct LexerSlice {
-    pub chars: &Array<char>,
+    pub chars: &List<char>,
     pub start: i32,
     pub end: i32,
 }
 
 impl LexerSlice {
-    pub fn new(chars: &Array<char>, start: i32, end: i32) -> LexerSlice with stores[chars] {
+    pub fn new(chars: &List<char>, start: i32, end: i32) -> LexerSlice with stores[chars] {
         return LexerSlice { chars, start, end };
     }
 
-    pub fn empty(chars: &Array<char>) -> LexerSlice with stores[chars] {
+    pub fn empty(chars: &List<char>) -> LexerSlice with stores[chars] {
         return LexerSlice { chars, start: 0, end: 0 };
     }
 
@@ -126,7 +126,7 @@ pub struct Token {
     pub kind: i32,
     pub text: LexerSlice,
     pub span: Span,
-    pub leading_trivia: Array<Token>,
+    pub leading_trivia: List<Token>,
     pub channel: i32,
 }
 
@@ -135,11 +135,11 @@ impl Token {
         return Token { kind, text, span, leading_trivia: [], channel: 0 };
     }
 
-    pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>) -> Token {
+    pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: List<Token>) -> Token {
         return Token { kind, text, span, leading_trivia, channel: 0 };
     }
 
-    pub fn with_channel(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>, channel: i32) -> Token {
+    pub fn with_channel(kind: i32, text: LexerSlice, span: Span, leading_trivia: List<Token>, channel: i32) -> Token {
         return Token { kind, text, span, leading_trivia, channel };
     }
 }
@@ -163,20 +163,20 @@ impl Token {
 pub struct ParseError {
     pub message: String,
     pub span: Span,
-    pub expected: Array<String>,
+    pub expected: List<String>,
     pub line: i32 = 1,
     pub col: i32 = 0,
-    pub rule_stack: Array<String> = [],
+    pub rule_stack: List<String> = [],
 }
 
 impl ParseError {
-    pub fn new(message: String, span: Span, expected: Array<String>) -> ParseError {
+    pub fn new(message: String, span: Span, expected: List<String>) -> ParseError {
         return ParseError { message, span, expected };
     }
 
     /// Construct a ParseError whose position is already resolved. Used by
     /// `Parser::error`, which has the source on hand to compute line/col.
-    pub fn at(message: String, span: Span, expected: Array<String>, line: i32, col: i32) -> ParseError {
+    pub fn at(message: String, span: Span, expected: List<String>, line: i32, col: i32) -> ParseError {
         return ParseError { message, span, expected, line, col, rule_stack: [] };
     }
 
@@ -223,7 +223,7 @@ pub variant CstChild {
 pub struct CstNode {
     pub name: String,
     pub span: Span,
-    pub children: Array<CstChild>,
+    pub children: List<CstChild>,
 }
 
 impl CstNode {
@@ -326,8 +326,8 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// Text escaping follows `CommonToken.toString` (`vendor/antlr4/runtime/
 /// Java/src/org/antlr/v4/runtime/CommonToken.java`): only `\n`, `\r`,
 /// `\t` are escaped; backslashes and quotes pass through unchanged.
-pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
-    let chars: Array<char> = input.chars().collect();
+pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
+    let chars: List<char> = input.chars().collect();
     let mut out = String::with_capacity(tokens.len() * 32);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
@@ -356,7 +356,7 @@ pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> 
 /// `to_lexer_string` for both main-stream tokens and interleaved
 /// non-default-channel trivia. `channel=N` is printed only for non-default
 /// channels, matching ANTLR4.
-fn emit_lexer_token(out: &mut String, tok: &Token, chars: &Array<char>, index: i32, eof_kind: i32) {
+fn emit_lexer_token(out: &mut String, tok: &Token, chars: &List<char>, index: i32, eof_kind: i32) {
     let is_eof = tok.kind == eof_kind;
     let mut text_buf = String::with_capacity(16);
     if is_eof {
@@ -383,7 +383,7 @@ fn emit_lexer_token(out: &mut String, tok: &Token, chars: &Array<char>, index: i
 
 /// Compute (line, column) at a 0-based char index in `chars`, with
 /// 1-based line and 0-based column to match ANTLR4's `Token` getters.
-fn line_col_at(chars: &Array<char>, pos: i32) -> [i32, i32] {
+fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
     let mut line = 1;
     let mut col = 0;
     let cap = if pos < chars.len() { pos } else { chars.len() };
@@ -412,9 +412,9 @@ pub struct HighlightOverride {
 /// passes to `Visitor::enter_rule`. The generator emits the names in
 /// parser-rule declaration order; index = rule id.
 pub struct HighlightMapping {
-    pub defaults: Array<String>,
-    pub rule_names: Array<String>,
-    pub overrides: Array<HighlightOverride>,
+    pub defaults: List<String>,
+    pub rule_names: List<String>,
+    pub overrides: List<HighlightOverride>,
 }
 
 /// A single highlight capture: a named range in the source text.
@@ -434,15 +434,15 @@ struct ResolvedOverride {
 
 /// HighlightVisitor collects highlight captures during a CST walk.
 pub struct HighlightVisitor {
-    defaults: Array<String>,
-    overrides: Array<ResolvedOverride>,
-    rule_stack: Array<i32>,
-    pub captures: Array<HighlightCapture>,
+    defaults: List<String>,
+    overrides: List<ResolvedOverride>,
+    rule_stack: List<i32>,
+    pub captures: List<HighlightCapture>,
 }
 
 impl HighlightVisitor {
     pub fn new(mapping: HighlightMapping) -> HighlightVisitor {
-        let mut overrides: Array<ResolvedOverride> = Array::with_capacity(mapping.overrides.len());
+        let mut overrides: List<ResolvedOverride> = List::with_capacity(mapping.overrides.len());
         for let ov of &mapping.overrides {
             let mut id: i32 = -1;
             for let mut i = 0; i < mapping.rule_names.len(); i += 1 {
@@ -556,7 +556,7 @@ fn push_class(out: &mut String, capture: &String) {
 
 /// Produce a highlighted HTML fragment from source text and captures.
 /// Captures must be sorted by start position (as produced by HighlightVisitor).
-pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> String {
+pub fn highlight_html(source: &String, captures: &List<HighlightCapture>) -> String {
     let mut out = String::with_capacity(source.len() * 5);
     let mut pos = 0;
     let mut iter = source.chars();
@@ -585,7 +585,7 @@ pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> St
     return out;
 }
 
-fn substr(chars: &Array<char>, start: i32, end: i32) -> String {
+fn substr(chars: &List<char>, start: i32, end: i32) -> String {
     let mut out = String::with_capacity(end - start);
     let mut i = start;
     while i < end && i < chars.len() {
@@ -614,7 +614,7 @@ pub trait Visitor {
 
 /// TreeRecorder is a Visitor that records events for building a CstNode tree.
 pub struct TreeRecorder {
-    events: Array<TreeEvent>,
+    events: List<TreeEvent>,
 }
 
 variant TreeEvent {
@@ -653,10 +653,10 @@ impl Visitor for TreeRecorder {
     }
 }
 
-fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
+fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
     if let Enter(info) = events[*pos] {
         *pos += 1;
-        let mut children: Array<CstChild> = [];
+        let mut children: List<CstChild> = [];
         loop {
             if *pos >= events.len() {
                 break;
@@ -750,31 +750,31 @@ pub enum TokenKind {
 
 pub struct CharsetItemListItem {
     pub charset: CharsetNode,
-    pub comment_or_space_or_cdo_or_cdc_list: Array<Token>,
+    pub comment_or_space_or_cdo_or_cdc_list: List<Token>,
 }
 
 pub struct ImportsItemListItem {
     pub imports: ImportsNode,
-    pub comment_or_space_or_cdo_or_cdc_list: Array<Token>,
+    pub comment_or_space_or_cdo_or_cdc_list: List<Token>,
 }
 
 pub struct NamespaceItemListItem {
     pub namespace_: NamespaceNode,
-    pub comment_or_space_or_cdo_or_cdc_list: Array<Token>,
+    pub comment_or_space_or_cdo_or_cdc_list: List<Token>,
 }
 
 pub struct NestedStatementItemListItem {
     pub nested_statement: NestedStatementNode,
-    pub comment_or_space_or_cdo_or_cdc_list: Array<Token>,
+    pub comment_or_space_or_cdo_or_cdc_list: List<Token>,
 }
 
 pub struct StylesheetNode {
     pub span: Span,
     pub ws: WsNode,
-    pub charset_item_list: Array<CharsetItemListItem>,
-    pub imports_item_list: Array<ImportsItemListItem>,
-    pub namespace__item_list: Array<NamespaceItemListItem>,
-    pub nested_statement_item_list: Array<NestedStatementItemListItem>,
+    pub charset_item_list: List<CharsetItemListItem>,
+    pub imports_item_list: List<ImportsItemListItem>,
+    pub namespace__item_list: List<NamespaceItemListItem>,
+    pub nested_statement_item_list: List<NestedStatementItemListItem>,
     pub eof: Token,
 }
 
@@ -976,7 +976,7 @@ pub struct CommaWsMediaQueryItem {
 
 pub struct MediaQueryItemListItem {
     pub media_query: MediaQueryNode,
-    pub comma_ws_media_query_list: Array<CommaWsMediaQueryItem>,
+    pub comma_ws_media_query_list: List<CommaWsMediaQueryItem>,
 }
 
 pub struct MediaQueryListNode {
@@ -1002,13 +1002,13 @@ pub struct MediaQueryAlt0 {
     pub ws: WsNode,
     pub media_type: MediaTypeNode,
     pub ws_2: WsNode,
-    pub and_ws_media_expression_list: Array<AndWsMediaExpressionItem>,
+    pub and_ws_media_expression_list: List<AndWsMediaExpressionItem>,
 }
 
 pub struct MediaQueryAlt1 {
     pub span: Span,
     pub media_expression: MediaExpressionNode,
-    pub and_ws_media_expression_list: Array<AndWsMediaExpressionItem>,
+    pub and_ws_media_expression_list: List<AndWsMediaExpressionItem>,
 }
 
 pub struct MediaTypeNode {
@@ -1052,7 +1052,7 @@ pub struct PageNode {
     pub lbrace: Token,
     pub ws_2: WsNode,
     pub declaration: Option<DeclarationNode>,
-    pub semicolon_ws_declaration_list: Array<SemicolonWsDeclarationOptItem>,
+    pub semicolon_ws_declaration_list: List<SemicolonWsDeclarationOptItem>,
     pub rbrace: Token,
     pub ws_3: WsNode,
 }
@@ -1073,7 +1073,7 @@ pub struct CommaWsSelectorItem {
 pub struct SelectorGroupNode {
     pub span: Span,
     pub selector: SelectorNode,
-    pub comma_ws_selector_list: Array<CommaWsSelectorItem>,
+    pub comma_ws_selector_list: List<CommaWsSelectorItem>,
 }
 
 pub struct CombinatorSimpleSelectorSequenceWsItem {
@@ -1086,7 +1086,7 @@ pub struct SelectorNode {
     pub span: Span,
     pub simple_selector_sequence: SimpleSelectorSequenceNode,
     pub ws: WsNode,
-    pub combinator_simple_selector_sequence_ws_list: Array<CombinatorSimpleSelectorSequenceWsItem>,
+    pub combinator_simple_selector_sequence_ws_list: List<CombinatorSimpleSelectorSequenceWsItem>,
 }
 
 pub variant CombinatorNode {
@@ -1161,7 +1161,7 @@ pub struct SimpleSelectorSequenceGroup0Alt4 {
 pub struct SimpleSelectorSequenceAlt0 {
     pub span: Span,
     pub type_selector_or_universal: Option<TypeSelectorOrUniversalGroup>,
-    pub group_0_list: Array<SimpleSelectorSequenceGroup0>,
+    pub group_0_list: List<SimpleSelectorSequenceGroup0>,
 }
 
 pub variant SimpleSelectorSequenceGroup1 {
@@ -1194,7 +1194,7 @@ pub struct SimpleSelectorSequenceGroup1Alt4 {
 
 pub struct SimpleSelectorSequenceAlt1 {
     pub span: Span,
-    pub group_1_list: Array<SimpleSelectorSequenceGroup1>,
+    pub group_1_list: List<SimpleSelectorSequenceGroup1>,
 }
 
 pub struct TypeSelectorNode {
@@ -1335,7 +1335,7 @@ pub struct ItemWsItem {
 
 pub struct ExpressionNode {
     pub span: Span,
-    pub item_ws_list: Array<ItemWsItem>,
+    pub item_ws_list: List<ItemWsItem>,
 }
 
 pub struct NegationNode {
@@ -1465,7 +1465,7 @@ pub struct RulesetknownRuleset {
 
 pub struct RulesetunknownRuleset {
     pub span: Span,
-    pub any__list: Array<AnyNode>,
+    pub any__list: List<AnyNode>,
     pub lbrace: Token,
     pub ws: WsNode,
     pub declaration_list: Option<DeclarationListNode>,
@@ -1480,10 +1480,10 @@ pub struct SemicolonWsItem {
 
 pub struct DeclarationListNode {
     pub span: Span,
-    pub semicolon_ws_list: Array<SemicolonWsItem>,
+    pub semicolon_ws_list: List<SemicolonWsItem>,
     pub declaration: DeclarationNode,
     pub ws: WsNode,
-    pub semicolon_ws_declaration_list: Array<SemicolonWsDeclarationOptItem>,
+    pub semicolon_ws_declaration_list: List<SemicolonWsDeclarationOptItem>,
 }
 
 pub variant DeclarationNode {
@@ -1535,7 +1535,7 @@ pub struct ValueGroup0Alt2 {
 
 pub struct ValueNode {
     pub span: Span,
-    pub group_0_list: Array<ValueGroup0>,
+    pub group_0_list: List<ValueGroup0>,
 }
 
 pub struct OperatorOptTermItem {
@@ -1546,7 +1546,7 @@ pub struct OperatorOptTermItem {
 pub struct ExprNode {
     pub span: Span,
     pub term: TermNode,
-    pub operator__term_list: Array<OperatorOptTermItem>,
+    pub operator__term_list: List<OperatorOptTermItem>,
 }
 
 pub variant TermNode {
@@ -1785,7 +1785,7 @@ pub struct AnyAlt12 {
     pub span: Span,
     pub function_: Token,
     pub ws: WsNode,
-    pub any__or_unused_list: Array<AnyOrUnusedGroup>,
+    pub any__or_unused_list: List<AnyOrUnusedGroup>,
     pub rparen: Token,
     pub ws_2: WsNode,
 }
@@ -1794,7 +1794,7 @@ pub struct AnyAlt13 {
     pub span: Span,
     pub lparen: Token,
     pub ws: WsNode,
-    pub any__or_unused_list: Array<AnyOrUnusedGroup>,
+    pub any__or_unused_list: List<AnyOrUnusedGroup>,
     pub rparen: Token,
     pub ws_2: WsNode,
 }
@@ -1803,7 +1803,7 @@ pub struct AnyAlt14 {
     pub span: Span,
     pub lbracket: Token,
     pub ws: WsNode,
-    pub any__or_unused_list: Array<AnyOrUnusedGroup>,
+    pub any__or_unused_list: List<AnyOrUnusedGroup>,
     pub rbracket: Token,
     pub ws_2: WsNode,
 }
@@ -1826,7 +1826,7 @@ pub struct AtRuleNode {
     pub span: Span,
     pub atkeyword: Token,
     pub ws: WsNode,
-    pub any__list: Array<AnyNode>,
+    pub any__list: List<AnyNode>,
     pub group_0: Option<AtRuleGroup0>,
 }
 
@@ -1906,7 +1906,7 @@ pub struct BlockNode {
     pub span: Span,
     pub lbrace: Token,
     pub ws: WsNode,
-    pub group_0_list: Array<BlockGroup0>,
+    pub group_0_list: List<BlockGroup0>,
     pub rbrace: Token,
     pub ws_2: WsNode,
 }
@@ -1978,7 +1978,7 @@ pub struct GroupRuleBodyNode {
     pub span: Span,
     pub lbrace: Token,
     pub ws: WsNode,
-    pub nested_statement_list: Array<NestedStatementNode>,
+    pub nested_statement_list: List<NestedStatementNode>,
     pub rbrace: Token,
     pub ws_2: WsNode,
 }
@@ -2067,7 +2067,7 @@ pub struct WsSpaceWsAndWsSpaceWsSupportsConditionInParensItem {
 pub struct SupportsConjunctionNode {
     pub span: Span,
     pub supports_condition_in_parens: SupportsConditionInParensNode,
-    pub ws_space_ws_and_ws_space_ws_supports_condition_in_parens_list: Array<WsSpaceWsAndWsSpaceWsSupportsConditionInParensItem>,
+    pub ws_space_ws_and_ws_space_ws_supports_condition_in_parens_list: List<WsSpaceWsAndWsSpaceWsSupportsConditionInParensItem>,
 }
 
 pub struct WsSpaceWsOrWsSpaceWsSupportsConditionInParensItem {
@@ -2084,7 +2084,7 @@ pub struct WsSpaceWsOrWsSpaceWsSupportsConditionInParensItem {
 pub struct SupportsDisjunctionNode {
     pub span: Span,
     pub supports_condition_in_parens: SupportsConditionInParensNode,
-    pub ws_space_ws_or_ws_space_ws_supports_condition_in_parens_list: Array<WsSpaceWsOrWsSpaceWsSupportsConditionInParensItem>,
+    pub ws_space_ws_or_ws_space_ws_supports_condition_in_parens_list: List<WsSpaceWsOrWsSpaceWsSupportsConditionInParensItem>,
 }
 
 pub struct SupportsDeclarationConditionNode {
@@ -2098,7 +2098,7 @@ pub struct SupportsDeclarationConditionNode {
 pub struct GeneralEnclosedNode {
     pub span: Span,
     pub function__or_lparen: Token,
-    pub any__or_unused_list: Array<AnyOrUnusedGroup>,
+    pub any__or_unused_list: List<AnyOrUnusedGroup>,
     pub rparen: Token,
 }
 
@@ -2153,7 +2153,7 @@ pub struct SpaceWsItemWsSpaceWsCalcProductItem {
 pub struct CalcSumNode {
     pub span: Span,
     pub calc_product: CalcProductNode,
-    pub space_ws_item_ws_space_ws_calc_product_list: Array<SpaceWsItemWsSpaceWsCalcProductItem>,
+    pub space_ws_item_ws_space_ws_calc_product_list: List<SpaceWsItemWsSpaceWsCalcProductItem>,
 }
 
 pub variant CalcProductGroup0 {
@@ -2177,7 +2177,7 @@ pub struct CalcProductGroup0Alt1 {
 pub struct CalcProductNode {
     pub span: Span,
     pub calc_value: CalcValueNode,
-    pub group_0_list: Array<CalcProductGroup0>,
+    pub group_0_list: List<CalcProductGroup0>,
 }
 
 pub variant CalcValueNode {
@@ -2234,7 +2234,7 @@ pub struct FontFaceRuleNode {
     pub lbrace: Token,
     pub ws_2: WsNode,
     pub font_face_declaration: Option<FontFaceDeclarationNode>,
-    pub semicolon_ws_font_face_declaration_list: Array<SemicolonWsFontFaceDeclarationOptItem>,
+    pub semicolon_ws_font_face_declaration_list: List<SemicolonWsFontFaceDeclarationOptItem>,
     pub rbrace: Token,
     pub ws_3: WsNode,
 }
@@ -2270,7 +2270,7 @@ pub struct KeyframesRuleNode {
     pub ws_3: WsNode,
     pub lbrace: Token,
     pub ws_4: WsNode,
-    pub keyframe_block_list: Array<KeyframeBlockNode>,
+    pub keyframe_block_list: List<KeyframeBlockNode>,
     pub rbrace: Token,
     pub ws_5: WsNode,
 }
@@ -2300,7 +2300,7 @@ pub struct KeyframeSelectorNode {
     pub span: Span,
     pub from__or_to_or_percentage: Token,
     pub ws: WsNode,
-    pub comma_ws_item_ws_list: Array<CommaWsItemWsItem>,
+    pub comma_ws_item_ws_list: List<CommaWsItemWsItem>,
 }
 
 pub struct ViewportNode {
@@ -2335,7 +2335,7 @@ pub struct FontFeatureValuesRuleNode {
     pub ws_2: WsNode,
     pub lbrace: Token,
     pub ws_3: WsNode,
-    pub feature_value_block_list: Array<FeatureValueBlockNode>,
+    pub feature_value_block_list: List<FeatureValueBlockNode>,
     pub rbrace: Token,
     pub ws_4: WsNode,
 }
@@ -2350,7 +2350,7 @@ pub struct WsCommaWsFontFamilyNameItem {
 pub struct FontFamilyNameListNode {
     pub span: Span,
     pub font_family_name: FontFamilyNameNode,
-    pub ws_comma_ws_font_family_name_list: Array<WsCommaWsFontFamilyNameItem>,
+    pub ws_comma_ws_font_family_name_list: List<WsCommaWsFontFamilyNameItem>,
 }
 
 pub variant FontFamilyNameNode {
@@ -2371,7 +2371,7 @@ pub struct WsIdentItem {
 pub struct FontFamilyNameAlt1 {
     pub span: Span,
     pub ident: IdentNode,
-    pub ws_ident_list: Array<WsIdentItem>,
+    pub ws_ident_list: List<WsIdentItem>,
 }
 
 pub struct WsSemicolonWsFeatureValueDefinitionOptItem {
@@ -2388,7 +2388,7 @@ pub struct FeatureValueBlockNode {
     pub lbrace: Token,
     pub ws_2: WsNode,
     pub feature_value_definition: Option<FeatureValueDefinitionNode>,
-    pub ws_semicolon_ws_feature_value_definition_list: Array<WsSemicolonWsFeatureValueDefinitionOptItem>,
+    pub ws_semicolon_ws_feature_value_definition_list: List<WsSemicolonWsFeatureValueDefinitionOptItem>,
     pub rbrace: Token,
     pub ws_3: WsNode,
 }
@@ -2410,7 +2410,7 @@ pub struct FeatureValueDefinitionNode {
     pub colon: Token,
     pub ws_2: WsNode,
     pub number: NumberNode,
-    pub ws_number_list: Array<WsNumberItem>,
+    pub ws_number_list: List<WsNumberItem>,
 }
 
 pub variant IdentNode {
@@ -2460,7 +2460,7 @@ pub struct IdentAlt6 {
 
 pub struct WsNode {
     pub span: Span,
-    pub comment_or_space_list: Array<Token>,
+    pub comment_or_space_list: List<Token>,
 }
 
 global TK_OpenBracket: i32 = 0;
@@ -2545,7 +2545,7 @@ global TK_LIT_SLASH: i32 = 78;
 global TK_LIT_U5f: i32 = 79;
 
 struct Lexer {
-    chars: Array<char>,
+    chars: List<char>,
     pos: i32,
 }
 
@@ -2563,7 +2563,7 @@ impl Lexer {
     }
 }
 
-fn try_comment(chars: &Array<char>, start: i32) -> i32 {
+fn try_comment(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
@@ -2647,7 +2647,7 @@ fn try_comment(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_url(chars: &Array<char>, start: i32) -> i32 {
+fn try_url(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_7 = pos;
     let mut alts_ok_7 = false;
@@ -3185,7 +3185,7 @@ fn try_url(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_space(chars: &Array<char>, start: i32) -> i32 {
+fn try_space(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n' || chars[pos] == 'f') { return -1; }
@@ -3204,7 +3204,7 @@ fn try_space(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_cdo(chars: &Array<char>, start: i32) -> i32 {
+fn try_cdo(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '<' { return -1; }
     pos += 1;
@@ -3217,7 +3217,7 @@ fn try_cdo(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_cdc(chars: &Array<char>, start: i32) -> i32 {
+fn try_cdc(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '-' { return -1; }
     pos += 1;
@@ -3228,7 +3228,7 @@ fn try_cdc(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_includes(chars: &Array<char>, start: i32) -> i32 {
+fn try_includes(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '~' { return -1; }
     pos += 1;
@@ -3237,7 +3237,7 @@ fn try_includes(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_dashmatch(chars: &Array<char>, start: i32) -> i32 {
+fn try_dashmatch(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '|' { return -1; }
     pos += 1;
@@ -3246,7 +3246,7 @@ fn try_dashmatch(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_hash(chars: &Array<char>, start: i32) -> i32 {
+fn try_hash(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '#' { return -1; }
     pos += 1;
@@ -3499,7 +3499,7 @@ fn try_hash(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_import(chars: &Array<char>, start: i32) -> i32 {
+fn try_import(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -4250,7 +4250,7 @@ fn try_import(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_page(chars: &Array<char>, start: i32) -> i32 {
+fn try_page(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -4713,7 +4713,7 @@ fn try_page(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_media(chars: &Array<char>, start: i32) -> i32 {
+fn try_media(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -5280,7 +5280,7 @@ fn try_media(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_namespace(chars: &Array<char>, start: i32) -> i32 {
+fn try_namespace(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -6303,7 +6303,7 @@ fn try_namespace(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_charset(chars: &Array<char>, start: i32) -> i32 {
+fn try_charset(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -6326,7 +6326,7 @@ fn try_charset(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_important(chars: &Array<char>, start: i32) -> i32 {
+fn try_important(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '!' { return -1; }
     pos += 1;
@@ -7454,7 +7454,7 @@ fn try_important(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_percentage(chars: &Array<char>, start: i32) -> i32 {
+fn try_percentage(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     pos = try_number(chars, pos);
     if pos < 0 { return -1; }
@@ -7463,7 +7463,7 @@ fn try_percentage(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_url_(chars: &Array<char>, start: i32) -> i32 {
+fn try_url_(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'u' { return -1; }
     pos += 1;
@@ -7476,7 +7476,7 @@ fn try_url_(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_unicoderange(chars: &Array<char>, start: i32) -> i32 {
+fn try_unicoderange(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_290 = pos;
     let mut alts_ok_290 = false;
@@ -7755,7 +7755,7 @@ fn try_unicoderange(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_mediaonly(chars: &Array<char>, start: i32) -> i32 {
+fn try_mediaonly(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_311 = pos;
     let mut alts_ok_311 = false;
@@ -8256,7 +8256,7 @@ fn try_mediaonly(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_not(chars: &Array<char>, start: i32) -> i32 {
+fn try_not(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_339 = pos;
     let mut alts_ok_339 = false;
@@ -8633,7 +8633,7 @@ fn try_not(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_and(chars: &Array<char>, start: i32) -> i32 {
+fn try_and(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_360 = pos;
     let mut alts_ok_360 = false;
@@ -8970,7 +8970,7 @@ fn try_and(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_dimension(chars: &Array<char>, start: i32) -> i32 {
+fn try_dimension(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_381 = pos;
     let mut alts_ok_381 = false;
@@ -17208,7 +17208,7 @@ fn try_dimension(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_unknowndimension(chars: &Array<char>, start: i32) -> i32 {
+fn try_unknowndimension(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     pos = try_number(chars, pos);
     if pos < 0 { return -1; }
@@ -17217,42 +17217,42 @@ fn try_unknowndimension(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_plus(chars: &Array<char>, start: i32) -> i32 {
+fn try_plus(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '+' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_minus(chars: &Array<char>, start: i32) -> i32 {
+fn try_minus(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '-' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_greater(chars: &Array<char>, start: i32) -> i32 {
+fn try_greater(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '>' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_comma(chars: &Array<char>, start: i32) -> i32 {
+fn try_comma(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ',' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_tilde(chars: &Array<char>, start: i32) -> i32 {
+fn try_tilde(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '~' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_pseudonot(chars: &Array<char>, start: i32) -> i32 {
+fn try_pseudonot(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ':' { return -1; }
     pos += 1;
@@ -17633,7 +17633,7 @@ fn try_pseudonot(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_number(chars: &Array<char>, start: i32) -> i32 {
+fn try_number(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_880 = pos;
     let mut alts_ok_880 = false;
@@ -17692,7 +17692,7 @@ fn try_number(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_string_(chars: &Array<char>, start: i32) -> i32 {
+fn try_string_(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_884 = pos;
     let mut alts_ok_884 = false;
@@ -18058,7 +18058,7 @@ fn try_string_(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_prefixmatch(chars: &Array<char>, start: i32) -> i32 {
+fn try_prefixmatch(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '^' { return -1; }
     pos += 1;
@@ -18067,7 +18067,7 @@ fn try_prefixmatch(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_suffixmatch(chars: &Array<char>, start: i32) -> i32 {
+fn try_suffixmatch(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '$' { return -1; }
     pos += 1;
@@ -18076,7 +18076,7 @@ fn try_suffixmatch(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_substringmatch(chars: &Array<char>, start: i32) -> i32 {
+fn try_substringmatch(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '*' { return -1; }
     pos += 1;
@@ -18085,7 +18085,7 @@ fn try_substringmatch(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_fontface(chars: &Array<char>, start: i32) -> i32 {
+fn try_fontface(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -19063,7 +19063,7 @@ fn try_fontface(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_supports(chars: &Array<char>, start: i32) -> i32 {
+fn try_supports(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -20062,7 +20062,7 @@ fn try_supports(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_or(chars: &Array<char>, start: i32) -> i32 {
+fn try_or(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_1023 = pos;
     let mut alts_ok_1023 = false;
@@ -20315,7 +20315,7 @@ fn try_or(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_keyframes(chars: &Array<char>, start: i32) -> i32 {
+fn try_keyframes(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -22595,7 +22595,7 @@ fn try_keyframes(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_from(chars: &Array<char>, start: i32) -> i32 {
+fn try_from(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_1172 = pos;
     let mut alts_ok_1172 = false;
@@ -23076,7 +23076,7 @@ fn try_from(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_to(chars: &Array<char>, start: i32) -> i32 {
+fn try_to(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_1200 = pos;
     let mut alts_ok_1200 = false;
@@ -23329,7 +23329,7 @@ fn try_to(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_calc(chars: &Array<char>, start: i32) -> i32 {
+fn try_calc(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
     pos += 1;
@@ -23344,7 +23344,7 @@ fn try_calc(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_viewport(chars: &Array<char>, start: i32) -> i32 {
+fn try_viewport(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -24323,7 +24323,7 @@ fn try_viewport(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_counterstyle(chars: &Array<char>, start: i32) -> i32 {
+fn try_counterstyle(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -25837,7 +25837,7 @@ fn try_counterstyle(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_fontfeaturevalues(chars: &Array<char>, start: i32) -> i32 {
+fn try_fontfeaturevalues(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -27970,7 +27970,7 @@ fn try_fontfeaturevalues(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_dximagetransform(chars: &Array<char>, start: i32) -> i32 {
+fn try_dximagetransform(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'p' { return -1; }
     pos += 1;
@@ -28045,7 +28045,7 @@ fn try_dximagetransform(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_atkeyword(chars: &Array<char>, start: i32) -> i32 {
+fn try_atkeyword(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '@' { return -1; }
     pos += 1;
@@ -28054,7 +28054,7 @@ fn try_atkeyword(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_variable(chars: &Array<char>, start: i32) -> i32 {
+fn try_variable(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '-' { return -1; }
     pos += 1;
@@ -28309,7 +28309,7 @@ fn try_variable(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_var(chars: &Array<char>, start: i32) -> i32 {
+fn try_var(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'v' { return -1; }
     pos += 1;
@@ -28322,7 +28322,7 @@ fn try_var(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ident(chars: &Array<char>, start: i32) -> i32 {
+fn try_ident(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let opt_saved_1508 = pos;
     let mut opt_ok_1508 = false;
@@ -28581,7 +28581,7 @@ fn try_ident(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_function_(chars: &Array<char>, start: i32) -> i32 {
+fn try_function_(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     pos = try_ident(chars, pos);
     if pos < 0 { return -1; }
@@ -28590,98 +28590,98 @@ fn try_function_(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_unexpectedcharacter(chars: &Array<char>, start: i32) -> i32 {
+fn try_unexpectedcharacter(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_lit_semi(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_semi(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ';' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_lparen(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_lparen(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '(' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_colon(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_colon(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ':' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_rparen(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_rparen(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ')' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_lbrace(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_lbrace(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '{' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_rbrace(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_rbrace(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '}' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_star(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_star(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '*' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_pipe(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_pipe(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '|' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_dot(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_dot(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '.' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_lbracket(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_lbracket(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '[' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_eq(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_eq(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '=' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_rbracket(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_rbracket(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ']' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_slash(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_slash(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '/' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_u5f(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_u5f(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '_' { return -1; }
     return pos + 1;
 }
 
-fn classify_keyword(chars: &Array<char>, start: i32, end: i32) -> i32 {
+fn classify_keyword(chars: &List<char>, start: i32, end: i32) -> i32 {
     let len = end - start;
     if len == 1 {
         if chars[start + 0] == '_' { return TK_Underscore; }
@@ -28689,10 +28689,10 @@ fn classify_keyword(chars: &Array<char>, start: i32, end: i32) -> i32 {
     return -1;
 }
 
-pub fn tokenize(input: &String) -> Array<Token> {
+pub fn tokenize(input: &String) -> List<Token> {
     let mut lexer = Lexer::new(input);
-    let mut tokens: Array<Token> = Array::with_capacity(lexer.chars.len() / 4 + 1);
-    let mut trivia: Array<Token> = [];
+    let mut tokens: List<Token> = List::with_capacity(lexer.chars.len() / 4 + 1);
+    let mut trivia: List<Token> = [];
     while !lexer.at_end() {
         let start = lexer.pos;
         let mut best_end: i32 = -1;
@@ -29462,17 +29462,17 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 struct Parser {
-    tokens: Array<Token>,
+    tokens: List<Token>,
     pos: i32,
-    chars: Array<char>,
+    chars: List<char>,
 }
 
 impl Parser {
-    fn new(tokens: Array<Token>, chars: Array<char>) -> Parser {
+    fn new(tokens: List<Token>, chars: List<char>) -> Parser {
         return Parser { tokens, pos: 0, chars };
     }
 
-    fn error(&self, message: String, span: Span, expected: Array<String>) -> ParseError {
+    fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
         let lc = line_col_at(&self.chars, span.start);
         return ParseError::at(message, span, expected, lc.0, lc.1);
     }
@@ -29539,7 +29539,7 @@ impl Parser {
         ));
     }
 
-    fn match_not(&mut self, excluded: Array<i32>) -> Result<Token, ParseError> {
+    fn match_not(&mut self, excluded: List<i32>) -> Result<Token, ParseError> {
         let k = self.tokens[self.pos].kind;
         if k != TK_EOF {
             let mut blocked = false;
@@ -29561,7 +29561,7 @@ impl Parser {
         ));
     }
 
-    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+    fn match_set(&mut self, included: List<i32>) -> Result<Token, ParseError> {
         let k = self.tokens[self.pos].kind;
         for let x of included {
             if x == k {
@@ -29580,7 +29580,7 @@ impl Parser {
     }
 }
 
-fn scan_stylesheet(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_stylesheet(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_ws(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -29773,7 +29773,7 @@ fn scan_stylesheet(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_charset(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_charset(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -29817,7 +29817,7 @@ fn scan_charset(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_imports(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_imports(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -29961,7 +29961,7 @@ fn scan_imports(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_namespace_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_namespace_(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -30067,14 +30067,14 @@ fn scan_namespace_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_namespace_prefix(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_namespace_prefix(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_ident(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_media(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_media(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Media { return -1; }
     pos += 1;
@@ -30089,7 +30089,7 @@ fn scan_media(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_media_query_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_media_query_list(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_5(tokens[pos].kind) {
         let sp = pos;
@@ -30125,7 +30125,7 @@ fn scan_media_query_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     return pos;
 }
 
-fn scan_media_query(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_media_query(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -30211,14 +30211,14 @@ fn scan_media_query(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_media_type(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_media_type(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_ident(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_media_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_media_expression(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
@@ -30249,7 +30249,7 @@ fn scan_media_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     return pos;
 }
 
-fn scan_media_feature(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_media_feature(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_ident(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -30258,7 +30258,7 @@ fn scan_media_feature(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     return pos;
 }
 
-fn scan_page(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_page(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Page { return -1; }
     pos += 1;
@@ -30305,7 +30305,7 @@ fn scan_page(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_pseudo_page(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_pseudo_page(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { return -1; }
     pos += 1;
@@ -30316,7 +30316,7 @@ fn scan_pseudo_page(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_selector_group(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_selector_group(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_selector(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -30340,7 +30340,7 @@ fn scan_selector_group(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     return pos;
 }
 
-fn scan_selector(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_selector(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_simple_selector_sequence(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -30366,7 +30366,7 @@ fn scan_selector(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_combinator(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_combinator(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -30418,7 +30418,7 @@ fn scan_combinator(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_simple_selector_sequence(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_simple_selector_sequence(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -30578,7 +30578,7 @@ fn scan_simple_selector_sequence(tokens: &Array<Token>, pos: i32, min_prec: i32 
     return pos;
 }
 
-fn scan_type_selector(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_type_selector(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_12(tokens[pos].kind) {
         let sp = pos;
@@ -30590,7 +30590,7 @@ fn scan_type_selector(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     return pos;
 }
 
-fn scan_type_namespace_prefix(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_type_namespace_prefix(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_13(tokens[pos].kind) {
         let sp = pos;
@@ -30617,14 +30617,14 @@ fn scan_type_namespace_prefix(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0
     return pos;
 }
 
-fn scan_element_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_element_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_ident(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_universal(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_universal(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_14(tokens[pos].kind) {
         let sp = pos;
@@ -30636,7 +30636,7 @@ fn scan_universal(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_class_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_class_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DOT { return -1; }
     pos += 1;
@@ -30645,7 +30645,7 @@ fn scan_class_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_attrib(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_attrib(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { return -1; }
     pos += 1;
@@ -30738,7 +30738,7 @@ fn scan_attrib(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_pseudo(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_pseudo(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_COLON { return -1; }
     pos += 1;
@@ -30769,7 +30769,7 @@ fn scan_pseudo(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_functional_pseudo(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_functional_pseudo(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Function_ { return -1; }
     pos += 1;
@@ -30782,7 +30782,7 @@ fn scan_functional_pseudo(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     return pos;
 }
 
-fn scan_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_expression(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     sg_34_done: {
         sg_34: {
@@ -30906,7 +30906,7 @@ fn scan_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_negation(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_negation(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_PseudoNot { return -1; }
     pos += 1;
@@ -30921,7 +30921,7 @@ fn scan_negation(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_negation_arg(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_negation_arg(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -30981,7 +30981,7 @@ fn scan_negation_arg(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     return pos;
 }
 
-fn scan_operator_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_operator_(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -31033,7 +31033,7 @@ fn scan_operator_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_property_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_property_(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -31085,7 +31085,7 @@ fn scan_property_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_ruleset(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_ruleset(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -31189,7 +31189,7 @@ fn scan_ruleset(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_declaration_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_declaration_list(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos].kind == TK_LIT_SEMI {
         let sp = pos;
@@ -31233,7 +31233,7 @@ fn scan_declaration_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     return pos;
 }
 
-fn scan_declaration(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_declaration(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -31278,7 +31278,7 @@ fn scan_declaration(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_prio(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_prio(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Important { return -1; }
     pos += 1;
@@ -31287,7 +31287,7 @@ fn scan_prio(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_value(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_value(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_40 = pos;
     let sgk_40 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -31348,7 +31348,7 @@ fn scan_value(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_expr(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_term(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -31373,7 +31373,7 @@ fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_term(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_term(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -31541,7 +31541,7 @@ fn scan_term(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_function_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_function_(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Function_ { return -1; }
     pos += 1;
@@ -31556,7 +31556,7 @@ fn scan_function_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_dx_image_transform(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_dx_image_transform(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_DxImageTransform { return -1; }
     pos += 1;
@@ -31571,7 +31571,7 @@ fn scan_dx_image_transform(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
     return pos;
 }
 
-fn scan_hexcolor(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_hexcolor(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Hash { return -1; }
     pos += 1;
@@ -31580,7 +31580,7 @@ fn scan_hexcolor(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_number(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_number(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_24(tokens[pos].kind) {
         let sp = pos;
@@ -31607,7 +31607,7 @@ fn scan_number(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_percentage(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_percentage(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_24(tokens[pos].kind) {
         let sp = pos;
@@ -31634,7 +31634,7 @@ fn scan_percentage(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_dimension(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_dimension(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_24(tokens[pos].kind) {
         let sp = pos;
@@ -31661,7 +31661,7 @@ fn scan_dimension(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_unknown_dimension(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_unknown_dimension(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_24(tokens[pos].kind) {
         let sp = pos;
@@ -31688,7 +31688,7 @@ fn scan_unknown_dimension(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     return pos;
 }
 
-fn scan_any_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_any_(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -31961,7 +31961,7 @@ fn scan_any_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_at_rule(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_at_rule(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_AtKeyword { return -1; }
     pos += 1;
@@ -31997,7 +31997,7 @@ fn scan_at_rule(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_unused(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_unused(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -32057,7 +32057,7 @@ fn scan_unused(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_block(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_block(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -32121,7 +32121,7 @@ fn scan_block(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_nested_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_nested_statement(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -32213,7 +32213,7 @@ fn scan_nested_statement(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     return pos;
 }
 
-fn scan_group_rule_body(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_group_rule_body(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -32232,7 +32232,7 @@ fn scan_group_rule_body(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i
     return pos;
 }
 
-fn scan_supports_rule(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_supports_rule(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Supports { return -1; }
     pos += 1;
@@ -32247,7 +32247,7 @@ fn scan_supports_rule(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     return pos;
 }
 
-fn scan_supports_condition(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_supports_condition(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -32289,7 +32289,7 @@ fn scan_supports_condition(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
     return pos;
 }
 
-fn scan_supports_condition_in_parens(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_supports_condition_in_parens(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -32339,7 +32339,7 @@ fn scan_supports_condition_in_parens(tokens: &Array<Token>, pos: i32, min_prec: 
     return pos;
 }
 
-fn scan_supports_negation(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_supports_negation(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Not { return -1; }
     pos += 1;
@@ -32354,7 +32354,7 @@ fn scan_supports_negation(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     return pos;
 }
 
-fn scan_supports_conjunction(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_supports_conjunction(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_supports_condition_in_parens(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -32410,7 +32410,7 @@ fn scan_supports_conjunction(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
     return pos;
 }
 
-fn scan_supports_disjunction(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_supports_disjunction(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_supports_condition_in_parens(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -32466,7 +32466,7 @@ fn scan_supports_disjunction(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
     return pos;
 }
 
-fn scan_supports_declaration_condition(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_supports_declaration_condition(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
@@ -32479,7 +32479,7 @@ fn scan_supports_declaration_condition(tokens: &Array<Token>, pos: i32, min_prec
     return pos;
 }
 
-fn scan_general_enclosed(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_general_enclosed(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_56 = pos;
     sg_56: {
@@ -32523,7 +32523,7 @@ fn scan_general_enclosed(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     return pos;
 }
 
-fn scan_url(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_url(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -32559,7 +32559,7 @@ fn scan_url(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_var_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_var_(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Var { return -1; }
     pos += 1;
@@ -32576,7 +32576,7 @@ fn scan_var_(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_calc(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_calc(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Calc { return -1; }
     pos += 1;
@@ -32591,7 +32591,7 @@ fn scan_calc(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_calc_sum(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_calc_sum(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_calc_product(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -32637,7 +32637,7 @@ fn scan_calc_sum(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_calc_product(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_calc_product(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_calc_value(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -32675,7 +32675,7 @@ fn scan_calc_product(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     return pos;
 }
 
-fn scan_calc_value(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_calc_value(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -32779,7 +32779,7 @@ fn scan_calc_value(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_font_face_rule(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_font_face_rule(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_FontFace { return -1; }
     pos += 1;
@@ -32821,7 +32821,7 @@ fn scan_font_face_rule(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     return pos;
 }
 
-fn scan_font_face_declaration(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_font_face_declaration(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -32861,7 +32861,7 @@ fn scan_font_face_declaration(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0
     return pos;
 }
 
-fn scan_keyframes_rule(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_keyframes_rule(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Keyframes { return -1; }
     pos += 1;
@@ -32892,7 +32892,7 @@ fn scan_keyframes_rule(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     return pos;
 }
 
-fn scan_keyframe_block(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_keyframe_block(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     sg_62_done: {
         sg_62: {
@@ -32918,7 +32918,7 @@ fn scan_keyframe_block(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     return pos;
 }
 
-fn scan_keyframe_selector(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_keyframe_selector(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_63 = pos;
     sg_63: {
@@ -32986,7 +32986,7 @@ fn scan_keyframe_selector(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     return pos;
 }
 
-fn scan_viewport(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_viewport(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Viewport { return -1; }
     pos += 1;
@@ -33008,7 +33008,7 @@ fn scan_viewport(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_counter_style(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_counter_style(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_CounterStyle { return -1; }
     pos += 1;
@@ -33034,7 +33034,7 @@ fn scan_counter_style(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     return pos;
 }
 
-fn scan_font_feature_values_rule(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_font_feature_values_rule(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_FontFeatureValues { return -1; }
     pos += 1;
@@ -33061,7 +33061,7 @@ fn scan_font_feature_values_rule(tokens: &Array<Token>, pos: i32, min_prec: i32 
     return pos;
 }
 
-fn scan_font_family_name_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_font_family_name_list(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_font_family_name(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -33087,7 +33087,7 @@ fn scan_font_family_name_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0
     return pos;
 }
 
-fn scan_font_family_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_font_family_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -33130,7 +33130,7 @@ fn scan_font_family_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     return pos;
 }
 
-fn scan_feature_value_block(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_feature_value_block(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_feature_type(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -33174,14 +33174,14 @@ fn scan_feature_value_block(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
     return pos;
 }
 
-fn scan_feature_type(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_feature_type(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_AtKeyword { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_feature_value_definition(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_feature_value_definition(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_ident(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -33211,14 +33211,14 @@ fn scan_feature_value_definition(tokens: &Array<Token>, pos: i32, min_prec: i32 
     return pos;
 }
 
-fn scan_ident(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_ident(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_4(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_ws(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_ws(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
         let sp = pos;
@@ -33247,7 +33247,7 @@ fn scan_ws(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn _parse_stylesheet__inner(p: &mut Parser) -> Result<StylesheetNode, ParseError> {
     let start = p.peek().span.start;
     let ws = _parse_ws(p)?;
-    let mut charset_item_list: Array<CharsetItemListItem> = [];
+    let mut charset_item_list: List<CharsetItemListItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -33299,7 +33299,7 @@ fn _parse_stylesheet__inner(p: &mut Parser) -> Result<StylesheetNode, ParseError
         }
         if rep_scan_pos < 0 { break; }
         let charset = _parse_charset(p)?;
-        let mut comment_or_space_or_cdo_or_cdc_list: Array<Token> = [];
+        let mut comment_or_space_or_cdo_or_cdc_list: List<Token> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -33346,7 +33346,7 @@ fn _parse_stylesheet__inner(p: &mut Parser) -> Result<StylesheetNode, ParseError
         };
         charset_item_list.push(charset_item);
     }
-    let mut imports_item_list: Array<ImportsItemListItem> = [];
+    let mut imports_item_list: List<ImportsItemListItem> = [];
     loop {
         let mut rep_scan_pos_2: i32 = -1;
         rep_scan_2: {
@@ -33398,7 +33398,7 @@ fn _parse_stylesheet__inner(p: &mut Parser) -> Result<StylesheetNode, ParseError
         }
         if rep_scan_pos_2 < 0 { break; }
         let imports = _parse_imports(p)?;
-        let mut comment_or_space_or_cdo_or_cdc_list: Array<Token> = [];
+        let mut comment_or_space_or_cdo_or_cdc_list: List<Token> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -33445,7 +33445,7 @@ fn _parse_stylesheet__inner(p: &mut Parser) -> Result<StylesheetNode, ParseError
         };
         imports_item_list.push(imports_item);
     }
-    let mut namespace__item_list: Array<NamespaceItemListItem> = [];
+    let mut namespace__item_list: List<NamespaceItemListItem> = [];
     loop {
         let mut rep_scan_pos_3: i32 = -1;
         rep_scan_3: {
@@ -33497,7 +33497,7 @@ fn _parse_stylesheet__inner(p: &mut Parser) -> Result<StylesheetNode, ParseError
         }
         if rep_scan_pos_3 < 0 { break; }
         let namespace_ = _parse_namespace_(p)?;
-        let mut comment_or_space_or_cdo_or_cdc_list: Array<Token> = [];
+        let mut comment_or_space_or_cdo_or_cdc_list: List<Token> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -33544,7 +33544,7 @@ fn _parse_stylesheet__inner(p: &mut Parser) -> Result<StylesheetNode, ParseError
         };
         namespace__item_list.push(namespace__item);
     }
-    let mut nested_statement_item_list: Array<NestedStatementItemListItem> = [];
+    let mut nested_statement_item_list: List<NestedStatementItemListItem> = [];
     loop {
         let mut rep_scan_pos_4: i32 = -1;
         rep_scan_4: {
@@ -33596,7 +33596,7 @@ fn _parse_stylesheet__inner(p: &mut Parser) -> Result<StylesheetNode, ParseError
         }
         if rep_scan_pos_4 < 0 { break; }
         let nested_statement = _parse_nested_statement(p)?;
-        let mut comment_or_space_or_cdo_or_cdc_list: Array<Token> = [];
+        let mut comment_or_space_or_cdo_or_cdc_list: List<Token> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -33683,7 +33683,7 @@ fn _parse_charset__inner_bt_0(p: &mut Parser) -> Result<CharsetNode, ParseError>
     }));
 }
 
-fn _parse_charset__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_charset__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Charset { return -1; }
     pos += 1;
@@ -33715,7 +33715,7 @@ fn _parse_charset__inner_bt_1(p: &mut Parser) -> Result<CharsetNode, ParseError>
     }));
 }
 
-fn _parse_charset__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_charset__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Charset { return -1; }
     pos += 1;
@@ -33804,7 +33804,7 @@ fn _parse_imports__inner_bt_0(p: &mut Parser) -> Result<ImportsNode, ParseError>
     }));
 }
 
-fn _parse_imports__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_imports__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Import { return -1; }
     pos += 1;
@@ -33872,7 +33872,7 @@ fn _parse_imports__inner_bt_1(p: &mut Parser) -> Result<ImportsNode, ParseError>
     }));
 }
 
-fn _parse_imports__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_imports__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Import { return -1; }
     pos += 1;
@@ -33936,7 +33936,7 @@ fn _parse_imports__inner_bt_2(p: &mut Parser) -> Result<ImportsNode, ParseError>
     }));
 }
 
-fn _parse_imports__inner_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_imports__inner_scan_2(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Import { return -1; }
     pos += 1;
@@ -33996,7 +33996,7 @@ fn _parse_imports__inner_bt_3(p: &mut Parser) -> Result<ImportsNode, ParseError>
     }));
 }
 
-fn _parse_imports__inner_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_imports__inner_scan_3(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Import { return -1; }
     pos += 1;
@@ -34138,7 +34138,7 @@ fn _parse_namespace___inner_bt_0(p: &mut Parser) -> Result<NamespaceNode, ParseE
     }));
 }
 
-fn _parse_namespace___inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_namespace___inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Namespace { return -1; }
     pos += 1;
@@ -34236,7 +34236,7 @@ fn _parse_namespace___inner_bt_1(p: &mut Parser) -> Result<NamespaceNode, ParseE
     }));
 }
 
-fn _parse_namespace___inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_namespace___inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Namespace { return -1; }
     pos += 1;
@@ -34395,7 +34395,7 @@ fn _parse_media_query_list__inner(p: &mut Parser) -> Result<MediaQueryListNode, 
     }
     let media_query_item: Option<MediaQueryItemListItem> = if opt_scan_pos >= 0 {
         let media_query = _parse_media_query(p)?;
-        let mut comma_ws_media_query_list: Array<CommaWsMediaQueryItem> = [];
+        let mut comma_ws_media_query_list: List<CommaWsMediaQueryItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -34487,7 +34487,7 @@ fn _parse_media_query__inner(p: &mut Parser) -> Result<MediaQueryNode, ParseErro
         let ws = _parse_ws(p)?;
         let media_type = _parse_media_type(p)?;
         let ws_2 = _parse_ws(p)?;
-        let mut and_ws_media_expression_list: Array<AndWsMediaExpressionItem> = [];
+        let mut and_ws_media_expression_list: List<AndWsMediaExpressionItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -34530,7 +34530,7 @@ fn _parse_media_query__inner(p: &mut Parser) -> Result<MediaQueryNode, ParseErro
     }
     if kind == TK_LIT_LPAREN {
         let media_expression = _parse_media_expression(p)?;
-        let mut and_ws_media_expression_list: Array<AndWsMediaExpressionItem> = [];
+        let mut and_ws_media_expression_list: List<AndWsMediaExpressionItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -34680,7 +34680,7 @@ fn _parse_page__inner(p: &mut Parser) -> Result<PageNode, ParseError> {
     } else {
         null
     };
-    let mut semicolon_ws_declaration_list: Array<SemicolonWsDeclarationOptItem> = [];
+    let mut semicolon_ws_declaration_list: List<SemicolonWsDeclarationOptItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -34770,7 +34770,7 @@ fn _parse_pseudo_page(p: &mut Parser) -> Result<PseudoPageNode, ParseError> {
 fn _parse_selector_group__inner(p: &mut Parser) -> Result<SelectorGroupNode, ParseError> {
     let start = p.peek().span.start;
     let selector = _parse_selector(p)?;
-    let mut comma_ws_selector_list: Array<CommaWsSelectorItem> = [];
+    let mut comma_ws_selector_list: List<CommaWsSelectorItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -34822,7 +34822,7 @@ fn _parse_selector__inner(p: &mut Parser) -> Result<SelectorNode, ParseError> {
     let start = p.peek().span.start;
     let simple_selector_sequence = _parse_simple_selector_sequence(p)?;
     let ws = _parse_ws(p)?;
-    let mut combinator_simple_selector_sequence_ws_list: Array<CombinatorSimpleSelectorSequenceWsItem> = [];
+    let mut combinator_simple_selector_sequence_ws_list: List<CombinatorSimpleSelectorSequenceWsItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -34953,7 +34953,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser) -> Result<SimpleSelect
             }
         }
         let type_selector_or_universal = type_selector_or_universal_inner;
-        let mut group_0_list: Array<SimpleSelectorSequenceGroup0> = [];
+        let mut group_0_list: List<SimpleSelectorSequenceGroup0> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -35035,7 +35035,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser) -> Result<SimpleSelect
         }));
     }
     if _gale_kind_set_11(kind) {
-        let mut group_1_list: Array<SimpleSelectorSequenceGroup1> = [];
+        let mut group_1_list: List<SimpleSelectorSequenceGroup1> = [];
         let mut _plus_first = true;
         loop {
             if !_plus_first {
@@ -35473,7 +35473,7 @@ fn _parse_functional_pseudo(p: &mut Parser) -> Result<FunctionalPseudoNode, Pars
 
 fn _parse_expression__inner(p: &mut Parser) -> Result<ExpressionNode, ParseError> {
     let start = p.peek().span.start;
-    let mut item_ws_list: Array<ItemWsItem> = [];
+    let mut item_ws_list: List<ItemWsItem> = [];
     let mut _plus_first = true;
     loop {
         if !_plus_first {
@@ -35640,7 +35640,7 @@ fn _parse_negation_arg__inner_bt_0(p: &mut Parser) -> Result<NegationArgNode, Pa
     }));
 }
 
-fn _parse_negation_arg__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_negation_arg__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_type_selector(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -35656,7 +35656,7 @@ fn _parse_negation_arg__inner_bt_1(p: &mut Parser) -> Result<NegationArgNode, Pa
     }));
 }
 
-fn _parse_negation_arg__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_negation_arg__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_universal(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -35879,7 +35879,7 @@ fn _parse_property_(p: &mut Parser) -> Result<PropertyNode, ParseError> {
 
 fn _parse_ruleset__inner_bt_1(p: &mut Parser) -> Result<RulesetNode, ParseError> {
     let start = p.peek().span.start;
-    let mut any__list: Array<AnyNode> = [];
+    let mut any__list: List<AnyNode> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -35915,7 +35915,7 @@ fn _parse_ruleset__inner_bt_1(p: &mut Parser) -> Result<RulesetNode, ParseError>
     }));
 }
 
-fn _parse_ruleset__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_ruleset__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _gale_kind_set_20(tokens[pos].kind) {
         let sp = pos;
@@ -35963,7 +35963,7 @@ fn _parse_ruleset__inner_bt_0(p: &mut Parser) -> Result<RulesetNode, ParseError>
     }));
 }
 
-fn _parse_ruleset__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_ruleset__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_selector_group(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -36033,7 +36033,7 @@ fn _parse_ruleset(p: &mut Parser) -> Result<RulesetNode, ParseError> {
 
 fn _parse_declaration_list__inner(p: &mut Parser) -> Result<DeclarationListNode, ParseError> {
     let start = p.peek().span.start;
-    let mut semicolon_ws_list: Array<SemicolonWsItem> = [];
+    let mut semicolon_ws_list: List<SemicolonWsItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -36063,7 +36063,7 @@ fn _parse_declaration_list__inner(p: &mut Parser) -> Result<DeclarationListNode,
     }
     let declaration = _parse_declaration(p)?;
     let ws = _parse_ws(p)?;
-    let mut semicolon_ws_declaration_list: Array<SemicolonWsDeclarationOptItem> = [];
+    let mut semicolon_ws_declaration_list: List<SemicolonWsDeclarationOptItem> = [];
     loop {
         let mut rep_scan_pos_2: i32 = -1;
         rep_scan_2: {
@@ -36143,7 +36143,7 @@ fn _parse_declaration__inner_bt_0(p: &mut Parser) -> Result<DeclarationNode, Par
     }));
 }
 
-fn _parse_declaration__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_declaration__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_property_(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -36176,7 +36176,7 @@ fn _parse_declaration__inner_bt_1(p: &mut Parser) -> Result<DeclarationNode, Par
     }));
 }
 
-fn _parse_declaration__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_declaration__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_property_(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -36255,7 +36255,7 @@ fn _parse_prio(p: &mut Parser) -> Result<PrioNode, ParseError> {
 
 fn _parse_value__inner(p: &mut Parser) -> Result<ValueNode, ParseError> {
     let start = p.peek().span.start;
-    let mut group_0_list: Array<ValueGroup0> = [];
+    let mut group_0_list: List<ValueGroup0> = [];
     let mut _plus_first = true;
     loop {
         if !_plus_first {
@@ -36334,7 +36334,7 @@ fn _parse_value(p: &mut Parser) -> Result<ValueNode, ParseError> {
 fn _parse_expr__inner(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let start = p.peek().span.start;
     let term = _parse_term(p)?;
-    let mut operator__term_list: Array<OperatorOptTermItem> = [];
+    let mut operator__term_list: List<OperatorOptTermItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -36397,7 +36397,7 @@ fn _parse_term__inner_bt_0(p: &mut Parser) -> Result<TermNode, ParseError> {
     }));
 }
 
-fn _parse_term__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_term__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_number(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -36417,7 +36417,7 @@ fn _parse_term__inner_bt_1(p: &mut Parser) -> Result<TermNode, ParseError> {
     }));
 }
 
-fn _parse_term__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_term__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_percentage(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -36437,7 +36437,7 @@ fn _parse_term__inner_bt_2(p: &mut Parser) -> Result<TermNode, ParseError> {
     }));
 }
 
-fn _parse_term__inner_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_term__inner_scan_2(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_dimension(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -36457,7 +36457,7 @@ fn _parse_term__inner_bt_11(p: &mut Parser) -> Result<TermNode, ParseError> {
     }));
 }
 
-fn _parse_term__inner_scan_11(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_term__inner_scan_11(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_unknown_dimension(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -36858,7 +36858,7 @@ fn _parse_any___inner_bt_1(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }));
 }
 
-fn _parse_any___inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_any___inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_number(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -36878,7 +36878,7 @@ fn _parse_any___inner_bt_2(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }));
 }
 
-fn _parse_any___inner_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_any___inner_scan_2(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_percentage(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -36898,7 +36898,7 @@ fn _parse_any___inner_bt_3(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }));
 }
 
-fn _parse_any___inner_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_any___inner_scan_3(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_dimension(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -36918,7 +36918,7 @@ fn _parse_any___inner_bt_4(p: &mut Parser) -> Result<AnyNode, ParseError> {
     }));
 }
 
-fn _parse_any___inner_scan_4(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_any___inner_scan_4(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_unknown_dimension(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -37036,7 +37036,7 @@ fn _parse_any___inner(p: &mut Parser) -> Result<AnyNode, ParseError> {
     if kind == TK_Function_ {
         let function_ = p.expect(TK_Function_)?;
         let ws = _parse_ws(p)?;
-        let mut any__or_unused_list: Array<AnyOrUnusedGroup> = [];
+        let mut any__or_unused_list: List<AnyOrUnusedGroup> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -37088,7 +37088,7 @@ fn _parse_any___inner(p: &mut Parser) -> Result<AnyNode, ParseError> {
     if kind == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;
         let ws = _parse_ws(p)?;
-        let mut any__or_unused_list: Array<AnyOrUnusedGroup> = [];
+        let mut any__or_unused_list: List<AnyOrUnusedGroup> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -37140,7 +37140,7 @@ fn _parse_any___inner(p: &mut Parser) -> Result<AnyNode, ParseError> {
     if kind == TK_LIT_LBRACKET {
         let lbracket = p.expect(TK_LIT_LBRACKET)?;
         let ws = _parse_ws(p)?;
-        let mut any__or_unused_list: Array<AnyOrUnusedGroup> = [];
+        let mut any__or_unused_list: List<AnyOrUnusedGroup> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -37209,7 +37209,7 @@ fn _parse_at_rule__inner(p: &mut Parser) -> Result<AtRuleNode, ParseError> {
     let start = p.peek().span.start;
     let atkeyword = p.expect(TK_AtKeyword)?;
     let ws = _parse_ws(p)?;
-    let mut any__list: Array<AnyNode> = [];
+    let mut any__list: List<AnyNode> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -37324,7 +37324,7 @@ fn _parse_block__inner(p: &mut Parser) -> Result<BlockNode, ParseError> {
     let start = p.peek().span.start;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws = _parse_ws(p)?;
-    let mut group_0_list: Array<BlockGroup0> = [];
+    let mut group_0_list: List<BlockGroup0> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -37589,7 +37589,7 @@ fn _parse_group_rule_body__inner(p: &mut Parser) -> Result<GroupRuleBodyNode, Pa
     let start = p.peek().span.start;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws = _parse_ws(p)?;
-    let mut nested_statement_list: Array<NestedStatementNode> = [];
+    let mut nested_statement_list: List<NestedStatementNode> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -37660,7 +37660,7 @@ fn _parse_supports_condition__inner_bt_1(p: &mut Parser) -> Result<SupportsCondi
     }));
 }
 
-fn _parse_supports_condition__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_supports_condition__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_supports_conjunction(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -37676,7 +37676,7 @@ fn _parse_supports_condition__inner_bt_2(p: &mut Parser) -> Result<SupportsCondi
     }));
 }
 
-fn _parse_supports_condition__inner_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_supports_condition__inner_scan_2(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_supports_disjunction(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -37692,7 +37692,7 @@ fn _parse_supports_condition__inner_bt_3(p: &mut Parser) -> Result<SupportsCondi
     }));
 }
 
-fn _parse_supports_condition__inner_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_supports_condition__inner_scan_3(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_supports_condition_in_parens(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -37775,7 +37775,7 @@ fn _parse_supports_condition_in_parens__inner_bt_0(p: &mut Parser) -> Result<Sup
     }));
 }
 
-fn _parse_supports_condition_in_parens__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_supports_condition_in_parens__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
@@ -37799,7 +37799,7 @@ fn _parse_supports_condition_in_parens__inner_bt_1(p: &mut Parser) -> Result<Sup
     }));
 }
 
-fn _parse_supports_condition_in_parens__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_supports_condition_in_parens__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_supports_declaration_condition(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -37815,7 +37815,7 @@ fn _parse_supports_condition_in_parens__inner_bt_2(p: &mut Parser) -> Result<Sup
     }));
 }
 
-fn _parse_supports_condition_in_parens__inner_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_supports_condition_in_parens__inner_scan_2(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_general_enclosed(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -37905,7 +37905,7 @@ fn _parse_supports_negation(p: &mut Parser) -> Result<SupportsNegationNode, Pars
 fn _parse_supports_conjunction__inner(p: &mut Parser) -> Result<SupportsConjunctionNode, ParseError> {
     let start = p.peek().span.start;
     let supports_condition_in_parens = _parse_supports_condition_in_parens(p)?;
-    let mut ws_space_ws_and_ws_space_ws_supports_condition_in_parens_list: Array<WsSpaceWsAndWsSpaceWsSupportsConditionInParensItem> = [];
+    let mut ws_space_ws_and_ws_space_ws_supports_condition_in_parens_list: List<WsSpaceWsAndWsSpaceWsSupportsConditionInParensItem> = [];
     let mut _plus_first = true;
     loop {
         if !_plus_first {
@@ -37980,7 +37980,7 @@ fn _parse_supports_conjunction(p: &mut Parser) -> Result<SupportsConjunctionNode
 fn _parse_supports_disjunction__inner(p: &mut Parser) -> Result<SupportsDisjunctionNode, ParseError> {
     let start = p.peek().span.start;
     let supports_condition_in_parens = _parse_supports_condition_in_parens(p)?;
-    let mut ws_space_ws_or_ws_space_ws_supports_condition_in_parens_list: Array<WsSpaceWsOrWsSpaceWsSupportsConditionInParensItem> = [];
+    let mut ws_space_ws_or_ws_space_ws_supports_condition_in_parens_list: List<WsSpaceWsOrWsSpaceWsSupportsConditionInParensItem> = [];
     let mut _plus_first = true;
     loop {
         if !_plus_first {
@@ -38079,7 +38079,7 @@ fn _parse_supports_declaration_condition(p: &mut Parser) -> Result<SupportsDecla
 fn _parse_general_enclosed__inner(p: &mut Parser) -> Result<GeneralEnclosedNode, ParseError> {
     let start = p.peek().span.start;
     let function__or_lparen = p.match_set([TK_Function_, TK_LIT_LPAREN])?;
-    let mut any__or_unused_list: Array<AnyOrUnusedGroup> = [];
+    let mut any__or_unused_list: List<AnyOrUnusedGroup> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -38233,7 +38233,7 @@ fn _parse_calc(p: &mut Parser) -> Result<CalcNode, ParseError> {
 fn _parse_calc_sum__inner(p: &mut Parser) -> Result<CalcSumNode, ParseError> {
     let start = p.peek().span.start;
     let calc_product = _parse_calc_product(p)?;
-    let mut space_ws_item_ws_space_ws_calc_product_list: Array<SpaceWsItemWsSpaceWsCalcProductItem> = [];
+    let mut space_ws_item_ws_space_ws_calc_product_list: List<SpaceWsItemWsSpaceWsCalcProductItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -38314,7 +38314,7 @@ fn _parse_calc_sum(p: &mut Parser) -> Result<CalcSumNode, ParseError> {
 fn _parse_calc_product__inner(p: &mut Parser) -> Result<CalcProductNode, ParseError> {
     let start = p.peek().span.start;
     let calc_value = _parse_calc_value(p)?;
-    let mut group_0_list: Array<CalcProductGroup0> = [];
+    let mut group_0_list: List<CalcProductGroup0> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -38403,7 +38403,7 @@ fn _parse_calc_value__inner_bt_0(p: &mut Parser) -> Result<CalcValueNode, ParseE
     }));
 }
 
-fn _parse_calc_value__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_calc_value__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_number(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -38423,7 +38423,7 @@ fn _parse_calc_value__inner_bt_1(p: &mut Parser) -> Result<CalcValueNode, ParseE
     }));
 }
 
-fn _parse_calc_value__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_calc_value__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_dimension(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -38443,7 +38443,7 @@ fn _parse_calc_value__inner_bt_2(p: &mut Parser) -> Result<CalcValueNode, ParseE
     }));
 }
 
-fn _parse_calc_value__inner_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_calc_value__inner_scan_2(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_unknown_dimension(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -38463,7 +38463,7 @@ fn _parse_calc_value__inner_bt_3(p: &mut Parser) -> Result<CalcValueNode, ParseE
     }));
 }
 
-fn _parse_calc_value__inner_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_calc_value__inner_scan_3(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_percentage(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -38549,7 +38549,7 @@ fn _parse_font_face_rule__inner(p: &mut Parser) -> Result<FontFaceRuleNode, Pars
     } else {
         null
     };
-    let mut semicolon_ws_font_face_declaration_list: Array<SemicolonWsFontFaceDeclarationOptItem> = [];
+    let mut semicolon_ws_font_face_declaration_list: List<SemicolonWsFontFaceDeclarationOptItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -38628,7 +38628,7 @@ fn _parse_font_face_declaration__inner_bt_0(p: &mut Parser) -> Result<FontFaceDe
     }));
 }
 
-fn _parse_font_face_declaration__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_font_face_declaration__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_property_(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -38656,7 +38656,7 @@ fn _parse_font_face_declaration__inner_bt_1(p: &mut Parser) -> Result<FontFaceDe
     }));
 }
 
-fn _parse_font_face_declaration__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_font_face_declaration__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_property_(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -38723,7 +38723,7 @@ fn _parse_keyframes_rule__inner(p: &mut Parser) -> Result<KeyframesRuleNode, Par
     let ws_3 = _parse_ws(p)?;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws_4 = _parse_ws(p)?;
-    let mut keyframe_block_list: Array<KeyframeBlockNode> = [];
+    let mut keyframe_block_list: List<KeyframeBlockNode> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -38805,7 +38805,7 @@ fn _parse_keyframe_selector__inner(p: &mut Parser) -> Result<KeyframeSelectorNod
     let start = p.peek().span.start;
     let from__or_to_or_percentage = p.match_set([TK_From, TK_To, TK_Percentage])?;
     let ws = _parse_ws(p)?;
-    let mut comma_ws_item_ws_list: Array<CommaWsItemWsItem> = [];
+    let mut comma_ws_item_ws_list: List<CommaWsItemWsItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -38960,7 +38960,7 @@ fn _parse_font_feature_values_rule__inner(p: &mut Parser) -> Result<FontFeatureV
     let ws_2 = _parse_ws(p)?;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws_3 = _parse_ws(p)?;
-    let mut feature_value_block_list: Array<FeatureValueBlockNode> = [];
+    let mut feature_value_block_list: List<FeatureValueBlockNode> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -39003,7 +39003,7 @@ fn _parse_font_feature_values_rule(p: &mut Parser) -> Result<FontFeatureValuesRu
 fn _parse_font_family_name_list__inner(p: &mut Parser) -> Result<FontFamilyNameListNode, ParseError> {
     let start = p.peek().span.start;
     let font_family_name = _parse_font_family_name(p)?;
-    let mut ws_comma_ws_font_family_name_list: Array<WsCommaWsFontFamilyNameItem> = [];
+    let mut ws_comma_ws_font_family_name_list: List<WsCommaWsFontFamilyNameItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -39067,7 +39067,7 @@ fn _parse_font_family_name__inner(p: &mut Parser) -> Result<FontFamilyNameNode, 
     }
     if _gale_kind_set_4(kind) {
         let ident = _parse_ident(p)?;
-        let mut ws_ident_list: Array<WsIdentItem> = [];
+        let mut ws_ident_list: List<WsIdentItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -39129,7 +39129,7 @@ fn _parse_feature_value_block__inner(p: &mut Parser) -> Result<FeatureValueBlock
     } else {
         null
     };
-    let mut ws_semicolon_ws_feature_value_definition_list: Array<WsSemicolonWsFeatureValueDefinitionOptItem> = [];
+    let mut ws_semicolon_ws_feature_value_definition_list: List<WsSemicolonWsFeatureValueDefinitionOptItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -39222,7 +39222,7 @@ fn _parse_feature_value_definition__inner(p: &mut Parser) -> Result<FeatureValue
     let colon = p.expect(TK_LIT_COLON)?;
     let ws_2 = _parse_ws(p)?;
     let number = _parse_number(p)?;
-    let mut ws_number_list: Array<WsNumberItem> = [];
+    let mut ws_number_list: List<WsNumberItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -39340,7 +39340,7 @@ fn _parse_ident(p: &mut Parser) -> Result<IdentNode, ParseError> {
 
 fn _parse_ws__inner(p: &mut Parser) -> Result<WsNode, ParseError> {
     let start = p.peek().span.start;
-    let mut comment_or_space_list: Array<Token> = [];
+    let mut comment_or_space_list: List<Token> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -39384,7 +39384,7 @@ fn _parse_ws(p: &mut Parser) -> Result<WsNode, ParseError> {
     return r;
 }
 
-fn scan_ws__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_ws__follow_0(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) && !((pos + 0 < tokens.len() && tokens[pos + 0].kind == TK_Space)) {
         let sp = pos;
@@ -39412,7 +39412,7 @@ fn scan_ws__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
 
 fn _parse_ws__follow_0__inner(p: &mut Parser) -> Result<WsNode, ParseError> {
     let start = p.peek().span.start;
-    let mut comment_or_space_list: Array<Token> = [];
+    let mut comment_or_space_list: List<Token> = [];
     loop {
         if p.peek_kind() == TK_Space { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -39459,553 +39459,553 @@ fn _parse_ws__follow_0(p: &mut Parser) -> Result<WsNode, ParseError> {
 
 pub fn parse_stylesheet(input: &String) -> Result<StylesheetNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_stylesheet(&mut parser);
 }
 
 pub fn parse_charset(input: &String) -> Result<CharsetNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_charset(&mut parser);
 }
 
 pub fn parse_imports(input: &String) -> Result<ImportsNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_imports(&mut parser);
 }
 
 pub fn parse_namespace_(input: &String) -> Result<NamespaceNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_namespace_(&mut parser);
 }
 
 pub fn parse_namespace_prefix(input: &String) -> Result<NamespacePrefixNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_namespace_prefix(&mut parser);
 }
 
 pub fn parse_media(input: &String) -> Result<MediaNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_media(&mut parser);
 }
 
 pub fn parse_media_query_list(input: &String) -> Result<MediaQueryListNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_media_query_list(&mut parser);
 }
 
 pub fn parse_media_query(input: &String) -> Result<MediaQueryNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_media_query(&mut parser);
 }
 
 pub fn parse_media_type(input: &String) -> Result<MediaTypeNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_media_type(&mut parser);
 }
 
 pub fn parse_media_expression(input: &String) -> Result<MediaExpressionNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_media_expression(&mut parser);
 }
 
 pub fn parse_media_feature(input: &String) -> Result<MediaFeatureNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_media_feature(&mut parser);
 }
 
 pub fn parse_page(input: &String) -> Result<PageNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_page(&mut parser);
 }
 
 pub fn parse_pseudo_page(input: &String) -> Result<PseudoPageNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_pseudo_page(&mut parser);
 }
 
 pub fn parse_selector_group(input: &String) -> Result<SelectorGroupNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_selector_group(&mut parser);
 }
 
 pub fn parse_selector(input: &String) -> Result<SelectorNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_selector(&mut parser);
 }
 
 pub fn parse_combinator(input: &String) -> Result<CombinatorNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_combinator(&mut parser);
 }
 
 pub fn parse_simple_selector_sequence(input: &String) -> Result<SimpleSelectorSequenceNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_simple_selector_sequence(&mut parser);
 }
 
 pub fn parse_type_selector(input: &String) -> Result<TypeSelectorNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_type_selector(&mut parser);
 }
 
 pub fn parse_type_namespace_prefix(input: &String) -> Result<TypeNamespacePrefixNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_type_namespace_prefix(&mut parser);
 }
 
 pub fn parse_element_name(input: &String) -> Result<ElementNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_element_name(&mut parser);
 }
 
 pub fn parse_universal(input: &String) -> Result<UniversalNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_universal(&mut parser);
 }
 
 pub fn parse_class_name(input: &String) -> Result<ClassNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_class_name(&mut parser);
 }
 
 pub fn parse_attrib(input: &String) -> Result<AttribNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_attrib(&mut parser);
 }
 
 pub fn parse_pseudo(input: &String) -> Result<PseudoNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_pseudo(&mut parser);
 }
 
 pub fn parse_functional_pseudo(input: &String) -> Result<FunctionalPseudoNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_functional_pseudo(&mut parser);
 }
 
 pub fn parse_expression(input: &String) -> Result<ExpressionNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_expression(&mut parser);
 }
 
 pub fn parse_negation(input: &String) -> Result<NegationNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_negation(&mut parser);
 }
 
 pub fn parse_negation_arg(input: &String) -> Result<NegationArgNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_negation_arg(&mut parser);
 }
 
 pub fn parse_operator_(input: &String) -> Result<OperatorNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_operator_(&mut parser);
 }
 
 pub fn parse_property_(input: &String) -> Result<PropertyNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_property_(&mut parser);
 }
 
 pub fn parse_ruleset(input: &String) -> Result<RulesetNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_ruleset(&mut parser);
 }
 
 pub fn parse_declaration_list(input: &String) -> Result<DeclarationListNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_declaration_list(&mut parser);
 }
 
 pub fn parse_declaration(input: &String) -> Result<DeclarationNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_declaration(&mut parser);
 }
 
 pub fn parse_prio(input: &String) -> Result<PrioNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_prio(&mut parser);
 }
 
 pub fn parse_value(input: &String) -> Result<ValueNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_value(&mut parser);
 }
 
 pub fn parse_expr(input: &String) -> Result<ExprNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_expr(&mut parser);
 }
 
 pub fn parse_term(input: &String) -> Result<TermNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_term(&mut parser);
 }
 
 pub fn parse_function_(input: &String) -> Result<FunctionNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_function_(&mut parser);
 }
 
 pub fn parse_dx_image_transform(input: &String) -> Result<DxImageTransformNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_dx_image_transform(&mut parser);
 }
 
 pub fn parse_hexcolor(input: &String) -> Result<HexcolorNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_hexcolor(&mut parser);
 }
 
 pub fn parse_number(input: &String) -> Result<NumberNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_number(&mut parser);
 }
 
 pub fn parse_percentage(input: &String) -> Result<PercentageNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_percentage(&mut parser);
 }
 
 pub fn parse_dimension(input: &String) -> Result<DimensionNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_dimension(&mut parser);
 }
 
 pub fn parse_unknown_dimension(input: &String) -> Result<UnknownDimensionNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_unknown_dimension(&mut parser);
 }
 
 pub fn parse_any_(input: &String) -> Result<AnyNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_any_(&mut parser);
 }
 
 pub fn parse_at_rule(input: &String) -> Result<AtRuleNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_at_rule(&mut parser);
 }
 
 pub fn parse_unused(input: &String) -> Result<UnusedNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_unused(&mut parser);
 }
 
 pub fn parse_block(input: &String) -> Result<BlockNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_block(&mut parser);
 }
 
 pub fn parse_nested_statement(input: &String) -> Result<NestedStatementNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_nested_statement(&mut parser);
 }
 
 pub fn parse_group_rule_body(input: &String) -> Result<GroupRuleBodyNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_group_rule_body(&mut parser);
 }
 
 pub fn parse_supports_rule(input: &String) -> Result<SupportsRuleNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_supports_rule(&mut parser);
 }
 
 pub fn parse_supports_condition(input: &String) -> Result<SupportsConditionNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_supports_condition(&mut parser);
 }
 
 pub fn parse_supports_condition_in_parens(input: &String) -> Result<SupportsConditionInParensNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_supports_condition_in_parens(&mut parser);
 }
 
 pub fn parse_supports_negation(input: &String) -> Result<SupportsNegationNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_supports_negation(&mut parser);
 }
 
 pub fn parse_supports_conjunction(input: &String) -> Result<SupportsConjunctionNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_supports_conjunction(&mut parser);
 }
 
 pub fn parse_supports_disjunction(input: &String) -> Result<SupportsDisjunctionNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_supports_disjunction(&mut parser);
 }
 
 pub fn parse_supports_declaration_condition(input: &String) -> Result<SupportsDeclarationConditionNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_supports_declaration_condition(&mut parser);
 }
 
 pub fn parse_general_enclosed(input: &String) -> Result<GeneralEnclosedNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_general_enclosed(&mut parser);
 }
 
 pub fn parse_url(input: &String) -> Result<UrlNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_url(&mut parser);
 }
 
 pub fn parse_var_(input: &String) -> Result<VarNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_var_(&mut parser);
 }
 
 pub fn parse_calc(input: &String) -> Result<CalcNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_calc(&mut parser);
 }
 
 pub fn parse_calc_sum(input: &String) -> Result<CalcSumNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_calc_sum(&mut parser);
 }
 
 pub fn parse_calc_product(input: &String) -> Result<CalcProductNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_calc_product(&mut parser);
 }
 
 pub fn parse_calc_value(input: &String) -> Result<CalcValueNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_calc_value(&mut parser);
 }
 
 pub fn parse_font_face_rule(input: &String) -> Result<FontFaceRuleNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_font_face_rule(&mut parser);
 }
 
 pub fn parse_font_face_declaration(input: &String) -> Result<FontFaceDeclarationNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_font_face_declaration(&mut parser);
 }
 
 pub fn parse_keyframes_rule(input: &String) -> Result<KeyframesRuleNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_keyframes_rule(&mut parser);
 }
 
 pub fn parse_keyframe_block(input: &String) -> Result<KeyframeBlockNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_keyframe_block(&mut parser);
 }
 
 pub fn parse_keyframe_selector(input: &String) -> Result<KeyframeSelectorNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_keyframe_selector(&mut parser);
 }
 
 pub fn parse_viewport(input: &String) -> Result<ViewportNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_viewport(&mut parser);
 }
 
 pub fn parse_counter_style(input: &String) -> Result<CounterStyleNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_counter_style(&mut parser);
 }
 
 pub fn parse_font_feature_values_rule(input: &String) -> Result<FontFeatureValuesRuleNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_font_feature_values_rule(&mut parser);
 }
 
 pub fn parse_font_family_name_list(input: &String) -> Result<FontFamilyNameListNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_font_family_name_list(&mut parser);
 }
 
 pub fn parse_font_family_name(input: &String) -> Result<FontFamilyNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_font_family_name(&mut parser);
 }
 
 pub fn parse_feature_value_block(input: &String) -> Result<FeatureValueBlockNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_feature_value_block(&mut parser);
 }
 
 pub fn parse_feature_type(input: &String) -> Result<FeatureTypeNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_feature_type(&mut parser);
 }
 
 pub fn parse_feature_value_definition(input: &String) -> Result<FeatureValueDefinitionNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_feature_value_definition(&mut parser);
 }
 
 pub fn parse_ident(input: &String) -> Result<IdentNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_ident(&mut parser);
 }
 
 pub fn parse_ws(input: &String) -> Result<WsNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_ws(&mut parser);
 }

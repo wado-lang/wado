@@ -43,12 +43,12 @@ test "box with trait method" {
 }
 
 struct MonoContainer<T> {
-    items: Array<T>,
+    items: List<T>,
 }
 
 impl<T> MonoContainer<T> {
     fn new() -> MonoContainer<T> {
-        return MonoContainer { items: [] as Array<T> };
+        return MonoContainer { items: [] as List<T> };
     }
     fn add(&mut self, item: T) {
         self.items.push(item);
@@ -72,7 +72,7 @@ test "field monomorphization" {
     assert container.get(2) == 30;
 }
 
-fn partition(arr: &mut Array<i32>, low: i32, high: i32, cmp: fn(&i32, &i32) -> bool) -> i32 {
+fn partition(arr: &mut List<i32>, low: i32, high: i32, cmp: fn(&i32, &i32) -> bool) -> i32 {
     let pivot = arr[high];
     let mut i = low - 1;
     for let mut j = low; j < high; j += 1 {
@@ -89,7 +89,7 @@ fn partition(arr: &mut Array<i32>, low: i32, high: i32, cmp: fn(&i32, &i32) -> b
     return i + 1;
 }
 
-fn quicksort(arr: &mut Array<i32>, low: i32, high: i32, cmp: fn(&i32, &i32) -> bool) {
+fn quicksort(arr: &mut List<i32>, low: i32, high: i32, cmp: fn(&i32, &i32) -> bool) {
     if low < high {
         let pi = partition(arr, low, high, cmp);
         quicksort(arr, low, pi - 1, cmp);
@@ -98,7 +98,7 @@ fn quicksort(arr: &mut Array<i32>, low: i32, high: i32, cmp: fn(&i32, &i32) -> b
 }
 
 test "quicksort with closure param" {
-    let mut arr: Array<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
+    let mut arr: List<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
     quicksort(&mut arr, 0, arr.len() - 1, |a: &i32, b: &i32| *a < *b);
     assert arr[0] == 1;
     assert arr[4] == 5;

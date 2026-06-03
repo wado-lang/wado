@@ -14,7 +14,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let probe_count = match request.get_method() {
         Get => {
             let probe = Fields::new();
-            let bytes: Array<u8> = [118 as u8];
+            let bytes: List<u8> = [118 as u8];
             let _ = probe.append("x-probe" as FieldName, bytes as FieldValue);
             if probe.has("x-probe" as FieldName) {
                 7;

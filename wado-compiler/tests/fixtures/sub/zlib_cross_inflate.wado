@@ -16,9 +16,9 @@ use { print, println, Stdout } from "core:cli";
 use { Stdin } from "wasi:cli";
 use { inflate_zlib, inflate_raw, inflate_gzip, InflateStream, RAW_FORMAT, GZIP_FORMAT, AUTO_FORMAT } from "core:zlib";
 
-fn read_all_stdin() -> Array<u8> with Stdin {
+fn read_all_stdin() -> List<u8> with Stdin {
     let [stdin_stream, _done] = Stdin::read_via_stream();
-    let mut buf: Array<u8> = [];
+    let mut buf: List<u8> = [];
     loop {
         let chunk = stdin_stream.read(65536);
         if chunk.len() == 0 {
@@ -32,7 +32,7 @@ fn read_all_stdin() -> Array<u8> with Stdin {
     return buf;
 }
 
-fn print_bytes(data: &Array<u8>) with Stdout {
+fn print_bytes(data: &List<u8>) with Stdout {
     for let mut i = 0; i < data.len(); i += 1 {
         if i > 0 {
             print(" ");
@@ -50,7 +50,7 @@ export fn run() with Stdout, Stdin {
     }
 
     let cmd = input[0] as i32;
-    let mut data: Array<u8> = [];
+    let mut data: List<u8> = [];
     for let mut i = 1; i < input.len(); i += 1 {
         data.push(input[i]);
     }

@@ -5236,7 +5236,7 @@ impl Parser {
     }
 
     /// Parse a type in impl block context, supporting bounds on generic type args.
-    /// `impl Array<T: Ord>` extracts T: Ord into `type_params` and returns Generic("Array", [Named("T")]).
+    /// `impl Array<T: Ord>` extracts T: Ord into `type_params` and returns Generic("List", [Named("T")]).
     /// `impl Foo<Array<String>, V>` parses `Array<String>` as a full nested generic type.
     /// Falls back to normal `parse_type()` for non-identifier starts (e.g., reference types).
     fn parse_impl_target_type(
@@ -6670,14 +6670,14 @@ line 2
     #[test]
     fn test_type_args_nested_generics() {
         // Array<Array<i32>> should parse correctly (>> splitting)
-        let module = parse("fn foo(x: Array<Array<i32>>) {}").unwrap();
+        let module = parse("fn foo(x: List<List<i32>>) {}").unwrap();
         if let Item::Function(func) = &module.items[0] {
             let ty = &func.params[0].ty;
             if let Type::Generic(g) = ty {
-                assert_eq!(g.name, "Array");
+                assert_eq!(g.name, "List");
                 assert_eq!(g.args.len(), 1);
                 if let Type::Generic(inner) = &g.args[0] {
-                    assert_eq!(inner.name, "Array");
+                    assert_eq!(inner.name, "List");
                 } else {
                     panic!("expected inner generic type");
                 }
@@ -6901,7 +6901,7 @@ line 2
 
     #[test]
     fn test_impl_block_bounded_type_params() {
-        let source = "impl Array<T: Ord> { fn sort(&mut self) {} }";
+        let source = "impl List<T: Ord> { fn sort(&mut self) {} }";
         let module = parse(source).unwrap();
         if let Item::Impl(impl_block) = &module.items[0] {
             assert_eq!(impl_block.type_params.len(), 1);

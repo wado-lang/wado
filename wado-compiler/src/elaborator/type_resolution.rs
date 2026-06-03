@@ -164,7 +164,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Fallback: resolve via generic associated type definitions.
                 // This handles GenericInstance types like ArrayIter<i32> whose Iterator impl
                 // is generic — resolve_assoc_type won't find a pre-registered entry, but
-                // resolve_generic_assoc_type can derive i32 from ("ArrayIter", "Item") → TypeParam(0).
+                // resolve_generic_assoc_type can derive i32 from ("ListIter", "Item") → TypeParam(0).
                 if let Some(resolved) = self
                     .tysys
                     .type_table

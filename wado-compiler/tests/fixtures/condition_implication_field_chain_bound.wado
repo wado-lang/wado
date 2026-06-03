@@ -15,7 +15,7 @@ struct Container {
 }
 
 #[inline(never)]
-fn loop_guard_field_chain_bound(c: &Container, src: &Array<u16>) -> i32 {
+fn loop_guard_field_chain_bound(c: &Container, src: &List<u16>) -> i32 {
     let mut sum: i32 = 0;
     // Loop bound is `c.size`, a FieldChain shape. The inner `src[n]`
     // bounds check folds against the same structural bound via the
@@ -30,7 +30,7 @@ fn loop_guard_field_chain_bound(c: &Container, src: &Array<u16>) -> i32 {
 
 export fn run() with Stdout {
     let c = Container { size: 4 };
-    let src: Array<u16> = Array::filled(16, 7 as u16);
+    let src: List<u16> = List::filled(16, 7 as u16);
     let r = loop_guard_field_chain_bound(&c, &src);
     println(`{r}`);
 }

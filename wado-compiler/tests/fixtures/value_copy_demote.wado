@@ -1,5 +1,5 @@
 // `value_copy_demote` regression: `sorted` is a deep value-copy of the
-// `&Array<String>` parameter that is only spine-mutated (`sort`) and read.
+// `&List<String>` parameter that is only spine-mutated (`sort`) and read.
 // The deep per-element String copy is unnecessary — no element is mutated
 // through `sorted` — so the pass rewrites the copy to a shallow spine copy
 // (`array_clone_shallow`) via a synthesized `$shallow` sibling helper.
@@ -10,7 +10,7 @@
 
 use { println } from "core:cli";
 
-fn distinct_count(tokens: &Array<String>) -> i32 {
+fn distinct_count(tokens: &List<String>) -> i32 {
     let mut sorted = *tokens;
     sorted.sort();
     let mut n = 0;
@@ -23,7 +23,7 @@ fn distinct_count(tokens: &Array<String>) -> i32 {
 }
 
 export fn run() with Stdout {
-    let words: Array<String> = ["pear", "apple", "pear", "fig"];
+    let words: List<String> = ["pear", "apple", "pear", "fig"];
     let n = distinct_count(&words);
     // `words` must be untouched by the (now shallow) copy in distinct_count.
     println(`{n} {words[0]} {words[3]}`);

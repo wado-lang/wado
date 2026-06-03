@@ -23,7 +23,7 @@ impl Describe for bool {
 
 test "basic heterogeneous" {
     let t = [42, "hello", true];
-    let mut results: Array<String> = [];
+    let mut results: List<String> = [];
     for let v of t {
         results.push(`{v}`);
     }
@@ -34,8 +34,8 @@ test "basic heterogeneous" {
 
 test "enumerate" {
     let t = [10, "world", false];
-    let mut indices: Array<i32> = [];
-    let mut values: Array<String> = [];
+    let mut indices: List<i32> = [];
+    let mut values: List<String> = [];
     for let [i, v] of t.enumerate() {
         indices.push(i);
         values.push(`{v}`);
@@ -77,7 +77,7 @@ test "single element" {
 
 test "trait dispatch per element type" {
     let t = [42, "wado", true];
-    let mut results: Array<String> = [];
+    let mut results: List<String> = [];
     for let v of t {
         results.push(v.describe());
     }
@@ -88,7 +88,7 @@ test "trait dispatch per element type" {
 
 test "enumerate with trait dispatch" {
     let t = [1, "two"];
-    let mut results: Array<String> = [];
+    let mut results: List<String> = [];
     for let [i, v] of t.enumerate() {
         results.push(`{i}: {v.describe()}`);
     }
@@ -98,7 +98,7 @@ test "enumerate with trait dispatch" {
 
 test "nested tuple for-of expansion" {
     let t = [[1, "a"], [true, 3.14]];
-    let mut results: Array<String> = [];
+    let mut results: List<String> = [];
     for let v of t {
         for let w of v {
             results.push(`{w}`);
@@ -112,7 +112,7 @@ test "nested tuple for-of expansion" {
 
 test "mutable binding" {
     let t = [10, 20, 30];
-    let mut results: Array<i32> = [];
+    let mut results: List<i32> = [];
     for let mut v of t {
         v = v + 1;
         results.push(v);
@@ -123,7 +123,7 @@ test "mutable binding" {
 }
 
 test "enumerate index as compile-time constant" {
-    let strings: Array<String> = ["a", "b", "c"];
+    let strings: List<String> = ["a", "b", "c"];
     let t = [100, "hello"];
     let mut result = strings[0];
     for let [i, v] of t.enumerate() {

@@ -1,7 +1,7 @@
-// Verify that impl_type_matches_concrete correctly rejects Array<i32> != Array<String>.
+// Verify that impl_type_matches_concrete correctly rejects List<i32> != List<String>.
 struct NestedMap<K, V> {
-    keys: Array<String>,
-    values: Array<V>,
+    keys: List<String>,
+    values: List<V>,
 }
 
 impl NestedMap<K, V> {
@@ -10,12 +10,12 @@ impl NestedMap<K, V> {
     }
 }
 
-impl KeyValueLiteralBuilder for NestedMap<Array<String>, V> {
+impl KeyValueLiteralBuilder for NestedMap<List<String>, V> {
     type Value = V;
-    type Output = NestedMap<Array<String>, V>;
+    type Output = NestedMap<List<String>, V>;
 
-    fn new_literal(capacity: i32) -> NestedMap<Array<String>, V> {
-        return NestedMap::<Array<String>, V>::new();
+    fn new_literal(capacity: i32) -> NestedMap<List<String>, V> {
+        return NestedMap::<List<String>, V>::new();
     }
 
     fn insert_literal(&mut self, key: String, value: Self::Value) {
@@ -23,14 +23,14 @@ impl KeyValueLiteralBuilder for NestedMap<Array<String>, V> {
         self.values.push(value);
     }
 
-    fn build(&self) -> NestedMap<Array<String>, V> {
+    fn build(&self) -> NestedMap<List<String>, V> {
         return *self;
     }
 }
 
 export fn run() {
-    // Array<i32> != Array<String> — should fail to find impl
-    let m: NestedMap<Array<i32>, i32> = { a: 1 };
+    // List<i32> != List<String> — should fail to find impl
+    let m: NestedMap<List<i32>, i32> = { a: 1 };
 }
 
 __DATA__

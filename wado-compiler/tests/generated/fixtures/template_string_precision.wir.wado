@@ -28,7 +28,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
 
 array builtin::array<i32> (mut i32);  // TypeId(4)
 
-struct core:prelude//Array<i32> {  // TypeId(5)
+struct core:prelude//List<i32> {  // TypeId(5)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
@@ -75,7 +75,7 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(26)
 
-type "functype//core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<i32>" = fn(ref "core:prelude//Array<i32>", ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(27)
+type "functype//core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<i32>" = fn(ref "core:prelude//List<i32>", ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(27)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(28)
 
@@ -122,7 +122,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/template_string_precision.wado/run"() with Stdout {
     let s: ref "core:prelude/string.wado//String";
-    let __b_1: ref "core:prelude//Array<i32>";
+    let __b_1: ref "core:prelude//List<i32>";
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let __local_5: ref "core:prelude/string.wado//String";
@@ -144,7 +144,7 @@ fn "wado-compiler/tests/fixtures/template_string_precision.wado/run"() with Stdo
     "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 5, indent: 0, buf: __local_5 }; "core:prelude/format.wado/String^Inspect::inspect"(s, __local_6); __local_5);
     "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 20, indent: 0, buf: __local_7 }; "core:prelude/format.wado/String^Display::fmt"(s, __local_8); __local_7);
     "core:cli/println"(__local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 20, indent: 0, buf: __local_9 }; "core:prelude/format.wado/String^Inspect::inspect"(s, __local_10); __local_9);
-    __b_1 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
+    __b_1 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
     "core:cli/println"(__local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: 3, indent: 0, buf: __local_11 }; limit_38 = (if __local_12.precision == -2 -> i32 {
         256;
     } else {

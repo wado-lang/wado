@@ -68,7 +68,7 @@ pub fn eprint(message: String) with Stderr {
 }
 
 /// Writes raw bytes to stdout.
-pub fn print_bytes(data: Array<u8>) with Stdout {
+pub fn print_bytes(data: List<u8>) with Stdout {
     let [rx, tx] = Stream::<u8>::new();
     let handle = Stdout::write_via_stream(rx);
     tx.write(data);
@@ -89,7 +89,7 @@ pub fn env(name: String) -> Option<String> with Environment {
 }
 
 /// Returns all command-line arguments.
-pub fn args() -> Array<String> with Environment {
+pub fn args() -> List<String> with Environment {
     return Environment::get_arguments();
 }
 

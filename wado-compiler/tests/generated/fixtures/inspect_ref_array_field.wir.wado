@@ -21,12 +21,12 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
 }
 
 struct wado-compiler/tests/fixtures/inspect_ref_array_field.wado//Wrapper {  // TypeId(3)
-    mut data: ref "core:prelude//Array<i32>",
+    mut data: ref "core:prelude//List<i32>",
 }
 
 array builtin::array<i32> (mut i32);  // TypeId(4)
 
-struct core:prelude//Array<i32> {  // TypeId(5)
+struct core:prelude//List<i32> {  // TypeId(5)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
@@ -71,7 +71,7 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(25)
 
-type "functype//core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<i32>" = fn(ref "core:prelude//Array<i32>", ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(26)
+type "functype//core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<i32>" = fn(ref "core:prelude//List<i32>", ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(26)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(27)
 
@@ -109,11 +109,11 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/inspect_ref_array_field.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//Array<i32>";
+    let __b_0: ref "core:prelude//List<i32>";
     let w: ref "wado-compiler/tests/fixtures/inspect_ref_array_field.wado//Wrapper";
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
-    __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     w = struct.new "wado-compiler/tests/fixtures/inspect_ref_array_field.wado//Wrapper" { data: __b_0 };
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "wado-compiler/tests/fixtures/inspect_ref_array_field.wado/Wrapper^Inspect::inspect"(w, __local_4); __local_3);
 }
@@ -392,7 +392,7 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 fn "wado-compiler/tests/fixtures/inspect_ref_array_field.wado/Wrapper^Inspect::inspect"(self, f) {
     let s_3: ref "core:prelude/string.wado//String";
     let s_5: ref "core:prelude/string.wado//String";
-    let self_6: ref "core:prelude//Array<i32>";
+    let self_6: ref "core:prelude//List<i32>";
     let s_10: ref "core:prelude/string.wado//String";
     let limit: i32;
     let s_15: ref "core:prelude/string.wado//String";

@@ -1414,7 +1414,7 @@ impl TypeTable {
 
     /// Register a generic associated type definition.
     /// E.g., for `impl Iterator for ArrayIter<T> { type Item = T; }`,
-    /// register `("ArrayIter", "Item") → TypeParam(0, "T")`.
+    /// register `("ListIter", "Item") → TypeParam(0, "T")`.
     pub fn register_generic_assoc_type_def(
         &mut self,
         base_struct_name: String,
@@ -1457,7 +1457,7 @@ impl TypeTable {
     }
 
     /// Resolve an associated type for a `GenericInstance` type using generic definitions.
-    /// For `ArrayIter<i32>::Item`: looks up `("ArrayIter", "Item")` → `TypeParam(0)`,
+    /// For `ArrayIter<i32>::Item`: looks up `("ListIter", "Item")` → `TypeParam(0)`,
     /// then substitutes using the instance's `type_args` to get `i32`.
     pub fn resolve_generic_assoc_type(
         &self,
@@ -1672,9 +1672,9 @@ impl TypeTable {
         })
     }
 
-    /// Create an Array<T> type (`GenericInstance` { name: "Array", ... })
+    /// Create an Array<T> type (`GenericInstance` { name: "List", ... })
     pub fn make_array(&mut self, element: TypeId) -> TypeId {
-        self.make_generic_instance("Array".to_string(), ModuleSource::array(), vec![element])
+        self.make_generic_instance("List".to_string(), ModuleSource::list(), vec![element])
     }
 
     /// Create a newtype wrapping a base type
@@ -1772,7 +1772,7 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::GenericInstance {
                 name, type_args, ..
-            } if name == "Array" && type_args.len() == 1 => Some(type_args[0]),
+            } if name == "List" && type_args.len() == 1 => Some(type_args[0]),
             // Unwrap references and check the inner type
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.as_array(*inner),
             _ => None,

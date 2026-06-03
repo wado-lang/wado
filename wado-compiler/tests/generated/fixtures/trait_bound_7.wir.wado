@@ -45,7 +45,7 @@ struct core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err
     payload_0: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude//Array<i32> {  // TypeId(9)
+struct core:prelude//List<i32> {  // TypeId(9)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
@@ -120,7 +120,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(44)
 
-type "functype//wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min" = fn(ref "core:prelude//Array<i32>") -> i32;  // TypeId(45)
+type "functype//wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min" = fn(ref "core:prelude//List<i32>") -> i32;  // TypeId(45)
 
 type "functype//core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq" = fn(ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>", ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>") -> bool;  // TypeId(46)
 
@@ -171,11 +171,11 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/trait_bound_result_eq"() wit
 }
 
 fn "wado-compiler/tests/fixtures/trait_bound_7.wado/trait_bound_struct_field_bounded"() with Stdout {
-    let __b: ref "core:prelude//Array<i32>";
+    let __b: ref "core:prelude//List<i32>";
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let self_21: i32;
-    __b = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(5, 3, 8, 1, 4), used: 5 };
+    __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(5, 3, 8, 1, 4), used: 5 };
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; self_21 = "wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min"(__b); "core:prelude/primitive.wado/i32::fmt_decimal"(self_21, __local_3); __local_2);
 }
 

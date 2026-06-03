@@ -1,11 +1,11 @@
-// Regression test: String::from_utf8_lossy should accept a newtype over Array<u8>.
+// Regression test: String::from_utf8_lossy should accept a newtype over List<u8>.
 // Previously, the monomorphizer failed to resolve I::Iter when I is a newtype,
 // causing an ICE (unresolved WIR MethodCall + invalid Wasm module).
 
-type MyBytes = Array<u8>;
+type MyBytes = List<u8>;
 
 export fn run() {
-    let bytes: MyBytes = [72, 101, 108, 108, 111] as Array<u8> as MyBytes;
+    let bytes: MyBytes = [72, 101, 108, 108, 111] as List<u8> as MyBytes;
     let s = String::from_utf8_lossy(bytes);
     assert s == "Hello";
 }

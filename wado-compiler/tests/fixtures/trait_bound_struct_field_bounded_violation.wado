@@ -5,7 +5,7 @@ variant NoOrd {
 }
 
 struct Holder<T> {
-    items: Array<T>,
+    items: List<T>,
 }
 
 impl Holder<T: Ord> {
@@ -15,7 +15,7 @@ impl Holder<T: Ord> {
 }
 
 export fn run() {
-    let h = Holder { items: [NoOrd::A(1)] as Array<NoOrd> };
+    let h = Holder { items: [NoOrd::A(1)] as List<NoOrd> };
     // NoOrd (variant) doesn't implement Ord, so min() should not be available
     let m = h.min();
 }

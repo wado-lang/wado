@@ -33,17 +33,17 @@ struct wado-compiler/tests/fixtures/trait_bound_4.wado//Point {  // TypeId(5)
     mut y: i32,
 }
 
-array builtin::array<core:prelude/array.wado/Array<i32>> (mut ref "core:prelude//Array<i32>");  // TypeId(6)
+array builtin::array<core:prelude/list.wado/List<i32>> (mut ref "core:prelude//List<i32>");  // TypeId(6)
 
 array builtin::array<i32> (mut i32);  // TypeId(7)
 
-struct core:prelude//Array<i32> {  // TypeId(8)
+struct core:prelude//List<i32> {  // TypeId(8)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
 
-struct core:prelude//Array<core:prelude/array.wado/Array<i32>> {  // TypeId(9)
-    mut repr: ref "builtin::array<core:prelude/array.wado/Array<i32>>",
+struct core:prelude//List<core:prelude/list.wado/List<i32>> {  // TypeId(9)
+    mut repr: ref "builtin::array<core:prelude/list.wado/List<i32>>",
     mut used: i32,
 }
 
@@ -109,9 +109,9 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(40)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>^Eq::eq" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>", ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>") -> bool;  // TypeId(41)
+type "functype//core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^Eq::eq" = fn(ref "core:prelude//List<core:prelude/list.wado/List<i32>>", ref "core:prelude//List<core:prelude/list.wado/List<i32>>") -> bool;  // TypeId(41)
 
-type "functype//core:prelude/array.wado/Array<i32>^Eq::eq" = fn(ref "core:prelude//Array<i32>", ref "core:prelude//Array<i32>") -> bool;  // TypeId(42)
+type "functype//core:prelude/list.wado/List<i32>^Eq::eq" = fn(ref "core:prelude//List<i32>", ref "core:prelude//List<i32>") -> bool;  // TypeId(42)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
 
@@ -133,15 +133,15 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/trait_bound_4.wado/trait_bound_nested_generic"() with Stdout {
-    let __b_0: ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>";
-    let __b_1: ref "core:prelude//Array<i32>";
-    let __b_2: ref "core:prelude//Array<i32>";
-    let __b_4: ref "core:prelude//Array<core:prelude/array.wado/Array<i32>>";
-    let __b_5: ref "core:prelude//Array<i32>";
-    let __b_6: ref "core:prelude//Array<i32>";
-    __b_0 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<i32>>" { repr: array.new_fixed<ref "core:prelude//Array<i32>">(__b_1 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }; __b_1, __b_2 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 }; __b_2), used: 2 };
-    __b_4 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<i32>>" { repr: array.new_fixed<ref "core:prelude//Array<i32>">(__b_5 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }; __b_5, __b_6 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 }; __b_6), used: 2 };
-    if "core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>^Eq::eq"(__b_0, __b_4) {
+    let __b_0: ref "core:prelude//List<core:prelude/list.wado/List<i32>>";
+    let __b_1: ref "core:prelude//List<i32>";
+    let __b_2: ref "core:prelude//List<i32>";
+    let __b_4: ref "core:prelude//List<core:prelude/list.wado/List<i32>>";
+    let __b_5: ref "core:prelude//List<i32>";
+    let __b_6: ref "core:prelude//List<i32>";
+    __b_0 = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(__b_1 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }; __b_1, __b_2 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 }; __b_2), used: 2 };
+    __b_4 = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(__b_5 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }; __b_5, __b_6 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 }; __b_6), used: 2 };
+    if "core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^Eq::eq"(__b_0, __b_4) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("equal"), used: 5 });
     } else {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not equal"), used: 9 });
@@ -494,11 +494,11 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>^Eq::eq"(self, other) {
+fn "core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^Eq::eq"(self, other) {
     let i: i32;
     let _licm_used_3: i32;
-    let _licm_repr_4: ref "builtin::array<core:prelude/array.wado/Array<i32>>";
-    let _licm_repr_5: ref "builtin::array<core:prelude/array.wado/Array<i32>>";
+    let _licm_repr_4: ref "builtin::array<core:prelude/list.wado/List<i32>>";
+    let _licm_repr_5: ref "builtin::array<core:prelude/list.wado/List<i32>>";
     if self.used != other.used {
         return 0;
     }
@@ -511,7 +511,7 @@ fn "core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>^Eq::eq"(se
             if i >= _licm_used_3 {
                 break b43;
             }
-            if "core:prelude/array.wado/Array<i32>^Eq::eq"(builtin::array_get<ref "core:prelude//Array<i32>">(_licm_repr_4, i), builtin::array_get<ref "core:prelude//Array<i32>">(_licm_repr_5, i)) == 0 {
+            if "core:prelude/list.wado/List<i32>^Eq::eq"(builtin::array_get<ref "core:prelude//List<i32>">(_licm_repr_4, i), builtin::array_get<ref "core:prelude//List<i32>">(_licm_repr_5, i)) == 0 {
                 return 0;
             }
             i = i + 1;
@@ -521,7 +521,7 @@ fn "core:prelude/array.wado/Array<core:prelude/array.wado/Array<i32>>^Eq::eq"(se
     return 1;
 }
 
-fn "core:prelude/array.wado/Array<i32>^Eq::eq"(self, other) {
+fn "core:prelude/list.wado/List<i32>^Eq::eq"(self, other) {
     let i: i32;
     let _licm_used_3: i32;
     let _licm_repr_4: ref builtin::array<i32>;

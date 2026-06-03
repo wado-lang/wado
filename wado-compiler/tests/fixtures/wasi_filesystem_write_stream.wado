@@ -43,7 +43,7 @@ export fn run() with Stdout, Stderr, Preopens {
         // Write "Hello, Stream!\n" via stream (consumer-first ordering)
         let [write_rx, write_tx] = Stream::<u8>::new();
         let sub1 = file.write_via_stream(write_rx, 0 as Filesize);
-        let data: Array<u8> = [72, 101, 108, 108, 111, 44, 32, 83, 116, 114, 101, 97, 109, 33, 10];
+        let data: List<u8> = [72, 101, 108, 108, 111, 44, 32, 83, 116, 114, 101, 97, 109, 33, 10];
         write_tx.write(data);
         write_tx.drop();
         sub1.drop();

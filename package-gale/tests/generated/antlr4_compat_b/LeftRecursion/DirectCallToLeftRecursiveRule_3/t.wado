@@ -32,17 +32,17 @@ impl Eq for Span {
 /// LexerSlice is a lazy reference to a range of characters in the source input.
 /// It avoids allocating a String for every token during tokenization.
 pub struct LexerSlice {
-    pub chars: &Array<char>,
+    pub chars: &List<char>,
     pub start: i32,
     pub end: i32,
 }
 
 impl LexerSlice {
-    pub fn new(chars: &Array<char>, start: i32, end: i32) -> LexerSlice with stores[chars] {
+    pub fn new(chars: &List<char>, start: i32, end: i32) -> LexerSlice with stores[chars] {
         return LexerSlice { chars, start, end };
     }
 
-    pub fn empty(chars: &Array<char>) -> LexerSlice with stores[chars] {
+    pub fn empty(chars: &List<char>) -> LexerSlice with stores[chars] {
         return LexerSlice { chars, start: 0, end: 0 };
     }
 
@@ -123,7 +123,7 @@ pub struct Token {
     pub kind: i32,
     pub text: LexerSlice,
     pub span: Span,
-    pub leading_trivia: Array<Token>,
+    pub leading_trivia: List<Token>,
     pub channel: i32,
 }
 
@@ -132,11 +132,11 @@ impl Token {
         return Token { kind, text, span, leading_trivia: [], channel: 0 };
     }
 
-    pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>) -> Token {
+    pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: List<Token>) -> Token {
         return Token { kind, text, span, leading_trivia, channel: 0 };
     }
 
-    pub fn with_channel(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>, channel: i32) -> Token {
+    pub fn with_channel(kind: i32, text: LexerSlice, span: Span, leading_trivia: List<Token>, channel: i32) -> Token {
         return Token { kind, text, span, leading_trivia, channel };
     }
 }
@@ -160,20 +160,20 @@ impl Token {
 pub struct ParseError {
     pub message: String,
     pub span: Span,
-    pub expected: Array<String>,
+    pub expected: List<String>,
     pub line: i32 = 1,
     pub col: i32 = 0,
-    pub rule_stack: Array<String> = [],
+    pub rule_stack: List<String> = [],
 }
 
 impl ParseError {
-    pub fn new(message: String, span: Span, expected: Array<String>) -> ParseError {
+    pub fn new(message: String, span: Span, expected: List<String>) -> ParseError {
         return ParseError { message, span, expected };
     }
 
     /// Construct a ParseError whose position is already resolved. Used by
     /// `Parser::error`, which has the source on hand to compute line/col.
-    pub fn at(message: String, span: Span, expected: Array<String>, line: i32, col: i32) -> ParseError {
+    pub fn at(message: String, span: Span, expected: List<String>, line: i32, col: i32) -> ParseError {
         return ParseError { message, span, expected, line, col, rule_stack: [] };
     }
 
@@ -220,7 +220,7 @@ pub variant CstChild {
 pub struct CstNode {
     pub name: String,
     pub span: Span,
-    pub children: Array<CstChild>,
+    pub children: List<CstChild>,
 }
 
 impl CstNode {
@@ -323,8 +323,8 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// Text escaping follows `CommonToken.toString` (`vendor/antlr4/runtime/
 /// Java/src/org/antlr/v4/runtime/CommonToken.java`): only `\n`, `\r`,
 /// `\t` are escaped; backslashes and quotes pass through unchanged.
-pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
-    let chars: Array<char> = input.chars().collect();
+pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
+    let chars: List<char> = input.chars().collect();
     let mut out = String::with_capacity(tokens.len() * 32);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
@@ -353,7 +353,7 @@ pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> 
 /// `to_lexer_string` for both main-stream tokens and interleaved
 /// non-default-channel trivia. `channel=N` is printed only for non-default
 /// channels, matching ANTLR4.
-fn emit_lexer_token(out: &mut String, tok: &Token, chars: &Array<char>, index: i32, eof_kind: i32) {
+fn emit_lexer_token(out: &mut String, tok: &Token, chars: &List<char>, index: i32, eof_kind: i32) {
     let is_eof = tok.kind == eof_kind;
     let mut text_buf = String::with_capacity(16);
     if is_eof {
@@ -380,7 +380,7 @@ fn emit_lexer_token(out: &mut String, tok: &Token, chars: &Array<char>, index: i
 
 /// Compute (line, column) at a 0-based char index in `chars`, with
 /// 1-based line and 0-based column to match ANTLR4's `Token` getters.
-fn line_col_at(chars: &Array<char>, pos: i32) -> [i32, i32] {
+fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
     let mut line = 1;
     let mut col = 0;
     let cap = if pos < chars.len() { pos } else { chars.len() };
@@ -409,9 +409,9 @@ pub struct HighlightOverride {
 /// passes to `Visitor::enter_rule`. The generator emits the names in
 /// parser-rule declaration order; index = rule id.
 pub struct HighlightMapping {
-    pub defaults: Array<String>,
-    pub rule_names: Array<String>,
-    pub overrides: Array<HighlightOverride>,
+    pub defaults: List<String>,
+    pub rule_names: List<String>,
+    pub overrides: List<HighlightOverride>,
 }
 
 /// A single highlight capture: a named range in the source text.
@@ -431,15 +431,15 @@ struct ResolvedOverride {
 
 /// HighlightVisitor collects highlight captures during a CST walk.
 pub struct HighlightVisitor {
-    defaults: Array<String>,
-    overrides: Array<ResolvedOverride>,
-    rule_stack: Array<i32>,
-    pub captures: Array<HighlightCapture>,
+    defaults: List<String>,
+    overrides: List<ResolvedOverride>,
+    rule_stack: List<i32>,
+    pub captures: List<HighlightCapture>,
 }
 
 impl HighlightVisitor {
     pub fn new(mapping: HighlightMapping) -> HighlightVisitor {
-        let mut overrides: Array<ResolvedOverride> = Array::with_capacity(mapping.overrides.len());
+        let mut overrides: List<ResolvedOverride> = List::with_capacity(mapping.overrides.len());
         for let ov of &mapping.overrides {
             let mut id: i32 = -1;
             for let mut i = 0; i < mapping.rule_names.len(); i += 1 {
@@ -553,7 +553,7 @@ fn push_class(out: &mut String, capture: &String) {
 
 /// Produce a highlighted HTML fragment from source text and captures.
 /// Captures must be sorted by start position (as produced by HighlightVisitor).
-pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> String {
+pub fn highlight_html(source: &String, captures: &List<HighlightCapture>) -> String {
     let mut out = String::with_capacity(source.len() * 5);
     let mut pos = 0;
     let mut iter = source.chars();
@@ -582,7 +582,7 @@ pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> St
     return out;
 }
 
-fn substr(chars: &Array<char>, start: i32, end: i32) -> String {
+fn substr(chars: &List<char>, start: i32, end: i32) -> String {
     let mut out = String::with_capacity(end - start);
     let mut i = start;
     while i < end && i < chars.len() {
@@ -611,7 +611,7 @@ pub trait Visitor {
 
 /// TreeRecorder is a Visitor that records events for building a CstNode tree.
 pub struct TreeRecorder {
-    events: Array<TreeEvent>,
+    events: List<TreeEvent>,
 }
 
 variant TreeEvent {
@@ -650,10 +650,10 @@ impl Visitor for TreeRecorder {
     }
 }
 
-fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
+fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
     if let Enter(info) = events[*pos] {
         *pos += 1;
-        let mut children: Array<CstChild> = [];
+        let mut children: List<CstChild> = [];
         loop {
             if *pos >= events.len() {
                 break;
@@ -705,7 +705,7 @@ global TK_EOF: i32 = 2;
 global TK_ERROR: i32 = 3;
 
 struct Lexer {
-    chars: Array<char>,
+    chars: List<char>,
     pos: i32,
 }
 
@@ -723,7 +723,7 @@ impl Lexer {
     }
 }
 
-fn try_id(chars: &Array<char>, start: i32) -> i32 {
+fn try_id(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || !('a' <= chars[pos] <= 'z') { return -1; }
     pos += 1;
@@ -740,7 +740,7 @@ fn try_id(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ws(chars: &Array<char>, start: i32) -> i32 {
+fn try_ws(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_1 = pos;
     let mut alts_ok_1 = false;
@@ -762,10 +762,10 @@ fn try_ws(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-pub fn tokenize(input: &String) -> Array<Token> {
+pub fn tokenize(input: &String) -> List<Token> {
     let mut lexer = Lexer::new(input);
-    let mut tokens: Array<Token> = Array::with_capacity(lexer.chars.len() / 4 + 1);
-    let mut trivia: Array<Token> = [];
+    let mut tokens: List<Token> = List::with_capacity(lexer.chars.len() / 4 + 1);
+    let mut trivia: List<Token> = [];
     while !lexer.at_end() {
         let start = lexer.pos;
         let mut best_end: i32 = -1;
@@ -815,17 +815,17 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 struct Parser {
-    tokens: Array<Token>,
+    tokens: List<Token>,
     pos: i32,
-    chars: Array<char>,
+    chars: List<char>,
 }
 
 impl Parser {
-    fn new(tokens: Array<Token>, chars: Array<char>) -> Parser {
+    fn new(tokens: List<Token>, chars: List<char>) -> Parser {
         return Parser { tokens, pos: 0, chars };
     }
 
-    fn error(&self, message: String, span: Span, expected: Array<String>) -> ParseError {
+    fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
         let lc = line_col_at(&self.chars, span.start);
         return ParseError::at(message, span, expected, lc.0, lc.1);
     }
@@ -892,7 +892,7 @@ impl Parser {
         ));
     }
 
-    fn match_not(&mut self, excluded: Array<i32>) -> Result<Token, ParseError> {
+    fn match_not(&mut self, excluded: List<i32>) -> Result<Token, ParseError> {
         let k = self.tokens[self.pos].kind;
         if k != TK_EOF {
             let mut blocked = false;
@@ -914,7 +914,7 @@ impl Parser {
         ));
     }
 
-    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+    fn match_set(&mut self, included: List<i32>) -> Result<Token, ParseError> {
         let k = self.tokens[self.pos].kind;
         for let x of included {
             if x == k {
@@ -933,21 +933,21 @@ impl Parser {
     }
 }
 
-fn scan_a_atom(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_a_atom(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_a_lr_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_a_lr_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_a(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_a_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
@@ -1025,7 +1025,7 @@ fn _parse_a(p: &mut Parser, min_prec: i32 = 0) -> Result<ANode, ParseError> {
 
 pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_a(&mut parser, 0);
 }

@@ -5,7 +5,7 @@
 //   Stage 2  (v3) tape-based:       ~27 ms (median, with high variance)
 //
 // Phase 1 (tokenize): single linear scan over input, emits packed u64 tokens
-//   into Array<u64>. The 64-bit token packs:
+//   into List<u64>. The 64-bit token packs:
 //     bits 56-63: kind (TOKEN_*)
 //     bits 28-55: start (28 bits, up to 256MB inputs)
 //     bits  0-27: end   (28 bits, exclusive)
@@ -18,11 +18,11 @@
 // Why it doesn't help on Wado (today):
 //   1. Tape construction (~12ms standalone, 36% self time) does the same
 //      per-byte scan as integrated parse — no algorithmic saving.
-//   2. The 85K-entry Array<u64> tape causes GC variance (12-25ms spread).
+//   2. The 85K-entry List<u64> tape causes GC variance (12-25ms spread).
 //   3. Phase 2 still per-token dispatches and re-parses numbers from ranges,
 //      so the savings from skipping whitespace are offset by tape cursor work.
-//   4. Wado's `Array<struct>` lowers to `(array (ref Struct))` — boxed; only
-//      `Array<u64>` packs inline. We picked u64 packing to mitigate, but the
+//   4. Wado's `List<struct>` lowers to `(array (ref Struct))` — boxed; only
+//      `List<u64>` packs inline. We picked u64 packing to mitigate, but the
 //      array still has per-push bounds + grow checks.
 //
 // Useful for future work: this file documents what's needed to make tape pay:
@@ -41,10 +41,10 @@ struct Event {
     id: i64,
     logo: Option<String>,
     name: String,
-    sub_topic_ids: Array<i64>,
+    sub_topic_ids: List<i64>,
     subject_code: Option<String>,
     subtitle: Option<String>,
-    topic_ids: Array<i64>,
+    topic_ids: List<i64>,
 }
 
 struct Price {
@@ -55,11 +55,11 @@ struct Price {
 
 struct Area {
     area_id: i64,
-    block_ids: Array<i64>,
+    block_ids: List<i64>,
 }
 
 struct SeatCategory {
-    areas: Array<Area>,
+    areas: List<Area>,
     seat_category_id: i64,
 }
 
@@ -68,8 +68,8 @@ struct Performance {
     id: i64,
     logo: Option<String>,
     name: Option<String>,
-    prices: Array<Price>,
-    seat_categories: Array<SeatCategory>,
+    prices: List<Price>,
+    seat_categories: List<SeatCategory>,
     seat_map_image: Option<String>,
     start: i64,
     venue_code: String,
@@ -80,12 +80,12 @@ struct CitmCatalog {
     audience_sub_category_names: TreeMap<String, String>,
     block_names: TreeMap<String, String>,
     events: TreeMap<String, Event>,
-    performances: Array<Performance>,
+    performances: List<Performance>,
     seat_category_names: TreeMap<String, String>,
     sub_topic_names: TreeMap<String, String>,
     subject_names: TreeMap<String, String>,
     topic_names: TreeMap<String, String>,
-    topic_sub_topics: TreeMap<String, Array<i64>>,
+    topic_sub_topics: TreeMap<String, List<i64>>,
     venue_names: TreeMap<String, String>,
 }
 
@@ -122,11 +122,11 @@ fn tok_end(t: u64) -> i32 {
 }
 
 // Phase 1: tokenize
-fn tokenize(input: String) -> Array<u64> {
+fn tokenize(input: String) -> List<u64> {
     let raw = input.internal_raw_bytes();
     let len = input.len();
     let mut pos = 0;
-    let mut tape: Array<u64> = Array::with_capacity(len / 6);
+    let mut tape: List<u64> = List::with_capacity(len / 6);
     // expect_key tracks whether the next string token is a KEY (after { or , inside object).
     // Stack of bools: 0 bit = inside object, 1 = next-string-is-key.
     // For simplicity use a single bool stack via i32 bitmask (max 32 nesting depth).
@@ -271,7 +271,7 @@ fn read_file(path: String) -> String with Preopens {
 // ============================================================================
 
 struct Cursor {
-    tape: Array<u64>,
+    tape: List<u64>,
     input: String,
     repr: builtin::array<u8>,
     idx: i32,
@@ -417,12 +417,12 @@ impl Cursor {
         // scalar tokens are already consumed via advance()
     }
 
-    fn parse_array_i64(&mut self) -> Array<i64> {
+    fn parse_array_i64(&mut self) -> List<i64> {
         let t = self.advance();
         if tok_kind(t) != TOK_ARRAY_START as i32 {
             panic("expected '['");
         }
-        let mut arr: Array<i64> = Array::with_capacity(4);
+        let mut arr: List<i64> = List::with_capacity(4);
         loop {
             let next = self.peek();
             if tok_kind(next) == TOK_ARRAY_END as i32 {
@@ -443,10 +443,10 @@ impl Cursor {
         let mut id: i64 = 0;
         let mut logo: Option<String> = null;
         let mut name: String = "";
-        let mut sub_topic_ids: Array<i64> = [];
+        let mut sub_topic_ids: List<i64> = [];
         let mut subject_code: Option<String> = null;
         let mut subtitle: Option<String> = null;
-        let mut topic_ids: Array<i64> = [];
+        let mut topic_ids: List<i64> = [];
 
         loop {
             let key_tok = self.peek();
@@ -543,12 +543,12 @@ impl Cursor {
         unreachable();
     }
 
-    fn parse_array_price(&mut self) -> Array<Price> {
+    fn parse_array_price(&mut self) -> List<Price> {
         let t = self.advance();
         if tok_kind(t) != TOK_ARRAY_START as i32 {
             panic("array<Price>: expected '['");
         }
-        let mut arr: Array<Price> = Array::with_capacity(8);
+        let mut arr: List<Price> = List::with_capacity(8);
         loop {
             let next = self.peek();
             if tok_kind(next) == TOK_ARRAY_END as i32 {
@@ -566,7 +566,7 @@ impl Cursor {
             panic("area: expected '{'");
         }
         let mut area_id: i64 = 0;
-        let mut block_ids: Array<i64> = [];
+        let mut block_ids: List<i64> = [];
         loop {
             let key_tok = self.peek();
             let kk = tok_kind(key_tok);
@@ -593,12 +593,12 @@ impl Cursor {
         unreachable();
     }
 
-    fn parse_array_area(&mut self) -> Array<Area> {
+    fn parse_array_area(&mut self) -> List<Area> {
         let t = self.advance();
         if tok_kind(t) != TOK_ARRAY_START as i32 {
             panic("array<Area>: expected '['");
         }
-        let mut arr: Array<Area> = Array::with_capacity(4);
+        let mut arr: List<Area> = List::with_capacity(4);
         loop {
             let next = self.peek();
             if tok_kind(next) == TOK_ARRAY_END as i32 {
@@ -615,7 +615,7 @@ impl Cursor {
         if tok_kind(t) != TOK_OBJECT_START as i32 {
             panic("seat_category: expected '{'");
         }
-        let mut areas: Array<Area> = [];
+        let mut areas: List<Area> = [];
         let mut seat_category_id: i64 = 0;
         loop {
             let key_tok = self.peek();
@@ -643,12 +643,12 @@ impl Cursor {
         unreachable();
     }
 
-    fn parse_array_seat_category(&mut self) -> Array<SeatCategory> {
+    fn parse_array_seat_category(&mut self) -> List<SeatCategory> {
         let t = self.advance();
         if tok_kind(t) != TOK_ARRAY_START as i32 {
             panic("array<SeatCategory>: expected '['");
         }
-        let mut arr: Array<SeatCategory> = Array::with_capacity(8);
+        let mut arr: List<SeatCategory> = List::with_capacity(8);
         loop {
             let next = self.peek();
             if tok_kind(next) == TOK_ARRAY_END as i32 {
@@ -669,8 +669,8 @@ impl Cursor {
         let mut id: i64 = 0;
         let mut logo: Option<String> = null;
         let mut name: Option<String> = null;
-        let mut prices: Array<Price> = [];
-        let mut seat_categories: Array<SeatCategory> = [];
+        let mut prices: List<Price> = [];
+        let mut seat_categories: List<SeatCategory> = [];
         let mut seat_map_image: Option<String> = null;
         let mut start: i64 = 0;
         let mut venue_code: String = "";
@@ -734,12 +734,12 @@ impl Cursor {
         unreachable();
     }
 
-    fn parse_array_performance(&mut self) -> Array<Performance> {
+    fn parse_array_performance(&mut self) -> List<Performance> {
         let t = self.advance();
         if tok_kind(t) != TOK_ARRAY_START as i32 {
             panic("array<Performance>: expected '['");
         }
-        let mut arr: Array<Performance> = Array::with_capacity(256);
+        let mut arr: List<Performance> = List::with_capacity(256);
         loop {
             let next = self.peek();
             if tok_kind(next) == TOK_ARRAY_END as i32 {
@@ -791,12 +791,12 @@ impl Cursor {
         unreachable();
     }
 
-    fn parse_topic_subtopics(&mut self) -> TreeMap<String, Array<i64>> {
+    fn parse_topic_subtopics(&mut self) -> TreeMap<String, List<i64>> {
         let t = self.advance();
         if tok_kind(t) != TOK_OBJECT_START as i32 {
             panic("topic_subtopics: expected '{'");
         }
-        let mut m: TreeMap<String, Array<i64>> = {};
+        let mut m: TreeMap<String, List<i64>> = {};
         loop {
             let key_tok = self.peek();
             if tok_kind(key_tok) == TOK_OBJECT_END as i32 {
@@ -820,12 +820,12 @@ impl Cursor {
         let mut audience_sub_category_names: TreeMap<String, String> = {};
         let mut block_names: TreeMap<String, String> = {};
         let mut events: TreeMap<String, Event> = {};
-        let mut performances: Array<Performance> = [];
+        let mut performances: List<Performance> = [];
         let mut seat_category_names: TreeMap<String, String> = {};
         let mut sub_topic_names: TreeMap<String, String> = {};
         let mut subject_names: TreeMap<String, String> = {};
         let mut topic_names: TreeMap<String, String> = {};
-        let mut topic_sub_topics: TreeMap<String, Array<i64>> = {};
+        let mut topic_sub_topics: TreeMap<String, List<i64>> = {};
         let mut venue_names: TreeMap<String, String> = {};
 
         loop {

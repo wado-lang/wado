@@ -32,13 +32,13 @@ struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(5)
     payload_0: i32,
 }
 
-struct core:prelude//Array<i32> {  // TypeId(6)
+struct core:prelude//List<i32> {  // TypeId(6)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
 
 struct wado-compiler/tests/fixtures/assoc_type_projection_struct_field.wado//Gen<i32> {  // TypeId(7)
-    mut items: ref "core:prelude//Array<i32>",
+    mut items: ref "core:prelude//List<i32>",
     mut idx: i32,
 }
 
@@ -118,7 +118,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/assoc_type_projection_struct_field.wado/__test_0_projected_assoc_type_stored_in_a_generic_struct_field"() {
-    let __b: ref "core:prelude//Array<i32>";
+    let __b: ref "core:prelude//List<i32>";
     let g: ref "wado-compiler/tests/fixtures/assoc_type_projection_struct_field.wado//Gen<i32>";
     let __cond_3: bool;
     let __cond_4: bool;
@@ -143,7 +143,7 @@ fn "wado-compiler/tests/fixtures/assoc_type_projection_struct_field.wado/__test_
     let v_49: ref "core:prelude/types.wado//Option<i32>";
     let v_58: ref "core:prelude/types.wado//Option<i32>";
     let __sroa_b_last: ref "core:prelude/types.wado//Option<i32>";
-    g = struct.new "wado-compiler/tests/fixtures/assoc_type_projection_struct_field.wado//Gen<i32>" { items: ref.as_non_null(__b = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 }; __b), idx: 0 };
+    g = struct.new "wado-compiler/tests/fixtures/assoc_type_projection_struct_field.wado//Gen<i32>" { items: ref.as_non_null(__b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 }; __b), idx: 0 };
     __sroa_b_last = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     v_32 = __sroa_b_last;
     __sroa_b_last = struct.new "core:prelude/types.wado//Option<i32>" { 1 };

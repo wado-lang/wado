@@ -8,11 +8,11 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
     let headers = Fields::new();
     // "hello" = [104, 101, 108, 108, 111]
-    let v1: Array<u8> = [104 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8];
+    let v1: List<u8> = [104 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8];
     let _ = headers.append("x-first" as FieldName, v1 as FieldValue);
 
     // "world" = [119, 111, 114, 108, 100]
-    let v2: Array<u8> = [119 as u8, 111 as u8, 114 as u8, 108 as u8, 100 as u8];
+    let v2: List<u8> = [119 as u8, 111 as u8, 114 as u8, 108 as u8, 100 as u8];
     let _ = headers.append("x-second" as FieldName, v2 as FieldValue);
 
     let [response, _tx_future] = Response::new(headers, null, trailers_future);

@@ -17,7 +17,7 @@ pub variant JsonValue {
     Bool(bool),
     Number(f64),
     Str(String),
-    Arr(Array<JsonValue>),
+    Arr(List<JsonValue>),
     Obj(TreeMap<String, JsonValue>),
 }
 
@@ -95,7 +95,7 @@ test "surrogate-pair-to-codepoint" {
 
 
 struct Parser {
-    bytes: Array<u8>,
+    bytes: List<u8>,
     pos: i32,
 }
 
@@ -105,7 +105,7 @@ impl Parser {
         return Parser { bytes, pos: 0 };
     }
 
-    fn from_bytes(bytes: Array<u8>) -> Parser {
+    fn from_bytes(bytes: List<u8>) -> Parser {
         return Parser { bytes, pos: 0 };
     }
 
@@ -144,7 +144,7 @@ impl Parser {
 
 
 test "parser-from-bytes" {
-    let bytes: Array<u8> = ['{' as u8, '}' as u8];
+    let bytes: List<u8> = ['{' as u8, '}' as u8];
     let mut p = Parser::from_bytes(bytes);
     assert p.peek() matches { Some(b) && b == '{' as u8 };
     p.advance();
@@ -849,11 +849,11 @@ impl Parser {
         self.skip_whitespace();
 
         if self.expect_byte(']' as u8) {
-            let empty: Array<JsonValue> = [];
+            let empty: List<JsonValue> = [];
             return Option::<JsonValue>::Some(JsonValue::Arr(empty));
         }
 
-        let mut items: Array<JsonValue> = [];
+        let mut items: List<JsonValue> = [];
         loop {
             if let Some(v) = self.parse_value() {
                 items.push(v);
@@ -1422,13 +1422,13 @@ test "stringify-string-with-escapes" {
 }
 
 test "stringify-empty-array" {
-    let empty: Array<JsonValue> = [];
+    let empty: List<JsonValue> = [];
     let v = JsonValue::Arr(empty);
     assert stringify(&v) == "[]";
 }
 
 test "stringify-array" {
-    let mut items: Array<JsonValue> = [];
+    let mut items: List<JsonValue> = [];
     items.push(JsonValue::Number(1.0));
     items.push(JsonValue::Number(2.0));
     items.push(JsonValue::Number(3.0));
@@ -1494,7 +1494,7 @@ test "format-number-floats" {
 }
 
 test "stringify-pretty-empty" {
-    let empty_arr: Array<JsonValue> = [];
+    let empty_arr: List<JsonValue> = [];
     let v = JsonValue::Arr(empty_arr);
     assert stringify_pretty(&v) == "[]";
 
@@ -1503,7 +1503,7 @@ test "stringify-pretty-empty" {
 }
 
 test "stringify-pretty-array" {
-    let mut items: Array<JsonValue> = [];
+    let mut items: List<JsonValue> = [];
     items.push(JsonValue::Number(1.0));
     items.push(JsonValue::Number(2.0));
     items.push(JsonValue::Number(3.0));

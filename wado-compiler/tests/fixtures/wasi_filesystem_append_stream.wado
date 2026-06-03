@@ -29,7 +29,7 @@ export fn run() with Stdout, Stderr, Preopens {
         // Write "Hello" (72, 101, 108, 108, 111)
         let [w_rx, w_tx] = Stream::<u8>::new();
         let sub1 = file.write_via_stream(w_rx, 0 as Filesize);
-        let hello: Array<u8> = [72, 101, 108, 108, 111];
+        let hello: List<u8> = [72, 101, 108, 108, 111];
         w_tx.write(hello);
         w_tx.drop();
         sub1.drop();
@@ -37,7 +37,7 @@ export fn run() with Stdout, Stderr, Preopens {
         // Append ", World!\n" (44, 32, 87, 111, 114, 108, 100, 33, 10)
         let [a_rx, a_tx] = Stream::<u8>::new();
         let sub2 = file.append_via_stream(a_rx);
-        let suffix: Array<u8> = [44, 32, 87, 111, 114, 108, 100, 33, 10];
+        let suffix: List<u8> = [44, 32, 87, 111, 114, 108, 100, 33, 10];
         a_tx.write(suffix);
         a_tx.drop();
         sub2.drop();

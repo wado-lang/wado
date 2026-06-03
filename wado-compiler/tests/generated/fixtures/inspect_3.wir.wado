@@ -72,17 +72,17 @@ struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(15)
     payload_0: i32,
 }
 
-struct core:prelude//Array<u64> {  // TypeId(16)
+struct core:prelude//List<u64> {  // TypeId(16)
     mut repr: ref builtin::array<u64>,
     mut used: i32,
 }
 
-struct core:prelude//Array<i32> {  // TypeId(17)
+struct core:prelude//List<i32> {  // TypeId(17)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
 
-struct core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint> {  // TypeId(18)
+struct core:prelude//List<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint> {  // TypeId(18)
     mut repr: ref "builtin::array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>",
     mut used: i32,
 }
@@ -175,11 +175,11 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref built
 
 type "functype//core:prelude/primitive.wado/fmt_float_special" = fn(ref "core:prelude/format.wado//Formatter", bool, "core:prelude/fpfmt.wado//enum:SpecialKind", ref "core:prelude/string.wado//String");  // TypeId(62)
 
-type "functype//core:prelude/format.wado/core/prelude/format.wado/write_array_inspect_alt<i32>" = fn(ref "core:prelude//Array<i32>", ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(63)
+type "functype//core:prelude/format.wado/core/prelude/format.wado/write_array_inspect_alt<i32>" = fn(ref "core:prelude//List<i32>", ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(63)
 
-type "functype//core:prelude/format.wado/core/prelude/format.wado/write_array_inspect_alt<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>" = fn(ref "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>", ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(64)
+type "functype//core:prelude/format.wado/core/prelude/format.wado/write_array_inspect_alt<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>" = fn(ref "core:prelude//List<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>", ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(64)
 
-type "functype//core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>" = fn(ref "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>", ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(65)
+type "functype//core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>" = fn(ref "core:prelude//List<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>", ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(65)
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(66)
 
@@ -248,16 +248,16 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:core::prelude/fpfmt.wado::POW10: ref null "core:prelude//Array<u64>" = ref.null none;
+global mut global:core::prelude/fpfmt.wado::POW10: ref null "core:prelude//List<u64>" = ref.null none;
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/inspect_3.wado/__test_0_pretty_array"() {
-    let __b_0: ref "core:prelude//Array<i32>";
+    let __b_0: ref "core:prelude//List<i32>";
     let __cond_2: bool;
-    let __b_3: ref "core:prelude//Array<i32>";
+    let __b_3: ref "core:prelude//List<i32>";
     let __cond_5: bool;
-    let __b_6: ref "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>";
-    let points: ref "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>";
+    let __b_6: ref "core:prelude//List<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>";
+    let points: ref "core:prelude//List<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>";
     let __cond_8: bool;
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/format.wado//Formatter";
@@ -280,7 +280,7 @@ fn "wado-compiler/tests/fixtures/inspect_3.wado/__test_0_pretty_array"() {
     let other_78: ref "core:prelude/string.wado//String";
     let len_a_79: i32;
     let limit_84: i32;
-    __b_0 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    __b_0 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     __cond_2 = __inline_String_Eq__eq_3: block -> bool {
         __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
@@ -303,7 +303,7 @@ condition: `{empty:#?}` == \"[]\"
 "), used: 33 }); __local_11);
         unreachable;
     }
-    __b_3 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    __b_3 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     __cond_5 = __inline_String_Eq__eq_21: block -> bool {
         __local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_13 };
@@ -330,8 +330,8 @@ condition: `{nums:#?}` == \"[\\n  1,\\n  2,\\n  3,\\n]\"
 "), used: 52 }); __local_15);
         unreachable;
     }
-    __b_6 = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint">(struct.new "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint" { x: 3, y: 4 }), used: 2 };
-    points = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>" { repr: ref.as_non_null(builtin::array_clone<ref "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint">(__b_6.repr)), used: 2 };
+    __b_6 = struct.new "core:prelude//List<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint">(struct.new "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint" { x: 3, y: 4 }), used: 2 };
+    points = struct.new "core:prelude//List<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>" { repr: ref.as_non_null(builtin::array_clone<ref "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint">(__b_6.repr)), used: 2 };
     __cond_8 = __inline_String_Eq__eq_39: block -> bool {
         __local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_17 };
@@ -534,7 +534,7 @@ fn "wado-compiler/tests/fixtures/inspect_3.wado/__test_3_no_display"() {
     let __cond_11: bool;
     let opt_p: ref null "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint";
     let __cond_13: bool;
-    let __b: ref "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>";
+    let __b: ref "core:prelude//List<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>";
     let __cond_16: bool;
     let __cond_18: bool;
     let __local_19: ref "core:prelude/string.wado//String";
@@ -718,7 +718,7 @@ condition: `{opt_p:?}` == \"Option::Some(PrettyPoint { x: 10, y: 20 })\"
 "), used: 72 }); __local_45);
         unreachable;
     }
-    __b = struct.new "core:prelude//Array<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint">(struct.new "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint" { x: 3, y: 4 }), used: 2 };
+    __b = struct.new "core:prelude//List<wado-compiler/tests/fixtures/inspect_3.wado/PrettyPoint>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint">(struct.new "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/inspect_3.wado//PrettyPoint" { x: 3, y: 4 }), used: 2 };
     __cond_16 = __inline_String_Eq__eq_82: block -> bool {
         __local_47 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         __local_48 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_47 };
@@ -1233,8 +1233,8 @@ fn "core:prelude/fpfmt.wado/fixed_width_for_prec"(f, precision) {
     let u_33: u64;
     let n_34: i32;
     let u_39: u64;
-    let self_40: ref "core:prelude//Array<u64>";
-    let self_42: ref "core:prelude//Array<u64>";
+    let self_40: ref "core:prelude//List<u64>";
+    let self_42: ref "core:prelude//List<u64>";
     let unpack_mv_mantissa: u64;
     let unpack_mv_exponent: i32;
     multivalue_bind [unpack_mv_mantissa, unpack_mv_exponent] = "core:prelude/fpfmt.wado/unpack64"(f);
@@ -1907,8 +1907,8 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<wado-c
 }
 
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
-    let __b: ref "core:prelude//Array<u64>";
-    __b = struct.new "core:prelude//Array<u64>" { repr: array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64), used: 20 };
+    let __b: ref "core:prelude//List<u64>";
+    __b = struct.new "core:prelude//List<u64>" { repr: array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64), used: 20 };
     global:core::prelude/fpfmt.wado::POW10 = __b;
 }
 
@@ -1933,7 +1933,7 @@ fn "core:prelude/primitive.wado/f64::inspect_into"(self, f) {
     let nd_15: i32;
     let x_16: i32;
     let self_20: ref "core:prelude/string.wado//String";
-    let self_23: ref "core:prelude//Array<u64>";
+    let self_23: ref "core:prelude//List<u64>";
     if f.precision >= 0 {
         "core:prelude/primitive.wado/f64::fmt_fixed"(self, f.precision, f);
         return;
@@ -1989,7 +1989,7 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
     let nd_20: i32;
     let x_21: i32;
     let self_25: ref "core:prelude/string.wado//String";
-    let self_28: ref "core:prelude//Array<u64>";
+    let self_28: ref "core:prelude//List<u64>";
     let __pattern_temp_0_mv_0: bool;
     let __pattern_temp_0_mv_1: bool;
     let __pattern_temp_0_mv_2: "core:prelude/fpfmt.wado//enum:SpecialKind";

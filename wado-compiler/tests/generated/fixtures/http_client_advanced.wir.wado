@@ -199,9 +199,9 @@ struct tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/type
 
 struct wado-compiler/tests/fixtures/http_client_advanced.wado//__Closure_2 {  // TypeId(30)}
 
-array builtin::array<core:prelude/array.wado/Array<u8>> (mut ref "core:prelude//Array<u8>");  // TypeId(31)
+array builtin::array<core:prelude/list.wado/List<u8>> (mut ref "core:prelude//List<u8>");  // TypeId(31)
 
-struct core:prelude/array.wado//ArrayIter<u8> {  // TypeId(32)
+struct core:prelude/list.wado//ListIter<u8> {  // TypeId(32)
     mut repr: ref builtin::array<u8>,
     mut used: i32,
     mut index: i32,
@@ -310,13 +310,13 @@ struct core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>::Som
     payload_0: i32,
 }
 
-struct core:prelude//Array<u8> {  // TypeId(53)
+struct core:prelude//List<u8> {  // TypeId(53)
     mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
 
-struct core:prelude//Array<core:prelude/array.wado/Array<u8>> {  // TypeId(54)
-    mut repr: ref "builtin::array<core:prelude/array.wado/Array<u8>>",
+struct core:prelude//List<core:prelude/list.wado/List<u8>> {  // TypeId(54)
+    mut repr: ref "builtin::array<core:prelude/list.wado/List<u8>>",
     mut used: i32,
 }
 
@@ -381,7 +381,7 @@ type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/handle" =
 
 type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(83)
 
-type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_append" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//Array<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(84)
+type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_append" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(84)
 
 type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>") -> ref "tuple//[Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(85)
 
@@ -401,7 +401,7 @@ type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_bind
 
 type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_has" = fn(i32, ref "core:prelude/string.wado//String") -> bool;  // TypeId(93)
 
-type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_get" = fn(i32, ref "core:prelude/string.wado//String") -> ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>";  // TypeId(94)
+type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_get" = fn(i32, ref "core:prelude/string.wado//String") -> ref "core:prelude//List<core:prelude/list.wado/List<u8>>";  // TypeId(94)
 
 type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(95)
 
@@ -425,9 +425,9 @@ type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32
 
 type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(105)
 
-type "functype//core:internal/cm_stream_read_u8" = fn(i32, i32) -> ref "core:prelude//Array<u8>";  // TypeId(106)
+type "functype//core:internal/cm_stream_read_u8" = fn(i32, i32) -> ref "core:prelude//List<u8>";  // TypeId(106)
 
-type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//Array<u8>");  // TypeId(107)
+type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//List<u8>");  // TypeId(107)
 
 type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(108)
 
@@ -447,7 +447,7 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String^Add::add" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(116)
 
-type "functype//core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//Array<u8>";  // TypeId(117)
+type "functype//core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect" = fn(ref "core:prelude/string.wado//StrUtf8ByteIter") -> ref "core:prelude//List<u8>";  // TypeId(117)
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(118)
 
@@ -457,17 +457,17 @@ type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(121)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::push" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>", ref "core:prelude//Array<u8>");  // TypeId(122)
+type "functype//core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push" = fn(ref "core:prelude//List<core:prelude/list.wado/List<u8>>", ref "core:prelude//List<u8>");  // TypeId(122)
 
-type "functype//core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>>" = fn(ref "core:prelude//Array<u8>") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>";  // TypeId(123)
+type "functype//core:prelude/string.wado/String::from_utf8<core:prelude/list.wado/List<u8>>" = fn(ref "core:prelude//List<u8>") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>";  // TypeId(123)
 
 type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>") -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(124)
 
-type "functype//core:prelude/array.wado/Array<u8>::push" = fn(ref "core:prelude//Array<u8>", u8);  // TypeId(125)
+type "functype//core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(125)
 
-type "functype//core:prelude/array.wado/Array<u8>::grow" = fn(ref "core:prelude//Array<u8>");  // TypeId(126)
+type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(126)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::grow" = fn(ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>");  // TypeId(127)
+type "functype//core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow" = fn(ref "core:prelude//List<core:prelude/list.wado/List<u8>>");  // TypeId(127)
 
 type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(128)
 
@@ -491,7 +491,7 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(138)
 
-type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(139)
+type "functype//core:prelude/list.wado/ListIter<u8>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<u8>") -> [i32, u8];  // TypeId(139)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-read from "wasi/stream-read";
@@ -577,7 +577,7 @@ fn "wado-compiler/tests/fixtures/http_client_advanced.wado/send_request"(path) w
 fn "wado-compiler/tests/fixtures/http_client_advanced.wado/read_body"(resp) {
     let body_stream: i32;
     let result: ref "core:prelude/string.wado//String";
-    let chunk: ref "core:prelude//Array<u8>";
+    let chunk: ref "core:prelude//List<u8>";
     let s: ref "core:prelude/string.wado//String";
     let text: ref "core:prelude/string.wado//String";
     let __pattern_temp_1: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>]";
@@ -596,7 +596,7 @@ fn "wado-compiler/tests/fixtures/http_client_advanced.wado/read_body"(resp) {
                 break b2;
             }
             let __match_scrut_0: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>";
-            __match_scrut_0 = "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>>"(chunk);
+            __match_scrut_0 = "core:prelude/string.wado/String::from_utf8<core:prelude/list.wado/List<u8>>"(chunk);
             text = (if ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(__match_scrut_0) -> ref "core:prelude/string.wado//String" {
                 s = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(__match_scrut_0).payload_0;
                 s;
@@ -618,7 +618,7 @@ fn "wado-compiler/tests/fixtures/http_client_advanced.wado/handle"(request) with
     let __cond_4: bool;
     let resp1_headers: i32;
     let __v0_6: bool;
-    let upstream_vals: ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>";
+    let upstream_vals: ref "core:prelude//List<core:prelude/list.wado/List<u8>>";
     let __v0_9: i32;
     let __cond_10: bool;
     let body1: ref "core:prelude/string.wado//String";
@@ -1420,12 +1420,12 @@ fn "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_
     let __outptr: i32;
     let __base_4: i32;
     let __count_5: i32;
-    let __result_6: ref "core:prelude//Array<core:prelude/array.wado/Array<u8>>";
+    let __result_6: ref "core:prelude//List<core:prelude/list.wado/List<u8>>";
     let __i_7: i32;
     let __elem_addr_8: i32;
     let __base_9: i32;
     let __count_10: i32;
-    let __result_11: ref "core:prelude//Array<u8>";
+    let __result_11: ref "core:prelude//List<u8>";
     let __i_12: i32;
     let __elem_addr_13: i32;
     __name_packed = "core:internal/cm_lower_string"(name);
@@ -1433,7 +1433,7 @@ fn "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_
     "wasi/wasi:http/Fields::get"(self, builtin::i32_wrap_i64(__name_packed), builtin::i32_wrap_i64(__name_packed >> 32_i64), __outptr);
     __base_4 = builtin::load_i32(__outptr);
     __count_5 = builtin::load_i32(__outptr + 4);
-    __result_6 = struct.new "core:prelude//Array<core:prelude/array.wado/Array<u8>>" { repr: builtin::array_new<ref "core:prelude//Array<u8>">(__count_5), used: 0 };
+    __result_6 = struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: builtin::array_new<ref "core:prelude//List<u8>">(__count_5), used: 0 };
     __i_7 = 0;
     b90: block {
         l91: loop {
@@ -1443,7 +1443,7 @@ fn "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_
             __elem_addr_8 = __base_4 + (__i_7 * 8);
             __base_9 = builtin::load_i32(__elem_addr_8);
             __count_10 = builtin::load_i32(__elem_addr_8 + 4);
-            __result_11 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(__count_10), used: 0 };
+            __result_11 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(__count_10), used: 0 };
             __i_12 = 0;
             b93: block {
                 l94: loop {
@@ -1451,7 +1451,7 @@ fn "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_
                         break b93;
                     }
                     __elem_addr_13 = __base_9 + (__i_12 * 1);
-                    "core:prelude/array.wado/Array<u8>::push"(__result_11, builtin::load_u8(__elem_addr_13));
+                    "core:prelude/list.wado/List<u8>::push"(__result_11, builtin::load_u8(__elem_addr_13));
                     __i_12 = __i_12 + 1;
                     continue l94;
                 };
@@ -1459,7 +1459,7 @@ fn "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_
             if __count_10 > 0 {
                 drop("mem/realloc"(__base_9, __count_10 * 1, 1, 0));
             }
-            "core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::push"(__result_6, __result_11);
+            "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(__result_6, __result_11);
             __i_7 = __i_7 + 1;
             continue l91;
         };
@@ -1907,7 +1907,7 @@ fn "core:internal/cm_stream_read_u8"(handle, max) {
     count = result >> 4;
     arr = "core:internal/memory_to_gc_array"(ptr, count);
     drop("mem/realloc"(ptr, max, 1, 0));
-    return struct.new "core:prelude//Array<u8>" { repr: arr, used: count };
+    return struct.new "core:prelude//List<u8>" { repr: arr, used: count };
 }
 
 fn "core:internal/cm_stream_write_u8"(handle, data) {
@@ -2069,12 +2069,12 @@ fn "core:prelude/string.wado/String^Add::add"(self, other) {
 }
 
 fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
-    let __b: ref "core:prelude//Array<u8>";
+    let __b: ref "core:prelude//List<u8>";
     let byte: u8;
     let _licm_used_10: i32;
     let _licm_repr_11: ref builtin::array<u8>;
     let __hfs_index_12: i32;
-    __b = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+    __b = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
     _licm_used_10 = self.used;
     _licm_repr_11 = self.repr;
     __hfs_index_12 = self.index;
@@ -2085,7 +2085,7 @@ fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
             }
             byte = builtin::array_get_u8(_licm_repr_11, __hfs_index_12);
             __hfs_index_12 = __hfs_index_12 + 1;
-            "core:prelude/array.wado/Array<u8>::push"(__b, byte);
+            "core:prelude/list.wado/List<u8>::push"(__b, byte);
             self.index = __hfs_index_12;
             continue l183;
         };
@@ -2247,27 +2247,27 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::push"(self, value) {
+fn "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::grow"(self);
+        "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"(self);
     }
-    builtin::array_set<ref "core:prelude//Array<u8>">(self.repr, used, value);
+    builtin::array_set<ref "core:prelude//List<u8>">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>>"(bytes) {
+fn "core:prelude/string.wado/String::from_utf8<core:prelude/list.wado/List<u8>>"(bytes) {
     let builder: ref "core:prelude/string.wado//String";
-    let iter: ref "core:prelude/array.wado//ArrayIter<u8>";
+    let iter: ref "core:prelude/list.wado//ListIter<u8>";
     let code: u32;
     builder = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 };
-    iter = struct.new "core:prelude/array.wado//ArrayIter<u8>" { repr: bytes.repr, used: bytes.used, index: 0 };
+    iter = struct.new "core:prelude/list.wado//ListIter<u8>" { repr: bytes.repr, used: bytes.used, index: 0 };
     b214: block {
         l215: loop {
             let __sroa___match_11_discriminant: i32;
             let __sroa___match_11_payload_0: u8;
-            multivalue_bind [__sroa___match_11_discriminant, __sroa___match_11_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
+            multivalue_bind [__sroa___match_11_discriminant, __sroa___match_11_payload_0] = "core:prelude/list.wado/ListIter<u8>^Iterator::next"(iter);
             if __sroa___match_11_discriminant == 0 {
                 code = 0;
                 if __sroa___match_11_payload_0 <u 128 {
@@ -2277,7 +2277,7 @@ fn "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>
                 } else if __sroa___match_11_payload_0 <u 224 {
                     let __sroa___local_12_discriminant: i32;
                     let __sroa___local_12_payload_0: u8;
-                    multivalue_bind [__sroa___local_12_discriminant, __sroa___local_12_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
+                    multivalue_bind [__sroa___local_12_discriminant, __sroa___local_12_payload_0] = "core:prelude/list.wado/ListIter<u8>^Iterator::next"(iter);
                     if __sroa___local_12_discriminant == 0 {
                         if (if __sroa___local_12_payload_0 <u 128 -> i32 {
                             1;
@@ -2293,11 +2293,11 @@ fn "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>
                 } else if __sroa___match_11_payload_0 <u 240 {
                     let __sroa___local_13_discriminant: i32;
                     let __sroa___local_13_payload_0: u8;
-                    multivalue_bind [__sroa___local_13_discriminant, __sroa___local_13_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
+                    multivalue_bind [__sroa___local_13_discriminant, __sroa___local_13_payload_0] = "core:prelude/list.wado/ListIter<u8>^Iterator::next"(iter);
                     if __sroa___local_13_discriminant == 0 {
                         let __sroa___local_14_discriminant: i32;
                         let __sroa___local_14_payload_0: u8;
-                        multivalue_bind [__sroa___local_14_discriminant, __sroa___local_14_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
+                        multivalue_bind [__sroa___local_14_discriminant, __sroa___local_14_payload_0] = "core:prelude/list.wado/ListIter<u8>^Iterator::next"(iter);
                         if __sroa___local_14_discriminant == 0 {
                             if (if __sroa___match_11_payload_0 == 224 -> i32 {
                                 __sroa___local_13_payload_0 <u 160;
@@ -2337,15 +2337,15 @@ fn "core:prelude/string.wado/String::from_utf8<core:prelude/array.wado/Array<u8>
                 } else if __sroa___match_11_payload_0 <u 245 {
                     let __sroa___local_15_discriminant: i32;
                     let __sroa___local_15_payload_0: u8;
-                    multivalue_bind [__sroa___local_15_discriminant, __sroa___local_15_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
+                    multivalue_bind [__sroa___local_15_discriminant, __sroa___local_15_payload_0] = "core:prelude/list.wado/ListIter<u8>^Iterator::next"(iter);
                     if __sroa___local_15_discriminant == 0 {
                         let __sroa___local_16_discriminant: i32;
                         let __sroa___local_16_payload_0: u8;
-                        multivalue_bind [__sroa___local_16_discriminant, __sroa___local_16_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
+                        multivalue_bind [__sroa___local_16_discriminant, __sroa___local_16_payload_0] = "core:prelude/list.wado/ListIter<u8>^Iterator::next"(iter);
                         if __sroa___local_16_discriminant == 0 {
                             let __sroa___local_17_discriminant: i32;
                             let __sroa___local_17_payload_0: u8;
-                            multivalue_bind [__sroa___local_17_discriminant, __sroa___local_17_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(iter);
+                            multivalue_bind [__sroa___local_17_discriminant, __sroa___local_17_payload_0] = "core:prelude/list.wado/ListIter<u8>^Iterator::next"(iter);
                             if __sroa___local_17_discriminant == 0 {
                                 if (if __sroa___match_11_payload_0 == 240 -> i32 {
                                     __sroa___local_15_payload_0 <u 144;
@@ -2437,17 +2437,17 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/t
     return result;
 }
 
-fn "core:prelude/array.wado/Array<u8>::push"(self, value) {
+fn "core:prelude/list.wado/List<u8>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<u8>::grow"(self);
+        "core:prelude/list.wado/List<u8>::grow"(self);
     }
     builtin::array_set_u8(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<u8>::grow"(self) {
+fn "core:prelude/list.wado/List<u8>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<u8>;
@@ -2460,7 +2460,7 @@ fn "core:prelude/array.wado/Array<u8>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(self) {
+fn "core:prelude/list.wado/ListIter<u8>^Iterator::next"(self) {
     let item: u8;
     if self.index >= self.used {
         return 1, 0;
@@ -2470,16 +2470,16 @@ fn "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(self) {
     return 0, item;
 }
 
-fn "core:prelude/array.wado/Array<core:prelude/array.wado/Array<u8>>::grow"(self) {
+fn "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref "builtin::array<core:prelude/array.wado/Array<u8>>";
+    let new_repr: ref "builtin::array<core:prelude/list.wado/List<u8>>";
     let a: i32;
     capacity = builtin::array_len(self.repr);
     a = capacity * 2;
     new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "core:prelude//Array<u8>">(new_capacity);
-    builtin::array_copy<ref "core:prelude//Array<u8>">(new_repr, 0, self.repr, 0, self.used);
+    new_repr = builtin::array_new<ref "core:prelude//List<u8>">(new_capacity);
+    builtin::array_copy<ref "core:prelude//List<u8>">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 

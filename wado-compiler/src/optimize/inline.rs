@@ -146,8 +146,8 @@ fn count_block_exprs(block: &NirBlock) -> usize {
 ///    post-mono canonical mangled name but **preserves** the original
 ///    `method_info` unchanged.
 ///
-/// So the call site has `name = "Array<{mod}/Node>^Eq::eq"` (qualified) but
-/// `method_info.to_mangled_name() = "Array<Node>^Eq::eq"` (unqualified). Two
+/// So the call site has `name = "List<{mod}/Node>^Eq::eq"` (qualified) but
+/// `method_info.to_mangled_name() = "List<Node>^Eq::eq"` (unqualified). Two
 /// representations of the same logical call. The function-definition side
 /// after monomorphization has both fields qualified, so a key based on
 /// `to_mangled_name()` misses the recursive cycle. Keying on

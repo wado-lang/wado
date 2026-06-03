@@ -988,7 +988,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let effective_id = tt.get_ultimate_base_type(concrete_type_id);
             let array_name = tt
                 .compiler_items()
-                .struct_name(crate::compiler_item::CompilerItem::Array)
+                .struct_name(crate::compiler_item::CompilerItem::List)
                 .to_string();
             match tt.get(effective_id).clone() {
                 ResolvedType::GenericInstance {

@@ -1270,7 +1270,7 @@ mod tests {
     fn test_classify_foreign_generic_is_foreign() {
         // Array<T> — head Array is foreign
         let tdx = make_type_decl_index(&[]);
-        let ty = generic("Array", vec![named("T")]);
+        let ty = generic("List", vec![named("T")]);
         assert!(matches!(
             classify_position(&ty, &["T".to_string()], &tdx),
             PositionKind::ForeignType
@@ -1380,7 +1380,7 @@ mod tests {
     fn test_rfc2451_foreign_generic_head_in_trait_arg_forbidden() {
         // impl<T> From<Array<T>> for ForeignType → T0=ForeignType, T1=Array<T>(foreign head) → forbidden
         let tdx = make_type_decl_index(&[]);
-        let trait_ty = generic("From", vec![generic("Array", vec![named("T")])]);
+        let trait_ty = generic("From", vec![generic("List", vec![named("T")])]);
         let ib = impl_block(vec![type_param("T")], trait_ty, named("ForeignType"));
         assert!(!check_orphan_rfc2451(&ib, &tdx));
     }

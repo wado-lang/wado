@@ -24,19 +24,19 @@ fn append_bang(mut s: String) -> String {
 }
 
 // Rebinding a mut array param does not affect the caller's binding.
-fn swap_array(mut arr: Array<i32>) -> Array<i32> {
-    arr = [99, 88, 77] as Array<i32>;
+fn swap_array(mut arr: List<i32>) -> List<i32> {
+    arr = [99, 88, 77] as List<i32>;
     return arr;
 }
 
 // Mutating an element of a mut array param does not affect the caller's array.
-fn double_first(mut arr: Array<i32>) -> Array<i32> {
+fn double_first(mut arr: List<i32>) -> List<i32> {
     arr[0] = arr[0] * 2;
     return arr;
 }
 
 // Appending to a mut array param does not affect the caller's array.
-fn push_zero(mut arr: Array<i32>) -> Array<i32> {
+fn push_zero(mut arr: List<i32>) -> List<i32> {
     arr.push(0);
     return arr;
 }
@@ -100,20 +100,20 @@ fn mut_param_string() with Stdout {
     assert excited == "hello!";
     assert greeting == "hello";
 
-    // Array: rebinding does not affect caller.
-    let a: Array<i32> = [1, 2, 3];
+    // List: rebinding does not affect caller.
+    let a: List<i32> = [1, 2, 3];
     let b = swap_array(a);
     assert b[0] == 99;
     assert a[0] == 1;
 
-    // Array: element mutation does not affect caller (value semantics).
-    let c: Array<i32> = [10, 20, 30];
+    // List: element mutation does not affect caller (value semantics).
+    let c: List<i32> = [10, 20, 30];
     let d = double_first(c);
     assert d[0] == 20;
     assert c[0] == 10; // caller's array is unchanged
 
-    // Array: append does not affect caller's length.
-    let e: Array<i32> = [1, 2, 3];
+    // List: append does not affect caller's length.
+    let e: List<i32> = [1, 2, 3];
     let f = push_zero(e);
     assert f.len() == 4;
     assert e.len() == 3; // caller's array is unchanged

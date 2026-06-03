@@ -438,7 +438,7 @@ mod tests {
         block_on(async {
             let src = concat!(
                 "fn f() -> i32 {\n",
-                "    let items: Array<i32> = [1, 2, 3];\n",
+                "    let items: List<i32> = [1, 2, 3];\n",
                 "    let mut total: i32 = 0;\n",
                 "    for let v of items {\n",
                 "        total = total + v;\n",

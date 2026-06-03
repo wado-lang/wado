@@ -2275,9 +2275,9 @@ impl Monomorphizer {
                 let mangled = type_table.mangle_type_name_resolving_newtypes(inner);
                 // Take the base name from the *resolved* type so newtypes
                 // (`type FieldValue = Array<u8>`) inherit the underlying
-                // type's base ("Array"), not the newtype's own name.
+                // type's base ("List"), not the newtype's own name.
                 // Without this, `base_struct_name` stays "FieldValue" while
-                // `struct_name` becomes "Array<u8>", and the trait_env
+                // `struct_name` becomes "List<u8>", and the trait_env
                 // candidate lookup misses the per-type impl.
                 let resolved_inner = type_table.resolve_newtype_base(inner);
                 let base = type_table.base_type_name(resolved_inner);
@@ -2295,7 +2295,7 @@ impl Monomorphizer {
             let recv_mangled = type_table.mangle_type_name_resolving_newtypes(recv_inner);
             // `base_type_name(Newtype)` returns the newtype's own name (e.g.
             // "MyBytes"), but the post-substitution body actually targets the
-            // base type's impl ("Array"). Peel through the newtype first so
+            // base type's impl ("List"). Peel through the newtype first so
             // `base_struct_name` lines up with the TraitEnv key for the
             // template's home module — required by the `(module_source, name)`
             // lookup in `monomorphize_with_externals` (issue #1110).
@@ -2305,7 +2305,7 @@ impl Monomorphizer {
             // For ref-type impls (e.g., impl IntoIterator for &Array<T>), preserve
             // the ref base_struct_name ("&" or "&mut") so that the monomorphizer
             // selects the correct generic function template
-            // ("&^IntoIterator::into_iter" instead of "Array^IntoIterator::into_iter").
+            // ("&^IntoIterator::into_iter" instead of "List^IntoIterator::into_iter").
             if info.is_ref_impl {
                 new_info.base_struct_name.clone_from(&info.base_struct_name);
             }
@@ -2461,7 +2461,7 @@ impl Monomorphizer {
             // matches where the template actually lives. Issue #1110 (1).
             //
             // `generic_or_concrete_impl_module` covers both `impl<T: Foo> Bar for Array<T>`
-            // (registered under bare "Array") and fully concrete impls;
+            // (registered under bare "List") and fully concrete impls;
             // the producer in `synthesis::traits::resolve_impl_module_via_env`
             // uses the same query, so the post-substitution `module_source`
             // matches what a freshly-produced FunctionRef would have.

@@ -253,9 +253,9 @@ fn collect_alias_groups(
 fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Ref(_) => true,
-        ResolvedType::GenericInstance { name, .. } if name == "Box" || name == "Array" => true,
+        ResolvedType::GenericInstance { name, .. } if name == "Box" || name == "List" => true,
         ResolvedType::Struct { base_name, .. }
-            if base_name.as_deref() == Some("Box") || base_name.as_deref() == Some("Array") =>
+            if base_name.as_deref() == Some("Box") || base_name.as_deref() == Some("List") =>
         {
             true
         }

@@ -1,17 +1,17 @@
 // Level 2: uses level1 generics and creates array literals.
-// The monomorphized Array<String>::push_literal may end up in this module,
-// while the call site references the generic origin (prelude/array.wado).
+// The monomorphized List<String>::push_literal may end up in this module,
+// while the call site references the generic origin (prelude/list.wado).
 
 use { make_pair, pair_to_array, Pair } from "./opt_crossmod_level1.wado";
 
-pub fn string_pair() -> Array<String> {
+pub fn string_pair() -> List<String> {
     return pair_to_array::<String>(make_pair::<String>("hello", "world"));
 }
 
-pub fn int_triple() -> Array<i32> {
+pub fn int_triple() -> List<i32> {
     return [10, 20, 30];
 }
 
-pub fn string_literals() -> Array<String> {
+pub fn string_literals() -> List<String> {
     return ["alpha", "beta", "gamma"];
 }

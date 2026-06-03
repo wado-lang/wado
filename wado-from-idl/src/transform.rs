@@ -342,7 +342,7 @@ impl<'a> Transformer<'a> {
 
         // Anonymous types - inline them
         match &ty.kind {
-            TypeDefKind::List(inner) => Ok(WadoType::Array(Box::new(self.transform_type(*inner)?))),
+            TypeDefKind::List(inner) => Ok(WadoType::List(Box::new(self.transform_type(*inner)?))),
             TypeDefKind::Option(inner) => {
                 Ok(WadoType::Option(Box::new(self.transform_type(*inner)?)))
             }
@@ -440,7 +440,7 @@ impl<'a> Transformer<'a> {
             TypeDefKind::List(inner) => WadoTypeDef::Newtype(WadoNewtype {
                 name,
                 cm_attr: Some(cm_attr),
-                target: WadoType::Array(Box::new(self.transform_type(*inner)?)),
+                target: WadoType::List(Box::new(self.transform_type(*inner)?)),
             }),
             _ => return Ok(None),
         };

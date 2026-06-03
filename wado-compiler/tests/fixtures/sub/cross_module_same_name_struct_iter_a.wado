@@ -1,6 +1,6 @@
 // Module A: defines a private `struct Pair` whose name COLLIDES
 // with the public struct in module B. Module A's function does:
-//   * binds a local `let mut pairs: Array<Pair> = []`
+//   * binds a local `let mut pairs: List<Pair> = []`
 //   * iterates `for let p of &mut pairs` and writes to a struct field
 //
 // The combination forces WIR codegen down a path that previously
@@ -9,11 +9,11 @@
 // with "expected (ref null $T), found (ref (exact $T))".
 
 struct Pair {
-    counts: Array<i32>,
+    counts: List<i32>,
 }
 
 pub fn drive() {
-    let mut pairs: Array<Pair> = [];
+    let mut pairs: List<Pair> = [];
     for let p of &mut pairs {
         p.counts.push(1);
     }

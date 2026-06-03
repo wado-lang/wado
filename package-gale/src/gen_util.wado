@@ -51,8 +51,8 @@ fn i32_to_hex(mut n: i32) -> String {
     if n == 0 {
         return "0";
     }
-    let digits: Array<char> = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'];
-    let mut buf: Array<char> = [];
+    let digits: List<char> = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'];
+    let mut buf: List<char> = [];
     while n > 0 {
         buf.push(digits[n % 16]);
         n = n / 16;
@@ -165,7 +165,7 @@ pub fn not_element_field_name(inner: &Element) -> String {
 }
 
 pub fn literal_field_name(text: &String) -> String {
-    let chars: Array<char> = text.chars().collect();
+    let chars: List<char> = text.chars().collect();
     if chars.len() == 1 {
         if let Some(names) = symbol_char_names(chars[0]) {
             return names.0;
@@ -187,8 +187,8 @@ pub fn literal_field_name(text: &String) -> String {
 }
 
 pub fn strip_suffix(s: &String, suffix: &String) -> String {
-    let s_chars: Array<char> = s.chars().collect();
-    let suffix_chars: Array<char> = suffix.chars().collect();
+    let s_chars: List<char> = s.chars().collect();
+    let suffix_chars: List<char> = suffix.chars().collect();
     let s_len = s_chars.len();
     let suf_len = suffix_chars.len();
     if s_len < suf_len {
@@ -206,7 +206,7 @@ pub fn strip_suffix(s: &String, suffix: &String) -> String {
     return result;
 }
 
-pub fn is_simple_cst_group(alts: &Array<Alternative>) -> bool {
+pub fn is_simple_cst_group(alts: &List<Alternative>) -> bool {
     if alts.len() < 2 {
         return false;
     }
@@ -223,7 +223,7 @@ pub fn is_simple_cst_group(alts: &Array<Alternative>) -> bool {
     return true;
 }
 
-pub fn group_variant_type_name(alts: &Array<Alternative>) -> String {
+pub fn group_variant_type_name(alts: &List<Alternative>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i > 0 {
@@ -237,7 +237,7 @@ pub fn group_variant_type_name(alts: &Array<Alternative>) -> String {
     return result;
 }
 
-pub fn group_field_base_name(alts: &Array<Alternative>) -> String {
+pub fn group_field_base_name(alts: &List<Alternative>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i > 0 {
@@ -260,7 +260,7 @@ pub fn group_case_name(alt: &Alternative) -> String {
 
 /// A token-only group: multiple alternatives, each with a single TokenRef or Literal.
 /// Example: (K_INSERT | K_REPLACE)
-pub fn is_token_only_group(alts: &Array<Alternative>) -> bool {
+pub fn is_token_only_group(alts: &List<Alternative>) -> bool {
     if alts.len() < 2 {
         return false;
     }
@@ -279,7 +279,7 @@ pub fn is_token_only_group(alts: &Array<Alternative>) -> bool {
 
 /// A single-alternative multi-element group: exactly 1 alt with 2+ elements.
 /// Example: (',' pair), (';'+ sql_stmt)
-pub fn is_single_alt_group(alts: &Array<Alternative>) -> bool {
+pub fn is_single_alt_group(alts: &List<Alternative>) -> bool {
     if alts.len() != 1 {
         return false;
     }
@@ -288,12 +288,12 @@ pub fn is_single_alt_group(alts: &Array<Alternative>) -> bool {
 
 /// Check if a group has any storable pattern.
 /// All multi-alt groups are storable (general groups get variant types).
-pub fn is_storable_group(alts: &Array<Alternative>) -> bool {
+pub fn is_storable_group(alts: &List<Alternative>) -> bool {
     return is_simple_cst_group(alts) || is_token_only_group(alts) || is_single_alt_group(alts) || is_general_group(alts);
 }
 
 /// A general multi-alt group: 2+ alternatives that don't match any specialized pattern.
-pub fn is_general_group(alts: &Array<Alternative>) -> bool {
+pub fn is_general_group(alts: &List<Alternative>) -> bool {
     if alts.len() < 2 {
         return false;
     }
@@ -302,7 +302,7 @@ pub fn is_general_group(alts: &Array<Alternative>) -> bool {
 
 /// Count how many general groups are in an element list.
 /// Matches the type gen's counting logic (looks through Repeat wrappers).
-pub fn count_general_groups(elements: &Array<Element>) -> i32 {
+pub fn count_general_groups(elements: &List<Element>) -> i32 {
     let mut count: i32 = 0;
     for let elem of elements {
         count += count_element_groups(elem);
@@ -434,7 +434,7 @@ pub fn single_alt_group_field_name(alt: &Alternative) -> String {
 
 /// Generate a field base name for a token-only group.
 /// (K_INSERT | K_REPLACE) -> "k_insert_or_k_replace"
-pub fn token_group_field_name(alts: &Array<Alternative>) -> String {
+pub fn token_group_field_name(alts: &List<Alternative>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i > 0 {
@@ -466,7 +466,7 @@ pub fn literal_const_name(text: &String) -> String {
     return result;
 }
 
-pub fn str_set_insert_all(set: &mut TreeSet<String>, arr: &Array<String>) {
+pub fn str_set_insert_all(set: &mut TreeSet<String>, arr: &List<String>) {
     for let item of arr {
         set.insert(*item);
     }
@@ -474,8 +474,8 @@ pub fn str_set_insert_all(set: &mut TreeSet<String>, arr: &Array<String>) {
 
 /// Build unique case names for labeled alternatives.
 /// When labels are unique, use them directly. When duplicated, append an index.
-fn build_case_names(alts: &Array<Alternative>, all_labeled: bool) -> Array<String> {
-    let mut names: Array<String> = [];
+fn build_case_names(alts: &List<Alternative>, all_labeled: bool) -> List<String> {
+    let mut names: List<String> = [];
     if !all_labeled {
         for let mut i = 0; i < alts.len(); i += 1 {
             names.push(`Alt{i}`);
@@ -483,7 +483,7 @@ fn build_case_names(alts: &Array<Alternative>, all_labeled: bool) -> Array<Strin
         return names;
     }
     // Count occurrences of each label
-    let mut label_counts: Array<[String, i32]> = [];
+    let mut label_counts: List<[String, i32]> = [];
     for let alt of alts {
         let lab = alt.label.unwrap();
         let mut found = false;
@@ -498,7 +498,7 @@ fn build_case_names(alts: &Array<Alternative>, all_labeled: bool) -> Array<Strin
         }
     }
     // Assign names: unique labels keep their name, duplicates get index
-    let mut label_indices: Array<[String, i32]> = [];
+    let mut label_indices: List<[String, i32]> = [];
     for let alt of alts {
         let lab = alt.label.unwrap();
         let mut is_dup = false;
@@ -528,7 +528,7 @@ fn build_case_names(alts: &Array<Alternative>, all_labeled: bool) -> Array<Strin
     return names;
 }
 
-fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {
+fn all_alternatives_labeled(alts: &List<Alternative>) -> bool {
     for let alt of alts {
         if let None = alt.label {
             return false;
@@ -537,13 +537,13 @@ fn all_alternatives_labeled(alts: &Array<Alternative>) -> bool {
     return true;
 }
 
-pub fn case_names_for_rule(alts: &Array<Alternative>) -> Array<String> {
+pub fn case_names_for_rule(alts: &List<Alternative>) -> List<String> {
     let all_labeled = all_alternatives_labeled(alts);
     return build_case_names(alts, all_labeled);
 }
 
 /// Return `true` when `first` contains `token` (linear scan).
-pub fn first_contains(first: &Array<String>, token: &String) -> bool {
+pub fn first_contains(first: &List<String>, token: &String) -> bool {
     for let item of first {
         if *item == *token {
             return true;
@@ -553,7 +553,7 @@ pub fn first_contains(first: &Array<String>, token: &String) -> bool {
 }
 
 /// Append every token in `source` to `arr`, skipping duplicates already in `arr`.
-pub fn dedup_append_arr(arr: &mut Array<String>, source: &Array<String>) {
+pub fn dedup_append_arr(arr: &mut List<String>, source: &List<String>) {
     for let tk of source {
         if !first_contains(arr, tk) {
             arr.push(*tk);
@@ -564,9 +564,9 @@ pub fn dedup_append_arr(arr: &mut Array<String>, source: &Array<String>) {
 // Parser codegen names every consumed element so the surrounding struct
 // field can be populated. When the same base name appears more than
 // once in an alt (e.g. two `ID` tokens) the second occurrence gets a
-// `_2` suffix, the third `_3`, and so on. `Array<[String, i32]>` is
+// `_2` suffix, the third `_3`, and so on. `List<[String, i32]>` is
 // the running counter: `[base, count_emitted_so_far]`.
-fn get_count(counts: &Array<[String, i32]>, name: &String) -> i32 {
+fn get_count(counts: &List<[String, i32]>, name: &String) -> i32 {
     for let entry of counts {
         if entry.0 == *name {
             return entry.1;
@@ -575,7 +575,7 @@ fn get_count(counts: &Array<[String, i32]>, name: &String) -> i32 {
     return 0;
 }
 
-fn increment_count(counts: &mut Array<[String, i32]>, name: &String) {
+fn increment_count(counts: &mut List<[String, i32]>, name: &String) {
     for let mut i = 0; i < counts.len(); i += 1 {
         if counts[i].0 == *name {
             let prev = counts[i].1;
@@ -588,7 +588,7 @@ fn increment_count(counts: &mut Array<[String, i32]>, name: &String) {
 
 /// Emit-and-record: returns the deduplicated name and bumps the counter.
 /// First occurrence returns `base`, second returns `{base}_2`, etc.
-pub fn dedup_name(base: &String, counts: &mut Array<[String, i32]>) -> String {
+pub fn dedup_name(base: &String, counts: &mut List<[String, i32]>) -> String {
     let count = get_count(counts, base);
     increment_count(counts, base);
     if count > 0 {
@@ -601,7 +601,7 @@ pub fn dedup_name(base: &String, counts: &mut Array<[String, i32]>) -> String {
 /// advancing the counter. Used at scan-guard / lookahead sites where
 /// the inner emission performs the actual `dedup_name` (which both
 /// returns the name and advances the counter).
-pub fn peek_dedup_name(base: &String, counts: &Array<[String, i32]>) -> String {
+pub fn peek_dedup_name(base: &String, counts: &List<[String, i32]>) -> String {
     let count = get_count(counts, base);
     if count > 0 {
         return `{base}_{count + 1}`;
@@ -629,7 +629,7 @@ pub fn has_field(elem: &Element) -> bool {
 }
 
 /// Returns true if `elem` is a list-label (`items+=X`). List labels store
-/// matches in an `Array<InnerType>` named by `lab.name`.
+/// matches in an `List<InnerType>` named by `lab.name`.
 pub fn is_list_label(elem: &Element) -> bool {
     if let Label(lab) = elem {
         return lab.list;
@@ -656,7 +656,7 @@ pub fn element_field_info(elem: &Element) -> [String, String] {
     if let Label(lab) = elem {
         if lab.list {
             let inner = element_field_info(&lab.element);
-            return [lab.field_name, `Array<{inner.1}>`];
+            return [lab.field_name, `List<{inner.1}>`];
         }
         return element_field_info(&lab.element);
     }
@@ -696,7 +696,7 @@ pub fn element_field_info(elem: &Element) -> [String, String] {
 
 /// Replay name counting for an element without emitting code.
 /// This advances the dedup counter so subsequent elements get correct suffixes.
-pub fn replay_element_names(elem: &Element, name_counts: &mut Array<[String, i32]>) {
+pub fn replay_element_names(elem: &Element, name_counts: &mut List<[String, i32]>) {
     if let TokenRef(t) = elem {
         dedup_name(&t.field_name, name_counts);
         return;

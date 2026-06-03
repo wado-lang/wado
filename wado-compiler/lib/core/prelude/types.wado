@@ -189,7 +189,7 @@ pub resource Stream<T> {
     /// Blocks until data is available or the writer drops.
     /// Returns an empty array on end-of-stream.
     #[cm("stream-read")]
-    fn read(&self, max: i32) -> Array<T>;
+    fn read(&self, max: i32) -> List<T>;
 
     /// Cancel an in-progress read. Blocks until cancellation completes.
     #[cm("stream-cancel-read")]
@@ -205,7 +205,7 @@ pub resource Stream<T> {
 pub resource StreamWritable<T> {
     /// Write a chunk of data to the stream.
     #[cm("stream-write")]
-    fn write(&self, data: Array<T>);
+    fn write(&self, data: List<T>);
 
     /// Write raw GC array directly to the stream.
     /// `len` is the number of valid elements (may be less than array capacity).

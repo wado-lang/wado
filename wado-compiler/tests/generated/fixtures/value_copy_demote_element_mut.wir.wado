@@ -11,7 +11,7 @@ struct core:prelude/string.wado//String {  // TypeId(1)
 
 array builtin::array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(2)
 
-struct core:prelude//Array<core:prelude/string.wado/String> {  // TypeId(3)
+struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(3)
     mut repr: ref "builtin::array<core:prelude/string.wado/String>",
     mut used: i32,
 }
@@ -34,7 +34,7 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/shout_first" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>") -> ref "core:prelude/string.wado//String";  // TypeId(13)
+type "functype//wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/shout_first" = fn(ref "core:prelude//List<core:prelude/string.wado/String>") -> ref "core:prelude/string.wado//String";  // TypeId(13)
 
 type "functype//wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/run" = fn();  // TypeId(14)
 
@@ -89,8 +89,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/shout_first"(words) {
-    let x: ref "core:prelude//Array<core:prelude/string.wado/String>";
-    x = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T26*/ words.repr)), used: words.used };
+    let x: ref "core:prelude//List<core:prelude/string.wado/String>";
+    x = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T26*/ words.repr)), used: words.used };
     "core:prelude/string.wado/String::push"(if builtin::unlikely(0 >= x.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -102,10 +102,10 @@ fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/shout_first"
 }
 
 fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//Array<core:prelude/string.wado/String>";
+    let __b_0: ref "core:prelude//List<core:prelude/string.wado/String>";
     let s: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/string.wado//String";
-    __b_0 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hi"), used: 2 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("yo"), used: 2 }), used: 2 };
+    __b_0 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hi"), used: 2 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("yo"), used: 2 }), used: 2 };
     s = "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/shout_first"(__b_0);
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, s); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, if builtin::unlikely(0 >= __b_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });

@@ -13,7 +13,7 @@ pub variant OptionValue {
     Ident(String),
     /// Dotted qualified name: `my.pkg.BaseParser`. Components are kept
     /// separate so consumers don't have to re-split.
-    Qualified(Array<String>),
+    Qualified(List<String>),
     /// Single-quoted string literal value, with the surrounding quotes
     /// stripped: `'foo.g4'` → `Str("foo.g4")`.
     Str(String),
@@ -105,30 +105,30 @@ pub struct PendingRef {
 pub struct Grammar {
     pub name: String,
     pub kind: GrammarKind,
-    pub parser_rules: Array<ParserRule>,
-    pub lexer_rules: Array<LexerRule>,
-    pub mode_names: Array<String>,
+    pub parser_rules: List<ParserRule>,
+    pub lexer_rules: List<LexerRule>,
+    pub mode_names: List<String>,
     /// User-defined channel names from `channels { }` blocks, in declaration
     /// order. Predefined channels (DEFAULT=0, HIDDEN=1) are NOT included —
     /// user channels receive sequential ids starting at 2.
-    pub channels: Array<String>,
+    pub channels: List<String>,
     /// Grammar-level options from `options { ... }` prequel blocks
     /// (`caseInsensitive`, `language`, `tokenVocab`, `superClass`, ...).
-    pub options: Array<GrammarOption>,
+    pub options: List<GrammarOption>,
     /// Grammar-level `@name { ... }` / `@scope::name { ... }` actions,
     /// in declaration order. Action bodies themselves are discarded.
-    pub named_actions: Array<NamedAction>,
+    pub named_actions: List<NamedAction>,
     /// Rule / token references encountered during parse that have not
     /// yet been resolved against a rule table. `check_references`
     /// walks these and reports undefined refs. Populated by `parse()`;
     /// concatenated by `merge_grammars` so that a merged Grammar can be
     /// validated in one pass.
-    pub pending_refs: Array<PendingRef>,
+    pub pending_refs: List<PendingRef>,
     /// Source `.g4` paths that contributed to this grammar, in the order
     /// they were supplied on the command line. Populated by `cmd_gen` after
     /// parsing — `parse()` itself returns an empty array because it operates
     /// on the file contents, not the path.
-    pub source_files: Array<String>,
+    pub source_files: List<String>,
 }
 
 /// Push a `LexerRule::virtual_token` for every uppercase parser-rule
@@ -140,7 +140,7 @@ pub fn synthesize_implicit_tokens(grammar: &mut Grammar) {
     if !grammar.kind matches { Combined } {
         return;
     }
-    let mut synthesized: Array<String> = [];
+    let mut synthesized: List<String> = [];
     for let r of &grammar.pending_refs {
         if !r.kind matches { TokenRef } {
             continue;
@@ -286,8 +286,8 @@ pub struct ParserRule {
     pub name: String,
     pub visibility: Visibility,
     /// Rule-level options from `options { ... }` prequel blocks.
-    pub options: Array<GrammarOption>,
-    pub alternatives: Array<Alternative>,
+    pub options: List<GrammarOption>,
+    pub alternatives: List<Alternative>,
     /// Cached `to_snake_case(name)` — used as the fragment in
     /// `parse_X` / `scan_X` function names. Populated by `ParserRule::new`
     /// so codegen never recomputes `to_snake_case` for the same rule name.
@@ -304,7 +304,7 @@ pub struct ParserRule {
 }
 
 impl ParserRule {
-    pub fn new(name: String, visibility: Visibility, options: Array<GrammarOption>, alternatives: Array<Alternative>) -> ParserRule {
+    pub fn new(name: String, visibility: Visibility, options: List<GrammarOption>, alternatives: List<Alternative>) -> ParserRule {
         let snake_name = to_snake_case(&name);
         let field_name = escape_ident(&snake_name);
         let type_name = `{to_pascal_case(&name)}Node`;
@@ -320,12 +320,12 @@ impl ParserRule {
 /// and `doc/options.md`.
 pub struct Alternative {
     pub label: Option<String>,
-    pub options: Array<GrammarOption>,
-    pub elements: Array<Element>,
+    pub options: List<GrammarOption>,
+    pub elements: List<Element>,
 }
 
 impl Alternative {
-    pub fn new(elements: Array<Element>) -> Alternative {
+    pub fn new(elements: List<Element>) -> Alternative {
         return Alternative { label: null, options: [], elements };
     }
 }
@@ -334,7 +334,7 @@ impl Alternative {
 ///
 /// Option-bearing variants (`RuleRef`, `TokenRef`, `Literal`, `Wildcard`,
 /// `Group`) each wrap a struct that carries the element's own
-/// `options: Array<GrammarOption>` field — parsed from a trailing
+/// `options: List<GrammarOption>` field — parsed from a trailing
 /// `<key=value, ...>` angle block in the `.g4` source, or (for `Group`)
 /// from a leading `options { ... }` block prequel. See ANTLR4
 /// `doc/options.md` for the accepted option names and value shapes.
@@ -356,7 +356,7 @@ pub variant Element {
 
 pub struct RuleRefElement {
     pub name: String,
-    pub options: Array<GrammarOption>,
+    pub options: List<GrammarOption>,
     /// Cached `to_snake_case(name)` — fragment in `scan_X` / `parse_X`.
     /// Empty by default; populated eagerly by `with_options` or lazily by
     /// `normalize_caches` on the path through `generate()`.
@@ -370,7 +370,7 @@ impl RuleRefElement {
         return RuleRefElement::with_options(name, []);
     }
 
-    pub fn with_options(name: String, options: Array<GrammarOption>) -> RuleRefElement {
+    pub fn with_options(name: String, options: List<GrammarOption>) -> RuleRefElement {
         let snake_name = to_snake_case(&name);
         let field_name = escape_ident(&snake_name);
         return RuleRefElement { name, options, snake_name, field_name };
@@ -379,7 +379,7 @@ impl RuleRefElement {
 
 pub struct TokenRefElement {
     pub name: String,
-    pub options: Array<GrammarOption>,
+    pub options: List<GrammarOption>,
     /// Cached `to_lower(name)` — used in token field/identifier names.
     pub lower_name: String = "",
     /// Cached `escape_ident(lower_name)` — standalone field name in CST structs.
@@ -391,7 +391,7 @@ impl TokenRefElement {
         return TokenRefElement::with_options(name, []);
     }
 
-    pub fn with_options(name: String, options: Array<GrammarOption>) -> TokenRefElement {
+    pub fn with_options(name: String, options: List<GrammarOption>) -> TokenRefElement {
         let lower_name = to_lower(&name);
         let field_name = escape_ident(&lower_name);
         return TokenRefElement { name, options, lower_name, field_name };
@@ -400,7 +400,7 @@ impl TokenRefElement {
 
 pub struct LiteralElement {
     pub text: String,
-    pub options: Array<GrammarOption>,
+    pub options: List<GrammarOption>,
 }
 
 impl LiteralElement {
@@ -410,7 +410,7 @@ impl LiteralElement {
 }
 
 pub struct WildcardElement {
-    pub options: Array<GrammarOption>,
+    pub options: List<GrammarOption>,
 }
 
 impl WildcardElement {
@@ -420,12 +420,12 @@ impl WildcardElement {
 }
 
 pub struct GroupElement {
-    pub alternatives: Array<Alternative>,
-    pub options: Array<GrammarOption>,
+    pub alternatives: List<Alternative>,
+    pub options: List<GrammarOption>,
 }
 
 impl GroupElement {
-    pub fn new(alternatives: Array<Alternative>) -> GroupElement {
+    pub fn new(alternatives: List<Alternative>) -> GroupElement {
         return GroupElement { alternatives, options: [] };
     }
 }
@@ -502,12 +502,12 @@ pub struct LexerRule {
     /// grammar actions or `type(X)` rewrites can.
     pub is_virtual: bool,
     /// Rule-level options from `options { ... }` prequel blocks.
-    pub options: Array<GrammarOption>,
-    pub body: Array<LexerAlt>,
+    pub options: List<GrammarOption>,
+    pub body: List<LexerAlt>,
 }
 
 impl LexerRule {
-    pub fn new(name: String, is_fragment: bool, skip: bool, body: Array<LexerAlt>) -> LexerRule {
+    pub fn new(name: String, is_fragment: bool, skip: bool, body: List<LexerAlt>) -> LexerRule {
         return LexerRule {
             name,
             visibility: Visibility::Default,
@@ -536,7 +536,7 @@ impl LexerRule {
 
 /// LexerAlt is one alternative in a lexer rule.
 pub struct LexerAlt {
-    pub elements: Array<LexerElement>,
+    pub elements: List<LexerElement>,
 }
 
 /// LexerElement is a single unit within a lexer alternative.
@@ -546,7 +546,7 @@ pub variant LexerElement {
     CharClass(CharClass),
     AnyChar,
     RuleRef(String),
-    Group(Array<LexerAlt>),
+    Group(List<LexerAlt>),
     Repeat(LexerRepeatElement),
     Not(LexerNotElement),
 }
@@ -563,7 +563,7 @@ pub struct LexerNotElement {
 
 /// CharClass represents a character class like [a-zA-Z0-9].
 pub struct CharClass {
-    pub ranges: Array<CharRange>,
+    pub ranges: List<CharRange>,
     pub negated: bool,
 }
 
@@ -583,19 +583,19 @@ impl CharRange {
     }
 }
 
-pub fn merge_grammars(grammars: Array<Grammar>) -> Grammar {
+pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
     if grammars.len() == 1 {
         return grammars[0];
     }
     let mut name = grammars[0].name;
-    let mut parser_rules: Array<ParserRule> = [];
-    let mut lexer_rules: Array<LexerRule> = [];
-    let mut mode_names: Array<String> = ["DEFAULT_MODE"];
-    let mut channels: Array<String> = [];
-    let mut options: Array<GrammarOption> = [];
-    let mut named_actions: Array<NamedAction> = [];
-    let mut pending_refs: Array<PendingRef> = [];
-    let mut source_files: Array<String> = [];
+    let mut parser_rules: List<ParserRule> = [];
+    let mut lexer_rules: List<LexerRule> = [];
+    let mut mode_names: List<String> = ["DEFAULT_MODE"];
+    let mut channels: List<String> = [];
+    let mut options: List<GrammarOption> = [];
+    let mut named_actions: List<NamedAction> = [];
+    let mut pending_refs: List<PendingRef> = [];
+    let mut source_files: List<String> = [];
     for let g of grammars {
         // Concatenate source paths so every input contributes a provenance entry.
         for let sf of &g.source_files {
@@ -629,14 +629,14 @@ pub fn merge_grammars(grammars: Array<Grammar>) -> Grammar {
             named_actions.push(*act);
         }
         // Build mode index remapping table for this grammar
-        let mut remap: Array<i32> = [];
+        let mut remap: List<i32> = [];
         for let mn of g.mode_names {
             let idx = find_or_add_mode(&mut mode_names, &mn);
             remap.push(idx);
         }
         // Build channel id remapping table. User channels start at id 2
         // (0=DEFAULT, 1=HIDDEN). Preserve existing ids when names line up.
-        let mut chan_remap: Array<i32> = [];
+        let mut chan_remap: List<i32> = [];
         for let cn of &g.channels {
             let id = find_or_add_channel(&mut channels, cn);
             chan_remap.push(id);
@@ -665,7 +665,7 @@ pub fn merge_grammars(grammars: Array<Grammar>) -> Grammar {
     }
     // Derive common name by stripping Lexer/Parser suffix
     if name.len() > 5 {
-        let chars: Array<char> = name.chars().collect();
+        let chars: List<char> = name.chars().collect();
         let len = chars.len();
         if len >= 6 {
             let mut suffix = String::with_capacity(6);
@@ -708,7 +708,7 @@ pub fn merge_grammars(grammars: Array<Grammar>) -> Grammar {
     };
 }
 
-fn find_or_add_mode(modes: &mut Array<String>, name: &String) -> i32 {
+fn find_or_add_mode(modes: &mut List<String>, name: &String) -> i32 {
     for let mut i = 0; i < modes.len(); i += 1 {
         if modes[i] == *name {
             return i;
@@ -720,7 +720,7 @@ fn find_or_add_mode(modes: &mut Array<String>, name: &String) -> i32 {
 
 /// Allocate a channel id for `name`. User channel ids start at 2
 /// (0=DEFAULT, 1=HIDDEN are predefined by ANTLR4).
-fn find_or_add_channel(channels: &mut Array<String>, name: &String) -> i32 {
+fn find_or_add_channel(channels: &mut List<String>, name: &String) -> i32 {
     for let mut i = 0; i < channels.len(); i += 1 {
         if channels[i] == *name {
             return i + 2;

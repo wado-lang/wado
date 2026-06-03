@@ -36,12 +36,12 @@ struct core:prelude/format.wado//Formatter {  // TypeId(5)
 
 struct ./sub/cross_module_struct_field_type_lib.wado//Wrapper {  // TypeId(6)
     mut name: ref "core:prelude/string.wado//String",
-    mut items: ref "core:prelude//Array<./sub/cross_module_struct_field_type_lib.wado/Inner>",
+    mut items: ref "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>",
 }
 
 array builtin::array<./sub/cross_module_struct_field_type_lib.wado/Inner> (mut ref "./sub/cross_module_struct_field_type_lib.wado//Inner");  // TypeId(7)
 
-struct core:prelude//Array<./sub/cross_module_struct_field_type_lib.wado/Inner> {  // TypeId(8)
+struct core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner> {  // TypeId(8)
     mut repr: ref "builtin::array<./sub/cross_module_struct_field_type_lib.wado/Inner>",
     mut used: i32,
 }
@@ -86,7 +86,7 @@ type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32; 
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(28)
 
-type "functype//core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<./sub/cross_module_struct_field_type_lib.wado/Inner>" = fn(ref "core:prelude//Array<./sub/cross_module_struct_field_type_lib.wado/Inner>", ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(29)
+type "functype//core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<./sub/cross_module_struct_field_type_lib.wado/Inner>" = fn(ref "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>", ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(29)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(30)
 
@@ -112,7 +112,7 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(41)
 
-type "functype//core:prelude/array.wado/Array<./sub/cross_module_struct_field_type_lib.wado/Inner>^Eq::eq" = fn(ref "core:prelude//Array<./sub/cross_module_struct_field_type_lib.wado/Inner>", ref "core:prelude//Array<./sub/cross_module_struct_field_type_lib.wado/Inner>") -> bool;  // TypeId(42)
+type "functype//core:prelude/list.wado/List<./sub/cross_module_struct_field_type_lib.wado/Inner>^Eq::eq" = fn(ref "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>", ref "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>") -> bool;  // TypeId(42)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
 
@@ -137,17 +137,17 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/cross_module_struct_field_type.wado/run"() {
     let w: ref "./sub/cross_module_struct_field_type_lib.wado//Wrapper";
-    let __b_1: ref "core:prelude//Array<./sub/cross_module_struct_field_type_lib.wado/Inner>";
+    let __b_1: ref "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>";
     let expected: ref "./sub/cross_module_struct_field_type_lib.wado//Wrapper";
     let __cond: bool;
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let name: ref "core:prelude/string.wado//String";
-    let __b_10: ref "core:prelude//Array<./sub/cross_module_struct_field_type_lib.wado/Inner>";
+    let __b_10: ref "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>";
     let f_20: ref "core:prelude/format.wado//Formatter";
     name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test"), used: 4 };
-    w = struct.new "./sub/cross_module_struct_field_type_lib.wado//Wrapper" { name: name, items: ref.as_non_null(__b_10 = struct.new "core:prelude//Array<./sub/cross_module_struct_field_type_lib.wado/Inner>" { repr: builtin::array_new<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(0), used: 0 }; __b_10) };
-    expected = struct.new "./sub/cross_module_struct_field_type_lib.wado//Wrapper" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test"), used: 4 }, items: ref.as_non_null(__b_1 = struct.new "core:prelude//Array<./sub/cross_module_struct_field_type_lib.wado/Inner>" { repr: builtin::array_new<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(0), used: 0 }; __b_1) };
+    w = struct.new "./sub/cross_module_struct_field_type_lib.wado//Wrapper" { name: name, items: ref.as_non_null(__b_10 = struct.new "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>" { repr: builtin::array_new<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(0), used: 0 }; __b_10) };
+    expected = struct.new "./sub/cross_module_struct_field_type_lib.wado//Wrapper" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test"), used: 4 }, items: ref.as_non_null(__b_1 = struct.new "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>" { repr: builtin::array_new<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(0), used: 0 }; __b_1) };
     __cond = "./sub/cross_module_struct_field_type_lib.wado/Wrapper^Eq::eq"(w, expected);
     if __cond == 0 {
         "core:internal/panic"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(146), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 117); "core:prelude/string.wado/String::push"(__local_6, 110); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/cross_module_struct_field_type.wado"), used: 64 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_20 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(6, f_20); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -494,7 +494,7 @@ fn "./sub/cross_module_struct_field_type_lib.wado/Wrapper^Eq::eq"(self, other) {
         }
         break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(self.name.repr, other.name.repr, len_a);
     } -> i32 {
-        "core:prelude/array.wado/Array<./sub/cross_module_struct_field_type_lib.wado/Inner>^Eq::eq"(self.items, other.items);
+        "core:prelude/list.wado/List<./sub/cross_module_struct_field_type_lib.wado/Inner>^Eq::eq"(self.items, other.items);
     } else {
         0;
     });
@@ -520,7 +520,7 @@ fn "./sub/cross_module_struct_field_type_lib.wado/Wrapper^Inspect::inspect"(self
     let s_5: ref "core:prelude/string.wado//String";
     let s_7: ref "core:prelude/string.wado//String";
     let s_9: ref "core:prelude/string.wado//String";
-    let self_10: ref "core:prelude//Array<./sub/cross_module_struct_field_type_lib.wado/Inner>";
+    let self_10: ref "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>";
     let limit: i32;
     let s_14: ref "core:prelude/string.wado//String";
     s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Wrapper { "), used: 10 };
@@ -703,7 +703,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     }
 }
 
-fn "core:prelude/array.wado/Array<./sub/cross_module_struct_field_type_lib.wado/Inner>^Eq::eq"(self, other) {
+fn "core:prelude/list.wado/List<./sub/cross_module_struct_field_type_lib.wado/Inner>^Eq::eq"(self, other) {
     let i: i32;
     let self_3: ref "./sub/cross_module_struct_field_type_lib.wado//Inner";
     let other_4: ref "./sub/cross_module_struct_field_type_lib.wado//Inner";

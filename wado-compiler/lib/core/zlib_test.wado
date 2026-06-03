@@ -55,7 +55,7 @@ use {
     zlib_version,
 } from "core:zlib";
 
-fn bytes_equal(a: &Array<u8>, b: &Array<u8>) -> bool {
+fn bytes_equal(a: &List<u8>, b: &List<u8>) -> bool {
     if a.len() != b.len() {
         return false;
     }
@@ -67,24 +67,24 @@ fn bytes_equal(a: &Array<u8>, b: &Array<u8>) -> bool {
     return true;
 }
 
-fn string_to_bytes(s: String) -> Array<u8> {
-    let mut out: Array<u8> = Array::with_capacity(s.len());
+fn string_to_bytes(s: String) -> List<u8> {
+    let mut out: List<u8> = List::with_capacity(s.len());
     for let mut i = 0; i < s.len(); i += 1 {
         out.push(s.get_byte_unchecked(i));
     }
     return out;
 }
 
-fn make_pattern_data(size: i32) -> Array<u8> {
-    let mut data: Array<u8> = Array::with_capacity(size);
+fn make_pattern_data(size: i32) -> List<u8> {
+    let mut data: List<u8> = List::with_capacity(size);
     for let mut i = 0; i < size; i += 1 {
         data.push((i % 256) as u8);
     }
     return data;
 }
 
-fn make_repeated(byte: u8, count: i32) -> Array<u8> {
-    let mut data: Array<u8> = Array::with_capacity(count);
+fn make_repeated(byte: u8, count: i32) -> List<u8> {
+    let mut data: List<u8> = List::with_capacity(count);
     for let mut i = 0; i < count; i += 1 {
         data.push(byte);
     }
@@ -139,13 +139,13 @@ test "other constants" {
 }
 
 test "adler32" {
-    let data: Array<u8> = [72, 101, 108, 108, 111];  // "Hello"
+    let data: List<u8> = [72, 101, 108, 108, 111];  // "Hello"
     let checksum = adler32(adler32_init(), &data, 0, 5);
     assert checksum == 93061621;
 }
 
 test "crc32" {
-    let data: Array<u8> = [72, 101, 108, 108, 111];  // "Hello"
+    let data: List<u8> = [72, 101, 108, 108, 111];  // "Hello"
     let crc = crc32(crc32_init(), &data, 0, 5);
     assert crc == 4157704578;
 }
@@ -153,7 +153,7 @@ test "crc32" {
 test "adler32_combine" {
     let seg1 = string_to_bytes("Hello, ");
     let seg2 = string_to_bytes("World!");
-    let mut combined: Array<u8> = Array::with_capacity(seg1.len() + seg2.len());
+    let mut combined: List<u8> = List::with_capacity(seg1.len() + seg2.len());
     for let mut i = 0; i < seg1.len(); i += 1 {
         combined.push(seg1[i]);
     }
@@ -171,7 +171,7 @@ test "adler32_combine" {
 test "crc32_combine" {
     let seg1 = string_to_bytes("Hello, ");
     let seg2 = string_to_bytes("World!");
-    let mut combined: Array<u8> = Array::with_capacity(seg1.len() + seg2.len());
+    let mut combined: List<u8> = List::with_capacity(seg1.len() + seg2.len());
     for let mut i = 0; i < seg1.len(); i += 1 {
         combined.push(seg1[i]);
     }
@@ -187,14 +187,14 @@ test "crc32_combine" {
 }
 
 test "inflate zlib Hello" {
-    let expected: Array<u8> = [72, 101, 108, 108, 111];
-    let compressed: Array<u8> = [120, 156, 243, 72, 205, 201, 201, 7, 0, 5, 140, 1, 245];
+    let expected: List<u8> = [72, 101, 108, 108, 111];
+    let compressed: List<u8> = [120, 156, 243, 72, 205, 201, 201, 7, 0, 5, 140, 1, 245];
     let result = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&expected, &result), "inflate Hello mismatch";
 }
 
 test "inflate zlib 1000xA" {
-    let compressed: Array<u8> = [120, 156, 115, 116, 28, 5, 163, 96, 20, 12, 119, 0, 0, 137, 12, 253, 233];
+    let compressed: List<u8> = [120, 156, 115, 116, 28, 5, 163, 96, 20, 12, 119, 0, 0, 137, 12, 253, 233];
     let result = inflate_zlib(&compressed).unwrap();
     assert result.len() == 1000;
     for let mut i = 0; i < 1000; i += 1 {
@@ -203,20 +203,20 @@ test "inflate zlib 1000xA" {
 }
 
 test "inflate zlib Hello World x20" {
-    let compressed: Array<u8> = [
+    let compressed: List<u8> = [
         120, 156, 243, 72, 205, 201, 201, 215, 81, 8, 207, 47, 202, 73, 81, 84, 240, 24, 229, 65, 121, 0, 245, 131, 90,
         181,
     ];
     let result = inflate_zlib(&compressed).unwrap();
     assert result.len() == 280;
-    let expected_unit: Array<u8> = [72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33, 32];
+    let expected_unit: List<u8> = [72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33, 32];
     for let mut i = 0; i < 14; i += 1 {
         assert result[i] == expected_unit[i];
     }
 }
 
 test "inflate zlib bytes 0-255" {
-    let compressed: Array<u8> = [
+    let compressed: List<u8> = [
         120, 156, 1, 0, 1, 255, 254, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
         23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
         51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78,
@@ -237,13 +237,13 @@ test "inflate zlib bytes 0-255" {
 }
 
 test "inflate zlib empty" {
-    let compressed: Array<u8> = [120, 156, 3, 0, 0, 0, 0, 1];
+    let compressed: List<u8> = [120, 156, 3, 0, 0, 0, 0, 1];
     let result = inflate_zlib(&compressed).unwrap();
     assert result.len() == 0;
 }
 
 test "stored block round-trip Hello" {
-    let data: Array<u8> = [72, 101, 108, 108, 111];
+    let data: List<u8> = [72, 101, 108, 108, 111];
     let compressed = zlib_compress_stored(&data);
     let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
@@ -257,14 +257,14 @@ test "stored block round-trip 1000 bytes" {
 }
 
 test "Huffman round-trip Hello" {
-    let data: Array<u8> = [72, 101, 108, 108, 111];
+    let data: List<u8> = [72, 101, 108, 108, 111];
     let compressed = zlib_compress(&data);
     let decompressed = inflate_zlib(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "Huffman round-trip empty" {
-    let data: Array<u8> = [];
+    let data: List<u8> = [];
     let compressed = zlib_compress(&data);
     let decompressed = inflate_zlib(&compressed).unwrap();
     assert decompressed.len() == 0;
@@ -286,8 +286,8 @@ test "Huffman round-trip mixed data" {
 }
 
 test "Huffman round-trip Hello World x20" {
-    let unit: Array<u8> = [72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33, 32];
-    let mut data: Array<u8> = Array::with_capacity(280);
+    let unit: List<u8> = [72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33, 32];
+    let mut data: List<u8> = List::with_capacity(280);
     for let mut j = 0; j < 20; j += 1 {
         for let mut i = 0; i < 14; i += 1 {
             data.push(unit[i]);
@@ -421,7 +421,7 @@ test "gzip multi-member" {
     let gz1 = gzip_compress(&seg1);
     let gz2 = gzip_compress(&seg2);
 
-    let mut multi: Array<u8> = Array::with_capacity(gz1.len() + gz2.len());
+    let mut multi: List<u8> = List::with_capacity(gz1.len() + gz2.len());
     for let mut i = 0; i < gz1.len(); i += 1 {
         multi.push(gz1[i]);
     }
@@ -458,11 +458,11 @@ test "InflateStream one-shot" {
 
 test "DeflateStream chunked update/finish" {
     let data = make_pattern_data(500);
-    let mut chunk1: Array<u8> = Array::with_capacity(200);
+    let mut chunk1: List<u8> = List::with_capacity(200);
     for let mut i = 0; i < 200; i += 1 {
         chunk1.push(data[i]);
     }
-    let mut chunk2: Array<u8> = Array::with_capacity(300);
+    let mut chunk2: List<u8> = List::with_capacity(300);
     for let mut i = 200; i < 500; i += 1 {
         chunk2.push(data[i]);
     }
@@ -481,11 +481,11 @@ test "InflateStream chunked update/finish" {
     let compressed = ds.compress(&data);
 
     let half = compressed.len() / 2;
-    let mut c1: Array<u8> = Array::with_capacity(half);
+    let mut c1: List<u8> = List::with_capacity(half);
     for let mut i = 0; i < half; i += 1 {
         c1.push(compressed[i]);
     }
-    let mut c2: Array<u8> = Array::with_capacity(compressed.len() - half);
+    let mut c2: List<u8> = List::with_capacity(compressed.len() - half);
     for let mut i = half; i < compressed.len(); i += 1 {
         c2.push(compressed[i]);
     }
@@ -623,18 +623,18 @@ test "round-trip 100KB data" {
 }
 
 test "inflate_zlib error on invalid data" {
-    let bad: Array<u8> = [0, 0];
+    let bad: List<u8> = [0, 0];
     assert inflate_zlib(&bad) matches { Err(_) };
 }
 
 test "inflate_gzip error on invalid data" {
-    let bad: Array<u8> = [0, 0];
+    let bad: List<u8> = [0, 0];
     assert inflate_gzip(&bad) matches { Err(_) };
 }
 
 // Returns a reference gzip member for "hello world", produced by a standard
 // zlib and used by the gzip rejection tests below.
-fn gzip_hello_world() -> Array<u8> {
+fn gzip_hello_world() -> List<u8> {
     return [
         31, 139, 8, 0, 0, 0, 0, 0, 2, 255, 203, 72, 205, 201, 201, 87, 40, 207, 47, 202, 73, 1, 0, 133, 17, 74, 13, 11,
         0, 0, 0,
@@ -654,13 +654,13 @@ fn gzip_hello_world() -> Array<u8> {
 // RFC 1951 section 3.2.4: one final stored block (BFINAL=1, BTYPE=00), then
 // LEN=5 and NLEN=~5, then the five literal bytes of "Hello".
 test "inflate raw stored block (RFC 1951 3.2.4)" {
-    let stream: Array<u8> = [0x01, 0x05, 0x00, 0xFA, 0xFF, 72, 101, 108, 108, 111];
+    let stream: List<u8> = [0x01, 0x05, 0x00, 0xFA, 0xFF, 72, 101, 108, 108, 111];
     assert bytes_equal(&inflate_raw(&stream), &string_to_bytes("Hello"));
 }
 
 // RFC 1951 section 3.2.4: an empty final stored block (LEN=0, NLEN=0xFFFF).
 test "inflate raw empty stored block (RFC 1951 3.2.4)" {
-    let stream: Array<u8> = [0x01, 0x00, 0x00, 0xFF, 0xFF];
+    let stream: List<u8> = [0x01, 0x00, 0x00, 0xFF, 0xFF];
     assert inflate_raw(&stream).len() == 0;
 }
 
@@ -669,15 +669,15 @@ test "inflate raw empty stored block (RFC 1951 3.2.4)" {
 // A,B,A,B,A, producing "ABABABA" (the X,Y overlap example in the RFC).
 // Encoded with fixed Huffman codes (BTYPE=01).
 test "inflate raw overlapping match (RFC 1951 3.2.3)" {
-    let stream: Array<u8> = [0x73, 0x74, 0x02, 0x43, 0x00];
-    let expected: Array<u8> = [65, 66, 65, 66, 65, 66, 65];  // "ABABABA"
+    let stream: List<u8> = [0x73, 0x74, 0x02, 0x43, 0x00];
+    let expected: List<u8> = [65, 66, 65, 66, 65, 66, 65];  // "ABABABA"
     assert bytes_equal(&inflate_raw(&stream), &expected);
 }
 
 // RFC 1951 section 3.2.5: the maximum match length, 258, encoded with length
 // code 285. Here a run of 259 identical bytes under fixed Huffman.
 test "inflate raw max-length match (RFC 1951 3.2.5)" {
-    let stream: Array<u8> = [139, 138, 26, 241, 0, 0];
+    let stream: List<u8> = [139, 138, 26, 241, 0, 0];
     let out = inflate_raw(&stream);
     assert out.len() == 259;
     for let mut i = 0; i < 259; i += 1 {
@@ -689,7 +689,7 @@ test "inflate raw max-length match (RFC 1951 3.2.5)" {
 // code-length code alphabet and the literal/length and distance tables built
 // from it, which the stored/fixed cases above never touch.
 test "inflate raw dynamic Huffman block (RFC 1951 3.2.7)" {
-    let stream: Array<u8> = [
+    let stream: List<u8> = [
         77, 141, 193, 13, 195, 48, 12, 3, 87, 225, 4, 222, 163, 143, 252, 218, 1, 148, 136, 117, 4, 56, 114, 96, 27, 14,
         178, 125, 133, 188, 250, 33, 64, 145, 212, 189, 28, 99, 39, 86, 102, 115, 55, 207, 143, 251, 184, 77, 182, 78,
         92, 210, 177, 53, 202, 160, 38, 188, 119, 235, 216, 227, 114, 136, 18, 130, 82, 7, 234, 23, 39, 235, 89, 136, 24,
@@ -705,25 +705,25 @@ test "inflate raw dynamic Huffman block (RFC 1951 3.2.7)" {
 
 // RFC 1950 section 2.2: FCHECK requires CMF*256+FLG to be a multiple of 31.
 test "inflate zlib rejects bad FCHECK (RFC 1950 2.2)" {
-    let bad: Array<u8> = [0x78, 0x00, 0, 0, 0, 0];
+    let bad: List<u8> = [0x78, 0x00, 0, 0, 0, 0];
     assert inflate_zlib(&bad) matches { Err(ZlibError::InvalidHeader) };
 }
 
 // RFC 1950 section 2.2: CM must be 8 (deflate). Here CM=9 with a valid FCHECK.
 test "inflate zlib rejects bad CM (RFC 1950 2.2)" {
-    let bad: Array<u8> = [0x79, 0x18, 0, 0, 0, 0];
+    let bad: List<u8> = [0x79, 0x18, 0, 0, 0, 0];
     assert inflate_zlib(&bad) matches { Err(ZlibError::UnsupportedCompressionMethod) };
 }
 
 // RFC 1950 section 2.2: FDICT set requests a preset dictionary (unsupported).
 test "inflate zlib rejects preset dictionary (RFC 1950 2.2)" {
-    let bad: Array<u8> = [0x78, 0x20, 0, 0, 0, 0];
+    let bad: List<u8> = [0x78, 0x20, 0, 0, 0, 0];
     assert inflate_zlib(&bad) matches { Err(ZlibError::PresetDictionaryNotSupported) };
 }
 
 // A zlib stream shorter than header(2) + trailer(4) cannot be valid.
 test "inflate zlib rejects truncated stream (RFC 1950 2.2)" {
-    let bad: Array<u8> = [0x78, 0x9C];
+    let bad: List<u8> = [0x78, 0x9C];
     assert inflate_zlib(&bad) matches { Err(ZlibError::DataTooShort) };
 }
 
@@ -732,7 +732,7 @@ test "inflate zlib rejects truncated stream (RFC 1950 2.2)" {
 // malformed, not silently decoded as empty even though the trailer holds the
 // Adler-32 of empty output (1).
 test "inflate zlib rejects reserved block type (RFC 1951 3.2.3)" {
-    let bad: Array<u8> = [0x78, 0x01, 0x07, 0, 0, 0, 1];
+    let bad: List<u8> = [0x78, 0x01, 0x07, 0, 0, 0, 1];
     assert inflate_zlib(&bad) matches { Err(ZlibError::InvalidDeflateData) };
 }
 
@@ -740,7 +740,7 @@ test "inflate zlib rejects reserved block type (RFC 1951 3.2.3)" {
 // code is malformed. 0x63 opens a fixed-Huffman block (BFINAL=1, BTYPE=01)
 // with no room left to encode an end-of-block.
 test "inflate zlib rejects truncated deflate body (RFC 1951 3.2.3)" {
-    let bad: Array<u8> = [0x78, 0x01, 0x63, 0, 0, 0, 1];
+    let bad: List<u8> = [0x78, 0x01, 0x63, 0, 0, 0, 1];
     assert inflate_zlib(&bad) matches { Err(ZlibError::InvalidDeflateData) };
 }
 
@@ -767,7 +767,7 @@ test "inflate gzip rejects ISIZE mismatch (RFC 1952 2.3.1)" {
 // A gzip stream cut off inside its 8-byte trailer is truncated.
 test "inflate gzip rejects truncated trailer (RFC 1952 2.3.1)" {
     let gz = gzip_hello_world();
-    let mut cut: Array<u8> = Array::with_capacity(gz.len() - 4);
+    let mut cut: List<u8> = List::with_capacity(gz.len() - 4);
     for let mut i = 0; i < gz.len() - 4; i += 1 {
         cut.push(gz[i]);
     }

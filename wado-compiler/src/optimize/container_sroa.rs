@@ -137,7 +137,7 @@ fn classify_array_method_sig(
 ) -> Option<ArrayMethodKind> {
     // Must be a method (instance or static) on `Array`.
     let info = func.method_info.as_ref()?;
-    if info.base_struct_name != "Array" {
+    if info.base_struct_name != "List" {
         return None;
     }
     // Must be a monomorphized instance so we know the concrete element type.
@@ -195,7 +195,7 @@ fn classify_array_method_sig(
 /// on other types.
 fn sig_key_of(func: &FunctionRef) -> Option<SigKey> {
     let info = func.method_info.as_ref()?;
-    if info.base_struct_name != "Array" {
+    if info.base_struct_name != "List" {
         return None;
     }
     Some((info.trait_name.clone(), info.method_name.clone()))
@@ -331,7 +331,7 @@ fn build_method_catalog(
         // Must be a method on Array (by base struct name). The kind is still
         // Array-specific because the pass itself is Array-specific — we only
         // de-hardcode method *names*, not the container type.
-        if method_info.base_struct_name != "Array" {
+        if method_info.base_struct_name != "List" {
             continue;
         }
         // Must be a monomorphized method (we need the concrete impl type arg).

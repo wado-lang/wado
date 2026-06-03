@@ -2089,14 +2089,14 @@ pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError> {
 ///
 /// Equivalent to `to_string` followed by a byte-buffer conversion, but
 /// skips the intermediate re-encoding: the serializer's UTF-8 buffer is
-/// handed back directly as an `Array<u8>` with no copy. Prefer this over
+/// handed back directly as an `List<u8>` with no copy. Prefer this over
 /// `to_string(value).bytes().collect()` whenever the output is consumed
 /// as bytes (e.g. an HTTP response body).
-pub fn to_bytes<T: Serialize>(value: &T) -> Result<Array<u8>, SerializeError> {
+pub fn to_bytes<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError> {
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = JsonSerializer { buf: &mut buf };
     value.serialize::<JsonSerializer>(&mut ser)?;
-    return Result::Ok(Array::<u8>::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
+    return Result::Ok(List::<u8>::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
 }
 
 /// Serializes a value to a pretty JSON string.

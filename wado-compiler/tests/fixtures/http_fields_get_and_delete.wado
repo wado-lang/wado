@@ -6,7 +6,7 @@ use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers } fr
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let fields = Fields::new();
 
-    let v: Array<u8> = [120 as u8]; // "x"
+    let v: List<u8> = [120 as u8]; // "x"
     let _ = fields.append("x-temp" as FieldName, v as FieldValue);
     assert fields.has("x-temp" as FieldName);
 

@@ -59,7 +59,7 @@ fn write_helper(dir: &Descriptor, path: &String, content: &String) -> Result<(),
     match opened {
         Err(e) => return Result::Err(e),
         Ok(file) => {
-            let bytes: Array<u8> = content.bytes().collect();
+            let bytes: List<u8> = content.bytes().collect();
             let [rx, tx] = Stream::<u8>::new();
             let sub = file.write_via_stream(rx, 0 as Filesize);
             tx.write(bytes);

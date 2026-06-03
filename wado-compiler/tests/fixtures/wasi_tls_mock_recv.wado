@@ -30,7 +30,7 @@ export fn run() with Stdout, Connector, Error {
         Err(e) => panic(`unexpected handshake failure: {e.to_debug_string()}`),
     }
 
-    let mut received: Array<u8> = [];
+    let mut received: List<u8> = [];
     loop {
         let chunk = tls_rx.read(4096);
         if chunk.len() == 0 {
