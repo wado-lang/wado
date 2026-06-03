@@ -153,30 +153,30 @@ fn "wado-compiler/tests/fixtures/bug_mut_ref_after_continue.wado/run"() with Std
     let f_110: ref "core:prelude/format.wado//Formatter";
     let self_117: i32;
     let f_121: ref "core:prelude/format.wado//Formatter";
-    let _licm_used_124: i32;
-    let _licm_repr_125: ref builtin::array<i32>;
+    let _licm_used_134: i32;
+    let _licm_repr_135: ref builtin::array<i32>;
     __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30, 40, 50), used: 5 };
     pos_2 = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
-    _licm_used_124 = 5;
-    _licm_repr_125 = __b_0.repr;
+    _licm_used_134 = 5;
+    _licm_repr_135 = __b_0.repr;
     b0: block {
         l1: loop {
-            if pos_2.value >= _licm_used_124 {
+            if pos_2.value >= _licm_used_134 {
                 break b0;
             }
-            if index_45 = pos_2.value; if builtin::unlikely(index_45 >= _licm_used_124) {
+            if index_45 = pos_2.value; if builtin::unlikely(index_45 >= _licm_used_134) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            }; builtin::array_get<i32>(_licm_repr_125, index_45) < 20 {
+            }; builtin::array_get<i32>(_licm_repr_135, index_45) < 20 {
                 pos_2.value = pos_2.value + 1;
                 continue l1;
             }
             index_50 = pos_2.value;
-            if builtin::unlikely(index_50 >= _licm_used_124) {
+            if builtin::unlikely(index_50 >= _licm_used_134) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
-            val_48 = builtin::array_get<i32>(_licm_repr_125, index_50);
+            val_48 = builtin::array_get<i32>(_licm_repr_135, index_50);
             pos_2.value = pos_2.value + 1;
             __cond_5 = val_48 == 20;
             if __cond_5 == 0 {
@@ -194,11 +194,11 @@ condition: pos == 2
                 unreachable;
             }
             index_89 = pos_2.value;
-            if builtin::unlikely(index_89 >= _licm_used_124) {
+            if builtin::unlikely(index_89 >= _licm_used_134) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
-            val_87 = builtin::array_get<i32>(_licm_repr_125, index_89);
+            val_87 = builtin::array_get<i32>(_licm_repr_135, index_89);
             pos_2.value = pos_2.value + 1;
             __cond_10 = val_87 == 30;
             if __cond_10 == 0 {

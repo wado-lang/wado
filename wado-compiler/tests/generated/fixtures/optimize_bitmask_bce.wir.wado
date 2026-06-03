@@ -106,20 +106,20 @@ fn "wado-compiler/tests/fixtures/optimize_bitmask_bce.wado/run"() {
     let repr: ref builtin::array<i32>;
     let f_20: ref "core:prelude/format.wado//Formatter";
     let f_25: ref "core:prelude/format.wado//Formatter";
-    let _licm_repr_28: ref builtin::array<i32>;
+    let _licm_repr_30: ref builtin::array<i32>;
     repr = builtin::array_new<i32>(32768);
     builtin::array_fill<i32>(repr, 0, -1, 32768);
     sum = 0;
     i = 0;
-    _licm_repr_28 = repr;
+    _licm_repr_30 = repr;
     b0: block {
         l1: loop {
             if i >= 100 {
                 break b0;
             }
             idx = i & 32767;
-            sum = sum + builtin::array_get<i32>(_licm_repr_28, idx);
-            builtin::array_set<i32>(_licm_repr_28, idx, i);
+            sum = sum + builtin::array_get<i32>(_licm_repr_30, idx);
+            builtin::array_set<i32>(_licm_repr_30, idx, i);
             i = i + 1;
             continue l1;
         };
