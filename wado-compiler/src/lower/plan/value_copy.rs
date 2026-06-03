@@ -87,6 +87,14 @@ pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
             // above.
             type_table.find_struct_type(name, module_source).is_some()
         }
+        // The raw GC array is a value type: assignment / parameter
+        // passing / return deep-copies it, like every other value.
+        // Its synthesized helper is `array_clone::<T>(&v)` (see
+        // `synthesize::build_copy_body`), the same intrinsic that
+        // deep-copies the `repr` field of `List<T>` / `String`. This
+        // is the only thing that makes `builtin::array` value-semantic
+        // rather than reference-semantic (WEP-2026-06-02 Phase 2).
+        ResolvedType::BuiltinArray(_) => true,
         // `&T` / `&mut T` are reference types: assignment copies the
         // pointer, not the pointee. This is intentional — a struct
         // field of type `&mut T` is meant to share the referenced

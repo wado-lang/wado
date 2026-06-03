@@ -238,14 +238,13 @@ impl List<T> {
             builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
             self.repr = new_repr;
         }
-        let mut raw = self.repr;
         let base = self.used;
         // Forward element-by-element copy intentionally propagates just-written
         // values for DEFLATE-style run-length back-references (src < dst, overlap).
         // `builtin::array_copy` uses copy-as-if-buffered semantics, so it cannot
         // replace this loop.
         for let mut i = 0; i < count; i += 1 {
-            builtin::array_set(&mut raw, base + i, builtin::array_get(&raw, src_start + i));
+            builtin::array_set(&mut self.repr, base + i, builtin::array_get(&self.repr, src_start + i));
         }
         self.used = new_used;
     }
@@ -526,7 +525,6 @@ impl List<T> {
         if n <= 1 {
             return;
         }
-        let mut src = self.repr;
         let mut buf: builtin::array<T> = builtin::array_new(n);
         let mut width = 1;
         for ; width < n; width = width * 2 {
@@ -539,8 +537,8 @@ impl List<T> {
                     for let mut k = start; k < end; k += 1 {
                         if i < mid {
                             if j < end {
-                                let a = builtin::array_get(&src, i);
-                                let b = builtin::array_get(&src, j);
+                                let a = builtin::array_get(&self.repr, i);
+                                let b = builtin::array_get(&self.repr, j);
                                 if let Greater = cmp(&a, &b) {
                                     builtin::array_set(&mut buf, k, b);
                                     j += 1;
@@ -549,15 +547,15 @@ impl List<T> {
                                     i += 1;
                                 }
                             } else {
-                                builtin::array_set(&mut buf, k, builtin::array_get(&src, i));
+                                builtin::array_set(&mut buf, k, builtin::array_get(&self.repr, i));
                                 i += 1;
                             }
                         } else {
-                            builtin::array_set(&mut buf, k, builtin::array_get(&src, j));
+                            builtin::array_set(&mut buf, k, builtin::array_get(&self.repr, j));
                             j += 1;
                         }
                     }
-                    builtin::array_copy(&mut src, start, &buf, start, end - start);
+                    builtin::array_copy(&mut self.repr, start, &buf, start, end - start);
                 }
             }
         }

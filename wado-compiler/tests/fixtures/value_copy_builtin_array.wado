@@ -1,0 +1,29 @@
+// `builtin::array<T>` has value semantics: assigning it or passing it by
+// value deep-copies the backing GC array, so a mutation through one binding
+// is not observed through another. Before WEP builtin-array-redesign Phase 2
+// the raw array was the only value-typed exception to value semantics — it
+// aliased like a reference. (WEP-2026-06-02.)
+
+fn mutate_copy(mut a: builtin::array<i32>) {
+    // `a` is a by-value copy; mutating it must not touch the caller's array.
+    builtin::array_set(&mut a, 0, 777);
+}
+
+export fn run() {
+    let mut a: builtin::array<i32> = builtin::array_new(3);
+    builtin::array_set(&mut a, 0, 10);
+    builtin::array_set(&mut a, 1, 20);
+
+    // Assignment deep-copies the array.
+    let mut b = a;
+    builtin::array_set(&mut b, 0, 99);
+    assert builtin::array_get(&a, 0) == 10;
+    assert builtin::array_get(&b, 0) == 99;
+
+    // Pass-by-value deep-copies the array.
+    mutate_copy(a);
+    assert builtin::array_get(&a, 0) == 10;
+}
+
+__DATA__
+{"stdout": ""}
