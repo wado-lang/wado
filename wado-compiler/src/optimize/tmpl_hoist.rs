@@ -1047,7 +1047,14 @@ fn extract_local_from_ref(expr: &NirExpr) -> Option<u32> {
     }
 }
 
-/// Check if an expression references a specific local (possibly through &mut).
+/// Check if an expression *aliases* a specific local (the local itself or a
+/// `&mut` chain to it).
+///
+/// Intentionally narrow: matching a non-alias *mention* (e.g. `foo(buf)`) would
+/// make the caller force-rewrite a Formatter's `buf` to the wrong buffer — a
+/// miscompile — so this must not be widened to a "mentions anywhere" walk such
+/// as `expr_mentions_local`. Pinned by the `references_local_matches_only_aliases_not_mentions`
+/// unit test below.
 fn references_local(expr: &NirExpr, local_index: u32) -> bool {
     match &expr.kind {
         NirExprKind::Local { index, .. } => *index == local_index,
