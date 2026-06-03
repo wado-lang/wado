@@ -89,7 +89,7 @@ fn "wado-compiler/tests/fixtures/variant_import_struct_simple.wado/__cm_export__
     let opts: ref "./variant_import_struct_module.wado//Options";
     let s1: ref "core:prelude/string.wado//String";
     opts = struct.new "./variant_import_struct_module.wado//Options" { align: struct.new "./variant_import_struct_module.wado//Align" { 1 }, width: 0 };
-    s1 = "./variant_import_struct_module.wado/format_with_opts"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, opts);
+    s1 = "./variant_import_struct_module.wado/format_with_opts"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hi"), used: 2 }, opts);
     "core:cli/println"(s1);
     "wasi/task-return"(0);
 }

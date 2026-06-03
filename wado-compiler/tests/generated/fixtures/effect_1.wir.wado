@@ -177,7 +177,7 @@ fn "wado-compiler/tests/fixtures/effect_1.wado/__cm_export__run"() {
     let __indirect_call_2: ref "canonical//CanonicalClosure_0";
     __indirect_call_2 = ref.cast "canonical//CanonicalClosure_0"(f_9);
     call_ref "functype/$canonical_closure_fn_0"(__indirect_call_2.func, __indirect_call_2.env);
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("done"), used: 4 });
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no_effect ok"), used: 12 });
     "wasi/task-return"(0);
 }
@@ -418,9 +418,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

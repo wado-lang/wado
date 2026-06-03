@@ -85,7 +85,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/variant_struct_concat_module.wado/format_str"(s, opts) {
     let pad: ref "core:prelude/string.wado//String";
-    pad = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 32), used: 2 };
+    pad = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("  "), used: 2 };
     return let __match_scrut_0: ref "wado-compiler/tests/fixtures/variant_struct_concat_module.wado//Align", __match_scrut_0 = opts.align, (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
         "core:prelude/string.wado/String^Add::add"(s, pad);
     } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
@@ -100,7 +100,7 @@ fn "wado-compiler/tests/fixtures/variant_struct_concat_module.wado/run"() with S
     let s: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/string.wado//String";
     opts = struct.new "wado-compiler/tests/fixtures/variant_struct_concat_module.wado//Opts" { align: struct.new "wado-compiler/tests/fixtures/variant_struct_concat_module.wado//Align" { 1 }, width: 0 };
-    s = "wado-compiler/tests/fixtures/variant_struct_concat_module.wado/format_str"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, opts);
+    s = "wado-compiler/tests/fixtures/variant_struct_concat_module.wado/format_str"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hi"), used: 2 }, opts);
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; "core:prelude/string.wado/String::push"(__local_2, 91); "core:prelude/string.wado/String::push_str"(__local_2, s); "core:prelude/string.wado/String::push"(__local_2, 93); __local_2);
 }
 

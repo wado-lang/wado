@@ -181,8 +181,8 @@ fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/run"
     let __local_12: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/format.wado//Formatter";
     let f_46: ref "core:prelude/format.wado//Formatter";
+    let self_55: i32;
     let __sroa_tree_value: ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node";
-    let __sroa_self_value_59: i32;
     __sroa_tree_value = struct.new "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Branch" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//BranchNode" { children: ref.as_non_null(__b_0 = struct.new "core:prelude//List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node">(struct.new "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//LeafNode" { value: 1 } }, struct.new "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Branch" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//BranchNode" { children: ref.as_non_null(__b_1 = struct.new "core:prelude//List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node">(struct.new "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//LeafNode" { value: 2 } }, struct.new "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Leaf" { discriminant: 0, payload_0: struct.new "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//LeafNode" { value: 3 } }), used: 2 }; __b_1) } }), used: 2 }; __b_0) } };
     sum = struct.new "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Sum" { total: 0 };
     "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/walk_node<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Sum>"(sum, __sroa_tree_value);
@@ -194,7 +194,7 @@ condition: tree == same
 "), used: 25 }); "core:prelude/string.wado/String::push"(__local_10, 116); "core:prelude/string.wado/String::push"(__local_10, 114); "core:prelude/string.wado/String::push"(__local_10, 101); "core:prelude/string.wado/String::push"(__local_10, 101); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<Node>" { value: __sroa_tree_value }, __local_11); "core:prelude/string.wado/String::push"(__local_10, 10); "core:prelude/string.wado/String::push"(__local_10, 115); "core:prelude/string.wado/String::push"(__local_10, 97); "core:prelude/string.wado/String::push"(__local_10, 109); "core:prelude/string.wado/String::push"(__local_10, 101); "core:prelude/string.wado/String::push"(__local_10, 58); "core:prelude/string.wado/String::push"(__local_10, 32); __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<Node>" { value: same }, __local_11); "core:prelude/string.wado/String::push"(__local_10, 10); __local_10);
         unreachable;
     }
-    "core:cli/println"(__local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_12 }; __sroa_self_value_59 = sum.total; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_59, __local_13); __local_12);
+    "core:cli/println"(__local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_12 }; self_55 = sum.total; "core:prelude/primitive.wado/i32::fmt_decimal"(self_55, __local_13); __local_12);
 }
 
 fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -427,7 +427,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<wado-c
                 break b19;
             }
             if shown > 0 {
-                s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
+                s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", "), used: 2 };
                 "core:prelude/string.wado/String::push_str"(f.buf, s_11);
             }
             "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<Node>" { value: builtin::array_get<ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node">(_licm_repr_21, i) }, f);
@@ -445,7 +445,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<wado-c
             s_15 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", ..."), used: 5 };
             "core:prelude/string.wado/String::push_str"(f.buf, s_15);
         } else {
-            s_17 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
+            s_17 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("..."), used: 3 };
             "core:prelude/string.wado/String::push_str"(f.buf, s_17);
         }
     }
@@ -582,7 +582,7 @@ fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Leaf
     "core:prelude/string.wado/String::push_str"(f.buf, s_5);
     __sroa_self_value = self.value;
     "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value, f);
-    s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 };
+    s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_11);
 }
 
@@ -595,7 +595,7 @@ fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Bran
     s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("children: "), used: 10 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_5);
     "core:prelude/format.wado/List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>^Inspect::inspect"(self.children, f);
-    s_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 };
+    s_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_7);
 }
 
@@ -613,14 +613,14 @@ fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node
         s_6 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Node::Leaf("), used: 11 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_6);
         "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/LeafNode^Inspect::inspect"(__inspect_Leaf_2, f);
-        s_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 };
+        s_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_8);
     } else {
         __inspect_Branch_3 = ref.cast "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node::Branch"(__match_4).payload_0;
         s_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Node::Branch("), used: 13 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_10);
         "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/BranchNode^Inspect::inspect"(__inspect_Branch_3, f);
-        s_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 };
+        s_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(")"), used: 1 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_12);
     }
 }
@@ -655,9 +655,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

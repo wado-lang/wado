@@ -358,6 +358,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     let __drop_v_26: i32;
     let __pattern_temp_0: ref "tuple//[Stream<wasi:filesystem/types.wado/DirectoryEntry>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
     let __match_29: ref null "wasi:filesystem/types.wado//DirectoryEntry";
+    let self_39: i32;
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
@@ -483,7 +484,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     if entry_count == 3 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("read_directory: entry count is exactly 3 (correct)"), used: 50 });
     } else {
-        "core:cli/eprintln"(__local_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(57), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("read_directory: unexpected entry count = "), used: 41 }); __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_18 }; "core:prelude/primitive.wado/i32::fmt_decimal"(entry_count, __local_19); __local_18);
+        "core:cli/eprintln"(__local_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(57), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("read_directory: unexpected entry count = "), used: 41 }); __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_18 }; self_39 = entry_count; "core:prelude/primitive.wado/i32::fmt_decimal"(self_39, __local_19); __local_18);
     }
     rmdir_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Descriptor_remove_directory_at"(dir, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_newdir"), used: 11 }));
     if ref.is_null(rmdir_result) {
@@ -1346,9 +1347,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

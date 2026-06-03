@@ -482,7 +482,8 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/handle
     if take_else == 0 {
         body_str = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fallback"), used: 8 };
     } else {
-        body_str = "core:prelude/string.wado/String^Add::add"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98, 99), used: 3 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 });
+        body_str = "core:prelude/string.wado/String^Add::add"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("abc"), used: 3 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+"), used: 1 });
     }
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();

@@ -130,7 +130,7 @@ fn "wado-compiler/tests/fixtures/effect_2.wado/__cm_export__run"() {
     "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("stderr effect"), used: 13 });
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("both stdout"), used: 11 });
     "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("both stderr"), used: 11 });
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("done"), used: 4 });
     "wado-compiler/tests/fixtures/effect_2.wado/effect_poly_multi_param"();
     "wasi/task-return"(0);
 }
@@ -383,9 +383,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

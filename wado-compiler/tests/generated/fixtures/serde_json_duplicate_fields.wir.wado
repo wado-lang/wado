@@ -1046,9 +1046,9 @@ fn "core:prelude/fpfmt.wado/write_exp"(buf, d, p, nd, upper) {
         "core:prelude/fpfmt.wado/write_digits_at"(buf, start_8, d, 1);
     }
     "core:prelude/string.wado/String::push_str"(buf, (if upper -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(69), used: 1 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("E"), used: 1 };
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101), used: 1 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("e"), used: 1 };
     }));
     if exp < 0 {
         "core:prelude/string.wado/String::push"(buf, 45);
@@ -1287,13 +1287,13 @@ fn "core:prelude/primitive.wado/fmt_float_special"(f, is_neg, kind, zero_repr) {
         "core:prelude/string.wado/String::push"(f.buf, 78);
     } else if kind == 2 {
         "core:prelude/string.wado/String::push_str"(f.buf, (if is_neg -> ref "core:prelude/string.wado//String" {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45, 105, 110, 102), used: 4 };
+            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-inf"), used: 4 };
         } else {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 102), used: 3 };
+            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("inf"), used: 3 };
         }));
     } else {
         "core:prelude/string.wado/String::push_str"(f.buf, (if is_neg -> ref "core:prelude/string.wado//String" {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
+            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
         }));
@@ -1419,7 +1419,7 @@ fn "core:prelude/primitive.wado/f64::inspect_into"(self, f) {
     let __pattern_temp_0_mv_2: "core:prelude/fpfmt.wado//enum:SpecialKind";
     multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2] = "core:prelude/fpfmt.wado/check_special"(self);
     if __pattern_temp_0_mv_0 {
-        "core:prelude/primitive.wado/fmt_float_special"(f, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 46, 48), used: 3 });
+        "core:prelude/primitive.wado/fmt_float_special"(f, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("0.0"), used: 3 });
         return;
     }
     abs_f = select f64(__pattern_temp_0_mv_1, builtin::f64_neg(self), self);
@@ -1476,7 +1476,7 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
         } else {
             __pattern_temp_0_mv_2 == 2;
         }) {
-            "core:prelude/primitive.wado/fmt_float_special"(f, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48), used: 1 });
+            "core:prelude/primitive.wado/fmt_float_special"(f, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("0"), used: 1 });
             return;
         }
         self_16 = f.buf;
@@ -2718,9 +2718,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

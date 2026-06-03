@@ -111,10 +111,10 @@ fn "wado-compiler/tests/fixtures/matches_option_string_literal.wado/__test_0_opt
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let __local_4: ref "core:prelude/string.wado//String";
-    opt = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47), used: 1 };
+    opt = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/"), used: 1 };
     __cond = (if ref.is_null(opt) == 0 -> bool {
         __local_4 = ref.as_non_null(opt);
-        if "core:prelude/string.wado/String^Eq::eq"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47), used: 1 }) -> bool {
+        if "core:prelude/string.wado/String^Eq::eq"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/"), used: 1 }) -> bool {
             1;
         } else {
             0;
@@ -136,10 +136,10 @@ fn "wado-compiler/tests/fixtures/matches_option_string_literal.wado/__test_1_opt
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let __local_4: ref "core:prelude/string.wado//String";
-    opt = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47, 102, 111, 111), used: 4 };
+    opt = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/foo"), used: 4 };
     __cond = (if ref.is_null(opt) == 0 -> bool {
         __local_4 = ref.as_non_null(opt);
-        if "core:prelude/string.wado/String^Eq::eq"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47), used: 1 }) -> bool {
+        if "core:prelude/string.wado/String^Eq::eq"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/"), used: 1 }) -> bool {
             1;
         } else {
             0;
@@ -164,7 +164,7 @@ fn "wado-compiler/tests/fixtures/matches_option_string_literal.wado/__test_2_opt
     opt = ref.null none;
     __cond = (if ref.is_null(opt) == 0 -> bool {
         __local_4 = ref.as_non_null(opt);
-        if "core:prelude/string.wado/String^Eq::eq"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47), used: 1 }) -> bool {
+        if "core:prelude/string.wado/String^Eq::eq"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/"), used: 1 }) -> bool {
             1;
         } else {
             0;
@@ -463,9 +463,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

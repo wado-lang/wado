@@ -151,7 +151,7 @@ fn "wado-compiler/tests/fixtures/iter_map_collect_variant.wado/run"() with Stdou
     let f: ref struct;
     __b_0 = struct.new "core:prelude//List<wado-compiler/tests/fixtures/iter_map_collect_variant.wado/Color>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//Color">(struct.new "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//Color" { 0 }, struct.new "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//Color" { 1 }), used: 2 };
     names = "core:prelude/traits.wado/IterMap<core:prelude/list.wado/ListIter<wado-compiler/tests/fixtures/iter_map_collect_variant.wado/Color>,core:prelude/string.wado/String>^Iterator::collect"(f = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/iter_map_collect_variant.wado//__Closure_2" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/iter_map_collect_variant.wado/__closure_wrapper_0" }; struct.new "core:prelude/traits.wado//IterMap<core:prelude/list.wado/ListIter<wado-compiler/tests/fixtures/iter_map_collect_variant.wado/Color>,core:prelude/string.wado/String>" { inner: struct.new "core:prelude/list.wado//ListIter<wado-compiler/tests/fixtures/iter_map_collect_variant.wado/Color>" { repr: __b_0.repr, used: __b_0.used, index: 0 }, f: f });
-    "core:cli/println"("core:prelude/list.wado/List<core:prelude/string.wado/String>::join"(names, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 }));
+    "core:cli/println"("core:prelude/list.wado/List<core:prelude/string.wado/String>::join"(names, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", "), used: 2 }));
 }
 
 fn "wado-compiler/tests/fixtures/iter_map_collect_variant.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -503,11 +503,11 @@ fn "core:prelude/list.wado/ListIter<wado-compiler/tests/fixtures/iter_map_collec
 
 fn "wado-compiler/tests/fixtures/iter_map_collect_variant.wado/__Closure_2::__call"(c) {
     return (if c.discriminant == 0 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 100), used: 3 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("red"), used: 3 };
     } else if c.discriminant == 1 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("green"), used: 5 };
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 108, 117, 101), used: 4 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("blue"), used: 4 };
     });
 }
 

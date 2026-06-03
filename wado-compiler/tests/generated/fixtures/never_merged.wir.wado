@@ -151,7 +151,7 @@ fn "wado-compiler/tests/fixtures/never_merged.wado/__test_0_as_bottom_type"() {
         v_1 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt).payload_0;
         v_1;
     } else {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 110, 101), used: 4 });
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 });
         unreachable;
     });
     a_2 = a_26 + 10;
@@ -166,7 +166,7 @@ condition: a == 15
         v_5 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt).payload_0;
         v_5;
     } else {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 110, 101), used: 4 });
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 });
         unreachable;
     });
     __cond_8 = __sroa_p_x == 5;
@@ -180,7 +180,7 @@ condition: p.x == 5
         v_10 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt).payload_0;
         v_10;
     } else {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 110, 101), used: 4 });
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 });
         unreachable;
     }), 2), used: 2 };
     if builtin::unlikely(0) {
@@ -199,7 +199,7 @@ condition: arr[0] == 5
         v_14 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt).payload_0;
         v_14;
     } else {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 110, 101), used: 4 });
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 });
         unreachable;
     });
     __cond_17 = b_15 == 8;
@@ -225,7 +225,7 @@ fn "wado-compiler/tests/fixtures/never_merged.wado/__test_1_let_binding"() {
         v = ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt).payload_0;
         v;
     } else {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 110, 101), used: 4 });
+        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("none"), used: 4 });
         unreachable;
     });
     __cond = x == 42;
@@ -488,9 +488,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

@@ -100,17 +100,18 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global global:__const_obj_0: ref null "wado-compiler/tests/fixtures/newtype_multiple_params.wado//Point" = struct.new "wado-compiler/tests/fixtures/newtype_multiple_params.wado//Point" { x: 2, y: 2 };
-global global:__const_obj_1: ref null "wado-compiler/tests/fixtures/newtype_multiple_params.wado//Point" = struct.new "wado-compiler/tests/fixtures/newtype_multiple_params.wado//Point" { x: 3, y: 3 };
-
 fn "wado-compiler/tests/fixtures/newtype_multiple_params.wado/run"() with Stdout {
     let loc1: ref "wado-compiler/tests/fixtures/newtype_multiple_params.wado//Point";
+    let loc2: ref "wado-compiler/tests/fixtures/newtype_multiple_params.wado//Point";
+    let loc3: ref "wado-compiler/tests/fixtures/newtype_multiple_params.wado//Point";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     loc1 = struct.new "wado-compiler/tests/fixtures/newtype_multiple_params.wado//Point" { x: 1, y: 1 };
+    loc2 = struct.new "wado-compiler/tests/fixtures/newtype_multiple_params.wado//Point" { x: 2, y: 2 };
+    loc3 = struct.new "wado-compiler/tests/fixtures/newtype_multiple_params.wado//Point" { x: 3, y: 3 };
     let result_mv_x: i32;
     let result_mv_y: i32;
-    multivalue_bind [result_mv_x, result_mv_y] = "wado-compiler/tests/fixtures/newtype_multiple_params.wado/Point::combine"(loc1, global:__const_obj_0, global:__const_obj_1);
+    multivalue_bind [result_mv_x, result_mv_y] = "wado-compiler/tests/fixtures/newtype_multiple_params.wado/Point::combine"(loc1, loc2, loc3);
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal"(result_mv_x, __local_5); __local_4);
 }
 
@@ -363,9 +364,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

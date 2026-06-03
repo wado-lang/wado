@@ -119,12 +119,12 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global global:__const_obj_0: ref null "core:prelude/int128.wado//u128" = struct.new "core:prelude/int128.wado//u128" { low: 12345_i64, high: 0_i64 };
-
 fn "wado-compiler/tests/fixtures/inline_u128_print_o3_regression.wado/run"() with Stdout {
+    let x: ref "core:prelude/int128.wado//u128";
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
-    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; "core:prelude/string.wado/String::push"(__local_1, 120); "core:prelude/string.wado/String::push"(__local_1, 61); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/int128.wado/u128::fmt_decimal"(global:__const_obj_0, __local_2); __local_1);
+    x = struct.new "core:prelude/int128.wado//u128" { low: 12345_i64, high: 0_i64 };
+    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; "core:prelude/string.wado/String::push"(__local_1, 120); "core:prelude/string.wado/String::push"(__local_1, 61); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/int128.wado/u128::fmt_decimal"(x, __local_2); __local_1);
 }
 
 fn "wado-compiler/tests/fixtures/inline_u128_print_o3_regression.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -535,9 +535,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

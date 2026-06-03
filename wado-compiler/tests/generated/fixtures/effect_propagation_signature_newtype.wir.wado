@@ -86,7 +86,7 @@ fn "wado-compiler/tests/fixtures/effect_propagation_signature_newtype.wado/run"(
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
     "wasi/stream-drop-writable"(__mv_hi_1);
     "wado-compiler/tests/fixtures/effect_propagation_signature_newtype.wado/consume"(__mv_lo_1);
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 });
 }
 
 fn "wado-compiler/tests/fixtures/effect_propagation_signature_newtype.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

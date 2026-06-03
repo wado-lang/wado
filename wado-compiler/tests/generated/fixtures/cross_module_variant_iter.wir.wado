@@ -308,7 +308,7 @@ fn "./sub/cross_module_variant_iter_helper.wado/make_tree"() {
     leaf1 = struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::B" { discriminant: 1, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//BData" { value: 10 } };
     leaf2 = struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::B" { discriminant: 1, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//BData" { value: 20 } };
     __b = struct.new "core:prelude//List<./sub/cross_module_variant_iter_helper.wado/Choice>" { repr: array.new_fixed<ref "./sub/cross_module_variant_iter_helper.wado//Choice">(leaf1, leaf2), used: 2 };
-    return struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::A" { discriminant: 0, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//AData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 111, 111, 116), used: 4 }, children: __b } };
+    return struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::A" { discriminant: 0, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//AData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("root"), used: 4 }, children: __b } };
 }
 
 fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>"(h, c) {
@@ -457,9 +457,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
