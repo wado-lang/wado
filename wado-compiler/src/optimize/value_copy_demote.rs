@@ -32,7 +32,7 @@ use crate::nir::{
     NirUnaryOp,
 };
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::{expr_mentions_local, is_local, strip_refs};
+use crate::nir_visitor::{NirRefVisitor, expr_mentions_local, is_local, strip_refs};
 use crate::tir::{ResolvedType, TypeTable};
 
 type FuncKey = (ModuleSource, String);
@@ -887,52 +887,47 @@ impl Analyzer<'_> {
     /// elements immutable: spine-only methods, index/field reads, by-value
     /// or `&` argument passing.
     fn handle_is_element_clean(&mut self, fn_body: &NirBlock, idx: u32) -> bool {
-        self.handle_block(fn_body, idx)
+        let mut v = ElementClean {
+            analyzer: self,
+            idx,
+            clean: true,
+        };
+        v.visit_block(fn_body);
+        v.clean
     }
 
-    fn handle_block(&mut self, block: &NirBlock, idx: u32) -> bool {
-        for stmt in &block.stmts {
-            if !self.handle_stmt(stmt, idx) {
-                return false;
-            }
+    /// The `arg` of a value-copy: element-clean when it is an immutable-ref
+    /// parameter (the body cannot mutate `*arg` at all) or when every use is
+    /// element-clean.
+    fn arg_local_is_element_clean(&mut self, fn_body: &NirBlock, idx: u32) -> bool {
+        self.handle_is_element_clean(fn_body, idx)
+    }
+}
+
+/// Element-cleanliness check for a single handle local `idx`: every use of it
+/// must keep the array's elements immutable (spine-only methods, index/field
+/// reads, by-value or `&` argument passing). Drives the canonical
+/// [`NirRefVisitor`] so every nested node — including match-arm and
+/// destructure patterns — is covered; only the storage-sharing shapes are
+/// special-cased, the rest fall through to `walk_expr`.
+struct ElementClean<'a, 'b> {
+    analyzer: &'b mut Analyzer<'a>,
+    idx: u32,
+    clean: bool,
+}
+
+impl NirRefVisitor for ElementClean<'_, '_> {
+    fn visit_expr(&mut self, expr: &NirExpr) {
+        if !self.clean {
+            return;
         }
-        true
-    }
-
-    fn handle_stmt(&mut self, stmt: &NirStmt, idx: u32) -> bool {
-        match &stmt.kind {
-            NirStmtKind::Let { value, .. } | NirStmtKind::Expr(value) => {
-                self.handle_expr(value, idx)
-            }
-            NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => value
-                .as_ref()
-                .map(|v| self.handle_expr(v, idx))
-                .unwrap_or(true),
-            NirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                self.handle_expr(condition, idx)
-                    && self.handle_block(then_block, idx)
-                    && else_block
-                        .as_ref()
-                        .map(|eb| self.handle_block(eb, idx))
-                        .unwrap_or(true)
-            }
-            NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-                self.handle_block(body, idx)
-            }
-            NirStmtKind::LetDestructure { value, .. } => self.handle_expr(value, idx),
-            NirStmtKind::Continue => true,
-        }
-    }
-
-    /// Returns false if `expr` contains a use of `Local(idx)` that is not a
-    /// recognized element-clean use.
-    fn handle_expr(&mut self, expr: &NirExpr, idx: u32) -> bool {
+        let idx = self.idx;
         match &expr.kind {
-            NirExprKind::Local { index, .. } => *index != idx,
+            NirExprKind::Local { index, .. } => {
+                if *index == idx {
+                    self.clean = false;
+                }
+            }
             NirExprKind::MethodCall {
                 receiver,
                 func,
@@ -945,13 +940,14 @@ impl Analyzer<'_> {
                 let key = (func.module_source.clone(), func.name.clone());
                 if is_local(recv, idx) {
                     // Receiver is the handle itself: `x.method()`.
-                    let safe = match self.callee_mutates_self(&key) {
+                    let safe = match self.analyzer.callee_mutates_self(&key) {
                         Some(false) => true, // &self
-                        Some(true) => self.is_method_element_immutable(&key),
+                        Some(true) => self.analyzer.is_method_element_immutable(&key),
                         None => false,
                     };
                     if !safe {
-                        return false;
+                        self.clean = false;
+                        return;
                     }
                 } else if expr_mentions_local(receiver, idx) {
                     // The handle appears inside the receiver — an element
@@ -962,22 +958,46 @@ impl Analyzer<'_> {
                     // receiver. (`x[i]` lowers to an `List::index` method
                     // call, not a bare `Index`, so a structural root check
                     // is not enough — match on the handle appearing at all.)
-                    if self.callee_mutates_self(&key) != Some(false) {
-                        return false;
+                    if self.analyzer.callee_mutates_self(&key) != Some(false) {
+                        self.clean = false;
+                        return;
                     }
-                    if !self.handle_expr(receiver, idx) {
-                        return false;
+                    self.visit_expr(receiver);
+                    if !self.clean {
+                        return;
                     }
-                } else if !self.handle_expr(receiver, idx) {
-                    return false;
+                } else {
+                    self.visit_expr(receiver);
+                    if !self.clean {
+                        return;
+                    }
                 }
-                args.iter().all(|a| self.handle_call_arg(&a.expr, idx))
+                for a in args {
+                    self.visit_call_arg(&a.expr);
+                    if !self.clean {
+                        return;
+                    }
+                }
             }
             NirExprKind::Call { args, .. } => {
-                args.iter().all(|a| self.handle_call_arg(&a.expr, idx))
+                for a in args {
+                    self.visit_call_arg(&a.expr);
+                    if !self.clean {
+                        return;
+                    }
+                }
             }
             NirExprKind::IndirectCall { callee, args } => {
-                self.handle_expr(callee, idx) && args.iter().all(|a| self.handle_call_arg(a, idx))
+                self.visit_expr(callee);
+                if !self.clean {
+                    return;
+                }
+                for a in args {
+                    self.visit_call_arg(a);
+                    if !self.clean {
+                        return;
+                    }
+                }
             }
             NirExprKind::Unary {
                 op: NirUnaryOp::MutRef,
@@ -985,58 +1005,68 @@ impl Analyzer<'_> {
             } => {
                 // `&mut x`, `&mut x[i]`, `&mut x.field` — a mutable
                 // reference into the handle escapes our control.
-                !expr_mentions_local(inner, idx)
+                if expr_mentions_local(inner, idx) {
+                    self.clean = false;
+                }
             }
             NirExprKind::Index { expr: base, index } => {
                 // Index read: `x[i]` produces an element copy.
-                let base_ok = is_local(base, idx) || self.handle_expr(base, idx);
-                base_ok && self.handle_expr(index, idx)
+                if !is_local(base, idx) {
+                    self.visit_expr(base);
+                    if !self.clean {
+                        return;
+                    }
+                }
+                self.visit_expr(index);
             }
             NirExprKind::FieldAccess { expr: base, .. } => {
-                is_local(base, idx) || self.handle_expr(base, idx)
+                if !is_local(base, idx) {
+                    self.visit_expr(base);
+                }
             }
             NirExprKind::Assign { target, value } => {
                 // A write whose target touches `idx` escapes our control.
                 if expr_mentions_local(target, idx) {
-                    return false;
+                    self.clean = false;
+                    return;
                 }
-                self.handle_expr(value, idx)
+                self.visit_expr(value);
             }
-            _ => {
-                for child in expr_children(expr) {
-                    if !self.handle_expr(child, idx) {
-                        return false;
-                    }
-                }
-                true
-            }
+            // Every other shape — operators, casts, aggregates, control flow,
+            // and the patterns reached through it — is a plain read; recurse
+            // with the canonical walk.
+            _ => self.walk_expr(expr),
         }
     }
+}
 
+impl ElementClean<'_, '_> {
     /// `idx` passed as a call argument: by-value or `&` is element-clean;
     /// `&mut idx` is not.
-    fn handle_call_arg(&mut self, arg: &NirExpr, idx: u32) -> bool {
+    fn visit_call_arg(&mut self, arg: &NirExpr) {
+        let idx = self.idx;
         match &arg.kind {
             // Passing the handle by value hands the callee an independent
             // (deep) copy, so it cannot reach our elements.
-            NirExprKind::Local { .. } => true,
+            NirExprKind::Local { .. } => {}
             NirExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
-            } => !expr_mentions_local(inner, idx),
+            } => {
+                if expr_mentions_local(inner, idx) {
+                    self.clean = false;
+                }
+            }
             NirExprKind::Unary {
                 op: NirUnaryOp::Ref,
                 expr: inner,
-            } => is_local(inner, idx) || self.handle_expr(inner, idx),
-            _ => self.handle_expr(arg, idx),
+            } => {
+                if !is_local(inner, idx) {
+                    self.visit_expr(inner);
+                }
+            }
+            _ => self.visit_expr(arg),
         }
-    }
-
-    /// The `arg` of a value-copy: element-clean when it is an immutable-ref
-    /// parameter (the body cannot mutate `*arg` at all) or when every use is
-    /// element-clean.
-    fn arg_local_is_element_clean(&mut self, fn_body: &NirBlock, idx: u32) -> bool {
-        self.handle_is_element_clean(fn_body, idx)
     }
 }
 
