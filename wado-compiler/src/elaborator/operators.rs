@@ -21,7 +21,7 @@ use super::util;
 /// `Binary`, the overloaded `MethodCall`, the `Assign` / `GlobalVarSet`, or
 /// the comparison-chain `Block`) — reify rebuilds it from the recorded facts
 /// + the AST. The returned `TirExpr` only needs the right `type_id` + `span`
-/// for the caller's outer typecheck / `expression_types` recording.
+///   for the caller's outer typecheck / `expression_types` recording.
 fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
     TirExpr::new(TirExprKind::Unit, type_id, span)
 }
