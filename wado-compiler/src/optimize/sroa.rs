@@ -226,7 +226,8 @@ fn mark_ref_field_locals_as_aliased(
 
 /// Walks the body and, for every decomposed candidate's `Let`, records the
 /// locals that appear as `&local` / `&mut local` field values so a later SROA
-/// iteration won't decompose them (their references may outlive the field).
+/// iteration won't decompose them. See the Step 3b comment in
+/// `sroa_in_function` for why pinning these locals is required.
 struct RefFieldMarker<'a> {
     decomposed: &'a IndexSet<u32>,
     stores_aliased: &'a mut IndexSet<u32>,
