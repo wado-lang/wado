@@ -43,6 +43,7 @@ mod cleanup;
 mod const_forward;
 mod const_global;
 mod dce;
+mod dedupe_const_globals;
 mod elide_local;
 mod elide_struct;
 mod init_guard;
@@ -61,6 +62,7 @@ use array::{promote_constant_arrays_to_data, split_large_array_literals};
 use cleanup::cleanup;
 use const_forward::forward_struct_field_constants;
 use const_global::promote_const_global_inits;
+use dedupe_const_globals::dedupe_const_globals;
 use elide_local::elide_write_only_locals;
 use elide_struct::{
     elide_multi_field_struct_locals, elide_single_field_struct_locals, flatten_seq_assignments,
@@ -214,6 +216,11 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     // body and `__modules_initialized` guard become reclaimable here.
     wir_pass("wir/promote_const_global_inits", module, profiler, |m| {
         promote_const_global_inits(m);
+    });
+    // Merge identical immutable const globals (e.g. duplicate `[10, 20, 30]`
+    // hoisted by `const_object_globalization`) now that they are immutable.
+    wir_pass("wir/dedupe_const_globals", module, profiler, |m| {
+        dedupe_const_globals(m);
     });
     remove_trivial_init_globals(module);
     cleanup(module);

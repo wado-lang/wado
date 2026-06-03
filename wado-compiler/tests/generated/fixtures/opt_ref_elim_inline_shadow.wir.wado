@@ -109,10 +109,10 @@ fn "wado-compiler/tests/fixtures/opt_ref_elim_inline_shadow.wado/run"() with Std
     let vx_11: i32;
     let vy_12: i32;
     let f_16: ref "core:prelude/format.wado//Formatter";
-    let self_17: i32;
     let f_21: ref "core:prelude/format.wado//Formatter";
-    let self_22: i32;
     let f_26: ref "core:prelude/format.wado//Formatter";
+    let __sroa_self_value_31: i32;
+    let __sroa_self_value_32: i32;
     let __sroa___sroa_o_inner_x: i32;
     let __sroa___sroa_o_inner_y: i32;
     __sroa___sroa_o_inner_x = 0;
@@ -129,7 +129,7 @@ fn "wado-compiler/tests/fixtures/opt_ref_elim_inline_shadow.wado/run"() with Std
     vy_12 = "wado-compiler/tests/fixtures/opt_ref_elim_inline_shadow.wado/opaque"(8);
     __sroa___sroa_o_inner_x = __sroa___sroa_o_inner_x + vx_11;
     __sroa___sroa_o_inner_y = __sroa___sroa_o_inner_y + vy_12;
-    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_16 = __local_2; self_17 = __sroa___sroa_o_inner_x; "core:prelude/primitive.wado/i32::fmt_decimal"(self_17, f_16); "core:prelude/string.wado/String::push"(__local_1, 32); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_21 = __local_2; self_22 = __sroa___sroa_o_inner_y; "core:prelude/primitive.wado/i32::fmt_decimal"(self_22, f_21); "core:prelude/string.wado/String::push"(__local_1, 32); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_26 = __local_2; "core:prelude/primitive.wado/i32::fmt_decimal"(3, f_26); __local_1);
+    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; __sroa_self_value_31 = __sroa___sroa_o_inner_x; f_16 = __local_2; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_31, f_16); "core:prelude/string.wado/String::push"(__local_1, 32); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; __sroa_self_value_32 = __sroa___sroa_o_inner_y; f_21 = __local_2; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_32, f_21); "core:prelude/string.wado/String::push"(__local_1, 32); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_26 = __local_2; "core:prelude/primitive.wado/i32::fmt_decimal"(3, f_26); __local_1);
 }
 
 fn "wado-compiler/tests/fixtures/opt_ref_elim_inline_shadow.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -377,9 +377,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

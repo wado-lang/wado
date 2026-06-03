@@ -46,6 +46,7 @@ mod array_literal;
 mod condition_implication;
 mod const_branch_prune;
 mod const_folding;
+mod const_object_globalization;
 mod container_sroa;
 mod copy_prop;
 mod cse;
@@ -75,6 +76,7 @@ use array_literal::collapse_array_literals;
 use condition_implication::eliminate_implied_conditions;
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
 use const_folding::fold_constants;
+use const_object_globalization::globalize_const_objects;
 use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
 use cse::eliminate_common_subexprs;
@@ -177,6 +179,19 @@ pub enum OptLevel {
 ///
 /// The `inline_threshold` and `opt_iterations` parameters override the
 /// defaults for the given `opt_level` when provided.
+/// Maximum UTF-8 byte length for a string literal to be materialized with a
+/// constant `array.new_fixed<u8>` repr instead of a passive `array.new_data`
+/// data segment. Below it, a constant string global promotes to an eager Wasm
+/// constant; above it the compact data-segment repr is kept (and the global
+/// stays lazy). `-O3` trades a little code size for more eager string globals;
+/// the other levels (and `-Os`, which targets size) stay conservative.
+fn string_inline_max_bytes(opt_level: OptLevel) -> usize {
+    match opt_level {
+        OptLevel::O3 => 8,
+        _ => NirPackage::DEFAULT_STRING_INLINE_MAX_BYTES,
+    }
+}
+
 pub fn optimize(
     mut project: NirPackage,
     opt_level: OptLevel,
@@ -184,6 +199,11 @@ pub fn optimize(
     opt_iterations: Option<u32>,
     profiler: &dyn SpanEmitter,
 ) -> NirPackage {
+    // Decide the short-string inline threshold once, from the opt level. Read
+    // by `wir_build` (`translate_string_literal` / `register_string_data`) to
+    // pick a constant `array.new_fixed<u8>` repr for strings at or below it —
+    // which lets a constant string global promote to an eager Wasm constant.
+    project.string_inline_max_bytes = string_inline_max_bytes(opt_level);
     match opt_level {
         OptLevel::O0 => {
             // No optimizations, but still run DCE to reduce codegen work
@@ -614,5 +634,16 @@ fn run_optimization_passes(
             any_changed = true;
         }
         any_changed
+    });
+    // Body globalization: hoist constant, read-only aggregate `let` bindings
+    // into shared immutable module globals so they build once at instantiation
+    // (WEP-2026-05-31). Runs once after the fixpoint converges, on the stable
+    // post-optimization shape, so the read-only gate and the const-aggregate
+    // recognizer see fully-inlined / array-literal-materialized bindings. The
+    // inline `GlobalVarSet`s it emits are promoted to eager Wasm constants by
+    // `wir_optimize::const_global`; the final `run_dce` reclaims the dead
+    // binding locals.
+    run_pass("nir/const_object_globalization", project, profiler, |p| {
+        globalize_const_objects(p)
     });
 }

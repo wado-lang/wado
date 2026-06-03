@@ -1,0 +1,17 @@
+// Test: `#[benign(E)]` lets a function perform effect `E` internally without
+// propagating it to callers. `emit` performs `Stdout`, but because it is
+// benign, `run` can call it without declaring `with Stdout`.
+
+use { println, Stdout } from "core:cli";
+
+#[benign(Stdout)]
+fn emit(msg: String) {
+    println(msg);
+}
+
+export fn run() {
+    emit("benign effect works");
+}
+
+__DATA__
+{"stdout": "benign effect works\n"}

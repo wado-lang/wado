@@ -120,12 +120,12 @@ fn "wado-compiler/tests/fixtures/wir_optimize_vcopy_into_struct.wado/run"() with
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let f_8: ref "core:prelude/format.wado//Formatter";
-    let self_9: i32;
     let f_13: ref "core:prelude/format.wado//Formatter";
-    let self_14: i32;
+    let __sroa_self_value_16: i32;
+    let __sroa_self_value_17: i32;
     c = struct.new "wado-compiler/tests/fixtures/wir_optimize_vcopy_into_struct.wado//Inner" { value: 42 };
     w = "wado-compiler/tests/fixtures/wir_optimize_vcopy_into_struct.wado/wrap"(c);
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_8 = __local_3; self_9 = w.inner.value; "core:prelude/primitive.wado/i32::fmt_decimal"(self_9, f_8); "core:prelude/string.wado/String::push"(__local_2, 44); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; f_13 = __local_3; self_14 = w.label; "core:prelude/primitive.wado/i32::fmt_decimal"(self_14, f_13); __local_2);
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; __sroa_self_value_16 = w.inner.value; f_8 = __local_3; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_16, f_8); "core:prelude/string.wado/String::push"(__local_2, 44); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; __sroa_self_value_17 = w.label; f_13 = __local_3; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_17, f_13); __local_2);
 }
 
 fn "wado-compiler/tests/fixtures/wir_optimize_vcopy_into_struct.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -373,9 +373,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

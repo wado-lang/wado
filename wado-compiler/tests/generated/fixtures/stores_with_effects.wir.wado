@@ -112,16 +112,17 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "wado-compiler/tests/fixtures/stores_with_effects.wado//Data" = struct.new "wado-compiler/tests/fixtures/stores_with_effects.wado//Data" { value: 99 };
+
 fn "wado-compiler/tests/fixtures/stores_with_effects.wado/store_and_log"(data) with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
-    let self_7: i32;
-    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(41), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Storing data with value: "), used: 25 }); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; self_7 = data.value; "core:prelude/primitive.wado/i32::fmt_decimal"(self_7, __local_2); __local_1);
+    let __sroa_self_value: i32;
+    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(41), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Storing data with value: "), used: 25 }); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; __sroa_self_value = data.value; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value, __local_2); __local_1);
     return struct.new "wado-compiler/tests/fixtures/stores_with_effects.wado//Container" { data: data };
 }
 
 fn "wado-compiler/tests/fixtures/stores_with_effects.wado/run"() with Stdout {
-    let d: ref "wado-compiler/tests/fixtures/stores_with_effects.wado//Data";
     let c: ref "wado-compiler/tests/fixtures/stores_with_effects.wado//Container";
     let __v0: i32;
     let __cond: bool;
@@ -129,8 +130,7 @@ fn "wado-compiler/tests/fixtures/stores_with_effects.wado/run"() with Stdout {
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let f_10: ref "core:prelude/format.wado//Formatter";
     let f_15: ref "core:prelude/format.wado//Formatter";
-    d = struct.new "wado-compiler/tests/fixtures/stores_with_effects.wado//Data" { value: 99 };
-    c = "wado-compiler/tests/fixtures/stores_with_effects.wado/store_and_log"(d);
+    c = "wado-compiler/tests/fixtures/stores_with_effects.wado/store_and_log"(global:__const_obj_0);
     __v0 = c.data.value;
     __cond = __v0 == 99;
     if __cond == 0 {
@@ -420,9 +420,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

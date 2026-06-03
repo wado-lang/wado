@@ -29,6 +29,10 @@ struct EffectSignature {
     /// `#[ambient]` — the function bypasses caller effect requirements.
     /// Its own effects are ignored when checking callers.
     is_ambient: bool,
+    /// `#[benign(E)]` effects. Admitted in the function body without a `with E`
+    /// clause and never propagated to callers, but only these specific effects
+    /// are suppressed (unlike `is_ambient`, which suppresses all of them).
+    benign: Vec<EffectRef>,
 }
 
 /// Minimal parameter info needed for effect resolution.
@@ -233,6 +237,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                             .collect(),
                         is_method: func.is_method(),
                         is_ambient: func.is_ambient,
+                        benign: func.benign_effects.clone(),
                     },
                 );
             }
@@ -252,6 +257,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                                 .collect(),
                             is_method: method.is_method(),
                             is_ambient: method.is_ambient,
+                            benign: method.benign_effects.clone(),
                         },
                     );
                 }
@@ -465,6 +471,10 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         // implicitly admitted.
         let mut effects: IndexSet<EffectRef> = func.effects.iter().cloned().collect();
         effects.extend(self.signature_resources(func));
+        // `#[benign(E)]` admits `E` in the body without a `with E` clause.
+        // `get_function_effects` strips it from the outgoing set, so callers
+        // never see it.
+        effects.extend(func.benign_effects.iter().cloned());
         self.current_effects = self.expand_effects(&effects);
         self.current_stores = func.stores.iter().cloned().collect();
 
@@ -1002,6 +1012,15 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     }
                 }
             }
+        }
+        // `#[benign(E)]` effects never propagate to callers; strip them here.
+        if let Some(benign) = self
+            .func_index
+            .get(&key)
+            .map(|sig| &sig.benign)
+            .filter(|benign| !benign.is_empty())
+        {
+            effects.retain(|e| !benign.contains(e));
         }
         effects
     }

@@ -46,7 +46,11 @@ fn bad() {
 
 ### Ambient Effects
 
-`log_stdout` and `log_stderr` from `core:internal` are effect-less by compiler magic. They can be called from any function without effect declaration.
+`log_stdout` and `log_stderr` from `core:internal` are effect-less by compiler magic. They can be called from any function without effect declaration. This is _ambient authority_: no world import and no `with` annotation are required, justified by the effects being best-effort and unobservable as a dependency.
+
+### Benign Effects
+
+`#[benign(E)]` marks a function that performs effect `E` but whose effect is observationally pure — unobservable through the function's interface — so `E` is not propagated to callers. Unlike an ambient effect, a benign effect still requires the world import; only the `with E` propagation is elided. The canonical use is `HashMap::new` consuming `InsecureSeed` for Hash DoS resistance without leaking it (the seed is unobservable because the map iterates in insertion order). See `wep-2026-01-20-effect-system-randomness.md`.
 
 ### Generic Effects
 

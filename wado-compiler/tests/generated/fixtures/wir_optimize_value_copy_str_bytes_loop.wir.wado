@@ -101,32 +101,31 @@ fn "wado-compiler/tests/fixtures/wir_optimize_value_copy_str_bytes_loop.wado/run
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let byte: u8;
-    let self_25: u64;
-    let __tmpl_buf_30: ref "core:prelude/string.wado//String";
-    let __fmt_buf_31: ref "core:prelude/format.wado//Formatter";
+    let __tmpl_buf_31: ref "core:prelude/string.wado//String";
+    let __fmt_buf_32: ref "core:prelude/format.wado//Formatter";
     let __sroa___iter_3_repr: ref builtin::array<u8>;
     let __sroa___iter_3_used: i32;
     let __sroa___iter_3_index: i32;
     byte_sum = 0_i64;
     i = 0;
-    __tmpl_buf_30 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
-    __fmt_buf_31 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __tmpl_buf_30 };
+    __tmpl_buf_31 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
+    __fmt_buf_32 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __tmpl_buf_31 };
     b0: block {
         l1: loop {
             if i >= 3 {
                 break b0;
             }
-            __tmpl_buf_30.used = 0;
-            "core:prelude/string.wado/String::push"(__tmpl_buf_30, 104);
-            "core:prelude/string.wado/String::push"(__tmpl_buf_30, 101);
-            "core:prelude/string.wado/String::push"(__tmpl_buf_30, 108);
-            "core:prelude/string.wado/String::push"(__tmpl_buf_30, 108);
-            "core:prelude/string.wado/String::push"(__tmpl_buf_30, 111);
-            "core:prelude/string.wado/String::push"(__tmpl_buf_30, 45);
-            __fmt_buf_31.indent = 0;
-            "core:prelude/primitive.wado/i32::fmt_decimal"(i, __fmt_buf_31);
-            __sroa___iter_3_repr = __tmpl_buf_30.repr;
-            __sroa___iter_3_used = __tmpl_buf_30.used;
+            __tmpl_buf_31.used = 0;
+            "core:prelude/string.wado/String::push"(__tmpl_buf_31, 104);
+            "core:prelude/string.wado/String::push"(__tmpl_buf_31, 101);
+            "core:prelude/string.wado/String::push"(__tmpl_buf_31, 108);
+            "core:prelude/string.wado/String::push"(__tmpl_buf_31, 108);
+            "core:prelude/string.wado/String::push"(__tmpl_buf_31, 111);
+            "core:prelude/string.wado/String::push"(__tmpl_buf_31, 45);
+            __fmt_buf_32.indent = 0;
+            "core:prelude/primitive.wado/i32::fmt_decimal"(i, __fmt_buf_32);
+            __sroa___iter_3_repr = __tmpl_buf_31.repr;
+            __sroa___iter_3_used = __tmpl_buf_31.used;
             __sroa___iter_3_index = 0;
             b3: block {
                 l4: loop {
@@ -143,7 +142,7 @@ fn "wado-compiler/tests/fixtures/wir_optimize_value_copy_str_bytes_loop.wado/run
             continue l1;
         };
     };
-    "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; self_25 = byte_sum; "core:prelude/primitive.wado/u64::fmt_decimal"(self_25, __local_8); __local_7);
+    "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; "core:prelude/primitive.wado/u64::fmt_decimal"(byte_sum, __local_8); __local_7);
 }
 
 fn "wado-compiler/tests/fixtures/wir_optimize_value_copy_str_bytes_loop.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -473,9 +472,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

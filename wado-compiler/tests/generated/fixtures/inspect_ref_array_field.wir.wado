@@ -280,7 +280,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<i32>"(
                 break b13;
             }
             if shown > 0 {
-                s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", "), used: 2 };
+                s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
                 "core:prelude/string.wado/String::push_str"(f.buf, s_11);
             }
             __sroa_self_value = builtin::array_get<i32>(_licm_repr_26, i);
@@ -299,7 +299,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<i32>"(
             s_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", ..."), used: 5 };
             "core:prelude/string.wado/String::push_str"(f.buf, s_19);
         } else {
-            s_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("..."), used: 3 };
+            s_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
             "core:prelude/string.wado/String::push_str"(f.buf, s_21);
         }
     }
@@ -401,7 +401,7 @@ fn "wado-compiler/tests/fixtures/inspect_ref_array_field.wado/Wrapper^Inspect::i
     s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("data: "), used: 6 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_5);
     self_6 = self.data;
-    s_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&"), used: 1 };
+    s_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(38), used: 1 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_10);
     limit = (if f.precision == -2 -> i32 {
         256;
@@ -409,7 +409,7 @@ fn "wado-compiler/tests/fixtures/inspect_ref_array_field.wado/Wrapper^Inspect::i
         f.precision;
     });
     "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<i32>"(self_6, f, 1, limit);
-    s_15 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
+    s_15 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_15);
 }
 
@@ -443,9 +443,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

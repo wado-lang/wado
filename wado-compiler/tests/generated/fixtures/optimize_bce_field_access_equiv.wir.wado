@@ -105,18 +105,18 @@ fn "wado-compiler/tests/fixtures/optimize_bce_field_access_equiv.wado/run"() {
     let repr: ref builtin::array<i32>;
     let f_18: ref "core:prelude/format.wado//Formatter";
     let f_23: ref "core:prelude/format.wado//Formatter";
-    let _licm_repr_26: ref builtin::array<i32>;
+    let _licm_repr_28: ref builtin::array<i32>;
     repr = builtin::array_new<i32>(100);
     builtin::array_fill<i32>(repr, 0, 42, 100);
     sum = 0;
     i = 0;
-    _licm_repr_26 = repr;
+    _licm_repr_28 = repr;
     b0: block {
         l1: loop {
             if i >= 100 {
                 break b0;
             }
-            sum = sum + builtin::array_get<i32>(_licm_repr_26, i);
+            sum = sum + builtin::array_get<i32>(_licm_repr_28, i);
             i = i + 1;
             continue l1;
         };
@@ -377,9 +377,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

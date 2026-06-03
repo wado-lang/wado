@@ -78,6 +78,12 @@ pub struct NirPackage {
     pub used_wasi_functions: IndexSet<String>,
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
+    /// Maximum UTF-8 byte length for a string literal to get a constant
+    /// `array.new_fixed<u8>` repr (which lets a constant string global promote
+    /// to an eager Wasm constant). Longer strings keep the compact
+    /// `array.new_data` data-segment repr and stay lazy. Set by `optimize` from
+    /// the opt level (raised at `-O3`); see `optimize::string_inline_max_bytes`.
+    pub string_inline_max_bytes: usize,
     /// When true, skip Wasm validation after code generation.
     pub skip_validation: bool,
     /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")
@@ -110,6 +116,11 @@ pub struct NirPackage {
 }
 
 impl NirPackage {
+    /// Default short-string inline threshold (UTF-8 bytes), used for build
+    /// paths that skip `optimize` (e.g. `wado dump --nir-lowered`). `optimize`
+    /// overrides it per opt level.
+    pub const DEFAULT_STRING_INLINE_MAX_BYTES: usize = 4;
+
     /// Check if the project targets the synthetic test world.
     pub fn is_test_world(&self) -> bool {
         self.target_world == world_registry::TEST_WORLD

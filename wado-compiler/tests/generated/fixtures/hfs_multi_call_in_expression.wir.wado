@@ -123,31 +123,30 @@ fn "wado-compiler/tests/fixtures/hfs_multi_call_in_expression.wado/run"() with S
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let f_9: ref "core:prelude/format.wado//Formatter";
-    let self_10: i32;
     let f_14: ref "core:prelude/format.wado//Formatter";
-    let self_15: i32;
-    let __hfs_v_17: i32;
+    let __sroa_self_value_18: i32;
+    let __hfs_v_19: i32;
     b = struct.new "wado-compiler/tests/fixtures/hfs_multi_call_in_expression.wado//Buf" { v: 0, pad: 0 };
     sum = 0;
     i = 0;
-    __hfs_v_17 = b.v;
+    __hfs_v_19 = b.v;
     b0: block {
         l1: loop {
             if i >= 2 {
                 break b0;
             }
-            __hfs_v_17 = __hfs_v_17 + 0;
-            __hfs_v_17 = __hfs_v_17 + 0;
-            b.v = __hfs_v_17;
+            __hfs_v_19 = __hfs_v_19 + 0;
+            __hfs_v_19 = __hfs_v_19 + 0;
+            b.v = __hfs_v_19;
             sum = (sum + "wado-compiler/tests/fixtures/hfs_multi_call_in_expression.wado/f_inc100"(b)) + "wado-compiler/tests/fixtures/hfs_multi_call_in_expression.wado/g_inc1"(b);
-            __hfs_v_17 = b.v;
-            __hfs_v_17 = __hfs_v_17 + 0;
+            __hfs_v_19 = b.v;
+            __hfs_v_19 = __hfs_v_19 + 0;
             i = i + 1;
-            b.v = __hfs_v_17;
+            b.v = __hfs_v_19;
             continue l1;
         };
     };
-    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; f_9 = __local_4; self_10 = sum; "core:prelude/primitive.wado/i32::fmt_decimal"(self_10, f_9); "core:prelude/string.wado/String::push"(__local_3, 32); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; f_14 = __local_4; self_15 = b.v; "core:prelude/primitive.wado/i32::fmt_decimal"(self_15, f_14); __local_3);
+    "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; f_9 = __local_4; "core:prelude/primitive.wado/i32::fmt_decimal"(sum, f_9); "core:prelude/string.wado/String::push"(__local_3, 32); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; __sroa_self_value_18 = b.v; f_14 = __local_4; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_18, f_14); __local_3);
 }
 
 fn "wado-compiler/tests/fixtures/hfs_multi_call_in_expression.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -395,9 +394,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
