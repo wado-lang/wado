@@ -776,7 +776,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ResolvedType::Primitive(_) | ResolvedType::Unit => {
                             Some(ModuleSource::primitive())
                         }
-                        ResolvedType::BuiltinArray(_) => Some(ModuleSource::list()),
+                        ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
                         _ => None,
                     }
                 })

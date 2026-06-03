@@ -3304,7 +3304,7 @@ fn resolve_impl_module_via_env(
         | ResolvedType::Flags { name, .. }
         | ResolvedType::GenericInstance { name, .. }
         | ResolvedType::GenericResource { name, .. } => Some(name.clone()),
-        ResolvedType::BuiltinArray(_) => Some("List".to_string()),
+        ResolvedType::BuiltinArray(_) => Some("Array".to_string()),
         _ => None,
     };
 
@@ -3317,7 +3317,7 @@ fn resolve_impl_module_via_env(
         | ResolvedType::GenericInstance { module_source, .. }
         | ResolvedType::GenericResource { module_source, .. } => Some(module_source.clone()),
         ResolvedType::Primitive(_) | ResolvedType::Unit => Some(ModuleSource::primitive()),
-        ResolvedType::BuiltinArray(_) => Some(ModuleSource::list()),
+        ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
         _ => None,
     };
 
