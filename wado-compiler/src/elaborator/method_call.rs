@@ -5,8 +5,8 @@ use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
-    CallArg, FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirExpr, TirExprKind,
-    TypeId, TypeTable,
+    FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirExpr, TirExprKind, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
@@ -41,6 +41,11 @@ pub(super) struct MethodCallInput<'a> {
     pub args: &'a [ast::Expr],
     pub expected_type: Option<TypeId>,
     pub span: Span,
+}
+
+/// Body-walk placeholder for a resolved (method / static) call. Stage 7-B.
+fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(TirExprKind::Unit, type_id, span)
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -796,34 +801,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &func,
                 self_kind,
                 is_ref_impl,
-                param_is_mut.clone(),
+                param_is_mut,
                 param_names,
                 param_defaults,
                 return_type,
-                method_type_args.clone(),
+                method_type_args,
             );
             // Side-channel for synthetic callers (Gap 6 of Stage 5):
             // for-of's `.into_iter()` / `.next()` dispatches pass
             // `call_id == None` so `record_method_dispatch` skips them,
-            // but the synthetic caller still needs the
-            // receiver-adjustment inputs for its own recording. We
-            // populate the channel regardless of `call_id`; the
-            // `method_found` gate keeps the error-recovery placeholder
-            // from leaking out.
-            self.pending_method_dispatch = Some((self_kind, is_ref_impl));
+            // but the synthetic caller still needs the receiver-adjustment
+            // inputs *and* the resolved `FunctionRef` for its own
+            // recording. We populate the channel regardless of `call_id`;
+            // the `method_found` gate keeps the error-recovery placeholder
+            // from leaking out. Stage 7-B: the `FunctionRef` rides the
+            // channel because the returned TIR is now a typed placeholder.
+            self.pending_method_dispatch = Some((self_kind, is_ref_impl, func));
         }
 
-        Self::build_tir_method_call(
-            receiver,
-            func,
-            method_type_args, // Use inferred type args
-            args.into_iter()
-                .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
-                .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
-                .collect(),
-            return_type,
-            span,
-        )
+        // Stage 7-B: reify rebuilds the `MethodCall` TIR from the recorded
+        // `method_dispatch` (or, for synthetic call_id==None callers, from
+        // `pending_method_dispatch`) and the resolved receiver / args; the
+        // combined walk projects only the result type. `receiver` and
+        // `args` were resolved above for their fact-recording side effects.
+        let _ = (receiver, args);
+        placeholder(return_type, span)
     }
 
     /// Resolve a static method call: `List::<i32>::with_capacity(100)` or `Point::origin()`
@@ -1023,14 +1025,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 static_call.span,
                             );
                         }
-                        return TirExpr::new(
-                            TirExprKind::IntLiteral {
-                                value: 0,
-                                repr: "0".to_string(),
-                            },
-                            flags_info.type_id,
-                            static_call.span,
-                        );
+                        return placeholder(flags_info.type_id, static_call.span);
                     }
                     "all" => {
                         if !args.is_empty() {
@@ -1045,22 +1040,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 static_call.span,
                             );
                         }
-                        let member_count = flags_info.members.len();
-                        let all_bits = if member_count == 0 {
-                            0u32
-                        } else if member_count >= 32 {
-                            u32::MAX
-                        } else {
-                            (1u32 << member_count) - 1
-                        };
-                        return TirExpr::new(
-                            TirExprKind::IntLiteral {
-                                value: u64::from(all_bits),
-                                repr: all_bits.to_string(),
-                            },
-                            flags_info.type_id,
-                            static_call.span,
-                        );
+                        return placeholder(flags_info.type_id, static_call.span);
                     }
                     _ => {}
                 }
@@ -1098,20 +1078,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
                     }
 
-                    // Payload is the single argument, or None for unit variants
-                    let payload = args.into_iter().next().map(Box::new);
-
-                    // Create VariantConstruct expression
-                    return TirExpr::new(
-                        TirExprKind::VariantConstruct {
-                            variant_type: target_type_id,
-                            case_index: case_index as u32,
-                            case_name: case_data.name.clone(),
-                            payload,
-                        },
-                        target_type_id,
-                        static_call.span,
-                    );
+                    // Stage 7-B: reify rebuilds the `VariantConstruct` from
+                    // the AST + variant info; the combined walk projects only
+                    // the result type.
+                    let _ = case_index;
+                    return placeholder(target_type_id, static_call.span);
                 }
                 // If no matching case, fall through to general method lookup
                 // (e.g., trait methods like `AppError::from(e)`)
@@ -1165,21 +1136,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.typecheck(args[0].type_id, expected_type, span);
                     }
 
-                    // Payload was already resolved with the correct expected type
-                    // (substituted in the param_types computation above).
-                    let payload = args.into_iter().next().map(Box::new);
-
-                    // Create VariantConstruct expression
-                    return TirExpr::new(
-                        TirExprKind::VariantConstruct {
-                            variant_type: target_type_id,
-                            case_index: case_index as u32,
-                            case_name: case_data.name.clone(),
-                            payload,
-                        },
-                        target_type_id,
-                        static_call.span,
-                    );
+                    // Stage 7-B: reify rebuilds the `VariantConstruct` from
+                    // the AST + variant info; the combined walk projects only
+                    // the result type. The payload was already resolved (and
+                    // typechecked) above for its fact-recording side effects.
+                    let _ = case_index;
+                    return placeholder(target_type_id, static_call.span);
                 }
                 // If no matching case, fall through to general method lookup
                 // (e.g., trait methods like `Result::<T, E>::from(e)`)
@@ -1217,15 +1179,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .get_newtype_base(target_type_id);
             let base_of_arg = self.tysys.type_table.borrow().get_newtype_base(arg_type);
             if base_of_target == Some(arg_type) || base_of_arg == Some(target_type_id) {
-                let arg = args.into_iter().next().unwrap();
-                return TirExpr::new(
-                    TirExprKind::Cast {
-                        expr: Box::new(arg),
-                        target_type: target_type_id,
-                    },
-                    target_type_id,
-                    static_call.span,
-                );
+                // Stage 7-B: reify rebuilds the newtype `Cast`; the combined
+                // walk projects only the result type.
+                return placeholder(target_type_id, static_call.span);
             }
         }
 
@@ -1513,25 +1469,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem.types.static_method_dispatch.insert(
             key,
             super::sem::types::StaticMethodDispatch {
-                function_ref: func_ref.clone(),
-                param_is_mut: param_is_mut.clone(),
-                type_args: method_type_args.clone(),
+                function_ref: func_ref,
+                param_is_mut,
+                type_args: method_type_args,
             },
         );
 
-        TirExpr::new(
-            TirExprKind::Call {
-                func: func_ref,
-                type_args: method_type_args,
-                args: args
-                    .into_iter()
-                    .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
-                    .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
-                    .collect(),
-            },
-            return_type,
-            static_call.span,
-        )
+        // Stage 7-B: reify rebuilds the static-method `Call` TIR from the
+        // recorded `static_method_dispatch` + resolved args; the combined
+        // walk projects only the result type. `args` was resolved above for
+        // its fact-recording side effects and is now discarded.
+        let _ = args;
+        placeholder(return_type, static_call.span)
     }
 
     /// Look up `#[cm("...")]` for a static (no-self) method on a resource type in a module.
@@ -2642,6 +2591,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TirExpr],
         impl_type_args: &[TypeId],
         method_type_args: &[TypeId],
+        call_id: AstId,
         span: Span,
         _ctx: &mut FunctionContext,
     ) -> TirExpr {
@@ -2755,31 +2705,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ..
         } = method_ref;
 
-        TirExpr::new(
-            TirExprKind::Call {
-                func: FunctionRef {
-                    module_source: struct_module,
-                    name: final_mangled_name,
-                    monomorph_info,
-                    method_info: Some({
-                        let mut m = LocalMethodName::new(
-                            actual_struct_name,
-                            trait_name_opt,
-                            method_name.to_string(),
-                        );
-                        m.cm_name = cm_name;
-                        m
-                    }),
-                },
+        let func_ref = FunctionRef {
+            module_source: struct_module,
+            name: final_mangled_name,
+            monomorph_info,
+            method_info: Some({
+                let mut m = LocalMethodName::new(
+                    actual_struct_name,
+                    trait_name_opt,
+                    method_name.to_string(),
+                );
+                m.cm_name = cm_name;
+                m
+            }),
+        };
+
+        // Stage 7-B: record the static-method dispatch decision (formerly
+        // recovered by the caller from the built `Call` TIR) so reify can
+        // reproduce the same `Call` shape without re-running impl lookup,
+        // mangled-name construction, or monomorph-info shaping. The per-arg
+        // `is_mut` flags match what the old `CallArg`s carried.
+        let param_is_mut: Vec<bool> = args
+            .iter()
+            .zip(param_is_mut.iter().copied().chain(std::iter::repeat(false)))
+            .map(|(_, is_mut)| is_mut)
+            .collect();
+        self.sem.types.static_method_dispatch.insert(
+            self.ann_key(call_id),
+            super::sem::types::StaticMethodDispatch {
+                function_ref: func_ref,
+                param_is_mut,
                 type_args: vec![],
-                args: args
-                    .iter()
-                    .zip(param_is_mut.iter().copied().chain(std::iter::repeat(false)))
-                    .map(|(expr, is_mut)| CallArg::new(expr.clone(), is_mut))
-                    .collect(),
             },
-            return_type,
-            span,
-        )
+        );
+
+        placeholder(return_type, span)
     }
 }

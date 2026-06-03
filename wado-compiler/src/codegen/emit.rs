@@ -2647,9 +2647,11 @@ impl<'a> WirEmitter<'a> {
     /// aggregate-construction arms of [`Self::emit_instr`]; only instructions
     /// valid in a Wasm 3.0 GC constant expression are accepted (scalar consts,
     /// `ref.null` / `ref.i31` / `ref.func`, and `struct.new` / `array.new_fixed`
-    /// / `array.new_default` / `array.new_data`). Anything else reaching an init
-    /// slot is an optimizer bug — a non-const initializer should never be placed
-    /// here — so it ICEs rather than silently miscompiling to `i32.const 0`.
+    /// / `array.new_default`). This mirrors [`WirInstr::is_const_expressible`],
+    /// the predicate `wir_optimize::const_global` gates promotion on; anything
+    /// else reaching an init slot is an optimizer bug — a non-const initializer
+    /// should never be placed here — so it ICEs rather than silently
+    /// miscompiling to `i32.const 0`.
     fn push_const_instrs<'i>(&'i self, instr: &'i WirInstr, out: &mut Vec<Instruction<'i>>) {
         match instr {
             WirInstr::I32Const(v) => out.push(Instruction::I32Const(*v)),
@@ -2664,6 +2666,13 @@ impl<'a> WirEmitter<'a> {
             WirInstr::RefI31(inner) => {
                 self.push_const_instrs(inner, out);
                 out.push(Instruction::RefI31);
+            }
+            // `struct.new` / `array.new_*` aggregate fields wrap non-null
+            // ref values in `RefAsNonNull`; the constructor already yields a
+            // non-null ref, and `ref.as_non_null` is not a valid constant
+            // instruction, so drop the wrapper and emit the inner value.
+            WirInstr::RefAsNonNull(inner) => {
+                self.push_const_instrs(inner, out);
             }
             WirInstr::RefFunc { func_id } => {
                 out.push(Instruction::RefFunc(
@@ -2692,19 +2701,6 @@ impl<'a> WirEmitter<'a> {
                 out.push(Instruction::ArrayNewDefault(
                     self.resolve_type_index(type_id.index()),
                 ));
-            }
-            WirInstr::ArrayNewData {
-                type_id,
-                data_index,
-                offset,
-                len,
-            } => {
-                self.push_const_instrs(offset, out);
-                self.push_const_instrs(len, out);
-                out.push(Instruction::ArrayNewData {
-                    array_type_index: self.resolve_type_index(type_id.index()),
-                    array_data_index: *data_index,
-                });
             }
             other => panic!(
                 "non-const instruction in global initializer: {other:?}; \
@@ -3010,6 +3006,7 @@ mod tests {
                 nullable: false,
             },
             mutable: false,
+            wado_mutable: false,
             init: WirInstr::StructNew {
                 type_id: tid,
                 fields: vec![WirInstr::I32Const(3), WirInstr::I32Const(4)],

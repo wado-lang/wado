@@ -192,4 +192,4 @@ fn example() {
 
 1. **Component Model export**: `export global` syntax for exposing globals at CM boundary
 2. **Thread safety**: Consider `global atomic` for thread-safe mutable globals (requires Wasm threads)
-3. ~~**Constant folding optimization**~~: Implemented as Constant Global Promotion (CGP) in `optimize/const_global_promotion.rs`. Lazy-init globals whose initializers fold to scalar constants are promoted back to immutable Wasm globals.
+3. ~~**Constant folding optimization**~~: Implemented as `wir_optimize::const_global`. A user-immutable global whose extracted initializer folds to a Wasm constant (scalar, `struct.new`, or `array.new_fixed`) is promoted back to an eager immutable Wasm constant. See [WEP: Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md).

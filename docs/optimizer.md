@@ -49,11 +49,10 @@ The optimizer runs after lowering and before Wasm emission. `optimize.rs` orches
    17. Common Subexpression Elimination
    18. Store-to-Load Forwarding
    19. Constant Folding
-   20. Constant Global Promotion
-   21. Constant Branch Pruning
-   22. Loop-Invariant Code Motion
-   23. Condition Implication
-   24. Template String Buffer Hoisting
+   20. Constant Branch Pruning
+   21. Loop-Invariant Code Motion
+   22. Condition Implication
+   23. Template String Buffer Hoisting
 3. Hot Field Scalarization — runs once after the loop converges.
 4. Final DCE — clean up code made dead by optimizations.
 5. Select Lowering — post-optimization rewrite (all levels).
@@ -217,12 +216,6 @@ Today the engine reduces literal-only Binary / Unary / Cast expressions, the sho
 
 Unit tests: [`wado-compiler/tests/niri.rs`](../wado-compiler/tests/niri.rs).
 
-### Constant Global Promotion (`const_global_promotion.rs`)
-
-After propagation and folding reduce a global's runtime initialization to a scalar constant, this pass promotes it back to an immutable compile-time constant so the next iteration of constant propagation can substitute it inline.
-
-E2E: [opt_const.wado](../wado-compiler/tests/fixtures/opt_const.wado).
-
 ### Constant Branch Pruning (`const_branch_prune.rs`)
 
 Eliminates branches with compile-time-known boolean conditions and simplifies degenerate block patterns:
@@ -367,6 +360,8 @@ Write-only-local elimination is split across two layers. The NIR pass (`optimize
 DAE and DRVE live at NIR (`optimize::dae`, `optimize::drve`) alongside `inline` / `copy_prop` / `const_fold` / `dce`.
 
 ### Phase 7: Global Cleanup
+
+Constant global-initializer promotion (`const_global.rs`) — a user-immutable global (`global X = …`) whose non-constant initializer was extracted into an `__initialize_module` runtime assignment is promoted back to an eager Wasm constant once NIR optimization has folded that assignment to a const (`struct.new` / `array.new_fixed` / scalar). The value is moved into the global's `init`, the global is marked immutable, and the now-redundant `GlobalSet`(s) are dropped — even when the init is inlined into a duplicated `__inline___initialize_modules` guard block. Const-ness is decided here, once, via `WirInstr::is_const_expressible` (which `codegen`'s `push_const_instrs` mirrors); this subsumes the former scalar-only NIR `const_global_promotion`. Strings stay lazy because a `String`'s `array.new_data<u8>` repr is not a valid Wasm constant instruction. See [WEP: Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md). E2E: [const_global_object.wado](../wado-compiler/tests/fixtures/const_global_object.wado), [const_global_entry.wado](../wado-compiler/tests/fixtures/const_global_entry.wado).
 
 Trivial init-guard removal — removes compiler-generated module-initialization guard blocks when no actual initialization remains.
 

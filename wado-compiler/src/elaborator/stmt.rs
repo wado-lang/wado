@@ -2654,17 +2654,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
             ctx,
         );
-        // Capture the `(self_kind, is_ref_impl)` the dispatch chose
-        // (Gap 6 of WEP 2026-05-26): the synthetic call passed
+        // Capture the `(self_kind, is_ref_impl, FunctionRef)` the dispatch
+        // chose (Gap 6 of WEP 2026-05-26): the synthetic call passed
         // `call_id == None` so `record_method_dispatch` skipped it, but
-        // reify needs the receiver-adjustment inputs to reproduce the
-        // same call shape. Also capture the resolved `FunctionRef`
-        // before `into_iter_call` is consumed by the iterator `let`.
+        // reify needs the receiver-adjustment inputs + the resolved
+        // `FunctionRef` to reproduce the same call shape. Since Stage 7-B
+        // `resolve_method_call_with` returns a typed placeholder, the
+        // `FunctionRef` rides `pending_method_dispatch` rather than being
+        // recovered from `into_iter_call.kind`.
         let into_iter_dispatch = self.pending_method_dispatch.take();
-        let into_iter_func = match &into_iter_call.kind {
-            TirExprKind::MethodCall { func, .. } => Some(func.clone()),
-            _ => None,
-        };
         let iter_type = into_iter_call.type_id;
 
         // Iterator-trait conformance check, mirroring the pre-refactor
@@ -2728,10 +2726,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ctx,
         );
         let next_dispatch = self.pending_method_dispatch.take();
-        let next_func = match &next_call.kind {
-            TirExprKind::MethodCall { func, .. } => Some(func.clone()),
-            _ => None,
-        };
         let option_type = next_call.type_id;
 
         // Build the `Option::Some(<user binding>)` arm pattern directly as
@@ -2778,21 +2772,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // record when both dispatches succeeded (the trait-check error
         // path above bailed without resolving them).
         if let (
-            Some(into_iter_func),
-            Some(into_iter_dispatch),
-            Some(next_func),
-            Some(next_dispatch),
-        ) = (into_iter_func, into_iter_dispatch, next_func, next_dispatch)
+            Some((into_iter_self_kind, into_iter_is_ref_impl, into_iter_func)),
+            Some((next_self_kind, next_is_ref_impl, next_func)),
+        ) = (into_iter_dispatch, next_dispatch)
         {
             self.record_for_of_iterator(
                 for_of.id,
                 super::sem::types::ForOfIteratorInfo {
                     into_iter: into_iter_func,
-                    into_iter_self_kind: into_iter_dispatch.0,
-                    into_iter_is_ref_impl: into_iter_dispatch.1,
+                    into_iter_self_kind,
+                    into_iter_is_ref_impl,
                     next: next_func,
-                    next_self_kind: next_dispatch.0,
-                    next_is_ref_impl: next_dispatch.1,
+                    next_self_kind,
+                    next_is_ref_impl,
                     item_type,
                     iter_type,
                 },

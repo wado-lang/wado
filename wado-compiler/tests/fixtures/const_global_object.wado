@@ -1,0 +1,44 @@
+// Constant Object Globalization: a constant-shaped struct or array global
+// initializer is promoted to an eager Wasm constant by
+// `wir_optimize::const_global`, instead of being assigned at runtime in
+// `__initialize_module`.
+//
+// - `ORIGIN` (struct literal) lowers to a const `struct.new`.
+// - `NUMS` (array literal) lowers to a const `struct.new` wrapping
+//   `array.new_fixed`.
+//   Both become immutable Wasm globals with an eager init, so the
+//   `global:ORIGIN = …` / `global:NUMS = …` runtime assignments vanish from
+//   `__initialize_module`.
+// - `GREET` (string) stays lazy: a `String`'s `array.new_data<u8>` repr is
+//   not a valid Wasm constant instruction, so it must be initialized at
+//   runtime. This locks that documented limitation.
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+global ORIGIN: Point = Point { x: 3, y: 4 };
+global NUMS: Array<i32> = [10, 20, 30];
+global GREET: String = "hi";
+
+export fn run() with Stdout {
+    println(`{ORIGIN.x},{ORIGIN.y},{NUMS.len()},{GREET}`);
+}
+
+__DATA__
+{
+    "stdout": "3,4,3,hi\n",
+    "wir_expect:O2": [
+        "global global:ORIGIN",
+        "global global:NUMS",
+        "array.new_fixed<i32>(10, 20, 30)",
+        "global mut global:GREET"
+    ],
+    "wir_not_expect:O2": [
+        "global mut global:ORIGIN",
+        "global mut global:NUMS"
+    ]
+}
