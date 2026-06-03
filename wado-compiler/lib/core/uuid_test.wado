@@ -129,15 +129,32 @@ test "parse accepts uppercase hex" {
     }
 }
 
+test "parse accepts the simple (hyphenless) form" {
+    // 32 hex digits, no hyphens — same value as the hyphenated form.
+    let simple = Uuid::parse(&"000102030405460788090a0b0c0d0e0f");
+    let hyphenated = Uuid::parse(&"00010203-0405-4607-8809-0a0b0c0d0e0f");
+    assert simple matches { Some(_) };
+    if let Some(s) = simple {
+        assert s.to_string() == "00010203-0405-4607-8809-0a0b0c0d0e0f";
+        if let Some(h) = hyphenated {
+            assert s == h;
+        }
+    }
+}
+
 test "parse rejects malformed input" {
     assert Uuid::parse(&"") matches { None };
     assert Uuid::parse(&"not-a-uuid") matches { None };
     // wrong length (35 chars)
     assert Uuid::parse(&"0001020-0405-4607-8809-0a0b0c0d0e0f") matches { None };
-    // missing a separator: 33 hex digits leaves a trailing half-byte
+    // hyphen in the wrong place (strict field boundaries)
+    assert Uuid::parse(&"000102030-405-4607-8809-0a0b0c0d0e0f") matches { None };
+    // a field boundary that is not a hyphen
     assert Uuid::parse(&"00010203f0405-4607-8809-0a0b0c0d0e0f") matches { None };
     // non-hex digit
     assert Uuid::parse(&"0001020g-0405-4607-8809-0a0b0c0d0e0f") matches { None };
+    // 33 hex digits (neither 32 nor 36 chars)
+    assert Uuid::parse(&"000102030405460788090a0b0c0d0e0ff") matches { None };
 }
 
 test "Default is the nil UUID" {

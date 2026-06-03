@@ -26,6 +26,9 @@ let id = Uuid::v7(); // with Random, SystemClock
 let s = `{id}`; // "0190b6e0-...-..." (canonical form)
 if let Some(parsed) = Uuid::parse(&s) { ... }
 
+`parse` accepts both the hyphenated form and the 32-digit hyphenless
+"simple" form, matching Rust's `uuid` and Go's `google/uuid`.
+
 ## Structs
 
 ### `pub struct Uuid`
@@ -61,10 +64,14 @@ ordering of `v7` values matches creation-time ordering.
 
 #### `pub fn parse(s: &String) -> Option<Uuid>`
 
-Parse the canonical hyphenated form (`8-4-4-4-12` lowercase or
-uppercase hex). Hyphens are treated as separators and skipped wherever
-they appear; the remaining 32 characters must all be hex digits.
-Returns `null` for anything that is not a 36-character hyphenated UUID.
+Parse a UUID string (case-insensitive), like Rust's `uuid` and Go's
+`google/uuid`:
+
+- the canonical hyphenated form `8-4-4-4-12` (36 chars), with hyphens
+  required at exactly the field boundaries, or
+- the simple form: 32 hex digits with no hyphens.
+
+Returns `null` for anything else.
 
 #### `pub fn version(&self) -> i32`
 

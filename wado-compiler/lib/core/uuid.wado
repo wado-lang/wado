@@ -21,6 +21,9 @@
 //!   let id = Uuid::v7();              // with Random, SystemClock
 //!   let s = `{id}`;                   // "0190b6e0-...-..." (canonical form)
 //!   if let Some(parsed) = Uuid::parse(&s) { ... }
+//!
+//! `parse` accepts both the hyphenated form and the 32-digit hyphenless
+//! "simple" form, matching Rust's `uuid` and Go's `google/uuid`.
 
 use { u8x16 } from "core:simd";
 use { Random } from "wasi:random";
@@ -72,35 +75,43 @@ impl Uuid {
         return from_byte_list(&b);
     }
 
-    /// Parse the canonical hyphenated form (`8-4-4-4-12` lowercase or
-    /// uppercase hex). Hyphens are treated as separators and skipped wherever
-    /// they appear; the remaining 32 characters must all be hex digits.
-    /// Returns `null` for anything that is not a 36-character hyphenated UUID.
+    /// Parse a UUID string (case-insensitive), like Rust's `uuid` and Go's
+    /// `google/uuid`:
+    ///
+    /// - the canonical hyphenated form `8-4-4-4-12` (36 chars), with hyphens
+    ///   required at exactly the field boundaries, or
+    /// - the simple form: 32 hex digits with no hyphens.
+    ///
+    /// Returns `null` for anything else.
     pub fn parse(s: &String) -> Option<Uuid> {
-        if s.len() != 36 {
+        let len = s.len();
+        if len != 36 && len != 32 {
             return null;
         }
+        // Field widths in hex digits. The hyphenated form's separators fall
+        // between these groups (8-4-4-4-12); the simple form is one group of
+        // 32. Deriving the hyphen positions from the field structure keeps the
+        // canonical layout explicit instead of hardcoding offsets.
+        let groups: List<i32> = if len == 36 { [8, 4, 4, 4, 12] } else { [32] };
+        let bytes: List<u8> = s.bytes().collect();
         let mut out: List<u8> = [];
-        let mut hi = -1;
-        for let byte of s.bytes() {
-            if byte == '-' as u8 {
-                continue;
+        let mut pos = 0;
+        for let mut g = 0; g < groups.len(); g += 1 {
+            if g > 0 {
+                if bytes[pos] != '-' as u8 {
+                    return null;
+                }
+                pos += 1;
             }
-            let nibble = hex_value(byte);
-            if nibble < 0 {
-                return null;
+            for let mut k = 0; k < groups[g]; k += 2 {
+                let hi = hex_value(bytes[pos]);
+                let lo = hex_value(bytes[pos + 1]);
+                if hi < 0 || lo < 0 {
+                    return null;
+                }
+                out.push((hi << 4 | lo) as u8);
+                pos += 2;
             }
-            if hi < 0 {
-                hi = nibble;
-            } else {
-                out.push((hi << 4 | nibble) as u8);
-                hi = -1;
-            }
-        }
-        // Reject a trailing half-byte (odd hex-digit count) or the wrong
-        // number of bytes.
-        if hi >= 0 || out.len() != 16 {
-            return null;
         }
         return Option::Some(from_byte_list(&out));
     }
