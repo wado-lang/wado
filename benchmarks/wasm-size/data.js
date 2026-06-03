@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780479261036,
+  "lastUpdate": 1780490684859,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29317,6 +29317,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8daad84c370ad9c8a33537695c36e041230b67a1"
         },
         "date": 1780479260523,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9687,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457437,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dea5f64ccdd6f5ceb7099be9a7110390232aa385",
+          "message": "Merge pull request #1280 from wado-lang/claude/unobservable-effects-question-zsgA1\n\nfeat(effect): add #[benign(E)] for observationally-pure effects",
+          "timestamp": "2026-06-03T21:36:01+09:00",
+          "tree_id": "897b22f7034499d2fce400fd2129b3aa2e976d04",
+          "url": "https://github.com/wado-lang/wado/commit/dea5f64ccdd6f5ceb7099be9a7110390232aa385"
+        },
+        "date": 1780490684342,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
