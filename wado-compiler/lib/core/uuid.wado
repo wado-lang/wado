@@ -1,0 +1,202 @@
+#![stdlib("core:uuid")]
+//! UUID generation and parsing (RFC 9562).
+//!
+//! Only the two versions in common use today are provided:
+//!
+//! - `Uuid::v4()` — random UUID. The default for "just give me a unique id".
+//! - `Uuid::v7()` — time-ordered UUID. A 48-bit Unix-millisecond timestamp in
+//!   the high bytes makes values sortable by creation time, which is ideal for
+//!   database keys and log correlation.
+//!
+//! A `Uuid` is a single 128-bit value (stored as a `u8x16` SIMD register, one
+//! lane per byte). Construction, formatting, and parsing are all byte-oriented,
+//! which maps directly onto the lane layout. Equality and ordering compare the
+//! 16 bytes in big-endian order, so `v7` values sort by timestamp.
+//!
+//! Usage:
+//!
+//!   use { Uuid } from "core:uuid";
+//!
+//!   let id = Uuid::v4();              // with Random
+//!   let id = Uuid::v7();              // with Random, SystemClock
+//!   let s = `{id}`;                   // "0190b6e0-...-..." (canonical form)
+//!   if let Some(parsed) = Uuid::parse(&s) { ... }
+
+use { u8x16 } from "core:simd";
+use { Random } from "wasi:random";
+use { SystemClock } from "wasi:clocks";
+
+/// A 128-bit universally unique identifier.
+///
+/// The bytes are held big-endian: byte 0 is the most significant. This is the
+/// order RFC 9562 lays out the fields in, so the natural byte order is also the
+/// canonical string order and (for `v7`) the timestamp order.
+pub struct Uuid {
+    bytes: u8x16,
+}
+
+impl Uuid {
+    /// The nil UUID — all 128 bits zero (`00000000-0000-0000-0000-000000000000`).
+    pub fn nil() -> Uuid {
+        return Uuid { bytes: u8x16::splat(0) };
+    }
+
+    /// Generate a version-4 (random) UUID.
+    ///
+    /// All 122 free bits come from the cryptographically-secure `Random`
+    /// effect; the version (`0100`) and variant (`10`) bits are then forced
+    /// into place per RFC 9562.
+    pub fn v4() -> Uuid with Random {
+        let mut b = fill_random(16);
+        set_version_and_variant(&mut b, 0x40);
+        return from_byte_list(&b);
+    }
+
+    /// Generate a version-7 (time-ordered) UUID.
+    ///
+    /// The high 48 bits are the Unix timestamp in milliseconds, read from the
+    /// `SystemClock` effect; the remaining bits are random. Because the
+    /// timestamp occupies the most significant bytes, lexicographic / numeric
+    /// ordering of `v7` values matches creation-time ordering.
+    pub fn v7() -> Uuid with Random, SystemClock {
+        let now = SystemClock::now();
+        let ms = (now.seconds as i64) * 1000 + (now.nanoseconds as i64) / 1_000_000;
+        let mut b = fill_random(16);
+        b[0] = ((ms >> 40) & 0xFF) as u8;
+        b[1] = ((ms >> 32) & 0xFF) as u8;
+        b[2] = ((ms >> 24) & 0xFF) as u8;
+        b[3] = ((ms >> 16) & 0xFF) as u8;
+        b[4] = ((ms >> 8) & 0xFF) as u8;
+        b[5] = (ms & 0xFF) as u8;
+        set_version_and_variant(&mut b, 0x70);
+        return from_byte_list(&b);
+    }
+
+    /// Parse the canonical hyphenated form (`8-4-4-4-12` lowercase or
+    /// uppercase hex). Returns `null` for any string that is not exactly a
+    /// 36-character canonical UUID.
+    pub fn parse(s: &String) -> Option<Uuid> {
+        if s.len() != 36 {
+            return null;
+        }
+        let mut out: List<u8> = [];
+        let mut hi = -1;
+        let mut idx = 0;
+        for let c of s.chars() {
+            if idx == 8 || idx == 13 || idx == 18 || idx == 23 {
+                if c != '-' {
+                    return null;
+                }
+                idx += 1;
+                continue;
+            }
+            if !c.is_hexdigit() {
+                return null;
+            }
+            let v = c.hex_digit_value();
+            if hi < 0 {
+                hi = v;
+            } else {
+                out.push(((hi << 4) | v) as u8);
+                hi = -1;
+            }
+            idx += 1;
+        }
+        if out.len() != 16 {
+            return null;
+        }
+        return Option::Some(from_byte_list(&out));
+    }
+
+    /// The version number (4 or 7 for UUIDs produced by this module).
+    pub fn version(&self) -> i32 {
+        return (self.bytes.extract_lane(6) >> 4) & 0xF;
+    }
+
+    /// The canonical hyphenated lowercase string form.
+    pub fn to_string(&self) -> String {
+        let mut s = String::with_capacity(36);
+        let mut i = 0;
+        while i < 16 {
+            if i == 4 || i == 6 || i == 8 || i == 10 {
+                s.push('-');
+            }
+            let byte = self.bytes.extract_lane(i);
+            s.push(nibble_to_hex((byte >> 4) & 0xF));
+            s.push(nibble_to_hex(byte & 0xF));
+            i += 1;
+        }
+        return s;
+    }
+}
+
+impl Display for Uuid {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.to_string());
+    }
+}
+
+impl Eq for Uuid {
+    fn eq(&self, other: &Uuid) -> bool {
+        return self.bytes.eq(&other.bytes).all_true();
+    }
+}
+
+impl Ord for Uuid {
+    fn cmp(&self, other: &Uuid) -> Ordering {
+        let mut i = 0;
+        while i < 16 {
+            let a = self.bytes.extract_lane(i);
+            let b = other.bytes.extract_lane(i);
+            if a < b {
+                return Ordering::Less;
+            }
+            if a > b {
+                return Ordering::Greater;
+            }
+            i += 1;
+        }
+        return Ordering::Equal;
+    }
+}
+
+/// Force the RFC 9562 version (high nibble of byte 6) and variant (top two bits
+/// of byte 8) into a 16-byte buffer. `version_byte` is the version nibble
+/// already shifted into the high position (`0x40` for v4, `0x70` for v7).
+fn set_version_and_variant(b: &mut List<u8>, version_byte: u8) {
+    b[6] = ((b[6] as i32 & 0x0F) | (version_byte as i32)) as u8;
+    b[8] = ((b[8] as i32 & 0x3F) | 0x80) as u8;
+}
+
+/// Collect exactly `n` random bytes, looping to tolerate short reads (the
+/// `Random` contract allows returning fewer bytes than requested).
+fn fill_random(n: i32) -> List<u8> with Random {
+    let mut out: List<u8> = [];
+    while out.len() < n {
+        let chunk = Random::get_random_bytes((n - out.len()) as u64);
+        if chunk.is_empty() {
+            panic("Random::get_random_bytes returned no data");
+        }
+        for let byte of chunk {
+            out.push(byte);
+        }
+    }
+    return out;
+}
+
+fn from_byte_list(b: &List<u8>) -> Uuid {
+    let v: u8x16 = [
+        b[0] as i32, b[1] as i32, b[2] as i32, b[3] as i32,
+        b[4] as i32, b[5] as i32, b[6] as i32, b[7] as i32,
+        b[8] as i32, b[9] as i32, b[10] as i32, b[11] as i32,
+        b[12] as i32, b[13] as i32, b[14] as i32, b[15] as i32,
+    ];
+    return Uuid { bytes: v };
+}
+
+fn nibble_to_hex(n: i32) -> char {
+    if n < 10 {
+        return char::from_u32_unchecked(('0' as u32) + (n as u32));
+    }
+    return char::from_u32_unchecked(('a' as u32) + ((n - 10) as u32));
+}

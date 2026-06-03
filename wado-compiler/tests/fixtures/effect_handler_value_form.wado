@@ -1,0 +1,46 @@
+// Regression: `with E => h do { expr }` used in value position must yield the
+// do-block's trailing value. The WithHandler expression was previously
+// hard-typed `Unit`, so the body's value was dropped — producing either a
+// spurious type error (`expected (), found i32`) or, when the result was fed
+// to another value-consuming operation, an invalid-Wasm ICE
+// (`expected i32 but nothing on stack`).
+interface Counter {
+    fn next() -> i32;
+}
+
+struct Stepper {
+    value: i32,
+}
+
+impl Counter for Stepper {
+    fn next(&mut self) -> i32 {
+        self.value += 1;
+        resume self.value
+    }
+}
+
+test "value-form with-do yields the block value" {
+    let mut a = Stepper { value: 0 };
+    let first = with Counter => &mut a do {
+        Counter::next()
+    };
+    assert first == 1;
+}
+
+test "two value-form with-do blocks feed a comparison" {
+    let mut b = Stepper { value: 10 };
+    let x = with Counter => &mut b do { Counter::next() };
+    let y = with Counter => &mut b do { Counter::next() };
+    assert x == 11;
+    assert y == 12;
+    assert x < y;
+}
+
+test "value-form with-do binds with an explicit type annotation" {
+    let mut c = Stepper { value: 41 };
+    let n: i64 = with Counter => &mut c do { Counter::next() as i64 };
+    assert n == 42;
+}
+
+__DATA__
+{"test": {}}

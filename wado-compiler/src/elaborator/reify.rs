@@ -2291,7 +2291,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 )
             }
-            ast::Expr::WithHandler(with_expr) => self.reify_with_handler(with_expr, ctx),
+            ast::Expr::WithHandler(with_expr) => {
+                self.reify_with_handler(with_expr, ctx, recorded_type)
+            }
             // `build_tir_from_state` skips reify for modules with syntax
             // errors, so reify never walks an `Error` placeholder.
             ast::Expr::Error(_) => {
@@ -5812,8 +5814,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         with_expr: &ast::WithHandlerExpr,
         ctx: &mut FunctionContext,
+        result_type: crate::tir::TypeId,
     ) -> TirExpr {
-        use crate::tir::{EffectRef, TirExprKind, TirHandlerBinding, TypeTable};
+        use crate::tir::{EffectRef, TirExprKind, TirHandlerBinding};
 
         let mut bindings: Vec<TirHandlerBinding> = Vec::with_capacity(with_expr.handlers.len());
         for binding in &with_expr.handlers {
@@ -5847,16 +5850,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         ctx.enter_scope();
-        let body = self.reify_block(&with_expr.body, ctx, None);
+        // `with ... do { ... }` evaluates to its body block's trailing value.
+        // Propagate the recorded result type so the body's tail expression
+        // replays any coercion (e.g. literal widening) the annotate phase
+        // applied against the binding's expected type.
+        let body = self.reify_block(&with_expr.body, ctx, Some(result_type));
         ctx.exit_scope();
 
         TirExpr::new(
             TirExprKind::WithHandler {
                 bindings,
                 body,
-                result_type: TypeTable::UNIT,
+                result_type,
             },
-            TypeTable::UNIT,
+            result_type,
             with_expr.span,
         )
     }
