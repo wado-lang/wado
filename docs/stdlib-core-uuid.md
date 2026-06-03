@@ -62,8 +62,9 @@ ordering of `v7` values matches creation-time ordering.
 #### `pub fn parse(s: &String) -> Option<Uuid>`
 
 Parse the canonical hyphenated form (`8-4-4-4-12` lowercase or
-uppercase hex). Returns `null` for any string that is not exactly a
-36-character canonical UUID.
+uppercase hex). Hyphens are treated as separators and skipped wherever
+they appear; the remaining 32 characters must all be hex digits.
+Returns `null` for anything that is not a 36-character hyphenated UUID.
 
 #### `pub fn version(&self) -> i32`
 
@@ -84,3 +85,7 @@ The canonical hyphenated lowercase string form.
 #### `impl Ord for Uuid`
 
 ##### `fn cmp(&self, other: &Uuid) -> Ordering`
+
+#### `impl Default for Uuid`
+
+##### `fn default() -> Uuid`

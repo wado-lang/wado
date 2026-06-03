@@ -20,8 +20,9 @@ impl Random for MockRandom {
             self.pos += 1;
             n -= 1;
         }
-        resume out
+        resume out;
     }
+
     ..
 }
 
@@ -32,8 +33,9 @@ struct MockClock {
 
 impl SystemClock for MockClock {
     fn now(&self) -> Instant {
-        resume self.instant
+        resume self.instant;
     }
+
     ..
 }
 
@@ -60,7 +62,7 @@ test "v4 is deterministic under a fixed Random source" {
         // bytes 00..0f, with byte 6 -> 0x46 (version) and byte 8 -> 0x88 (variant)
         assert id.to_string() == "00010203-0405-4607-8809-0a0b0c0d0e0f";
         assert id.version() == 4;
-    }
+    };
 }
 
 test "v4 always sets version 4 and the RFC variant" {
@@ -70,29 +72,35 @@ test "v4 always sets version 4 and the RFC variant" {
         // byte 6: (0xFF & 0x0F) | 0x40 = 0x4F ; byte 8: (0xFF & 0x3F) | 0x80 = 0xBF
         assert id.to_string() == "ffffffff-ffff-4fff-bfff-ffffffffffff";
         assert id.version() == 4;
-    }
+    };
 }
 
 test "v7 embeds the millisecond timestamp big-endian" {
     // seconds = 1, nanoseconds = 0  ->  1000 ms = 0x0000_0000_03E8
     let mut rng = MockRandom { data: repeated(0xFF, 16), pos: 0 };
-    let clock = MockClock { instant: Instant { seconds: 1, nanoseconds: 0 } };
+    let clock = MockClock {
+        instant: Instant { seconds: 1, nanoseconds: 0 },
+    };
     with Random => &mut rng, SystemClock => &clock do {
         let id = Uuid::v7();
         assert id.to_string() == "00000000-03e8-7fff-bfff-ffffffffffff";
         assert id.version() == 7;
-    }
+    };
 }
 
 test "v7 values sort by timestamp" {
     let mut rng = MockRandom { data: repeated(0x00, 32), pos: 0 };
-    let early = MockClock { instant: Instant { seconds: 1, nanoseconds: 0 } };
-    let late = MockClock { instant: Instant { seconds: 2, nanoseconds: 0 } };
+    let early = MockClock {
+        instant: Instant { seconds: 1, nanoseconds: 0 },
+    };
+    let late = MockClock {
+        instant: Instant { seconds: 2, nanoseconds: 0 },
+    };
     let a = with Random => &mut rng, SystemClock => &early do {
-        Uuid::v7()
+        Uuid::v7();
     };
     let b = with Random => &mut rng, SystemClock => &late do {
-        Uuid::v7()
+        Uuid::v7();
     };
     assert a < b;
     assert b > a;
@@ -126,10 +134,16 @@ test "parse rejects malformed input" {
     assert Uuid::parse(&"not-a-uuid") matches { None };
     // wrong length (35 chars)
     assert Uuid::parse(&"0001020-0405-4607-8809-0a0b0c0d0e0f") matches { None };
-    // hyphen in the wrong place
-    assert Uuid::parse(&"000102030-405-4607-8809-0a0b0c0d0e0f") matches { None };
+    // missing a separator: 33 hex digits leaves a trailing half-byte
+    assert Uuid::parse(&"00010203f0405-4607-8809-0a0b0c0d0e0f") matches { None };
     // non-hex digit
     assert Uuid::parse(&"0001020g-0405-4607-8809-0a0b0c0d0e0f") matches { None };
+}
+
+test "Default is the nil UUID" {
+    let d = Uuid::default();
+    assert d == Uuid::nil();
+    assert d.to_string() == "00000000-0000-0000-0000-000000000000";
 }
 
 test "nil is all zero" {

@@ -60,49 +60,46 @@ impl Uuid {
     /// ordering of `v7` values matches creation-time ordering.
     pub fn v7() -> Uuid with Random, SystemClock {
         let now = SystemClock::now();
-        let ms = (now.seconds as i64) * 1000 + (now.nanoseconds as i64) / 1_000_000;
+        let ms = now.seconds as i64 * 1000 + now.nanoseconds as i64 / 1_000_000;
         let mut b = fill_random(16);
-        b[0] = ((ms >> 40) & 0xFF) as u8;
-        b[1] = ((ms >> 32) & 0xFF) as u8;
-        b[2] = ((ms >> 24) & 0xFF) as u8;
-        b[3] = ((ms >> 16) & 0xFF) as u8;
-        b[4] = ((ms >> 8) & 0xFF) as u8;
+        b[0] = (ms >> 40 & 0xFF) as u8;
+        b[1] = (ms >> 32 & 0xFF) as u8;
+        b[2] = (ms >> 24 & 0xFF) as u8;
+        b[3] = (ms >> 16 & 0xFF) as u8;
+        b[4] = (ms >> 8 & 0xFF) as u8;
         b[5] = (ms & 0xFF) as u8;
         set_version_and_variant(&mut b, 0x70);
         return from_byte_list(&b);
     }
 
     /// Parse the canonical hyphenated form (`8-4-4-4-12` lowercase or
-    /// uppercase hex). Returns `null` for any string that is not exactly a
-    /// 36-character canonical UUID.
+    /// uppercase hex). Hyphens are treated as separators and skipped wherever
+    /// they appear; the remaining 32 characters must all be hex digits.
+    /// Returns `null` for anything that is not a 36-character hyphenated UUID.
     pub fn parse(s: &String) -> Option<Uuid> {
         if s.len() != 36 {
             return null;
         }
         let mut out: List<u8> = [];
         let mut hi = -1;
-        let mut idx = 0;
-        for let c of s.chars() {
-            if idx == 8 || idx == 13 || idx == 18 || idx == 23 {
-                if c != '-' {
-                    return null;
-                }
-                idx += 1;
+        for let byte of s.bytes() {
+            if byte == '-' as u8 {
                 continue;
             }
-            if !c.is_hexdigit() {
+            let nibble = hex_value(byte);
+            if nibble < 0 {
                 return null;
             }
-            let v = c.hex_digit_value();
             if hi < 0 {
-                hi = v;
+                hi = nibble;
             } else {
-                out.push(((hi << 4) | v) as u8);
+                out.push((hi << 4 | nibble) as u8);
                 hi = -1;
             }
-            idx += 1;
         }
-        if out.len() != 16 {
+        // Reject a trailing half-byte (odd hex-digit count) or the wrong
+        // number of bytes.
+        if hi >= 0 || out.len() != 16 {
             return null;
         }
         return Option::Some(from_byte_list(&out));
@@ -110,21 +107,18 @@ impl Uuid {
 
     /// The version number (4 or 7 for UUIDs produced by this module).
     pub fn version(&self) -> i32 {
-        return (self.bytes.extract_lane(6) >> 4) & 0xF;
+        return self.bytes.extract_lane(6) >> 4 & 0xF;
     }
 
     /// The canonical hyphenated lowercase string form.
     pub fn to_string(&self) -> String {
         let mut s = String::with_capacity(36);
-        let mut i = 0;
-        while i < 16 {
+        for let mut i = 0; i < 16; i += 1 {
             if i == 4 || i == 6 || i == 8 || i == 10 {
                 s.push('-');
             }
             let byte = self.bytes.extract_lane(i);
-            s.push(nibble_to_hex((byte >> 4) & 0xF));
-            s.push(nibble_to_hex(byte & 0xF));
-            i += 1;
+            s.push_str(&`{byte:02x}`);
         }
         return s;
     }
@@ -144,8 +138,7 @@ impl Eq for Uuid {
 
 impl Ord for Uuid {
     fn cmp(&self, other: &Uuid) -> Ordering {
-        let mut i = 0;
-        while i < 16 {
+        for let mut i = 0; i < 16; i += 1 {
             let a = self.bytes.extract_lane(i);
             let b = other.bytes.extract_lane(i);
             if a < b {
@@ -154,9 +147,14 @@ impl Ord for Uuid {
             if a > b {
                 return Ordering::Greater;
             }
-            i += 1;
         }
         return Ordering::Equal;
+    }
+}
+
+impl Default for Uuid {
+    fn default() -> Uuid {
+        return Uuid::nil();
     }
 }
 
@@ -164,8 +162,8 @@ impl Ord for Uuid {
 /// of byte 8) into a 16-byte buffer. `version_byte` is the version nibble
 /// already shifted into the high position (`0x40` for v4, `0x70` for v7).
 fn set_version_and_variant(b: &mut List<u8>, version_byte: u8) {
-    b[6] = ((b[6] as i32 & 0x0F) | (version_byte as i32)) as u8;
-    b[8] = ((b[8] as i32 & 0x3F) | 0x80) as u8;
+    b[6] = (b[6] as i32 & 0x0F | version_byte as i32) as u8;
+    b[8] = (b[8] as i32 & 0x3F | 0x80) as u8;
 }
 
 /// Collect exactly `n` random bytes, looping to tolerate short reads (the
@@ -186,17 +184,23 @@ fn fill_random(n: i32) -> List<u8> with Random {
 
 fn from_byte_list(b: &List<u8>) -> Uuid {
     let v: u8x16 = [
-        b[0] as i32, b[1] as i32, b[2] as i32, b[3] as i32,
-        b[4] as i32, b[5] as i32, b[6] as i32, b[7] as i32,
-        b[8] as i32, b[9] as i32, b[10] as i32, b[11] as i32,
-        b[12] as i32, b[13] as i32, b[14] as i32, b[15] as i32,
+        b[0] as i32, b[1] as i32, b[2] as i32, b[3] as i32, b[4] as i32, b[5] as i32, b[6] as i32, b[7] as i32,
+        b[8] as i32, b[9] as i32, b[10] as i32, b[11] as i32, b[12] as i32, b[13] as i32, b[14] as i32, b[15] as i32,
     ];
     return Uuid { bytes: v };
 }
 
-fn nibble_to_hex(n: i32) -> char {
-    if n < 10 {
-        return char::from_u32_unchecked(('0' as u32) + (n as u32));
+/// The value of a single ASCII hex digit byte (`0`–`9`, `a`–`f`, `A`–`F`), or
+/// `-1` when the byte is not a hex digit.
+fn hex_value(byte: u8) -> i32 {
+    if byte >= '0' as u8 && byte <= '9' as u8 {
+        return (byte - '0' as u8) as i32;
     }
-    return char::from_u32_unchecked(('a' as u32) + ((n - 10) as u32));
+    if byte >= 'a' as u8 && byte <= 'f' as u8 {
+        return (byte - 'a' as u8) as i32 + 10;
+    }
+    if byte >= 'A' as u8 && byte <= 'F' as u8 {
+        return (byte - 'A' as u8) as i32 + 10;
+    }
+    return -1;
 }

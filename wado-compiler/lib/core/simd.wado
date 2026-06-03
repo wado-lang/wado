@@ -2250,12 +2250,9 @@ impl Inspect for v128 {
     pub fn inspect(&self, f: &mut Formatter) {
         let bytes = *self as u8x16;
         f.write_str(&"v128(0x");
-        let mut i = 0;
-        while i < 16 {
+        for let mut i = 0; i < 16; i += 1 {
             let byte = bytes.extract_lane(i);
-            f.write_char(v128_hex_nibble((byte >> 4) & 0xF));
-            f.write_char(v128_hex_nibble(byte & 0xF));
-            i += 1;
+            f.write_str(&`{byte:02x}`);
         }
         f.write_char(')');
     }
@@ -2265,11 +2262,4 @@ impl InspectAlt for v128 {
     pub fn inspect_alt(&self, f: &mut Formatter) {
         self.inspect(f);
     }
-}
-
-fn v128_hex_nibble(n: i32) -> char {
-    if n < 10 {
-        return char::from_u32_unchecked(('0' as u32) + (n as u32));
-    }
-    return char::from_u32_unchecked(('a' as u32) + ((n - 10) as u32));
 }
