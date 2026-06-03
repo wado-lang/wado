@@ -3258,14 +3258,10 @@ pub struct TirFunction {
     /// checker does not propagate those requirements to callers.
     pub is_ambient: bool,
 
-    /// Effects marked `#[benign(E)]`. A benign effect is performed inside the
-    /// function body but is *observationally pure* (unobservable through the
-    /// function's interface), so the effect checker admits it in the body
+    /// Effects from `#[benign(E)]`. The checker admits each one in the body
     /// without a `with E` clause and never propagates it to callers. Unlike
-    /// `is_ambient`, only the listed effects are suppressed (other effects
-    /// propagate normally) and the world import for `E` is still required,
-    /// because the body genuinely references the imported operation. See
-    /// `docs/wep-2026-01-20-effect-system-randomness.md`.
+    /// `is_ambient`, only the listed effects are suppressed; the world import
+    /// for `E` is still required since the body references the operation.
     pub benign_effects: Vec<EffectRef>,
 
     /// Inline hint from `#[inline]`, `#[inline(always)]`, or `#[inline(never)]` attributes.

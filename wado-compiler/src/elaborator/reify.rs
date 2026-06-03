@@ -8885,9 +8885,9 @@ fn extract_is_ambient_attr(attrs: &[crate::ast::Attribute]) -> bool {
     attrs.iter().any(|a| a.name == "ambient")
 }
 
-/// Collect the effect names listed in `#[benign(E, ...)]` attributes. Multiple
-/// `#[benign(...)]` attributes and multiple arguments accumulate. The names are
-/// resolved to `EffectRef`s by the caller via [`Self::reify_effects`].
+/// Collect the effect names from every `#[benign(E, ...)]` attribute; multiple
+/// attributes and arguments accumulate. The caller resolves them to
+/// `EffectRef`s via `reify_effects`.
 fn extract_benign_effect_names(attrs: &[crate::ast::Attribute]) -> Vec<String> {
     attrs
         .iter()

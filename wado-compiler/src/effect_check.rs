@@ -471,10 +471,9 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         // implicitly admitted.
         let mut effects: IndexSet<EffectRef> = func.effects.iter().cloned().collect();
         effects.extend(self.signature_resources(func));
-        // `#[benign(E)]` admits `E` in the body without a `with E` clause: the
-        // function genuinely performs `E` (so its imported operations type-check
-        // here), but `E` is observationally pure and is stripped from the
-        // outgoing effects in `get_function_effects`, so callers never see it.
+        // `#[benign(E)]` admits `E` in the body without a `with E` clause.
+        // `get_function_effects` strips it from the outgoing set, so callers
+        // never see it.
         effects.extend(func.benign_effects.iter().cloned());
         self.current_effects = self.expand_effects(&effects);
         self.current_stores = func.stores.iter().cloned().collect();
@@ -1014,10 +1013,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                 }
             }
         }
-        // `#[benign(E)]` effects never propagate to callers — they are
-        // observationally pure at this function's interface. Strip them from
-        // the outgoing set (the world import is still required because the body
-        // references the imported operation directly).
+        // `#[benign(E)]` effects never propagate to callers; strip them here.
         if let Some(benign) = self
             .func_index
             .get(&key)
