@@ -1,0 +1,28 @@
+// Regression: deserializing a struct with an auto-derived `Deserialize`
+// via `from_string` must compile at -O2. The struct field lookup used by
+// the generated deserializer reads `String.repr` (an `Array<u8>`); after
+// the raw array was renamed to `Array<T>` (WEP-2026-06-02 Phase 2), the
+// orchestration pre-pass static type resolver did not recognise the
+// `Array<T>` spelling and resolved `String.repr` to `Unknown` (→ i32),
+// which LICM then hoisted with the wrong type, producing an invalid core
+// module ("expected i32, found (ref ...)") only at -O2.
+use { from_string } from "core:json";
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+impl Deserialize for Point;
+
+export fn run() with Stdout {
+    let r = from_string::<Point>("{\"x\":3,\"y\":4}");
+    if let Ok(p) = r {
+        println(`{p.x},{p.y}`);
+    } else {
+        panic("deserialize Point failed");
+    }
+}
+
+__DATA__
+{"stdout": "3,4\n"}

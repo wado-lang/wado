@@ -253,6 +253,9 @@ fn visit_item(spans: &mut TypeSpans, item: &Item) {
             visit_type(spans, &g.ty);
             visit_expr(spans, &g.initializer);
         }
+        Item::BuiltinTypeDecl(d) => {
+            visit_generic_params(spans, &d.type_params);
+        }
         Item::Use(_)
         | Item::Resource(_)
         | Item::World(_)

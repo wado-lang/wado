@@ -96,8 +96,8 @@ use {
 } from "core:prelude/intparse.wado";
 
 /// Copy bytes from linear memory to a new GC array (internal helper)
-fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
-    let mut arr: builtin::array<u8> = builtin::array_new(len);
+fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
+    let mut arr: Array<u8> = builtin::array_new(len);
     for let mut i = 0; i < len; i += 1 {
         builtin::array_set_u8(&mut arr, i, builtin::i32_load8_u(ptr + i) as u8);
     }
@@ -120,7 +120,7 @@ fn count_digits_i64(val: i64) -> i32 {
 }
 
 /// Write `digit_count` decimal digits of `abs_val` backwards into `arr` starting at `offset`.
-fn write_decimal_digits(arr: &mut builtin::array<u8>, offset: i32, abs_val: i64, digit_count: i32) {
+fn write_decimal_digits(arr: &mut Array<u8>, offset: i32, abs_val: i64, digit_count: i32) {
     let mut pos = offset + digit_count;
     if abs_val == 0 {
         builtin::array_set_u8(arr, offset, '0' as u8);
@@ -133,7 +133,7 @@ fn write_decimal_digits(arr: &mut builtin::array<u8>, offset: i32, abs_val: i64,
 }
 
 /// Write `digit_count` digits of `abs_val` in given base backwards into `arr` at `offset`.
-fn write_base_digits(arr: &mut builtin::array<u8>, offset: i32, abs_val: i64, digit_count: i32, base: i32, upper: bool) {
+fn write_base_digits(arr: &mut Array<u8>, offset: i32, abs_val: i64, digit_count: i32, base: i32, upper: bool) {
     let base64 = base as i64;
     let mut pos = offset + digit_count;
     if abs_val == 0 {
@@ -202,7 +202,7 @@ fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
 }
 
 /// Write digits of a u64 value (as raw i64 bits) in a power-of-2 base.
-fn write_u64_base_digits(arr: &mut builtin::array<u8>, offset: i32, val_i64: i64, digit_count: i32, bits_per_digit: i32, mask: i32, upper: bool) {
+fn write_u64_base_digits(arr: &mut Array<u8>, offset: i32, val_i64: i64, digit_count: i32, bits_per_digit: i32, mask: i32, upper: bool) {
     let mask64 = mask as i64;
     let mut pos = offset + digit_count;
     if val_i64 == 0 {

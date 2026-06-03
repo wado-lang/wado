@@ -9,6 +9,12 @@
 #[compiler_item("tuple")]
 pub type [..T];
 
+/// Fixed-length GC array — the builtin storage primitive. Declared
+/// definition-less; its storage and instructions live in the compiler.
+/// A value type: deep-copied on assignment, argument passing, and return.
+#[compiler_item("array")]
+pub type Array<T>;
+
 /// Box wraps a value on the GC heap, enabling references to primitives.
 #[compiler_item("box")]
 pub struct Box<T> {
@@ -210,7 +216,7 @@ pub resource StreamWritable<T> {
     /// Write raw GC array directly to the stream.
     /// `len` is the number of valid elements (may be less than array capacity).
     #[cm("stream-write-raw")]
-    fn write_raw(&self, data: builtin::array<T>, len: i32);
+    fn write_raw(&self, data: Array<T>, len: i32);
 
     /// Cancel an in-progress write. Blocks until cancellation completes.
     #[cm("stream-cancel-write")]

@@ -253,6 +253,11 @@ pub enum CompilerItem {
     /// recorded so the compiler can synthesise tuple types under the
     /// correct module path.
     Tuple,
+    /// `Array<T>` — the raw GC array, declared definition-less
+    /// (`pub type Array<T>;`). The owning module and the user-facing
+    /// name are recorded so the type resolver can bind the name to the
+    /// `ResolvedType::BuiltinArray` builtin.
+    Array,
 }
 
 impl CompilerItem {
@@ -328,6 +333,7 @@ impl CompilerItem {
         Self::U128FromU64,
         Self::U128FromPair,
         Self::Tuple,
+        Self::Array,
     ];
 
     /// Total number of variants. `ALL.len()` at compile time.
@@ -410,6 +416,7 @@ impl CompilerItem {
             Self::U128FromU64 => "u128_from_u64",
             Self::U128FromPair => "u128_from_pair",
             Self::Tuple => "tuple",
+            Self::Array => "array",
         }
     }
 
@@ -464,6 +471,7 @@ impl CompilerItem {
             | Self::U128FromU64
             | Self::U128FromPair
             | Self::Tuple
+            | Self::Array
             // Variant cases of always-loaded variants/enums travel with
             // their parents — Option, Result, and Ordering are all in
             // the auto-loaded prelude, so their cases are always
@@ -581,6 +589,7 @@ impl CompilerItem {
             | Self::U128FromU64
             | Self::U128FromPair => CompilerItemKind::Method,
             Self::Tuple => CompilerItemKind::TupleFamily,
+            Self::Array => CompilerItemKind::BuiltinType,
             Self::OptionSome | Self::OptionNone | Self::ResultOk | Self::ResultErr => {
                 CompilerItemKind::VariantCase
             }
@@ -624,6 +633,8 @@ pub enum CompilerItemKind {
     Method,
     /// The `pub type [..T];` declaration that owns the tuple family.
     TupleFamily,
+    /// A named, definition-less builtin type (`pub type Array<T>;`).
+    BuiltinType,
     /// One case of a `variant` declaration (e.g. `Option::Some`).
     VariantCase,
     /// One case of an `enum` declaration (e.g. `Ordering::Less`).
@@ -639,6 +650,7 @@ impl fmt::Display for CompilerItemKind {
             Self::Trait => "trait",
             Self::Method => "method",
             Self::TupleFamily => "tuple type family",
+            Self::BuiltinType => "builtin type",
             Self::VariantCase => "variant case",
             Self::EnumCase => "enum case",
         })
@@ -735,6 +747,13 @@ pub enum Resolved {
     /// user-visible declared name on the Wado side, only an owning
     /// module; the [`ModuleSource`] is therefore the only payload.
     TupleFamily { module_source: ModuleSource },
+    /// A named, definition-less builtin type (`Array<T>`). Carries the
+    /// owning module and the user-facing name so the type resolver can
+    /// bind the name to its builtin `ResolvedType`.
+    BuiltinType {
+        module_source: ModuleSource,
+        name: String,
+    },
     /// One case of a `variant` declaration. Carries the owning
     /// variant's name (`Option`, `Result`) so downstream consumers can
     /// reconstruct the `TirPattern::Variant.enum_type` / lookup keys,
@@ -773,6 +792,7 @@ impl Resolved {
             Self::Trait { .. } => CompilerItemKind::Trait,
             Self::Method { .. } => CompilerItemKind::Method,
             Self::TupleFamily { .. } => CompilerItemKind::TupleFamily,
+            Self::BuiltinType { .. } => CompilerItemKind::BuiltinType,
             Self::VariantCase { .. } => CompilerItemKind::VariantCase,
             Self::EnumCase { .. } => CompilerItemKind::EnumCase,
         }
@@ -788,6 +808,7 @@ impl Resolved {
             | Self::Trait { module_source, .. }
             | Self::Method { module_source, .. }
             | Self::TupleFamily { module_source }
+            | Self::BuiltinType { module_source, .. }
             | Self::VariantCase { module_source, .. }
             | Self::EnumCase { module_source, .. } => module_source,
         }

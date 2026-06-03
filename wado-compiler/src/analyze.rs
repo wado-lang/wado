@@ -550,6 +550,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     // Tuple type family declaration — handled in orchestration
                 }
 
+                Item::BuiltinTypeDecl(_) => {
+                    // Named definition-less builtin type (`pub type Array<T>;`)
+                    // — its compiler_item + name binding is handled in
+                    // orchestration; no plain symbol to define.
+                }
+
                 Item::Error(_) => {
                     // Error-recovery placeholder; no symbol to define.
                 }

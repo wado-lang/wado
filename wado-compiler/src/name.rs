@@ -1128,12 +1128,12 @@ pub fn mangle_option_type(inner_type: &str) -> String {
     format!("Option<{inner_type}>")
 }
 
-/// Build a `builtin::array` type name from element type name.
+/// Build the raw GC array type name from element type name.
 ///
 /// Examples:
-/// - `mangle_builtin_array_type("i32")` → `"builtin::array<i32>"`
+/// - `mangle_builtin_array_type("i32")` → `"Array<i32>"`
 pub fn mangle_builtin_array_type(elem_type: &str) -> String {
-    format!("builtin::array<{elem_type}>")
+    format!("Array<{elem_type}>")
 }
 
 /// Build a local method name from struct name and method name.

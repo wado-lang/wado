@@ -2987,7 +2987,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             ResolvedType::BuiltinArray(elem) => {
-                format!("builtin::array<{}>", self.type_id_to_string(elem))
+                format!("Array<{}>", self.type_id_to_string(elem))
             }
             ResolvedType::Ref(inner) => format!("&{}", self.type_id_to_string(inner)),
             ResolvedType::MutRef(inner) => format!("&mut {}", self.type_id_to_string(inner)),

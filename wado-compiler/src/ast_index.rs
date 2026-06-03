@@ -305,6 +305,12 @@ fn record_item_name_spans(index: &mut AstIndex, item: &Item) {
         Item::Global(g) => {
             index.name_spans.insert(g.id, g.name_span);
         }
+        Item::BuiltinTypeDecl(d) => {
+            index.name_spans.insert(d.id, d.name_span);
+            for tp in &d.type_params {
+                index.name_spans.insert(tp.id, tp.name_span);
+            }
+        }
         Item::Impl(imp) => record_impl_name_spans(index, imp),
         Item::Use(_) | Item::World(_) | Item::Test(_) | Item::TupleTypeDecl(_) => {}
         // Error-recovery placeholder; its own span is the only fact to record,

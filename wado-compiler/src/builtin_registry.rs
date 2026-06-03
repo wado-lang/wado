@@ -199,6 +199,18 @@ impl BuiltinRegistry {
                     TypeTable::UNIT
                 }
             }
+            // `Array<T>` is the user-facing spelling of the raw GC array
+            // builtin; the builtin module's own signatures use it.
+            Type::Generic(g) if g.name == "Array" => {
+                if let Some(first_arg) = g.args.first() {
+                    let element_type = Self::resolve_type(first_arg, type_params, type_table);
+                    type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::BuiltinArray(element_type))
+                } else {
+                    TypeTable::UNIT
+                }
+            }
             Type::Tuple(elements) => {
                 let element_types: Vec<TypeId> = elements
                     .iter()

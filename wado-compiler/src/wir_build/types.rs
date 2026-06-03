@@ -481,7 +481,7 @@ fn register_raw_array_type(
         return;
     }
 
-    let fq = format!("builtin::array<{elem_name}>");
+    let fq = crate::name::mangle_builtin_array_type(&elem_name);
     let elem_wir_type = ctx.type_id_to_wir_type(type_table, element_type_id);
 
     let type_id = ctx.register_type(

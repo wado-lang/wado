@@ -1840,7 +1840,7 @@ impl TypeTable {
             ResolvedType::Unknown => "unknown".to_string(),
             ResolvedType::Error => "error".to_string(),
             ResolvedType::BuiltinArray(elem) => {
-                format!("builtin::array<{}>", self.type_name(*elem))
+                format!("Array<{}>", self.type_name(*elem))
             }
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::Enum { name, .. } => name.clone(),

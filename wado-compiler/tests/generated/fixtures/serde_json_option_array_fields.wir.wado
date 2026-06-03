@@ -14,16 +14,16 @@ struct core:prelude/types.wado//Box<Option<core:prelude/string.wado/String>> {  
     mut value: ref null "core:prelude/string.wado//String",
 }
 
-array builtin::array<u8> (mut u8);  // TypeId(3)
+array Array<u8> (mut u8);  // TypeId(3)
 
 struct core:prelude/string.wado//StrCharIter {  // TypeId(4)
-    mut repr: ref builtin::array<u8>,
+    mut repr: ref Array<u8>,
     mut used: i32,
     mut byte_index: i32,
 }
 
 struct core:prelude/string.wado//String {  // TypeId(5)
-    mut repr: ref builtin::array<u8>,
+    mut repr: ref Array<u8>,
     mut used: i32,
 }
 
@@ -84,10 +84,10 @@ struct wado-compiler/tests/fixtures/serde_json_option_array_fields.wado//User { 
     mut scores: ref "core:prelude//List<i32>",
 }
 
-array builtin::array<i32> (mut i32);  // TypeId(16)
+array Array<i32> (mut i32);  // TypeId(16)
 
 struct core:prelude/list.wado//ListRefIter<i32> {  // TypeId(17)
-    mut repr: ref builtin::array<i32>,
+    mut repr: ref Array<i32>,
     mut used: i32,
     mut index: i32,
 }
@@ -238,7 +238,7 @@ struct core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:
 }
 
 struct core:prelude//List<i32> {  // TypeId(47)
-    mut repr: ref builtin::array<i32>,
+    mut repr: ref Array<i32>,
     mut used: i32,
 }
 
@@ -282,7 +282,7 @@ type "functype//wado-compiler/tests/fixtures/serde_json_option_array_fields.wado
 
 type "functype//wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/$value_copy$T20$shallow" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(67)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(68)
+type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(68)
 
 type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(69)
 
@@ -292,11 +292,11 @@ type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String"
 
 type "functype//core:internal/unreachable" = fn();  // TypeId(72)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(73)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(73)
 
 type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(74)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(75)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(75)
 
 type "functype//core:prelude/fpfmt.wado/pow10_coarse" = fn(i32) -> [u64, u64];  // TypeId(76)
 
@@ -312,9 +312,9 @@ type "functype//core:prelude/fpfmt.wado/parse" = fn(u64, i32) -> f64;  // TypeId
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(82)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(83)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(83)
 
-type "functype//core:prelude/primitive.wado/write_base_digits" = fn(ref builtin::array<u8>, i32, i64, i32, i32, bool);  // TypeId(84)
+type "functype//core:prelude/primitive.wado/write_base_digits" = fn(ref Array<u8>, i32, i64, i32, i32, bool);  // TypeId(84)
 
 type "functype//core:prelude/primitive.wado/count_digits_base" = fn(i64, i32) -> i32;  // TypeId(85)
 
@@ -342,7 +342,7 @@ type "functype//core:prelude/string.wado/String::push_str_range_unchecked" = fn(
 
 type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(97)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(98)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref Array<u8>, ref Array<u8>, i32) -> bool;  // TypeId(98)
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(99)
 
@@ -698,9 +698,9 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
 }
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
-    let bytes: ref builtin::array<u8>;
+    let bytes: ref Array<u8>;
     let len: i32;
-    let new_repr: ref builtin::array<u8>;
+    let new_repr: ref Array<u8>;
     bytes = message.repr;
     len = message.used;
     if add_newline {
@@ -1368,7 +1368,7 @@ fn "core:prelude/primitive.wado/i32^LowerHex::fmt"(self, f) {
 fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref builtin::array<u8>;
+    let new_repr: ref Array<u8>;
     let a_5: i32;
     let a_7: i32;
     capacity = builtin::array_len(self.repr);
@@ -1627,7 +1627,7 @@ fn "core:json/JsonDeserializer::skip_whitespace"(self) {
     let index: i32;
     let _licm_input_5: ref "core:prelude/string.wado//String";
     let _licm_used_6: i32;
-    let _licm_repr_7: ref builtin::array<u8>;
+    let _licm_repr_7: ref Array<u8>;
     let __hfs_pos_8: i32;
     _licm_input_5 = self.input;
     _licm_used_6 = _licm_input_5.used;
@@ -1715,10 +1715,10 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
     let index_39: i32;
     let offset_43: i64;
     let _licm_input_44: ref "core:prelude/string.wado//String";
-    let _licm_repr_45: ref builtin::array<u8>;
+    let _licm_repr_45: ref Array<u8>;
     let _licm_input_46: ref "core:prelude/string.wado//String";
     let _licm_used_47: i32;
-    let _licm_repr_48: ref builtin::array<u8>;
+    let _licm_repr_48: ref Array<u8>;
     let __hfs_pos_49: i32;
     let __hfs_pos_50: i32;
     let __hfs_call_51: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>";
@@ -1870,7 +1870,7 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {
     let offset_13: i64;
     let _licm_pos_14: i32;
     let _licm_input_15: ref "core:prelude/string.wado//String";
-    let _licm_repr_16: ref builtin::array<u8>;
+    let _licm_repr_16: ref Array<u8>;
     self.pos = self.pos + 1;
     start = self.pos;
     if (self.pos + 4) > self.input.used {
@@ -1918,13 +1918,13 @@ fn "core:json/JsonDeserializer::skip_number"(self) {
     let index_29: i32;
     let _licm_input_30: ref "core:prelude/string.wado//String";
     let _licm_used_31: i32;
-    let _licm_repr_32: ref builtin::array<u8>;
+    let _licm_repr_32: ref Array<u8>;
     let _licm_input_33: ref "core:prelude/string.wado//String";
     let _licm_used_34: i32;
-    let _licm_repr_35: ref builtin::array<u8>;
+    let _licm_repr_35: ref Array<u8>;
     let _licm_input_36: ref "core:prelude/string.wado//String";
     let _licm_used_37: i32;
-    let _licm_repr_38: ref builtin::array<u8>;
+    let _licm_repr_38: ref Array<u8>;
     let __hfs_pos_39: i32;
     let __hfs_pos_40: i32;
     let __hfs_pos_41: i32;
@@ -2068,7 +2068,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
     let msg_47: ref "core:prelude/string.wado//String";
     let _licm_input_49: ref "core:prelude/string.wado//String";
     let _licm_used_50: i32;
-    let _licm_repr_51: ref builtin::array<u8>;
+    let _licm_repr_51: ref Array<u8>;
     let __hfs_pos_52: i32;
     let __hfs_pos_53: i32;
     let __hfs_pos_54: i32;
@@ -2242,7 +2242,7 @@ fn "core:json/JsonDeserializer::skip_string"(self) {
     let offset_10: i64;
     let _licm_input_11: ref "core:prelude/string.wado//String";
     let _licm_used_12: i32;
-    let _licm_repr_13: ref builtin::array<u8>;
+    let _licm_repr_13: ref Array<u8>;
     let __hfs_pos_14: i32;
     self.pos = self.pos + 1;
     _licm_input_11 = self.input;
@@ -2884,7 +2884,7 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field<wado-compiler/tests
     let _licm_de_37: ref "core:json//JsonDeserializer";
     let _licm_input_38: ref "core:prelude/string.wado//String";
     let _licm_used_39: i32;
-    let _licm_repr_40: ref builtin::array<u8>;
+    let _licm_repr_40: ref Array<u8>;
     let __hfs_pos_41: i32;
     "core:json/JsonDeserializer::skip_whitespace"(self.de);
     if builtin::unlikely(self.de.pos >= self.de.input.used) {
@@ -3050,7 +3050,7 @@ fn "core:json/JsonStructSerializer^SerializeStruct::field<core:prelude/string.wa
 fn "core:prelude/list.wado/List<i32>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref builtin::array<i32>;
+    let new_repr: ref Array<i32>;
     let a: i32;
     capacity = builtin::array_len(self.repr);
     a = capacity * 2;
