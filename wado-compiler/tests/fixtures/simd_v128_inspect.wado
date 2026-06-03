@@ -1,0 +1,26 @@
+// Regression: a struct containing a `v128` (SIMD) field must auto-derive
+// `Inspect` without an internal compiler error. Before `impl Inspect for v128`
+// existed in `core:simd`, auto-deriving `Inspect` for `Wrap` produced an
+// unresolved `v128^Inspect::inspect` method call that panicked in WIR
+// translation. Inspecting a bare `v128` exercises the same impl directly.
+use { println, Stdout } from "core:cli";
+use { u8x16 } from "core:simd";
+
+struct Wrap {
+    bytes: u8x16,
+}
+
+export fn run() with Stdout {
+    let v: u8x16 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+    println(`{v:?}`);
+    let w = Wrap { bytes: v };
+    println(`{w:?}`);
+}
+
+__DATA__
+{
+    "stdout_contains": [
+        "v128(0x000102030405060708090a0b0c0d0e0f) as u8x16",
+        "Wrap { bytes: v128(0x000102030405060708090a0b0c0d0e0f) as u8x16 }"
+    ]
+}

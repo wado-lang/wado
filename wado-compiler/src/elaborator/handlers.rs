@@ -57,6 +57,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         with_expr: &ast::WithHandlerExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> TirExpr {
         // Counter feeding `HandlerBindingFacts.bundle_group` for the
         // bundled-handler form. A bundled clause may expand into multiple
@@ -75,16 +76,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // so handler-introduced bindings, if any, don't leak — matches how
         // regular block expressions behave.
         ctx.enter_scope();
-        let body = self.resolve_block(&with_expr.body, ctx, None);
+        let body = self.resolve_block(&with_expr.body, ctx, expected_type);
         ctx.exit_scope();
+
+        // `with ... do { ... }` is an expression: it evaluates to its body
+        // block's value (the shared `block_result_type` handles every tail
+        // kind — a bare expression, an `if`/`else`, a `match`, a labeled
+        // block, or a diverging `return`). Typing it this way rather than a
+        // hardcoded `Unit` is what makes the value form
+        // `let x = with E => h do { ... }` work; for the common statement form
+        // the body's tail is `Unit`, so this is unchanged.
+        let result_type = crate::tir::block_result_type(&body);
 
         TirExpr::new(
             TirExprKind::WithHandler {
                 bindings: Vec::new(),
                 body,
-                result_type: TypeTable::UNIT,
+                result_type,
             },
-            TypeTable::UNIT,
+            result_type,
             with_expr.span,
         )
     }

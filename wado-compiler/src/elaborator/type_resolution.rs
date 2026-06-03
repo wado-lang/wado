@@ -364,6 +364,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow_mut()
                     .make_future_writable(elem)
             }
+            // `Array<T>` is the user-facing spelling of the raw GC array
+            // builtin (`ResolvedType::BuiltinArray`), declared
+            // definition-less via `#[compiler_item("array")]` in
+            // `core:prelude`. Resolved by its canonical name, like the
+            // other prelude builtins (`Option` / `Stream` / `Future`);
+            // this also resolves the builtin module's own signatures,
+            // which are elaborated before the compiler-item registry is
+            // populated.
+            _ if name == TypeTable::ARRAY_TYPE_NAME => {
+                if args.len() != 1 {
+                    let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                        expected: 1,
+                        found: args.len(),
+                        span,
+                    });
+                    return TypeTable::ERROR;
+                }
+                let element_type = self.resolve_type(&args[0]);
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_builtin_array(element_type)
+            }
             _ => {
                 // Check if it's a user-defined generic struct
                 if self.sem.decls.generic_struct_names.contains(name) {

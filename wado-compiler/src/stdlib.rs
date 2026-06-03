@@ -34,6 +34,7 @@ pub const CORE_BUILTIN: &str = include_str!("../lib/core/builtin.wado");
 pub const CORE_PRELUDE_TRAITS: &str = include_str!("../lib/core/prelude/traits.wado");
 pub const CORE_PRELUDE_INT128: &str = include_str!("../lib/core/prelude/int128.wado");
 pub const CORE_PRELUDE_TYPES: &str = include_str!("../lib/core/prelude/types.wado");
+pub const CORE_PRELUDE_ARRAY: &str = include_str!("../lib/core/prelude/array.wado");
 pub const CORE_PRELUDE_PRIMITIVE: &str = include_str!("../lib/core/prelude/primitive.wado");
 pub const CORE_PRELUDE_FORMAT: &str = include_str!("../lib/core/prelude/format.wado");
 pub const CORE_PRELUDE_LIST: &str = include_str!("../lib/core/prelude/list.wado");
@@ -56,7 +57,12 @@ pub const CORE_KILN_TYPES: &str = include_str!("../lib/core/kiln/types.wado");
 pub const CORE_KILN_WORLDS: &str = include_str!("../lib/core/kiln/worlds.wado");
 pub const CORE_URL: &str = include_str!("../lib/core/url.wado");
 pub const CORE_ROUTER: &str = include_str!("../lib/core/router.wado");
+<<<<<<< HEAD
 pub const CORE_DIGEST: &str = include_str!("../lib/core/digest.wado");
+||||||| 8daad84c
+=======
+pub const CORE_UUID: &str = include_str!("../lib/core/uuid.wado");
+>>>>>>> origin/main
 
 // WASI flat package files — re-export from all sub-interfaces (backward compat)
 pub const WASI_CLI: &str = include_str!("../lib/wasi/cli.wado");
@@ -126,6 +132,7 @@ pub const ALL_CORE_MODULES: &[(&str, &str)] = &[
     ("core:collections", CORE_COLLECTIONS),
     ("core:internal", CORE_INTERNAL),
     ("core:prelude", CORE_PRELUDE),
+    ("core:prelude/array.wado", CORE_PRELUDE_ARRAY),
     ("core:prelude/list.wado", CORE_PRELUDE_LIST),
     ("core:prelude/format.wado", CORE_PRELUDE_FORMAT),
     ("core:prelude/fpfmt.wado", CORE_PRELUDE_FPFMT),
@@ -147,7 +154,12 @@ pub const ALL_CORE_MODULES: &[(&str, &str)] = &[
     ("core:simd", CORE_SIMD),
     ("core:url", CORE_URL),
     ("core:router", CORE_ROUTER),
+<<<<<<< HEAD
     ("core:digest", CORE_DIGEST),
+||||||| 8daad84c
+=======
+    ("core:uuid", CORE_UUID),
+>>>>>>> origin/main
     ("core:kiln", CORE_KILN),
     ("core:kiln/kiln_host.wado", CORE_KILN_KILN_HOST),
     ("core:kiln/types.wado", CORE_KILN_TYPES),

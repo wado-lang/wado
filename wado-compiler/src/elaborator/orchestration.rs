@@ -366,6 +366,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             logger,
                         );
                     }
+                    Item::BuiltinTypeDecl(decl) => {
+                        super::item::register_builtin_type_compiler_item(
+                            &type_table,
+                            &decl.attrs,
+                            &decl.name,
+                            module_source,
+                            decl.span,
+                            logger,
+                        );
+                    }
                     _ => {}
                 }
             }
@@ -2717,6 +2727,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         type_params,
                     );
                     type_table.make_option(inner)
+                }
+                // `Array<T>` is the user-facing spelling of the raw GC array
+                // builtin (`ResolvedType::BuiltinArray`); mirror the elaborator's
+                // `resolve_generic_type` "Array" arm so struct field types
+                // resolved through this static pre-pass match.
+                _ if generic.name == TypeTable::ARRAY_TYPE_NAME && !generic.args.is_empty() => {
+                    let elem = Self::resolve_type_static_with_params(
+                        &generic.args[0],
+                        type_table,
+                        lookup,
+                        type_params,
+                    );
+                    type_table.make_builtin_array(elem)
                 }
                 _ => {
                     let type_args: Vec<TypeId> = generic

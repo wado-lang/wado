@@ -1,0 +1,19 @@
+// Test: `#[benign(E)]` suppresses only the named effect, unlike `#[ambient]`
+// which bypasses all of them. `emit` is benign for `Stdout`, so `println` is
+// admitted, but it also calls `eprintln` (which requires `Stderr`) without
+// declaring it — that effect is still required and must error.
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+
+#[benign(Stdout)]
+fn emit() {
+    println("ok");      // Stdout: benign, admitted in the body
+    eprintln("oops");   // Stderr: not benign, not declared -> error
+}
+
+export fn run() with Stdout, Stderr {
+    emit();
+}
+
+__DATA__
+{"compile_error": "missing effect 'Stderr'"}

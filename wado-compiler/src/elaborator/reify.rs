@@ -968,6 +968,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: extract_is_ambient_attr(&func.attrs),
+            benign_effects: self.reify_effects(&extract_benign_effect_names(&func.attrs)),
             inline_hint: extract_inline_hint_attr(&func.attrs),
             compiler_item: crate::elaborator::item::extract_compiler_item(
                 &func.attrs,
@@ -1405,6 +1406,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: extract_is_ambient_attr(&func.attrs),
+            benign_effects: self.reify_effects(&extract_benign_effect_names(&func.attrs)),
             inline_hint: extract_inline_hint_attr(&func.attrs),
             compiler_item: crate::elaborator::item::extract_compiler_item(
                 &func.attrs,
@@ -1494,6 +1496,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: false,
+            benign_effects: Vec::new(),
             inline_hint: InlineHint::Auto,
             compiler_item: None,
             export_name: None,
@@ -2324,7 +2327,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 )
             }
-            ast::Expr::WithHandler(with_expr) => self.reify_with_handler(with_expr, ctx),
+            ast::Expr::WithHandler(with_expr) => {
+                self.reify_with_handler(with_expr, ctx, recorded_type)
+            }
             // `build_tir_from_state` skips reify for modules with syntax
             // errors, so reify never walks an `Error` placeholder.
             ast::Expr::Error(_) => {
@@ -5845,8 +5850,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         with_expr: &ast::WithHandlerExpr,
         ctx: &mut FunctionContext,
+        result_type: crate::tir::TypeId,
     ) -> TirExpr {
-        use crate::tir::{EffectRef, TirExprKind, TirHandlerBinding, TypeTable};
+        use crate::tir::{EffectRef, TirExprKind, TirHandlerBinding};
 
         let mut bindings: Vec<TirHandlerBinding> = Vec::with_capacity(with_expr.handlers.len());
         for binding in &with_expr.handlers {
@@ -5880,16 +5886,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         ctx.enter_scope();
-        let body = self.reify_block(&with_expr.body, ctx, None);
+        // `with ... do { ... }` evaluates to its body block's trailing value.
+        // Propagate the recorded result type so the body's tail expression
+        // replays any coercion (e.g. literal widening) the annotate phase
+        // applied against the binding's expected type.
+        let body = self.reify_block(&with_expr.body, ctx, Some(result_type));
         ctx.exit_scope();
 
         TirExpr::new(
             TirExprKind::WithHandler {
                 bindings,
                 body,
-                result_type: TypeTable::UNIT,
+                result_type,
             },
-            TypeTable::UNIT,
+            result_type,
             with_expr.span,
         )
     }
@@ -8913,6 +8923,18 @@ fn ast_literal_to_pattern(lit: &ast::Literal) -> crate::tir::TirLiteralPattern {
 /// an Elaborator.
 fn extract_is_ambient_attr(attrs: &[crate::ast::Attribute]) -> bool {
     attrs.iter().any(|a| a.name == "ambient")
+}
+
+/// Collect the effect names from every `#[benign(E, ...)]` attribute; multiple
+/// attributes and arguments accumulate. The caller resolves them to
+/// `EffectRef`s via `reify_effects`.
+fn extract_benign_effect_names(attrs: &[crate::ast::Attribute]) -> Vec<String> {
+    attrs
+        .iter()
+        .filter(|a| a.name == "benign")
+        .flat_map(|a| a.args.iter().map(crate::ast::AttrArg::as_str))
+        .map(str::to_string)
+        .collect()
 }
 
 fn extract_inline_hint_attr(attrs: &[crate::ast::Attribute]) -> crate::tir::InlineHint {

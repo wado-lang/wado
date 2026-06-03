@@ -1,0 +1,217 @@
+#![stdlib("core:uuid")]
+//! UUID generation and parsing (RFC 9562).
+//!
+//! Only the two versions in common use today are provided:
+//!
+//! - `Uuid::v4()` — random UUID. The default for "just give me a unique id".
+//! - `Uuid::v7()` — time-ordered UUID. A 48-bit Unix-millisecond timestamp in
+//!   the high bytes makes values sortable by creation time, which is ideal for
+//!   database keys and log correlation.
+//!
+//! A `Uuid` is a single 128-bit value (stored as a `u8x16` SIMD register, one
+//! lane per byte). Construction, formatting, and parsing are all byte-oriented,
+//! which maps directly onto the lane layout. Equality and ordering compare the
+//! 16 bytes in big-endian order, so `v7` values sort by timestamp.
+//!
+//! Usage:
+//!
+//!   use { Uuid } from "core:uuid";
+//!
+//!   let id = Uuid::v4();              // with Random
+//!   let id = Uuid::v7();              // with Random, SystemClock
+//!   let s = `{id}`;                   // "0190b6e0-...-..." (canonical form)
+//!   if let Some(parsed) = Uuid::parse(&s) { ... }
+//!
+//! `parse` accepts both the hyphenated form and the 32-digit hyphenless
+//! "simple" form, matching Rust's `uuid` and Go's `google/uuid`.
+
+use { u8x16 } from "core:simd";
+use { Random } from "wasi:random";
+use { SystemClock } from "wasi:clocks";
+
+/// A 128-bit universally unique identifier.
+///
+/// The bytes are held big-endian: byte 0 is the most significant. This is the
+/// order RFC 9562 lays out the fields in, so the natural byte order is also the
+/// canonical string order and (for `v7`) the timestamp order.
+pub struct Uuid {
+    bytes: u8x16,
+}
+
+impl Uuid {
+    /// The nil UUID — all 128 bits zero (`00000000-0000-0000-0000-000000000000`).
+    pub fn nil() -> Uuid {
+        return Uuid { bytes: u8x16::splat(0) };
+    }
+
+    /// Generate a version-4 (random) UUID.
+    ///
+    /// All 122 free bits come from the cryptographically-secure `Random`
+    /// effect; the version (`0100`) and variant (`10`) bits are then forced
+    /// into place per RFC 9562.
+    pub fn v4() -> Uuid with Random {
+        let mut b = fill_random(16);
+        set_version_and_variant(&mut b, 0x40);
+        return from_byte_list(&b);
+    }
+
+    /// Generate a version-7 (time-ordered) UUID.
+    ///
+    /// The high 48 bits are the Unix timestamp in milliseconds, read from the
+    /// `SystemClock` effect; the remaining bits are random. Because the
+    /// timestamp occupies the most significant bytes, lexicographic / numeric
+    /// ordering of `v7` values matches creation-time ordering.
+    pub fn v7() -> Uuid with Random, SystemClock {
+        let now = SystemClock::now();
+        let ms = now.seconds as i64 * 1000 + now.nanoseconds as i64 / 1_000_000;
+        let mut b = fill_random(16);
+        b[0] = (ms >> 40 & 0xFF) as u8;
+        b[1] = (ms >> 32 & 0xFF) as u8;
+        b[2] = (ms >> 24 & 0xFF) as u8;
+        b[3] = (ms >> 16 & 0xFF) as u8;
+        b[4] = (ms >> 8 & 0xFF) as u8;
+        b[5] = (ms & 0xFF) as u8;
+        set_version_and_variant(&mut b, 0x70);
+        return from_byte_list(&b);
+    }
+
+    /// Parse a UUID string (case-insensitive), like Rust's `uuid` and Go's
+    /// `google/uuid`:
+    ///
+    /// - the canonical hyphenated form `8-4-4-4-12` (36 chars), with hyphens
+    ///   required at exactly the field boundaries, or
+    /// - the simple form: 32 hex digits with no hyphens.
+    ///
+    /// Returns `null` for anything else.
+    pub fn parse(s: &String) -> Option<Uuid> {
+        let len = s.len();
+        if len != 36 && len != 32 {
+            return null;
+        }
+        // Field widths in hex digits. The hyphenated form's separators fall
+        // between these groups (8-4-4-4-12); the simple form is one group of
+        // 32. Deriving the hyphen positions from the field structure keeps the
+        // canonical layout explicit instead of hardcoding offsets.
+        let groups: List<i32> = if len == 36 { [8, 4, 4, 4, 12] } else { [32] };
+        let bytes: List<u8> = s.bytes().collect();
+        let mut out: List<u8> = [];
+        let mut pos = 0;
+        for let mut g = 0; g < groups.len(); g += 1 {
+            if g > 0 {
+                if bytes[pos] != '-' as u8 {
+                    return null;
+                }
+                pos += 1;
+            }
+            for let mut k = 0; k < groups[g]; k += 2 {
+                let hi = hex_value(bytes[pos]);
+                let lo = hex_value(bytes[pos + 1]);
+                if hi < 0 || lo < 0 {
+                    return null;
+                }
+                out.push((hi << 4 | lo) as u8);
+                pos += 2;
+            }
+        }
+        return Option::Some(from_byte_list(&out));
+    }
+
+    /// The version number (4 or 7 for UUIDs produced by this module).
+    pub fn version(&self) -> i32 {
+        return self.bytes.extract_lane(6) >> 4 & 0xF;
+    }
+
+    /// The canonical hyphenated lowercase string form.
+    pub fn to_string(&self) -> String {
+        let mut s = String::with_capacity(36);
+        for let mut i = 0; i < 16; i += 1 {
+            if i == 4 || i == 6 || i == 8 || i == 10 {
+                s.push('-');
+            }
+            let byte = self.bytes.extract_lane(i);
+            s.push_str(&`{byte:02x}`);
+        }
+        return s;
+    }
+}
+
+impl Display for Uuid {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.to_string());
+    }
+}
+
+impl Eq for Uuid {
+    fn eq(&self, other: &Uuid) -> bool {
+        return self.bytes.eq(&other.bytes).all_true();
+    }
+}
+
+impl Ord for Uuid {
+    fn cmp(&self, other: &Uuid) -> Ordering {
+        for let mut i = 0; i < 16; i += 1 {
+            let a = self.bytes.extract_lane(i);
+            let b = other.bytes.extract_lane(i);
+            if a < b {
+                return Ordering::Less;
+            }
+            if a > b {
+                return Ordering::Greater;
+            }
+        }
+        return Ordering::Equal;
+    }
+}
+
+impl Default for Uuid {
+    fn default() -> Uuid {
+        return Uuid::nil();
+    }
+}
+
+/// Force the RFC 9562 version (high nibble of byte 6) and variant (top two bits
+/// of byte 8) into a 16-byte buffer. `version_byte` is the version nibble
+/// already shifted into the high position (`0x40` for v4, `0x70` for v7).
+fn set_version_and_variant(b: &mut List<u8>, version_byte: u8) {
+    b[6] = (b[6] as i32 & 0x0F | version_byte as i32) as u8;
+    b[8] = (b[8] as i32 & 0x3F | 0x80) as u8;
+}
+
+/// Collect exactly `n` random bytes, looping to tolerate short reads (the
+/// `Random` contract allows returning fewer bytes than requested).
+fn fill_random(n: i32) -> List<u8> with Random {
+    let mut out: List<u8> = [];
+    while out.len() < n {
+        let chunk = Random::get_random_bytes((n - out.len()) as u64);
+        if chunk.is_empty() {
+            panic("Random::get_random_bytes returned no data");
+        }
+        for let byte of chunk {
+            out.push(byte);
+        }
+    }
+    return out;
+}
+
+fn from_byte_list(b: &List<u8>) -> Uuid {
+    let v: u8x16 = [
+        b[0] as i32, b[1] as i32, b[2] as i32, b[3] as i32, b[4] as i32, b[5] as i32, b[6] as i32, b[7] as i32,
+        b[8] as i32, b[9] as i32, b[10] as i32, b[11] as i32, b[12] as i32, b[13] as i32, b[14] as i32, b[15] as i32,
+    ];
+    return Uuid { bytes: v };
+}
+
+/// The value of a single ASCII hex digit byte (`0`–`9`, `a`–`f`, `A`–`F`), or
+/// `-1` when the byte is not a hex digit.
+fn hex_value(byte: u8) -> i32 {
+    if byte >= '0' as u8 && byte <= '9' as u8 {
+        return (byte - '0' as u8) as i32;
+    }
+    if byte >= 'a' as u8 && byte <= 'f' as u8 {
+        return (byte - 'a' as u8) as i32 + 10;
+    }
+    if byte >= 'A' as u8 && byte <= 'F' as u8 {
+        return (byte - 'A' as u8) as i32 + 10;
+    }
+    return -1;
+}

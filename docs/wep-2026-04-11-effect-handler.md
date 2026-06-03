@@ -101,6 +101,19 @@ section records only the current state.
       `effect_handler_resource_future.wado` (`MockFuture` round-tripping
       a value through a stored slot).
 
+- [x] Value form (`let x = with E => h do { expr }`). `with ... do` is an
+      expression that evaluates to its body block's trailing value, not a
+      statement that always yields `()`. The elaborator types `WithHandler`
+      as the body's value type (annotate `resolve_with_handler` and reify
+      `reify_with_handler` both derive it from the body's tail expression;
+      `block_value_type` is the shared helper), and the dispatch desugaring
+      binds the body's trailing value to a temp local while the handler is
+      still installed, runs the restore sequence, then yields the local as
+      the block's tail (`take_tail_value` in
+      `synthesis/effect_dispatch.rs`). The statement form is unchanged: a
+      `Unit`-tailed body skips the temp entirely. Fixture:
+      `effect_handler_value_form.wado`.
+
 - [ ] `core:test::MockCM` and handler-bundling helpers (e.g.
       `MockStdout::drain()`). With generic-resource dispatch in place,
       packaging the buffered Stream/Future handlers from the
@@ -171,6 +184,27 @@ with Stdin => &mut mock_stdin, Stdout => &mut mock_stdout do {
     // ...
 }
 ```
+
+### Value Form
+
+`with ... do { ... }` is an expression. Like other Wado blocks (`if`, `match`,
+labeled blocks), it evaluates to its body's trailing value, so it can be bound
+or fed directly into another expression:
+
+```wado
+let id = with Random => &mut rng do {
+    Uuid::v4()
+};
+
+// Two value-form blocks feeding a comparison.
+let a = with Random => &mut rng, SystemClock => &early do { Uuid::v7() };
+let b = with Random => &mut rng, SystemClock => &late do { Uuid::v7() };
+assert a < b;
+```
+
+The body's value is evaluated while the handler is still installed and survives
+the per-effect dispatch restore. The statement form is just the special case
+where the body's tail is `Unit`.
 
 Only the effects actually needed are required on the calling function:
 

@@ -6,10 +6,10 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(0)
     mut value: i32,
 }
 
-array builtin::array<u8> (mut u8);  // TypeId(1)
+array Array<u8> (mut u8);  // TypeId(1)
 
 struct core:prelude/string.wado//String {  // TypeId(2)
-    mut repr: ref builtin::array<u8>,
+    mut repr: ref Array<u8>,
     mut used: i32,
 }
 
@@ -28,16 +28,16 @@ struct wado-compiler/tests/fixtures/try_op_generic_method_call.wado//StringSink 
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-array builtin::array<i32> (mut i32);  // TypeId(5)
+array Array<i32> (mut i32);  // TypeId(5)
 
 struct core:prelude/list.wado//ListIter<i32> {  // TypeId(6)
-    mut repr: ref builtin::array<i32>,
+    mut repr: ref Array<i32>,
     mut used: i32,
     mut index: i32,
 }
 
 struct core:prelude//List<i32> {  // TypeId(7)
-    mut repr: ref builtin::array<i32>,
+    mut repr: ref Array<i32>,
     mut used: i32,
 }
 
@@ -71,17 +71,17 @@ type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wad
 
 type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(22)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(23)
+type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(23)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(24)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(24)
 
 type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(25)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(26)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(26)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(27)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(28)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(28)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(29)
 
@@ -170,9 +170,9 @@ fn "wado-compiler/tests/fixtures/try_op_generic_method_call.wado/__cm_export__ru
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref builtin::array<u8>;
+    let bytes: ref Array<u8>;
     let len: i32;
-    let new_repr: ref builtin::array<u8>;
+    let new_repr: ref Array<u8>;
     bytes = message.repr;
     len = message.used;
     if add_newline {
@@ -308,7 +308,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
 fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref builtin::array<u8>;
+    let new_repr: ref Array<u8>;
     let a_5: i32;
     let a_7: i32;
     capacity = builtin::array_len(self.repr);
@@ -405,9 +405,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
@@ -475,8 +475,8 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "wado-compiler/tests/fixtures/try_op_generic_method_call.wado/StringSink^Sink::put<i32>"(self, v) {
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
-    let self_8: i32;
-    self.buf = ref.as_non_null(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_2, self.buf); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; self_8 = v.value; "core:prelude/primitive.wado/i32::fmt_decimal"(self_8, __local_3); __local_2);
+    let __sroa_self_value: i32;
+    self.buf = ref.as_non_null(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_2, self.buf); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; __sroa_self_value = v.value; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value, __local_3); __local_2);
     return ref.null none;
 }
 

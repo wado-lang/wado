@@ -25,7 +25,7 @@ pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: boo
     let bytes = message.internal_raw_bytes();
     let len = message.len();
     if add_newline {
-        let mut new_repr: builtin::array<u8> = builtin::array_new(len + 1);
+        let mut new_repr: Array<u8> = builtin::array_new(len + 1);
         builtin::array_copy(&mut new_repr, 0, &bytes, 0, len);
         builtin::array_set_u8(&mut new_repr, len, 10);
         tx.write_raw(new_repr, len + 1);

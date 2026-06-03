@@ -1,0 +1,79 @@
+#![no_prelude]
+#![stdlib("core:prelude/array.wado")]
+// The raw fixed-length GC array `Array<T>` — the builtin storage primitive
+// behind `String` and `List<T>`, now exposed as a first-class value type.
+//
+// `Array<T>` is a value type: assigning it, passing it by value, or
+// returning it deep-copies the backing GC array (see WEP-2026-06-02). Its
+// length is a runtime value (`array.len`), not part of the type. Element
+// access always copies (`arr[i]` returns `T`, never `&T`) because Wasm GC
+// has no interior references; in-place mutation goes through `set` / `[i] = v`.
+//
+// Every method is a thin wrapper over a `builtin::array_*` intrinsic, which
+// lowers directly to the matching `array.*` instruction.
+
+use { IndexValue, IndexAssign } from "core:prelude/traits.wado";
+
+/// Fixed-length GC array — the builtin storage primitive. Declared
+/// definition-less; its storage and instructions live in the compiler.
+#[compiler_item("array")]
+pub type Array<T>;
+
+impl Array<T> {
+    /// Creates a new array of `len` elements, each initialised to the
+    /// default value of `T` (`array.new_default`).
+    pub fn new(len: i32) -> Array<T> {
+        return builtin::array_new(len);
+    }
+
+    /// Creates a new array of `len` elements, each set to `value`.
+    pub fn filled(len: i32, value: T) -> Array<T> {
+        let mut a: Array<T> = builtin::array_new(len);
+        builtin::array_fill(&mut a, 0, value, len);
+        return a;
+    }
+
+    /// Returns the number of elements (`array.len`).
+    pub fn len(&self) -> i32 {
+        return builtin::array_len(self);
+    }
+
+    /// Returns a copy of the element at `index` (`array.get`).
+    /// Traps if `index` is out of bounds.
+    pub fn get(&self, index: i32) -> T {
+        return builtin::array_get(self, index);
+    }
+
+    /// Sets the element at `index` to `value` (`array.set`).
+    /// Traps if `index` is out of bounds.
+    pub fn set(&mut self, index: i32, value: T) with stores[value] {
+        builtin::array_set(self, index, value);
+    }
+
+    /// Sets every element to `value` (`array.fill`).
+    pub fn fill(&mut self, value: T) with stores[value] {
+        builtin::array_fill(self, 0, value, builtin::array_len(self));
+    }
+
+    /// Copies `len` elements of `src` starting at `src_off` into self
+    /// starting at `dst` (`array.copy`).
+    pub fn copy_from(&mut self, dst: i32, src: &Array<T>, src_off: i32, len: i32) {
+        builtin::array_copy(self, dst, src, src_off, len);
+    }
+}
+
+impl IndexValue<i32> for Array<T> {
+    type Output = T;
+
+    fn index_value(&self, index: i32) -> Self::Output {
+        return builtin::array_get(self, index);
+    }
+}
+
+impl IndexAssign<i32> for Array<T> {
+    type Input = T;
+
+    fn index_assign(&mut self, index: i32, value: Self::Input) with stores[value] {
+        builtin::array_set(self, index, value);
+    }
+}

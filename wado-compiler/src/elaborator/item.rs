@@ -74,6 +74,7 @@ fn placeholder_function(name: String, span: Span) -> TirFunction {
         is_dispatch_wrapper: false,
         is_cm_export: false,
         is_ambient: false,
+        benign_effects: Vec::new(),
         inline_hint: crate::tir::InlineHint::Auto,
         compiler_item: None,
         export_name: None,
@@ -413,6 +414,43 @@ pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
     }
     let resolved = Resolved::TupleFamily {
         module_source: module_source.clone(),
+    };
+    if let Err(err) = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved)
+    {
+        report_register_error(err, span, logger);
+    }
+}
+
+/// Register a named definition-less type (`pub type Array<T>;`) carrying a
+/// `#[compiler_item("...")]` annotation. Binds the builtin type's name and
+/// owning module so the type resolver can map the name to its builtin
+/// `ResolvedType`.
+pub(super) fn register_builtin_type_compiler_item<H: CompilerHost>(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    name: &str,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) {
+    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+        return;
+    };
+    if !check_compiler_item_placement(
+        item,
+        CompilerItemKind::BuiltinType,
+        module_source,
+        span,
+        logger,
+    ) {
+        return;
+    }
+    let resolved = Resolved::BuiltinType {
+        module_source: module_source.clone(),
+        name: name.to_string(),
     };
     if let Err(err) = type_table
         .borrow_mut()

@@ -13,10 +13,10 @@ struct ./variant_import_struct_module.wado//Options {  // TypeId(1)
     mut width: i32,
 }
 
-array builtin::array<u8> (mut u8);  // TypeId(2)
+array Array<u8> (mut u8);  // TypeId(2)
 
 struct core:prelude/string.wado//String {  // TypeId(3)
-    mut repr: ref builtin::array<u8>,
+    mut repr: ref Array<u8>,
     mut used: i32,
 }
 
@@ -46,13 +46,13 @@ type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wad
 
 type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(16)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(17)
+type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(17)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(18)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(18)
 
 type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(20)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(20)
 
 type "functype//core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
 
@@ -89,7 +89,7 @@ fn "wado-compiler/tests/fixtures/variant_import_struct_simple.wado/__cm_export__
     let opts: ref "./variant_import_struct_module.wado//Options";
     let s1: ref "core:prelude/string.wado//String";
     opts = struct.new "./variant_import_struct_module.wado//Options" { align: struct.new "./variant_import_struct_module.wado//Align" { 1 }, width: 0 };
-    s1 = "./variant_import_struct_module.wado/format_with_opts"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hi"), used: 2 }, opts);
+    s1 = "./variant_import_struct_module.wado/format_with_opts"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, opts);
     "core:cli/println"(s1);
     "wasi/task-return"(0);
 }
@@ -159,9 +159,9 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let bytes: ref builtin::array<u8>;
+    let bytes: ref Array<u8>;
     let len: i32;
-    let new_repr: ref builtin::array<u8>;
+    let new_repr: ref Array<u8>;
     bytes = message.repr;
     len = message.used;
     if add_newline {
@@ -241,7 +241,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
 fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref builtin::array<u8>;
+    let new_repr: ref Array<u8>;
     let a_5: i32;
     let a_7: i32;
     capacity = builtin::array_len(self.repr);

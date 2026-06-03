@@ -3,16 +3,17 @@
 // Converts AST back to canonical source code with comments.
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr,
-    CastExpr, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
-    ConditionElement, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt,
-    ForStmt, Function, FunctionType, GenericParam, GlobalDecl, IfExpr, IfStmt, ImplBlock,
-    ImportAttributes, IndexExpr, InterfaceDecl, InterfaceMethod, Item, LabeledBlockStmt, LetStmt,
-    Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Newtype, Param, Pattern,
-    ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl,
-    StructField, StructLiteralExpr, TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr,
-    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
-    VariantDecl, WhileStmt, WorldDecl, WorldExport,
+    AssertStmt, AssignExpr, AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt,
+    BuiltinTypeDecl, CallExpr, CastExpr, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr,
+    CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr, ExprStmt,
+    FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
+    GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InterfaceDecl,
+    InterfaceMethod, Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr,
+    MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind,
+    StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
+    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr,
+    UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WhileStmt, WorldDecl,
+    WorldExport,
 };
 use crate::comment::{Comment, CommentKind};
 use crate::hashmap::IndexSet;
@@ -340,6 +341,7 @@ impl<'a> Unparser<'a> {
             Item::Test(t) => self.unparse_test(t),
             Item::Global(g) => self.unparse_global(g),
             Item::TupleTypeDecl(d) => self.unparse_tuple_type_decl(d),
+            Item::BuiltinTypeDecl(d) => self.unparse_builtin_type_decl(d),
             // The formatter's fail-fast path produces no Item::Error; emit
             // nothing if one is ever unparsed (e.g. a future partial-AST caller).
             Item::Error(_) => {}
@@ -881,6 +883,15 @@ impl<'a> Unparser<'a> {
         self.emit_outer_attrs(&d.attrs);
         self.emit_kw_if(d.is_pub, "pub ");
         self.output.push_str("type [..T];\n");
+    }
+
+    fn unparse_builtin_type_decl(&mut self, d: &BuiltinTypeDecl) {
+        self.emit_outer_attrs(&d.attrs);
+        self.emit_kw_if(d.is_pub, "pub ");
+        self.output.push_str("type ");
+        self.output.push_str(&d.name);
+        self.unparse_generic_params(&d.type_params);
+        self.output.push_str(";\n");
     }
 
     fn unparse_newtype(&mut self, t: &Newtype) {
@@ -2639,6 +2650,7 @@ pub fn get_item_span(item: &Item) -> Span {
         Item::Test(t) => t.span,
         Item::Global(g) => g.span,
         Item::TupleTypeDecl(d) => d.span,
+        Item::BuiltinTypeDecl(d) => d.span,
         Item::Error(e) => e.span,
     }
 }
@@ -2660,6 +2672,7 @@ pub fn get_item_id(item: &Item) -> crate::ast::AstId {
         Item::Test(t) => t.id,
         Item::Global(g) => g.id,
         Item::TupleTypeDecl(d) => d.id,
+        Item::BuiltinTypeDecl(d) => d.id,
         Item::Error(e) => e.id,
     }
 }
@@ -2686,6 +2699,7 @@ fn get_item_first_line(item: &Item) -> usize {
             .and_then(|a| a.first().map(|a| a.span.line)),
         Item::Trait(t) => first_attr_line(&t.attrs),
         Item::TupleTypeDecl(d) => first_attr_line(&d.attrs),
+        Item::BuiltinTypeDecl(d) => first_attr_line(&d.attrs),
         Item::Test(t) => first_attr_line(&t.attributes),
         _ => None,
     };
@@ -3586,6 +3600,12 @@ pub fn unparse_newtype_signature(n: &Newtype) -> String {
     emit_decl_header(n.is_pub, "type ", &n.name, &n.type_params, &mut out);
     out.push_str(" = ");
     unparse_type_into(&n.ty, &mut out);
+    out
+}
+
+pub fn unparse_builtin_type_decl_signature(d: &BuiltinTypeDecl) -> String {
+    let mut out = String::new();
+    emit_decl_header(d.is_pub, "type ", &d.name, &d.type_params, &mut out);
     out
 }
 

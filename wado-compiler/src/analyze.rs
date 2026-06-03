@@ -550,6 +550,20 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     // Tuple type family declaration — handled in orchestration
                 }
 
+                Item::BuiltinTypeDecl(decl) => {
+                    // Named definition-less builtin type (`pub type Array<T>;`).
+                    // Register a type symbol so it has a declaration site (LSP,
+                    // `pub use`, prelude collision protection); its resolution
+                    // to a builtin `ResolvedType` is wired in the elaborator.
+                    self.define_unique(
+                        module_source,
+                        decl.id,
+                        &decl.name,
+                        SymbolKind::BuiltinType,
+                        decl.span,
+                    );
+                }
+
                 Item::Error(_) => {
                     // Error-recovery placeholder; no symbol to define.
                 }
