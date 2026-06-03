@@ -146,6 +146,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(array.new_fixed<u8>(65, 66, 67, 130)), used: 4 };
+
 fn "wado-compiler/tests/fixtures/ref_2.wado/double_all"(arr) {
     let i: i32;
     let value: i32;
@@ -360,7 +362,6 @@ fn "wado-compiler/tests/fixtures/ref_2.wado/ref_nested_mut_write_test"() with St
 
 fn "wado-compiler/tests/fixtures/ref_2.wado/ref_mut_array_append_complex_test"() with Stdout {
     let __b_0: ref "core:prelude//List<u8>";
-    let __b_2: ref "core:prelude//List<u8>";
     let i: i32;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
@@ -371,8 +372,7 @@ fn "wado-compiler/tests/fixtures/ref_2.wado/ref_mut_array_append_complex_test"()
     let _licm_used_41: i32;
     let _licm_repr_42: ref builtin::array<u8>;
     __b_0 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-    __b_2 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(65, 66, 67, 130), used: 4 };
-    "wado-compiler/tests/fixtures/ref_2.wado/process"(__b_0, __b_2, 4);
+    "wado-compiler/tests/fixtures/ref_2.wado/process"(__b_0, global:__const_obj_0, 4);
     "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }; "core:prelude/string.wado/String::push"(__local_5, 108); "core:prelude/string.wado/String::push"(__local_5, 101); "core:prelude/string.wado/String::push"(__local_5, 110); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; __sroa_self_value_39 = __b_0.used; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_39, __local_6); __local_5);
     i = 0;
     _licm_used_41 = __b_0.used;
@@ -401,8 +401,8 @@ fn "wado-compiler/tests/fixtures/ref_2.wado/__cm_export__run"() {
     msg = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello"), used: 5 };
     "wado-compiler/tests/fixtures/ref_2.wado/append_world"(msg);
     "core:cli/println"(msg);
-    s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 };
-    suffix = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("b"), used: 1 };
+    s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
+    suffix = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 };
     "core:prelude/string.wado/String::push_str"(s_3, suffix);
     "core:prelude/string.wado/String::push_str"(s_3, suffix);
     "core:cli/println"(s_3);
@@ -684,9 +684,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

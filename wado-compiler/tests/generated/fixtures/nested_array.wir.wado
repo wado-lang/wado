@@ -278,7 +278,7 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_3deep_iterate_te
         };
     };
     "core:cli/println"(__local_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_18 }; "core:prelude/primitive.wado/i32::fmt_decimal"(total, __local_19); __local_18);
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
 fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_iterate_test"() with Stdout {
@@ -327,8 +327,7 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_iterate_test"() 
                         continue l21;
                     };
                 };
-                buf_5 = "core:prelude/string.wado/String^Add::add"(buf_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-"), used: 1 });
+                buf_5 = "core:prelude/string.wado/String^Add::add"(buf_5, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 });
             } else {
                 break b17;
             }
@@ -336,7 +335,7 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_iterate_test"() 
         };
     };
     "core:cli/println"(buf_5);
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
 fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_method_test"() with Stdout {
@@ -362,7 +361,7 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_method_test"() w
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; self_47 = builtin::array_get<ref "core:prelude//List<i32>">(__b_0.repr, 1); __sroa_self_value_51 = self_47.used; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_51, __local_8); __local_7);
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
 fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_mutate_test"() with Stdout {
@@ -400,7 +399,7 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_mutate_test"() w
     } else {
         __local_10.precision;
     }); "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<core:prelude/list.wado/List<i32>>"(__b_0, __local_10, 1, limit_55); __local_9);
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
 fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_option_access_test"() with Stdout {
@@ -462,7 +461,7 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_option_access_te
                     "core:prelude/string.wado/String::push"(__local_12, 41);
                     __local_12;
                 } else {
-                    struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("None"), used: 4 };
+                    struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 111, 110, 101), used: 4 };
                 });
                 "core:cli/println"(s);
             } else {
@@ -471,7 +470,7 @@ fn "wado-compiler/tests/fixtures/nested_array.wado/nested_array_option_access_te
             continue l34;
         };
     };
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
 fn "wado-compiler/tests/fixtures/nested_array.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -674,7 +673,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<i32>"(
                 break b51;
             }
             if shown > 0 {
-                s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", "), used: 2 };
+                s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
                 "core:prelude/string.wado/String::push_str"(f.buf, s_11);
             }
             __sroa_self_value = builtin::array_get<i32>(_licm_repr_26, i);
@@ -693,7 +692,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<i32>"(
             s_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", ..."), used: 5 };
             "core:prelude/string.wado/String::push_str"(f.buf, s_19);
         } else {
-            s_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("..."), used: 3 };
+            s_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
             "core:prelude/string.wado/String::push_str"(f.buf, s_21);
         }
     }
@@ -731,7 +730,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<core:p
                 break b60;
             }
             if shown > 0 {
-                s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", "), used: 2 };
+                s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
                 "core:prelude/string.wado/String::push_str"(f.buf, s_11);
             }
             self_12 = builtin::array_get<ref "core:prelude//List<i32>">(_licm_repr_24, i);
@@ -755,7 +754,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<core:p
             s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", ..."), used: 5 };
             "core:prelude/string.wado/String::push_str"(f.buf, s_18);
         } else {
-            s_20 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("..."), used: 3 };
+            s_20 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
             "core:prelude/string.wado/String::push_str"(f.buf, s_20);
         }
     }
@@ -885,9 +884,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
