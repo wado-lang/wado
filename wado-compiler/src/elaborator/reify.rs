@@ -968,6 +968,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: extract_is_ambient_attr(&func.attrs),
+            benign_effects: self.reify_effects(&extract_benign_effect_names(&func.attrs)),
             inline_hint: extract_inline_hint_attr(&func.attrs),
             compiler_item: crate::elaborator::item::extract_compiler_item(
                 &func.attrs,
@@ -1372,6 +1373,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: extract_is_ambient_attr(&func.attrs),
+            benign_effects: self.reify_effects(&extract_benign_effect_names(&func.attrs)),
             inline_hint: extract_inline_hint_attr(&func.attrs),
             compiler_item: crate::elaborator::item::extract_compiler_item(
                 &func.attrs,
@@ -1461,6 +1463,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: false,
+            benign_effects: Vec::new(),
             inline_hint: InlineHint::Auto,
             compiler_item: None,
             export_name: None,
@@ -8880,6 +8883,18 @@ fn ast_literal_to_pattern(lit: &ast::Literal) -> crate::tir::TirLiteralPattern {
 /// an Elaborator.
 fn extract_is_ambient_attr(attrs: &[crate::ast::Attribute]) -> bool {
     attrs.iter().any(|a| a.name == "ambient")
+}
+
+/// Collect the effect names listed in `#[benign(E, ...)]` attributes. Multiple
+/// `#[benign(...)]` attributes and multiple arguments accumulate. The names are
+/// resolved to `EffectRef`s by the caller via [`Self::reify_effects`].
+fn extract_benign_effect_names(attrs: &[crate::ast::Attribute]) -> Vec<String> {
+    attrs
+        .iter()
+        .filter(|a| a.name == "benign")
+        .flat_map(|a| a.args.iter().map(crate::ast::AttrArg::as_str))
+        .map(str::to_string)
+        .collect()
 }
 
 fn extract_inline_hint_attr(attrs: &[crate::ast::Attribute]) -> crate::tir::InlineHint {

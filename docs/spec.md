@@ -3933,6 +3933,34 @@ pub fn api_function() with Http, FileSystem {
 }
 ```
 
+### Benign Effects (`#[benign(E)]`)
+
+A function marked `#[benign(E)]` may perform effect `E` in its body without declaring `with E`, and `E` is not propagated to its callers. This is for effects that are _observationally pure_ — performed internally but unobservable through the function's interface.
+
+```wado
+// `make` seeds a hash for DoS resistance, but the seed never affects any
+// observable result, so callers do not need `with InsecureSeed`.
+#[benign(InsecureSeed)]
+fn make<K, V>() -> HashMap<K, V> {
+    let seed = get_insecure_seed();
+    return HashMap { seed, /* ... */ };
+}
+
+fn use_map() {           // no `with InsecureSeed`
+    let m = make();
+}
+```
+
+Rules:
+
+- Only the listed effects are suppressed; every other effect the body performs still propagates normally. (This distinguishes `#[benign]` from the internal `#[ambient]` mechanism, which bypasses the effect system entirely.)
+- The world import for `E` is still required, because the body genuinely references `E`'s imported operations. `#[benign]` removes the `with E` propagation, not the capability.
+- `#[benign]` is an unchecked assertion of observational purity (the compiler cannot verify it), analogous to using an escape hatch. It is sound only when an invariant of the code makes `E` genuinely unobservable through the interface, and such uses must be audited.
+
+Multiple effects may be listed in one attribute (`#[benign(A, B)]`) or across several attributes.
+
+See [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md).
+
 ### Generic Effects (Effect Polymorphism)
 
 Use `<effect E>` to declare a generic effect parameter. `E` can represent zero or more concrete effects, inferred from function-typed arguments at each call site.
@@ -4324,6 +4352,18 @@ fn critical_path() -> i32 { return 1; }
 
 #[inline(never)]       // never inline
 fn error_handler() { panic("error"); }
+```
+
+#### `#[benign(E, ...)]`
+
+Declares that a function performs the listed effects internally but does not propagate them to callers, because they are observationally pure (unobservable through the function's interface). Only the named effects are suppressed; other effects propagate as usual, and the world import for each named effect is still required. It is an unchecked assertion and must be audited. See [Benign Effects](#benign-effects-benigne) in the Effect System section.
+
+```wado
+#[benign(InsecureSeed)]
+fn make<K, V>() -> HashMap<K, V> {
+    let seed = get_insecure_seed(); // performed here, not required of callers
+    return HashMap { seed, /* ... */ };
+}
 ```
 
 #### `#[hidden]`
