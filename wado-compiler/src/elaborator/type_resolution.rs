@@ -162,7 +162,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return resolved;
                 }
                 // Fallback: resolve via generic associated type definitions.
-                // This handles GenericInstance types like ArrayIter<i32> whose Iterator impl
+                // This handles GenericInstance types like ListIter<i32> whose Iterator impl
                 // is generic — resolve_assoc_type won't find a pre-registered entry, but
                 // resolve_generic_assoc_type can derive i32 from ("ListIter", "Item") → TypeParam(0).
                 if let Some(resolved) = self
@@ -422,7 +422,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )
                     }
                 } else if let Some(gn_info) = self.lookup_generic_newtype(name).cloned() {
-                    // Generic newtype instantiation: type MyArray<T> = Array<T>
+                    // Generic newtype instantiation: type MyArray<T> = List<T>
                     // Substitute type params in the base type AST, then resolve
                     let concrete_base_ast =
                         substitute_type_params(&gn_info.base_type_ast, &gn_info.type_params, args);

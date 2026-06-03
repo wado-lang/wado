@@ -487,7 +487,7 @@ fn walk_expr_for_leftmost(expr: &NirExpr, candidate: u32, field_name: &str) -> L
         NirExprKind::FieldAccess { expr: inner, .. } => {
             observable_propagate(walk_expr_for_leftmost(inner, candidate, field_name))
         }
-        // `Array<T>::index_value`-shaped Index may trap on a null base
+        // `List<T>::index_value`-shaped Index may trap on a null base
         // and on OOB; the op itself is observable.
         NirExprKind::Index { expr: inner, index } => observable_propagate(walk_children_pure(
             [inner.as_ref(), index.as_ref()].into_iter(),

@@ -46,8 +46,8 @@ impl FuncInstState {
     /// because a generic impl's post-substitution function is materialised
     /// in the receiver type's module, not the impl block's module: that
     /// invariant is what `call_rewrite`'s "ref-blanket" path relies on to
-    /// route `&Array<i32>^Inspect::inspect` through the `&T`-blanket
-    /// instantiation rather than collapsing it to `Array<i32>::inspect`.
+    /// route `&List<i32>^Inspect::inspect` through the `&T`-blanket
+    /// instantiation rather than collapsing it to `List<i32>::inspect`.
     ///
     /// The lookup uses `info.struct_name` (the post-substitution type
     /// name) rather than `info.base_struct_name`, which mirrors the
@@ -85,7 +85,7 @@ impl FuncInstState {
 
     /// Module of any non-blanket `impl <trait> for <Type>` block — broader
     /// than [`Self::impl_module`] in that it also returns generic impls
-    /// (`impl<T> IntoIterator for Array<T>`) which live in the receiver
+    /// (`impl<T> IntoIterator for List<T>`) which live in the receiver
     /// type's own module by convention. Used by the type-param dispatch
     /// path to distinguish "the receiver type has a non-blanket impl,
     /// fall through to the receiver's module" from "no impl at all, use
@@ -212,7 +212,7 @@ impl Monomorphizer {
     /// arg, so the struct registered here and the `GenericInstance`
     /// looked up by mangled name in `substitute_type` agree on a single
     /// identity. Without this, a generic instantiated over a variant
-    /// (e.g. `IterMap<ArrayIter<Color>, String>`) was registered with an
+    /// (e.g. `IterMap<ListIter<Color>, String>`) was registered with an
     /// unqualified name from one side and looked up with a qualified
     /// name from the other, producing two distinct wasm-GC types for the
     /// same struct and an "expected (ref $type), found (ref $type)" ICE

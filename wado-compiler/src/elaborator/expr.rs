@@ -400,7 +400,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Literal::IncludeBytes(raw_path) => {
                 let key = [self.current_module_source.to_string(), raw_path.clone()];
-                let array_u8_type = self.tysys.type_table.borrow_mut().make_array(TypeTable::U8);
+                let array_u8_type = self.tysys.type_table.borrow_mut().make_list(TypeTable::U8);
                 if let Some(bytes) = self.tysys.included_files.get(&key) {
                     (TirExprKind::BytesLiteral(bytes.clone()), array_u8_type)
                 } else {
@@ -1667,8 +1667,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TirExpr::new(TirExprKind::Unit, TypeTable::UNKNOWN, index.span);
         }
 
-        // For Array and custom types, look for Index or IndexValue trait implementation
-        // (Array implements IndexValue<i32> with type Output = T)
+        // For List and custom types, look for Index or IndexValue trait implementation
+        // (List implements IndexValue<i32> with type Output = T)
         let struct_name = match &base_type {
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance { name, .. } => name.clone(),
@@ -2615,7 +2615,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let target_type = self.resolve_type(&cast.target_type);
 
         // Special case: tuple literal cast to a type implementing SequenceLiteralBuilder
-        // [1, 2, 3] as Array<i32>, [1, 2, 3] as SeqVec<i32>
+        // [1, 2, 3] as List<i32>, [1, 2, 3] as SeqVec<i32>
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(&cast.expr, ctx, target_type) {
             return coerced;
         }
@@ -2907,7 +2907,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 let is_tuple_literal = matches!(&field.value, ast::Expr::TupleLiteral(_));
 
-                // Generic call expressions (e.g. `Array::filled(n, 0)` inside
+                // Generic call expressions (e.g. `List::filled(n, 0)` inside
                 // a struct literal field) need the expected field type so the
                 // call's type-parameter inference can back-infer from it. Without
                 // this, the call falls back to literal defaults.
@@ -2928,7 +2928,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
 
                 // For tuple literals in generic struct fields where the field type
-                // contains type params (e.g., Array<T>), skip providing the expected
+                // contains type params (e.g., List<T>), skip providing the expected
                 // type so the tuple isn't coerced yet. Instead, resolve as a plain
                 // tuple and defer coercion to after type inference.
                 let needs_deferred_coercion = is_tuple_literal
@@ -3058,7 +3058,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Substitute type parameters in field value types.
             // This is necessary for empty array literals in self-referential fields
-            // (e.g., `children: []` in `Node<K> { children: Array<&Node<K>> }`)
+            // (e.g., `children: []` in `Node<K> { children: List<&Node<K>> }`)
             // which get typed with TypeParams before inference.
             //
             // Use map-based substitution (TypeId → TypeId) instead of index-based, so
@@ -3090,8 +3090,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Second pass: apply deferred tuple-to-sequence coercion now that
             // concrete type arguments are known. For example, [10, 20, 30] in
-            // `Container<i32> { items: [10, 20, 30] }` needs Array<i32> coercion,
-            // but at first pass the field type was Array<T> (type param).
+            // `Container<i32> { items: [10, 20, 30] }` needs List<i32> coercion,
+            // but at first pass the field type was List<T> (type param).
             if !deferred_coercions.is_empty() && !type_args.is_empty() {
                 for &(field_idx, ast_idx) in &deferred_coercions {
                     let field_name = &fields[field_idx].name;

@@ -144,7 +144,7 @@ pub(crate) enum CoercionKind {
     StringNewtype,
     /// A closure literal retagged as a newtype over its fn-type.
     ClosureToFnNewtype,
-    /// A tuple literal lowered through `SequenceLiteralBuilder` (Array
+    /// A tuple literal lowered through `SequenceLiteralBuilder` (List
     /// and user-defined sequence types).
     TupleToSequence,
     /// An anonymous struct literal lowered through `KeyValueLiteralBuilder`.
@@ -305,7 +305,7 @@ pub(crate) struct TypeAnnotations {
     #[allow(dead_code)]
     pub(crate) static_method_dispatch: IndexMap<SymbolKey, StaticMethodDispatch>,
     /// `SequenceLiteralBuilder` coercion data for a tuple literal
-    /// coerced into an `Array<T>` / user-defined sequence type. Keyed
+    /// coerced into an `List<T>` / user-defined sequence type. Keyed
     /// by the `Expr::TupleLiteral`'s [`AstId`]. The
     /// `try_coerce_tuple_to_sequence` path produces a desugar block
     /// (`__seq_lit: { let __b = Builder::new_literal(N); __b.push_literal(...); ...; break __seq_lit: __b.build(); }`)
@@ -589,7 +589,7 @@ pub(crate) struct FromCallFacts {
 #[allow(dead_code)]
 pub(crate) struct SequenceCoercionFacts {
     /// The builder struct's [`crate::tir::TypeId`] (e.g.
-    /// `Array<i32>`'s `SequenceLiteralBuilder` is `Array<i32>` itself).
+    /// `List<i32>`'s `SequenceLiteralBuilder` is `List<i32>` itself).
     pub(crate) builder_type: crate::tir::TypeId,
     /// The element type each `push_literal` call takes.
     pub(crate) element_type: crate::tir::TypeId,
@@ -605,7 +605,7 @@ pub(crate) struct SequenceCoercionFacts {
     pub(crate) builder_base_name: String,
     /// Mangled struct name used in `format_local` (e.g. `"List<i32>"`).
     pub(crate) mangled_builder_name: String,
-    /// Type-arg `TypeId`s on the builder (e.g. `[i32]` for `Array<i32>`).
+    /// Type-arg `TypeId`s on the builder (e.g. `[i32]` for `List<i32>`).
     pub(crate) type_arg_ids: Vec<crate::tir::TypeId>,
     /// Type-arg display names (mangled) parallel to `type_arg_ids`.
     pub(crate) type_arg_names: Vec<String>,
@@ -943,7 +943,7 @@ pub(crate) struct OperatorDispatch {
     /// arithmetic/comparison operator dispatches return the value
     /// directly and set this `false`. Recorded explicitly because the
     /// return-type shape alone is ambiguous: an `IndexValue` whose
-    /// `Output` is itself a reference (`Array<&i32>::index_value` →
+    /// `Output` is itself a reference (`List<&i32>::index_value` →
     /// `&i32`) would otherwise be mistaken for the `Index` shape and
     /// double-dereferenced.
     pub(crate) needs_deref: bool,

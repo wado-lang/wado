@@ -141,8 +141,8 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
 
     // Phase 3: Data flow
     //
-    // Forward constant struct fields. Array literals already arrive as
-    // `StructNew Array<T> { repr: array.new_fixed, used: N }` (the NIR
+    // Forward constant struct fields. List literals already arrive as
+    // `StructNew List<T> { repr: array.new_fixed, used: N }` (the NIR
     // `optimize::array_literal` pass materializes the literal and `wir_build`
     // lowers it), so the bounds-check-elimination path keys on that shape
     // directly. Loop-guarded bounds checks are eliminated at TIR level by the
@@ -214,7 +214,7 @@ pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn
     // Phase 8: Final DCE & compaction
     //
     // Mark functions orphaned by earlier WIR passes as dead (notably a
-    // single-element array literal's `Array<T>::push` instantiation, whose
+    // single-element array literal's `List<T>::push` instantiation, whose
     // only call site never existed once NIR `optimize::array_literal`
     // materialized the literal), then mark unreachable types as dead and
     // compact all dead items out of the module.

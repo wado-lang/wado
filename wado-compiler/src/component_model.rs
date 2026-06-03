@@ -2718,7 +2718,7 @@ pub fn cm_type_to_valtype(ty: &Type) -> ValType {
             "Future" => ValType::I32,
             // Tuple types map to i32 for simplicity (struct pointer)
             "Tuple" => ValType::I32,
-            // Array<T> is represented as a GC array reference (handled as i32 in WASI context)
+            // List<T> is represented as a GC array reference (handled as i32 in WASI context)
             "List" => ValType::I32,
             // Option<T> is represented as i32 discriminant
             "Option" => ValType::I32,
@@ -2763,7 +2763,7 @@ pub fn source_uses_cm_abi(source: &str) -> bool {
 
 /// Flatten a pre-resolved AST type into CM core-level `ValType`s.
 ///
-/// Compound types like String and `Array<T>` are lowered to (ptr: i32, len: i32)
+/// Compound types like String and `List<T>` are lowered to (ptr: i32, len: i32)
 /// in the Component Model core ABI. This function pushes the appropriate number
 /// of `ValType`s for each parameter.
 pub fn flatten_cm_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &CmInterfaceRegistry) {
@@ -3045,7 +3045,7 @@ fn is_return_type_supported_with_types(
     }
 }
 
-/// Check if a type is a supported primitive type (for inner types of Array/Option/Tuple)
+/// Check if a type is a supported primitive type (for inner types of List/Option/Tuple)
 fn is_primitive_type_supported_with_types(
     ty: &Type,
     enums: &IndexSet<&str>,
@@ -3680,7 +3680,7 @@ mod tests {
     fn test_array_and_option_type_support() {
         use crate::ast::{GenericType, NamedType};
 
-        // Array<String> should be supported
+        // List<String> should be supported
         let array_string = Type::Generic(GenericType {
             id: crate::ast::AstId::fresh(),
             name: "List".to_string(),
@@ -3697,7 +3697,7 @@ mod tests {
             "List<String> should be supported"
         );
 
-        // Array<Tuple<String, String>> should be supported
+        // List<Tuple<String, String>> should be supported
         let tuple_ss = Type::Generic(GenericType {
             id: crate::ast::AstId::fresh(),
             name: "Tuple".to_string(),

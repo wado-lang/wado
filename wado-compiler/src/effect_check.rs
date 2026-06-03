@@ -1426,7 +1426,7 @@ fn merge_sets(dst: &mut IndexSet<EffectRef>, src: &IndexSet<EffectRef>) {
 /// Walk a type recursively, collecting every resource (`Resource` or
 /// `GenericResource`) reference as an `EffectRef::Concrete`.
 ///
-/// Handles nested containers (`Option<T>`, `Result<T,E>`, tuples, `Array<T>`,
+/// Handles nested containers (`Option<T>`, `Result<T,E>`, tuples, `List<T>`,
 /// function types, refs, newtypes, struct fields, variant case payloads).
 /// Uses `visited` to stop at cycles (e.g. recursive struct types).
 fn collect_resource_refs(

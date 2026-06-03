@@ -199,7 +199,7 @@ pub fn register_types(ctx: &mut WirContext<'_>) {
     register_mono_library_types(ctx);
 
     // Phase 3.1: Monomorphized variants (first pass — register variants with simple
-    // payloads so that array element types can reference them, e.g. Array<Option<i32>>)
+    // payloads so that array element types can reference them, e.g. List<Option<i32>>)
     register_mono_variants(ctx);
 
     // Phase 3.5: Pre-register arrays from mono struct fields
@@ -208,9 +208,9 @@ pub fn register_types(ctx: &mut WirContext<'_>) {
     // Phase 3.6: All remaining raw array types (must come before wrapper structs)
     register_remaining_arrays(ctx);
 
-    // Phase 3.7: Array<T> wrapper structs — must come before mono entry structs
-    // because entry structs may have Array<T> fields that reference these wrappers
-    register_array_wrapper_structs(ctx);
+    // Phase 3.7: List<T> wrapper structs — must come before mono entry structs
+    // because entry structs may have List<T> fields that reference these wrappers
+    register_list_wrapper_structs(ctx);
 
     // Phase 4: Monomorphized entry module structs
     register_mono_entry_types(ctx);
@@ -252,8 +252,8 @@ fn register_struct(
         return;
     }
 
-    // Also check with newtypes resolved: e.g., Array<Tuple<FieldName,FieldValue>> should
-    // reuse the existing Array<Tuple<String,Array<u8>>> when FieldName/FieldValue are newtypes.
+    // Also check with newtypes resolved: e.g., List<Tuple<FieldName,FieldValue>> should
+    // reuse the existing List<Tuple<String,List<u8>>> when FieldName/FieldValue are newtypes.
     if let Some(ref mono) = tir_struct.monomorph_info {
         let has_newtypes = mono
             .impl_type_args
@@ -461,7 +461,7 @@ fn register_raw_array_type(
         return;
     }
     // Use the type-arg mangle so the element name matches what
-    // `register_array_wrapper_struct` looks up under (which is the
+    // `register_list_wrapper_struct` looks up under (which is the
     // monomorphizer-side qualified form). Otherwise the wrapper
     // lookup misses and the wrapper struct ends up unregistered for
     // any element whose qualified form differs from the unqualified
@@ -499,7 +499,7 @@ fn register_raw_array_type(
     ctx.array_type_by_name
         .insert(elem_name.clone(), type_id.clone());
     // Also register under the newtype-resolved name so that e.g.
-    // `Array<[FieldName, FieldValue]>` and `Array<[String, Array<u8>]>` share
+    // `List<[FieldName, FieldValue]>` and `List<[String, List<u8>]>` share
     // the same raw array type when FieldName/FieldValue are newtypes.
     if resolved_name != elem_name {
         ctx.array_type_by_name.insert(resolved_name, type_id);
@@ -1154,21 +1154,21 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// Register Array<T> wrapper structs for all `GenericInstance("List", [T])` types
+/// Register List<T> wrapper structs for all `GenericInstance("List", [T])` types
 /// found in any module's type table.
 ///
-/// In the TIR, `Array<T>` is `GenericInstance { name: "List", type_args: [T] }`,
+/// In the TIR, `List<T>` is `GenericInstance { name: "List", type_args: [T] }`,
 /// not a struct definition. We create wrapper structs here to provide the
 /// underlying GC array types that the WIR emitter needs.
 ///
-/// Types are processed in dependency order: if `T` is itself `Array<U>`,
-/// `Array<U>` is fully registered (raw array + wrapper struct) before
-/// `Array<Array<U>>` so that the backing array gets a concrete element type
+/// Types are processed in dependency order: if `T` is itself `List<U>`,
+/// `List<U>` is fully registered (raw array + wrapper struct) before
+/// `List<List<U>>` so that the backing array gets a concrete element type
 /// instead of abstract `structref`.
-fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
+fn register_list_wrapper_structs(ctx: &mut WirContext<'_>) {
     use crate::tir::ResolvedType;
 
-    // Collect unique Array<T> element types from the shared type table.
+    // Collect unique List<T> element types from the shared type table.
     let mut array_elem_types: Vec<(crate::tir::TypeId, String)> = Vec::new();
     let tt_rc = ctx.package.type_table.clone();
     {
@@ -1189,8 +1189,8 @@ fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
                 // GenericInstance args by `ModuleSource`). The
                 // newtype-resolving variant additionally resolves any
                 // newtype wrappers so that e.g.
-                // `Array<[FieldName, FieldValue]>` and
-                // `Array<[String, Array<u8>]>` dedup to one entry when
+                // `List<[FieldName, FieldValue]>` and
+                // `List<[String, List<u8>]>` dedup to one entry when
                 // FieldName/FieldValue are newtypes.
                 let elem_name =
                     type_table.mangle_type_arg_for_generic_resolving_newtypes(type_args[0]);
@@ -1201,7 +1201,7 @@ fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
         }
     }
 
-    // Topological sort: process leaf element types (non-Array) before nested ones.
+    // Topological sort: process leaf element types (non-List) before nested ones.
     // Partition into non-array elements (leaf) and array elements (nested).
     let tt = tt_rc.borrow();
     let mut leaf: Vec<(crate::tir::TypeId, String)> = Vec::new();
@@ -1228,12 +1228,12 @@ fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
         }
 
         // Register wrapper struct
-        register_array_wrapper_struct(ctx, &elem_name);
+        register_list_wrapper_struct(ctx, &elem_name);
     }
 }
 
-/// Register a single `Array<T>` wrapper struct given the element's mangled name.
-fn register_array_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
+/// Register a single `List<T>` wrapper struct given the element's mangled name.
+fn register_list_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
     let elem_name_string = elem_name.to_string();
     let mangled = crate::name::mangle_generic_name("List", std::slice::from_ref(&elem_name_string));
 
@@ -1295,7 +1295,7 @@ fn is_abstract_ref(ty: &crate::wir::WirType) -> bool {
     )
 }
 
-/// Fix up types that resolved to `AbstractRef(Struct)` or `AbstractRef(Array)`
+/// Fix up types that resolved to `AbstractRef(Struct)` or `AbstractRef(List)`
 /// because of forward references or self-referential types.
 ///
 /// After all types are registered, re-scan struct fields, array element types,

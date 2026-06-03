@@ -345,7 +345,7 @@ pub fn param_local(name: &str, type_id: TypeId, is_mut: bool) -> TirLocal {
 
 /// Create a static call to a generic struct method with proper monomorphization info.
 ///
-/// For example, `Array::<String>::with_capacity(n)` needs:
+/// For example, `List::<String>::with_capacity(n)` needs:
 /// - `method_info` with `struct_name: "List"`, `method_name: "with_capacity"`
 /// - `monomorph_info` with `generic_name: "List::with_capacity"`, `type_args: [String]`
 ///
@@ -389,9 +389,9 @@ pub fn generic_static_call(
 
 /// Create a method call on a generic struct with proper monomorphization info.
 ///
-/// For example, `arr.push(elem)` where `arr: Array<String>` needs:
+/// For example, `arr.push(elem)` where `arr: List<String>` needs:
 /// - `method_info` with `struct_name: "List"`, `method_name: "push"`
-/// - The receiver's `type_id` must be the concrete `Array<String>` `TypeId`
+/// - The receiver's `type_id` must be the concrete `List<String>` `TypeId`
 pub fn generic_method_call(
     receiver: TirExpr,
     struct_name: &str,

@@ -4951,7 +4951,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // `Deref` (`expr[i]` → `*expr.index(i)`). Annotate records
             // this explicitly: a return-type-shape check would misfire
             // for an `IndexValue` whose `Output` is itself a reference
-            // (`Array<&i32>::index_value` → `&i32`) and double-deref.
+            // (`List<&i32>::index_value` → `&i32`) and double-deref.
             if dispatch.needs_deref {
                 return TirExpr::new(
                     TirExprKind::Unary {
@@ -5179,7 +5179,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `Elaborator::resolve_from_call` (expr.rs:4263+): builds a
     /// mangled `__<Target>__From<From>__from` method name with the
     /// `LocalMethodName` carrying the canonical From-impl
-    /// Reify a tuple-to-sequence coercion (`[1, 2, 3]: Array<i32>`).
+    /// Reify a tuple-to-sequence coercion (`[1, 2, 3]: List<i32>`).
     /// Mirrors `try_coerce_tuple_to_sequence_inner`'s desugar block
     /// shape (`__seq_lit: { let __b = Builder::new_literal(N); __b.push_literal(...); ...; break __seq_lit: __b.build(); }`).
     /// The Stage-5 walk-order invariant (Gap 7) keeps the `__b`
@@ -8059,7 +8059,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .tysys
                     .type_table
                     .borrow_mut()
-                    .make_array(crate::tir::TypeTable::U8);
+                    .make_list(crate::tir::TypeTable::U8);
                 let key = [self.current_module_source.to_string(), raw_path.clone()];
                 let bytes = self
                     .tysys

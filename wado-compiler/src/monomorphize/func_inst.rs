@@ -95,8 +95,8 @@ fn receiver_module_hint(tt: &TypeTable, tid: TypeId) -> Option<ModuleSource> {
 /// usually the call site's `FunctionRef::module_source`. If the literal
 /// `(module_hint, name)` key misses, fall back to `TraitEnv::impl_module_for`
 /// over `struct_candidates` to find a user-written cross-module trait impl
-/// (e.g. `impl<T: Inspect> Inspect for Array<T>` lives in
-/// `core:prelude/format`, not in `Array<T>`'s own module). For inherent
+/// (e.g. `impl<T: Inspect> Inspect for List<T>` lives in
+/// `core:prelude/format`, not in `List<T>`'s own module). For inherent
 /// methods (no trait name on the call) also try `type_module_hint` directly
 /// — inherent impls live with their receiver type.
 ///
@@ -144,9 +144,9 @@ fn lookup_template_with_trait_fallback<'a, V>(
         None
     } else if let Some(type_module) = type_module_hint {
         // Inherent methods: the impl block lives in the receiver type's own
-        // module (`impl<T> Array<T> { fn len ... }`). Newtypes peel through
+        // module (`impl<T> List<T> { fn len ... }`). Newtypes peel through
         // their base via `receiver_module_hint`, so this picks up
-        // `Array::len` even when called as `MyArray<i32>::len`.
+        // `List::len` even when called as `MyArray<i32>::len`.
         generic_functions.get(&(type_module.clone(), name.to_string()))
     } else {
         None
@@ -530,7 +530,7 @@ impl Monomorphizer {
                 }
 
                 // Also check if the receiver is a monomorphized generic struct
-                // e.g., c.get() where c: Counter<i32>, or arr.push() where arr: Array<fn(i32)->i32>
+                // e.g., c.get() where c: Counter<i32>, or arr.push() where arr: List<fn(i32)->i32>
                 let struct_info = self.get_struct_info_from_type(receiver.type_id, type_table);
                 if let Some((base_struct, impl_type_args)) = struct_info
                     && !impl_type_args.is_empty()
@@ -538,7 +538,7 @@ impl Monomorphizer {
                     // Try both regular method and trait method formats
                     // Method names to try: BaseStruct::method, BaseStruct^Trait::method (from method_info)
                     let mut names_to_try = Vec::new();
-                    // For ref-type impls (e.g., impl Trait for &Array<T>),
+                    // For ref-type impls (e.g., impl Trait for &List<T>),
                     // try the ref struct name FIRST so it takes priority
                     let is_ref_blanket_impl = if let Some(ref info) =
                         method_func.method_info.clone()
@@ -586,13 +586,13 @@ impl Monomorphizer {
                             // For true ref blanket impls (e.g., impl<T> Inspect for &T),
                             // the impl_type_args should be the full inner type of the ref,
                             // not the inner struct's own type args.
-                            // e.g., for &Array<i32>, we need [Array<i32>], not [i32].
+                            // e.g., for &List<i32>, we need [List<i32>], not [i32].
                             //
-                            // But for specific ref impls (e.g., impl<T> IntoIterator for &Array<T>),
+                            // But for specific ref impls (e.g., impl<T> IntoIterator for &List<T>),
                             // the impl_type_args from get_struct_info_from_type are correct as-is.
                             // Distinguish by checking the generic function's self param:
                             //   - &T blanket: self is &&TypeParam → for-type is TypeParam
-                            //   - &Array<T>:  self is &&GenericInstance → for-type is GenericInstance
+                            //   - &List<T>:  self is &&GenericInstance → for-type is GenericInstance
                             let effective_impl_type_args = if is_ref_blanket_impl
                                 && generic_method_name == &names_to_try[0]
                             {
@@ -629,7 +629,7 @@ impl Monomorphizer {
                             // Queue if we have at least enough impl type args.
                             // impl_type_args may be longer than impl_type_params when the impl
                             // fixes some struct type params to concrete types
-                            // (e.g., `impl Trait for Foo<Array<String>, V>` where only V is free).
+                            // (e.g., `impl Trait for Foo<List<String>, V>` where only V is free).
                             if effective_impl_type_args.len() >= generic_func.impl_type_params.len()
                             {
                                 let method_type_args_for_key =
@@ -679,7 +679,7 @@ impl Monomorphizer {
                             Some(trait_name),
                             &method_name,
                         ));
-                        // For ref-type impls (e.g., impl Trait for &Array<T>),
+                        // For ref-type impls (e.g., impl Trait for &List<T>),
                         // the template function is registered under "&^Trait::method"
                         if info.base_struct_name != *base_struct {
                             names_to_try.push(MethodName::format_local(
@@ -1437,7 +1437,7 @@ impl Monomorphizer {
                                 // Per the inspect_ref_array_field.wado contract, this
                                 // path must consult `concrete_impl_module_for` only —
                                 // letting a generic `impl<T> Trait for Foo<T>` leak in
-                                // would route `&Array<i32>^Inspect` to Array's impl in
+                                // would route `&List<i32>^Inspect` to List's impl in
                                 // format.wado instead of the ref blanket's, and the
                                 // leading `&` would disappear at codegen.
                                 //
@@ -2192,11 +2192,11 @@ impl Monomorphizer {
 
     /// Resolve method call name substitution during monomorphization.
     ///
-    /// When a generic function body contains a method call like `Array<T>::len`,
-    /// this resolves it to the concrete `Array<i32>::len` after type substitution.
+    /// When a generic function body contains a method call like `List<T>::len`,
+    /// this resolves it to the concrete `List<i32>::len` after type substitution.
     /// Handles three cases:
     /// 1. Type-param receiver (e.g., `T^Ord::cmp` → `i32^Ord::cmp`)
-    /// 2. Generic struct receiver (e.g., `Array<T>::len` → `Array<i32>::len`)
+    /// 2. Generic struct receiver (e.g., `List<T>::len` → `List<i32>::len`)
     /// 3. Non-generic receiver (no change needed)
     fn resolve_method_call_substitution(
         &self,
@@ -2274,7 +2274,7 @@ impl Monomorphizer {
             } else {
                 let mangled = type_table.mangle_type_name_resolving_newtypes(inner);
                 // Take the base name from the *resolved* type so newtypes
-                // (`type FieldValue = Array<u8>`) inherit the underlying
+                // (`type FieldValue = List<u8>`) inherit the underlying
                 // type's base ("List"), not the newtype's own name.
                 // Without this, `base_struct_name` stays "FieldValue" while
                 // `struct_name` becomes "List<u8>", and the trait_env
@@ -2285,7 +2285,7 @@ impl Monomorphizer {
             }
         } else if needs_struct_type_args {
             // Derive the struct name from the already-substituted receiver type.
-            // Resolve through newtypes so that e.g. MyArray<i32>::len → Array<i32>::len.
+            // Resolve through newtypes so that e.g. MyArray<i32>::len → List<i32>::len.
             let mut recv_inner = receiver_type_id;
             while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
                 type_table.get(recv_inner).clone()
@@ -2302,7 +2302,7 @@ impl Monomorphizer {
             let resolved_recv = type_table.resolve_newtype_base(recv_inner);
             let recv_base = type_table.base_type_name(resolved_recv);
             let mut new_info = info.with_substituted_struct_name(&recv_mangled, &recv_base);
-            // For ref-type impls (e.g., impl IntoIterator for &Array<T>), preserve
+            // For ref-type impls (e.g., impl IntoIterator for &List<T>), preserve
             // the ref base_struct_name ("&" or "&mut") so that the monomorphizer
             // selects the correct generic function template
             // ("&^IntoIterator::into_iter" instead of "List^IntoIterator::into_iter").
@@ -2332,15 +2332,15 @@ impl Monomorphizer {
             };
             // Per the inspect_ref_array_field.wado contract, this path must
             // consult `concrete_impl_module_for` only — a broader
-            // `impl_module_for` fallback would route `&Array<i32>^Inspect`
-            // to Array's generic impl in format.wado instead of the ref
+            // `impl_module_for` fallback would route `&List<i32>^Inspect`
+            // to List's generic impl in format.wado instead of the ref
             // blanket's, and the leading `&` would disappear at codegen.
             //
             // If no concrete impl exists, a generic impl on the receiver
-            // type (`impl<T> IntoIterator for Array<T>`) still lives in the
+            // type (`impl<T> IntoIterator for List<T>`) still lives in the
             // receiver type's own module by convention — fall through to
             // `receiver_module` for that case (covers newtype inheritance:
-            // `FieldValue = Array<u8>` reuses Array's impl). Only when no
+            // `FieldValue = List<u8>` reuses List's impl). Only when no
             // per-type impl exists at all does dispatch run through a
             // blanket impl (`impl<I: Bound> Trait for I`); the body for
             // those lives in the blanket's module, keyed by trait name in
@@ -2379,8 +2379,8 @@ impl Monomorphizer {
                 {
                     inner = t;
                 }
-                // Peel newtypes: `type FieldValue = Array<u8>` inherits
-                // Array's generic-impl dispatch, so the call must not be
+                // Peel newtypes: `type FieldValue = List<u8>` inherits
+                // List's generic-impl dispatch, so the call must not be
                 // marked blanket even though FieldValue itself has no impl.
                 let resolved = type_table.resolve_newtype_base(inner);
                 matches!(
@@ -2419,7 +2419,7 @@ impl Monomorphizer {
                 method_info: Some(new_info),
             };
         } else {
-            // Normal monomorphization (e.g., Array<T>::len → Array<i32>::len)
+            // Normal monomorphization (e.g., List<T>::len → List<i32>::len)
             let (existing_generic_name, existing_impl_ta, existing_method_ta, existing_is_blanket) =
                 match method_func {
                     FunctionRef {
@@ -2454,13 +2454,13 @@ impl Monomorphizer {
                 is_blanket: existing_is_blanket,
             });
             // When substitution peels a newtype on the receiver
-            // (`MyBytes^InspectAlt::inspect_alt` → `Array<u8>^InspectAlt::inspect_alt`),
+            // (`MyBytes^InspectAlt::inspect_alt` → `List<u8>^InspectAlt::inspect_alt`),
             // the original `module_source` (the newtype's module) no longer
             // points at the body's home. Re-resolve through `TraitEnv` for
             // the post-substitution struct name so the queue's lookup key
             // matches where the template actually lives. Issue #1110 (1).
             //
-            // `generic_or_concrete_impl_module` covers both `impl<T: Foo> Bar for Array<T>`
+            // `generic_or_concrete_impl_module` covers both `impl<T: Foo> Bar for List<T>`
             // (registered under bare "List") and fully concrete impls;
             // the producer in `synthesis::traits::resolve_impl_module_via_env`
             // uses the same query, so the post-substitution `module_source`
@@ -2882,7 +2882,7 @@ impl Monomorphizer {
                             // Only set if arg_type is concrete (not a type param)
                             // AND not already present in monomorph_info.type_args.
                             // If it's already there, it's an impl type arg (e.g.,
-                            // Array<String>::push where T=String comes from the
+                            // List<String>::push where T=String comes from the
                             // impl, not a method-level type param). Adding it again
                             // would cause double-counting in instantiation.
                             let is_concrete = !matches!(
@@ -2894,7 +2894,7 @@ impl Monomorphizer {
                             // Check if the inferred type is already an impl type arg
                             // of the receiver's struct. If so, it's not a method-level
                             // type arg and should not be added (to avoid double-counting
-                            // in instantiation). e.g., Array<String>::push infers
+                            // in instantiation). e.g., List<String>::push infers
                             // String from the arg, but String is the impl type arg.
                             let receiver_impl_type_args = {
                                 let mut base = receiver.type_id;

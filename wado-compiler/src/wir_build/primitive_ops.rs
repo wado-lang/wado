@@ -128,22 +128,22 @@ impl FunctionTranslator<'_, '_> {
 
     /// Translate a bytes literal to WIR instructions.
     ///
-    /// Creates an `Array<u8>` struct from a passive data segment:
+    /// Creates an `List<u8>` struct from a passive data segment:
     ///   `array.new_data` $`u8_array`, $`data_idx` (offset=0, len=bytes)
-    ///   struct.new $`Array<u8>` (repr=array, used=len)
+    ///   struct.new $`List<u8>` (repr=array, used=len)
     pub(super) fn translate_bytes_literal(&self, b: &[u8]) -> WirInstr {
         let byte_len = b.len();
 
         // Look up u8 GC array type
         let u8_array_type = self.ctx.array_type_by_name.get("u8").cloned();
 
-        // Look up Array<u8> wrapper struct type
+        // Look up List<u8> wrapper struct type
         let mangled =
             crate::name::mangle_generic_name("List", std::slice::from_ref(&"u8".to_string()));
-        let array_struct_name = crate::name::StructName::new(ModuleSource::prelude(), mangled);
-        let array_struct_type = self.ctx.struct_type_map.get(&array_struct_name).cloned();
+        let list_struct_name = crate::name::StructName::new(ModuleSource::prelude(), mangled);
+        let list_struct_type = self.ctx.struct_type_map.get(&list_struct_name).cloned();
 
-        let (Some(gc_array_type_id), Some(struct_type_id)) = (u8_array_type, array_struct_type)
+        let (Some(gc_array_type_id), Some(struct_type_id)) = (u8_array_type, list_struct_type)
         else {
             panic!("[WIR] Bytes literal: u8 array or List<u8> struct type not registered");
         };
@@ -575,31 +575,31 @@ impl FunctionTranslator<'_, '_> {
             _ => array_expr.type_id,
         };
 
-        if let Some(element_type_id) = self.type_table.as_array(base_type_id) {
-            self.build_array_get(arr, idx, base_type_id, element_type_id)
+        if let Some(element_type_id) = self.type_table.as_list(base_type_id) {
+            self.build_list_get(arr, idx, base_type_id, element_type_id)
         } else {
             panic!("[WIR] translate_index: expected array type, got type_id={base_type_id:?}");
         }
     }
 
     /// Build an array.get instruction sequence.
-    /// Given an Array<T> struct ref, extracts the repr field and does the appropriate get.
-    fn build_array_get(
+    /// Given an List<T> struct ref, extracts the repr field and does the appropriate get.
+    fn build_list_get(
         &self,
         arr: WirInstr,
         idx: WirInstr,
         array_type_id: TypeId,
         element_type_id: TypeId,
     ) -> WirInstr {
-        // Get the Array<T> struct WirType
-        let array_struct_wir = self.ctx.type_id_to_wir_type(self.type_table, array_type_id);
+        // Get the List<T> struct WirType
+        let list_struct_wir = self.ctx.type_id_to_wir_type(self.type_table, array_type_id);
         let WirType::Ref {
-            type_id: array_struct_type,
+            type_id: list_struct_type,
             ..
-        } = array_struct_wir
+        } = list_struct_wir
         else {
             panic!(
-                "[WIR] build_array_get: expected Ref List<T> struct, got {array_struct_wir:?} (array_type_id={array_type_id:?})"
+                "[WIR] build_list_get: expected Ref List<T> struct, got {list_struct_wir:?} (array_type_id={array_type_id:?})"
             );
         };
 
@@ -616,14 +616,14 @@ impl FunctionTranslator<'_, '_> {
             .cloned();
         let Some(raw_type) = raw_array_type else {
             panic!(
-                "[WIR] build_array_get: raw GC array type not registered (element_type_id={element_type_id:?}, elem_name={elem_name})"
+                "[WIR] build_list_get: raw GC array type not registered (element_type_id={element_type_id:?}, elem_name={elem_name})"
             );
         };
 
         // StructGet field "repr" (field 0) to get raw array
-        let repr_result_ty = self.struct_field_wir_type(&array_struct_type, "repr");
+        let repr_result_ty = self.struct_field_wir_type(&list_struct_type, "repr");
         let raw_arr = WirInstr::StructGet {
-            type_id: array_struct_type,
+            type_id: list_struct_type,
             field_name: "repr".to_string(),
             expr: Box::new(arr),
             result_ty: repr_result_ty,
@@ -694,17 +694,17 @@ impl FunctionTranslator<'_, '_> {
             _ => array_expr.type_id,
         };
 
-        if let Some(element_type_id) = self.type_table.as_array(base_type_id) {
-            let array_struct_wir = self.ctx.type_id_to_wir_type(self.type_table, base_type_id);
+        if let Some(element_type_id) = self.type_table.as_list(base_type_id) {
+            let list_struct_wir = self.ctx.type_id_to_wir_type(self.type_table, base_type_id);
             let WirType::Ref {
-                type_id: array_struct_type,
+                type_id: list_struct_type,
                 ..
-            } = array_struct_wir
+            } = list_struct_wir
             else {
                 return WirInstr::Drop(Box::new(val));
             };
 
-            // Same alignment as `build_array_get` above: lookup must
+            // Same alignment as `build_list_get` above: lookup must
             // use the qualified mangle so the key matches what
             // `register_raw_array_type` registered.
             let elem_name = self.type_table.mangle_type_arg_for_generic(element_type_id);
@@ -718,9 +718,9 @@ impl FunctionTranslator<'_, '_> {
                 return WirInstr::Drop(Box::new(val));
             };
 
-            let repr_result_ty = self.struct_field_wir_type(&array_struct_type, "repr");
+            let repr_result_ty = self.struct_field_wir_type(&list_struct_type, "repr");
             let raw_arr = WirInstr::StructGet {
-                type_id: array_struct_type,
+                type_id: list_struct_type,
                 field_name: "repr".to_string(),
                 expr: Box::new(arr),
                 result_ty: repr_result_ty,

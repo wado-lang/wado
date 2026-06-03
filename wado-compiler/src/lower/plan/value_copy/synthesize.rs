@@ -283,8 +283,8 @@ fn build_copy_return_expr(
     // `array_clone::<T>` generation safe even when a stray reachable
     // type in the closure happens to be a non-monomorphized template
     // wrapper. The shape that *does* need a non-identity copy
-    // (Array<T> / tuple) is recovered by the explicit checks below.
-    let array_name = type_table
+    // (List<T> / tuple) is recovered by the explicit checks below.
+    let list_name = type_table
         .borrow()
         .compiler_items()
         .struct_name(crate::compiler_item::CompilerItem::List)
@@ -292,11 +292,11 @@ fn build_copy_return_expr(
     if let ResolvedType::GenericInstance {
         name, type_args, ..
     } = resolved
-        && name == &array_name
+        && name == &list_name
         && type_args.len() == 1
         && is_synth_safe_element(type_args[0], type_table, project)
     {
-        return Some(build_array_wrapper_copy(
+        return Some(build_list_wrapper_copy(
             type_id,
             &mangled,
             type_args[0],
@@ -455,8 +455,8 @@ fn contains_variant_recursive(
     }
 }
 
-/// `Array<T>`'s wrapper-struct deep-copy emits a `StructLiteral`
-/// whose `type_id` is `Array<T>`. WIR-level resolution of that
+/// `List<T>`'s wrapper-struct deep-copy emits a `StructLiteral`
+/// whose `type_id` is `List<T>`. WIR-level resolution of that
 /// `type_id` becomes `AbstractRef(Struct)` whenever `T` is a shape
 /// that the WIR struct registry never materialises a concrete entry
 /// for — variants, resources, function/closure types, and unmaterialised
@@ -464,7 +464,7 @@ fn contains_variant_recursive(
 /// only knows how to handle a concrete `WirType::Ref`, so we skip
 /// the non-identity body and fall through to identity for those `T`s.
 /// Built-in primitives, ordinary structs, and known wrapper shapes
-/// (`Array<T>`, `String`, tuples) all have concrete WIR registrations
+/// (`List<T>`, `String`, tuples) all have concrete WIR registrations
 /// and are passed through.
 fn is_synth_safe_element(
     elem_type: TypeId,
@@ -484,13 +484,13 @@ fn is_synth_safe_element(
             module_source,
             ..
         } => {
-            // Tuples / String / Array<T> / known struct templates are
+            // Tuples / String / List<T> / known struct templates are
             // safe; unknown generic-instance names whose template
             // isn't a registered struct are not.
             if TypeTable::is_tuple_type(&name, &module_source) {
                 return true;
             }
-            let (array_name, string_name, box_name) = {
+            let (list_name, string_name, box_name) = {
                 let tt = type_table.borrow();
                 let items = tt.compiler_items();
                 (
@@ -505,7 +505,7 @@ fn is_synth_safe_element(
                         .to_string(),
                 )
             };
-            if name == array_name || name == string_name || name == box_name {
+            if name == list_name || name == string_name || name == box_name {
                 return true;
             }
             // A concrete monomorphised struct entry is the strongest
@@ -531,7 +531,7 @@ fn is_synth_safe_element(
     }
 }
 
-fn build_array_wrapper_copy(
+fn build_list_wrapper_copy(
     type_id: TypeId,
     mangled_name: &str,
     elem_type: TypeId,
@@ -772,7 +772,7 @@ fn make_field_copy(
             span,
         );
     }
-    // Nested value-semantic field (struct, Array<T>, tuple, Option<T>
+    // Nested value-semantic field (struct, List<T>, tuple, Option<T>
     // / Result<T, E> with deep-copy payload, MutRef<T>, etc.). Without
     // this wrap the generated body would do a one-level shallow copy
     // and the inner type's own deep-copy via its `$value_copy$T` helper

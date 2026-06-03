@@ -596,7 +596,7 @@ mod tests {
         })
     }
 
-    /// Register the `Option`, `Result`, `String`, and `Array` compiler
+    /// Register the `Option`, `Result`, `String`, and `List` compiler
     /// items against the relevant prelude modules so `make_option` /
     /// `make_result` and the type-identity reads inside `lift` /
     /// `cm_binding` succeed in unit tests. Production resolution wires
@@ -949,7 +949,7 @@ mod tests {
         assert_eq!(expr.type_id, TypeTable::I32);
     }
 
-    /// `Array<IpAddress>` lifts must walk the buffer at the variant's
+    /// `List<IpAddress>` lifts must walk the buffer at the variant's
     /// canonical-ABI stride (1 byte disc + payload), not the 4-byte
     /// i32-handle fallback. Regression for issue #997 (#1, #2).
     #[test]

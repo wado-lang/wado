@@ -40,7 +40,7 @@ use super::types::{LiftContext, binary_add};
 /// TIR function `__cm_stream_read_<T>` that:
 /// 1. Calls `cm_stream_read_raw(handle, max, elem_size, elem_align)` to get raw buffer
 /// 2. Loops through the buffer, lifting each record from linear memory
-/// 3. Constructs `Array<T>` and returns it
+/// 3. Constructs `List<T>` and returns it
 ///
 /// The generated functions are added to the entry module so they can be called
 /// by the CM resource method rewriter.
@@ -121,7 +121,7 @@ pub(super) fn synthesize_record_stream_reads(project: &mut Package) {
     }
 }
 
-/// Find all stream-read method calls that return Array<T> where T is not u8.
+/// Find all stream-read method calls that return List<T> where T is not u8.
 ///
 /// Coverage must match `rewrite_cm_methods_in_expr`, which descends into every
 /// container expression (if/match/block/binary/...) when rewriting a record
@@ -156,7 +156,7 @@ impl TirRefVisitor for RecordStreamReadFinder<'_> {
             _ => None,
         };
         if cm_name.as_deref() == Some("stream-read") && !is_u8_array_type(expr.type_id, self.tt) {
-            // Extract element type from Array<T>
+            // Extract element type from List<T>
             if let Some(type_args) = self.tt.generic_type_args(expr.type_id)
                 && let Some(&elem_type_id) = type_args.first()
             {
@@ -172,7 +172,7 @@ impl TirRefVisitor for RecordStreamReadFinder<'_> {
 
 /// Generate a TIR function for reading records from a stream.
 ///
-/// Generates `__cm_stream_read_<T>(handle: i32, max: i32) -> Array<T>`:
+/// Generates `__cm_stream_read_<T>(handle: i32, max: i32) -> List<T>`:
 /// 1. Call `cm_stream_read_raw` to get raw buffer [ptr, count]
 /// 2. Loop: lift each record from buffer at ptr + i * `elem_size`
 /// 3. Append to result array
@@ -189,7 +189,7 @@ fn synthesize_stream_read_func(
     type_table: &RefCell<TypeTable>,
     interner: &RefCell<ModuleSourceInterner>,
 ) -> TirFunction {
-    let array_struct_name =
+    let list_struct_name =
         super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items())
             .array;
     let func_name = format!("__cm_stream_read_{elem_name}");
@@ -305,19 +305,19 @@ fn synthesize_stream_read_func(
     );
     stmts.push(let_stmt("count", count_idx, TypeTable::I32, count_expr));
 
-    // let mut arr = Array::<T>::with_capacity(count)
+    // let mut arr = List::<T>::with_capacity(count)
     // Use internal_from_raw with a new GC array
     // Actually, build the array by appending elements one by one
     let arr_idx = next_local;
     next_local += 1;
     locals.push(TirLocal::synth(next_local, array_type_id, false));
 
-    // Create empty array via Array<T>::with_capacity(count)
+    // Create empty array via List<T>::with_capacity(count)
     let empty_arr = TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef {
                 module_source: ModuleSource::list(),
-                name: format!("{array_struct_name}<{elem_name}>::with_capacity"),
+                name: format!("{list_struct_name}<{elem_name}>::with_capacity"),
                 monomorph_info: Some(MonomorphInfo {
                     generic_name: "List::with_capacity".to_string(),
                     impl_type_args: vec![elem_type_id],
@@ -325,8 +325,8 @@ fn synthesize_stream_read_func(
                     is_blanket: false,
                 }),
                 method_info: Some(LocalMethodName {
-                    struct_name: format!("{array_struct_name}<{elem_name}>"),
-                    base_struct_name: array_struct_name.clone(),
+                    struct_name: format!("{list_struct_name}<{elem_name}>"),
+                    base_struct_name: list_struct_name.clone(),
                     trait_name: None,
                     base_trait_name: None,
                     base_trait_module: None,
@@ -409,7 +409,7 @@ fn synthesize_stream_read_func(
         &lift_ctx,
     );
 
-    // Push to array - use Array::push method pattern
+    // Push to array - use List::push method pattern
     // arr.push(elem) → internal call
     let elem_idx = next_local;
     next_local += 1;
@@ -421,7 +421,7 @@ fn synthesize_stream_read_func(
             Box::new(local_ref(arr_idx, "arr", array_type_id)),
             FunctionRef {
                 module_source: ModuleSource::list(),
-                name: format!("{array_struct_name}<{elem_name}>::push"),
+                name: format!("{list_struct_name}<{elem_name}>::push"),
                 monomorph_info: Some(MonomorphInfo {
                     generic_name: "List::push".to_string(),
                     impl_type_args: vec![elem_type_id],
@@ -429,8 +429,8 @@ fn synthesize_stream_read_func(
                     is_blanket: false,
                 }),
                 method_info: Some(LocalMethodName {
-                    struct_name: format!("{array_struct_name}<{elem_name}>"),
-                    base_struct_name: array_struct_name,
+                    struct_name: format!("{list_struct_name}<{elem_name}>"),
+                    base_struct_name: list_struct_name,
                     trait_name: None,
                     base_trait_name: None,
                     base_trait_module: None,
@@ -835,7 +835,7 @@ fn pascal_to_kebab(name: &str) -> String {
     })
 }
 
-/// Check if a `TypeId` represents `Array<u8>`.
+/// Check if a `TypeId` represents `List<u8>`.
 fn is_u8_array_type(type_id: TypeId, tt: &TypeTable) -> bool {
     let name = tt.type_name(type_id);
     name == "List<u8>"

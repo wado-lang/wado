@@ -370,7 +370,7 @@ pub const DEFAULT_STEP_BUDGET: u32 = 1000;
 ///   **never** recorded for these; that matches the conservatism the
 ///   OLD WIR-level `const_forward` had for stores-passed args.
 /// - `alias_groups`: union-find groups of locals connected by
-///   reference-typed `let dst = src` copies (`Box<T>`, `Array<T>`,
+///   reference-typed `let dst = src` copies (`Box<T>`, `List<T>`,
 ///   `&T`, `&mut T`). Used to widen field-assignment invalidation:
 ///   writing `dst.field = …` must drop the same field on every
 ///   alias.

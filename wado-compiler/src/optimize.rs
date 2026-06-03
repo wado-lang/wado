@@ -6,7 +6,7 @@
 //!
 //! Fixed-point loop ([`run_optimization_passes`], in order):
 //! 1.  `match_to_switch` — dense `Match` → `Switch` lowering.
-//! 2.  `container_sroa` — `AoS` → `SoA` for `Array<Tuple<...>>` / `Array<Struct>`.
+//! 2.  `container_sroa` — `AoS` → `SoA` for `List<Tuple<...>>` / `List<Struct>`.
 //! 3.  `value_copy_elide` — strip `$value_copy$T<id>` wrappers on read-only
 //!     bindings.
 //! 4.  `value_copy_demote` — demote deep `$value_copy$T` to a shallow spine
@@ -238,7 +238,7 @@ pub fn optimize(
             // The iteration cap is purely defensive. Since
             // `field_forward` was merged into `const_fold` (issue
             // #1009), straight-line constant chains produced by
-            // inlined `Array::push` and similar patterns fold in a
+            // inlined `List::push` and similar patterns fold in a
             // single iteration rather than one statement per round,
             // so even Gale parsers reach a true fixed point in well
             // under 10 iterations. 30 leaves comfortable headroom for
@@ -433,13 +433,13 @@ pub mod pass_dump {
 
 /// Run optimization passes with a fixed-point iteration strategy.
 ///
-/// Container SROA runs early because it needs to see `Array<T>` *method
+/// Container SROA runs early because it needs to see `List<T>` *method
 /// calls* (push, `index_value`, `index_assign`, len, ...) before `inline`
 /// expands them into raw field-accesses and `builtin::array_get` /
 /// `array_set` pairs. Running it before `inline` in each iteration — rather
 /// than only in iteration 0 — also lets the optimization loop re-run
 /// container SROA on newly-inlined code that exposes fresh
-/// `Array<Tuple<...>>` locals.
+/// `List<Tuple<...>>` locals.
 ///
 /// The exact in-loop pass list and its ordering rationale lives on the
 /// module doc above; the `step!` calls below are the canonical source for
@@ -510,7 +510,7 @@ fn run_optimization_passes(
             elide_synthesized_value_copies(p);
             false
         });
-        // Demote deep `$value_copy$T` copies of `Array<E>` to shallow spine
+        // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
         // copies when the binding's elements are provably never mutated
         // through it. Runs alongside `value_copy_elide`: elide removes a
         // copy whose target is read-only; demote weakens a copy whose target
@@ -534,10 +534,10 @@ fn run_optimization_passes(
         // `optimize/sroa_param.rs`.
         step!("nir/sroa_param", sroa_single_field_parameters);
         step!("nir/inline", |p| inline_functions(p, threshold));
-        // Materialize `ArrayLiteral` from the `Array<T> { array_new(N) } +
-        // N × Array::push` builder window. Runs *after* inline: the
+        // Materialize `ArrayLiteral` from the `List<T> { array_new(N) } +
+        // N × List::push` builder window. Runs *after* inline: the
         // `SequenceLiteralBuilder` methods (and, for wrapper builders such
-        // as `SeqVec { items: Array<T> }`, the `push_literal → self.field.push`
+        // as `SeqVec { items: List<T> }`, the `push_literal → self.field.push`
         // delegation) must be inlined first so the raw `array_new + push`
         // window — direct or field-rooted — is exposed. Later `cse` /
         // `const_fold` in this same loop then see the normalized literal.
@@ -566,7 +566,7 @@ fn run_optimization_passes(
         // `field_forward`'s rewrite responsibilities are absorbed by
         // `const_fold` (see `optimize::const_folding::ConstFoldVisitor`).
         // Both passes used to alternate one statement at a time on
-        // chained-`Array::push` patterns produced by Gale-generated
+        // chained-`List::push` patterns produced by Gale-generated
         // parsers, leaving the optimizer non-convergent at `-O3`
         // (issue #1009). The merged const-fold walk feeds the
         // interpreter's `field_env` from `Let` / `Assign` /

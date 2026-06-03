@@ -1,24 +1,24 @@
-//! Container SROA (P0a) — `AoS` → `SoA` transformation for `Array<Tuple<...>>` locals.
+//! Container SROA (P0a) — `AoS` → `SoA` transformation for `List<Tuple<...>>` locals.
 //!
-//! This pass decomposes local variables of type `Array<[T_0, T_1, ..., T_n]>` into
-//! N parallel `Array<T_k>` locals, eliminating the per-element `struct.new` for
+//! This pass decomposes local variables of type `List<[T_0, T_1, ..., T_n]>` into
+//! N parallel `List<T_k>` locals, eliminating the per-element `struct.new` for
 //! tuple payloads. After decomposition, operations on the original array are
 //! rewritten as parallel operations on the new per-field arrays:
 //!
 //! ```text
-//! let mut v: Array<[i32, i32]> = [];        →   let mut v_0: Array<i32> = [];
-//! v.push([a, b]);                                let mut v_1: Array<i32> = [];
+//! let mut v: List<[i32, i32]> = [];        →   let mut v_0: List<i32> = [];
+//! v.push([a, b]);                                let mut v_1: List<i32> = [];
 //! let sum = v[i].0 + v[i].1;                    v_0.push(a); v_1.push(b);
 //!                                                let sum = v_0[i] + v_1[i];
 //! ```
 //!
-//! P0a scope covers `Array<Tuple<...>>` and `Array<UserStruct>` locals (both have
+//! P0a scope covers `List<Tuple<...>>` and `List<UserStruct>` locals (both have
 //! the same `WasmGC` struct representation). Nested arrays are not yet decomposed.
 //! Only method-call usage is handled; direct indexing is expected to have been
 //! desugared already into `index_value`/`index_assign` trait calls by lowering.
 //!
-//! TODO(optimizer): nested-container decomposition (`Array<Array<T>>`,
-//! `Array<UserStruct { Array<T>, ... }>`). The recursion into nested element
+//! TODO(optimizer): nested-container decomposition (`List<List<T>>`,
+//! `List<UserStruct { List<T>, ... }>`). The recursion into nested element
 //! types is a clean extension of `decompose_local`; the harder problem is the
 //! recursive element-immutability proof, which `value_copy_demote.rs` already
 //! solves and could be lifted out for reuse here.
@@ -29,22 +29,22 @@
 //! element-immutable `&self`/`&mut self` method becomes a SROA-safe use,
 //! not just `push` / `index_value` / `index_assign` / `len` / `is_empty`.
 //!
-//! # Array method identification
+//! # List method identification
 //!
 //! Rather than hardcoding method names (`"push"`, `"len"`, `"index_value"`, …),
-//! this pass identifies relevant Array methods by **signature shape**:
+//! this pass identifies relevant List methods by **signature shape**:
 //!
 //! | Kind             | Signature                                         | stdlib method  |
 //! |------------------|---------------------------------------------------|----------------|
-//! | `ElementWriter`  | `fn(&mut Array<T>, T) -> ()`                      | `push`         |
-//! | `IndexReader`    | `fn(&Array<T>, i32) -> T`                         | `index_value`  |
-//! | `IndexWriter`    | `fn(&mut Array<T>, i32, T) -> ()`                 | `index_assign` |
-//! | `Constructor`    | `fn(i32) -> Array<T>` (static)                    | `with_capacity`|
-//! | `Query`          | `fn(&Array<T>) -> i32 \| bool` (length-invariant) | `len`, `is_empty`, `capacity` |
+//! | `ElementWriter`  | `fn(&mut List<T>, T) -> ()`                      | `push`         |
+//! | `IndexReader`    | `fn(&List<T>, i32) -> T`                         | `index_value`  |
+//! | `IndexWriter`    | `fn(&mut List<T>, i32, T) -> ()`                 | `index_assign` |
+//! | `Constructor`    | `fn(i32) -> List<T>` (static)                    | `with_capacity`|
+//! | `Query`          | `fn(&List<T>) -> i32 \| bool` (length-invariant) | `len`, `is_empty`, `capacity` |
 //!
 //! Classification happens once when the `MethodCatalog` is built, and every
 //! whitelist and rewrite decision is driven by looking up the call's classified
-//! `ArrayMethodKind`. Unclassified Array methods cause the candidate to escape,
+//! `ListMethodKind`. Unclassified List methods cause the candidate to escape,
 //! so adding a new stdlib method that doesn't match any kind is safe by default.
 //! Adding a new method that *does* match a kind (e.g., `push_back`) is
 //! automatically handled — no optimizer change required.
@@ -52,14 +52,14 @@
 //! # Pipeline position
 //!
 //! Runs *first* in each fixed-point iteration, before `inline`. The pass
-//! relies on every `Array<T>` access being a method call (`push`,
+//! relies on every `List<T>` access being a method call (`push`,
 //! `index_value`, `index_assign`, `len`, ...), but `inline` expands those
 //! thin wrappers into raw `builtin::array_get`/`array_set` + field-access
 //! pairs, after which the method-call shape is gone. Running before inline
-//! preserves the call structure that `array_method_kind` classifies.
+//! preserves the call structure that `list_method_kind` classifies.
 //!
 //! Running inside each loop iteration (rather than only once up front) also
-//! lets container SROA pick up new `Array<Tuple<...>>` locals exposed by
+//! lets container SROA pick up new `List<Tuple<...>>` locals exposed by
 //! earlier-iteration inlining of helper functions.
 
 use crate::hashmap::{IndexMap, IndexSet};
@@ -73,29 +73,29 @@ use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
-/// Signature key for a monomorphized `Array<T>` method: (`trait_name`, `method_name`).
+/// Signature key for a monomorphized `List<T>` method: (`trait_name`, `method_name`).
 /// Inherent methods (`push/len/is_empty/with_capacity`) use `trait_name = None`;
 /// trait methods (`index_value/index_assign`) use `Some("IndexValue<i32>")` etc.
 ///
 /// This key is the *method family* identifier — it is invariant under the element
-/// type `T` (i.e., `Array<i32>::push` and `Array<i64>::push` share the same
+/// type `T` (i.e., `List<i32>::push` and `List<i64>::push` share the same
 /// `SigKey`). The catalog then uses `(TypeId, SigKey)` for per-element-type lookup.
 type SigKey = (Option<String>, String);
 
-/// Classification of an `Array<T>` method by signature shape. Determines whether
+/// Classification of an `List<T>` method by signature shape. Determines whether
 /// the pass can safely rewrite calls on decomposed candidates, and how.
 ///
 /// See the module-level table for the mapping from each kind to stdlib methods.
-/// Classification is *signature-driven*: any Array method whose signature
+/// Classification is *signature-driven*: any List method whose signature
 /// matches one of these shapes is automatically handled, regardless of name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum ArrayMethodKind {
-    /// `fn(&mut Array<T>, T) -> ()` — stores one element (e.g., `push`).
+enum ListMethodKind {
+    /// `fn(&mut List<T>, T) -> ()` — stores one element (e.g., `push`).
     ///
     /// Rewrite: N parallel calls, one per field, with the T argument projected
     /// per field.
     ElementWriter,
-    /// `fn(&Array<T>, i32) -> T` — reads one element by index (e.g., `index_value`).
+    /// `fn(&List<T>, i32) -> T` — reads one element by index (e.g., `index_value`).
     ///
     /// Rewrite: at each use, read each per-field array at the same index and
     /// reconstruct a tuple/struct literal — but only when the surrounding
@@ -103,19 +103,19 @@ enum ArrayMethodKind {
     /// dispatch directly to the relevant per-field read). Bare full-value reads
     /// cause the candidate to escape.
     IndexReader,
-    /// `fn(&mut Array<T>, i32, T) -> ()` — writes one element by index
+    /// `fn(&mut List<T>, i32, T) -> ()` — writes one element by index
     /// (e.g., `index_assign`).
     ///
     /// Rewrite: N parallel calls, sharing the same (duplicable) index and
     /// projecting the T argument per field.
     IndexWriter,
-    /// `fn(i32) -> Array<T>` (static, no receiver) — constructs a new container
+    /// `fn(i32) -> List<T>` (static, no receiver) — constructs a new container
     /// with the given capacity (e.g., `with_capacity`).
     ///
     /// Rewrite: N parallel calls, one per field, each constructing an
-    /// `Array<T_k>` with the same capacity.
+    /// `List<T_k>` with the same capacity.
     Constructor,
-    /// `fn(&Array<T>) -> i32 | bool` — length-invariant query with no element
+    /// `fn(&List<T>) -> i32 | bool` — length-invariant query with no element
     /// argument (e.g., `len`, `is_empty`, `capacity`).
     ///
     /// Rewrite: dispatch to field 0's corresponding method. Since push, slot
@@ -128,14 +128,11 @@ enum ArrayMethodKind {
     Query,
 }
 
-/// Classify an Array method's signature into an `ArrayMethodKind`, if it matches
+/// Classify an List method's signature into an `ListMethodKind`, if it matches
 /// any of the recognized shapes. Returns the element type `T` on success so
 /// callers can sanity-check consistency with the call-site receiver type.
-fn classify_array_method_sig(
-    func: &NirFunction,
-    type_table: &TypeTable,
-) -> Option<ArrayMethodKind> {
-    // Must be a method (instance or static) on `Array`.
+fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Option<ListMethodKind> {
+    // Must be a method (instance or static) on `List`.
     let info = func.method_info.as_ref()?;
     if info.base_struct_name != "List" {
         return None;
@@ -150,17 +147,17 @@ fn classify_array_method_sig(
     let params: Vec<TypeId> = func.params.iter().map(|p| p.type_id).collect();
     let ret = func.return_type;
 
-    let is_array_of_t = |ty: TypeId| type_table.as_array(ty) == Some(elem_ty);
-    let is_ref_array_of_t = |ty: TypeId| {
+    let is_list_of_t = |ty: TypeId| type_table.as_list(ty) == Some(elem_ty);
+    let is_ref_list_of_t = |ty: TypeId| {
         matches!(
             type_table.get(ty),
-            ResolvedType::Ref(inner) if type_table.as_array(*inner) == Some(elem_ty)
+            ResolvedType::Ref(inner) if type_table.as_list(*inner) == Some(elem_ty)
         )
     };
-    let is_mut_ref_array_of_t = |ty: TypeId| {
+    let is_mut_ref_list_of_t = |ty: TypeId| {
         matches!(
             type_table.get(ty),
-            ResolvedType::MutRef(inner) if type_table.as_array(*inner) == Some(elem_ty)
+            ResolvedType::MutRef(inner) if type_table.as_list(*inner) == Some(elem_ty)
         )
     };
     let is_t = |ty: TypeId| ty == elem_ty;
@@ -170,28 +167,28 @@ fn classify_array_method_sig(
     let is_query_return = |ty: TypeId| ty == TypeTable::I32 || ty == TypeTable::BOOL;
 
     match params.as_slice() {
-        // fn(&Array<T>) -> i32 | bool — Query
-        [p0] if is_ref_array_of_t(*p0) && is_query_return(ret) => Some(ArrayMethodKind::Query),
-        // fn(i32) -> Array<T> — Constructor (static)
-        [p0] if is_i32(*p0) && is_array_of_t(ret) => Some(ArrayMethodKind::Constructor),
-        // fn(&mut Array<T>, T) -> () — ElementWriter
-        [p0, p1] if is_mut_ref_array_of_t(*p0) && is_t(*p1) && is_unit(ret) => {
-            Some(ArrayMethodKind::ElementWriter)
+        // fn(&List<T>) -> i32 | bool — Query
+        [p0] if is_ref_list_of_t(*p0) && is_query_return(ret) => Some(ListMethodKind::Query),
+        // fn(i32) -> List<T> — Constructor (static)
+        [p0] if is_i32(*p0) && is_list_of_t(ret) => Some(ListMethodKind::Constructor),
+        // fn(&mut List<T>, T) -> () — ElementWriter
+        [p0, p1] if is_mut_ref_list_of_t(*p0) && is_t(*p1) && is_unit(ret) => {
+            Some(ListMethodKind::ElementWriter)
         }
-        // fn(&Array<T>, i32) -> T — IndexReader
-        [p0, p1] if is_ref_array_of_t(*p0) && is_i32(*p1) && is_t(ret) => {
-            Some(ArrayMethodKind::IndexReader)
+        // fn(&List<T>, i32) -> T — IndexReader
+        [p0, p1] if is_ref_list_of_t(*p0) && is_i32(*p1) && is_t(ret) => {
+            Some(ListMethodKind::IndexReader)
         }
-        // fn(&mut Array<T>, i32, T) -> () — IndexWriter
-        [p0, p1, p2] if is_mut_ref_array_of_t(*p0) && is_i32(*p1) && is_t(*p2) && is_unit(ret) => {
-            Some(ArrayMethodKind::IndexWriter)
+        // fn(&mut List<T>, i32, T) -> () — IndexWriter
+        [p0, p1, p2] if is_mut_ref_list_of_t(*p0) && is_i32(*p1) && is_t(*p2) && is_unit(ret) => {
+            Some(ListMethodKind::IndexWriter)
         }
         _ => None,
     }
 }
 
 /// Extract the `SigKey` (trait name, method name) from a `FunctionRef` that
-/// refers to an Array method. Returns `None` for non-method functions or methods
+/// refers to an List method. Returns `None` for non-method functions or methods
 /// on other types.
 fn sig_key_of(func: &FunctionRef) -> Option<SigKey> {
     let info = func.method_info.as_ref()?;
@@ -201,15 +198,15 @@ fn sig_key_of(func: &FunctionRef) -> Option<SigKey> {
     Some((info.trait_name.clone(), info.method_name.clone()))
 }
 
-/// Lookup: method family `SigKey` → `ArrayMethodKind`. Built once from the
+/// Lookup: method family `SigKey` → `ListMethodKind`. Built once from the
 /// function table and used at every call site to classify the operation.
 /// Since classification depends only on signature *shape* (not element type),
-/// one entry per family suffices — `Array<i32>::push` and `Array<i64>::push`
+/// one entry per family suffices — `List<i32>::push` and `List<i64>::push`
 /// share `((None, "push"), ElementWriter)`.
-type SigKindIndex = IndexMap<SigKey, ArrayMethodKind>;
+type SigKindIndex = IndexMap<SigKey, ListMethodKind>;
 
 /// Lookup table: (element type `T_k`, (trait, method)) → `FunctionRef` for
-/// `Array<T_k>::method`. Built once per pass.
+/// `List<T_k>::method`. Built once per pass.
 type MethodCatalog = IndexMap<(TypeId, SigKey), FunctionRef>;
 
 /// A local that is a candidate for container SROA.
@@ -232,17 +229,17 @@ struct Candidate {
     span: Span,
     /// Form of the initializer — currently always a `Constructor` call whose
     /// (duplicable) capacity expression is carried forward to build the
-    /// per-field `Array<T_k>::with_capacity(...)` calls during rewrite.
+    /// per-field `List<T_k>::with_capacity(...)` calls during rewrite.
     init: CandidateInit,
 }
 
 /// Layout of the per-element container value.
 #[derive(Debug, Clone)]
 enum ElementLayout {
-    /// `Array<Tuple<T_0, T_1, ..., T_n>>` — decomposable sources are
+    /// `List<Tuple<T_0, T_1, ..., T_n>>` — decomposable sources are
     /// `TupleLiteral` (or another decomposable container's `index_value`).
     Tuple,
-    /// `Array<UserStruct>` — decomposable sources are `StructLiteral` of that
+    /// `List<UserStruct>` — decomposable sources are `StructLiteral` of that
     /// specific struct (or another decomposable container's `index_value`).
     /// The `type_id` identifies the exact struct type so we reject literals
     /// of a different (even structurally-compatible) struct.
@@ -251,7 +248,7 @@ enum ElementLayout {
 
 /// How the candidate was initialized.
 ///
-/// Any Array method classified as `Constructor` with a single duplicable
+/// Any List method classified as `Constructor` with a single duplicable
 /// capacity argument qualifies. The capacity expression is cloned once per
 /// decomposed field at rewrite time, so it must be side-effect-free.
 struct CandidateInit {
@@ -272,7 +269,7 @@ pub fn scalarize_containers(project: &mut NirPackage) -> bool {
     }
 
     // Build a struct lookup: (name, module_source) → &NirStruct. Used by
-    // `collect_candidates` to expand `Array<UserStruct>` element types.
+    // `collect_candidates` to expand `List<UserStruct>` element types.
     let struct_index = build_struct_index(&project.structs);
 
     let mut changed = false;
@@ -313,9 +310,9 @@ fn build_struct_index(structs: &[NirStruct]) -> StructIndex<'_> {
     out
 }
 
-/// Build a catalog of monomorphized `Array<T>::{method}` function references in
+/// Build a catalog of monomorphized `List<T>::{method}` function references in
 /// this project, plus a parallel `SigKindIndex` that classifies each method
-/// family into an `ArrayMethodKind` based on its signature shape.
+/// family into an `ListMethodKind` based on its signature shape.
 fn build_method_catalog(
     project: &NirPackage,
     type_table: &TypeTable,
@@ -328,8 +325,8 @@ fn build_method_catalog(
         let Some(method_info) = &func.method_info else {
             continue;
         };
-        // Must be a method on Array (by base struct name). The kind is still
-        // Array-specific because the pass itself is Array-specific — we only
+        // Must be a method on List (by base struct name). The kind is still
+        // List-specific because the pass itself is List-specific — we only
         // de-hardcode method *names*, not the container type.
         if method_info.base_struct_name != "List" {
             continue;
@@ -384,7 +381,7 @@ fn scalarize_in_function(
     }
 
     // Step 2: escape analysis. Build safe-set via whitelist + tuple-source fixpoint.
-    // Also track which `ArrayMethodKind`s were observed on each whitelisted use,
+    // Also track which `ListMethodKind`s were observed on each whitelisted use,
     // so step 3 can demand only the monomorphizations that will actually be
     // emitted per field (rather than unconditionally requiring all four kinds).
     let body_ref = func.body.as_ref().expect("checked in caller");
@@ -396,7 +393,7 @@ fn scalarize_in_function(
     // Step 3: verify that every required (element_ty, sig) is present in the catalog.
     // Required kinds = `Constructor` (always, for the initializer) ∪ observed
     // kinds. If any candidate has missing monomorphizations, drop it.
-    let empty_used: IndexSet<ArrayMethodKind> = IndexSet::default();
+    let empty_used: IndexSet<ListMethodKind> = IndexSet::default();
     let safe_candidates: Vec<&Candidate> = candidates
         .iter()
         .filter(|c| safe_indices.contains(&c.local_index))
@@ -409,7 +406,7 @@ fn scalarize_in_function(
         return false;
     }
 
-    // Step 4: allocate parallel `Array<T_k>` locals. Mutable borrow of type_table.
+    // Step 4: allocate parallel `List<T_k>` locals. Mutable borrow of type_table.
     // Map: (original local, field k) → new local index
     let mut field_local_map: IndexMap<(u32, u32), u32> = IndexMap::default();
     // Map: (original local, field k) → (new name, array type id)
@@ -421,7 +418,7 @@ fn scalarize_in_function(
         for c in &safe_candidates {
             let base = func.local_count;
             for (k, &elem_ty) in c.element_types.iter().enumerate() {
-                let arr_ty = type_table.make_array(elem_ty);
+                let arr_ty = type_table.make_list(elem_ty);
                 let new_index = base + k as u32;
                 let new_name = format!("__csroa_{}_{}", c.local_name, k);
                 field_local_map.insert((c.local_index, k as u32), new_index);
@@ -489,12 +486,12 @@ struct RewriteCtx<'a> {
     sig_kinds: &'a SigKindIndex,
 }
 
-/// Returns true if every `ArrayMethodKind` the rewrite might use is available
+/// Returns true if every `ListMethodKind` the rewrite might use is available
 /// for every element type `T_k` of the candidate.
 ///
 /// The rewrite always needs:
 /// - `Constructor` (for both `Empty` and `WithCapacity` init forms — both are
-///   emitted as `Array<T_k>::with_capacity(n)`)
+///   emitted as `List<T_k>::with_capacity(n)`)
 /// - `ElementWriter` (push — any original `push` is expanded to per-field pushes)
 /// - `IndexReader` (`index_value` — any read `v[i].K` or cross-candidate source)
 /// - `IndexWriter` (`index_assign` — any slot copy `v[i] = src`)
@@ -504,7 +501,7 @@ struct RewriteCtx<'a> {
 /// In practice all `T_k` get the same stdlib methods monomorphized together,
 /// so checking field 0 alone is enough.
 ///
-/// Check that every `ArrayMethodKind` the rewrite will need for this candidate
+/// Check that every `ListMethodKind` the rewrite will need for this candidate
 /// has a corresponding monomorphization in the catalog for every per-field
 /// element type.
 ///
@@ -514,12 +511,12 @@ struct RewriteCtx<'a> {
 /// versions of methods that are actually called.
 fn required_methods_available(
     c: &Candidate,
-    used_kinds: &IndexSet<ArrayMethodKind>,
+    used_kinds: &IndexSet<ListMethodKind>,
     catalog: &MethodCatalog,
     sig_kinds: &SigKindIndex,
 ) -> bool {
-    let mut required: IndexSet<ArrayMethodKind> = IndexSet::default();
-    required.insert(ArrayMethodKind::Constructor);
+    let mut required: IndexSet<ListMethodKind> = IndexSet::default();
+    required.insert(ListMethodKind::Constructor);
     for &k in used_kinds {
         required.insert(k);
     }
@@ -533,18 +530,18 @@ fn required_methods_available(
     true
 }
 
-/// Locate the `SigKey` of a monomorphized `Array<elem_ty>` method whose signature
+/// Locate the `SigKey` of a monomorphized `List<elem_ty>` method whose signature
 /// classifies as `kind`. Returns the first match, or `None` if no such method is
 /// monomorphized in this project.
 ///
 /// The catalog is keyed by `(TypeId, SigKey)` and the `sig_kinds` index maps
-/// `SigKey → ArrayMethodKind`. We combine them to answer queries of the form
-/// "which stdlib Array method of kind K is available for element type T?".
+/// `SigKey → ListMethodKind`. We combine them to answer queries of the form
+/// "which stdlib List method of kind K is available for element type T?".
 fn find_sig_key_for_kind(
     catalog: &MethodCatalog,
     sig_kinds: &SigKindIndex,
     elem_ty: TypeId,
-    kind: ArrayMethodKind,
+    kind: ListMethodKind,
 ) -> Option<SigKey> {
     for ((t, sig), _) in catalog {
         if *t == elem_ty && sig_kinds.get(sig).copied() == Some(kind) {
@@ -576,8 +573,8 @@ fn collect_candidates(
         else {
             continue;
         };
-        // Type must be Array<Tuple<...>> or Array<UserStruct>.
-        let Some(elem_ty) = type_table.as_array(*type_id) else {
+        // Type must be List<Tuple<...>> or List<UserStruct>.
+        let Some(elem_ty) = type_table.as_list(*type_id) else {
             continue;
         };
         let Some((layout, element_types)) = element_layout_of(elem_ty, type_table, struct_index)
@@ -612,11 +609,11 @@ fn element_layout_of(
     type_table: &TypeTable,
     struct_index: &StructIndex<'_>,
 ) -> Option<(ElementLayout, Vec<TypeId>)> {
-    // Tuple element (e.g., `Array<[i32, i32]>`).
+    // Tuple element (e.g., `List<[i32, i32]>`).
     if let Some(tuple_elems) = type_table.as_tuple(elem_ty) {
         return Some((ElementLayout::Tuple, tuple_elems));
     }
-    // User struct element (e.g., `Array<Point>`). Generic struct instances
+    // User struct element (e.g., `List<Point>`). Generic struct instances
     // appear as `ResolvedType::Struct` after monomorphization.
     if let ResolvedType::Struct {
         name,
@@ -648,7 +645,7 @@ fn element_layout_of(
 /// (no hardcoded label or method names):
 ///
 /// 1. A direct `Call` classified as `Constructor` by signature — e.g.
-///    `Array::<T>::with_capacity(cap)` written by the user directly. The
+///    `List::<T>::with_capacity(cap)` written by the user directly. The
 ///    argument must be side-effect-free so it can be cloned once per field.
 /// 2. The `SequenceLiteralBuilder` desugaring for empty array literals
 ///    (`[]`), which lowers to
@@ -662,7 +659,7 @@ fn recognize_init(value: &NirExpr, sig_kinds: &SigKindIndex) -> Option<Candidate
     let NirExprKind::Call { func, args, .. } = &inner.kind else {
         return None;
     };
-    if array_method_kind(func, sig_kinds) != Some(ArrayMethodKind::Constructor) {
+    if list_method_kind(func, sig_kinds) != Some(ListMethodKind::Constructor) {
         return None;
     }
     if args.len() != 1 {
@@ -742,10 +739,10 @@ fn unwrap_builder_labeled_block(expr: &NirExpr) -> Option<&NirExpr> {
     Some(inner)
 }
 
-/// Look up the `ArrayMethodKind` of a call target by signature, via the
-/// pre-built `SigKindIndex`. Returns `None` for non-method functions, non-Array
-/// methods, or Array methods whose signature didn't match any kind.
-fn array_method_kind(func: &FunctionRef, sig_kinds: &SigKindIndex) -> Option<ArrayMethodKind> {
+/// Look up the `ListMethodKind` of a call target by signature, via the
+/// pre-built `SigKindIndex`. Returns `None` for non-method functions, non-List
+/// methods, or List methods whose signature didn't match any kind.
+fn list_method_kind(func: &FunctionRef, sig_kinds: &SigKindIndex) -> Option<ListMethodKind> {
     let sig = sig_key_of(func)?;
     sig_kinds.get(&sig).copied()
 }
@@ -769,7 +766,7 @@ fn compute_safe_set(
     body: &NirBlock,
     candidates: &[Candidate],
     sig_kinds: &SigKindIndex,
-) -> (IndexSet<u32>, IndexMap<u32, IndexSet<ArrayMethodKind>>) {
+) -> (IndexSet<u32>, IndexMap<u32, IndexSet<ListMethodKind>>) {
     // Map candidate local → element arity (for push/index_assign/index_value arity checks).
     let mut arity_of: IndexMap<u32, usize> = IndexMap::default();
     // Map candidate local → element layout (for verifying literal shape matches).
@@ -809,12 +806,12 @@ struct WhitelistChecker<'a> {
     layout_of: &'a IndexMap<u32, ElementLayout>,
     sig_kinds: &'a SigKindIndex,
     escaped: IndexSet<u32>,
-    /// Per-candidate set of `ArrayMethodKind`s observed on whitelisted uses.
+    /// Per-candidate set of `ListMethodKind`s observed on whitelisted uses.
     /// Only kinds the rewrite actually needs to emit are recorded; bare
     /// `IndexReader` uses (which escape) are not. Drives the
     /// `required_methods_available` check so we only demand stdlib
     /// monomorphizations that will actually be called.
-    used_kinds: IndexMap<u32, IndexSet<ArrayMethodKind>>,
+    used_kinds: IndexMap<u32, IndexSet<ListMethodKind>>,
 }
 
 impl WhitelistChecker<'_> {
@@ -825,7 +822,7 @@ impl WhitelistChecker<'_> {
     }
 
     /// Record that a whitelisted call of `kind` was observed on candidate `idx`.
-    fn record_use(&mut self, idx: u32, kind: ArrayMethodKind) {
+    fn record_use(&mut self, idx: u32, kind: ListMethodKind) {
         self.used_kinds.entry(idx).or_default().insert(kind);
     }
 
@@ -894,7 +891,7 @@ impl WhitelistChecker<'_> {
                 func,
                 args,
                 ..
-            } if array_method_kind(func, self.sig_kinds) == Some(ArrayMethodKind::IndexReader) => {
+            } if list_method_kind(func, self.sig_kinds) == Some(ListMethodKind::IndexReader) => {
                 if args.len() != 1 {
                     return false;
                 }
@@ -934,7 +931,7 @@ impl WhitelistChecker<'_> {
                 self.visit_expr(&args[0].expr);
                 // Record that `other` is being read via IndexReader so it
                 // needs that method monomorphization during rewrite.
-                self.record_use(other, ArrayMethodKind::IndexReader);
+                self.record_use(other, ListMethodKind::IndexReader);
                 true
             }
             _ => false,
@@ -969,10 +966,10 @@ impl NirRefVisitor for WhitelistChecker<'_> {
                 if let Some(rec_local) = receiver_local(receiver)
                     && self.safe.contains(&rec_local)
                 {
-                    let kind = array_method_kind(func, self.sig_kinds);
+                    let kind = list_method_kind(func, self.sig_kinds);
                     match (kind, args.len()) {
                         // v.push-shaped(source)
-                        (Some(ArrayMethodKind::ElementWriter), 1) => {
+                        (Some(ListMethodKind::ElementWriter), 1) => {
                             let arity = self.arity_of.get(&rec_local).copied().unwrap_or(0);
                             let layout = self
                                 .layout_of
@@ -980,19 +977,19 @@ impl NirRefVisitor for WhitelistChecker<'_> {
                                 .cloned()
                                 .unwrap_or(ElementLayout::Tuple);
                             if self.check_source(&args[0].expr, arity, &layout) {
-                                self.record_use(rec_local, ArrayMethodKind::ElementWriter);
+                                self.record_use(rec_local, ListMethodKind::ElementWriter);
                             } else {
                                 self.mark(rec_local);
                             }
                             return;
                         }
                         // v.len() / v.is_empty() / v.capacity() — Query, no arg
-                        (Some(ArrayMethodKind::Query), 0) => {
-                            self.record_use(rec_local, ArrayMethodKind::Query);
+                        (Some(ListMethodKind::Query), 0) => {
+                            self.record_use(rec_local, ListMethodKind::Query);
                             return;
                         }
                         // v.index_assign-shaped(i, source)
-                        (Some(ArrayMethodKind::IndexWriter), 2) => {
+                        (Some(ListMethodKind::IndexWriter), 2) => {
                             let arity = self.arity_of.get(&rec_local).copied().unwrap_or(0);
                             let layout = self
                                 .layout_of
@@ -1015,7 +1012,7 @@ impl NirRefVisitor for WhitelistChecker<'_> {
                             // index argument visited normally
                             self.visit_expr(&args[0].expr);
                             if self.check_source(&args[1].expr, arity, &layout) {
-                                self.record_use(rec_local, ArrayMethodKind::IndexWriter);
+                                self.record_use(rec_local, ListMethodKind::IndexWriter);
                             } else {
                                 self.mark(rec_local);
                             }
@@ -1026,7 +1023,7 @@ impl NirRefVisitor for WhitelistChecker<'_> {
                         // index. That case is short-circuited by the
                         // `FieldAccess` branch below; if we arrive here directly
                         // the entire struct value is escaping.
-                        (Some(ArrayMethodKind::IndexReader), 1) => {
+                        (Some(ListMethodKind::IndexReader), 1) => {
                             self.mark(rec_local);
                             self.visit_expr(&args[0].expr);
                             return;
@@ -1051,13 +1048,13 @@ impl NirRefVisitor for WhitelistChecker<'_> {
                     args,
                     ..
                 } = &inner.kind
-                    && array_method_kind(func, self.sig_kinds) == Some(ArrayMethodKind::IndexReader)
+                    && list_method_kind(func, self.sig_kinds) == Some(ListMethodKind::IndexReader)
                     && args.len() == 1
                     && let Some(rec_local) = receiver_local(receiver)
                     && self.safe.contains(&rec_local)
                 {
                     // Safe — just visit the index expression.
-                    self.record_use(rec_local, ArrayMethodKind::IndexReader);
+                    self.record_use(rec_local, ListMethodKind::IndexReader);
                     self.visit_expr(&args[0].expr);
                     return;
                 }
@@ -1111,7 +1108,7 @@ fn receiver_local(expr: &NirExpr) -> Option<u32> {
 /// expression-statement-level `push/index_assign` calls with per-field versions.
 ///
 /// For each statement:
-/// - Candidate `Let { v: Array<Tuple<...>> = init }` → N per-field `Let`s
+/// - Candidate `Let { v: List<Tuple<...>> = init }` → N per-field `Let`s
 /// - `ExprStmt(v.push(src))` where `v` is decomposed → N push stmts
 /// - `ExprStmt(v.index_assign(i, src))` where `v` is decomposed → N `index_assign` stmts
 /// - Any other statement: recurse into nested blocks and rewrite expressions in-place.
@@ -1149,7 +1146,7 @@ fn process_stmt(mut stmt: NirStmt, out: &mut Vec<NirStmt>, ctx: &RewriteCtx) {
 }
 
 /// Emit N per-field Let statements for a decomposed candidate.
-/// The original Let's initializer is replaced by N `Array<T_k>::with_capacity(cap)`
+/// The original Let's initializer is replaced by N `List<T_k>::with_capacity(cap)`
 /// calls, one per field. The same (duplicable) capacity expression from the
 /// original initializer is cloned once per field.
 fn expand_candidate_let(stmt: &NirStmt, out: &mut Vec<NirStmt>, ctx: &RewriteCtx) {
@@ -1181,7 +1178,7 @@ fn expand_candidate_let(stmt: &NirStmt, out: &mut Vec<NirStmt>, ctx: &RewriteCtx
     }
 }
 
-/// Build a `Array<T_k>::Constructor(cap)` NIR call — e.g. `with_capacity(cap)`.
+/// Build a `List<T_k>::Constructor(cap)` NIR call — e.g. `with_capacity(cap)`.
 /// The specific method is resolved via `find_sig_key_for_kind(Constructor)`,
 /// so there's no hardcoded name match. `cap` is the (duplicable) capacity
 /// expression recognized from the original initializer, already cloned once
@@ -1197,7 +1194,7 @@ fn build_with_capacity_call(
         ctx.catalog,
         ctx.sig_kinds,
         elem_ty,
-        ArrayMethodKind::Constructor,
+        ListMethodKind::Constructor,
     )
     .expect("Constructor checked by required_methods_available");
     let func = ctx
@@ -1234,10 +1231,10 @@ fn try_expand_call_stmt(expr: &NirExpr, span: Span, ctx: &RewriteCtx) -> Option<
     let arity = info.element_types.len();
     let layout = info.layout.clone();
 
-    let kind = array_method_kind(func, ctx.sig_kinds);
+    let kind = list_method_kind(func, ctx.sig_kinds);
     match (kind, args.len()) {
         // Case 1: v.ElementWriter(source) — e.g. push
-        (Some(ArrayMethodKind::ElementWriter), 1) => {
+        (Some(ListMethodKind::ElementWriter), 1) => {
             let src = &args[0].expr;
             let per_field = decompose_source(src, arity, &layout, ctx)?;
             let sig = sig_key_of(func)?;
@@ -1261,7 +1258,7 @@ fn try_expand_call_stmt(expr: &NirExpr, span: Span, ctx: &RewriteCtx) -> Option<
             Some(out)
         }
         // Case 2: v.IndexWriter(i, source) — e.g. index_assign
-        (Some(ArrayMethodKind::IndexWriter), 2) => {
+        (Some(ListMethodKind::IndexWriter), 2) => {
             let idx = &args[0].expr;
             let src = &args[1].expr;
             if !is_duplicable_expr(idx) {
@@ -1365,7 +1362,7 @@ fn decompose_source(
             func,
             args,
             ..
-        } if array_method_kind(func, ctx.sig_kinds) == Some(ArrayMethodKind::IndexReader)
+        } if list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::IndexReader)
             && args.len() == 1 =>
         {
             let other = receiver_local(receiver)?;
@@ -1638,7 +1635,7 @@ fn rewrite_expr_inplace(expr: &mut NirExpr, ctx: &RewriteCtx) {
             args,
             ..
         } = &inner.kind
-        && array_method_kind(func, ctx.sig_kinds) == Some(ArrayMethodKind::IndexReader)
+        && list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::IndexReader)
         && args.len() == 1
         && let Some(rec_local) = receiver_local(receiver)
         && ctx.decomposed.contains(&rec_local)
@@ -1683,7 +1680,7 @@ fn rewrite_expr_inplace(expr: &mut NirExpr, ctx: &RewriteCtx) {
         && let Some(rec_local) = receiver_local(receiver)
         && ctx.decomposed.contains(&rec_local)
         && args.is_empty()
-        && array_method_kind(func, ctx.sig_kinds) == Some(ArrayMethodKind::Query)
+        && list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::Query)
     {
         let info = ctx
             .candidate_data
@@ -1692,7 +1689,7 @@ fn rewrite_expr_inplace(expr: &mut NirExpr, ctx: &RewriteCtx) {
         let elem_ty = info.element_types[0];
         let field_local = ctx.field_local_map[&(rec_local, 0)];
         let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, 0)].clone();
-        // Look up the same query method on Array<T_0>. A missing catalog entry
+        // Look up the same query method on List<T_0>. A missing catalog entry
         // here is a compiler bug: escape analysis records every observed Query
         // use via `record_use`, and `required_methods_available` verifies the
         // entry exists for every per-field element type before the candidate

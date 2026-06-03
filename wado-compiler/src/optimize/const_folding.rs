@@ -613,8 +613,8 @@ impl ConstFoldVisitor<'_> {
     ///   become a soundness hazard.
     /// - `Block { …; tail_expr }` / `LabeledBlock { …; break label: tail }`:
     ///   recurse on the producing tail. This is the shape produced by
-    ///   inlining a constructor (`Array::filled(16, 0)` becomes
-    ///   `__inline_…: { …; break __inline_…: Array<u16> { repr, used: 16 } }`),
+    ///   inlining a constructor (`List::filled(16, 0)` becomes
+    ///   `__inline_…: { …; break __inline_…: List<u16> { repr, used: 16 } }`),
     ///   so the constructor's field knowledge reaches the let target.
     fn update_field_env_from_let(&mut self, local_index: u32, value: &NirExpr) {
         // Unwrap a chained `$value_copy$T<id>(arg)` so the underlying

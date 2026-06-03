@@ -505,7 +505,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Check if there's a trait impl for a type, with optional type args for bounds checking.
-    /// For `impl<T: Eq> Eq for Array<T>`, when checking `Array<Foo>`, passes `[Foo]` as `type_args`.
+    /// For `impl<T: Eq> Eq for List<T>`, when checking `List<Foo>`, passes `[Foo]` as `type_args`.
     pub(super) fn find_trait_impl_for_type_with_args(
         &self,
         type_name: &str,
@@ -840,7 +840,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Check if an impl block's type parameter bounds are satisfied by the given type args.
-    /// For `impl<T: Ord> Array<T>`, checks that the concrete type substituted for T implements Ord.
+    /// For `impl<T: Ord> List<T>`, checks that the concrete type substituted for T implements Ord.
     pub(super) fn check_impl_block_bounds(
         &self,
         impl_block: &ast::ImplBlock,
@@ -947,7 +947,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     if self.type_implements_trait(type_arg, &bound.name) {
                         // Register associated type resolutions so the monomorphizer can
-                        // substitute e.g. I::Iter → ArrayIter<u8> when I = Array<u8>.
+                        // substitute e.g. I::Iter → ListIter<u8> when I = List<u8>.
                         self.register_assoc_types_for_concrete_type_and_trait(
                             type_arg,
                             &bound.name.clone(),
@@ -969,11 +969,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Register associated type resolutions for a concrete type instantiating a trait.
-    /// For example, when `Array<u8>` implements `IntoIterator`, registers:
-    /// - (Array<u8>, "Item") → u8
-    /// - (Array<u8>, "Iter") → `ArrayIter`<u8>
+    /// For example, when `List<u8>` implements `IntoIterator`, registers:
+    /// - (List<u8>, "Item") → u8
+    /// - (List<u8>, "Iter") → `ListIter`<u8>
     ///
-    /// This enables the monomorphizer to resolve `I::Iter` → `ArrayIter<u8>` when `I = Array<u8>`.
+    /// This enables the monomorphizer to resolve `I::Iter` → `ListIter<u8>` when `I = List<u8>`.
     pub(super) fn register_assoc_types_for_concrete_type_and_trait(
         &mut self,
         concrete_type_id: TypeId,
@@ -982,11 +982,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Get the base type name and concrete type args for impl block lookup.
         // For newtypes, follow the chain to the underlying type to find the trait impl,
         // but registration (below) still uses concrete_type_id so the monomorphizer can
-        // resolve e.g. `MyBytes::Iter` when `MyBytes` is a newtype over `Array<u8>`.
+        // resolve e.g. `MyBytes::Iter` when `MyBytes` is a newtype over `List<u8>`.
         let (type_name, concrete_type_args) = {
             let tt = self.tysys.type_table.borrow();
             let effective_id = tt.get_ultimate_base_type(concrete_type_id);
-            let array_name = tt
+            let list_name = tt
                 .compiler_items()
                 .struct_name(crate::compiler_item::CompilerItem::List)
                 .to_string();
@@ -995,7 +995,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name, type_args, ..
                 } => (name, type_args),
                 ResolvedType::Struct { name, .. } => (name, vec![]),
-                ResolvedType::BuiltinArray(elem) => (array_name, vec![elem]),
+                ResolvedType::BuiltinArray(elem) => (list_name, vec![elem]),
                 // Primitives (`i32`, `f64`, `bool`, ...) can implement traits
                 // with associated types just like structs. Without this arm,
                 // a generic call like `parse_range::<i32>(...)` would skip
@@ -1052,7 +1052,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut scope = self.enter_inherited_type_param_scope();
 
             // Bind impl type params to concrete type args.
-            // For `impl<T> IntoIterator for Array<T>` with Array<u8>:
+            // For `impl<T> IntoIterator for List<T>` with List<u8>:
             // impl_ty_param_names = ["T"], concrete_type_args = [u8_typeid]
             // → set current_type_params["T"] = (0, u8_typeid)
             for (i, tp_name) in info.impl_ty_param_names.iter().enumerate() {

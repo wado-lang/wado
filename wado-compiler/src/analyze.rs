@@ -565,7 +565,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     /// is also opting out of the prelude's name reservation, and the
     /// bundled stdlib files that *implement* the prelude carry the
     /// attribute precisely so they can define names like `Option`, `Eq`,
-    /// `Array` without being flagged as collisions with themselves.
+    /// `List` without being flagged as collisions with themselves.
     fn check_prelude_collisions(&mut self, module: &Module, module_source: &ModuleSource) {
         if module.has_no_prelude() {
             return;

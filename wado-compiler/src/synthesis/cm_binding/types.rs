@@ -20,7 +20,7 @@ use crate::tir::{
 use crate::synthesis::common::{binary, i32_const, i64_const, synth_span};
 
 /// Snapshot of the stdlib type / variant names the CM binding code
-/// matches against — `String`, `Array`, `Option`, `Result` — resolved
+/// matches against — `String`, `List`, `Option`, `Result` — resolved
 /// once through the `CompilerItem` registry so a stdlib rename of any
 /// of these flows through every CM lift / lower / adapter site
 /// without hard-coded literals scattered across `synthesis::cm_binding`.
@@ -149,7 +149,7 @@ pub struct LiftContext<'a> {
 /// interfaces are always distinct `TypeId`s.
 ///
 /// This is needed for synthesized binding code that calls generic methods
-/// (e.g., `Array::<String>::with_capacity()`). The monomorphizer requires
+/// (e.g., `List::<String>::with_capacity()`). The monomorphizer requires
 /// concrete `TypeId`s in `MonomorphInfo::type_args` to instantiate generic
 /// methods.
 pub fn cm_type_to_type_id(
@@ -197,13 +197,13 @@ pub fn cm_type_to_type_id(
                 .unwrap_or(TypeTable::I32),
         },
         Type::Generic(g) => {
-            let array_name = type_table
+            let list_name = type_table
                 .compiler_items()
                 .struct_name(crate::compiler_item::CompilerItem::List)
                 .to_string();
-            if g.name.as_str() == array_name && g.args.len() == 1 {
+            if g.name.as_str() == list_name && g.args.len() == 1 {
                 let elem_type = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                return type_table.make_array(elem_type);
+                return type_table.make_list(elem_type);
             }
             let option_name = type_table
                 .compiler_items()
@@ -951,7 +951,7 @@ pub(super) fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
 /// Used by callers that need to re-enter AST-shaped `Type` match arms
 /// (struct/generic field recursion in
 /// `synthesize_lift_from_flat_params`, element lowering in the
-/// `Array<T>` arm of `lower_to_flat_inner`). The returned value only
+/// `List<T>` arm of `lower_to_flat_inner`). The returned value only
 /// needs the top-level `name` and (for `GenericInstance`) immediate
 /// type args; deeper structural data is already reachable through
 /// `tir_modules` + `type_table` and is looked up lazily.
@@ -1070,7 +1070,7 @@ pub(super) fn compute_export_flat_param_types(
 /// Primitives (`i32`, `f64`, `bool`, `char`, ...) and handle-shaped
 /// types (resources, enums, flags) all travel as a single i32 / i64 /
 /// f32 / f64 both at the Wasm layer and at the CM layer, so no lifting
-/// step is required. Everything else — `String`, `Array<T>`,
+/// step is required. Everything else — `String`, `List<T>`,
 /// `Option<T>`, `Result<T, E>`, tuples, user structs, variants — expands
 /// to either a different value type or multiple values under the flat
 /// ABI, and therefore must be reconstructed into a Wado-side value.
@@ -1090,7 +1090,7 @@ pub(super) fn param_needs_lifting(type_id: TypeId, tt: &TypeTable) -> bool {
         // opaque.
         ResolvedType::Newtype { base_type, .. } => param_needs_lifting(*base_type, tt),
         // Everything else (Struct, Variant, tuples via GenericInstance,
-        // `Array<T>`, `Option<T>`, `Result<T, E>`, references, etc.)
+        // `List<T>`, `Option<T>`, `Result<T, E>`, references, etc.)
         // either widens or splits at the flat ABI.
         _ => true,
     }

@@ -1,13 +1,13 @@
-//! Array optimization passes for WIR.
+//! List optimization passes for WIR.
 //!
 //! - **Constant array data promotion**: `ArrayNewFixed` of constants → `ArrayNewData`.
 //! - **Large array literal splitting**: `array.new_fixed` (>= threshold) → `array.new_default` + sets.
 //!
-//! Array literals reach WIR already as `ArrayNewFixed`: the NIR
+//! List literals reach WIR already as `ArrayNewFixed`: the NIR
 //! `optimize::array_literal` pass materializes `NirExprKind::ArrayLiteral` from
 //! the `SequenceLiteralBuilder` push sequence, and `wir_build` lowers it
 //! directly. The former WIR-level `collapse_array_push_sequences` that
-//! reconstructed `ArrayNewFixed` from inlined `Array::push` chains is therefore
+//! reconstructed `ArrayNewFixed` from inlined `List::push` chains is therefore
 //! retired; the passes below consume the `ArrayNewFixed` it used to produce.
 
 use crate::wir::{WirData, WirInstr, WirPackage, WirType, WirTypeDef};
@@ -50,7 +50,7 @@ pub(super) fn promote_constant_arrays_to_data(module: &mut WirPackage) {
         }
     }
 
-    // Also check global initializers (e.g., `global ITEMS: Array<i32> = [1,2,3]`).
+    // Also check global initializers (e.g., `global ITEMS: List<i32> = [1,2,3]`).
     for global in &mut module.globals {
         visitor.visit_instr(&mut global.init);
     }

@@ -1,8 +1,8 @@
 //! Post-synthesis type fixups and call-site rewrites.
 //!
 //! After import-adapter synthesis the binding bodies use WASI-derived
-//! `TypeId`s (e.g. `Array<Tuple<String, Array<u8>>>`) while the call sites
-//! see the user's newtype-aliased types (e.g. `Array<Tuple<FieldName,
+//! `TypeId`s (e.g. `List<Tuple<String, List<u8>>>`) while the call sites
+//! see the user's newtype-aliased types (e.g. `List<Tuple<FieldName,
 //! FieldValue>>`). [`rewrite_calls_in_block`] reaches every effect-style
 //! call and resource method call, swaps in the binding `FunctionRef`,
 //! flattens args to the binding's flat CM parameter shape, and runs
@@ -31,7 +31,7 @@ use super::types::{
 
 /// Recursively replace WASI-derived types with user types in the binding.
 /// Given a WASI AST `Type` and the user's `TypeId`, compute the WASI-derived `TypeId`
-/// and replace it, then recurse into sub-types (Array elements, Tuple fields, etc.).
+/// and replace it, then recurse into sub-types (List elements, Tuple fields, etc.).
 fn replace_wasi_derived_type_recursive(
     adapter: &mut TirFunction,
     wasi_type: &Type,
@@ -151,8 +151,8 @@ fn replace_wasi_derived_type_recursive(
 
 /// Fix up WASI-derived types in the binding body to match the user's types.
 ///
-/// The binding body uses `TypeIds` from `cm_type_to_type_id` (e.g., `Array<Tuple<String, Array<u8>>>`).
-/// The call site uses user types with newtype aliases (e.g., `Array<Tuple<FieldName, FieldValue>>`).
+/// The binding body uses `TypeIds` from `cm_type_to_type_id` (e.g., `List<Tuple<String, List<u8>>>`).
+/// The call site uses user types with newtype aliases (e.g., `List<Tuple<FieldName, FieldValue>>`).
 /// This function computes the WASI-derived `TypeId` for each param and replaces it in the body.
 fn fixup_wasi_derived_types_in_adapter(
     adapter: &mut TirFunction,
@@ -254,7 +254,7 @@ fn replace_type_in_adapter(adapter: &mut TirFunction, old_type: TypeId, new_type
 
 /// Like `replace_type_in_adapter` but also renames function references that
 /// contain the old type name to use the new type name. This is needed when
-/// the binding body calls monomorphized functions like `Array<T>::with_capacity`
+/// the binding body calls monomorphized functions like `List<T>::with_capacity`
 /// where T is a WASI-derived type that differs from the user's newtype alias.
 fn replace_type_in_adapter_with_names(
     adapter: &mut TirFunction,
@@ -294,7 +294,7 @@ fn replace_type_in_adapter_with_names(
 /// Replaces every occurrence of `old_type` with `new_type` throughout an
 /// adapter body, and — when `rename` is set — rewrites function references
 /// whose mangled name embeds `old_name` to use `new_name` (needed for
-/// monomorphized helpers like `Array<T>::with_capacity` where `T` is a
+/// monomorphized helpers like `List<T>::with_capacity` where `T` is a
 /// WASI-derived type differing from the user's newtype alias).
 ///
 /// Traversal is exhaustive via `TirMutVisitor`, so the swap reaches every
@@ -1021,7 +1021,7 @@ fn rewrite_calls_in_expr(
                     fixup_return_type_in_body(&mut adapter, old_return_type, expr.type_id);
                 }
                 // Fix up adapter param types for GC pass-through params (String,
-                // Array<T>) where the binding receives the GC value directly.
+                // List<T>) where the binding receives the GC value directly.
                 // Do NOT fix up params that get flattened (Option, resource handles)
                 // because taken_args indices don't match flat adapter param indices.
                 if let Some(func_info) = &wasi_func_info {
@@ -1071,7 +1071,7 @@ fn rewrite_calls_in_expr(
             }
 
             // Flatten call site args to match the binding's flat CM params.
-            // GC passthrough types (String, Array<u8>, Option<T>) are passed
+            // GC passthrough types (String, List<u8>, Option<T>) are passed
             // through as GC refs — the binding body handles lowering.
             // Other multi-flat types are flattened here into individual i32 args.
             let flat_call_args = if let Some(func_info) = &wasi_func_info {

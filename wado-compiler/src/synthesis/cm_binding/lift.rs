@@ -99,9 +99,9 @@ fn synthesize_lift_inner(
     let resolved = ctx.cm_interface_registry.resolve_type(ty);
     let ty = &resolved;
     // Resolve stdlib struct names through the compiler-item registry so
-    // a rename of `String` / `Array` / `Option` / `Result` flows through
+    // a rename of `String` / `List` / `Option` / `Result` flows through
     // CM lifting without code changes here.
-    let (string_name, array_name, option_name, result_name) = {
+    let (string_name, list_name, option_name, result_name) = {
         let tt = ctx.type_table.borrow();
         let items = tt.compiler_items();
         (
@@ -220,7 +220,7 @@ fn synthesize_lift_inner(
         }
         Type::Generic(g) => {
             let gname = g.name.as_str();
-            if gname == array_name && g.args.len() == 1 {
+            if gname == list_name && g.args.len() == 1 {
                 synthesize_lift_list(&g.args[0], addr, next_local, stmts, locals, ctx)
             } else if gname == option_name && g.args.len() == 1 {
                 synthesize_lift_option_inner(&g.args[0], addr, next_local, stmts, locals, ctx)
@@ -345,7 +345,7 @@ fn try_lift_wasi_struct(
     // Create the struct type in the type table using the exact source
     // interface — no scan across packages. Covers both `wasi:*` and
     // `core:kiln/*` so that nested struct lifts (e.g. `InputFile` inside
-    // `Array<InputFile>`) hit the same `StructName` that
+    // `List<InputFile>`) hit the same `StructName` that
     // `wir_build::types::register_struct` registered.
     let struct_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
@@ -626,18 +626,18 @@ fn synthesize_lift_list(
         Some(ctx.cm_package),
     );
 
-    // Resolve TypeIds for the element type and Array<ElemType>.
-    // These are needed by the monomorphizer to instantiate Array::with_capacity and .push().
-    let (elem_type_id, array_type_id, array_struct_name) = {
+    // Resolve TypeIds for the element type and List<ElemType>.
+    // These are needed by the monomorphizer to instantiate List::with_capacity and .push().
+    let (elem_type_id, array_type_id, list_struct_name) = {
         let mut tt = ctx.type_table.borrow_mut();
         let elem_tid =
             cm_type_to_type_id(elem_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
-        let array_tid = tt.make_array(elem_tid);
-        let array_name = tt
+        let list_tid = tt.make_list(elem_tid);
+        let list_name = tt
             .compiler_items()
             .struct_name(crate::compiler_item::CompilerItem::List)
             .to_string();
-        (elem_tid, array_tid, array_name)
+        (elem_tid, list_tid, list_name)
     };
 
     let base_local = alloc_local(next_local, locals, TypeTable::I32);
@@ -666,7 +666,7 @@ fn synthesize_lift_list(
         result_local,
         array_type_id,
         generic_static_call(
-            &array_struct_name,
+            &list_struct_name,
             "with_capacity",
             ModuleSource::list(),
             vec![elem_type_id],
@@ -725,7 +725,7 @@ fn synthesize_lift_list(
     // __result.push(lifted_elem)
     loop_stmts.push(expr_stmt(generic_method_call(
         local_ref(result_local, "__result", array_type_id),
-        &array_struct_name,
+        &list_struct_name,
         "push",
         ModuleSource::list(),
         vec![lifted_elem],

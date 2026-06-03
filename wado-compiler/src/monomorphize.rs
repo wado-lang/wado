@@ -175,8 +175,8 @@ fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Opti
         | ResolvedType::GenericInstance { module_source, .. }
         | ResolvedType::Enum { module_source, .. }
         | ResolvedType::Variant { module_source, .. } => Some(module_source.clone()),
-        // Newtypes inherit their base type's impls (`type Foo = Array<u8>`
-        // gets Array's methods); the body of the inherited generic
+        // Newtypes inherit their base type's impls (`type Foo = List<u8>`
+        // gets List's methods); the body of the inherited generic
         // instantiation lives in the base type's module by convention, so
         // peel through to the base before reading the module source.
         ResolvedType::Newtype { base_type, .. } => {
@@ -188,7 +188,7 @@ fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Opti
 
 impl Monomorphizer {
     /// Perform monomorphization on a module, optionally with access to external generic
-    /// functions and structs from other modules (e.g., Array methods from prelude).
+    /// functions and structs from other modules (e.g., List methods from prelude).
     ///
     /// IMPORTANT: Requires unified type tables - `TypeIds` in external generics
     /// must be valid in the module's `type_table`.

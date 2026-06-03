@@ -692,7 +692,7 @@ impl<'a> WirContext<'a> {
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } if name == "List" && type_args.len() == 1 => {
-                // Look up Array<T> struct type. The element name must
+                // Look up List<T> struct type. The element name must
                 // come from `mangle_type_arg_for_generic` so it agrees
                 // with the registration key produced by the
                 // monomorphizer's `instantiation_name` (which qualifies

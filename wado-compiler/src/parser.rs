@@ -506,7 +506,7 @@ impl Parser {
 
     /// Expect a > token for closing generic type arguments.
     /// Handles the case where >> is lexed as `GtGt` instead of two separate Gt tokens.
-    /// This is necessary for nested generics like Array<Tuple<String, String>>.
+    /// This is necessary for nested generics like List<Tuple<String, String>>.
     fn expect_gt(&mut self) -> ParseResult<()> {
         // First check if we have a pending > from a previous GtGt split
         if self.pending_gt {
@@ -5100,11 +5100,11 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Impl)?;
 
-        // Parse generic parameters like <T> (Rust-style: impl<T: Ord> Array<T>)
+        // Parse generic parameters like <T> (Rust-style: impl<T: Ord> List<T>)
         let mut type_params = self.parse_generic_params()?;
 
         // Parse first type (could be trait name or target type)
-        // Supports bounds on type args: impl Array<T: Ord> { ... }
+        // Supports bounds on type args: impl List<T: Ord> { ... }
         let first_type = self.parse_impl_target_type(&mut type_params)?;
 
         // Check if this is `impl Trait for Type` or just `impl Type`
@@ -5236,8 +5236,8 @@ impl Parser {
     }
 
     /// Parse a type in impl block context, supporting bounds on generic type args.
-    /// `impl Array<T: Ord>` extracts T: Ord into `type_params` and returns Generic("List", [Named("T")]).
-    /// `impl Foo<Array<String>, V>` parses `Array<String>` as a full nested generic type.
+    /// `impl List<T: Ord>` extracts T: Ord into `type_params` and returns Generic("List", [Named("T")]).
+    /// `impl Foo<List<String>, V>` parses `List<String>` as a full nested generic type.
     /// Falls back to normal `parse_type()` for non-identifier starts (e.g., reference types).
     fn parse_impl_target_type(
         &mut self,
@@ -5257,12 +5257,12 @@ impl Parser {
         // We have Ident < ... - parse each type arg individually.
         // Each arg is either:
         //   - A bounded type param: `T: Ord` (ident followed by colon) → extract into type_params
-        //   - A full type: `Array<String>`, `i32`, `V`, etc. → parse with parse_type()
+        //   - A full type: `List<String>`, `i32`, `V`, etc. → parse with parse_type()
         //
         // Only bounded type params are added to type_params. Params without bounds are either
         // concrete types (like `i32` in `impl IndexValue<i32>`) or bare type params handled by
         // the elaborator. Adding bare params would shift the index of real type params, breaking
-        // associated type resolution (e.g., `type Output = T` for `impl IndexValue<i32> for Array<T>`).
+        // associated type resolution (e.g., `type Output = T` for `impl IndexValue<i32> for List<T>`).
         let start_span = self.peek().span;
         let name = self.consume_ident()?;
         self.advance(); // consume '<'
@@ -5296,7 +5296,7 @@ impl Parser {
                     source_interface: None,
                 }));
             } else {
-                // Full type: bare ident, generic type like Array<String>, reference, etc.
+                // Full type: bare ident, generic type like List<String>, reference, etc.
                 args.push(self.parse_type()?);
             }
 
@@ -6669,7 +6669,7 @@ line 2
 
     #[test]
     fn test_type_args_nested_generics() {
-        // Array<Array<i32>> should parse correctly (>> splitting)
+        // List<List<i32>> should parse correctly (>> splitting)
         let module = parse("fn foo(x: List<List<i32>>) {}").unwrap();
         if let Item::Function(func) = &module.items[0] {
             let ty = &func.params[0].ty;
@@ -6955,7 +6955,7 @@ line 2
         let module = parse(source).unwrap();
         assert!(module.has_generated());
         assert_eq!(module.generated_meta("by"), Some("tool"));
-        // Array values are exposed via generated_meta_array.
+        // List values are exposed via generated_meta_array.
         let sources = module.generated_meta_array("sources").unwrap();
         let owned: Vec<&str> = sources.iter().map(String::as_str).collect();
         assert_eq!(owned, vec!["a.wit", "b.wit"]);

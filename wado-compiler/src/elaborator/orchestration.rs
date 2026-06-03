@@ -2468,7 +2468,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Walk an AST type expression and emit errors for unknown Named types.
-    /// Generic type names (Array, Result, etc.) are not checked here since they
+    /// Generic type names (List, Result, etc.) are not checked here since they
     /// may be builtins not present in the type name registry; only their type
     /// arguments are validated recursively.
     fn validate_ast_type_names(
@@ -2655,11 +2655,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             )
                         })
                         .collect();
-                    // A generic newtype (`type MyArray<T> = Array<T>`)
+                    // A generic newtype (`type MyArray<T> = List<T>`)
                     // resolves to a `Newtype` over the instantiated base,
                     // mirroring `type_resolution.rs:418`. Without this it
                     // falls through to `UNKNOWN`, the newtype's inherited
-                    // base methods (`MyArray<i32>::len` → `Array<i32>::len`)
+                    // base methods (`MyArray<i32>::len` → `List<i32>::len`)
                     // never resolve, and monomorphization can't reach them.
                     if let Some(gn_info) = lookup.generic_newtype(&generic.name).cloned() {
                         let concrete_base = super::type_resolution::substitute_type_params(

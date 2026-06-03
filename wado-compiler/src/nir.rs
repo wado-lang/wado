@@ -229,7 +229,7 @@ pub enum NirExprKind {
     BoolLiteral(bool),
     CharLiteral(char),
     StringLiteral(String),
-    /// Byte array literal from `#include_bytes`. Lowered to `Array<u8>` via data segment.
+    /// Byte array literal from `#include_bytes`. Lowered to `List<u8>` via data segment.
     BytesLiteral(Vec<u8>),
     Null,
     Unit,
@@ -336,13 +336,13 @@ pub enum NirExprKind {
     TupleLiteral {
         elements: Vec<NirExpr>,
     },
-    /// A fixed-length `Array<T>` value materialized by
+    /// A fixed-length `List<T>` value materialized by
     /// `optimize::array_literal` from an inlined `SequenceLiteralBuilder`
     /// push sequence. `lower` never emits this; it is an
-    /// optimizer-materialized normalization, like `Switch`. The `Array<T>`
+    /// optimizer-materialized normalization, like `Switch`. The `List<T>`
     /// struct type is carried by the enclosing `NirExpr::type_id`, exactly
     /// as `TupleLiteral` relies on `type_id` for the tuple's struct type.
-    /// `wir_build` lowers it to the `Array<T>` `{ repr, used }` `StructNew`
+    /// `wir_build` lowers it to the `List<T>` `{ repr, used }` `StructNew`
     /// whose `repr` field is a `WirInstr::ArrayNewFixed` of the elements.
     ArrayLiteral {
         elements: Vec<NirExpr>,
@@ -676,7 +676,7 @@ pub struct NirTypeParam {
 pub struct MonomorphInfo {
     /// Original generic name (e.g., "Box" for "Box<i32>", or "`BTreeNode`<`K,V>::insert`" for methods)
     pub generic_name: String,
-    /// Impl-level type arguments (from the struct/type, e.g. `[i32]` for `Array<i32>`)
+    /// Impl-level type arguments (from the struct/type, e.g. `[i32]` for `List<i32>`)
     pub impl_type_args: Vec<TypeId>,
     /// Method-level type arguments (from the method's own generics, e.g. `[String]` for `.transform::<String>()`)
     pub method_type_args: Vec<TypeId>,

@@ -364,7 +364,7 @@ pub struct LocalMethodName {
     pub is_type_param_receiver: bool,
     /// Whether this method is from an `impl Trait for &T` or `impl Trait for &mut T`.
     /// When true, the function name uses the inner type name (e.g., "List") but the
-    /// actual impl is on the reference type (e.g., &Array<T>).
+    /// actual impl is on the reference type (e.g., &List<T>).
     pub is_ref_impl: bool,
     /// CM canonical name from `#[cm("...")]` attribute on resource methods.
     /// When set, synthesis generates a CM binding function and rewrites
@@ -1039,7 +1039,7 @@ pub enum TypeNameInfo {
         param_count: usize,
         return_type: String,
     },
-    /// `builtin::array<T>` (raw Wasm GC array, NOT the user-facing `Array<T>` struct)
+    /// `builtin::array<T>` (raw Wasm GC array, NOT the user-facing `List<T>` struct)
     BuiltinArray(String),
     /// Reactive<T> with inner type name
     Reactive(String),
@@ -1074,8 +1074,8 @@ pub fn format_type_name(info: TypeNameInfo) -> String {
 
 /// Build a mangled name that handles reference prefixes correctly.
 ///
-/// For `&` and `&mut` base names, formats as prefix: `&Array<i32>`, `&mut Array<i32>`.
-/// For other base names, formats as generic: `Array<i32>`, `Map<String,i32>`.
+/// For `&` and `&mut` base names, formats as prefix: `&List<i32>`, `&mut List<i32>`.
+/// For other base names, formats as generic: `List<i32>`, `Map<String,i32>`.
 fn mangle_ref_aware(base_name: &str, type_args: &[String]) -> String {
     if (base_name == "&" || base_name == "&mut") && type_args.len() == 1 {
         if base_name == "&mut" {

@@ -186,7 +186,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut trait_impl_struct_name: Option<String> = None;
 
         // If receiver is a reference type, try ref-type trait impls first.
-        // e.g., impl IntoIterator for &Array<T> takes priority over impl IntoIterator for Array<T>.
+        // e.g., impl IntoIterator for &List<T> takes priority over impl IntoIterator for List<T>.
         // Only specific ref impls are preferred (not blanket impls like impl Inspect for &T).
         {
             let is_ref = matches!(
@@ -210,7 +210,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Some(base_type_id),
                 );
                 // Only use ref-type impls that target a concrete container type
-                // (e.g., impl IntoIterator for &Array<T>), NOT blanket ref impls
+                // (e.g., impl IntoIterator for &List<T>), NOT blanket ref impls
                 // (e.g., impl Inspect for &T where the inner type is just a type param).
                 if let Some(trait_match) = result
                     && !trait_match.is_blanket_ref_impl
@@ -550,7 +550,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // IMPORTANT: Skip this for trait methods because find_trait_method_for_type already
         // resolved the return type using associated type bindings. Adding impl_args here would
         // incorrectly substitute TypeParams from the OUTER context (e.g., TreeMap's K, V) that
-        // happen to have the same indices as this impl's type params (e.g., Array's T).
+        // happen to have the same indices as this impl's type params (e.g., List's T).
         if trait_name.is_none() {
             match self.tysys.type_table.borrow().get(base_type_id).clone() {
                 ResolvedType::GenericInstance {
@@ -734,8 +734,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         //   1. In the trait-impl block's module for cross-module trait impls
         //      (e.g. `impl Display for String` in `core:prelude/format`).
         //   2. In the *base* type's module when the method was inherited
-        //      through a newtype (`type MyArray<T> = Array<T>`; `arr.len()`
-        //      reaches `Array::len` in `core:prelude/array`, not the
+        //      through a newtype (`type MyArray<T> = List<T>`; `arr.len()`
+        //      reaches `List::len` in `core:prelude/array`, not the
         //      newtype's module).
         //   3. In the receiver type's module otherwise — inherent methods
         //      live alongside the type they're declared on.
@@ -826,7 +826,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Resolve a static method call: `Array::<i32>::with_capacity(100)` or `Point::origin()`
+    /// Resolve a static method call: `List::<i32>::with_capacity(100)` or `Point::origin()`
     pub(super) fn resolve_static_method_call(
         &mut self,
         static_call: &ast::StaticMethodCallExpr,
@@ -877,7 +877,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .unwrap_or_default();
 
-        // For generic variant constructors (e.g., Option::<Array<u8>>::Some([])),
+        // For generic variant constructors (e.g., Option::<List<u8>>::Some([])),
         // compute substituted payload type so literal coercion works on first resolve.
         if param_types.is_empty() {
             let generic_data = {
@@ -925,7 +925,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Re-resolve param types with concrete type args in scope for literal coercion.
         // lookup_static_method_param_types resolves without type params in scope, so
-        // generic params (T, U, Array<T>, etc.) resolve to UNKNOWN or contain UNKNOWN.
+        // generic params (T, U, List<T>, etc.) resolve to UNKNOWN or contain UNKNOWN.
         // We re-resolve them by temporarily mapping type param names directly to concrete
         // types from the call-site turbofish, then resolving the AST param types.
         // NOTE: We cannot change lookup_static_method_param_types itself to add type params,
@@ -1276,7 +1276,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     module_source,
                     type_args,
                 } => {
-                    // Build mangled name for generic type: Array<i32>
+                    // Build mangled name for generic type: List<i32>
                     let type_arg_names: Vec<String> = type_args
                         .iter()
                         .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
@@ -1672,7 +1672,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 let mut scope = self.enter_inherited_type_param_scope();
                                 scope.trait_ctx.type_params.clear();
 
-                                // Extract type params from impl block type (e.g., impl Array<T>)
+                                // Extract type params from impl block type (e.g., impl List<T>)
                                 if let ast::Type::Generic(generic) = &impl_block.ty {
                                     for (i, arg) in generic.args.iter().enumerate() {
                                         if let ast::Type::Named(named) = arg {

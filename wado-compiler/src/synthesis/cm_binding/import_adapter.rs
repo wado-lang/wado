@@ -295,7 +295,7 @@ fn wasi_return_type_id(
 /// Synthesise the per-import CM lift function for an async import. Body
 /// is built from `func_info.return_type` via [`synthesize_lift`] — the
 /// same helper sync imports use, so generic calls inside (e.g.
-/// `Array::with_capacity`) are visible to the monomorphizer.
+/// `List::with_capacity`) are visible to the monomorphizer.
 fn synthesize_async_lift_function(
     name: String,
     func_info: &CmFunctionInfo,
@@ -440,7 +440,7 @@ pub(super) fn synthesize_adapter(
     // ---- Pass 1: Allocate all parameter locals (contiguous) ----
     // Wasm requires params at indices [0..n-1], so allocate them first.
     //
-    // For types that the binding lowers internally (String, Array<u8>), we create
+    // For types that the binding lowers internally (String, List<u8>), we create
     // a single placeholder param. The binding body will lower them to flat CM args.
     //
     // For other types (handles, Option<T>, etc.), we create flat params matching
@@ -469,7 +469,7 @@ pub(super) fn synthesize_adapter(
                 next_local += 1;
                 param_mapping.push((start, 1));
             }
-            // Array<u8>: single placeholder param (binding body lowers to ptr+len)
+            // List<u8>: single placeholder param (binding body lowers to ptr+len)
             Type::Generic(g)
                 if g.name == names.array
                     && g.args.len() == 1
@@ -487,7 +487,7 @@ pub(super) fn synthesize_adapter(
                 next_local += 1;
                 param_mapping.push((start, 1));
             }
-            // General Array<T>: single placeholder param (binding body lowers to ptr+len)
+            // General List<T>: single placeholder param (binding body lowers to ptr+len)
             Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
                 params.push(TirParam {
                     name: param_name.clone(),
@@ -662,7 +662,7 @@ pub(super) fn synthesize_adapter(
                 ));
             }
 
-            // Array<u8> param: accept Wado Array<u8>, lower to (ptr, len) pair
+            // List<u8> param: accept Wado List<u8>, lower to (ptr, len) pair
             Type::Generic(g)
                 if g.name == names.array
                     && g.args.len() == 1
@@ -708,7 +708,7 @@ pub(super) fn synthesize_adapter(
                 ));
             }
 
-            // General Array<T> param: lower to (ptr, len) in linear memory
+            // General List<T> param: lower to (ptr, len) in linear memory
             Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
                 let elem_type = &g.args[0];
                 // Use registry-aware layout so named WASI struct/variant/enum/flags
@@ -734,11 +734,11 @@ pub(super) fn synthesize_adapter(
                         cm_interface_registry,
                         &func_info.package,
                     );
-                    let array_tid = tt.make_array(elem_tid);
-                    (elem_tid, array_tid)
+                    let list_tid = tt.make_list(elem_tid);
+                    (elem_tid, list_tid)
                 };
 
-                // __len = Array<T>::len(param)
+                // __len = List<T>::len(param)
                 let len_local = alloc_local(&mut next_local, &mut locals, TypeTable::I32);
                 body_stmts.push(let_stmt(
                     &format!("__{param_name}_len"),
@@ -1383,7 +1383,7 @@ pub(super) fn synthesize_adapter(
         let resolved = cm_interface_registry.resolve_type(return_type);
 
         // Inline lifting for all types, including list<T> which uses
-        // Array::<T>::with_capacity() and .push() with proper monomorphization info.
+        // List::<T>::with_capacity() and .push() with proper monomorphization info.
         let lift_ctx = LiftContext {
             cm_interface_registry,
             type_table,
