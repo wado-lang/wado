@@ -264,10 +264,11 @@ total. Generated `tests/generated/fixtures/*.wir.wado` snapshots regenerate from
 harness; the hand-edited surface is `lib/`, hand-written fixtures, `src/`, `docs/`,
 and the VS Code grammar.
 
-- [ ] Rename the growable `Array<T>` → `List<T>` everywhere — type, `compiler_item`
+- [x] Rename the growable `Array<T>` → `List<T>` everywhere — type, `compiler_item`
       key `"array"` → `"list"`, `CompilerItem::Array` → `List`, stdlib, fixtures,
       grammar, docs — regenerate the WIR snapshots, and gate on green across `-O`
-      levels.
+      levels. Done: `mise run test` and `mise run test-wado` both green; the raw
+      `builtin::array` intrinsic and its WIR ops are untouched, awaiting Phase 1.
 
 ### Phase 1 — Reference-typed `builtin::array` operations (unblocking fix)
 
