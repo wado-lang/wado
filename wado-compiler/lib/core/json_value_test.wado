@@ -3,7 +3,7 @@ use { to_string, from_string } from "core:json";
 use { DeserializeError } from "core:serde";
 use { TreeMap } from "core:collections";
 
-fn obj(entries: Array<[String, Value]>) -> TreeMap<String, Value> {
+fn obj(entries: List<[String, Value]>) -> TreeMap<String, Value> {
     let mut m: TreeMap<String, Value> = TreeMap::new();
     for let e of entries {
         m[e.0] = e.1;
@@ -59,14 +59,14 @@ test "Value::String with escapes serialize" {
     assert r matches { Ok(s) && s == `"say \\"hi\\""` };
 }
 
-test "Value::Array empty serialize" {
-    let v = Value::Array([]);
+test "Value::List empty serialize" {
+    let v = Value::List([]);
     let r = to_string(&v);
     assert r matches { Ok(s) && s == "[]" };
 }
 
-test "Value::Array serialize" {
-    let v = Value::Array([
+test "Value::List serialize" {
+    let v = Value::List([
         Value::Number(1.0),
         Value::Number(2.0),
         Value::Number(3.0),
@@ -75,8 +75,8 @@ test "Value::Array serialize" {
     assert r matches { Ok(s) && s == "[1,2,3]" };
 }
 
-test "Value::Array mixed serialize" {
-    let v = Value::Array([
+test "Value::List mixed serialize" {
+    let v = Value::List([
         Value::Null, Value::Bool(true),
         Value::String("x"),
     ]);
@@ -147,14 +147,14 @@ test "Value::String with escapes deserialize" {
     assert r matches { Ok(v) && v == Value::String("line\nbreak") };
 }
 
-test "Value::Array empty deserialize" {
+test "Value::List empty deserialize" {
     let r: Result<Value, DeserializeError> = from_string("[]");
-    assert r matches { Ok(v) && v == Value::Array([]) };
+    assert r matches { Ok(v) && v == Value::List([]) };
 }
 
-test "Value::Array deserialize" {
+test "Value::List deserialize" {
     let r: Result<Value, DeserializeError> = from_string("[1,2,3]");
-    assert r matches { Ok(v) && v == Value::Array([
+    assert r matches { Ok(v) && v == Value::List([
         Value::Number(1.0),
         Value::Number(2.0),
         Value::Number(3.0),
@@ -178,7 +178,7 @@ test "Value nested object with array deserialize" {
     if let Ok(v) = r {
         let expected = Value::Object(obj([
             [
-                "nums", Value::Array([
+                "nums", Value::List([
                     Value::Number(1.0),
                     Value::Number(2.0),
                 ]),
@@ -203,7 +203,7 @@ test "Value round-trip nested" {
         ["name", Value::String("Alice")],
         ["age", Value::Number(30.0)],
         [
-            "tags", Value::Array([
+            "tags", Value::List([
                 Value::String("admin"),
                 Value::String("user"),
             ]),
@@ -246,7 +246,7 @@ test "inspect string" {
 }
 
 test "inspect array" {
-    let v = Value::Array([
+    let v = Value::List([
         Value::Number(1.0),
         Value::Bool(true), Value::Null,
     ]);
@@ -254,7 +254,7 @@ test "inspect array" {
 }
 
 test "inspect empty array" {
-    assert `{Value::Array([]):?}` == "[]";
+    assert `{Value::List([]):?}` == "[]";
 }
 
 test "inspect object" {
@@ -282,7 +282,7 @@ test "pretty-print object" {
 test "pretty-print nested" {
     let v = Value::Object(obj([
         [
-            "items", Value::Array([
+            "items", Value::List([
                 Value::Number(1.0),
                 Value::Number(2.0),
             ]),
@@ -318,10 +318,10 @@ test "Value eq string" {
 }
 
 test "Value eq array" {
-    assert Value::Array([]) == Value::Array([]);
-    assert Value::Array([Value::Number(1.0)]) == Value::Array([Value::Number(1.0)]);
-    assert !(Value::Array([Value::Number(1.0)]) == Value::Array([Value::Number(2.0)]));
-    assert !(Value::Array([Value::Number(1.0)]) == Value::Array([]));
+    assert Value::List([]) == Value::List([]);
+    assert Value::List([Value::Number(1.0)]) == Value::List([Value::Number(1.0)]);
+    assert !(Value::List([Value::Number(1.0)]) == Value::List([Value::Number(2.0)]));
+    assert !(Value::List([Value::Number(1.0)]) == Value::List([]));
 }
 
 test "Value eq object" {

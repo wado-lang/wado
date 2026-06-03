@@ -106,7 +106,7 @@ fn repeat_inner_walk_field(elem: &Element, rule_name: &String, group_counter: &m
     if let Group(g) = elem {
         let alts = &g.alternatives;
         if is_simple_cst_group(alts) {
-            let mut cases: Array<GroupCaseInfo> = [];
+            let mut cases: List<GroupCaseInfo> = [];
             for let alt of alts {
                 if let RuleRef(r) = &alt.elements[0] {
                     cases.push(GroupCaseInfo {
@@ -151,7 +151,7 @@ fn repeat_inner_walk_field(elem: &Element, rule_name: &String, group_counter: &m
     return element_to_walk_field(elem, rule_name, group_counter);
 }
 
-fn gen_walk_group_match(w: &mut CodeWriter, expr: &String, cases: &Array<GroupCaseInfo>) {
+fn gen_walk_group_match(w: &mut CodeWriter, expr: &String, cases: &List<GroupCaseInfo>) {
     w.begin(&`match {expr}`);
     for let c of cases {
         w.begin(&`{c.case_name}(inner) =>`);
@@ -161,7 +161,7 @@ fn gen_walk_group_match(w: &mut CodeWriter, expr: &String, cases: &Array<GroupCa
     w.end();
 }
 
-fn gen_walk_general_group_match(w: &mut CodeWriter, expr: &String, cases: &Array<GeneralGroupCaseInfo>) {
+fn gen_walk_general_group_match(w: &mut CodeWriter, expr: &String, cases: &List<GeneralGroupCaseInfo>) {
     w.begin(&`match {expr}`);
     for let c of cases {
         w.begin(&`{c.case_name}(inner) =>`);
@@ -195,15 +195,15 @@ struct GroupCaseInfo {
 
 struct GeneralGroupCaseInfo {
     case_name: String,
-    fields: Array<WalkField>,
+    fields: List<WalkField>,
 }
 
 variant WalkAction {
     VisitToken,
     WalkRule(String),
-    WalkGroup(Array<GroupCaseInfo>),
-    WalkStruct(Array<WalkField>),
-    WalkGeneralGroup(Array<GeneralGroupCaseInfo>),
+    WalkGroup(List<GroupCaseInfo>),
+    WalkStruct(List<WalkField>),
+    WalkGeneralGroup(List<GeneralGroupCaseInfo>),
 }
 
 enum WalkWrapper {
@@ -218,9 +218,9 @@ struct WalkField {
     wrapper: WalkWrapper,
 }
 
-fn collect_walk_fields(elements: &Array<Element>, rule_name: &String, group_counter: &mut i32) -> Array<WalkField> {
-    let mut fields: Array<WalkField> = [];
-    let mut name_counts: Array<[String, i32]> = [];
+fn collect_walk_fields(elements: &List<Element>, rule_name: &String, group_counter: &mut i32) -> List<WalkField> {
+    let mut fields: List<WalkField> = [];
+    let mut name_counts: List<[String, i32]> = [];
     for let elem of elements {
         if let Some(field) = element_to_walk_field(elem, rule_name, group_counter) {
             let base_name = field.name;
@@ -310,7 +310,7 @@ fn element_to_walk_field(elem: &Element, rule_name: &String, group_counter: &mut
     if let Group(g) = elem {
         let alts = &g.alternatives;
         if is_simple_cst_group(alts) {
-            let mut cases: Array<GroupCaseInfo> = [];
+            let mut cases: List<GroupCaseInfo> = [];
             for let alt of alts {
                 if let RuleRef(r) = &alt.elements[0] {
                     cases.push(GroupCaseInfo {
@@ -360,10 +360,10 @@ fn build_struct_walk_action(alt: &Alternative, rule_name: &String, group_counter
     return WalkAction::WalkStruct(fields);
 }
 
-fn build_general_group_walk_action(alts: &Array<Alternative>, rule_name: &String, group_counter: &mut i32) -> WalkAction {
+fn build_general_group_walk_action(alts: &List<Alternative>, rule_name: &String, group_counter: &mut i32) -> WalkAction {
     let gc_before = *group_counter;
     let mut gc_max = gc_before;
-    let mut cases: Array<GeneralGroupCaseInfo> = [];
+    let mut cases: List<GeneralGroupCaseInfo> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
         let mut gc = gc_before;
         let fields = collect_walk_fields(&alts[i].elements, rule_name, &mut gc);
@@ -379,7 +379,7 @@ fn build_general_group_walk_action(alts: &Array<Alternative>, rule_name: &String
     return WalkAction::WalkGeneralGroup(cases);
 }
 
-fn get_name_count(counts: &Array<[String, i32]>, name: &String) -> i32 {
+fn get_name_count(counts: &List<[String, i32]>, name: &String) -> i32 {
     for let entry of counts {
         if entry.0 == *name {
             return entry.1;
@@ -388,7 +388,7 @@ fn get_name_count(counts: &Array<[String, i32]>, name: &String) -> i32 {
     return 0;
 }
 
-fn increment_name_count(counts: &mut Array<[String, i32]>, name: &String) {
+fn increment_name_count(counts: &mut List<[String, i32]>, name: &String) {
     for let mut i = 0; i < counts.len(); i += 1 {
         if counts[i].0 == *name {
             let prev = counts[i].1;

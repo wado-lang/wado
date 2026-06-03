@@ -31,7 +31,7 @@ Note: `wasm_plan` (component planning) is now integrated into the `wir_build` ph
 
 For each WASI function used by the program, `cm_binding_gen` synthesizes an binding that:
 
-1. Accepts Wado-typed parameters (String, Array, structs, etc.)
+1. Accepts Wado-typed parameters (String, List, structs, etc.)
 2. Lowers parameters to CM flat ABI (linear memory via builtins)
 3. Calls the lowered WASI function via `CmRawCall`
 4. Lifts the result from CM flat ABI back to Wado types
@@ -53,7 +53,7 @@ The core synthesizer (`synthesize_lift`, `synthesize_lower_to_flat`) is recursiv
 | bool                                                    | `value as i32`                | `i32_load8_u(addr) != 0`            | synthesizer inline                                            |
 | char                                                    | `value as i32`                | `char::from_u32_unchecked`          | synthesizer inline                                            |
 | String                                                  | alloc + copy → `(ptr, len)`   | copy from linear memory → GC string | `internal::cm_lower_string`, `internal::memory_to_gc_string`  |
-| Array\<u8\>                                             | alloc + copy → `(ptr, len)`   | copy from linear memory → GC array  | `internal::cm_lower_array_u8`, `internal::memory_to_gc_array` |
+| List\<u8\>                                              | alloc + copy → `(ptr, len)`   | copy from linear memory → GC array  | `internal::cm_lower_array_u8`, `internal::memory_to_gc_array` |
 | list\<T\>, option\<T\>, result\<T, E\>, record, variant | recursive                     | recursive                           | synthesizer generates TIR                                     |
 
 No per-type converter functions exist. The synthesizer handles all composite types by recursing into their structure.
@@ -142,7 +142,7 @@ This requires:
 - [x] Generate `synthesize_lift_from_flat_params` for each parameter in the export binding
 - [x] Map flat params to binding function parameters
 
-Implemented via `synthesize_lift_from_flat_params` which lifts flat CM params (i32/i64/f32/f64) to Wado-typed values. Handles primitives, bool, char, String, resources, Array, Option, and tuples. The export binding now detects when param lifting is needed (via `export_needs_param_lifting`) and generates flat-typed binding params with lifting code.
+Implemented via `synthesize_lift_from_flat_params` which lifts flat CM params (i32/i64/f32/f64) to Wado-typed values. Handles primitives, bool, char, String, resources, List, Option, and tuples. The export binding now detects when param lifting is needed (via `export_needs_param_lifting`) and generates flat-typed binding params with lifting code.
 
 ### Non-Result Return Types
 
@@ -203,7 +203,7 @@ The type-driven synthesizer (`synthesize_lift`, `synthesize_lower_to_flat`, flat
 
 #### Parameter Lifting Gaps
 
-`synthesize_lift_from_flat_params` handles primitives, bool, char, String, resources, Array (with linear memory round-trip), Option, and tuples. The following types are **not yet implemented**:
+`synthesize_lift_from_flat_params` handles primitives, bool, char, String, resources, List (with linear memory round-trip), Option, and tuples. The following types are **not yet implemented**:
 
 - **Struct parameters (non-String)**: Treated as i32 passthrough. Should lift each field from consecutive flat params.
 - **Result parameters**: Falls through to unit default. Unlikely in practice (Result is typically a return type, not a parameter).
@@ -226,9 +226,9 @@ In practice this is safe because:
 
 To fix: compute flat return types from the world's full `result<T, error-context>` type, and zero-fill any extra slots.
 
-#### Array Lifting Uses Temporary Linear Memory
+#### List Lifting Uses Temporary Linear Memory
 
-For `Array<T>` where T is not u8, `synthesize_lift_from_flat_params` writes flat params (ptr, len) to a temporary 8-byte linear memory block, then calls `synthesize_lift` which reads from that block. This:
+For `List<T>` where T is not u8, `synthesize_lift_from_flat_params` writes flat params (ptr, len) to a temporary 8-byte linear memory block, then calls `synthesize_lift` which reads from that block. This:
 
 - Requires `builtin::realloc` to be linked (always true for programs with linear memory)
 - Allocates and immediately frees 8 bytes (wasteful but correct)
@@ -238,7 +238,7 @@ For `Array<T>` where T is not u8, `synthesize_lift_from_flat_params` writes flat
 
 Import adapters use two strategies depending on the parameter type:
 
-- **Adapter-internal lowering** (String, Array\<u8\>): The binding accepts a single Wado-level parameter and lowers it internally to multiple flat CM args (ptr + len). This works because String and Array have well-defined Wado TypeIds that codegen can convert to Wasm types.
+- **Adapter-internal lowering** (String, List\<u8\>): The binding accepts a single Wado-level parameter and lowers it internally to multiple flat CM args (ptr + len). This works because String and List have well-defined Wado TypeIds that codegen can convert to Wasm types.
 - **Call-site flattening** (Option\<T\>, other multi-flat types): The binding accepts pre-flattened i32 params, and the call-site rewrite transforms Wado-level args into flat values before passing them.
 
 The call-site flattening approach was chosen for Option\<T\> because binding-internal lowering faces a fundamental type mismatch: Wado's `null` literal generates `ref.null` (a GC nullable reference) at the Wasm level, but the binding would need to accept it as a parameter and extract an i32 discriminant + payload. Converting between GC references and i32 scalars requires non-trivial unwrapping logic (pattern matching, unboxing) that the TIR synthesizer cannot easily generate for all Option\<T\> instantiations.

@@ -213,7 +213,7 @@ pub variant RequestOptionsError {
 pub type FieldName = String;
 
 #[cm("wasi:http/types@0.3.0-rc-2026-03-15#field-value")]
-pub type FieldValue = Array<u8>;
+pub type FieldValue = List<u8>;
 
 #[cm("wasi:http/types@0.3.0-rc-2026-03-15#headers")]
 pub type Headers = Fields;
@@ -268,14 +268,14 @@ pub resource Fields {
     /// entries would exceed an implementation size limit.
     #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[static]fields.from-list")]
     #[cm_params("entries")]
-    fn from_list(entries: Array<[FieldName, FieldValue]>) -> Result<Fields, HeaderError>;
+    fn from_list(entries: List<[FieldName, FieldValue]>) -> Result<Fields, HeaderError>;
     /// Get all of the values corresponding to a name. If the name is not present
     /// in this `fields`, an empty list is returned. However, if the name is
     /// present but empty, this is represented by a list with one or more
     /// empty field-values present.
     #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]fields.get")]
     #[cm_params("self", "name")]
-    fn get(self: &Fields, name: FieldName) -> Array<FieldValue>;
+    fn get(self: &Fields, name: FieldName) -> List<FieldValue>;
     /// Returns `true` when the name is present in this `fields`. If the name is
     /// syntactically invalid, `false` is returned.
     #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]fields.has")]
@@ -290,7 +290,7 @@ pub resource Fields {
     /// exceed an implementation-defined size limit.
     #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]fields.set")]
     #[cm_params("self", "name", "value")]
-    fn set(self: &Fields, name: FieldName, value: Array<FieldValue>) -> Result<(), HeaderError>;
+    fn set(self: &Fields, name: FieldName, value: List<FieldValue>) -> Result<(), HeaderError>;
     /// Delete all values for a name. Does nothing if no values for the name
     /// exist.
     /// 
@@ -306,7 +306,7 @@ pub resource Fields {
     /// Fails with `header-error.immutable` if the `fields` are immutable.
     #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]fields.get-and-delete")]
     #[cm_params("self", "name")]
-    fn get_and_delete(self: &Fields, name: FieldName) -> Result<Array<FieldValue>, HeaderError>;
+    fn get_and_delete(self: &Fields, name: FieldName) -> Result<List<FieldValue>, HeaderError>;
     /// Append a value for a name. Does not change or delete any existing
     /// values for that name.
     /// 
@@ -328,7 +328,7 @@ pub resource Fields {
     /// the order in which they will be serialized for transport.
     #[cm("wasi:http/types@0.3.0-rc-2026-03-15#[method]fields.copy-all")]
     #[cm_params("self")]
-    fn copy_all(self: &Fields) -> Array<[FieldName, FieldValue]>;
+    fn copy_all(self: &Fields) -> List<[FieldName, FieldValue]>;
     /// Make a deep copy of the Fields. Equivalent in behavior to calling the
     /// `fields` constructor on the return value of `copy-all`. The resulting
     /// `fields` is mutable.

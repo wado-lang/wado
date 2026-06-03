@@ -52,7 +52,7 @@ Currently `try_unparse_block_inline` is called from:
   }
   ```
 
-## Tuple/Array Literals (`[...]`)
+## Tuple/List Literals (`[...]`)
 
 Three formatting strategies are tried in order:
 

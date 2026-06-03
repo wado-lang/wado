@@ -13,7 +13,7 @@ struct InspWrapper {
 }
 
 struct InspMatrix {
-    data: Array<Array<i32>>,
+    data: List<List<i32>>,
     rows: i32,
 }
 
@@ -71,23 +71,23 @@ test "hidden fields" {
 }
 
 test "array" {
-    let arr: Array<i32> = [1, 2, 3];
+    let arr: List<i32> = [1, 2, 3];
     assert `{arr:?}` == "[1, 2, 3]";
-    let empty: Array<i32> = [];
+    let empty: List<i32> = [];
     assert `{empty:?}` == "[]";
-    let single: Array<i32> = [42];
+    let single: List<i32> = [42];
     assert `{single:?}` == "[42]";
 
     // fallback to inspect without :?
     assert `{arr}` == "[1, 2, 3]";
     assert `{empty}` == "[]";
 
-    let points: Array<InspPoint> = [InspPoint { x: 1, y: 2 }, InspPoint { x: 3, y: 4 }];
+    let points: List<InspPoint> = [InspPoint { x: 1, y: 2 }, InspPoint { x: 3, y: 4 }];
     assert `{points}` == "[InspPoint { x: 1, y: 2 }, InspPoint { x: 3, y: 4 }]";
 }
 
 test "array option" {
-    let arr: Array<Option<i32>> = [Option::<i32>::Some(1), null, Option::<i32>::Some(3)];
+    let arr: List<Option<i32>> = [Option::<i32>::Some(1), null, Option::<i32>::Some(3)];
     assert `{arr:?}` == "[Option::Some(1), Option::None, Option::Some(3)]";
 }
 
@@ -98,7 +98,7 @@ test "nested struct" {
     };
     assert `{line:?}` == "InspLine { start: InspPoint { x: 0, y: 0 }, end: InspPoint { x: 10, y: 20 } }";
 
-    let points: Array<InspPoint> = [InspPoint { x: 1, y: 2 }, InspPoint { x: 3, y: 4 }];
+    let points: List<InspPoint> = [InspPoint { x: 1, y: 2 }, InspPoint { x: 3, y: 4 }];
     assert `{points:?}` == "[InspPoint { x: 1, y: 2 }, InspPoint { x: 3, y: 4 }]";
 }
 
@@ -129,22 +129,22 @@ test "option of string" {
 }
 
 test "nested arrays" {
-    let matrix: Array<Array<i32>> = [[1, 2], [3, 4]];
+    let matrix: List<List<i32>> = [[1, 2], [3, 4]];
     assert `{matrix:?}` == "[[1, 2], [3, 4]]";
-    let deep: Array<Array<Array<i32>>> = [[[1, 2], [3]], [[4, 5, 6]]];
+    let deep: List<List<List<i32>>> = [[[1, 2], [3]], [[4, 5, 6]]];
     assert `{deep:?}` == "[[[1, 2], [3]], [[4, 5, 6]]]";
-    let strs: Array<Array<String>> = [["a", "b"], ["c"]];
+    let strs: List<List<String>> = [["a", "b"], ["c"]];
     assert `{strs:?}` == "[[\"a\", \"b\"], [\"c\"]]";
 }
 
 test "nested array struct" {
-    let data: Array<Array<i32>> = [[1, 2], [3, 4]];
+    let data: List<List<i32>> = [[1, 2], [3, 4]];
     let m = InspMatrix { data: data, rows: 2 };
     assert `{m:?}` == "InspMatrix { data: [[1, 2], [3, 4]], rows: 2 }";
 }
 
 test "nested array tuple" {
-    let arr: Array<[i32, String]> = [[1, "one"], [2, "two"]];
+    let arr: List<[i32, String]> = [[1, "one"], [2, "two"]];
     assert `{arr:?}` == "[[1, \"one\"], [2, \"two\"]]";
 }
 

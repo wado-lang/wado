@@ -70,7 +70,7 @@ The declaration itself generates no code; it is a type-system anchor.
 A pack parameter may carry trait bounds using the same `..T: Trait` syntax as scalar bounds:
 
 ```wado
-fn inspect_all<..T: Inspect>(values: [..T]) -> Array<String> { ... }
+fn inspect_all<..T: Inspect>(values: [..T]) -> List<String> { ... }
 
 impl<..T: Eq> Eq for [..T] { ... }
 
@@ -136,8 +136,8 @@ tuple type is `[..T]` — once the pack is instantiated to a concrete tuple type
 elaborator unrolls the `for let v of tuple` loop as usual:
 
 ```wado
-fn inspect_all<..T: Inspect>(values: [..T]) -> Array<String> {
-    let mut parts: Array<String> = [];
+fn inspect_all<..T: Inspect>(values: [..T]) -> List<String> {
+    let mut parts: List<String> = [];
     for let v of values {
         parts.push(v.inspect());
     }
@@ -191,7 +191,7 @@ valid.
 
 **Disambiguation with arrays**: `[for let v of x { expr }]` produces a tuple when `x`
 has a tuple type (known at monomorphization time) and an array when `x` has type
-`Array<E>` (runtime iteration). The two paths are resolved by the type of the iterable.
+`List<E>` (runtime iteration). The two paths are resolved by the type of the iterable.
 
 **Break/continue** inside `[for ... { }]` are compile errors, consistent with WEP-2026-02-10.
 
@@ -218,7 +218,7 @@ user code. It exposes a struct's field types and names at compile time via a tra
 pub trait Reflect {
     type Fields;
     fn fields(&self) -> Self::Fields;
-    fn field_names() -> Array<String>;
+    fn field_names() -> List<String>;
     fn type_name() -> String;
 }
 ```
@@ -250,7 +250,7 @@ where T: Reflect<Fields = [..F]>
     fn inspect(&self) -> String {
         let names = T::field_names();
         let values: [..F] = self.fields();
-        let mut parts: Array<String> = [];
+        let mut parts: List<String> = [];
         for let [i, v] of values.enumerate() {
             parts.push(`{names[i]}: {v.inspect()}`);
         }
@@ -332,7 +332,7 @@ impl<..T: Clone> Clone for [..T] {
 ```wado
 impl<..T: Inspect> Inspect for [..T] {
     fn inspect(&self) -> String {
-        let mut parts: Array<String> = [];
+        let mut parts: List<String> = [];
         for let v of *self {
             parts.push(v.inspect());
         }
@@ -375,7 +375,7 @@ where T: Reflect<Fields = [..F]>
     fn inspect(&self) -> String {
         let names = T::field_names();
         let values: [..F] = self.fields();
-        let mut parts: Array<String> = [];
+        let mut parts: List<String> = [];
         for let [i, v] of values.enumerate() {
             parts.push(`{names[i]}: {v.inspect()}`);
         }
@@ -456,6 +456,6 @@ where T: Reflect<Fields = [..F]>
 - [Trait Bounds Enforcement](./wep-2026-02-07-trait-bounds.md)
 - [Default Trait](./wep-2026-03-04-default-trait.md)
 - [Inspect / Debug Output](./wep-2026-02-21-inspect-debug-output.md)
-- [Tuple and Array Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md)
+- [Tuple and List Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md)
 - [Tuple Destructuring](./wep-2026-02-22-tuple-destructuring.md)
 - [Serialization and Deserialization](./wep-2026-02-28-serde.md)

@@ -175,7 +175,7 @@ impl<T: Display> Display for Pair<T, T> {
 
 ```wado
 // Single bound
-fn print_all<T: Display>(items: Array<T>) with Stdout {
+fn print_all<T: Display>(items: List<T>) with Stdout {
     for item in items {
         println(item.display());
     }
@@ -208,7 +208,7 @@ fn log_item(item: &dyn Display) with Stdout {
 }
 
 // In collections
-let items: Array<&dyn Display> = [&point, &user];
+let items: List<&dyn Display> = [&point, &user];
 
 // Owned trait object with Box
 let boxed: Box<dyn Display> = Box::new(point);
@@ -305,7 +305,7 @@ trait Clone {
 
 // Standard library implementations
 impl Clone for String { ... }
-impl<T: Clone> Clone for Array<T> { ... }
+impl<T: Clone> Clone for List<T> { ... }
 impl<T: Clone> Clone for Option<T> { ... }
 impl<K: Clone, V: Clone> Clone for TreeMap<K, V> { ... }
 ```
@@ -346,8 +346,8 @@ impl Default for String {
     fn default() -> String { return ""; }
 }
 
-impl<T> Default for Array<T> {
-    fn default() -> Array<T> { return []; }
+impl<T> Default for List<T> {
+    fn default() -> List<T> { return []; }
 }
 
 impl<T> Default for Option<T> {
@@ -458,7 +458,7 @@ trait FromIterator<T> {
     fn from_iter<I: Iterator<Item = T>>(iter: I) -> Self;
 }
 
-impl<T> FromIterator<T> for Array<T> { ... }
+impl<T> FromIterator<T> for List<T> { ... }
 ```
 
 ### 11. Orphan Rules
@@ -589,7 +589,7 @@ fn run() with Stdout {
 
 ```wado
 struct Stack<T> {
-    items: Array<T>,
+    items: List<T>,
 }
 
 impl<T> Stack<T> {
@@ -618,7 +618,7 @@ impl<T: Clone> Clone for Stack<T> {
 
 impl<T: Display> Display for Stack<T> {
     fn display(&self) -> String {
-        let parts = self.items.iter().map(|x| x.display()).collect::<Array<String>>();
+        let parts = self.items.iter().map(|x| x.display()).collect::<List<String>>();
         return `Stack[{parts.join(", ")}]`;
     }
 }

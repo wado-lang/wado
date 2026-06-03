@@ -17,10 +17,10 @@
 // `impl ... for &X<...>` impls as "name = `&`" because
 // `get_type_name(Type::Reference)` collapses to the literal `"&"`.
 // Without an additional inner-type check, `impl<T> IntoIterator for
-// &Array<T>` matched any `&AnyContainer<T>` receiver, and the
+// &List<T>` matched any `&AnyContainer<T>` receiver, and the
 // elaborator committed to whichever ref impl appeared first in the
 // scan. The mis-matched impl then walked the receiver as
-// `&Array<String>` (`arr.repr` / `arr.used`), which lowered to a
+// `&List<String>` (`arr.repr` / `arr.used`), which lowered to a
 // non-null Wasm GC reference where the destination expected a
 // nullable one — that mismatch is what `wasmparser` flagged in
 // `codegen.rs:44`.
@@ -33,7 +33,7 @@
 // stays exempt — its own bound check downstream handles soundness.
 //
 // Discovered while migrating `package-gale/src/follow_env.wado`'s
-// `FollowSet.kinds` from `Array<String>` to `TreeSet<String>` for an
+// `FollowSet.kinds` from `List<String>` to `TreeSet<String>` for an
 // O(n²)→O(n log n) speedup on the FOLLOW fixed point. Tracked at
 // issue #1032.
 

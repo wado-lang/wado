@@ -9,7 +9,7 @@
 
 #### `pub interface Environment`
 
-##### `fn get_environment() -> Array<[String, String]>`
+##### `fn get_environment() -> List<[String, String]>`
 
 Get the POSIX-style environment variables.
 
@@ -20,7 +20,7 @@ Morally, these are a value import, but until value imports are available
 in the component model, this import function should return the same
 values each time it is called.
 
-##### `fn get_arguments() -> Array<String>`
+##### `fn get_arguments() -> List<String>`
 
 Get the POSIX-style arguments to the program.
 
@@ -158,7 +158,7 @@ Broken pipe
 
 #### `pub interface Preopens`
 
-##### `fn get_directories() -> Array<[Descriptor, String]>`
+##### `fn get_directories() -> List<[Descriptor, String]>`
 
 Return the set of preopened directories, and their paths.
 
@@ -912,7 +912,7 @@ Construct an empty HTTP Fields.
 
 The resulting `fields` is mutable.
 
-##### `fn from_list(entries: Array<[FieldName, FieldValue]>) -> Result<Fields, HeaderError>`
+##### `fn from_list(entries: List<[FieldName, FieldValue]>) -> Result<Fields, HeaderError>`
 
 Construct an HTTP Fields.
 
@@ -931,7 +931,7 @@ An error result will be returned if any header or value was
 syntactically invalid, if a header was forbidden, or if the
 entries would exceed an implementation size limit.
 
-##### `fn get(self: &Fields, name: FieldName) -> Array<FieldValue>`
+##### `fn get(self: &Fields, name: FieldName) -> List<FieldValue>`
 
 Get all of the values corresponding to a name. If the name is not present
 in this `fields`, an empty list is returned. However, if the name is
@@ -943,7 +943,7 @@ empty field-values present.
 Returns `true` when the name is present in this `fields`. If the name is
 syntactically invalid, `false` is returned.
 
-##### `fn set(self: &Fields, name: FieldName, value: Array<FieldValue>) -> Result<(), HeaderError>`
+##### `fn set(self: &Fields, name: FieldName, value: List<FieldValue>) -> Result<(), HeaderError>`
 
 Set all of the values for a name. Clears any existing values for that
 name, if they have been set.
@@ -960,7 +960,7 @@ exist.
 
 Fails with `header-error.immutable` if the `fields` are immutable.
 
-##### `fn get_and_delete(self: &Fields, name: FieldName) -> Result<Array<FieldValue>, HeaderError>`
+##### `fn get_and_delete(self: &Fields, name: FieldName) -> Result<List<FieldValue>, HeaderError>`
 
 Delete all values for a name. Does nothing if no values for the name
 exist.
@@ -979,7 +979,7 @@ Fails with `header-error.immutable` if the `fields` are immutable.
 Fails with `header-error.size-exceeded` if the value would exceed
 an implementation-defined size limit.
 
-##### `fn copy_all(self: &Fields) -> Array<[FieldName, FieldValue]>`
+##### `fn copy_all(self: &Fields) -> List<[FieldName, FieldValue]>`
 
 Retrieve the full set of names and values in the Fields. Like the
 constructor, the list represents each name-value pair.
@@ -1206,7 +1206,7 @@ acquired from it previously will remain valid.
 
 #### `pub type FieldName = String`
 
-#### `pub type FieldValue = Array<u8>`
+#### `pub type FieldValue = List<u8>`
 
 #### `pub type Headers = Fields`
 
@@ -1602,7 +1602,7 @@ The insecure interface for insecure pseudo-random numbers.
 It is intended to be portable at least between Unix-family platforms and
 Windows.
 
-##### `fn get_insecure_random_bytes(max_len: u64) -> Array<u8>`
+##### `fn get_insecure_random_bytes(max_len: u64) -> List<u8>`
 
 Return up to `max-len` insecure pseudo-random bytes.
 
@@ -1634,7 +1634,7 @@ WASI Random is a random data API.
 It is intended to be portable at least between Unix-family platforms and
 Windows.
 
-##### `fn get_random_bytes(max_len: u64) -> Array<u8>`
+##### `fn get_random_bytes(max_len: u64) -> List<u8>`
 
 Return up to `max-len` cryptographically-secure random or pseudo-random
 bytes.
@@ -1670,7 +1670,7 @@ represented as a `u64`.
 
 #### `pub interface IpNameLookup`
 
-##### `async fn resolve_addresses(name: String) -> AsyncCall<Result<Array<IpAddress>, ErrorCode>>`
+##### `async fn resolve_addresses(name: String) -> AsyncCall<Result<List<IpAddress>, ErrorCode>>`
 
 Resolve an internet host name to a list of IP addresses.
 
@@ -2260,7 +2260,7 @@ The POSIX equivalent of this is calling `connect` with an `AF_UNSPEC` address.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
 - <https://man.freebsd.org/cgi/man.cgi?connect>
 
-##### `async fn send(self: &UdpSocket, data: Array<u8>, remote_address: Option<IpSocketAddress>) -> AsyncCall<Result<(), ErrorCode>>`
+##### `async fn send(self: &UdpSocket, data: List<u8>, remote_address: Option<IpSocketAddress>) -> AsyncCall<Result<(), ErrorCode>>`
 
 Send a message on the socket to a particular peer.
 
@@ -2308,7 +2308,7 @@ already done so.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg>
 - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
 
-##### `async fn receive(self: &UdpSocket) -> AsyncCall<Result<[Array<u8>, IpSocketAddress], ErrorCode>>`
+##### `async fn receive(self: &UdpSocket) -> AsyncCall<Result<[List<u8>, IpSocketAddress], ErrorCode>>`
 
 Receive a message on the socket.
 

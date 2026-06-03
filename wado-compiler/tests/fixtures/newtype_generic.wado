@@ -1,17 +1,17 @@
-// Generic newtypes (`type MyArray<T> = Array<T>`): the newtype inherits
+// Generic newtypes (`type MyArray<T> = List<T>`): the newtype inherits
 // methods from the instantiated base type, accepts literal coercion via
 // the annotation, supports mutation (`push`), and works across element
 // types (i32, String). See docs/wep-2026-01-29-newtype-semantics.md.
 
 use { println, Stdout } from "core:cli";
 
-type MyArray<T> = Array<T>;
+type MyArray<T> = List<T>;
 
 export fn run() with Stdout {
     // Create via type annotation (literal coercion)
     let arr: MyArray<i32> = [1, 2, 3];
 
-    // Inherit Array methods
+    // Inherit List methods
     println(`len: {arr.len()}`);
     println(`first: {arr[0]}`);
 

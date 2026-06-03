@@ -4,7 +4,7 @@ This WEP defines the trait system for indexing operations (`[]` operator) in Wad
 
 ## Context
 
-Wado needs traits to support indexing operations on collections like `Array<T>` and user-defined types. The design must account for:
+Wado needs traits to support indexing operations on collections like `List<T>` and user-defined types. The design must account for:
 
 1. **Four distinct operations**:
    - Read (reference): `let x = container[i]` where container returns `&T`
@@ -106,7 +106,7 @@ The compiler desugars `[]` syntax based on which traits are implemented:
 
 | Type             | Description                                       |
 | ---------------- | ------------------------------------------------- |
-| `Array<Struct>`  | Returns `&Struct` - actual reference to GC object |
+| `List<Struct>`   | Returns `&Struct` - actual reference to GC object |
 | Custom container | User-defined container with reference storage     |
 | Tree nodes       | `tree[path]` returns reference to node            |
 
@@ -114,7 +114,7 @@ The compiler desugars `[]` syntax based on which traits are implemented:
 
 | Type               | Description                                   |
 | ------------------ | --------------------------------------------- |
-| `Array<i32>`       | Returns `i32` by value - cannot return `&i32` |
+| `List<i32>`        | Returns `i32` by value - cannot return `&i32` |
 | Computed sequences | Fibonacci where `fib[n]` computes on demand   |
 | `RangeExclusive`   | `range[i]` computes i-th value, no storage    |
 | Packed bit arrays  | `bits[i]` returns extracted bool              |
@@ -123,29 +123,29 @@ The compiler desugars `[]` syntax based on which traits are implemented:
 
 | Type           | Description                               |
 | -------------- | ----------------------------------------- |
-| `Array<i32>`   | Read returns copy, write replaces element |
-| `Array<f64>`   | Same - Wasm GC constraint                 |
+| `List<i32>`    | Read returns copy, write replaces element |
+| `List<f64>`    | Same - Wasm GC constraint                 |
 | Remote storage | Can GET/PUT values but no live references |
 
 #### Index + IndexMut + IndexAssign (Full Access)
 
-| Type            | Description                                        |
-| --------------- | -------------------------------------------------- |
-| `Array<Struct>` | Full read/mutate/write for reference element types |
-| Custom maps     | Full access to stored reference values             |
+| Type           | Description                                        |
+| -------------- | -------------------------------------------------- |
+| `List<Struct>` | Full read/mutate/write for reference element types |
+| Custom maps    | Full access to stored reference values             |
 
-### Implementation for Array
+### Implementation for List
 
 ```wado
 // For ALL element types: value-based read and assignment
-impl IndexValue<i32> for Array<T> {
+impl IndexValue<i32> for List<T> {
     type Output = T;
     fn index_value(&self, index: i32) -> Self::Output {
         return builtin::array_get::<T>(self.repr, index);
     }
 }
 
-impl IndexAssign<i32> for Array<T> {
+impl IndexAssign<i32> for List<T> {
     type Input = T;
     fn index_assign(&mut self, index: i32, value: Self::Input) {
         builtin::array_set::<T>(self.repr, index, value);
@@ -153,8 +153,8 @@ impl IndexAssign<i32> for Array<T> {
 }
 
 // For reference element types only (when trait bounds are available):
-// impl Index<i32> for Array<T> where T: Reference { ... }
-// impl IndexMut<i32> for Array<T> where T: Reference { ... }
+// impl Index<i32> for List<T> where T: Reference { ... }
+// impl IndexMut<i32> for List<T> where T: Reference { ... }
 ```
 
 ### Optimization: Pattern Recognition
@@ -182,7 +182,7 @@ This keeps the semantic layer clean while allowing low-level optimization.
 
 1. **Semantically honest**: `IndexValue` clearly means "you get a copy"
 2. **Wasm GC compatible**: No fake references for primitives
-3. **General**: Works for any `Container<Primitive>`, not just Array
+3. **General**: Works for any `Container<Primitive>`, not just List
 4. **No proxy objects**: Avoids C++ `vector<bool>` mistakes
 5. **Flexible**: Collections implement only what they support
 6. **Optimizable**: Inlining enables pattern recognition
@@ -204,7 +204,7 @@ error: cannot mutate indexed value
 10 |     arr[i].increment();
    |     ^^^^^^^^^^^^^^^^^^
    |
-   = note: `Array<i32>` implements `IndexValue`, not `IndexMut`
+   = note: `List<i32>` implements `IndexValue`, not `IndexMut`
    = note: primitive array elements cannot be mutated in place
    = help: use `arr[i] = arr[i] + 1` instead
 ```

@@ -1,12 +1,12 @@
 // Verify that `if 0 { panic(...) }` from constant-folded bounds checks
 // is eliminated by the WIR peephole pass.
 
-fn sum_first_two(arr: Array<u16>) -> i32 {
+fn sum_first_two(arr: List<u16>) -> i32 {
     return arr[0] as i32 + arr[1] as i32;
 }
 
 export fn run() {
-    let arr: Array<u16> = [10, 20, 30];
+    let arr: List<u16> = [10, 20, 30];
     assert sum_first_two(arr) == 30;
 }
 

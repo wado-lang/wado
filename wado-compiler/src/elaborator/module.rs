@@ -413,8 +413,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         actual_idx += 1;
                     }
 
-                    // Also collect type params from generic type: impl Array<T> {...}
-                    // The type args in Array<T> are type parameters.
+                    // Also collect type params from generic type: impl List<T> {...}
+                    // The type args in List<T> are type parameters.
                     // For ref types (impl Trait for &Container<T>), unwrap the reference first.
                     let impl_inner_ty = match &impl_block.ty {
                         ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {

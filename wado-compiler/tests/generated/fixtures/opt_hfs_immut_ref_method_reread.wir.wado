@@ -27,13 +27,13 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
 }
 
 struct wado-compiler/tests/fixtures/opt_hfs_immut_ref_method_reread.wado//Lexer {  // TypeId(4)
-    mut chars: ref "core:prelude//Array<char>",
+    mut chars: ref "core:prelude//List<char>",
     mut pos: i32,
 }
 
 array builtin::array<char> (mut char);  // TypeId(5)
 
-struct core:prelude//Array<char> {  // TypeId(6)
+struct core:prelude//List<char> {  // TypeId(6)
     mut repr: ref builtin::array<char>,
     mut used: i32,
 }
@@ -88,7 +88,7 @@ type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelud
 
 type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(31)
 
-type "functype//core:prelude/string.wado/StrCharIter^Iterator::collect" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude//Array<char>";  // TypeId(32)
+type "functype//core:prelude/string.wado/StrCharIter^Iterator::collect" = fn(ref "core:prelude/string.wado//StrCharIter") -> ref "core:prelude//List<char>";  // TypeId(32)
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(33)
 
@@ -100,9 +100,9 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(37)
 
-type "functype//core:prelude/array.wado/Array<char>::push" = fn(ref "core:prelude//Array<char>", char);  // TypeId(38)
+type "functype//core:prelude/list.wado/List<char>::push" = fn(ref "core:prelude//List<char>", char);  // TypeId(38)
 
-type "functype//core:prelude/array.wado/Array<char>::grow" = fn(ref "core:prelude//Array<char>");  // TypeId(39)
+type "functype//core:prelude/list.wado/List<char>::grow" = fn(ref "core:prelude//List<char>");  // TypeId(39)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(40)
 
@@ -430,15 +430,15 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
 }
 
 fn "core:prelude/string.wado/StrCharIter^Iterator::collect"(self) {
-    let __b: ref "core:prelude//Array<char>";
-    __b = struct.new "core:prelude//Array<char>" { repr: builtin::array_new<char>(0), used: 0 };
+    let __b: ref "core:prelude//List<char>";
+    __b = struct.new "core:prelude//List<char>" { repr: builtin::array_new<char>(0), used: 0 };
     b29: block {
         l30: loop {
             let __sroa___match_4_discriminant: i32;
             let __sroa___match_4_payload_0: char;
             multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(self);
             if __sroa___match_4_discriminant == 0 {
-                "core:prelude/array.wado/Array<char>::push"(__b, __sroa___match_4_payload_0);
+                "core:prelude/list.wado/List<char>::push"(__b, __sroa___match_4_payload_0);
             } else {
                 break b29;
             }
@@ -478,7 +478,7 @@ fn "wado-compiler/tests/fixtures/opt_hfs_immut_ref_method_reread.wado/Lexer::rea
     let c: char;
     let index_6: i32;
     let index_9: i32;
-    let _licm_chars_10: ref "core:prelude//Array<char>";
+    let _licm_chars_10: ref "core:prelude//List<char>";
     let _licm_used_11: i32;
     let _licm_repr_12: ref builtin::array<char>;
     let _licm_used_15: i32;
@@ -687,17 +687,17 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     }
 }
 
-fn "core:prelude/array.wado/Array<char>::push"(self, value) {
+fn "core:prelude/list.wado/List<char>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<char>::grow"(self);
+        "core:prelude/list.wado/List<char>::grow"(self);
     }
     builtin::array_set<char>(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<char>::grow"(self) {
+fn "core:prelude/list.wado/List<char>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<char>;

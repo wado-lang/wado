@@ -2777,8 +2777,8 @@ fn generate_display_fallback(
     // Resolve the body's home for the delegate target (the receiver
     // type's `Inspect` / `InspectAlt` impl). For an auto-derived
     // Inspect on a newtype, that's the newtype's module; for a
-    // parameterized type like `Array<FieldValue>`, Array's
-    // `impl<T: Inspect> Inspect for Array<T>` lives in `core:prelude/format`.
+    // parameterized type like `List<FieldValue>`, List's
+    // `impl<T: Inspect> Inspect for List<T>` lives in `core:prelude/format`.
     let delegate_trait = inspect_info
         .base_trait_name
         .as_deref()
@@ -2896,7 +2896,7 @@ fn generate_fallback_impls(
     let mut generated = Vec::new();
 
     let span = synth_span();
-    let (string_name, array_name) = {
+    let (string_name, list_name) = {
         let tt = module.type_table.borrow();
         let items = tt.compiler_items();
         (
@@ -2904,7 +2904,7 @@ fn generate_fallback_impls(
                 .struct_name(crate::compiler_item::CompilerItem::String)
                 .to_string(),
             items
-                .struct_name(crate::compiler_item::CompilerItem::Array)
+                .struct_name(crate::compiler_item::CompilerItem::List)
                 .to_string(),
         )
     };
@@ -2992,7 +2992,7 @@ fn generate_fallback_impls(
         .map(|s| (s.name.clone(), s.type_params.clone()))
         .collect();
     for (name, type_params) in &generic_struct_infos {
-        if name == &array_name {
+        if name == &list_name {
             continue;
         }
         if !needs_fallback(name, ctx) {
@@ -3306,7 +3306,7 @@ fn resolve_impl_module_via_env(
         | ResolvedType::Flags { name, .. }
         | ResolvedType::GenericInstance { name, .. }
         | ResolvedType::GenericResource { name, .. } => Some(name.clone()),
-        ResolvedType::BuiltinArray(_) => Some("Array".to_string()),
+        ResolvedType::BuiltinArray(_) => Some("List".to_string()),
         _ => None,
     };
 
@@ -3319,7 +3319,7 @@ fn resolve_impl_module_via_env(
         | ResolvedType::GenericInstance { module_source, .. }
         | ResolvedType::GenericResource { module_source, .. } => Some(module_source.clone()),
         ResolvedType::Primitive(_) | ResolvedType::Unit => Some(ModuleSource::primitive()),
-        ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
+        ResolvedType::BuiltinArray(_) => Some(ModuleSource::list()),
         _ => None,
     };
 

@@ -21,7 +21,7 @@ impl Deserialize for ChatMessage;
 
 struct ChatRequest {
     model: String,
-    messages: Array<ChatMessage>,
+    messages: List<ChatMessage>,
 }
 impl Serialize for ChatRequest;
 
@@ -31,7 +31,7 @@ struct ChatChoice {
 impl Deserialize for ChatChoice;
 
 struct ChatResponse {
-    choices: Array<ChatChoice>,
+    choices: List<ChatChoice>,
 }
 impl Deserialize for ChatResponse;
 
@@ -85,7 +85,7 @@ fn read_body(resp: Response) -> String {
     let [res_rx, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream_rx, _trailers] = Response::consume_body(resp, res_rx);
 
-    let mut buf: Array<u8> = [];
+    let mut buf: List<u8> = [];
     loop {
         let chunk = body_stream_rx.read(4096);
         if chunk.len() == 0 {
@@ -105,7 +105,7 @@ export fn run() with Stdout, Stderr, Environment, Client {
         },
     };
 
-    let messages: Array<ChatMessage> = [
+    let messages: List<ChatMessage> = [
         ChatMessage {
             role: "user",
             content: "Explain WebAssembly briefly",

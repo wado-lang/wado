@@ -81,7 +81,7 @@ pub(super) fn check_assignable(
     // Rule 3: Type params -- defer until monomorphization.
     // Note: We can't reject TypeParam-vs-concrete here because trait impls
     // legitimately pass concrete types where type params are expected
-    // (e.g., `I` -> `ArrayIter<T>` in Iterator blanket impls).
+    // (e.g., `I` -> `ListIter<T>` in Iterator blanket impls).
     if type_table.contains_type_param(actual) || type_table.contains_type_param(expected) {
         return TypeCheckResult::Deferred;
     }

@@ -5,8 +5,8 @@ use { println } from "core:cli";
 // A simple multi-value container that can hold either a list or a named-field record.
 // Both literal forms produce the same type (with keys empty for sequences).
 struct Bag<T> {
-    keys: Array<String>,
-    values: Array<T>,
+    keys: List<String>,
+    values: List<T>,
 }
 
 impl Bag<T> {
@@ -57,7 +57,7 @@ impl SequenceLiteralBuilder for Bag<T> {
     type Output = Bag<T>;
 
     fn new_literal(capacity: i32) -> Bag<T> {
-        return Bag { keys: [], values: Array::<T>::with_capacity(capacity) };
+        return Bag { keys: [], values: List::<T>::with_capacity(capacity) };
     }
 
     fn push_literal(&mut self, value: T) {

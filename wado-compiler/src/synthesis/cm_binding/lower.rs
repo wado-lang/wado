@@ -1079,7 +1079,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             // to. Accepts both `wasi:*` and `core:kiln/*` sources so the
             // kiln generator's record surface (input-file, output-file,
             // response, raw-request) lowers through the same path as WASI
-            // records. Callers (e.g. the `Array<T>` element lower)
+            // records. Callers (e.g. the `List<T>` element lower)
             // populate `source_interface` via `type_id_to_ast_type` so
             // this lookup does not need a fallback path.
             let source = n.source_interface.as_deref();

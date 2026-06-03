@@ -1,12 +1,12 @@
-// ArrayIter<T> should implement IntoIterator, allowing it to be passed
+// ListIter<T> should implement IntoIterator, allowing it to be passed
 // to functions expecting IntoIterator<Item = u8> (e.g., String::from_utf8).
 //
 // Previously the compiler panicked at wir_build/translate.rs with:
-//   [WIR] unresolved MethodCall: name="ArrayIter<u8>^IntoIterator::into_iter"
+//   [WIR] unresolved MethodCall: name="ListIter<u8>^IntoIterator::into_iter"
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
-    let arr: Array<u8> = [72, 101, 108, 108, 111] as Array<u8>;
+    let arr: List<u8> = [72, 101, 108, 108, 111] as List<u8>;
     if let Ok(s) = String::from_utf8(arr.iter()) {
         println(s);
     }

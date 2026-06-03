@@ -1,12 +1,12 @@
 // Stage 1 of the NIR field-env improvements.
 //
-// `Array::filled(16, 0)` is inlined into a `LabeledBlock` whose tail
-// `break label: Array<u16> { repr, used: 16 }` carries a StructLit.
+// `List::filled(16, 0)` is inlined into a `LabeledBlock` whose tail
+// `break label: List<u16> { repr, used: 16 }` carries a StructLit.
 // niri must peer through the labeled-block tail to bind `arr.used = 16`
 // into field_env, and that binding must survive a loop that does not
 // touch `arr`.
 //
-// `Array<T>::len(&self) -> i32 { return self.used; }` is single-tail
+// `List<T>::len(&self) -> i32 { return self.used; }` is single-tail
 // and CTFE-eligible: when `self` carries `KnownFields { used: 16 }`
 // via field_env, the call folds to `16`. The bounds check
 // `unlikely(1 >= arr.len())` then folds to false and the panic branch
@@ -15,7 +15,7 @@
 use { println, Stdout } from "core:cli";
 
 fn check_arr_len_loop_invariant() -> i32 {
-    let arr: Array<u16> = Array::filled(16, 0 as u16);
+    let arr: List<u16> = List::filled(16, 0 as u16);
     let mut acc: i32 = 0;
     for let mut i = 0; i < 5; i += 1 {
         acc += i;

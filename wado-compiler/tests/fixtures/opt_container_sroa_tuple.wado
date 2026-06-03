@@ -1,18 +1,18 @@
-// Test: Container SROA (P0a) — decomposes Array<Tuple<T1,...,Tn>> locals
-// into N parallel Array<T_k> locals, eliminating struct.new for tuple payloads
+// Test: Container SROA (P0a) — decomposes List<Tuple<T1,...,Tn>> locals
+// into N parallel List<T_k> locals, eliminating struct.new for tuple payloads
 // (AoS → SoA transformation).
 //
 // This targets the zlib insertion-sort pattern where tuples are pushed into
 // an array, indexed by field, and slot-copied between positions.
 use { println, Stdout } from "core:cli";
 
-// The P0a pass requires monomorphized Array<T_k> methods to exist for each
+// The P0a pass requires monomorphized List<T_k> methods to exist for each
 // tuple element type. This helper exercises every method we rely on so that
-// monomorphization emits them. In zlib, Array<i32>/Array<u16>/... are used
+// monomorphization emits them. In zlib, List<i32>/List<u16>/... are used
 // organically, but this standalone fixture must force it explicitly.
 #[inline("never")]
 fn _force_array_i32_monomorphization() -> i32 {
-    let mut x: Array<i32> = Array::<i32>::with_capacity(4);
+    let mut x: List<i32> = List::<i32>::with_capacity(4);
     x.push(1);
     x.push(2);
     x[0] = 10;
@@ -23,7 +23,7 @@ fn _force_array_i32_monomorphization() -> i32 {
 
 #[inline("never")]
 fn build_and_sum_push() -> i32 {
-    let mut v: Array<[i32, i32]> = [];
+    let mut v: List<[i32, i32]> = [];
     v.push([1, 10]);
     v.push([2, 20]);
     v.push([3, 30]);
@@ -37,7 +37,7 @@ fn build_and_sum_push() -> i32 {
 #[inline("never")]
 fn slot_copy_pattern() -> i32 {
     // Insertion-sort-style slot copy: items[j+1] = items[j]
-    let mut items: Array<[i32, i32]> = [];
+    let mut items: List<[i32, i32]> = [];
     items.push([1, 100]);
     items.push([2, 200]);
     items.push([3, 300]);
@@ -50,7 +50,7 @@ fn slot_copy_pattern() -> i32 {
 
 #[inline("never")]
 fn with_capacity_init() -> i32 {
-    let mut v: Array<[i32, i32]> = Array::<[i32, i32]>::with_capacity(4);
+    let mut v: List<[i32, i32]> = List::<[i32, i32]>::with_capacity(4);
     v.push([1, 10]);
     v.push([2, 20]);
     let mut sum = 0;

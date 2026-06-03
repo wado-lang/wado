@@ -19,10 +19,10 @@ The current `String` API (`wado-compiler/lib/core/prelude/string.wado`) mixes th
 
 There are also Rust-named methods whose semantics differ from Rust because of Wado's value semantics:
 
-- `as_bytes() -> Array<u8>` — Rust returns `&[u8]` (zero-copy borrow); Wado returns an owned, deep-copied `Array<u8>`.
+- `as_bytes() -> List<u8>` — Rust returns `&[u8]` (zero-copy borrow); Wado returns an owned, deep-copied `List<u8>`.
 - `String::concat(a, b)` — Rust has no static `String::concat`; the closest is `[a, b].concat()` on a slice.
 
-WEP-2026-03-29 (Redesign String and Array APIs) catalogs the Rust-alignment of method names but does not address (a) the checked/unchecked discipline, (b) the value-semantics mismatches above, or (c) the role of `internal_*` primitives. This WEP fills those gaps and overrides the relevant rows of WEP-2026-03-29.
+WEP-2026-03-29 (Redesign String and List APIs) catalogs the Rust-alignment of method names but does not address (a) the checked/unchecked discipline, (b) the value-semantics mismatches above, or (c) the role of `internal_*` primitives. This WEP fills those gaps and overrides the relevant rows of WEP-2026-03-29.
 
 Since Wado has no external users, this WEP removes deprecated names outright instead of going through a deprecation period.
 
@@ -53,7 +53,7 @@ The following names violate this rule today and are removed:
 
 | Method                 | Rust meaning                       | Wado meaning today                      | Replacement                                |
 | ---------------------- | ---------------------------------- | --------------------------------------- | ------------------------------------------ |
-| `as_bytes()`           | `&[u8]` (zero-copy borrow)         | Owned `Array<u8>` (deep copy)           | Removed. Use `bytes().collect()` if needed |
+| `as_bytes()`           | `&[u8]` (zero-copy borrow)         | Owned `List<u8>` (deep copy)            | Removed. Use `bytes().collect()` if needed |
 | `String::concat(a, b)` | No such method (closest: slice op) | Static two-arg concatenation            | Removed. Use `a + b`                       |
 | `get_byte(i)`          | `as_bytes()[i]` is bounds-checked  | Bounds-unchecked direct access          | `get_byte_unchecked(i)`                    |
 | `set_byte(i, v)`       | `as_bytes_mut()` is `unsafe`       | Bounds-unchecked, UTF-8-unchecked write | `set_byte_unchecked(i, v)`                 |
@@ -90,7 +90,7 @@ is replaced by dedicated bulk methods that compile to a single `array_copy`:
 ```wado
 impl String {
     // Append all bytes from `bytes`. Caller must ensure the result is valid UTF-8.
-    pub fn push_bytes_unchecked(&mut self, bytes: Array<u8>);
+    pub fn push_bytes_unchecked(&mut self, bytes: List<u8>);
 
     // Append the byte range `[start, end)` of `s`. Caller must ensure the
     // range is in bounds, on UTF-8 boundaries, and that the result is valid UTF-8.
@@ -155,7 +155,7 @@ A future visibility annotation (e.g. `#[stdlib_only]`) should restrict these to 
 
 The following rows in WEP-2026-03-29's mapping table are superseded by this WEP:
 
-- `as_bytes()` — removed (was: NEW returning `Array<u8>`).
+- `as_bytes()` — removed (was: NEW returning `List<u8>`).
 - `String::concat(a, b)` — removed (was: kept as Wado-specific).
 - `String::get_byte(i)` / `set_byte(i, v)` — removed; replaced by `get_byte_unchecked` / `set_byte_unchecked` (was: kept as low-level byte access).
 - `truncate_bytes` — removed outright (was: rename with deprecation period).
@@ -182,7 +182,7 @@ P1 — checked / unchecked pairs
 
 P1 — bulk append primitives
 
-- [ ] Add `String::push_bytes_unchecked(bytes: Array<u8>)`.
+- [ ] Add `String::push_bytes_unchecked(bytes: List<u8>)`.
 - [ ] Add `String::push_str_range_unchecked(s: String, start: i32, end: i32)`.
 - [ ] Replace the `internal_reserve_uninit` + `set_byte_unchecked` loop in:
   - `wado-compiler/lib/core/json.wado` (3 sites)

@@ -46,7 +46,7 @@ pub resource Stream<T> {
     fn new() -> [Stream<T>, StreamWritable<T>];
 
     #[canonical("stream-read")]
-    fn read(&self, max: i32) -> Array<T>;
+    fn read(&self, max: i32) -> List<T>;
 
     #[canonical("stream-drop-readable")]
     fn drop(self);
@@ -54,7 +54,7 @@ pub resource Stream<T> {
 
 pub resource StreamWritable<T> {
     #[canonical("stream-write")]
-    fn write(&self, data: Array<T>);
+    fn write(&self, data: List<T>);
 
     #[canonical("stream-drop-writable")]
     fn drop(self);
@@ -280,20 +280,20 @@ trailers where the reader may close before trailers are written.
 
 #### Stream::read Error Handling (Existing)
 
-`Stream::read(&self, max: i32) -> Array<T>`:
+`Stream::read(&self, max: i32) -> List<T>`:
 
-| CM ReturnCode | Wado result                | Meaning                           |
-| ------------- | -------------------------- | --------------------------------- |
-| BLOCKED       | (internal)                 | Wait via waitable-set, then retry |
-| COMPLETED     | `Array` with `count` items | Data available                    |
-| DROPPED       | Empty `Array`              | Writer closed (EOF)               |
+| CM ReturnCode | Wado result               | Meaning                           |
+| ------------- | ------------------------- | --------------------------------- |
+| BLOCKED       | (internal)                | Wait via waitable-set, then retry |
+| COMPLETED     | `List` with `count` items | Data available                    |
+| DROPPED       | Empty `List`              | Writer closed (EOF)               |
 
 For streams, DROPPED is "end of stream" — the empty array serves as the EOF signal.
 This is the existing behavior and remains unchanged.
 
 #### StreamWritable::write Error Handling (Existing)
 
-`StreamWritable::write(&self, data: Array<T>)`:
+`StreamWritable::write(&self, data: List<T>)`:
 
 | CM ReturnCode | Wado behavior            | Meaning                           |
 | ------------- | ------------------------ | --------------------------------- |
@@ -397,7 +397,7 @@ builtin.wado                     types.wado
 types.wado (single source of truth)
   resource Stream<T> {
       #[canonical("stream-read")]
-      fn read(&self, max: i32) -> Array<T>;
+      fn read(&self, max: i32) -> List<T>;
   }
          │
          ▼

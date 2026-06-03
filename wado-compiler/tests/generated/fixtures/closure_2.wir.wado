@@ -65,18 +65,18 @@ array builtin::array<i32> (mut i32);  // TypeId(12)
 
 array builtin::array<Fn<1,i32>> (mut ref struct);  // TypeId(13)
 
-struct core:prelude/array.wado//ArrayIter<i32> {  // TypeId(14)
+struct core:prelude/list.wado//ListIter<i32> {  // TypeId(14)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
     mut index: i32,
 }
 
-struct core:prelude//Array<i32> {  // TypeId(15)
+struct core:prelude//List<i32> {  // TypeId(15)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
 
-struct core:prelude//Array<Fn<1,i32>> {  // TypeId(16)
+struct core:prelude//List<Fn<1,i32>> {  // TypeId(16)
     mut repr: ref builtin::array<Fn<1,i32>>,
     mut used: i32,
 }
@@ -123,7 +123,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(30)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(31)
 
-type "functype//wado-compiler/tests/fixtures/closure_2.wado/scale_and_add" = fn(ref "core:prelude//Array<i32>", i32, i32) -> i32;  // TypeId(32)
+type "functype//wado-compiler/tests/fixtures/closure_2.wado/scale_and_add" = fn(ref "core:prelude//List<i32>", i32, i32) -> i32;  // TypeId(32)
 
 type "functype//wado-compiler/tests/fixtures/closure_2.wado/__test_0_capture_fn_param" = fn();  // TypeId(33)
 
@@ -215,9 +215,9 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(77)
 
-type "functype//core:prelude/array.wado/Array<Fn<1,i32>>::push" = fn(ref "core:prelude//Array<Fn<1,i32>>", ref struct);  // TypeId(78)
+type "functype//core:prelude/list.wado/List<Fn<1,i32>>::push" = fn(ref "core:prelude//List<Fn<1,i32>>", ref struct);  // TypeId(78)
 
-type "functype//core:prelude/array.wado/Array<Fn<1,i32>>::grow" = fn(ref "core:prelude//Array<Fn<1,i32>>");  // TypeId(79)
+type "functype//core:prelude/list.wado/List<Fn<1,i32>>::grow" = fn(ref "core:prelude//List<Fn<1,i32>>");  // TypeId(79)
 
 type "functype//wado-compiler/tests/fixtures/closure_2.wado/__Closure_7::__call" = fn(ref "wado-compiler/tests/fixtures/closure_2.wado//__Closure_7") -> ref "core:prelude/string.wado//String";  // TypeId(80)
 
@@ -247,7 +247,7 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//core:prelude/string.wado/StrCharIter^Iterator::next" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(93)
 
-type "functype//core:prelude/array.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(94)
+type "functype//core:prelude/list.wado/ListIter<i32>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<i32>") -> [i32, i32];  // TypeId(94)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -264,14 +264,14 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/closure_2.wado/scale_and_add"(items, scale, base) {
     let total: i32;
-    let __iter_5: ref "core:prelude/array.wado//ArrayIter<i32>";
+    let __iter_5: ref "core:prelude/list.wado//ListIter<i32>";
     total = 0;
-    __iter_5 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: items.repr, used: items.used, index: 0 };
+    __iter_5 = struct.new "core:prelude/list.wado//ListIter<i32>" { repr: items.repr, used: items.used, index: 0 };
     b0: block {
         l1: loop {
             let __sroa___match_7_discriminant: i32;
             let __sroa___match_7_payload_0: i32;
-            multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_5);
+            multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/list.wado/ListIter<i32>^Iterator::next"(__iter_5);
             if __sroa___match_7_discriminant == 0 {
                 total = total + ((__sroa___match_7_payload_0 * scale) + base);
             } else {
@@ -284,14 +284,14 @@ fn "wado-compiler/tests/fixtures/closure_2.wado/scale_and_add"(items, scale, bas
 }
 
 fn "wado-compiler/tests/fixtures/closure_2.wado/__test_0_capture_fn_param"() {
-    let __b: ref "core:prelude//Array<i32>";
+    let __b: ref "core:prelude//List<i32>";
     let r5: i32;
     let __cond_13: bool;
     let __local_22: ref "core:prelude/string.wado//String";
     let __local_23: ref "core:prelude/format.wado//Formatter";
     let f_85: ref "core:prelude/format.wado//Formatter";
     let f_90: ref "core:prelude/format.wado//Formatter";
-    __b = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     r5 = "wado-compiler/tests/fixtures/closure_2.wado/scale_and_add"(__b, 2, 1);
     __cond_13 = r5 == 15;
     if __cond_13 == 0 {
@@ -605,7 +605,7 @@ condition: sum == 30
 }
 
 fn "wado-compiler/tests/fixtures/closure_2.wado/__test_13_loop_scope_c_style_for"() {
-    let __b: ref "core:prelude//Array<Fn<1,i32>>";
+    let __b: ref "core:prelude//List<Fn<1,i32>>";
     let i: i32;
     let get_i: ref struct;
     let __v0_4: ref struct;
@@ -643,7 +643,7 @@ fn "wado-compiler/tests/fixtures/closure_2.wado/__test_13_loop_scope_c_style_for
     let f_93: ref "core:prelude/format.wado//Formatter";
     let f_103: ref "core:prelude/format.wado//Formatter";
     let f_109: ref "core:prelude/format.wado//Formatter";
-    __b = struct.new "core:prelude//Array<Fn<1,i32>>" { repr: builtin::array_new<ref struct>(0), used: 0 };
+    __b = struct.new "core:prelude//List<Fn<1,i32>>" { repr: builtin::array_new<ref struct>(0), used: 0 };
     i = 0;
     b26: block {
         l27: loop {
@@ -651,7 +651,7 @@ fn "wado-compiler/tests/fixtures/closure_2.wado/__test_13_loop_scope_c_style_for
                 break b26;
             }
             get_i = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/closure_2.wado//__Closure_30" { __capture_0: i }, inspect: ref.func "closure/wado-compiler/tests/fixtures/closure_2.wado/__closure_inspect_wrapper_6", inspect_alt: ref.func "closure/wado-compiler/tests/fixtures/closure_2.wado/__closure_inspect_alt_wrapper_6", func: ref.func "closure/wado-compiler/tests/fixtures/closure_2.wado/__closure_wrapper_6" };
-            "core:prelude/array.wado/Array<Fn<1,i32>>::push"(__b, get_i);
+            "core:prelude/list.wado/List<Fn<1,i32>>::push"(__b, get_i);
             i = i + 1;
             continue l27;
         };
@@ -744,9 +744,9 @@ condition: call_fn(closures[4], 0) == 4
 }
 
 fn "wado-compiler/tests/fixtures/closure_2.wado/__test_14_loop_scope_for_of"() {
-    let __b_0: ref "core:prelude//Array<i32>";
-    let __b_2: ref "core:prelude//Array<Fn<1,i32>>";
-    let __iter_4: ref "core:prelude/array.wado//ArrayIter<i32>";
+    let __b_0: ref "core:prelude//List<i32>";
+    let __b_2: ref "core:prelude//List<Fn<1,i32>>";
+    let __iter_4: ref "core:prelude/list.wado//ListIter<i32>";
     let get_item: ref struct;
     let __v0_7: ref struct;
     let __v1_8: i32;
@@ -783,17 +783,17 @@ fn "wado-compiler/tests/fixtures/closure_2.wado/__test_14_loop_scope_for_of"() {
     let f_111: ref "core:prelude/format.wado//Formatter";
     let f_121: ref "core:prelude/format.wado//Formatter";
     let f_127: ref "core:prelude/format.wado//Formatter";
-    __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30, 40, 50), used: 5 };
-    __b_2 = struct.new "core:prelude//Array<Fn<1,i32>>" { repr: builtin::array_new<ref struct>(0), used: 0 };
-    __iter_4 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: __b_0.repr, used: 5, index: 0 };
+    __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30, 40, 50), used: 5 };
+    __b_2 = struct.new "core:prelude//List<Fn<1,i32>>" { repr: builtin::array_new<ref struct>(0), used: 0 };
+    __iter_4 = struct.new "core:prelude/list.wado//ListIter<i32>" { repr: __b_0.repr, used: 5, index: 0 };
     b44: block {
         l45: loop {
             let __sroa___match_32_discriminant: i32;
             let __sroa___match_32_payload_0: i32;
-            multivalue_bind [__sroa___match_32_discriminant, __sroa___match_32_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_4);
+            multivalue_bind [__sroa___match_32_discriminant, __sroa___match_32_payload_0] = "core:prelude/list.wado/ListIter<i32>^Iterator::next"(__iter_4);
             if __sroa___match_32_discriminant == 0 {
                 get_item = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/closure_2.wado//__Closure_31" { __capture_0: __sroa___match_32_payload_0 }, inspect: ref.func "closure/wado-compiler/tests/fixtures/closure_2.wado/__closure_inspect_wrapper_7", inspect_alt: ref.func "closure/wado-compiler/tests/fixtures/closure_2.wado/__closure_inspect_alt_wrapper_7", func: ref.func "closure/wado-compiler/tests/fixtures/closure_2.wado/__closure_wrapper_7" };
-                "core:prelude/array.wado/Array<Fn<1,i32>>::push"(__b_2, get_item);
+                "core:prelude/list.wado/List<Fn<1,i32>>::push"(__b_2, get_item);
             } else {
                 break b44;
             }
@@ -1424,17 +1424,17 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     }
 }
 
-fn "core:prelude/array.wado/Array<Fn<1,i32>>::push"(self, value) {
+fn "core:prelude/list.wado/List<Fn<1,i32>>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<Fn<1,i32>>::grow"(self);
+        "core:prelude/list.wado/List<Fn<1,i32>>::grow"(self);
     }
     builtin::array_set<ref struct>(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
+fn "core:prelude/list.wado/ListIter<i32>^Iterator::next"(self) {
     let item: i32;
     if self.index >= self.used {
         return 1, 0;
@@ -1444,7 +1444,7 @@ fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
     return 0, item;
 }
 
-fn "core:prelude/array.wado/Array<Fn<1,i32>>::grow"(self) {
+fn "core:prelude/list.wado/List<Fn<1,i32>>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<Fn<1,i32>>;

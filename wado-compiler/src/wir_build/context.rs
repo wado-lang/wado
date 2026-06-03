@@ -691,14 +691,14 @@ impl<'a> WirContext<'a> {
             }
             ResolvedType::GenericInstance {
                 name, type_args, ..
-            } if name == "Array" && type_args.len() == 1 => {
-                // Look up Array<T> struct type. The element name must
+            } if name == "List" && type_args.len() == 1 => {
+                // Look up List<T> struct type. The element name must
                 // come from `mangle_type_arg_for_generic` so it agrees
                 // with the registration key produced by the
                 // monomorphizer's `instantiation_name` (which qualifies
                 // Struct / GenericInstance args by `ModuleSource`).
                 let elem_type_name = type_table.mangle_type_arg_for_generic(type_args[0]);
-                let array_fq = format!("core:prelude//Array<{elem_type_name}>");
+                let array_fq = format!("core:prelude//List<{elem_type_name}>");
                 if let Some(type_id) = self.type_map.get(&array_fq) {
                     WirType::Ref {
                         type_id: type_id.clone(),
@@ -709,7 +709,7 @@ impl<'a> WirContext<'a> {
                     let resolved_name =
                         type_table.mangle_type_arg_for_generic_resolving_newtypes(type_args[0]);
                     if resolved_name != elem_type_name {
-                        let resolved_fq = format!("core:prelude//Array<{resolved_name}>");
+                        let resolved_fq = format!("core:prelude//List<{resolved_name}>");
                         if let Some(type_id) = self.type_map.get(&resolved_fq) {
                             return WirType::Ref {
                                 type_id: type_id.clone(),

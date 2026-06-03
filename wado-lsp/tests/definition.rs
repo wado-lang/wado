@@ -218,7 +218,7 @@ fn while_let_binding_definition() {
 fn for_of_binding_definition() {
     futures::executor::block_on(async {
         let source = concat!(
-            "fn f(items: Array<i32>) -> i32 {\n",
+            "fn f(items: List<i32>) -> i32 {\n",
             "    let mut total = 0;\n",
             "    for let item of items {\n",
             "        total = total + item;\n",
@@ -239,7 +239,7 @@ fn for_of_keyword_does_not_resolve_to_synthetic_iter() {
     // compiler internals into the editor.
     futures::executor::block_on(async {
         let source = concat!(
-            "fn f(items: Array<i32>) -> i32 {\n",
+            "fn f(items: List<i32>) -> i32 {\n",
             "    let mut total = 0;\n",
             "    for let item of items {\n",
             "        total = total + item;\n",

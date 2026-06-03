@@ -133,8 +133,8 @@ fn gen_walk_field(w: &mut Writer, field: &WalkField, var: &String) {
     };
 }
 
-fn build_walk_fields(n: i32) -> Array<WalkField> {
-    let mut fields: Array<WalkField> = [];
+fn build_walk_fields(n: i32) -> List<WalkField> {
+    let mut fields: List<WalkField> = [];
     for let mut i = 0; i < n; i += 1 {
         if i % 2 == 0 {
             fields.push(WalkField { name: `f{Dec { value: i }}`, action: WalkAction::VisitToken });
@@ -145,8 +145,8 @@ fn build_walk_fields(n: i32) -> Array<WalkField> {
     return fields;
 }
 
-fn build_case_names(n: i32) -> Array<String> {
-    let mut names: Array<String> = [];
+fn build_case_names(n: i32) -> List<String> {
+    let mut names: List<String> = [];
     for let mut i = 0; i < n; i += 1 {
         names.push(`Alt{Dec { value: i }}`);
     }

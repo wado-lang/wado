@@ -28,8 +28,8 @@ impl Transform {
     }
 }
 
-fn for_each_item(items: Array<i32>, f: fn(i32) -> i32) -> Array<i32> {
-    let mut result: Array<i32> = [];
+fn for_each_item(items: List<i32>, f: fn(i32) -> i32) -> List<i32> {
+    let mut result: List<i32> = [];
     for let item of items {
         result.push(f(item));
     }
@@ -94,7 +94,7 @@ test "closure fn param capture" {
 }
 
 test "closure fn param effectful" {
-    let items: Array<i32> = [1, 2, 3];
+    let items: List<i32> = [1, 2, 3];
     let result = for_each_item(items, |x: i32| x * 10);
     assert result[0] == 10;
     assert result[1] == 20;

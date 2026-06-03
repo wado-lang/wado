@@ -189,8 +189,8 @@ impl<T: Serialize> Serialize for Option<T> {
     }
 }
 
-// Array<T: Serialize>
-impl<T: Serialize> Serialize for Array<T> {
+// List<T: Serialize>
+impl<T: Serialize> Serialize for List<T> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         let mut seq = s.begin_seq(self.len());
         if let Ok(mut seq) = seq {
@@ -226,7 +226,7 @@ struct User {
     age: i32,
     active: bool,
     location: Option<Point>,
-    tags: Array<String>,
+    tags: List<String>,
 }
 
 impl Serialize for User {
@@ -237,7 +237,7 @@ impl Serialize for User {
             st.field::<i32>(&"age", &self.age);
             st.field::<bool>(&"active", &self.active);
             st.field::<Option<Point>>(&"location", &self.location);
-            st.field::<Array<String>>(&"tags", &self.tags);
+            st.field::<List<String>>(&"tags", &self.tags);
             return st.end();
         }
         return Result::<(), SerializeError>::Err(SerializeError { message: "begin_struct failed" });

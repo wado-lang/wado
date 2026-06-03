@@ -1,5 +1,5 @@
 // `value_copy_demote` soundness: one function with two copies that share
-// the same `$value_copy$T_Array<String>` helper — one demote-eligible
+// the same `$value_copy$T_List<String>` helper — one demote-eligible
 // (`sorted`, only spine-mutated and read), one NOT (`victim`, an element
 // is mutated via `victim[0].push`).
 //
@@ -13,7 +13,7 @@
 
 use { println } from "core:cli";
 
-fn process(a: &Array<String>, b: &Array<String>) -> String {
+fn process(a: &List<String>, b: &List<String>) -> String {
     let mut sorted = *a;
     sorted.sort();
     let mut victim = *b;
@@ -22,8 +22,8 @@ fn process(a: &Array<String>, b: &Array<String>) -> String {
 }
 
 export fn run() with Stdout {
-    let a: Array<String> = ["q", "p"];
-    let b: Array<String> = ["hi", "yo"];
+    let a: List<String> = ["q", "p"];
+    let b: List<String> = ["hi", "yo"];
     println(process(&a, &b));
 }
 

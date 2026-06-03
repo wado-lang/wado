@@ -30,7 +30,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // Write the length as response body bytes
     // For "Hello" (5 bytes), write "5"
     let len_byte = (total_len + 48) as u8;  // ASCII digit
-    let body_data: Array<u8> = [len_byte];
+    let body_data: List<u8> = [len_byte];
     resp_body_tx.write(body_data);
     resp_body_tx.drop();
 

@@ -1646,7 +1646,7 @@ pub struct ForStmt {
 }
 
 /// For-of loop: `for let item of array { body }`
-/// Iterates over elements of an Array<T>
+/// Iterates over elements of an List<T>
 #[derive(Debug, Clone)]
 pub struct ForOfStmt {
     pub id: AstId,
@@ -2193,7 +2193,7 @@ pub struct StructLiteralField {
 
 /// Tuple literal expression: `[1, 2, 3]` or `[1, "hello", true]`
 /// This uses bracket syntax following TypeScript conventions.
-/// Can be coerced to Array<T> when all elements have the same type.
+/// Can be coerced to List<T> when all elements have the same type.
 #[derive(Debug, Clone)]
 pub struct TupleLiteralExpr {
     pub id: AstId,
@@ -2387,11 +2387,11 @@ pub struct MethodCallExpr {
     pub span: Span,
 }
 
-/// Static method call expression: `Array::<i32>::with_capacity(100)` or `Point::origin()`
+/// Static method call expression: `List::<i32>::with_capacity(100)` or `Point::origin()`
 #[derive(Debug, Clone)]
 pub struct StaticMethodCallExpr {
     pub id: AstId,
-    /// The target type (e.g., `Array<i32>` or `Point`)
+    /// The target type (e.g., `List<i32>` or `Point`)
     pub target_type: Type,
     /// The method name (e.g., `with_capacity` or `origin`)
     pub method: String,

@@ -210,7 +210,7 @@ fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut
         None => return,
     };
 
-    let mut non_lr_indices: Array<i32> = [];
+    let mut non_lr_indices: List<i32> = [];
     match rule {
         Simple(_) => return,
         MultiAlt(m) => {
@@ -228,9 +228,9 @@ fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut
         return;
     }
 
-    let mut first_sets: Array<Array<String>> = [];
+    let mut first_sets: List<List<String>> = [];
     for let idx of &non_lr_indices {
-        let mut visiting: Array<String> = [];
+        let mut visiting: List<String> = [];
         first_sets.push(ctx.first_of_alt(&surface.alternatives[*idx], &mut visiting));
     }
     let mut groups = compute_overlap_groups(&first_sets);
@@ -243,23 +243,23 @@ fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut
         }
         let mut sorted_group = group.sorted();
         sort_group_by_specificity(&mut sorted_group, &first_sets);
-        let mut mapped_alts: Array<Alternative> = [];
+        let mut mapped_alts: List<Alternative> = [];
         for let gi of &sorted_group {
             mapped_alts.push(surface.alternatives[non_lr_indices[*gi]]);
         }
-        let mut local_indices: Array<i32> = [];
+        let mut local_indices: List<i32> = [];
         for let mut i = 0; i < sorted_group.len(); i += 1 {
             local_indices.push(i);
         }
         sort_group_by_element_count(&mut local_indices, &mapped_alts);
-        let mut reordered: Array<i32> = [];
+        let mut reordered: List<i32> = [];
         for let li of &local_indices {
             reordered.push(sorted_group[*li]);
         }
 
-        let mut pred_indices: Array<i32> = [];
-        let mut pred_elements: Array<Array<Element>> = [];
-        let mut real_indices: Array<i32> = [];
+        let mut pred_indices: List<i32> = [];
+        let mut pred_elements: List<List<Element>> = [];
+        let mut real_indices: List<i32> = [];
         for let mut k = 0; k < reordered.len(); k += 1 {
             let real_idx = non_lr_indices[reordered[k]];
             pred_indices.push(real_idx);
@@ -352,7 +352,7 @@ fn push_spaces(out: &mut String, n: i32) {
 /// Recurses into Group alts and Repeat bodies so nested repeats are
 /// surfaced too.
 fn render_repeats(out: &mut String, rule: &Rule) {
-    let mut lines: Array<String> = [];
+    let mut lines: List<String> = [];
     match rule {
         Simple(s) => collect_repeats_in_alt(&s.body, &mut lines),
         MultiAlt(m) => {
@@ -381,13 +381,13 @@ fn render_repeats(out: &mut String, rule: &Rule) {
     }
 }
 
-fn collect_repeats_in_alt(alt: &AltBody, lines: &mut Array<String>) {
+fn collect_repeats_in_alt(alt: &AltBody, lines: &mut List<String>) {
     for let op of &alt.ops {
         collect_repeats_in_op(op, lines);
     }
 }
 
-fn collect_repeats_in_op(op: &Op, lines: &mut Array<String>) {
+fn collect_repeats_in_op(op: &Op, lines: &mut List<String>) {
     match op {
         Repeat(rep) => {
             lines.push(repeat_line(rep));
@@ -526,7 +526,7 @@ fn render_summary(out: &mut String, lowered: &LoweredGrammar) {
 // ==========================================================================
 
 /// Render a token-kind set as `[A, B, C]`.
-fn push_token_set(out: &mut String, tokens: &Array<String>) {
+fn push_token_set(out: &mut String, tokens: &List<String>) {
     out.push('[');
     for let mut i = 0; i < tokens.len(); i += 1 {
         if i > 0 {

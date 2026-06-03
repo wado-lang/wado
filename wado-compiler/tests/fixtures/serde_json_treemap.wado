@@ -98,14 +98,14 @@ test "treemap with bool values" {
 }
 
 test "treemap with nested array values" {
-    let mut map = TreeMap::<String, Array<i32>>::new();
+    let mut map = TreeMap::<String, List<i32>>::new();
     map["scores"] = [10, 20, 30];
     map["ids"] = [1, 2];
-    let r = to_string::<TreeMap<String, Array<i32>>>(&map);
+    let r = to_string::<TreeMap<String, List<i32>>>(&map);
     if let Ok(s) = r {
         assert s == `\{"scores":[10,20,30],"ids":[1,2]\}`;
     } else {
-        panic("serialize TreeMap with Array values failed");
+        panic("serialize TreeMap with List values failed");
     }
 }
 

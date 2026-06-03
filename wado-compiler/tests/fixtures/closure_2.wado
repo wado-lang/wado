@@ -24,7 +24,7 @@ fn clamp(value: i32, min_val: i32, max_val: i32) -> i32 {
     return value;
 }
 
-fn scale_and_add(items: Array<i32>, scale: i32, base: i32) -> i32 {
+fn scale_and_add(items: List<i32>, scale: i32, base: i32) -> i32 {
     let mut total = 0;
     let transform = |x: i32| x * scale + base;
     for let item of items {
@@ -45,7 +45,7 @@ test "capture fn param" {
     assert clamp(5, 0, 10) == 5;
     assert clamp(-5, 0, 10) == 0;
 
-    let items: Array<i32> = [1, 2, 3];
+    let items: List<i32> = [1, 2, 3];
     let r5 = scale_and_add(items, 2, 1);
     assert r5 == 15;
 }
@@ -246,7 +246,7 @@ test "closure in loop" {
 }
 
 test "loop scope c-style for" {
-    let mut closures: Array<fn(i32) -> i32> = [];
+    let mut closures: List<fn(i32) -> i32> = [];
 
     for let mut i = 0; i < 5; i += 1 {
         let get_i = |_: i32| i;
@@ -261,8 +261,8 @@ test "loop scope c-style for" {
 }
 
 test "loop scope for-of" {
-    let items: Array<i32> = [10, 20, 30, 40, 50];
-    let mut closures: Array<fn(i32) -> i32> = [];
+    let items: List<i32> = [10, 20, 30, 40, 50];
+    let mut closures: List<fn(i32) -> i32> = [];
 
     for let item of items {
         let get_item = |_: i32| item;

@@ -30,12 +30,12 @@ array builtin::array<i32> (mut i32);  // TypeId(4)
 
 array builtin::array<i64> (mut i64);  // TypeId(5)
 
-struct core:prelude//Array<i64> {  // TypeId(6)
+struct core:prelude//List<i64> {  // TypeId(6)
     mut repr: ref builtin::array<i64>,
     mut used: i32,
 }
 
-struct core:prelude//Array<i32> {  // TypeId(7)
+struct core:prelude//List<i32> {  // TypeId(7)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
@@ -130,9 +130,9 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(50)
 
-type "functype//core:prelude/array.wado/Array<i64>::push" = fn(ref "core:prelude//Array<i64>", i64);  // TypeId(51)
+type "functype//core:prelude/list.wado/List<i64>::push" = fn(ref "core:prelude//List<i64>", i64);  // TypeId(51)
 
-type "functype//core:prelude/array.wado/Array<i64>::grow" = fn(ref "core:prelude//Array<i64>");  // TypeId(52)
+type "functype//core:prelude/list.wado/List<i64>::grow" = fn(ref "core:prelude//List<i64>");  // TypeId(52)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(53)
 
@@ -241,7 +241,7 @@ condition: result == \"test\"
 fn "wado-compiler/tests/fixtures/static_2.wado/__test_3_literal_coercion_with_generic_static_method"() {
     let sum: i64;
     let __cond_6: bool;
-    let __b_7: ref "core:prelude//Array<i64>";
+    let __b_7: ref "core:prelude//List<i64>";
     let __v0_9: i32;
     let __cond_10: bool;
     let __v0_11: i64;
@@ -252,16 +252,16 @@ fn "wado-compiler/tests/fixtures/static_2.wado/__test_3_literal_coercion_with_ge
     let __local_18: ref "core:prelude/format.wado//Formatter";
     let __local_19: ref "core:prelude/string.wado//String";
     let __local_20: ref "core:prelude/format.wado//Formatter";
-    let __b_36: ref "core:prelude//Array<i64>";
+    let __b_36: ref "core:prelude//List<i64>";
     let f_48: ref "core:prelude/format.wado//Formatter";
     let f_53: ref "core:prelude/format.wado//Formatter";
     let f_70: ref "core:prelude/format.wado//Formatter";
     let f_75: ref "core:prelude/format.wado//Formatter";
     let f_83: ref "core:prelude/format.wado//Formatter";
     let f_88: ref "core:prelude/format.wado//Formatter";
-    __b_36 = struct.new "core:prelude//Array<i64>" { repr: builtin::array_new<i64>(0), used: 0 };
-    "core:prelude/array.wado/Array<i64>::push"(__b_36, 10_i64);
-    "core:prelude/array.wado/Array<i64>::push"(__b_36, 20_i64);
+    __b_36 = struct.new "core:prelude//List<i64>" { repr: builtin::array_new<i64>(0), used: 0 };
+    "core:prelude/list.wado/List<i64>::push"(__b_36, 10_i64);
+    "core:prelude/list.wado/List<i64>::push"(__b_36, 20_i64);
     sum = if builtin::unlikely(0 >= __b_36.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -276,7 +276,7 @@ condition: sum == 30 as i64
 "), used: 29 }); "core:prelude/string.wado/String::push"(__local_15, 115); "core:prelude/string.wado/String::push"(__local_15, 117); "core:prelude/string.wado/String::push"(__local_15, 109); "core:prelude/string.wado/String::push"(__local_15, 58); "core:prelude/string.wado/String::push"(__local_15, 32); __local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_15 }; f_53 = __local_16; "core:prelude/primitive.wado/i64::fmt_decimal"(sum, f_53); "core:prelude/string.wado/String::push"(__local_15, 10); __local_15);
         unreachable;
     }
-    __b_7 = struct.new "core:prelude//Array<i64>" { repr: array.new_fixed<i64>(100_i64, 200_i64, 300_i64), used: 3 };
+    __b_7 = struct.new "core:prelude//List<i64>" { repr: array.new_fixed<i64>(100_i64, 200_i64, 300_i64), used: 3 };
     __v0_9 = 3;
     __cond_10 = __v0_9 == 3;
     if __cond_10 == 0 {
@@ -300,7 +300,7 @@ condition: arr2[0] == 100 as i64
 }
 
 fn "wado-compiler/tests/fixtures/static_2.wado/__test_4_nested_generic_types_with_static_methods"() {
-    let __b: ref "core:prelude//Array<i32>";
+    let __b: ref "core:prelude//List<i32>";
     let __v0_4: i32;
     let __cond_5: bool;
     let __v0_6: i32;
@@ -313,7 +313,7 @@ fn "wado-compiler/tests/fixtures/static_2.wado/__test_4_nested_generic_types_wit
     let f_39: ref "core:prelude/format.wado//Formatter";
     let f_47: ref "core:prelude/format.wado//Formatter";
     let f_52: ref "core:prelude/format.wado//Formatter";
-    __b = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     __v0_4 = 3;
     __cond_5 = __v0_4 == 3;
     if __cond_5 == 0 {
@@ -852,17 +852,17 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     }
 }
 
-fn "core:prelude/array.wado/Array<i64>::push"(self, value) {
+fn "core:prelude/list.wado/List<i64>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<i64>::grow"(self);
+        "core:prelude/list.wado/List<i64>::grow"(self);
     }
     builtin::array_set<i64>(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<i64>::grow"(self) {
+fn "core:prelude/list.wado/List<i64>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<i64>;

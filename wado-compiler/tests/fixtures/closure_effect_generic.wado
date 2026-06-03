@@ -3,14 +3,14 @@
 
 use { println, Stdout } from "core:cli";
 
-fn each<effect E>(items: Array<i32>, mut f: fn mut(i32) with E) with E {
+fn each<effect E>(items: List<i32>, mut f: fn mut(i32) with E) with E {
     for let item of items {
         f(item);
     }
 }
 
 export fn run() with Stdout {
-    let items: Array<i32> = [1, 2, 3];
+    let items: List<i32> = [1, 2, 3];
 
     // Pure closure — E unifies with the empty effect set.
     let mut total = 0;

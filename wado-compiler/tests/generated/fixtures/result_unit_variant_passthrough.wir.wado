@@ -26,7 +26,7 @@ variant wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado//Color
     Blue,
 }
 
-struct core:prelude/array.wado//ArrayIter<u8> {  // TypeId(4)
+struct core:prelude/list.wado//ListIter<u8> {  // TypeId(4)
     mut repr: ref builtin::array<u8>,
     mut used: i32,
     mut index: i32,
@@ -47,7 +47,7 @@ struct core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/result_u
     payload_0: ref "wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado//Color",
 }
 
-struct core:prelude//Array<u8> {  // TypeId(8)
+struct core:prelude//List<u8> {  // TypeId(8)
     mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
@@ -74,7 +74,7 @@ type "functype//wado-compiler/tests/fixtures/result_unit_variant_passthrough.wad
 
 type "functype//wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/__test_1_err_passthrough_preserves_variant_case" = fn();  // TypeId(19)
 
-type "functype//wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/passthrough_with_ok_work" = fn(ref "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/Color>", ref "core:prelude//Array<u8>") -> ref null "wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado//Color";  // TypeId(20)
+type "functype//wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/passthrough_with_ok_work" = fn(ref "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/Color>", ref "core:prelude//List<u8>") -> ref null "wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado//Color";  // TypeId(20)
 
 type "functype//wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/__test_2_ok_arm_with_body_still_preserves_err_passthrough" = fn();  // TypeId(21)
 
@@ -122,7 +122,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
 
-type "functype//core:prelude/array.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(44)
+type "functype//core:prelude/list.wado/ListIter<u8>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<u8>") -> [i32, u8];  // TypeId(44)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -272,18 +272,18 @@ condition: passthrough(Result<i32, Color>::Err(Color::Blue)) matches { Err(Color
 fn "wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/passthrough_with_ok_work"(c, bytes) {
     let e: ref "wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado//Color";
     let total: i32;
-    let __iter_4: ref "core:prelude/array.wado//ArrayIter<u8>";
+    let __iter_4: ref "core:prelude/list.wado//ListIter<u8>";
     if ref.test "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/Color>::Err"(c) {
         e = ref.cast "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/Color>::Err"(c).payload_0;
         return e;
     } else {
         total = 0;
-        __iter_4 = struct.new "core:prelude/array.wado//ArrayIter<u8>" { repr: bytes.repr, used: bytes.used, index: 0 };
+        __iter_4 = struct.new "core:prelude/list.wado//ListIter<u8>" { repr: bytes.repr, used: bytes.used, index: 0 };
         b16: block {
             l17: loop {
                 let __sroa___local_6_discriminant: i32;
                 let __sroa___local_6_payload_0: u8;
-                multivalue_bind [__sroa___local_6_discriminant, __sroa___local_6_payload_0] = "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(__iter_4);
+                multivalue_bind [__sroa___local_6_discriminant, __sroa___local_6_payload_0] = "core:prelude/list.wado/ListIter<u8>^Iterator::next"(__iter_4);
                 if __sroa___local_6_discriminant == 0 {
                     total = total + __sroa___local_6_payload_0;
                 } else {
@@ -300,16 +300,16 @@ fn "wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/passthroug
 }
 
 fn "wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/__test_2_ok_arm_with_body_still_preserves_err_passthrough"() {
-    let __b_0: ref "core:prelude//Array<u8>";
+    let __b_0: ref "core:prelude//List<u8>";
     let __cond_2: bool;
-    let __b_3: ref "core:prelude//Array<u8>";
+    let __b_3: ref "core:prelude//List<u8>";
     let __cond_5: bool;
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
     let __local_10: ref "wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado//Color";
-    __b_0 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(1, 2, 3), used: 3 };
+    __b_0 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(1, 2, 3), used: 3 };
     let __match_scrut_0: ref null "wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado//Color";
     __match_scrut_0 = "wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/passthrough_with_ok_work"(struct.new "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/Color>::Ok" { discriminant: 0, payload_0: 1 }, __b_0);
     __cond_2 = (if ref.is_null(__match_scrut_0) -> bool {
@@ -323,7 +323,7 @@ condition: passthrough_with_ok_work(Result<i32, Color>::Ok(1), arr) matches { Ok
 "), used: 87 }); __local_6);
         unreachable;
     }
-    __b_3 = struct.new "core:prelude//Array<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+    __b_3 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
     let __match_scrut_1: ref null "wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado//Color";
     __match_scrut_1 = "wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/passthrough_with_ok_work"(struct.new "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/Color>::Err" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado//Color" { 1 } }, __b_3);
     __cond_5 = (if ref.is_null(__match_scrut_1) == 0 -> bool {
@@ -667,7 +667,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/ArrayIter<u8>^Iterator::next"(self) {
+fn "core:prelude/list.wado/ListIter<u8>^Iterator::next"(self) {
     let item: u8;
     if self.index >= self.used {
         return 1, 0;

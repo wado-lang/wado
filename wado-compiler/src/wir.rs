@@ -521,7 +521,7 @@ impl fmt::Display for WirName {
 /// - `fq`: fully-qualified name shared via `Rc<str>` for Debug output
 ///
 /// `Eq` and `Hash` use `index` only (O(1) integer operations).
-/// `Debug` prints the fq name (e.g., "core:prelude//Array<i32>").
+/// `Debug` prints the fq name (e.g., "core:prelude//List<i32>").
 /// `Clone` is O(1) — Rc refcount increment (non-atomic, near zero cost).
 #[derive(Clone)]
 pub struct WirTypeId {
@@ -641,10 +641,10 @@ pub enum WirAttribute {
     Hidden,
 }
 
-/// Generic instantiation origin (e.g., `Array<i32>` from `Array<T>`).
+/// Generic instantiation origin (e.g., `List<i32>` from `List<T>`).
 #[derive(Debug, Clone)]
 pub struct WirGenericOrigin {
-    /// Base generic name (e.g., "Array", "Box").
+    /// Base generic name (e.g., "List", "Box").
     pub base_name: String,
     /// Type arguments used for instantiation (e.g., ["i32"]).
     pub type_args: Vec<String>,

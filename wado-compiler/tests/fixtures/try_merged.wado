@@ -79,7 +79,7 @@ fn test_try_op_chained() with Stdout {
     println("chained ok");
 }
 
-fn first_positive(arr: Array<i32>) -> Option<i32> {
+fn first_positive(arr: List<i32>) -> Option<i32> {
     let mut i = 0;
     while i < arr.len() {
         if arr[i] > 0 {
@@ -90,14 +90,14 @@ fn first_positive(arr: Array<i32>) -> Option<i32> {
     return null;
 }
 
-fn first_positive_doubled(arr: Array<i32>) -> Option<i32> {
+fn first_positive_doubled(arr: List<i32>) -> Option<i32> {
     let n = first_positive(arr)?;
     return Option::<i32>::Some(n * 2);
 }
 
 fn test_try_op_option_basic() with Stdout {
-    assert first_positive_doubled([1, 2, 3] as Array<i32>) matches { Some(n) && n == 2 };
-    assert first_positive_doubled([-1, -2] as Array<i32>) matches { None };
+    assert first_positive_doubled([1, 2, 3] as List<i32>) matches { Some(n) && n == 2 };
+    assert first_positive_doubled([-1, -2] as List<i32>) matches { None };
     println("option ok");
 }
 

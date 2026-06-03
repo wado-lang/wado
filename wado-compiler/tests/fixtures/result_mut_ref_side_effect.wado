@@ -4,14 +4,14 @@ impl Span {
 }
 struct Token { kind: i32, text: String, span: Span }
 
-struct ParseError { message: String, span: Span, expected: Array<String> }
+struct ParseError { message: String, span: Span, expected: List<String> }
 impl ParseError {
-    fn new(message: String, span: Span, expected: Array<String>) -> ParseError {
+    fn new(message: String, span: Span, expected: List<String>) -> ParseError {
         return ParseError { message, span, expected };
     }
 }
 
-struct Parser { tokens: Array<Token>, pos: i32 }
+struct Parser { tokens: List<Token>, pos: i32 }
 impl Parser {
     fn peek_kind(&self) -> i32 { return self.tokens[self.pos].kind; }
     fn peek(&self) -> &Token { return &self.tokens[self.pos]; }
@@ -255,7 +255,7 @@ fn make_tok(kind: i32, text: String, pos: i32) -> Token {
 }
 
 export fn run() {
-    let tokens: Array<Token> = [
+    let tokens: List<Token> = [
         make_tok(1, "1", 0),
         make_tok(61, "+", 2),
         make_tok(1, "2", 4),

@@ -1,36 +1,36 @@
 //! Materialize `NirExprKind::ArrayLiteral` from an `Array<T>` builder
-//! sequence — an `array_new(N)` allocation followed by `N` `Array::push`
+//! sequence — an `array_new(N)` allocation followed by `N` `List::push`
 //! calls.
 //!
-//! An array literal `[e0, …, eN-1] as Array<T>` is lowered (via the
+//! An array literal `[e0, …, eN-1] as List<T>` is lowered (via the
 //! `SequenceLiteralBuilder` coercion and inlining) to:
 //!
 //! ```text
-//! let mut __b = <init binding> Array<T> { repr: array_new(N), used: 0 };
+//! let mut __b = <init binding> List<T> { repr: array_new(N), used: 0 };
 //! PLACE.push(e0);
 //! PLACE.push(e1);
 //! …
 //! PLACE.push(eN-1);
 //! ```
 //!
-//! `PLACE` is the bound local itself for a direct `Array<T>` literal, or a
+//! `PLACE` is the bound local itself for a direct `List<T>` literal, or a
 //! field of it for a custom `SequenceLiteralBuilder` whose builder wraps an
-//! `Array<T>` (e.g. `SeqVec { items: Array<T> }`, `Bag { keys, values }`).
-//! This pass recognizes that window — the `Array<T> { repr: array_new(N),
-//! used: 0 }` struct plus its `N` trailing `Array::push` calls — and rewrites
+//! `List<T>` (e.g. `SeqVec { items: List<T> }`, `Bag { keys, values }`).
+//! This pass recognizes that window — the `List<T> { repr: array_new(N),
+//! used: 0 }` struct plus its `N` trailing `List::push` calls — and rewrites
 //! the struct to `NirExprKind::ArrayLiteral { elements }`, dropping the
 //! pushes. The pushes need not be contiguous: inlining `push_literal` leaves
 //! single-use element temps between them (see `pure_temp_binding`), and
 //! pushes to distinct array fields may interleave (see `try_collapse_at`).
 //!
-//! `Array::push` is identified by its [`CompilerItem::ArrayPush`] marker, not
+//! `List::push` is identified by its [`CompilerItem::ListPush`] marker, not
 //! by a canonical path, mirroring `string_push`. `array_new` is identified by
 //! its builtin name.
 //!
 //! Runs *after* `inline` in the fixpoint loop: the `SequenceLiteralBuilder`
 //! `new_literal` / `push_literal` / `build` methods (and, for wrapper builders,
 //! the `push_literal → self.field.push` delegation) must be inlined first so
-//! the raw `Array<T> { array_new } + Array::push` window is exposed. Giving
+//! the raw `List<T> { array_new } + List::push` window is exposed. Giving
 //! constant arrays this first-class, analyzable shape lets `cse`,
 //! `const_fold`, bounds-check elimination, and constant globalization act on
 //! them; `wir_build` lowers `ArrayLiteral` to `array.new_fixed`.
@@ -44,7 +44,7 @@ use crate::nir_visitor::{NirOptVisitor, opt_walk_block};
 /// The builtin generic name of the raw array allocation (`builtin::array_new`).
 const ARRAY_NEW: &str = "array_new";
 
-/// The `Array<T>` struct's backing-array field and length-counter field.
+/// The `List<T>` struct's backing-array field and length-counter field.
 const REPR_FIELD: &str = "repr";
 const USED_FIELD: &str = "used";
 
@@ -66,9 +66,9 @@ pub fn collapse_array_literals(project: &mut NirPackage) -> bool {
     changed
 }
 
-/// Collect the mangled names of every `Array<T>::push` monomorphization by
-/// their shared [`CompilerItem::ArrayPush`] marker. Each element type produces
-/// a distinct `NirFunction` (`Array<i32>::push`, `Array<String>::push`, …), so
+/// Collect the mangled names of every `List<T>::push` monomorphization by
+/// their shared [`CompilerItem::ListPush`] marker. Each element type produces
+/// a distinct `NirFunction` (`List<i32>::push`, `List<String>::push`, …), so
 /// call sites are matched by membership in this set rather than against one
 /// reference.
 fn resolve_array_push_names(project: &NirPackage) -> IndexSet<String> {
@@ -77,7 +77,7 @@ fn resolve_array_push_names(project: &NirPackage) -> IndexSet<String> {
         .iter()
         .filter_map(|f| {
             let func = f.borrow();
-            (func.compiler_item == Some(CompilerItem::ArrayPush)).then(|| func.name.clone())
+            (func.compiler_item == Some(CompilerItem::ListPush)).then(|| func.name.clone())
         })
         .collect()
 }
@@ -97,14 +97,14 @@ impl NirOptVisitor for Collapser<'_> {
 }
 
 impl Collapser<'_> {
-    /// Scan a statement list for `Array<T>` builder windows and collapse them
+    /// Scan a statement list for `List<T>` builder windows and collapse them
     /// in place.
     fn collapse_in_stmts(&self, stmts: &mut Vec<NirStmt>) -> bool {
         let mut changed = false;
         let mut i = 0;
         while i < stmts.len() {
             // The window is an init statement whose value embeds one or more
-            // `Array<T> { array_new(N), used: 0 }` structs, each consumed by a
+            // `List<T> { array_new(N), used: 0 }` structs, each consumed by a
             // run of `push` calls in the following statements.
             let consumed = self.try_collapse_at(stmts, i);
             if consumed > 0 {
@@ -122,7 +122,7 @@ impl Collapser<'_> {
     /// Try to collapse the builder window starting at `stmts[start]` (the init
     /// statement). Returns the number of following statements the window
     /// consumed — pushes plus any interleaved element temps — or 0 if no
-    /// window matched. On success, the init statement's embedded `Array<T>`
+    /// window matched. On success, the init statement's embedded `List<T>`
     /// structs are rewritten to `ArrayLiteral` in place.
     fn try_collapse_at(&self, stmts: &mut [NirStmt], start: usize) -> usize {
         // Identify the local bound/assigned by the init statement.
@@ -130,7 +130,7 @@ impl Collapser<'_> {
             return 0;
         };
 
-        // Collect the `Array<T> { array_new(N), used: 0 }` structs reachable in
+        // Collect the `List<T> { array_new(N), used: 0 }` structs reachable in
         // the init value, each with the access path (field chain) by which the
         // bound local reaches it. `[]` path = the local itself is the array.
         let mut targets = Vec::new();
@@ -231,7 +231,7 @@ impl Collapser<'_> {
             return 0;
         }
 
-        // Rewrite each `Array<T> { array_new(N), used: 0 }` struct to the
+        // Rewrite each `List<T> { array_new(N), used: 0 }` struct to the
         // materialized `ArrayLiteral`.
         if let Some(value) = init_value_mut(&mut stmts[start].kind) {
             let mut elements_by_path: Vec<(Vec<u32>, Vec<NirExpr>)> = targets
@@ -334,7 +334,7 @@ fn is_local(expr: &NirExpr, index: u32) -> bool {
     matches!(&expr.kind, NirExprKind::Local { index: i, .. } if *i == index)
 }
 
-/// A detected `Array<T> { repr: array_new(N), used: 0 }` struct, with the
+/// A detected `List<T> { repr: array_new(N), used: 0 }` struct, with the
 /// field path from the init's bound local and its `array_new` capacity.
 struct ArrayTarget {
     path: Vec<u32>,
@@ -378,7 +378,7 @@ fn init_value_mut(kind: &mut NirStmtKind) -> Option<&mut NirExpr> {
     }
 }
 
-/// Walk an init value, recording each `Array<T> { array_new(N), used: 0 }`
+/// Walk an init value, recording each `List<T> { array_new(N), used: 0 }`
 /// struct with the field path from the value's root. Descends through the
 /// outer block tail (`{ …; *__b }` produced for direct literals) and through
 /// wrapper `StructLiteral` fields.
@@ -399,7 +399,7 @@ fn collect_array_targets(expr: &NirExpr, path: &mut Vec<u32>, out: &mut Vec<Arra
             // indistinguishable from a growable-array initialization (`let mut
             // v = []; v.push(…)`); collapsing it to a fixed 0-length
             // `array.new_fixed()` would break subsequent growth.
-            if let Some(capacity) = match_array_struct(&expr.kind).filter(|&n| n > 0) {
+            if let Some(capacity) = match_list_struct(&expr.kind).filter(|&n| n > 0) {
                 out.push(ArrayTarget {
                     path: path.clone(),
                     capacity,
@@ -417,8 +417,8 @@ fn collect_array_targets(expr: &NirExpr, path: &mut Vec<u32>, out: &mut Vec<Arra
     }
 }
 
-/// If `kind` is an `Array<T> { repr: array_new(N), used: 0 }` struct, return N.
-fn match_array_struct(kind: &NirExprKind) -> Option<usize> {
+/// If `kind` is an `List<T> { repr: array_new(N), used: 0 }` struct, return N.
+fn match_list_struct(kind: &NirExprKind) -> Option<usize> {
     let NirExprKind::StructLiteral { fields, .. } = kind else {
         return None;
     };
@@ -459,14 +459,14 @@ fn is_zero_int(expr: &NirExpr) -> bool {
     matches!(&expr.kind, NirExprKind::IntLiteral { value, .. } if *value == 0)
 }
 
-/// Rewrite the `Array<T>` structs collected by [`collect_array_targets`] to
+/// Rewrite the `List<T>` structs collected by [`collect_array_targets`] to
 /// `ArrayLiteral`, matching by field path. Consumes the element vectors.
 fn rewrite_array_targets(
     expr: &mut NirExpr,
     path: &mut Vec<u32>,
     elements_by_path: &mut [(Vec<u32>, Vec<NirExpr>)],
 ) {
-    let is_array_struct = match_array_struct(&expr.kind).is_some();
+    let is_array_struct = match_list_struct(&expr.kind).is_some();
     match &mut expr.kind {
         NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
             if let Some(value) = block.stmts.iter_mut().find_map(|s| match &mut s.kind {

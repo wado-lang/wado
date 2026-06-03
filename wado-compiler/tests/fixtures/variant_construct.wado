@@ -1,20 +1,20 @@
 use { println, Stdout } from "core:cli";
 
 // from variant_construct_literal_coercion.wado
-fn return_empty() -> Option<Array<u8>> {
-    return Option::<Array<u8>>::Some([]);
+fn return_empty() -> Option<List<u8>> {
+    return Option::<List<u8>>::Some([]);
 }
 
-fn return_non_empty() -> Option<Array<u8>> {
-    return Option::<Array<u8>>::Some([1 as u8, 2 as u8, 3 as u8]);
+fn return_non_empty() -> Option<List<u8>> {
+    return Option::<List<u8>>::Some([1 as u8, 2 as u8, 3 as u8]);
 }
 
-fn return_result_array() -> Result<Array<i32>, String> {
-    return Result::<Array<i32>, String>::Ok([10, 20, 30]);
+fn return_result_array() -> Result<List<i32>, String> {
+    return Result::<List<i32>, String>::Ok([10, 20, 30]);
 }
 
-fn return_result_empty() -> Result<Array<i32>, String> {
-    return Result::<Array<i32>, String>::Ok([]);
+fn return_result_empty() -> Result<List<i32>, String> {
+    return Result::<List<i32>, String>::Ok([]);
 }
 
 // from variant_construct_simple.wado
@@ -58,7 +58,7 @@ fn variant_construct_literal_coercion() with Stdout {
 
     // Multiple Option instantiations in the same file
     let opt_i32: Option<i32> = Option::<i32>::Some(42);
-    let opt_arr: Option<Array<u8>> = Option::<Array<u8>>::Some([1 as u8, 2 as u8]);
+    let opt_arr: Option<List<u8>> = Option::<List<u8>>::Some([1 as u8, 2 as u8]);
     assert opt_i32 matches { Some(n) && n == 42 };
     assert opt_arr matches { Some(a) && a.len() == 2 };
 

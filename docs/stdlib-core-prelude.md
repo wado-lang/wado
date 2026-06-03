@@ -252,9 +252,9 @@ Types implementing this trait can be iterated over using `for-of` loops.
 Advances the iterator and returns the next value.
 Returns None when iteration is complete.
 
-#### `fn collect(&mut self) -> Array<Self::Item>`
+#### `fn collect(&mut self) -> List<Self::Item>`
 
-Collects remaining elements into an Array.
+Collects remaining elements into an List.
 
 #### `fn count(&mut self) -> i32`
 
@@ -581,9 +581,9 @@ Types implementing this trait can be iterated over using `for-of` loops.
 Advances the iterator and returns the next value.
 Returns None when iteration is complete.
 
-#### `fn collect(&mut self) -> Array<Self::Item>`
+#### `fn collect(&mut self) -> List<Self::Item>`
 
-Collects remaining elements into an Array.
+Collects remaining elements into an List.
 
 #### `fn count(&mut self) -> i32`
 
@@ -736,7 +736,7 @@ Use `Stream::<T>::new()` to create a `[Stream<T>, StreamWritable<T>]` pair.
 
 Create a new stream pair: [Stream<T>, StreamWritable<T>].
 
-#### `fn read(&self, max: i32) -> Array<T>`
+#### `fn read(&self, max: i32) -> List<T>`
 
 Read up to `max` elements from the stream.
 Blocks until data is available or the writer drops.
@@ -755,7 +755,7 @@ Drop the readable end of the stream.
 Writable end of an async sequence (WASI Component Model stream).
 Opaque i32 handle managed by the runtime.
 
-#### `fn write(&self, data: Array<T>)`
+#### `fn write(&self, data: List<T>)`
 
 Write a chunk of data to the stream.
 
@@ -976,7 +976,7 @@ Panics if the character is not a valid hex digit.
 
 Returns the number of bytes this character needs in UTF-8 encoding.
 
-#### `pub fn encode_utf8(&self) -> Array<u8>`
+#### `pub fn encode_utf8(&self) -> List<u8>`
 
 Encodes this character as UTF-8, returning the bytes.
 
@@ -3093,7 +3093,7 @@ Much faster than a loop for large n (e.g., trailing zeros in large integers).
 Appends another string to this string.
 Grows the string if necessary (O(1) amortized).
 
-#### `pub fn push_bytes_unchecked(&mut self, bytes: Array<u8>)`
+#### `pub fn push_bytes_unchecked(&mut self, bytes: List<u8>)`
 
 Append all bytes of `bytes` to this string (bulk-copy, single `array_copy`).
 
@@ -3332,19 +3332,19 @@ Build a String from any iterable of chars.
 Build a String from any iterable of bytes, validating that they form valid UTF-8.
 Returns Ok(String) on success, or Err(String) with an error message on failure.
 
-Accepts any `IntoIterator` whose item is `u8`: `Array<u8>`, `StrUtf8ByteIter`, etc.
+Accepts any `IntoIterator` whose item is `u8`: `List<u8>`, `StrUtf8ByteIter`, etc.
 
 #### `pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String`
 
 Build a String from any iterable of bytes, replacing invalid UTF-8 sequences with U+FFFD.
 
-Accepts any `IntoIterator` whose item is `u8`: `Array<u8>`, `StrUtf8ByteIter`, etc.
+Accepts any `IntoIterator` whose item is `u8`: `List<u8>`, `StrUtf8ByteIter`, etc.
 
 #### `pub fn from_utf8_unchecked<I: IntoIterator<Item = u8>>(bytes: I) -> String`
 
 Build a String from any iterable of bytes without UTF-8 validation.
 
-Accepts any `IntoIterator` whose item is `u8`: `Array<u8>`, `StrUtf8ByteIter`, etc.
+Accepts any `IntoIterator` whose item is `u8`: `List<u8>`, `StrUtf8ByteIter`, etc.
 
 # Safety
 
@@ -3529,15 +3529,15 @@ Generic zip iterator adapter that pairs elements from two iterators.
 
 ##### `fn into_iter(&self) -> IterZip<I, J>`
 
-### `pub struct Array<T>`
+### `pub struct List<T>`
 
 _Fields are private._
 
-#### `pub fn with_capacity(capacity: i32) -> Array<T>`
+#### `pub fn with_capacity(capacity: i32) -> List<T>`
 
 #### `pub fn grow(&mut self)`
 
-#### `pub fn filled(n: i32, element: T) -> Array<T>`
+#### `pub fn filled(n: i32, element: T) -> List<T>`
 
 #### `pub fn len(&self) -> i32`
 
@@ -3549,7 +3549,7 @@ Returns the total number of elements the array can hold without reallocating.
 
 #### `pub fn internal_raw_data(&self) -> builtin::array<T>`
 
-#### `pub fn internal_from_raw(repr: builtin::array<T>, used: i32) -> Array<T>`
+#### `pub fn internal_from_raw(repr: builtin::array<T>, used: i32) -> List<T>`
 
 #### `pub fn push(&mut self, value: T)`
 
@@ -3594,7 +3594,7 @@ Reserves capacity for at least `additional` more elements.
 
 Shrinks the capacity to match the current length.
 
-#### `pub fn extend(&mut self, other: &Array<T>)`
+#### `pub fn extend(&mut self, other: &List<T>)`
 
 Extends this array with elements from another array.
 
@@ -3602,7 +3602,7 @@ Extends this array with elements from another array.
 
 Reverses the elements in place.
 
-#### `pub fn repeat(&self, n: i32) -> Array<T>`
+#### `pub fn repeat(&self, n: i32) -> List<T>`
 
 Returns a new array containing this array's elements repeated `n` times.
 
@@ -3616,15 +3616,15 @@ run-length expansion (where src < dst). Forward order is correct in both cases.
 
 Returns true if the array contains the given value.
 
-#### `pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T>`
+#### `pub fn slice(&self, start: i32, end: i32) -> ListSlice<T>`
 
-#### `pub fn iter(&self) -> ArrayIter<T>`
+#### `pub fn iter(&self) -> ListIter<T>`
 
 #### `pub fn sort_by(&mut self, cmp: fn mut(&T, &T) -> Ordering)`
 
 In-place sort with comparator. Stable, O(n log n) worst case.
 
-#### `pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering) -> Array<T>`
+#### `pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering) -> List<T>`
 
 #### `pub fn windows(&self, size: i32) -> WindowsIter<T>`
 
@@ -3638,61 +3638,61 @@ The last chunk may be shorter. Panics if `size` is 0.
 
 #### `pub fn sort(&mut self)`
 
-#### `pub fn sorted(&self) -> Array<T>`
+#### `pub fn sorted(&self) -> List<T>`
 
 #### `pub fn join(&self, separator: String) -> String`
 
 Joins elements into a string with the given separator.
 
-#### `impl IndexValue<i32> for Array<T>`
+#### `impl IndexValue<i32> for List<T>`
 
 ##### `fn index_value(&self, index: i32) -> Self::Output`
 
-#### `impl IndexAssign<i32> for Array<T>`
+#### `impl IndexAssign<i32> for List<T>`
 
 ##### `fn index_assign(&mut self, index: i32, value: Self::Input)`
 
-#### `impl Eq for Array<T>`
+#### `impl Eq for List<T>`
 
 ##### `pub fn eq(&self, other: &Self) -> bool`
 
-#### `impl Ord for Array<T>`
+#### `impl Ord for List<T>`
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
 
-#### `impl IndexValue<RangeExclusive<i32>> for Array<T>`
+#### `impl IndexValue<RangeExclusive<i32>> for List<T>`
 
-##### `fn index_value(&self, range: RangeExclusive<i32>) -> ArraySlice<T>`
+##### `fn index_value(&self, range: RangeExclusive<i32>) -> ListSlice<T>`
 
-#### `impl IndexValue<RangeInclusive<i32>> for Array<T>`
+#### `impl IndexValue<RangeInclusive<i32>> for List<T>`
 
-##### `fn index_value(&self, range: RangeInclusive<i32>) -> ArraySlice<T>`
+##### `fn index_value(&self, range: RangeInclusive<i32>) -> ListSlice<T>`
 
-#### `impl IntoIterator for Array<T>`
+#### `impl IntoIterator for List<T>`
 
 ##### `fn into_iter(&self) -> Self::Iter`
 
-#### `impl FromIterator<T> for Array<T>`
+#### `impl FromIterator<T> for List<T>`
 
-##### `fn from_iter(iter: ArrayIter<T>) -> Array<T>`
+##### `fn from_iter(iter: ListIter<T>) -> List<T>`
 
-#### `impl SequenceLiteralBuilder for Array<T>`
+#### `impl SequenceLiteralBuilder for List<T>`
 
-##### `fn new_literal(capacity: i32) -> Array<T>`
+##### `fn new_literal(capacity: i32) -> List<T>`
 
 ##### `fn push_literal(&mut self, value: T)`
 
-##### `fn build(&self) -> Array<T>`
+##### `fn build(&self) -> List<T>`
 
-#### `impl Default for Array<T>`
+#### `impl Default for List<T>`
 
-##### `pub fn default() -> Array<T>`
+##### `pub fn default() -> List<T>`
 
-### `pub struct ArrayIter<T>`
+### `pub struct ListIter<T>`
 
 _Fields are private._
 
-#### `pub fn collect(&mut self) -> Array<T>`
+#### `pub fn collect(&mut self) -> List<T>`
 
 #### `pub fn sum(&mut self) -> Option<T>`
 
@@ -3700,13 +3700,13 @@ _Fields are private._
 
 #### `pub fn max(&mut self) -> Option<T>`
 
-#### `impl Iterator for ArrayIter<T>`
+#### `impl Iterator for ListIter<T>`
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
-#### `impl IntoIterator for ArrayIter<T>`
+#### `impl IntoIterator for ListIter<T>`
 
-##### `fn into_iter(&self) -> ArrayIter<T>`
+##### `fn into_iter(&self) -> ListIter<T>`
 
 ### `pub struct RangeExclusive<T: Ord>`
 

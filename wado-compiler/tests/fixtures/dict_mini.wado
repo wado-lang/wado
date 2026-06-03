@@ -1,11 +1,11 @@
 // MiniDict - A minimal dictionary implementation using linear search
-// Tests generic structs with tuple array fields: Array<[K, V]>
+// Tests generic structs with tuple array fields: List<[K, V]>
 
 use { println, Stdout } from "core:cli";
 
 // MiniDict uses an array of [K, V] tuples for entries
 struct MiniDict<K, V> {
-    entries: Array<[K, V]>,
+    entries: List<[K, V]>,
 }
 
 impl<K, V> MiniDict<K, V> {
@@ -55,7 +55,7 @@ impl<K, V> MiniDict<K, V> {
                     self.entries[j] = self.entries[j + 1];
                 }
                 // Remove last element (now duplicated)
-                // Note: Array doesn't have pop() yet, so this is incomplete
+                // Note: List doesn't have pop() yet, so this is incomplete
                 return true;
             }
         }

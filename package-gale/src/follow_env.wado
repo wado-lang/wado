@@ -9,7 +9,7 @@ use { TreeMap, TreeSet } from "core:collections";
 ///
 /// `kinds` is a `TreeSet` so the fixed-point solver's repeated
 /// `follow_union` / `follow_eq` calls run at `O(|b| log |a|)` instead
-/// of the linear `Array::contains` scan they would do on an `Array`.
+/// of the linear `List::contains` scan they would do on an `List`.
 /// `closed` tracks whether the set is "closed under EOF": i.e. whether
 /// the start rule (or any rule reachable from it through a strictly
 /// nullable suffix chain) is known to be terminated by EOF.
@@ -56,7 +56,7 @@ pub struct FollowEnv {
     /// argument. Lifted into `FollowEnv` so subsequent Phase 1 steps
     /// can compute against a snapshot independent of the codegen-side
     /// cache.
-    tail_greedy: TreeMap<String, Array<String>>,
+    tail_greedy: TreeMap<String, List<String>>,
     /// Per-rule FOLLOW set, populated by [`build`]. The `closed` flag
     /// indicates the rule is reachable from the start rule by a chain
     /// whose ultimate suffix is EOF — i.e. EOF is in `kinds` because
@@ -70,7 +70,7 @@ impl FollowEnv {
     /// the starting point for incremental wiring.
     pub fn empty() -> FollowEnv {
         return FollowEnv {
-            tail_greedy: TreeMap::<String, Array<String>>::new(),
+            tail_greedy: TreeMap::<String, List<String>>::new(),
             rule_follow: TreeMap::<String, FollowSet>::new(),
         };
     }
@@ -78,7 +78,7 @@ impl FollowEnv {
     /// Tail-greedy first set for `rule_name`. Returns the empty array
     /// for unknown rules, which is the safe choice: an unknown rule
     /// cannot collide with any caller's follow.
-    pub fn tail_greedy(&self, rule_name: &String) -> Array<String> {
+    pub fn tail_greedy(&self, rule_name: &String) -> List<String> {
         if let Some(s) = self.tail_greedy.get(*rule_name) {
             return s;
         }
@@ -102,10 +102,10 @@ impl FollowEnv {
 /// resulting `rule_follow` reflects only call-graph contributions —
 /// useful for sub-grammar analysis or tests that exercise propagation
 /// without an EOF anchor.
-pub fn build(parser_rules: &Array<ParserRule>, ctx: &mut GenContext, start_rule: &String) -> FollowEnv {
-    let mut tail_greedy = TreeMap::<String, Array<String>>::new();
+pub fn build(parser_rules: &List<ParserRule>, ctx: &mut GenContext, start_rule: &String) -> FollowEnv {
+    let mut tail_greedy = TreeMap::<String, List<String>>::new();
     for let rule of parser_rules {
-        let mut visiting: Array<String> = [];
+        let mut visiting: List<String> = [];
         let tg = ctx.tail_greedy_first_of_rule(&rule.name, &mut visiting);
         tail_greedy[rule.name] = tg;
     }
@@ -128,7 +128,7 @@ pub fn build(parser_rules: &Array<ParserRule>, ctx: &mut GenContext, start_rule:
 /// Termination: every iteration that doesn't grow any rule's set is
 /// the last; the algorithm terminates because each set is monotonic
 /// in a finite token universe.
-fn compute_rule_follow(parser_rules: &Array<ParserRule>, ctx: &mut GenContext, start_rule: &String) -> TreeMap<String, FollowSet> {
+fn compute_rule_follow(parser_rules: &List<ParserRule>, ctx: &mut GenContext, start_rule: &String) -> TreeMap<String, FollowSet> {
     let mut env = TreeMap::<String, FollowSet>::new();
     for let rule of parser_rules {
         env[rule.name] = FollowSet::empty();
@@ -164,7 +164,7 @@ fn compute_rule_follow(parser_rules: &Array<ParserRule>, ctx: &mut GenContext, s
 /// at the group's position; `Repeat` recurses with `first(inner) ∪
 /// local_follow` so that the inner's siblings (after one iteration)
 /// see the start-of-inner contributions plus the loop exit follow.
-fn walk_for_contributions(elements: &Array<Element>, ctx: &mut GenContext, outer_follow: &FollowSet, env: &mut TreeMap<String, FollowSet>, changed: &mut bool) {
+fn walk_for_contributions(elements: &List<Element>, ctx: &mut GenContext, outer_follow: &FollowSet, env: &mut TreeMap<String, FollowSet>, changed: &mut bool) {
     for let mut i = 0; i < elements.len(); i += 1 {
         let local = local_follow(elements, i, ctx, outer_follow);
         contribute_for_element(&elements[i], ctx, &local, env, changed);
@@ -189,7 +189,7 @@ fn contribute_for_element(elem: &Element, ctx: &mut GenContext, local: &FollowSe
             }
         },
         Repeat(rep) => {
-            let mut fv: Array<String> = [];
+            let mut fv: List<String> = [];
             let inner_first = ctx.first_of_element(&rep.element, &mut fv);
             let inner_outer = follow_union(local, &follow_set_from_array(&inner_first, false));
             contribute_for_element(&rep.element, ctx, &inner_outer, env, changed);
@@ -204,7 +204,7 @@ fn contribute_for_element(elem: &Element, ctx: &mut GenContext, local: &FollowSe
 
 /// Effective follow at position `i` in `elements`:
 /// `first(elements[i+1..]) ∪ (suffix deep-nullable → outer_follow)`.
-fn local_follow(elements: &Array<Element>, i: i32, ctx: &mut GenContext, outer_follow: &FollowSet) -> FollowSet {
+fn local_follow(elements: &List<Element>, i: i32, ctx: &mut GenContext, outer_follow: &FollowSet) -> FollowSet {
     let suffix_first = ctx.first_of_elements_from(elements, i + 1);
     let mut kinds = TreeSet::<String>::new();
     for let k of &suffix_first {
@@ -220,10 +220,10 @@ fn local_follow(elements: &Array<Element>, i: i32, ctx: &mut GenContext, outer_f
     return FollowSet { kinds, closed };
 }
 
-/// Build a `FollowSet` from an `Array<String>` first-set. Used at the
-/// boundary where `GenContext` returns an `Array<String>` and the
+/// Build a `FollowSet` from an `List<String>` first-set. Used at the
+/// boundary where `GenContext` returns an `List<String>` and the
 /// FollowEnv-internal representation is a `TreeSet<String>`.
-fn follow_set_from_array(arr: &Array<String>, closed: bool) -> FollowSet {
+fn follow_set_from_array(arr: &List<String>, closed: bool) -> FollowSet {
     let mut kinds = TreeSet::<String>::new();
     for let k of arr {
         kinds.insert(*k);

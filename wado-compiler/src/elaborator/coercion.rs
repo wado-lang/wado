@@ -399,7 +399,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Tuple literal → type implementing SequenceLiteralBuilder (Array<T> and user types).
+        // Tuple literal → type implementing SequenceLiteralBuilder (List<T> and user types).
         // The sub-helper records `TupleToSequence` and `expression_types`.
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(expr, ctx, target_type) {
             return Some(coerced);
@@ -636,15 +636,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// implementing `SequenceLiteralBuilder`.
     ///
     /// Coerce a tuple/sequence literal `[e0, e1, ...]` to a type implementing
-    /// `SequenceLiteralBuilder` (including built-in `Array<T>` and user types).
+    /// `SequenceLiteralBuilder` (including built-in `List<T>` and user types).
     ///
     /// `&mut <tuple-literal>` / `&<tuple-literal>` are looked through: the cast
-    /// `&mut [...] as Array<T>` parses as `(&mut [...]) as Array<T>` (`&mut`
+    /// `&mut [...] as List<T>` parses as `(&mut [...]) as List<T>` (`&mut`
     /// binds tighter than `as`), but the user-facing semantics is to construct
-    /// an `Array<T>` and let the call site auto-borrow it. Without this
+    /// an `List<T>` and let the call site auto-borrow it. Without this
     /// passthrough the inner `[...]` would lower as a `tuple<>` `struct.new`
     /// and the call site's Wasm validation would fail because the tuple
-    /// struct type is unrelated to the expected `Array` struct type.
+    /// struct type is unrelated to the expected `List` struct type.
     pub(super) fn try_coerce_tuple_to_sequence(
         &mut self,
         expr: &Expr,

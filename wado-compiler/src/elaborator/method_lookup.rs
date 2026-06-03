@@ -600,7 +600,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         {
                             for method in &impl_block.methods {
                                 if method.name == method_name {
-                                    // Set up type params for generic impls (e.g., impl Array<T>).
+                                    // Set up type params for generic impls (e.g., impl List<T>).
                                     // Inherited scope; only `type_params` is replaced.
                                     let mut scope = self.enter_inherited_type_param_scope();
                                     scope.trait_ctx.type_params.clear();
@@ -732,7 +732,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         {
                             for method in &impl_block.methods {
                                 if method.name == method_name {
-                                    // Set up type params for generic impls (e.g., impl Array<T>).
+                                    // Set up type params for generic impls (e.g., impl List<T>).
                                     // Inherited scope; only `type_params` is replaced.
                                     let mut scope = self.enter_inherited_type_param_scope();
                                     scope.trait_ctx.type_params.clear();
@@ -1211,7 +1211,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            // Generic instance (e.g., Option<T>, Array<T>): substitute in type args
+            // Generic instance (e.g., Option<T>, List<T>): substitute in type args
             ResolvedType::GenericInstance {
                 name,
                 module_source,
@@ -1835,7 +1835,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // appear to match any `&T` receiver, and the elaborator would
             // commit to whichever one happened to land first in
             // `impl_refs`. That is exactly how `&TreeSet<String>` ended
-            // up wired to `impl<T> IntoIterator for &Array<T>`, which
+            // up wired to `impl<T> IntoIterator for &List<T>`, which
             // then ICEd in WIR validation when `arr.repr` / `arr.used`
             // accesses lowered against the receiver's actual layout.
             //
@@ -2770,7 +2770,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
 
-            // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for Array<T>)
+            // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for List<T>)
             let impl_block = self.get_impl_block(impl_ref);
             if !impl_block.type_params.iter().all(|p| p.bounds.is_empty())
                 && !concrete_type_args.is_empty()
@@ -3070,7 +3070,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
 
             // If an expected index type is provided, check the trait's type argument matches.
-            // e.g., for `impl IndexValue<RangeExclusive<i32>> for Array<T>`, the trait type arg
+            // e.g., for `impl IndexValue<RangeExclusive<i32>> for List<T>`, the trait type arg
             // is `RangeExclusive<i32>` which must match the actual index expression type.
             if let Some(expected_idx_type) = expected_index_type {
                 let impl_block = self.get_impl_block(impl_ref);
@@ -3302,12 +3302,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // First, resolve the indexed container to get its type
         let container_expr = self.resolve_expr(&index_expr.expr, ctx, None);
 
-        // Check if this is an Array type (Arrays use optimized direct access, not traits)
+        // Check if this is an List type (Arrays use optimized direct access, not traits)
         let is_array = self
             .tysys
             .type_table
             .borrow()
-            .as_array(container_expr.type_id)
+            .as_list(container_expr.type_id)
             .is_some();
         if is_array {
             return None; // Use normal resolution for arrays

@@ -29,7 +29,7 @@ test "to_lexer_string interleaves non-default-channel trivia in source order" {
     let a = Token::new(0, ls("a"), Span::new(0, 1));
     let b = Token::with_channel(1, ls("b"), Span::new(1, 2), [], 2);
     let eof = Token::with_trivia(2, ls(""), Span::new(2, 2), [b]);
-    let tokens: Array<Token> = [a, eof];
+    let tokens: List<Token> = [a, eof];
     let actual = to_lexer_string(&tokens, &"ab", 2);
     let expected = "[@0,0:0='a',<1>,1:0]
 [@1,1:1='b',<2>,channel=2,1:1]
@@ -45,7 +45,7 @@ test "to_lexer_string skips default-channel (skip) trivia without consuming an i
     let a = Token::new(0, ls("a"), Span::new(0, 1));
     let ws = Token::new(1, ls(" "), Span::new(1, 2));
     let c = Token::with_trivia(0, ls("c"), Span::new(2, 3), [ws]);
-    let tokens: Array<Token> = [a, c];
+    let tokens: List<Token> = [a, c];
     let actual = to_lexer_string(&tokens, &"a c", 2);
     let expected = "[@0,0:0='a',<1>,1:0]
 [@1,2:2='c',<1>,1:2]
@@ -105,7 +105,7 @@ test "Span equality" {
 }
 
 test "LexerSlice basic" {
-    let chars: Array<char> = ['h', 'e', 'l', 'l', 'o'];
+    let chars: List<char> = ['h', 'e', 'l', 'l', 'o'];
     let s = LexerSlice::new(&chars, 0, 5);
     assert s.len() == 5;
     assert !s.is_empty();
@@ -113,7 +113,7 @@ test "LexerSlice basic" {
 }
 
 test "LexerSlice empty" {
-    let chars: Array<char> = [];
+    let chars: List<char> = [];
     let s = LexerSlice::empty(&chars);
     assert s.is_empty();
     assert s.len() == 0;
@@ -172,14 +172,14 @@ test "Token::new has empty leading_trivia" {
 
 test "Token::with_trivia attaches trivia" {
     let ws = Token::new(99, ls(" "), Span::new(0, 1));
-    let trivia: Array<Token> = [ws];
+    let trivia: List<Token> = [ws];
     let t = Token::with_trivia(1, ls("hello"), Span::new(1, 6), trivia);
     assert t.leading_trivia.len() == 1;
     assert t.leading_trivia[0].text.to_string() == " ";
 }
 
 test "ParseError::new creates error" {
-    let expected: Array<String> = ["INT", "STRING"];
+    let expected: List<String> = ["INT", "STRING"];
     let err = ParseError::new("unexpected token", Span::new(5, 6), expected);
     assert err.message == "unexpected token";
     assert err.span == Span::new(5, 6);
@@ -279,7 +279,7 @@ test "normalize_tree single line passthrough" {
 
 test "highlight_html escapes HTML and wraps captures" {
     let source = "<div>";
-    let captures: Array<HighlightCapture> = [
+    let captures: List<HighlightCapture> = [
         HighlightCapture { capture: "tag", start: 0, end: 5 },
     ];
     let html = highlight_html(&source, &captures);
@@ -288,7 +288,7 @@ test "highlight_html escapes HTML and wraps captures" {
 
 test "highlight_html emits plain text for gaps" {
     let source = "a + b";
-    let captures: Array<HighlightCapture> = [
+    let captures: List<HighlightCapture> = [
         HighlightCapture { capture: "operator", start: 2, end: 3 },
     ];
     let html = highlight_html(&source, &captures);
@@ -297,7 +297,7 @@ test "highlight_html emits plain text for gaps" {
 
 test "highlight_html converts dot-separated captures to CSS classes" {
     let source = "{";
-    let captures: Array<HighlightCapture> = [
+    let captures: List<HighlightCapture> = [
         HighlightCapture { capture: "punctuation.bracket", start: 0, end: 1 },
     ];
     let html = highlight_html(&source, &captures);
@@ -351,7 +351,7 @@ test "HighlightVisitor handles trivia" {
         overrides: [],
     };
     let mut visitor = HighlightVisitor::new(mapping);
-    let trivia: Array<Token> = [Token::new(0, ls("/* hi */"), Span::new(0, 8))];
+    let trivia: List<Token> = [Token::new(0, ls("/* hi */"), Span::new(0, 8))];
     let token = Token::with_trivia(1, ls("if"), Span::new(9, 11), trivia);
     visitor.enter_rule(0, &"root", &Span::new(0, 11));
     visitor.visit_token(&token);

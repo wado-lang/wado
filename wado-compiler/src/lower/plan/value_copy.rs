@@ -43,7 +43,7 @@ pub fn plan(flat: &mut FlatPackage) -> ValueCopyPlan {
 pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
     let items = type_table.compiler_items();
     let box_name = items.struct_name(crate::compiler_item::CompilerItem::Box);
-    let array_name = items.struct_name(crate::compiler_item::CompilerItem::Array);
+    let list_name = items.struct_name(crate::compiler_item::CompilerItem::List);
     match type_table.get(type_id) {
         // Concrete structs need a field-by-field deep copy, except for
         // the `Box<T>` shortcut whose semantics intentionally share
@@ -62,7 +62,7 @@ pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
                 // element-wise deep copy.
                 return !type_args.is_empty();
             }
-            if name == array_name {
+            if name == list_name {
                 return true;
             }
             // `Option<T>` / `Result<T, E>` are reference-shaped variants
@@ -91,7 +91,7 @@ pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
         // pointer, not the pointee. This is intentional — a struct
         // field of type `&mut T` is meant to share the referenced
         // value with the original, not duplicate it. Stdlib types
-        // that need deep-copy semantics use `Array<T>` / `String`
+        // that need deep-copy semantics use `List<T>` / `String`
         // (which deep-copy via `array_clone` on their internal
         // `builtin::array`), not `&mut T`.
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => false,

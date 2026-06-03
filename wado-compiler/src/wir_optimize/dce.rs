@@ -132,7 +132,7 @@ fn remap_func_ids(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
 /// [`WirPackage::defined_func_base`].
 ///
 /// Catches functions whose only call sites never materialized — most
-/// notably the monomorphic `Array<T>::push` (and its `Array<T>::grow`
+/// notably the monomorphic `List<T>::push` (and its `List<T>::grow`
 /// callee) for a single-element array literal `[v]`. NIR
 /// `optimize::array_literal` rewrites `[v]` to `NirExprKind::ArrayLiteral`,
 /// which `wir_build` lowers to `array.new_fixed`, so the `push` chain is

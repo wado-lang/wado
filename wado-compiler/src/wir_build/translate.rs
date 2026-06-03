@@ -1027,10 +1027,10 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Lower a `NirExprKind::ArrayLiteral` to the `Array<T>` struct shape
-    /// `struct.new Array<T> { repr: array.new_fixed<T>(e0, …, eN-1), used: N }`.
+    /// `struct.new List<T> { repr: array.new_fixed<T>(e0, …, eN-1), used: N }`.
     ///
-    /// `Array<T>` is `{ repr: builtin::array<T>, used: i32 }` (see
-    /// `lib/core/prelude/array.wado`); this mirrors `translate_string_literal`,
+    /// `List<T>` is `{ repr: builtin::array<T>, used: i32 }` (see
+    /// `lib/core/prelude/list.wado`); this mirrors `translate_string_literal`,
     /// which builds the structurally identical `String { repr, used }`. The
     /// raw `builtin::array<T>` type is read from the struct's `repr` field, so
     /// no element-type bookkeeping is duplicated on the NIR node. The resulting
@@ -1044,7 +1044,7 @@ impl FunctionTranslator<'_, '_> {
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, array_type_id);
         let WirType::Ref { type_id, .. } = wir_type else {
             panic!(
-                "[WIR] ArrayLiteral expected Ref WirType for Array<T> struct, got {wir_type:?} (type_id={array_type_id:?})"
+                "[WIR] ArrayLiteral expected Ref WirType for List<T> struct, got {wir_type:?} (type_id={array_type_id:?})"
             );
         };
         // The `repr` field is a non-nullable ref to the raw `builtin::array<T>`.
@@ -1053,7 +1053,7 @@ impl FunctionTranslator<'_, '_> {
             ..
         } = self.struct_field_wir_type(&type_id, "repr")
         else {
-            panic!("[WIR] ArrayLiteral: Array<T> struct {type_id:?} has no `repr` array field");
+            panic!("[WIR] ArrayLiteral: List<T> struct {type_id:?} has no `repr` array field");
         };
         let element_instrs: Vec<WirInstr> =
             elements.iter().map(|e| self.translate_expr(e)).collect();
@@ -1632,7 +1632,7 @@ impl FunctionTranslator<'_, '_> {
                 self.translate_string_literal(s)
             }
             NirExprKind::BytesLiteral(b) => {
-                // Bytes literals are constructed as Array<u8> from data segments
+                // Bytes literals are constructed as List<u8> from data segments
                 self.translate_bytes_literal(b)
             }
             NirExprKind::Null => {

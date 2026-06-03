@@ -172,7 +172,7 @@ match person {
 #### For-Of
 
 ```wado
-let people: Array<Person> = [...];
+let people: List<Person> = [...];
 for let { name, age } of people {
     println(`{name}: {age}`);
 }
@@ -271,4 +271,4 @@ This is different from `..` which ignores all unmentioned fields. With `_`, the 
 
 - [Variant Payload Design](./wep-2026-01-25-variant-payload-design.md) — struct payloads in variants use `Named({ field: T })` syntax
 - [Struct and Trait System](./wep-2026-01-13-struct-and-trait.md) — struct definition and construction
-- [Tuple and Array Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md) — tuple destructuring patterns
+- [Tuple and List Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md) — tuple destructuring patterns

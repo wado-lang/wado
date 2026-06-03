@@ -40,7 +40,7 @@ Inspect output follows Wado literal syntax where possible:
 | Struct (generic)           | `Name { field: value }` (no type args) | `Box { value: 42 }`           |
 | Struct (`#[hidden]` field) | Field omitted, `..` appended           | `Foo { visible: 1, .. }`      |
 | Tuple                      | `[elem, ...]`                          | `[1, "a", true]`              |
-| `Array<T>`                 | `[elem, ...]`                          | `[1, 2, 3]`                   |
+| `List<T>`                  | `[elem, ...]`                          | `[1, 2, 3]`                   |
 | `TreeMap<K, V>`            | `{key: value, ...}`                    | `{"a": 1, "b": 2}`            |
 | `TreeSet<T>`               | `{elem, ...}`                          | `{10, 20, 30}`                |
 | `Value` (json\_value)      | JSON-like representation               | `{"key": "val"}`              |
@@ -152,7 +152,7 @@ fn synthesize_inspect_for_type(T, expr, f_ref) -> Vec<TirStmt>:
                 synthesize_inspect_for_type(elem_type, expr.i, f_ref)
             f.write_char(']')
 
-        Array(elem_type) →
+        List(elem_type) →
             // Generate a loop that iterates and inspects each element
             f.write_char('[')
             for-of loop with index tracking, comma separation
@@ -322,7 +322,7 @@ A bare `&fn_name` lowers to a synthetic zero-capture closure (a `__Closure_N` wh
 1. **Pretty-print (`{:#?}`)**: Indented multi-line output via `InspectAlt` trait and `Formatter` indent tracking. Uses `open_brace`/`close_brace`/`write_newline_indent` on the `Formatter`. Example:
 
 ```wado
-let arr: Array<i32> = [1, 2, 3];
+let arr: List<i32> = [1, 2, 3];
 println(`{arr:#?}`);
 // [
 //   1,
@@ -350,7 +350,7 @@ The core `synthesize_inspect` phase and the full pipeline integration are implem
 | Struct (generic)           | Done   | Type args substituted for field types; type args omitted in name         |
 | Struct (`#[hidden]` field) | Done   | Hidden fields skipped with `..` hint; `is_hidden` propagated through TIR |
 | Tuple                      | Done   |                                                                          |
-| `Array<T>`                 | Done   | Loop-based with comma separation                                         |
+| `List<T>`                  | Done   | Loop-based with comma separation                                         |
 | `Option::Some(v)`          | Done   | Renders as `Some(inspect(v))`                                            |
 | `Option::None` / `null`    | Done   | Renders as `null`                                                        |
 | Enum                       | Done   | `TypeName::CaseName`                                                     |
@@ -369,7 +369,7 @@ The core `synthesize_inspect` phase and the full pipeline integration are implem
 | `TreeSet<T>`               | Done   | Custom `Inspect`/`InspectAlt`: `{elem, ...}` format                      |
 | `Value` (json\_value)      | Done   | Custom `Inspect`/`InspectAlt`: JSON-like format                          |
 | Pretty-print (`:#?`)       | Done   | `InspectAlt` trait with `Formatter` indent tracking                      |
-| `Array<Array<T>>`          | TODO   | Nested array codegen bug (tracked as TODO test)                          |
+| `List<List<T>>`            | TODO   | Nested array codegen bug (tracked as TODO test)                          |
 
 ### Additional Fixes
 

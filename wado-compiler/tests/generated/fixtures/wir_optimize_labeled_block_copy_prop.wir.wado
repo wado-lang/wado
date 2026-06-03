@@ -22,7 +22,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
 
 array builtin::array<i32> (mut i32);  // TypeId(3)
 
-struct core:prelude//Array<i32> {  // TypeId(4)
+struct core:prelude//List<i32> {  // TypeId(4)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
@@ -45,7 +45,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/wir_optimize_labeled_block_copy_prop.wado/sum_array" = fn(ref "core:prelude//Array<i32>") -> i32;  // TypeId(14)
+type "functype//wado-compiler/tests/fixtures/wir_optimize_labeled_block_copy_prop.wado/sum_array" = fn(ref "core:prelude//List<i32>") -> i32;  // TypeId(14)
 
 type "functype//wado-compiler/tests/fixtures/wir_optimize_labeled_block_copy_prop.wado/__test_0" = fn();  // TypeId(15)
 
@@ -125,14 +125,14 @@ fn "wado-compiler/tests/fixtures/wir_optimize_labeled_block_copy_prop.wado/sum_a
 }
 
 fn "wado-compiler/tests/fixtures/wir_optimize_labeled_block_copy_prop.wado/__test_0"() {
-    let __b: ref "core:prelude//Array<i32>";
+    let __b: ref "core:prelude//List<i32>";
     let __v0: i32;
     let __cond: bool;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let f_18: ref "core:prelude/format.wado//Formatter";
     let f_23: ref "core:prelude/format.wado//Formatter";
-    __b = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
+    __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
     __v0 = "wado-compiler/tests/fixtures/wir_optimize_labeled_block_copy_prop.wado/sum_array"(__b);
     __cond = __v0 == 60;
     if __cond == 0 {

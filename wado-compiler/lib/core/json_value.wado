@@ -33,7 +33,7 @@ pub variant Value {
     Bool(bool),
     Number(f64),
     String(String),
-    Array(Array<Value>),
+    List(List<Value>),
     Object(TreeMap<String, Value>),
 }
 
@@ -44,7 +44,7 @@ impl Eq for Value {
             [Bool(a), Bool(b)] => a == b,
             [Number(a), Number(b)] => a == b,
             [String(a), String(b)] => a == b,
-            [Array(a), Array(b)] => {
+            [List(a), List(b)] => {
                 if a.len() != b.len() {
                     return false;
                 }
@@ -84,7 +84,7 @@ impl Serialize for Value {
             Bool(b) => s.serialize_bool(*b),
             Number(n) => s.serialize_f64(*n),
             String(str_val) => s.serialize_string(str_val),
-            Array(arr) => {
+            List(arr) => {
                 let seq = s.begin_seq(arr.len())?;
                 for let item of *arr {
                     seq.element(&item)?;
@@ -126,7 +126,7 @@ impl Visitor for ValueVisitor {
     }
 
     fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<Value, DeserializeError> {
-        let mut items: Array<Value> = [];
+        let mut items: List<Value> = [];
         loop {
             let next_opt = seq.next_element::<Value>()?;
             match next_opt {
@@ -135,7 +135,7 @@ impl Visitor for ValueVisitor {
                 },
                 None => {
                     seq.end()?;
-                    return Result::Ok(Value::Array(items));
+                    return Result::Ok(Value::List(items));
                 },
             }
         }
@@ -164,7 +164,7 @@ impl Inspect for Value {
             Bool(b) => f.write_str(&if *b { "true" } else { "false" }),
             Number(n) => (*n).inspect(f),
             String(s) => (*s).inspect(f),
-            Array(arr) => {
+            List(arr) => {
                 f.write_char('[');
                 for let mut i = 0; i < arr.len(); i += 1 {
                     if i > 0 {
@@ -199,7 +199,7 @@ impl InspectAlt for Value {
             Bool(b) => f.write_str(&if *b { "true" } else { "false" }),
             Number(n) => (*n).inspect_alt(f),
             String(s) => (*s).inspect_alt(f),
-            Array(arr) => {
+            List(arr) => {
                 if arr.is_empty() {
                     f.write_str(&"[]");
                     return;

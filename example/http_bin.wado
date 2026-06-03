@@ -152,7 +152,7 @@ fn parse_url(request: &Request) -> Url {
 fn read_body_from_request(request: Request) -> String {
     let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Request::consume_body(request, res_future);
-    let mut buf: Array<u8> = [];
+    let mut buf: List<u8> = [];
     loop {
         let chunk = body_stream.read(4096);
         if chunk.len() == 0 {
@@ -282,8 +282,8 @@ fn respond_anything(request: Request) -> RouteResponse {
     return json_response(200, build_request_json(method, &url, &h, body));
 }
 
-fn format_allow(methods: &Array<Method>) -> String {
-    let names: Array<String> = methods.iter().map(|m: Method| method_name(m)).collect();
+fn format_allow(methods: &List<Method>) -> String {
+    let names: List<String> = methods.iter().map(|m: Method| method_name(m)).collect();
     return names.join(", ");
 }
 

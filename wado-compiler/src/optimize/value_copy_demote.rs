@@ -1,4 +1,4 @@
-//! `value_copy_demote` — demote a deep `$value_copy$T` of an `Array<E>` to a
+//! `value_copy_demote` — demote a deep `$value_copy$T` of an `List<E>` to a
 //! shallow spine copy when the binding's elements are provably never mutated
 //! through it (nor through the source the copy reads from).
 //!
@@ -16,7 +16,7 @@
 //!
 //! TODO(optimizer): expose the element-immutability analysis so
 //! `container_sroa` can replace its hardcoded method-shape whitelist
-//! with this richer query, and so nested-`Array<Array<T>>` demotion can
+//! with this richer query, and so nested-`List<List<T>>` demotion can
 //! reuse the recursive immutability proof. The recursion guard at
 //! `is_element_immutable_method` returns `false` for any recursive
 //! call site, suppressing self-recursive and mutually-recursive helpers.
@@ -49,24 +49,24 @@ pub fn demote_value_copies(project: &mut NirPackage) {
         by_key.insert((f.module_source.clone(), f.name.clone()), i);
     }
 
-    // Identify `$value_copy$T` helpers whose body is an `Array<E>` wrapper
+    // Identify `$value_copy$T` helpers whose body is an `List<E>` wrapper
     // copy: `return StructLiteral { repr: array_clone(v.repr), used: ... }`.
-    let mut array_wrapper_copies: IndexSet<FuncKey> = IndexSet::default();
+    let mut list_wrapper_copies: IndexSet<FuncKey> = IndexSet::default();
     for f in &project.functions {
         let f = f.borrow();
         if f.value_copy_type().is_some()
             && let Some(body) = &f.body
-            && body_is_array_wrapper_copy(body)
+            && body_is_list_wrapper_copy(body)
         {
-            array_wrapper_copies.insert((f.module_source.clone(), f.name.clone()));
+            list_wrapper_copies.insert((f.module_source.clone(), f.name.clone()));
         }
     }
     crate::compiler_trace!(
         "demote",
         "array-wrapper value-copy helpers: {}",
-        array_wrapper_copies.len()
+        list_wrapper_copies.len()
     );
-    if array_wrapper_copies.is_empty() {
+    if list_wrapper_copies.is_empty() {
         return;
     }
 
@@ -94,7 +94,7 @@ pub fn demote_value_copies(project: &mut NirPackage) {
         let Some(body) = &f.body else { continue };
         collect_sites(
             body,
-            &array_wrapper_copies,
+            &list_wrapper_copies,
             body,
             &f.params,
             fi,
@@ -151,7 +151,7 @@ pub fn demote_value_copies(project: &mut NirPackage) {
     for fi in touched {
         let mut f = project.functions[fi].borrow_mut();
         if let Some(body) = &mut f.body {
-            retarget_block(body, fi, &site_elig, &array_wrapper_copies, &shallow_name);
+            retarget_block(body, fi, &site_elig, &list_wrapper_copies, &shallow_name);
         }
     }
     project.functions.extend(new_funcs);
@@ -161,7 +161,7 @@ pub fn demote_value_copies(project: &mut NirPackage) {
 // Helper-shape detection / rewrite
 // ---------------------------------------------------------------------------
 
-fn body_is_array_wrapper_copy(body: &NirBlock) -> bool {
+fn body_is_list_wrapper_copy(body: &NirBlock) -> bool {
     // `return StructLiteral { fields: [.., repr: Call(array_clone, ..), ..] }`
     for stmt in &body.stmts {
         if let NirStmtKind::Return { value: Some(v) } = &stmt.kind
@@ -946,7 +946,7 @@ impl Analyzer<'_> {
                     // `x.field.method()`). A `&mut self` method there may
                     // mutate an element, which a shallow copy would share.
                     // A `&self` method is a read; recurse to vet the
-                    // receiver. (`x[i]` lowers to an `Array::index` method
+                    // receiver. (`x[i]` lowers to an `List::index` method
                     // call, not a bare `Index`, so a structural root check
                     // is not enough — match on the handle appearing at all.)
                     if self.callee_mutates_self(&key) != Some(false) {

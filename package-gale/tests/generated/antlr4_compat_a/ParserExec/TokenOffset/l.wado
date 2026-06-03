@@ -32,17 +32,17 @@ impl Eq for Span {
 /// LexerSlice is a lazy reference to a range of characters in the source input.
 /// It avoids allocating a String for every token during tokenization.
 pub struct LexerSlice {
-    pub chars: &Array<char>,
+    pub chars: &List<char>,
     pub start: i32,
     pub end: i32,
 }
 
 impl LexerSlice {
-    pub fn new(chars: &Array<char>, start: i32, end: i32) -> LexerSlice with stores[chars] {
+    pub fn new(chars: &List<char>, start: i32, end: i32) -> LexerSlice with stores[chars] {
         return LexerSlice { chars, start, end };
     }
 
-    pub fn empty(chars: &Array<char>) -> LexerSlice with stores[chars] {
+    pub fn empty(chars: &List<char>) -> LexerSlice with stores[chars] {
         return LexerSlice { chars, start: 0, end: 0 };
     }
 
@@ -123,7 +123,7 @@ pub struct Token {
     pub kind: i32,
     pub text: LexerSlice,
     pub span: Span,
-    pub leading_trivia: Array<Token>,
+    pub leading_trivia: List<Token>,
     pub channel: i32,
 }
 
@@ -132,11 +132,11 @@ impl Token {
         return Token { kind, text, span, leading_trivia: [], channel: 0 };
     }
 
-    pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>) -> Token {
+    pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: List<Token>) -> Token {
         return Token { kind, text, span, leading_trivia, channel: 0 };
     }
 
-    pub fn with_channel(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>, channel: i32) -> Token {
+    pub fn with_channel(kind: i32, text: LexerSlice, span: Span, leading_trivia: List<Token>, channel: i32) -> Token {
         return Token { kind, text, span, leading_trivia, channel };
     }
 }
@@ -160,20 +160,20 @@ impl Token {
 pub struct ParseError {
     pub message: String,
     pub span: Span,
-    pub expected: Array<String>,
+    pub expected: List<String>,
     pub line: i32 = 1,
     pub col: i32 = 0,
-    pub rule_stack: Array<String> = [],
+    pub rule_stack: List<String> = [],
 }
 
 impl ParseError {
-    pub fn new(message: String, span: Span, expected: Array<String>) -> ParseError {
+    pub fn new(message: String, span: Span, expected: List<String>) -> ParseError {
         return ParseError { message, span, expected };
     }
 
     /// Construct a ParseError whose position is already resolved. Used by
     /// `Parser::error`, which has the source on hand to compute line/col.
-    pub fn at(message: String, span: Span, expected: Array<String>, line: i32, col: i32) -> ParseError {
+    pub fn at(message: String, span: Span, expected: List<String>, line: i32, col: i32) -> ParseError {
         return ParseError { message, span, expected, line, col, rule_stack: [] };
     }
 
@@ -220,7 +220,7 @@ pub variant CstChild {
 pub struct CstNode {
     pub name: String,
     pub span: Span,
-    pub children: Array<CstChild>,
+    pub children: List<CstChild>,
 }
 
 impl CstNode {
@@ -323,8 +323,8 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// Text escaping follows `CommonToken.toString` (`vendor/antlr4/runtime/
 /// Java/src/org/antlr/v4/runtime/CommonToken.java`): only `\n`, `\r`,
 /// `\t` are escaped; backslashes and quotes pass through unchanged.
-pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
-    let chars: Array<char> = input.chars().collect();
+pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
+    let chars: List<char> = input.chars().collect();
     let mut out = String::with_capacity(tokens.len() * 32);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
@@ -353,7 +353,7 @@ pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> 
 /// `to_lexer_string` for both main-stream tokens and interleaved
 /// non-default-channel trivia. `channel=N` is printed only for non-default
 /// channels, matching ANTLR4.
-fn emit_lexer_token(out: &mut String, tok: &Token, chars: &Array<char>, index: i32, eof_kind: i32) {
+fn emit_lexer_token(out: &mut String, tok: &Token, chars: &List<char>, index: i32, eof_kind: i32) {
     let is_eof = tok.kind == eof_kind;
     let mut text_buf = String::with_capacity(16);
     if is_eof {
@@ -380,7 +380,7 @@ fn emit_lexer_token(out: &mut String, tok: &Token, chars: &Array<char>, index: i
 
 /// Compute (line, column) at a 0-based char index in `chars`, with
 /// 1-based line and 0-based column to match ANTLR4's `Token` getters.
-fn line_col_at(chars: &Array<char>, pos: i32) -> [i32, i32] {
+fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
     let mut line = 1;
     let mut col = 0;
     let cap = if pos < chars.len() { pos } else { chars.len() };
@@ -409,9 +409,9 @@ pub struct HighlightOverride {
 /// passes to `Visitor::enter_rule`. The generator emits the names in
 /// parser-rule declaration order; index = rule id.
 pub struct HighlightMapping {
-    pub defaults: Array<String>,
-    pub rule_names: Array<String>,
-    pub overrides: Array<HighlightOverride>,
+    pub defaults: List<String>,
+    pub rule_names: List<String>,
+    pub overrides: List<HighlightOverride>,
 }
 
 /// A single highlight capture: a named range in the source text.
@@ -431,15 +431,15 @@ struct ResolvedOverride {
 
 /// HighlightVisitor collects highlight captures during a CST walk.
 pub struct HighlightVisitor {
-    defaults: Array<String>,
-    overrides: Array<ResolvedOverride>,
-    rule_stack: Array<i32>,
-    pub captures: Array<HighlightCapture>,
+    defaults: List<String>,
+    overrides: List<ResolvedOverride>,
+    rule_stack: List<i32>,
+    pub captures: List<HighlightCapture>,
 }
 
 impl HighlightVisitor {
     pub fn new(mapping: HighlightMapping) -> HighlightVisitor {
-        let mut overrides: Array<ResolvedOverride> = Array::with_capacity(mapping.overrides.len());
+        let mut overrides: List<ResolvedOverride> = List::with_capacity(mapping.overrides.len());
         for let ov of &mapping.overrides {
             let mut id: i32 = -1;
             for let mut i = 0; i < mapping.rule_names.len(); i += 1 {
@@ -553,7 +553,7 @@ fn push_class(out: &mut String, capture: &String) {
 
 /// Produce a highlighted HTML fragment from source text and captures.
 /// Captures must be sorted by start position (as produced by HighlightVisitor).
-pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> String {
+pub fn highlight_html(source: &String, captures: &List<HighlightCapture>) -> String {
     let mut out = String::with_capacity(source.len() * 5);
     let mut pos = 0;
     let mut iter = source.chars();
@@ -582,7 +582,7 @@ pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> St
     return out;
 }
 
-fn substr(chars: &Array<char>, start: i32, end: i32) -> String {
+fn substr(chars: &List<char>, start: i32, end: i32) -> String {
     let mut out = String::with_capacity(end - start);
     let mut i = start;
     while i < end && i < chars.len() {
@@ -611,7 +611,7 @@ pub trait Visitor {
 
 /// TreeRecorder is a Visitor that records events for building a CstNode tree.
 pub struct TreeRecorder {
-    events: Array<TreeEvent>,
+    events: List<TreeEvent>,
 }
 
 variant TreeEvent {
@@ -650,10 +650,10 @@ impl Visitor for TreeRecorder {
     }
 }
 
-fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
+fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
     if let Enter(info) = events[*pos] {
         *pos += 1;
-        let mut children: Array<CstChild> = [];
+        let mut children: List<CstChild> = [];
         loop {
             if *pos >= events.len() {
                 break;
@@ -684,7 +684,7 @@ pub enum TokenKind {
 
 pub struct ANode {
     pub span: Span,
-    pub lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66_list: Array<Token>,
+    pub lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66_list: List<Token>,
 }
 
 global TK_WS: i32 = 0;
@@ -758,7 +758,7 @@ global TK_LIT_65: i32 = 67;
 global TK_LIT_66: i32 = 68;
 
 struct Lexer {
-    chars: Array<char>,
+    chars: List<char>,
     pos: i32,
 }
 
@@ -776,7 +776,7 @@ impl Lexer {
     }
 }
 
-fn try_ws(chars: &Array<char>, start: i32) -> i32 {
+fn try_ws(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
     let mut alts_ok_0 = false;
@@ -798,463 +798,463 @@ fn try_ws(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_lit_1(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_1(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_2(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_2(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_3(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_3(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_4(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_4(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_5(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_5(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_6(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_6(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '6' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_7(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_7(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '7' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_8(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_8(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '8' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_9(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_9(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '9' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_10(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_10(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '0' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_11(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_11(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '1' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_12(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_12(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '2' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_13(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_13(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '3' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_14(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_14(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '4' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_15(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_15(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '5' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_16(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_16(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '6' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_17(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_17(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '7' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_18(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_18(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '8' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_19(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_19(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '1' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '9' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_20(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_20(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '0' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_21(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_21(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '1' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_22(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_22(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '2' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_23(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_23(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '3' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_24(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_24(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '4' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_25(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_25(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '5' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_26(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_26(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '6' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_27(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_27(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '7' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_28(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_28(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '8' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_29(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_29(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '2' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '9' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_30(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_30(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '0' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_31(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_31(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '1' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_32(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_32(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '2' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_33(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_33(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '3' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_34(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_34(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '4' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_35(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_35(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '5' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_36(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_36(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '6' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_37(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_37(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '7' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_38(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_38(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '8' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_39(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_39(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '3' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '9' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_40(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_40(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '0' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_41(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_41(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '1' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_42(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_42(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '2' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_43(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_43(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '3' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_44(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_44(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '4' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_45(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_45(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '5' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_46(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_46(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '6' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_47(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_47(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '7' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_48(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_48(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '8' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_49(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_49(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '4' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '9' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_50(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_50(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '0' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_51(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_51(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '1' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_52(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_52(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '2' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_53(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_53(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '3' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_54(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_54(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '4' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_55(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_55(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '5' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_56(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_56(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '6' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_57(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_57(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '7' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_58(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_58(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '8' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_59(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_59(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '5' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '9' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_60(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_60(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '6' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '0' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_61(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_61(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '6' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '1' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_62(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_62(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '6' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '2' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_63(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_63(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '6' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '3' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_64(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_64(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '6' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '4' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_65(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_65(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '6' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '5' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_66(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_66(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '6' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '6' { return -1; }
     return pos + 2;
 }
 
-pub fn tokenize(input: &String) -> Array<Token> {
+pub fn tokenize(input: &String) -> List<Token> {
     let mut lexer = Lexer::new(input);
-    let mut tokens: Array<Token> = Array::with_capacity(lexer.chars.len() / 4 + 1);
-    let mut trivia: Array<Token> = [];
+    let mut tokens: List<Token> = List::with_capacity(lexer.chars.len() / 4 + 1);
+    let mut trivia: List<Token> = [];
     while !lexer.at_end() {
         let start = lexer.pos;
         let mut best_end: i32 = -1;
@@ -1495,17 +1495,17 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 struct Parser {
-    tokens: Array<Token>,
+    tokens: List<Token>,
     pos: i32,
-    chars: Array<char>,
+    chars: List<char>,
 }
 
 impl Parser {
-    fn new(tokens: Array<Token>, chars: Array<char>) -> Parser {
+    fn new(tokens: List<Token>, chars: List<char>) -> Parser {
         return Parser { tokens, pos: 0, chars };
     }
 
-    fn error(&self, message: String, span: Span, expected: Array<String>) -> ParseError {
+    fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
         let lc = line_col_at(&self.chars, span.start);
         return ParseError::at(message, span, expected, lc.0, lc.1);
     }
@@ -1572,7 +1572,7 @@ impl Parser {
         ));
     }
 
-    fn match_not(&mut self, excluded: Array<i32>) -> Result<Token, ParseError> {
+    fn match_not(&mut self, excluded: List<i32>) -> Result<Token, ParseError> {
         let k = self.tokens[self.pos].kind;
         if k != TK_EOF {
             let mut blocked = false;
@@ -1594,7 +1594,7 @@ impl Parser {
         ));
     }
 
-    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+    fn match_set(&mut self, included: List<i32>) -> Result<Token, ParseError> {
         let k = self.tokens[self.pos].kind;
         for let x of included {
             if x == k {
@@ -1613,7 +1613,7 @@ impl Parser {
     }
 }
 
-fn scan_a(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     sg_0: {
@@ -2425,7 +2425,7 @@ fn scan_a(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_a__inner(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
-    let mut lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66_list: Array<Token> = [];
+    let mut lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66_list: List<Token> = [];
     let mut _plus_first = true;
     loop {
         if !_plus_first {
@@ -2859,7 +2859,7 @@ fn _parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
 
 pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_a(&mut parser);
 }

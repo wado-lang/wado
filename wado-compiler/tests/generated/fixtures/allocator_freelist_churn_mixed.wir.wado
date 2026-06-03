@@ -22,13 +22,13 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
 
 array builtin::array<i32> (mut i32);  // TypeId(3)
 
-struct core:prelude/array.wado//ArrayIter<i32> {  // TypeId(4)
+struct core:prelude/list.wado//ListIter<i32> {  // TypeId(4)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
     mut index: i32,
 }
 
-struct core:prelude//Array<i32> {  // TypeId(5)
+struct core:prelude//List<i32> {  // TypeId(5)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
@@ -95,9 +95,9 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
 
-type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(37)
+type "functype//core:prelude/list.wado/List<i32>::push" = fn(ref "core:prelude//List<i32>", i32);  // TypeId(37)
 
-type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(38)
+type "functype//core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(38)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
@@ -105,7 +105,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(41)
 
-type "functype//core:prelude/array.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(42)
+type "functype//core:prelude/list.wado/ListIter<i32>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<i32>") -> [i32, i32];  // TypeId(42)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -122,14 +122,14 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/allocator_freelist_churn_mixed.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//Array<i32>";
-    let __b_2: ref "core:prelude//Array<i32>";
-    let __iter_4: ref "core:prelude/array.wado//ArrayIter<i32>";
+    let __b_0: ref "core:prelude//List<i32>";
+    let __b_2: ref "core:prelude//List<i32>";
+    let __iter_4: ref "core:prelude/list.wado//ListIter<i32>";
     let i_6: i32;
     let before: i32;
     let i_8: i32;
-    let __b_9: ref "core:prelude//Array<i32>";
-    let __iter_11: ref "core:prelude/array.wado//ArrayIter<i32>";
+    let __b_9: ref "core:prelude//List<i32>";
+    let __iter_11: ref "core:prelude/list.wado//ListIter<i32>";
     let k: i32;
     let after: i32;
     let __cond: bool;
@@ -150,16 +150,16 @@ fn "wado-compiler/tests/fixtures/allocator_freelist_churn_mixed.wado/run"() with
     let _licm_used_94: i32;
     let _licm_used_95: i32;
     let _licm_repr_96: ref builtin::array<i32>;
-    __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(24, 200, 56, 512, 8, 96, 312, 40), used: 8 };
-    __b_2 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-    __iter_4 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: __b_0.repr, used: 8, index: 0 };
+    __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(24, 200, 56, 512, 8, 96, 312, 40), used: 8 };
+    __b_2 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    __iter_4 = struct.new "core:prelude/list.wado//ListIter<i32>" { repr: __b_0.repr, used: 8, index: 0 };
     b0: block {
         l1: loop {
             let __sroa___match_22_discriminant: i32;
             let __sroa___match_22_payload_0: i32;
-            multivalue_bind [__sroa___match_22_discriminant, __sroa___match_22_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_4);
+            multivalue_bind [__sroa___match_22_discriminant, __sroa___match_22_payload_0] = "core:prelude/list.wado/ListIter<i32>^Iterator::next"(__iter_4);
             if __sroa___match_22_discriminant == 0 {
-                "core:prelude/array.wado/Array<i32>::push"(__b_2, "mem/realloc"(0, 0, 8, __sroa___match_22_payload_0));
+                "core:prelude/list.wado/List<i32>::push"(__b_2, "mem/realloc"(0, 0, 8, __sroa___match_22_payload_0));
             } else {
                 break b0;
             }
@@ -194,15 +194,15 @@ fn "wado-compiler/tests/fixtures/allocator_freelist_churn_mixed.wado/run"() with
             if i_8 >= 1000 {
                 break b7;
             }
-            __b_9 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-            __iter_11 = struct.new "core:prelude/array.wado//ArrayIter<i32>" { repr: _licm_repr_93, used: _licm_used_94, index: 0 };
+            __b_9 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+            __iter_11 = struct.new "core:prelude/list.wado//ListIter<i32>" { repr: _licm_repr_93, used: _licm_used_94, index: 0 };
             b10: block {
                 l11: loop {
                     let __sroa___match_23_discriminant: i32;
                     let __sroa___match_23_payload_0: i32;
-                    multivalue_bind [__sroa___match_23_discriminant, __sroa___match_23_payload_0] = "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(__iter_11);
+                    multivalue_bind [__sroa___match_23_discriminant, __sroa___match_23_payload_0] = "core:prelude/list.wado/ListIter<i32>^Iterator::next"(__iter_11);
                     if __sroa___match_23_discriminant == 0 {
-                        "core:prelude/array.wado/Array<i32>::push"(__b_9, "mem/realloc"(0, 0, 8, __sroa___match_23_payload_0));
+                        "core:prelude/list.wado/List<i32>::push"(__b_9, "mem/realloc"(0, 0, 8, __sroa___match_23_payload_0));
                     } else {
                         break b10;
                     }
@@ -590,17 +590,17 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
+fn "core:prelude/list.wado/List<i32>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<i32>::grow"(self);
+        "core:prelude/list.wado/List<i32>::grow"(self);
     }
     builtin::array_set<i32>(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
+fn "core:prelude/list.wado/ListIter<i32>^Iterator::next"(self) {
     let item: i32;
     if self.index >= self.used {
         return 1, 0;
@@ -610,7 +610,7 @@ fn "core:prelude/array.wado/ArrayIter<i32>^Iterator::next"(self) {
     return 0, item;
 }
 
-fn "core:prelude/array.wado/Array<i32>::grow"(self) {
+fn "core:prelude/list.wado/List<i32>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<i32>;

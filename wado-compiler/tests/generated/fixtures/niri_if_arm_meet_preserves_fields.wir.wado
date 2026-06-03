@@ -22,7 +22,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
 
 array builtin::array<u16> (mut u16);  // TypeId(3)
 
-struct core:prelude//Array<u16> {  // TypeId(4)
+struct core:prelude//List<u16> {  // TypeId(4)
     mut repr: ref builtin::array<u16>,
     mut used: i32,
 }
@@ -91,9 +91,9 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
 
-type "functype//core:prelude/array.wado/Array<u16>::push" = fn(ref "core:prelude//Array<u16>", u16);  // TypeId(37)
+type "functype//core:prelude/list.wado/List<u16>::push" = fn(ref "core:prelude//List<u16>", u16);  // TypeId(37)
 
-type "functype//core:prelude/array.wado/Array<u16>::grow" = fn(ref "core:prelude//Array<u16>");  // TypeId(38)
+type "functype//core:prelude/list.wado/List<u16>::grow" = fn(ref "core:prelude//List<u16>");  // TypeId(38)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
@@ -142,13 +142,13 @@ fn "wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/check_no
 }
 
 fn "wado-compiler/tests/fixtures/niri_if_arm_meet_preserves_fields.wado/check_arm_writes_diverge"(flag) {
-    let arr: ref "core:prelude//Array<u16>";
+    let arr: ref "core:prelude//List<u16>";
     let repr: ref builtin::array<u16>;
     repr = builtin::array_new<u16>(16);
     builtin::array_fill<u16>(repr, 0, 0, 16);
-    arr = struct.new "core:prelude//Array<u16>" { repr: repr, used: 16 };
+    arr = struct.new "core:prelude//List<u16>" { repr: repr, used: 16 };
     if flag {
-        "core:prelude/array.wado/Array<u16>::push"(arr, 99);
+        "core:prelude/list.wado/List<u16>::push"(arr, 99);
     }
     return arr.used;
 }
@@ -494,17 +494,17 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<u16>::push"(self, value) {
+fn "core:prelude/list.wado/List<u16>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<u16>::grow"(self);
+        "core:prelude/list.wado/List<u16>::grow"(self);
     }
     builtin::array_set<u16>(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<u16>::grow"(self) {
+fn "core:prelude/list.wado/List<u16>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<u16>;

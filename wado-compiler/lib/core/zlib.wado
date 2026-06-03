@@ -33,7 +33,7 @@
 //! Compression:
 //!
 //! ```wado
-//! let input: Array<u8> = [...];
+//! let input: List<u8> = [...];
 //! let compressed = zlib_compress(&input);                            // zlib, default level/strategy
 //! let fast       = zlib_compress(&input, Z_BEST_SPEED);              // override level only
 //! let best       = zlib_compress(&input, Z_BEST_COMPRESSION);
@@ -131,7 +131,7 @@ pub global MAX_WBITS: i32 = 15;
 
 
 /// Computes an Adler-32 checksum over `buf[offset..offset+len]`, starting from `adler`.
-pub fn adler32(adler: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
+pub fn adler32(adler: u32, buf: &List<u8>, offset: i32, len: i32) -> u32 {
     let base: u32 = 65521;
     let nmax = 5552;
     let mut s1 = adler & 0xFFFF;
@@ -238,10 +238,10 @@ pub fn adler32_combine(adler1: u32, adler2: u32, len2: i32) -> u32 {
 }
 
 
-global CRC_TABLE: Array<u32> = build_crc_table();
+global CRC_TABLE: List<u32> = build_crc_table();
 
-fn build_crc_table() -> Array<u32> {
-    let mut table: Array<u32> = Array::filled(256, 0);
+fn build_crc_table() -> List<u32> {
+    let mut table: List<u32> = List::filled(256, 0);
     for let mut i = 0; i < 256; i += 1 {
         let mut c = i as u32;
         for let mut j = 0; j < 8; j += 1 {
@@ -257,7 +257,7 @@ fn build_crc_table() -> Array<u32> {
 }
 
 /// Computes a CRC-32 checksum over `buf[offset..offset+len]`, starting from `crc`.
-pub fn crc32(crc: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
+pub fn crc32(crc: u32, buf: &List<u8>, offset: i32, len: i32) -> u32 {
     let table = CRC_TABLE;
     let mut c = crc ^ 0xFFFFFFFF;
     for let mut i = 0; i < len; i += 1 {
@@ -273,7 +273,7 @@ pub fn crc32_init() -> u32 {
 }
 
 // Multiply two GF(2) polynomials (for CRC-32 combine)
-fn gf2_matrix_times(mat: &Array<u32>, vec: u32) -> u32 {
+fn gf2_matrix_times(mat: &List<u32>, vec: u32) -> u32 {
     let mut result: u32 = 0;
     let mut v = vec;
     let mut i = 0;
@@ -287,7 +287,7 @@ fn gf2_matrix_times(mat: &Array<u32>, vec: u32) -> u32 {
     return result;
 }
 
-fn gf2_matrix_square(square: &mut Array<u32>, mat: &Array<u32>) {
+fn gf2_matrix_square(square: &mut List<u32>, mat: &List<u32>) {
     for let mut n = 0; n < 32; n += 1 {
         square[n] = gf2_matrix_times(mat, mat[n]);
     }
@@ -302,8 +302,8 @@ pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32 {
         return crc1;
     }
 
-    let mut even: Array<u32> = Array::filled(32, 0);
-    let mut odd: Array<u32> = Array::filled(32, 0);
+    let mut even: List<u32> = List::filled(32, 0);
+    let mut odd: List<u32> = List::filled(32, 0);
 
     // Put operator for one zero bit in odd
     odd[0] = 0xEDB88320;  // CRC-32 polynomial
@@ -392,47 +392,47 @@ global MAXBITS: i32 = 15;
 // 257..285 map to lengths 3..258 (LENGTH_BASE) plus 0..5 extra bits
 // (LENGTH_EXTRA), and distance codes 0..29 map to distances 1..32768
 // (DIST_BASE) plus 0..13 extra bits (DIST_EXTRA).
-global LENGTH_BASE: Array<i32> = [
+global LENGTH_BASE: List<i32> = [
     3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258,
 ];
-global LENGTH_EXTRA: Array<i32> = [
+global LENGTH_EXTRA: List<i32> = [
     0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0,
 ];
-global DIST_BASE: Array<i32> = [
+global DIST_BASE: List<i32> = [
     1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145,
     8193, 12289, 16385, 24577,
 ];
-global DIST_EXTRA: Array<i32> = [
+global DIST_EXTRA: List<i32> = [
     0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13,
 ];
 
 // Build a set of tables to decode the provided canonical Huffman code.
 // Returns [result, root_bits, table_offset_after]
 // result: 0=success, -1=invalid code, 1=not enough space
-fn inflate_table(codetype: i32, lens: &Array<u16>, lens_offset: i32, codes_count: i32, table: &mut Array<Code>, table_start: i32, bits_in: i32, work: &mut Array<u16>) -> [i32, i32, i32] {
+fn inflate_table(codetype: i32, lens: &List<u16>, lens_offset: i32, codes_count: i32, table: &mut List<Code>, table_start: i32, bits_in: i32, work: &mut List<u16>) -> [i32, i32, i32] {
     // Length codes 257..285 base
-    let lbase: Array<u16> = [
+    let lbase: List<u16> = [
         3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227,
         258, 0, 0,
     ];
     // Length codes 257..285 extra
-    let lext: Array<u16> = [
+    let lext: List<u16> = [
         16, 16, 16, 16, 16, 16, 16, 16, 17, 17, 17, 17, 18, 18, 18, 18, 19, 19, 19, 19, 20, 20, 20, 20, 21, 21, 21, 21,
         16, 64, 204,
     ];
     // Distance codes 0..29 base
-    let dbase: Array<u16> = [
+    let dbase: List<u16> = [
         1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097,
         6145, 8193, 12289, 16385, 24577, 0, 0,
     ];
     // Distance codes 0..29 extra
-    let dext: Array<u16> = [
+    let dext: List<u16> = [
         16, 16, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 24, 25, 25, 26, 26, 27, 27, 28, 28,
         29, 29, 64, 64,
     ];
 
-    let mut count: Array<u16> = Array::filled(MAXBITS + 1, 0);
-    let mut offs: Array<u16> = Array::filled(MAXBITS + 1, 0);
+    let mut count: List<u16> = List::filled(MAXBITS + 1, 0);
+    let mut offs: List<u16> = List::filled(MAXBITS + 1, 0);
 
     // accumulate lengths for codes
     for let mut sym = 0; sym < codes_count; sym += 1 {
@@ -666,7 +666,7 @@ enum InflateMode {
 // Order in which the code-length code lengths are stored in a dynamic block
 // (RFC 1951 section 3.2.7): "(HCLEN + 4) x 3 bits: code lengths for the code
 // length alphabet given just above, in the order: 16, 17, 18, 0, 8, 7, ...".
-global INFLATE_ORDER: Array<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+global INFLATE_ORDER: List<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
 
 struct InflateState {
     mode: InflateMode,
@@ -678,7 +678,7 @@ struct InflateState {
     wsize: i32,
     whave: i32,
     wnext: i32,
-    window: Array<u8>,
+    window: List<u8>,
 
     // bit buffer
     hold: u32,
@@ -690,7 +690,7 @@ struct InflateState {
     extra: i32,
 
     // code tables
-    codes: Array<Code>,
+    codes: List<Code>,
     lencode_off: i32,  // offset into codes for len/lit table
     distcode_off: i32,  // offset into codes for dist table
     lenbits: i32,
@@ -701,8 +701,8 @@ struct InflateState {
     nlen: i32,
     ndist: i32,
     have_count: i32,
-    lens: Array<u16>,
-    work: Array<u16>,
+    lens: List<u16>,
+    work: List<u16>,
 
     // checksum
     check: u32,
@@ -725,13 +725,13 @@ impl InflateState {
             wsize: 0,
             whave: 0,
             wnext: 0,
-            window: Array::filled(1 << wbits, 0),
+            window: List::filled(1 << wbits, 0),
             hold: 0,
             bits: 0,
             length: 0,
             offset: 0,
             extra: 0,
-            codes: Array::filled(ENOUGH, Code::new(0, 0, 0)),
+            codes: List::filled(ENOUGH, Code::new(0, 0, 0)),
             lencode_off: 0,
             distcode_off: 0,
             lenbits: 0,
@@ -740,8 +740,8 @@ impl InflateState {
             nlen: 0,
             ndist: 0,
             have_count: 0,
-            lens: Array::filled(320, 0),
-            work: Array::filled(288, 0),
+            lens: List::filled(320, 0),
+            work: List::filled(288, 0),
             check: 0,
             total: 0,
             sane: true,
@@ -789,7 +789,7 @@ impl InflateState {
     }
 
     // Update sliding window
-    fn update_window(&mut self, output: &Array<u8>, out_end: i32, copy_len: i32) {
+    fn update_window(&mut self, output: &List<u8>, out_end: i32, copy_len: i32) {
         if self.wsize == 0 {
             self.wsize = 1 << self.wbits;
             self.wnext = 0;
@@ -841,9 +841,9 @@ impl InflateState {
 // stream reached the end of its final block cleanly (mode Done). It is false
 // when the stream is invalid (mode Bad) or truncated before the final block,
 // so the zlib/gzip wrappers can reject malformed DEFLATE data precisely.
-fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [Array<u8>, i32, bool] {
+fn inflate_raw_ex(input: &List<u8>, input_offset: i32, input_length: i32) -> [List<u8>, i32, bool] {
     let mut state = InflateState::new(true);
-    let mut output: Array<u8> = [];
+    let mut output: List<u8> = [];
 
     let mut inp = input_offset;
     let mut have = input_length;
@@ -1474,18 +1474,18 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
 
 // Decompress raw deflate data from a slice of input (no zlib/gzip header)
 // Returns the decompressed output only
-fn inflate_raw_from(input: &Array<u8>, input_offset: i32, input_length: i32) -> Array<u8> {
+fn inflate_raw_from(input: &List<u8>, input_offset: i32, input_length: i32) -> List<u8> {
     let [result, ..] = inflate_raw_ex(input, input_offset, input_length);
     return result;
 }
 
 /// Decompresses raw DEFLATE data (no header/checksum).
-pub fn inflate_raw(input: &Array<u8>) -> Array<u8> {
+pub fn inflate_raw(input: &List<u8>) -> List<u8> {
     return inflate_raw_from(input, 0, input.len());
 }
 
 /// Decompresses zlib-wrapped data (RFC 1950: 2-byte header + DEFLATE + 4-byte Adler-32).
-pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
+pub fn inflate_zlib(input: &List<u8>) -> Result<List<u8>, ZlibError> {
     // Skip 2-byte zlib header
     if input.len() < 6 {
         return Result::Err(ZlibError::DataTooShort);
@@ -1530,9 +1530,9 @@ pub fn inflate_zlib(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
 
 
 /// Compresses data into raw DEFLATE stored blocks (no actual compression).
-pub fn deflate_stored(input: &Array<u8>) -> Array<u8> {
+pub fn deflate_stored(input: &List<u8>) -> List<u8> {
     let total = input.len();
-    let mut output: Array<u8> = Array::with_capacity(total + (total / 65535 + 1) * 5);
+    let mut output: List<u8> = List::with_capacity(total + (total / 65535 + 1) * 5);
 
     let mut pos = 0;
     while pos < total {
@@ -1566,8 +1566,8 @@ pub fn deflate_stored(input: &Array<u8>) -> Array<u8> {
 }
 
 /// Wraps data in zlib format using stored blocks (no actual compression).
-pub fn zlib_compress_stored(input: &Array<u8>) -> Array<u8> {
-    let mut output: Array<u8> = Array::with_capacity(input.len() + 12);
+pub fn zlib_compress_stored(input: &List<u8>) -> List<u8> {
+    let mut output: List<u8> = List::with_capacity(input.len() + 12);
 
     // zlib header: CMF=0x78 (deflate, 32K window), FLG=0x01 (check bits)
     output.push(0x78);
@@ -1609,7 +1609,7 @@ fn bi_reverse(code: u32, len: i32) -> u32 {
 
 // Bit writer for deflate output
 struct BitWriter {
-    output: Array<u8>,
+    output: List<u8>,
     buf: u64,
     bits: i32,
 }
@@ -1653,9 +1653,9 @@ struct EncCode {
 }
 
 // Build fixed Huffman literal/length encoding table (288 symbols)
-fn build_fixed_ltree() -> Array<EncCode> {
-    let mut bl_count: Array<i32> = Array::filled(16, 0);
-    let mut tree: Array<EncCode> = Array::filled(288, EncCode { code: 0, len: 0 });
+fn build_fixed_ltree() -> List<EncCode> {
+    let mut bl_count: List<i32> = List::filled(16, 0);
+    let mut tree: List<EncCode> = List::filled(288, EncCode { code: 0, len: 0 });
 
     let mut n = 0;
     while n <= 143 {
@@ -1680,7 +1680,7 @@ fn build_fixed_ltree() -> Array<EncCode> {
     }
 
     // Generate canonical codes (gen_codes from trees.c)
-    let mut next_code: Array<u32> = Array::filled(16, 0);
+    let mut next_code: List<u32> = List::filled(16, 0);
     let mut code: u32 = 0;
     for let mut bits = 1; bits <= 15; bits += 1 {
         code = code + bl_count[bits - 1] as u32 << 1;
@@ -1699,8 +1699,8 @@ fn build_fixed_ltree() -> Array<EncCode> {
 }
 
 // Build fixed distance encoding table (30 codes, all 5 bits)
-fn build_fixed_dtree() -> Array<EncCode> {
-    let mut tree: Array<EncCode> = Array::filled(30, EncCode { code: 0, len: 5 });
+fn build_fixed_dtree() -> List<EncCode> {
+    let mut tree: List<EncCode> = List::filled(30, EncCode { code: 0, len: 5 });
     for let mut i = 0; i < 30; i += 1 {
         tree[i] = EncCode { code: bi_reverse(i as u32, 5) as u16, len: 5 };
     }
@@ -1709,8 +1709,8 @@ fn build_fixed_dtree() -> Array<EncCode> {
 
 // Direct lookup table: length_codes[length - 3] = code index (0..28)
 // Built using the zlib tr_static_init algorithm
-fn build_length_codes(extra_lbits: &Array<i32>) -> Array<u8> {
-    let mut table: Array<u8> = Array::filled(256, 0);
+fn build_length_codes(extra_lbits: &List<i32>) -> List<u8> {
+    let mut table: List<u8> = List::filled(256, 0);
     let mut length = 0;
     for let mut code = 0; code < 28; code += 1 {
         let count = 1 << extra_lbits[code];
@@ -1726,8 +1726,8 @@ fn build_length_codes(extra_lbits: &Array<i32>) -> Array<u8> {
 // zlib-style distance code lookup table (512 entries)
 // First 256: direct lookup for dist-1 < 256
 // Next 256: shifted lookup for (dist-1) >> 7 when dist > 256
-fn build_dist_codes(extra_dbits: &Array<i32>) -> Array<u8> {
-    let mut table: Array<u8> = Array::filled(512, 0);
+fn build_dist_codes(extra_dbits: &List<i32>) -> List<u8> {
+    let mut table: List<u8> = List::filled(512, 0);
     let mut dist = 0;
     // First 16 codes: direct entries (covers dist 1..256)
     for let mut code = 0; code < 16; code += 1 {
@@ -1756,7 +1756,7 @@ fn hash3(a: u8, b: u8, c: u8) -> i32 {
 }
 
 /// Compresses data using DEFLATE with fixed Huffman codes and LZ77 matching.
-pub fn deflate_huffman(input: &Array<u8>) -> Array<u8> {
+pub fn deflate_huffman(input: &List<u8>) -> List<u8> {
     let ltree = build_fixed_ltree();
     let dtree = build_fixed_dtree();
 
@@ -1779,8 +1779,8 @@ pub fn deflate_huffman(input: &Array<u8>) -> Array<u8> {
     }
 
     // Hash table for LZ77
-    let mut head: Array<i32> = Array::filled(32768, -1);
-    let mut prev: Array<i32> = Array::filled(32768, -1);
+    let mut head: List<i32> = List::filled(32768, -1);
+    let mut prev: List<i32> = List::filled(32768, -1);
 
     let mut pos = 0;
     while pos < input_len {
@@ -1896,7 +1896,7 @@ global MAX_BL_BITS: i32 = 7;  // max bits for bit-length codes
 
 // Build a Huffman tree from frequency counts
 // Returns code lengths in bl_count format
-fn build_huffman_tree(freqs: &Array<i32>, max_sym: i32, max_bits: i32, bl_count: &mut Array<i32>, lengths: &mut Array<u8>) {
+fn build_huffman_tree(freqs: &List<i32>, max_sym: i32, max_bits: i32, bl_count: &mut List<i32>, lengths: &mut List<u8>) {
     // frequency of each symbol
     // number of symbols
     // maximum code length
@@ -1904,13 +1904,13 @@ fn build_huffman_tree(freqs: &Array<i32>, max_sym: i32, max_bits: i32, bl_count:
     // output: code length for each symbol
 
     // Build min-heap of symbols with non-zero frequency
-    let mut heap: Array<i32> = Array::with_capacity(max_sym + 1);
+    let mut heap: List<i32> = List::with_capacity(max_sym + 1);
     let mut heap_len = 0;
 
     // Track tree structure for depth computation
-    let mut depth: Array<i32> = Array::filled(2 * max_sym + 1, 0);
-    let mut dad: Array<i32> = Array::filled(2 * max_sym + 1, -1);
-    let mut node_freq: Array<i32> = Array::filled(2 * max_sym + 1, 0);
+    let mut depth: List<i32> = List::filled(2 * max_sym + 1, 0);
+    let mut dad: List<i32> = List::filled(2 * max_sym + 1, -1);
+    let mut node_freq: List<i32> = List::filled(2 * max_sym + 1, 0);
 
     // Initialize leaf nodes
     for let mut i = 0; i < max_sym; i += 1 {
@@ -1948,7 +1948,7 @@ fn build_huffman_tree(freqs: &Array<i32>, max_sym: i32, max_bits: i32, bl_count:
     }
 
     // Build heap array (indices of symbols with freq > 0)
-    let mut items: Array<[i32, i32]> = [];  // [freq, index]
+    let mut items: List<[i32, i32]> = [];  // [freq, index]
     for let mut i = 0; i < max_sym; i += 1 {
         if freqs[i] > 0 {
             items.push([freqs[i], i]);
@@ -1982,7 +1982,7 @@ fn build_huffman_tree(freqs: &Array<i32>, max_sym: i32, max_bits: i32, bl_count:
     // Use a simple priority queue with sorted list
     // We'll use two queues: one for leaves (sorted), one for internal nodes (naturally sorted)
     let mut leaf_idx = 0;
-    let mut int_nodes: Array<[i32, i32]> = [];  // [freq, node_index]
+    let mut int_nodes: List<[i32, i32]> = [];  // [freq, node_index]
     let mut int_idx = 0;
 
     // Helper: get next smallest from either queue
@@ -2064,7 +2064,7 @@ fn build_huffman_tree(freqs: &Array<i32>, max_sym: i32, max_bits: i32, bl_count:
     }
 
     // Enforce max_bits limit: clamp overflow depths to max_bits, then fix Kraft inequality
-    let mut raw_count: Array<i32> = Array::filled(max_bits + 2, 0);
+    let mut raw_count: List<i32> = List::filled(max_bits + 2, 0);
     for let mut i = 0; i < max_sym; i += 1 {
         if freqs[i] > 0 {
             let d = depth[i];
@@ -2103,7 +2103,7 @@ fn build_huffman_tree(freqs: &Array<i32>, max_sym: i32, max_bits: i32, bl_count:
     // Assign code lengths based on fixed counts
     // Sort symbols by (depth, frequency) and assign lengths from the count distribution
     // Create sorted list of symbols with non-zero freq, sorted by depth then freq
-    let mut sym_list: Array<[i32, i32, i32]> = [];  // [depth, freq, symbol]
+    let mut sym_list: List<[i32, i32, i32]> = [];  // [depth, freq, symbol]
     for let mut i = 0; i < max_sym; i += 1 {
         if freqs[i] > 0 {
             let mut d = depth[i];
@@ -2164,13 +2164,13 @@ fn build_huffman_tree(freqs: &Array<i32>, max_sym: i32, max_bits: i32, bl_count:
 }
 
 // Generate canonical Huffman codes from code lengths
-fn gen_huffman_codes(lengths: &Array<u8>, max_sym: i32, max_bits: i32) -> Array<EncCode> {
-    let mut bl_count: Array<i32> = Array::filled(max_bits + 1, 0);
+fn gen_huffman_codes(lengths: &List<u8>, max_sym: i32, max_bits: i32) -> List<EncCode> {
+    let mut bl_count: List<i32> = List::filled(max_bits + 1, 0);
     for let mut i = 0; i < max_sym; i += 1 {
         bl_count[lengths[i] as i32] += 1;
     }
 
-    let mut next_code: Array<u32> = Array::filled(max_bits + 1, 0);
+    let mut next_code: List<u32> = List::filled(max_bits + 1, 0);
     let mut code: u32 = 0;
     bl_count[0] = 0;
     for let mut bits = 1; bits <= max_bits; bits += 1 {
@@ -2178,7 +2178,7 @@ fn gen_huffman_codes(lengths: &Array<u8>, max_sym: i32, max_bits: i32) -> Array<
         next_code[bits] = code;
     }
 
-    let mut tree: Array<EncCode> = Array::filled(max_sym, EncCode { code: 0, len: 0 });
+    let mut tree: List<EncCode> = List::filled(max_sym, EncCode { code: 0, len: 0 });
     for let mut i = 0; i < max_sym; i += 1 {
         let len = lengths[i] as i32;
         if len != 0 {
@@ -2190,14 +2190,14 @@ fn gen_huffman_codes(lengths: &Array<u8>, max_sym: i32, max_bits: i32) -> Array<
 }
 
 // Write a dynamic Huffman block
-fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Array<i32>, sym_count: i32, is_last: bool, length_codes_table: &Array<u8>, dist_codes_table: &Array<u8>) {
+fn write_dynamic_block(bw: &mut BitWriter, symbols: &List<i32>, distances: &List<i32>, sym_count: i32, is_last: bool, length_codes_table: &List<u8>, dist_codes_table: &List<u8>) {
     // 0..255=literal, 256=EOB, 257+=length
     // distance for each length symbol (0 for literals)
 
 
     // Count frequencies
-    let mut lit_freq: Array<i32> = Array::filled(286, 0);
-    let mut dist_freq: Array<i32> = Array::filled(30, 0);
+    let mut lit_freq: List<i32> = List::filled(286, 0);
+    let mut dist_freq: List<i32> = List::filled(30, 0);
 
     for let mut i = 0; i < sym_count; i += 1 {
         let sym = symbols[i];
@@ -2235,12 +2235,12 @@ fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Arr
     }
 
     // Build trees
-    let mut lit_bl_count: Array<i32> = Array::filled(16, 0);
-    let mut lit_lengths: Array<u8> = Array::filled(286, 0);
+    let mut lit_bl_count: List<i32> = List::filled(16, 0);
+    let mut lit_lengths: List<u8> = List::filled(286, 0);
     build_huffman_tree(&lit_freq, 286, 15, &mut lit_bl_count, &mut lit_lengths);
 
-    let mut dist_bl_count: Array<i32> = Array::filled(16, 0);
-    let mut dist_lengths: Array<u8> = Array::filled(30, 0);
+    let mut dist_bl_count: List<i32> = List::filled(16, 0);
+    let mut dist_lengths: List<u8> = List::filled(30, 0);
     build_huffman_tree(&dist_freq, 30, 15, &mut dist_bl_count, &mut dist_lengths);
 
     // Generate codes
@@ -2259,7 +2259,7 @@ fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Arr
 
     // RLE encode the combined code lengths
     let total_codes = nlit + ndist;
-    let mut combined: Array<u8> = Array::filled(total_codes, 0);
+    let mut combined: List<u8> = List::filled(total_codes, 0);
     for let mut i = 0; i < nlit; i += 1 {
         combined[i] = lit_lengths[i];
     }
@@ -2267,8 +2267,8 @@ fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Arr
         combined[nlit + i] = dist_lengths[i];
     }
 
-    let mut rle: Array<u8> = [];
-    let mut rle_extra: Array<i32> = [];
+    let mut rle: List<u8> = [];
+    let mut rle_extra: List<i32> = [];
     let mut ci = 0;
     while ci < total_codes {
         let val = combined[ci];
@@ -2316,16 +2316,16 @@ fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Arr
     }
 
     // Build bit-length tree
-    let mut bl_freq: Array<i32> = Array::filled(19, 0);
+    let mut bl_freq: List<i32> = List::filled(19, 0);
     for let mut j = 0; j < rle.len(); j += 1 {
         bl_freq[rle[j] as i32] += 1;
     }
-    let mut bl_bl_count: Array<i32> = Array::filled(MAX_BL_BITS + 1, 0);
-    let mut bl_lengths: Array<u8> = Array::filled(19, 0);
+    let mut bl_bl_count: List<i32> = List::filled(MAX_BL_BITS + 1, 0);
+    let mut bl_lengths: List<u8> = List::filled(19, 0);
     build_huffman_tree(&bl_freq, 19, MAX_BL_BITS, &mut bl_bl_count, &mut bl_lengths);
     let bl_tree = gen_huffman_codes(&bl_lengths, 19, MAX_BL_BITS);
 
-    let bl_order: Array<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+    let bl_order: List<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
     let mut nbl = 19;
     while nbl > 4 && bl_lengths[bl_order[nbl - 1]] == 0 {
         nbl -= 1;
@@ -2399,7 +2399,7 @@ fn write_dynamic_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Arr
 }
 
 // Write a fixed Huffman block from symbol buffer
-fn write_fixed_block(bw: &mut BitWriter, symbols: &Array<i32>, distances: &Array<i32>, sym_count: i32, is_last: bool, ltree: &Array<EncCode>, dtree: &Array<EncCode>, length_codes_table: &Array<u8>, dist_codes_table: &Array<u8>) {
+fn write_fixed_block(bw: &mut BitWriter, symbols: &List<i32>, distances: &List<i32>, sym_count: i32, is_last: bool, ltree: &List<EncCode>, dtree: &List<EncCode>, length_codes_table: &List<u8>, dist_codes_table: &List<u8>) {
     if is_last {
         bw.write_bits(1, 1);  // BFINAL
     } else {
@@ -2485,7 +2485,7 @@ fn get_deflate_config(level: i32) -> DeflateConfig {
 /// `level` is 0-9 (0 = stored, 1 = fastest, 9 = best compression).
 /// `strategy` is one of `Z_DEFAULT_STRATEGY`, `Z_FILTERED`, `Z_HUFFMAN_ONLY`,
 /// `Z_RLE`, or `Z_FIXED`.
-pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8> {
+pub fn deflate_with_level(input: &List<u8>, level: i32, strategy: i32) -> List<u8> {
     let input_len = input.len();
 
     // Level 0: stored blocks
@@ -2505,8 +2505,8 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
     let dist_codes_table = build_dist_codes(&DIST_EXTRA);
 
     // Collect symbols using LZ77
-    let mut symbols: Array<i32> = Array::with_capacity(input_len);
-    let mut distances: Array<i32> = Array::with_capacity(input_len);
+    let mut symbols: List<i32> = List::with_capacity(input_len);
+    let mut distances: List<i32> = List::with_capacity(input_len);
 
     if input_len == 0 {
         // Empty input: just write empty block
@@ -2554,8 +2554,8 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
         }
     } else {
         // Z_DEFAULT_STRATEGY or Z_FILTERED: full LZ77 matching
-        let mut head: Array<i32> = Array::filled(32768, -1);
-        let mut prev: Array<i32> = Array::filled(32768, -1);
+        let mut head: List<i32> = List::filled(32768, -1);
+        let mut prev: List<i32> = List::filled(32768, -1);
         // Mirror input into linear memory to enable 8-byte word compares
         // in the LZ77 match-extension inner loops. GC arrays only support
         // byte-level access; linear memory lets us load 8 bytes in a single
@@ -2845,8 +2845,8 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
     fixed_bits += ltree[256].len as i32;  // EOB
 
     // Compute cost of dynamic encoding (approximate)
-    let mut lit_freq: Array<i32> = Array::filled(286, 0);
-    let mut dist_freq: Array<i32> = Array::filled(30, 0);
+    let mut lit_freq: List<i32> = List::filled(286, 0);
+    let mut dist_freq: List<i32> = List::filled(30, 0);
     for let mut i = 0; i < sym_count; i += 1 {
         let sym = symbols[i];
         if sym < 256 {
@@ -2875,11 +2875,11 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
     }
 
     // Build optimal trees to estimate dynamic cost
-    let mut lit_bl_count: Array<i32> = Array::filled(16, 0);
-    let mut lit_lengths: Array<u8> = Array::filled(286, 0);
+    let mut lit_bl_count: List<i32> = List::filled(16, 0);
+    let mut lit_lengths: List<u8> = List::filled(286, 0);
     build_huffman_tree(&lit_freq, 286, 15, &mut lit_bl_count, &mut lit_lengths);
-    let mut dist_bl_count: Array<i32> = Array::filled(16, 0);
-    let mut dist_lengths: Array<u8> = Array::filled(30, 0);
+    let mut dist_bl_count: List<i32> = List::filled(16, 0);
+    let mut dist_lengths: List<u8> = List::filled(30, 0);
     build_huffman_tree(&dist_freq, 30, 15, &mut dist_bl_count, &mut dist_lengths);
 
     let mut dynamic_data_bits = 0;
@@ -2913,7 +2913,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
 
     // RLE-encode the combined code lengths to count header bits
     let total_codes = nlit + ndist;
-    let mut hdr_combined: Array<u8> = Array::filled(total_codes, 0);
+    let mut hdr_combined: List<u8> = List::filled(total_codes, 0);
     for let mut hi = 0; hi < nlit; hi += 1 {
         hdr_combined[hi] = lit_lengths[hi];
     }
@@ -2921,8 +2921,8 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
         hdr_combined[nlit + hi] = dist_lengths[hi];
     }
 
-    let mut hdr_rle: Array<u8> = [];
-    let mut hdr_rle_extra: Array<i32> = [];
+    let mut hdr_rle: List<u8> = [];
+    let mut hdr_rle_extra: List<i32> = [];
     let mut hci = 0;
     while hci < total_codes {
         let hval = hdr_combined[hci];
@@ -2969,16 +2969,16 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
     }
 
     // Build BL tree for header cost
-    let mut hdr_bl_freq: Array<i32> = Array::filled(19, 0);
+    let mut hdr_bl_freq: List<i32> = List::filled(19, 0);
     for let mut hj = 0; hj < hdr_rle.len(); hj += 1 {
         hdr_bl_freq[hdr_rle[hj] as i32] += 1;
     }
-    let mut hdr_bl_bl_count: Array<i32> = Array::filled(MAX_BL_BITS + 1, 0);
-    let mut hdr_bl_lengths: Array<u8> = Array::filled(19, 0);
+    let mut hdr_bl_bl_count: List<i32> = List::filled(MAX_BL_BITS + 1, 0);
+    let mut hdr_bl_lengths: List<u8> = List::filled(19, 0);
     build_huffman_tree(&hdr_bl_freq, 19, MAX_BL_BITS, &mut hdr_bl_bl_count, &mut hdr_bl_lengths);
     let hdr_bl_tree = gen_huffman_codes(&hdr_bl_lengths, 19, MAX_BL_BITS);
 
-    let hdr_bl_order: Array<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+    let hdr_bl_order: List<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
     let mut hdr_nbl = 19;
     while hdr_nbl > 4 && hdr_bl_lengths[hdr_bl_order[hdr_nbl - 1]] == 0 {
         hdr_nbl -= 1;
@@ -3039,8 +3039,8 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
 
 
 // Wrap raw deflate data in zlib format
-fn zlib_wrap(input: &Array<u8>, deflated: &Array<u8>, level: i32) -> Array<u8> {
-    let mut output: Array<u8> = Array::with_capacity(deflated.len() + 6);
+fn zlib_wrap(input: &List<u8>, deflated: &List<u8>, level: i32) -> List<u8> {
+    let mut output: List<u8> = List::with_capacity(deflated.len() + 6);
 
     // zlib header: CMF=0x78 (deflate, 32K window)
     // FLG: FCHECK + FLEVEL
@@ -3080,7 +3080,7 @@ fn zlib_wrap(input: &Array<u8>, deflated: &Array<u8>, level: i32) -> Array<u8> {
 ///
 /// `level` defaults to `Z_DEFAULT_COMPRESSION` and `strategy` defaults to
 /// `Z_DEFAULT_STRATEGY`.
-pub fn zlib_compress(input: &Array<u8>, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> Array<u8> {
+pub fn zlib_compress(input: &List<u8>, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> List<u8> {
     let deflated = deflate_with_level(input, level, strategy);
     return zlib_wrap(input, &deflated, level);
 }
@@ -3096,7 +3096,7 @@ global GZIP_FCOMMENT: u8 = 16;
 
 // Parse a single gzip member header (RFC 1952 section 2.3), returning the
 // position where the DEFLATE data starts.
-fn gzip_parse_header(input: &Array<u8>, start: i32) -> Result<i32, ZlibError> {
+fn gzip_parse_header(input: &List<u8>, start: i32) -> Result<i32, ZlibError> {
     // The fixed header is 10 bytes: ID1, ID2, CM, FLG, MTIME(4), XFL, OS.
     if start + 10 > input.len() {
         return Result::Err(ZlibError::DataTooShort);
@@ -3156,8 +3156,8 @@ fn gzip_parse_header(input: &Array<u8>, start: i32) -> Result<i32, ZlibError> {
 /// Decompresses gzip-wrapped data (RFC 1952).
 ///
 /// Supports multi-member gzip streams; member outputs are concatenated.
-pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
-    let mut output: Array<u8> = [];
+pub fn inflate_gzip(input: &List<u8>) -> Result<List<u8>, ZlibError> {
+    let mut output: List<u8> = [];
     let mut member_start = 0;
 
     while member_start < input.len() {
@@ -3229,9 +3229,9 @@ pub fn inflate_gzip(input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
 /// `level` defaults to `Z_DEFAULT_COMPRESSION` and `strategy` defaults to
 /// `Z_DEFAULT_STRATEGY`. Use `gzip_compress_with_header` to set MTIME, file
 /// name, comment, and other gzip header fields.
-pub fn gzip_compress(input: &Array<u8>, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> Array<u8> {
+pub fn gzip_compress(input: &List<u8>, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> List<u8> {
     let deflated = deflate_with_level(input, level, strategy);
-    let mut output: Array<u8> = Array::with_capacity(deflated.len() + 18);
+    let mut output: List<u8> = List::with_capacity(deflated.len() + 18);
 
     // Gzip header (10 bytes)
     output.push(GZIP_MAGIC1);  // ID1
@@ -3279,7 +3279,7 @@ pub fn gzip_compress(input: &Array<u8>, level: i32 = Z_DEFAULT_COMPRESSION, stra
 ///
 /// Returns `ZlibError::OutputExceedsMax` if the decompressed size exceeds
 /// `max_output` (default: `i32::MAX`).
-pub fn uncompress(input: &Array<u8>, max_output: i32 = i32::MAX) -> Result<Array<u8>, ZlibError> {
+pub fn uncompress(input: &List<u8>, max_output: i32 = i32::MAX) -> Result<List<u8>, ZlibError> {
     if input.len() < 2 {
         return Result::Err(ZlibError::DataTooShort);
     }
@@ -3304,7 +3304,7 @@ pub fn uncompress(input: &Array<u8>, max_output: i32 = i32::MAX) -> Result<Array
 ///
 /// `level` defaults to `Z_DEFAULT_COMPRESSION` and `strategy` defaults to
 /// `Z_DEFAULT_STRATEGY`.
-pub fn deflate_raw(input: &Array<u8>, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> Array<u8> {
+pub fn deflate_raw(input: &List<u8>, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> List<u8> {
     return deflate_with_level(input, level, strategy);
 }
 
@@ -3315,7 +3315,7 @@ pub struct GzipHeader {
     time: u32,  // modification time (Unix timestamp)
     xflags: i32,  // extra flags (2=best, 4=fastest)
     os: i32,  // operating system (0xFF = unknown)
-    extra: Array<u8>,
+    extra: List<u8>,
     name: String,  // original file name (empty = none)
     comment: String,  // comment (empty = none)
     hcrc: bool,  // true to write header CRC16
@@ -3352,7 +3352,7 @@ impl GzipHeader {
     }
 
     /// Returns the FEXTRA payload (empty = none).
-    pub fn extra(&self) -> Array<u8> {
+    pub fn extra(&self) -> List<u8> {
         return self.extra;
     }
 
@@ -3387,7 +3387,7 @@ impl GzipHeader {
     }
 
     /// Sets the FEXTRA payload. An empty array clears the field.
-    pub fn set_extra(&mut self, extra: &Array<u8>) {
+    pub fn set_extra(&mut self, extra: &List<u8>) {
         self.extra = [];
         for let mut i = 0; i < extra.len(); i += 1 {
             self.extra.push(extra[i]);
@@ -3412,9 +3412,9 @@ impl GzipHeader {
 
 /// Compresses data in gzip format using the given compression level and a
 /// caller-supplied header.
-pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHeader) -> Array<u8> {
+pub fn gzip_compress_with_header(input: &List<u8>, level: i32, header: &GzipHeader) -> List<u8> {
     let deflated = deflate_with_level(input, level, Z_DEFAULT_STRATEGY);
-    let mut output: Array<u8> = Array::with_capacity(deflated.len() + 64);
+    let mut output: List<u8> = List::with_capacity(deflated.len() + 64);
 
     // Gzip header
     output.push(GZIP_MAGIC1);
@@ -3520,8 +3520,8 @@ pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHea
 // as UTF-8 to match the bytes the compress side emits and to support
 // non-Latin-1 names. Invalid sequences are replaced with U+FFFD rather than
 // failing the parse, since these fields are best-effort metadata.
-fn bytes_to_string(buf: &Array<u8>, offset: i32, len: i32) -> String {
-    let mut slice: Array<u8> = Array::with_capacity(len);
+fn bytes_to_string(buf: &List<u8>, offset: i32, len: i32) -> String {
+    let mut slice: List<u8> = List::with_capacity(len);
     for let mut i = 0; i < len; i += 1 {
         slice.push(buf[offset + i]);
     }
@@ -3529,7 +3529,7 @@ fn bytes_to_string(buf: &Array<u8>, offset: i32, len: i32) -> String {
 }
 
 /// Parses and returns the gzip header without decompressing the body.
-pub fn inflate_get_gzip_header(input: &Array<u8>) -> Result<GzipHeader, ZlibError> {
+pub fn inflate_get_gzip_header(input: &List<u8>) -> Result<GzipHeader, ZlibError> {
     if input.len() < 10 {
         return Result::Err(ZlibError::DataTooShort);
     }
@@ -3608,7 +3608,7 @@ pub struct DeflateStream {
     level: i32,
     strategy: i32,
     format: i32,
-    buffer: Array<u8>,
+    buffer: List<u8>,
     finished: bool,
     total_in: i32,
     total_out: i32,
@@ -3738,7 +3738,7 @@ impl DeflateStream {
     /// Returns an independent copy of this stream, including buffered input
     /// and any attached gzip header.
     pub fn copy(&self) -> DeflateStream {
-        let mut buf_copy: Array<u8> = Array::with_capacity(self.buffer.len());
+        let mut buf_copy: List<u8> = List::with_capacity(self.buffer.len());
         for let mut i = 0; i < self.buffer.len(); i += 1 {
             buf_copy.push(self.buffer[i]);
         }
@@ -3766,7 +3766,7 @@ impl DeflateStream {
 
     /// Appends `chunk` to the input buffer. Panics if the stream has already
     /// been finished.
-    pub fn update(&mut self, chunk: &Array<u8>) {
+    pub fn update(&mut self, chunk: &List<u8>) {
         if self.finished {
             panic("DeflateStream already finished");
         }
@@ -3778,7 +3778,7 @@ impl DeflateStream {
     /// Compresses all buffered input and returns the wrapped output. Marks
     /// the stream as finished; further `update`/`finish`/`compress` calls
     /// panic until `reset` is invoked.
-    pub fn finish(&mut self) -> Array<u8> {
+    pub fn finish(&mut self) -> List<u8> {
         if self.finished {
             panic("DeflateStream already finished");
         }
@@ -3791,7 +3791,7 @@ impl DeflateStream {
 
     /// Compresses `input` in one shot, bypassing the internal buffer. Marks
     /// the stream as finished.
-    pub fn compress(&mut self, input: &Array<u8>) -> Array<u8> {
+    pub fn compress(&mut self, input: &List<u8>) -> List<u8> {
         if self.finished {
             panic("DeflateStream already finished");
         }
@@ -3802,7 +3802,7 @@ impl DeflateStream {
         return result;
     }
 
-    fn compress_internal(&self, input: &Array<u8>) -> Array<u8> {
+    fn compress_internal(&self, input: &List<u8>) -> List<u8> {
         if self.format == RAW_FORMAT {
             return self.compress_raw(input);
         } else if self.format == GZIP_FORMAT {
@@ -3811,15 +3811,15 @@ impl DeflateStream {
         return self.compress_zlib(input);
     }
 
-    fn compress_raw(&self, input: &Array<u8>) -> Array<u8> {
+    fn compress_raw(&self, input: &List<u8>) -> List<u8> {
         return deflate_with_level(input, self.level, self.strategy);
     }
 
-    fn compress_zlib(&self, input: &Array<u8>) -> Array<u8> {
+    fn compress_zlib(&self, input: &List<u8>) -> List<u8> {
         return zlib_wrap(input, &deflate_with_level(input, self.level, self.strategy), self.level);
     }
 
-    fn compress_gzip(&self, input: &Array<u8>) -> Array<u8> {
+    fn compress_gzip(&self, input: &List<u8>) -> List<u8> {
         if self.has_gzip_header {
             return gzip_compress_with_header(input, self.level, &self.gzip_header);
         }
@@ -3833,7 +3833,7 @@ impl DeflateStream {
 /// the decompressed output. `decompress` is a single-shot variant.
 pub struct InflateStream {
     format: i32,
-    buffer: Array<u8>,
+    buffer: List<u8>,
     total_in: i32,
     total_out: i32,
 }
@@ -3886,7 +3886,7 @@ impl InflateStream {
 
     /// Returns an independent copy of this stream, including buffered input.
     pub fn copy(&self) -> InflateStream {
-        let mut buf_copy: Array<u8> = Array::with_capacity(self.buffer.len());
+        let mut buf_copy: List<u8> = List::with_capacity(self.buffer.len());
         for let mut i = 0; i < self.buffer.len(); i += 1 {
             buf_copy.push(self.buffer[i]);
         }
@@ -3899,7 +3899,7 @@ impl InflateStream {
     }
 
     /// Appends `chunk` to the buffered compressed input.
-    pub fn update(&mut self, chunk: &Array<u8>) {
+    pub fn update(&mut self, chunk: &List<u8>) {
         for let mut i = 0; i < chunk.len(); i += 1 {
             self.buffer.push(chunk[i]);
         }
@@ -3907,7 +3907,7 @@ impl InflateStream {
 
     /// Decompresses the buffered input and clears the buffer. The stream may
     /// be reused for further input.
-    pub fn finish(&mut self) -> Result<Array<u8>, ZlibError> {
+    pub fn finish(&mut self) -> Result<List<u8>, ZlibError> {
         let decompress_result = self.decompress(&self.buffer);
         if let Err(e) = decompress_result {
             return Result::Err(e);
@@ -3921,7 +3921,7 @@ impl InflateStream {
 
     /// Decompresses `input` in one shot using the stream's `format`. Does not
     /// touch the internal buffer.
-    pub fn decompress(&self, input: &Array<u8>) -> Result<Array<u8>, ZlibError> {
+    pub fn decompress(&self, input: &List<u8>) -> Result<List<u8>, ZlibError> {
         if self.format == RAW_FORMAT {
             return Result::Ok(inflate_raw(input));
         } else if self.format == GZIP_FORMAT {
@@ -3940,7 +3940,7 @@ impl InflateStream {
 /// Returns the offset of the recovered block, or `-1` if no sync point is
 /// found. Useful for recovering from corruption in a DEFLATE stream after a
 /// sync flush.
-pub fn inflate_sync_find(input: &Array<u8>, start: i32) -> i32 {
+pub fn inflate_sync_find(input: &List<u8>, start: i32) -> i32 {
     // Look for stored block marker: 00 00 FF FF
     // This pattern appears at the start of a stored block after a sync flush
     let mut pos = start;

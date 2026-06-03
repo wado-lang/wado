@@ -30,6 +30,6 @@ A dynamically-typed JSON value, analogous to serde_json::Value.
 
 #### `String(String)`
 
-#### `Array(Array<Value>)`
+#### `List(List<Value>)`
 
 #### `Object(TreeMap<String, Value>)`

@@ -1,7 +1,7 @@
 use { println, Stdout } from "core:cli";
 
 fn test_array_append_minimal() with Stdout {
-    let mut arr: Array<i32> = [];
+    let mut arr: List<i32> = [];
     for let mut i = 0; i < 3; i += 1 {
         arr.push(i);
     }
@@ -40,7 +40,7 @@ struct InlineItem {
 fn test_generic_nested_ref() with Stdout {
     let mut a = InlineItem { value: 10 };
     let mut b = InlineItem { value: 20 };
-    let items: Array<&mut InlineItem> = [&mut a, &mut b];
+    let items: List<&mut InlineItem> = [&mut a, &mut b];
     for let mut i = 0; i < items.len(); i += 1 {
         println(`{items[i].value}`);
     }
@@ -103,8 +103,8 @@ fn test_match_tuple() with Stdout {
 }
 
 fn test_method_minimal() with Stdout {
-    let mut arr1: Array<i32> = [];
-    let mut arr2: Array<i32> = [];
+    let mut arr1: List<i32> = [];
+    let mut arr2: List<i32> = [];
     arr1.push(1);
     arr1.push(2);
     arr2.push(3);

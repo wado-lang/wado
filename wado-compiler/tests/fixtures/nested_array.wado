@@ -3,7 +3,7 @@ use { println, Stdout } from "core:cli";
 
 // from nested_array_3deep_iterate_test.wado
 fn nested_array_3deep_iterate_test() with Stdout {
-    let deep: Array<Array<Array<i32>>> = [[[1, 2], [3]], [[4, 5, 6]]];
+    let deep: List<List<List<i32>>> = [[[1, 2], [3]], [[4, 5, 6]]];
 
     // Access inner elements
     println(`{deep[0][0][1]}`);
@@ -25,7 +25,7 @@ fn nested_array_3deep_iterate_test() with Stdout {
 
 // from nested_array_iterate_test.wado
 fn nested_array_iterate_test() with Stdout {
-    let matrix: Array<Array<i32>> = [[10, 20], [30, 40]];
+    let matrix: List<List<i32>> = [[10, 20], [30, 40]];
 
     // Index access on nested array
     let first_row = matrix[0];
@@ -46,7 +46,7 @@ fn nested_array_iterate_test() with Stdout {
 
 // from nested_array_method_test.wado
 fn nested_array_method_test() with Stdout {
-    let matrix: Array<Array<i32>> = [[1, 2, 3], [4, 5]];
+    let matrix: List<List<i32>> = [[1, 2, 3], [4, 5]];
 
     // len() on retrieved element
     let row0 = matrix[0];
@@ -60,7 +60,7 @@ fn nested_array_method_test() with Stdout {
 
 // from nested_array_mutate_test.wado
 fn nested_array_mutate_test() with Stdout {
-    let mut matrix: Array<Array<i32>> = [[1, 2], [3, 4]];
+    let mut matrix: List<List<i32>> = [[1, 2], [3, 4]];
 
     // Append to inner array
     let mut row = matrix[0];
@@ -68,7 +68,7 @@ fn nested_array_mutate_test() with Stdout {
     println(`{row:?}`);
 
     // Replace inner array
-    let new_row: Array<i32> = [10, 20, 30];
+    let new_row: List<i32> = [10, 20, 30];
     matrix[0] = new_row;
     println(`{matrix:?}`);
 
@@ -80,7 +80,7 @@ fn nested_array_option_access_test() with Stdout {
     let a: Option<i32> = Option::<i32>::Some(42);
     let b: Option<i32> = null;
     let c: Option<i32> = Option::<i32>::Some(99);
-    let arr: Array<Option<i32>> = [a, b, c];
+    let arr: List<Option<i32>> = [a, b, c];
 
     // Index and pattern match
     if let Some(x) = arr[0] {

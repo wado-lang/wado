@@ -22,7 +22,7 @@ representative of the problems:
 ```wado
 // What the generator looks like (lexer_gen.wado:90-109)
 out.push_str("struct Lexer {\n");
-out.push_str("    chars: Array<char>,\n");
+out.push_str("    chars: List<char>,\n");
 out.push_str("    pos: i32,\n");
 out.push_str("}\n\n");
 out.push_str("impl Lexer {\n");
@@ -40,7 +40,7 @@ every function signature:
 fn gen_lexer_elem(
     out: &mut String,
     elem: &LexerElement,
-    all_rules: &Array<LexerRule>,
+    all_rules: &List<LexerRule>,
     indent: &String,         // threaded everywhere
     fail_action: &String,
     ctr: &mut i32,
@@ -102,7 +102,7 @@ The `quote!` macro produces `proc_macro2::TokenStream`:
 let name = format_ident!("Lexer");
 let tokens = quote! {
     struct #name {
-        chars: Array<char>,
+        chars: List<char>,
         pos: i32,
     }
 };
@@ -123,7 +123,7 @@ use genco::prelude::*;
 
 let tokens: rust::Tokens = quote! {
     struct Lexer {
-        chars: Array<char>,
+        chars: List<char>,
         pos: i32,
     }
 };
@@ -418,7 +418,7 @@ Usage would look like:
 ```wado
 fn gen_lexer_struct(w: &mut CodeWriter) {
     w.block("struct Lexer {", || {
-        w.line("chars: Array<char>,");
+        w.line("chars: List<char>,");
         w.line("pos: i32,");
     });
     w.blank();
@@ -460,7 +460,7 @@ that fights against rigid AST modeling.
 ```wado
 // Declaration builders
 let s = WadoStruct::new("Lexer")
-    .field("chars", "Array<char>")
+    .field("chars", "List<char>")
     .field("pos", "i32");
 
 // Emit declarations via builders
@@ -561,7 +561,7 @@ Current package-gale code (manual string appending):
 ```wado
 fn gen_lexer_struct(out: &mut String) {
     out.push_str("struct Lexer {\n");
-    out.push_str("    chars: Array<char>,\n");
+    out.push_str("    chars: List<char>,\n");
     out.push_str("    pos: i32,\n");
     out.push_str("}\n\n");
     out.push_str("impl Lexer {\n");
@@ -583,7 +583,7 @@ With CodeWriter:
 ```wado
 fn gen_lexer_struct(w: &mut CodeWriter) {
     w.begin("struct Lexer");
-    w.line("chars: Array<char>,");
+    w.line("chars: List<char>,");
     w.line("pos: i32,");
     w.end();
     w.blank();

@@ -1,7 +1,7 @@
 use { encode, decode, encode_url, encode_with, decode_bytes, Encoding } from "core:base64";
 
 test "encode empty" {
-    let data: Array<u8> = [];
+    let data: List<u8> = [];
     assert encode(&data) == "";
 }
 
@@ -16,22 +16,22 @@ test "encode Hello World" {
 }
 
 test "encode single byte" {
-    let data: Array<u8> = [0] as Array<u8>;
+    let data: List<u8> = [0] as List<u8>;
     assert encode(&data) == "AA==";
 }
 
 test "encode two bytes" {
-    let data: Array<u8> = [0, 0] as Array<u8>;
+    let data: List<u8> = [0, 0] as List<u8>;
     assert encode(&data) == "AAA=";
 }
 
 test "encode three bytes" {
-    let data: Array<u8> = [0, 0, 0] as Array<u8>;
+    let data: List<u8> = [0, 0, 0] as List<u8>;
     assert encode(&data) == "AAAA";
 }
 
 test "encode all byte values" {
-    let mut data: Array<u8> = Array::with_capacity(256);
+    let mut data: List<u8> = List::with_capacity(256);
     for let mut i = 0; i < 256; i += 1 {
         data.push(i as u8);
     }
@@ -39,7 +39,7 @@ test "encode all byte values" {
 }
 
 test "encode standard alphabet chars" {
-    let data: Array<u8> = [251, 239, 190] as Array<u8>;
+    let data: List<u8> = [251, 239, 190] as List<u8>;
     assert decode(encode(&data)) matches { Some(d) && d == data };
 }
 
@@ -49,7 +49,7 @@ test "encode_url Hello" {
 }
 
 test "encode_url empty" {
-    let data: Array<u8> = [];
+    let data: List<u8> = [];
     assert encode_url(&data) == "";
 }
 
@@ -89,12 +89,12 @@ test "decode without padding" {
 }
 
 test "decode url-safe" {
-    let data: Array<u8> = [251, 239, 190] as Array<u8>;
+    let data: List<u8> = [251, 239, 190] as List<u8>;
     assert decode(encode_url(&data)) matches { Some(d) && d == data };
 }
 
 test "decode standard" {
-    let data: Array<u8> = [251, 239, 190] as Array<u8>;
+    let data: List<u8> = [251, 239, 190] as List<u8>;
     assert decode(encode(&data)) matches { Some(d) && d == data };
 }
 
@@ -105,7 +105,7 @@ test "decode_bytes" {
 }
 
 test "decode_bytes empty" {
-    let raw: Array<u8> = [];
+    let raw: List<u8> = [];
     assert decode_bytes(&raw) matches { Some(d) && d.len() == 0 };
 }
 
@@ -126,18 +126,18 @@ test "decode control chars" {
 }
 
 test "round-trip standard" {
-    let data: Array<u8> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as Array<u8>;
+    let data: List<u8> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as List<u8>;
     assert decode(encode(&data)) matches { Some(d) && d == data };
 }
 
 test "round-trip url-safe" {
-    let data: Array<u8> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as Array<u8>;
+    let data: List<u8> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as List<u8>;
     assert decode(encode_url(&data)) matches { Some(d) && d == data };
 }
 
 test "round-trip various lengths" {
     for let mut size = 0; size <= 20; size += 1 {
-        let mut data: Array<u8> = Array::with_capacity(size);
+        let mut data: List<u8> = List::with_capacity(size);
         for let mut j = 0; j < size; j += 1 {
             data.push(((j * 7 + 13) % 256) as u8);
         }

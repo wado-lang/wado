@@ -9,7 +9,7 @@
 //! affect what the parser matches.
 
 pub fn strip_action_bodies(grammar: &String) -> String {
-    let chars: Array<char> = grammar.chars().collect();
+    let chars: List<char> = grammar.chars().collect();
     let n = chars.len();
     let mut out = String::with_capacity(grammar.len());
     let mut i = 0;
@@ -193,8 +193,8 @@ fn is_whitespace_char(c: char) -> bool {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
 
-fn starts_with_word(chars: &Array<char>, i: i32, word: &String) -> bool {
-    let w: Array<char> = word.chars().collect();
+fn starts_with_word(chars: &List<char>, i: i32, word: &String) -> bool {
+    let w: List<char> = word.chars().collect();
     let wn = w.len();
     if i + wn > chars.len() {
         return false;
@@ -213,7 +213,7 @@ fn starts_with_word(chars: &Array<char>, i: i32, word: &String) -> bool {
     return true;
 }
 
-fn find_balanced_close(chars: &Array<char>, open_idx: i32) -> i32 {
+fn find_balanced_close(chars: &List<char>, open_idx: i32) -> i32 {
     let n = chars.len();
     let mut depth = 1;
     let mut i = open_idx + 1;
@@ -279,7 +279,7 @@ fn find_balanced_close(chars: &Array<char>, open_idx: i32) -> i32 {
     return -1;
 }
 
-fn find_balanced_close_bracket(chars: &Array<char>, open_idx: i32) -> i32 {
+fn find_balanced_close_bracket(chars: &List<char>, open_idx: i32) -> i32 {
     let n = chars.len();
     let mut depth = 1;
     let mut i = open_idx + 1;
@@ -303,7 +303,7 @@ fn find_balanced_close_bracket(chars: &Array<char>, open_idx: i32) -> i32 {
 }
 
 fn preceded_by_prequel_keyword(out: &String) -> bool {
-    let out_chars: Array<char> = out.chars().collect();
+    let out_chars: List<char> = out.chars().collect();
     let mut j = out_chars.len();
     while j > 0 && is_whitespace_char(out_chars[j - 1]) {
         j -= 1;
@@ -313,8 +313,8 @@ fn preceded_by_prequel_keyword(out: &String) -> bool {
         || ends_with_word(&out_chars, j, &"channels");
 }
 
-fn ends_with_word(chars: &Array<char>, end: i32, word: &String) -> bool {
-    let w: Array<char> = word.chars().collect();
+fn ends_with_word(chars: &List<char>, end: i32, word: &String) -> bool {
+    let w: List<char> = word.chars().collect();
     let wn = w.len();
     if end < wn {
         return false;

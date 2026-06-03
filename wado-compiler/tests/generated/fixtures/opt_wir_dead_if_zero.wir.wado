@@ -22,7 +22,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
 
 array builtin::array<u16> (mut u16);  // TypeId(3)
 
-struct core:prelude//Array<u16> {  // TypeId(4)
+struct core:prelude//List<u16> {  // TypeId(4)
     mut repr: ref builtin::array<u16>,
     mut used: i32,
 }
@@ -101,14 +101,14 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/opt_wir_dead_if_zero.wado/run"() {
-    let __b_0: ref "core:prelude//Array<u16>";
+    let __b_0: ref "core:prelude//List<u16>";
     let __v0: i32;
     let __cond: bool;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let f_24: ref "core:prelude/format.wado//Formatter";
     let f_29: ref "core:prelude/format.wado//Formatter";
-    __b_0 = struct.new "core:prelude//Array<u16>" { repr: array.new_fixed<u16>(10, 20, 30), used: 3 };
+    __b_0 = struct.new "core:prelude//List<u16>" { repr: array.new_fixed<u16>(10, 20, 30), used: 3 };
     __v0 = if builtin::unlikely(0) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;

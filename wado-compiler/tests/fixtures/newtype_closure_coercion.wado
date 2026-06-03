@@ -13,7 +13,7 @@ fn apply(f: IntFn, x: i32) -> i32 {
     return f(x);
 }
 
-fn fold(arr: Array<i32>, init: i32, op: Reducer) -> i32 {
+fn fold(arr: List<i32>, init: i32, op: Reducer) -> i32 {
     let mut acc = init;
     for let v of arr {
         acc = op(acc, v);
@@ -31,7 +31,7 @@ export fn run() with Stdout {
     println(`{inc(41)}`);
 
     // Case 3: closure with unannotated params, inferred via newtype expected
-    let sum = fold([1, 2, 3, 4, 5] as Array<i32>, 0, |a, b| a + b);
+    let sum = fold([1, 2, 3, 4, 5] as List<i32>, 0, |a, b| a + b);
     println(`{sum}`);
 }
 

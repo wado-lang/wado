@@ -33,7 +33,7 @@ Even if we solve cleanup for individual resources, we need **compositional clean
 ```wado
 struct Connection {
     socket: Socket,        // Needs close()
-    buffer: Array<u8>,     // GC is fine
+    buffer: List<u8>,     // GC is fine
 }
 
 // When Connection is dropped, socket must be closed automatically
@@ -114,7 +114,7 @@ Component Model `resource` types automatically have move-only semantics:
 resource File {
     static fn open(path: String) -> File with FileSystem;
 
-    fn write(&self, data: &Array<u8>) -> Result<u32, IoError> with FileSystem;
+    fn write(&self, data: &List<u8>) -> Result<u32, IoError> with FileSystem;
 
     fn drop(self) with FileSystem;  // Called on drop
 }
@@ -139,8 +139,8 @@ The destructor is the resource's `drop` method:
 resource Socket {
     static fn connect(addr: String) -> Socket with Network;
 
-    fn read(&self, buf: &mut Array<u8>) -> i32 with Network;
-    fn write(&self, data: &Array<u8>) -> i32 with Network;
+    fn read(&self, buf: &mut List<u8>) -> i32 with Network;
+    fn write(&self, data: &List<u8>) -> i32 with Network;
 
     // Destructor: a consuming method, may declare effects
     fn drop(self) with Network;
@@ -175,7 +175,7 @@ resource Socket {
 
 struct Connection {
     socket: Socket,        // resource field
-    buffer: Array<u8>,     // normal field
+    buffer: List<u8>,     // normal field
 }
 
 // Connection is implicitly unique (has resource field)
@@ -349,8 +349,8 @@ use {File} from "wasi:filesystem" with {
 resource File {
     static fn open(path: String) -> File with FileSystem;
 
-    fn write(&self, data: &Array<u8>) -> Result<u32, IoError> with FileSystem;
-    fn read(&self, buf: &mut Array<u8>) -> Result<u32, IoError> with FileSystem;
+    fn write(&self, data: &List<u8>) -> Result<u32, IoError> with FileSystem;
+    fn read(&self, buf: &mut List<u8>) -> Result<u32, IoError> with FileSystem;
 
     fn drop(self) with FileSystem {
         // Implementation calls WASI close
@@ -369,7 +369,7 @@ The compiler generates WIT with `[destructor]` annotation for Component Model ex
 variant Stream {
     File(File),      // resource
     Network(Socket), // resource
-    Memory(Array<u8>),
+    Memory(List<u8>),
 }
 
 // Stream is implicitly unique
@@ -379,14 +379,14 @@ variant Stream {
 **Arrays**: Arrays of resources are allowed:
 
 ```wado
-let files: Array<File> = [];
+let files: List<File> = [];
 files.push(File::open("a.txt"));
 files.push(File::open("b.txt"));
 
 // When files is dropped, all File destructors are called
 ```
 
-The `Array<File>` type is itself `unique` (cannot copy an array of unique values).
+The `List<File>` type is itself `unique` (cannot copy an array of unique values).
 
 ### 9. Effect Requirements for Destructors
 
@@ -421,7 +421,7 @@ This is automatically checked by the compiler.
 resource File {
     static fn open(path: String) -> Result<File, IoError> with FileSystem;
 
-    fn write(&self, data: &Array<u8>) -> Result<u32, IoError> with FileSystem;
+    fn write(&self, data: &List<u8>) -> Result<u32, IoError> with FileSystem;
 
     fn drop(self) with FileSystem {
         wasi_filesystem_close(self.handle);
@@ -518,8 +518,8 @@ fn safe_write(path: String, data: String) -> Result<(), Error> with FileSystem {
 ### Arrays of Resources
 
 ```wado
-fn open_all(paths: Array<String>) -> Array<File> with FileSystem {
-    let files: Array<File> = [];
+fn open_all(paths: List<String>) -> List<File> with FileSystem {
+    let files: List<File> = [];
 
     for path in paths {
         files.push(File::open(path)?);

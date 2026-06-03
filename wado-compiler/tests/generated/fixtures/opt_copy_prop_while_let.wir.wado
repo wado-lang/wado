@@ -21,13 +21,13 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
 }
 
 struct wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado//Iterator {  // TypeId(3)
-    mut items: ref "core:prelude//Array<i32>",
+    mut items: ref "core:prelude//List<i32>",
     mut pos: i32,
 }
 
 array builtin::array<i32> (mut i32);  // TypeId(4)
 
-struct core:prelude//Array<i32> {  // TypeId(5)
+struct core:prelude//List<i32> {  // TypeId(5)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
@@ -50,11 +50,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/sum_iter" = fn(ref "core:prelude//Array<i32>") -> i32;  // TypeId(15)
+type "functype//wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/sum_iter" = fn(ref "core:prelude//List<i32>") -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/count_positive" = fn(ref "core:prelude//Array<i32>") -> i32;  // TypeId(16)
+type "functype//wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/count_positive" = fn(ref "core:prelude//List<i32>") -> i32;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/cross_sum" = fn(ref "core:prelude//Array<i32>", ref "core:prelude//Array<i32>") -> i32;  // TypeId(17)
+type "functype//wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/cross_sum" = fn(ref "core:prelude//List<i32>", ref "core:prelude//List<i32>") -> i32;  // TypeId(17)
 
 type "functype//wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/run" = fn();  // TypeId(18)
 
@@ -240,17 +240,17 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/cross_sum"(a, b) {
 }
 
 fn "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/run"() {
-    let __b_0: ref "core:prelude//Array<i32>";
+    let __b_0: ref "core:prelude//List<i32>";
     let __v0_2: i32;
     let __cond_3: bool;
-    let __b_4: ref "core:prelude//Array<i32>";
+    let __b_4: ref "core:prelude//List<i32>";
     let __v0_6: i32;
     let __cond_7: bool;
-    let __b_8: ref "core:prelude//Array<i32>";
+    let __b_8: ref "core:prelude//List<i32>";
     let __v0_10: i32;
     let __cond_11: bool;
-    let __b_12: ref "core:prelude//Array<i32>";
-    let __b_14: ref "core:prelude//Array<i32>";
+    let __b_12: ref "core:prelude//List<i32>";
+    let __b_14: ref "core:prelude//List<i32>";
     let __v0_16: i32;
     let __cond_17: bool;
     let __local_18: ref "core:prelude/string.wado//String";
@@ -269,7 +269,7 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/run"() {
     let f_88: ref "core:prelude/format.wado//Formatter";
     let f_110: ref "core:prelude/format.wado//Formatter";
     let f_115: ref "core:prelude/format.wado//Formatter";
-    __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
+    __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
     __v0_2 = "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/sum_iter"(__b_0);
     __cond_3 = __v0_2 == 15;
     if __cond_3 == 0 {
@@ -278,7 +278,7 @@ condition: sum_iter(items) == 15
 "), used: 34 }); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sum_iter(items): "), used: 17 }); __local_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_18 }; f_48 = __local_19; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_2, f_48); "core:prelude/string.wado/String::push"(__local_18, 10); __local_18);
         unreachable;
     }
-    __b_4 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    __b_4 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     __v0_6 = "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/sum_iter"(__b_4);
     __cond_7 = __v0_6 == 0;
     if __cond_7 == 0 {
@@ -287,7 +287,7 @@ condition: sum_iter(empty) == 0
 "), used: 33 }); "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sum_iter(empty): "), used: 17 }); __local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_20 }; f_62 = __local_21; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_6, f_62); "core:prelude/string.wado/String::push"(__local_20, 10); __local_20);
         unreachable;
     }
-    __b_8 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, -1, 2, 0, 3, -5), used: 6 };
+    __b_8 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, -1, 2, 0, 3, -5), used: 6 };
     __v0_10 = "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/count_positive"(__b_8);
     __cond_11 = __v0_10 == 3;
     if __cond_11 == 0 {
@@ -296,8 +296,8 @@ condition: count_positive(mixed) == 3
 "), used: 39 }); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("count_positive(mixed): "), used: 23 }); __local_23 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_22 }; f_88 = __local_23; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_10, f_88); "core:prelude/string.wado/String::push"(__local_22, 10); __local_22);
         unreachable;
     }
-    __b_12 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    __b_14 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20), used: 2 };
+    __b_12 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    __b_14 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20), used: 2 };
     __v0_16 = "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/cross_sum"(__b_12, __b_14);
     __cond_17 = __v0_16 == 180;
     if __cond_17 == 0 {

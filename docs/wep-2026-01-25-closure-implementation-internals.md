@@ -126,14 +126,14 @@ Sub-typing `fn <: fn mut` is realized as `Fn` being a sub-trait of `FnMut`.
 
 ```wado
 // User writes:
-fn for_each<effect E>(items: Array<i32>, mut f: fn mut(i32) with E) with E {
+fn for_each<effect E>(items: List<i32>, mut f: fn mut(i32) with E) with E {
     for let item of items {
         f(item);
     }
 }
 
 // Internally desugars to:
-fn for_each<F: FnMut<[i32], (), [E]>, effect E>(items: Array<i32>, mut f: F) with E {
+fn for_each<F: FnMut<[i32], (), [E]>, effect E>(items: List<i32>, mut f: F) with E {
     for let item of items {
         f.call_mut([item]);
     }
@@ -384,7 +384,7 @@ Tasks:
 - [x] Convert `lib/core/prelude/traits.wado` iterator methods to `fn mut(...)`: `map`, `filter`, `fold`, `find`, `any`, `all`, `position`, `reduce`
 - [x] Add `for_each` method
 - [ ] Update return types from named adapter structs (`IterMap<Self, U>` etc.) to `Iterator<Item = ...>` where the adapter type does not need to be user-named (deferred — requires the elaborator to elaborate the trait-object-style return type, out of scope for this PR)
-- [x] Migrate other bare-`fn(...)` stdlib references where the closure should be `fn mut`: `String::find_char`, `Array::sort_by` / `sorted_by`, `Benchmark::run`, serde `lookup` (`serde.wado`, `json.wado`, `router.wado`)
+- [x] Migrate other bare-`fn(...)` stdlib references where the closure should be `fn mut`: `String::find_char`, `List::sort_by` / `sorted_by`, `Benchmark::run`, serde `lookup` (`serde.wado`, `json.wado`, `router.wado`)
 - [ ] Add `<effect E>` effect-polymorphism to iterator methods (deferred — closure literals already inherit caller effects, so this is additive convenience rather than a correctness fix)
 
 ### Phase 8: CM boundary error

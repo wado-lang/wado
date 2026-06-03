@@ -1575,7 +1575,7 @@ pub(super) struct TraitMethodMatch {
     pub(super) impl_struct_name: String,
     /// True for blanket ref impls like `impl<T: Inspect> Inspect for &T` where
     /// the inner type is a type parameter. False for specific ref impls like
-    /// `impl IntoIterator for &Array<T>` where the inner type is a concrete generic.
+    /// `impl IntoIterator for &List<T>` where the inner type is a concrete generic.
     #[allow(dead_code)] // Used when ref-type impl priority is enabled
     pub(super) is_blanket_ref_impl: bool,
 }

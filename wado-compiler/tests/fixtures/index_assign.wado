@@ -6,14 +6,14 @@ fn compute(x: i32) -> i32 {
 }
 
 // from index_assign_in_function.wado
-fn fill_array(arr: &mut Array<i32>) {
+fn fill_array(arr: &mut List<i32>) {
     arr[0] = 100;
     arr[1] = 200;
     arr[2] = 300;
 }
 
-fn create_and_fill() -> Array<i32> {
-    let mut arr: Array<i32> = [0, 0];
+fn create_and_fill() -> List<i32> {
+    let mut arr: List<i32> = [0, 0];
     arr[0] = 42;
     arr[1] = 84;
     return arr;
@@ -21,7 +21,7 @@ fn create_and_fill() -> Array<i32> {
 
 // from index_assign_basic.wado
 fn index_assign_basic() with Stdout {
-    let mut arr: Array<i32> = [10, 20, 30];
+    let mut arr: List<i32> = [10, 20, 30];
     arr[0] = 100;
     arr[1] = 200;
     arr[2] = 300;
@@ -30,7 +30,7 @@ fn index_assign_basic() with Stdout {
 
 // from index_assign_expression_value.wado
 fn index_assign_expression_value() with Stdout {
-    let mut arr: Array<i32> = [0, 0, 0, 0];
+    let mut arr: List<i32> = [0, 0, 0, 0];
 
     // Arithmetic expression
     arr[0] = 10 + 20 * 3;
@@ -39,7 +39,7 @@ fn index_assign_expression_value() with Stdout {
     arr[1] = compute(5);
 
     // Binary operation with array access
-    let other: Array<i32> = [100];
+    let other: List<i32> = [100];
     arr[2] = other[0] + 50;
 
     // Nested arithmetic
@@ -50,7 +50,7 @@ fn index_assign_expression_value() with Stdout {
 
 // from index_assign_in_conditional.wado
 fn index_assign_in_conditional() with Stdout {
-    let mut arr: Array<i32> = [0, 0, 0];
+    let mut arr: List<i32> = [0, 0, 0];
     let condition = true;
 
     if condition {
@@ -77,7 +77,7 @@ fn index_assign_in_conditional() with Stdout {
 
 // from index_assign_in_function.wado
 fn index_assign_in_function() with Stdout {
-    let mut arr: Array<i32> = [0, 0, 0];
+    let mut arr: List<i32> = [0, 0, 0];
     fill_array(&mut arr);
     println(`{arr[0]} {arr[1]} {arr[2]}`);
 
@@ -88,14 +88,14 @@ fn index_assign_in_function() with Stdout {
 // from index_assign_in_loop.wado
 fn index_assign_in_loop() with Stdout {
     // For loop
-    let mut arr: Array<i32> = [0, 0, 0, 0, 0];
+    let mut arr: List<i32> = [0, 0, 0, 0, 0];
     for let mut i = 0; i < 5; i += 1 {
         arr[i] = i * 10;
     }
     println(`for: {arr[0]} {arr[1]} {arr[2]} {arr[3]} {arr[4]}`);
 
     // While loop
-    let mut arr2: Array<i32> = [0, 0, 0];
+    let mut arr2: List<i32> = [0, 0, 0];
     let mut j = 0;
     while j < 3 {
         arr2[j] = j + 100;
@@ -104,7 +104,7 @@ fn index_assign_in_loop() with Stdout {
     println(`while: {arr2[0]} {arr2[1]} {arr2[2]}`);
 
     // Loop with break
-    let mut arr3: Array<i32> = [0, 0, 0];
+    let mut arr3: List<i32> = [0, 0, 0];
     let mut k = 0;
     loop {
         arr3[k] = k * k;
@@ -118,10 +118,10 @@ fn index_assign_in_loop() with Stdout {
 
 // from index_assign_multiple.wado
 fn index_assign_multiple() with Stdout {
-    let mut a: Array<i32> = [0, 0, 0];
-    let mut b: Array<i32> = [0, 0, 0];
-    let mut c: Array<i64> = [0 as i64, 0 as i64];
-    let mut d: Array<f64> = [0.0, 0.0];
+    let mut a: List<i32> = [0, 0, 0];
+    let mut b: List<i32> = [0, 0, 0];
+    let mut c: List<i64> = [0 as i64, 0 as i64];
+    let mut d: List<f64> = [0.0, 0.0];
 
     // Multiple i32 assignments (should reuse same temp local)
     a[0] = 1;
@@ -147,8 +147,8 @@ fn index_assign_multiple() with Stdout {
 
 // from index_assign_nested.wado
 fn index_assign_nested() with Stdout {
-    let indices: Array<i32> = [2, 0, 1];
-    let mut values: Array<i32> = [0, 0, 0];
+    let indices: List<i32> = [2, 0, 1];
+    let mut values: List<i32> = [0, 0, 0];
 
     // Use index from another array
     values[indices[0]] = 100;  // values[2] = 100
@@ -158,8 +158,8 @@ fn index_assign_nested() with Stdout {
     println(`{values[0]} {values[1]} {values[2]}`);
 
     // Value from another array
-    let source: Array<i32> = [10, 20, 30];
-    let mut dest: Array<i32> = [0, 0, 0];
+    let source: List<i32> = [10, 20, 30];
+    let mut dest: List<i32> = [0, 0, 0];
     dest[0] = source[2];
     dest[1] = source[0];
     dest[2] = source[1];
@@ -169,14 +169,14 @@ fn index_assign_nested() with Stdout {
 
 // from index_assign_ref_array.wado
 fn index_assign_ref_array() with Stdout {
-    // Array of strings
-    let mut strings: Array<String> = ["a", "b", "c"];
+    // List of strings
+    let mut strings: List<String> = ["a", "b", "c"];
     strings[0] = "hello";
     strings[1] = "world";
     println(`{strings[0]} {strings[1]} {strings[2]}`);
 
     // String with computed value
-    let mut messages: Array<String> = ["", ""];
+    let mut messages: List<String> = ["", ""];
     messages[0] = "first";
     messages[1] = "second";
     println(`{messages[0]} {messages[1]}`);

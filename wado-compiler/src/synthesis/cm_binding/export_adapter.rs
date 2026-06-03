@@ -180,7 +180,7 @@ fn lower_to_flat_inner(
         ResolvedType::GenericInstance {
             name, type_args, ..
         } if name == &names.array && type_args.len() == 1 => {
-            // Array<T> flat ABI: (ptr: i32, len: i32) pointing at
+            // List<T> flat ABI: (ptr: i32, len: i32) pointing at
             // `len * cm_size(T)` bytes of linear memory with `cm_align(T)`
             // alignment, laid out per the Canonical ABI.
             let elem_type_id = type_args[0];
@@ -201,7 +201,7 @@ fn lower_to_flat_inner(
             let arr_local = alloc_local(next_local, locals, type_id);
             stmts.push(let_stmt("__arr_val", arr_local, type_id, value));
 
-            // __len = Array::len(__arr)
+            // __len = List::len(__arr)
             let len_local = alloc_local(next_local, locals, TypeTable::I32);
             stmts.push(let_stmt(
                 "__arr_len",
@@ -211,7 +211,7 @@ fn lower_to_flat_inner(
                     local_ref(arr_local, "__arr_val", type_id),
                     &names.array,
                     "len",
-                    ModuleSource::array(),
+                    ModuleSource::list(),
                     vec![],
                     TypeTable::I32,
                 ),
@@ -293,7 +293,7 @@ fn lower_to_flat_inner(
                     TirExprKind::method_call(
                         Box::new(local_ref(arr_local, "__arr_val", type_id)),
                         FunctionRef {
-                            module_source: ModuleSource::array(),
+                            module_source: ModuleSource::list(),
                             name: iv_mangled,
                             monomorph_info: None,
                             method_info: Some(iv_info),
@@ -523,7 +523,7 @@ fn lower_to_flat_inner(
 /// Returns the lifted TIR expression and the number of flat params consumed.
 ///
 /// `lift_ctx` carries the full CM resolution stack (WASI + kiln registries,
-/// type-table cell, binding package hint) used for Array / nested-struct
+/// type-table cell, binding package hint) used for List / nested-struct
 /// lifts and for the `struct_type_map` lookup in WIR.
 pub(super) fn synthesize_lift_from_flat_params(
     ty: &Type,
@@ -657,7 +657,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 && generic.args.len() == 1
                 && matches!(generic.args[0], Type::Named(ref n) if n.name == "u8") =>
             {
-                // Array<u8> flat ABI: (ptr: i32, len: i32) pointing to linear memory
+                // List<u8> flat ABI: (ptr: i32, len: i32) pointing to linear memory
                 let ptr = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
                 let len = local_ref(flat_param_locals[1], "__p", TypeTable::I32);
                 let lifted = internal_call("memory_to_gc_array", vec![ptr, len], target_type_id);

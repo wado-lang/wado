@@ -503,7 +503,7 @@ impl<'a> WirEmitter<'a> {
     fn build_array_subtype(&mut self, a: &WirArrayType, wir_idx: u32, subtypes: &mut Vec<SubType>) {
         debug_assert!(self.type_index_map.contains_key(&wir_idx));
 
-        // Array element types must be nullable for `array.new_default` (defaultability).
+        // List element types must be nullable for `array.new_default` (defaultability).
         // We add `ref.as_non_null` after `array.get` for ref-type elements.
         let storage_type = self.wir_type_to_storage_type(&a.element_type.clone().as_nullable());
         subtypes.push(SubType {
@@ -1021,7 +1021,7 @@ impl<'a> WirEmitter<'a> {
                 }
                 // When `element_copy_func` is set, the loop also
                 // branches on per-element nullability (slots beyond
-                // `Array<T>::used` are default-null) so it needs an
+                // `List<T>::used` are default-null) so it needs an
                 // extra temp of element-nullable-ref type.
                 //
                 // Dedup the element temp independently of `new_clone_site`:
@@ -1829,7 +1829,7 @@ impl<'a> WirEmitter<'a> {
                     Some(false) => f.instruction(&Instruction::ArrayGetU(wasm_idx)),
                     None => f.instruction(&Instruction::ArrayGet(wasm_idx)),
                 };
-                // Array elements are nullable in Wasm (for array.new_default).
+                // List elements are nullable in Wasm (for array.new_default).
                 // Narrow to non-null since Wado values are always non-null.
                 if self.is_array_element_ref(type_id.index()) {
                     f.instruction(&Instruction::RefAsNonNull);
@@ -2436,7 +2436,7 @@ impl<'a> WirEmitter<'a> {
                         });
                     // Wasm GC `array.get` produces `(ref null T)`; the
                     // synthesized `$value_copy$T<id>` expects a
-                    // non-null `(ref T)`. `Array<T>::repr` is sized to
+                    // non-null `(ref T)`. `List<T>::repr` is sized to
                     // capacity (≥ `used`), so the slots beyond `used`
                     // hold `array.new_default`'s null. Branch on
                     // null and short-circuit those slots — preserving

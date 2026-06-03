@@ -336,7 +336,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // First, determine expected parameter types to handle coercion.
         let mut param_types = self.lookup_function_param_types(effective_name);
 
-        // For variant constructors with type args (e.g., Option::<Array<u8>>::Some([])),
+        // For variant constructors with type args (e.g., Option::<List<u8>>::Some([])),
         // compute substituted payload type so literal coercion works on first resolve.
         if param_types.is_empty()
             && let Some(pos) = effective_name.find("::")
@@ -1408,12 +1408,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .compiler_items()
             .struct_name(crate::compiler_item::CompilerItem::String)
             .to_string();
-        let array_struct_name = self
+        let list_struct_name = self
             .tysys
             .type_table
             .borrow()
             .compiler_items()
-            .struct_name(crate::compiler_item::CompilerItem::Array)
+            .struct_name(crate::compiler_item::CompilerItem::List)
             .to_string();
         if let Type::Named(named) = ty
             && named.name == string_struct_name
@@ -1595,10 +1595,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             },
             Type::Generic(generic)
-                if generic.name == array_struct_name && generic.args.len() == 1 =>
+                if generic.name == list_struct_name && generic.args.len() == 1 =>
             {
                 let elem_type = self.resolve_wasi_type_scoped(&generic.args[0], wasi_package);
-                self.tysys.type_table.borrow_mut().make_array(elem_type)
+                self.tysys.type_table.borrow_mut().make_list(elem_type)
             }
             Type::Generic(generic) => match generic.name.as_str() {
                 "Option" if generic.args.len() == 1 => {

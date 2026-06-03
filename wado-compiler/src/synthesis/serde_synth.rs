@@ -750,7 +750,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
         method_info = method_info.with_type_args(&arg_names, &[]);
     }
     let mangled_name = method_info.to_mangled_name();
-    // For generic types (Option<String>, Array<i32>, etc.), set monomorph_info with
+    // For generic types (Option<String>, List<i32>, etc.), set monomorph_info with
     // the concrete type_args so the monomorphizer substitutes them correctly instead of
     // blindly replacing with the enclosing function's type parameters.
     let monomorph_info = if type_args.is_empty() {

@@ -32,17 +32,17 @@ impl Eq for Span {
 /// LexerSlice is a lazy reference to a range of characters in the source input.
 /// It avoids allocating a String for every token during tokenization.
 pub struct LexerSlice {
-    pub chars: &Array<char>,
+    pub chars: &List<char>,
     pub start: i32,
     pub end: i32,
 }
 
 impl LexerSlice {
-    pub fn new(chars: &Array<char>, start: i32, end: i32) -> LexerSlice with stores[chars] {
+    pub fn new(chars: &List<char>, start: i32, end: i32) -> LexerSlice with stores[chars] {
         return LexerSlice { chars, start, end };
     }
 
-    pub fn empty(chars: &Array<char>) -> LexerSlice with stores[chars] {
+    pub fn empty(chars: &List<char>) -> LexerSlice with stores[chars] {
         return LexerSlice { chars, start: 0, end: 0 };
     }
 
@@ -123,7 +123,7 @@ pub struct Token {
     pub kind: i32,
     pub text: LexerSlice,
     pub span: Span,
-    pub leading_trivia: Array<Token>,
+    pub leading_trivia: List<Token>,
     pub channel: i32,
 }
 
@@ -132,11 +132,11 @@ impl Token {
         return Token { kind, text, span, leading_trivia: [], channel: 0 };
     }
 
-    pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>) -> Token {
+    pub fn with_trivia(kind: i32, text: LexerSlice, span: Span, leading_trivia: List<Token>) -> Token {
         return Token { kind, text, span, leading_trivia, channel: 0 };
     }
 
-    pub fn with_channel(kind: i32, text: LexerSlice, span: Span, leading_trivia: Array<Token>, channel: i32) -> Token {
+    pub fn with_channel(kind: i32, text: LexerSlice, span: Span, leading_trivia: List<Token>, channel: i32) -> Token {
         return Token { kind, text, span, leading_trivia, channel };
     }
 }
@@ -160,20 +160,20 @@ impl Token {
 pub struct ParseError {
     pub message: String,
     pub span: Span,
-    pub expected: Array<String>,
+    pub expected: List<String>,
     pub line: i32 = 1,
     pub col: i32 = 0,
-    pub rule_stack: Array<String> = [],
+    pub rule_stack: List<String> = [],
 }
 
 impl ParseError {
-    pub fn new(message: String, span: Span, expected: Array<String>) -> ParseError {
+    pub fn new(message: String, span: Span, expected: List<String>) -> ParseError {
         return ParseError { message, span, expected };
     }
 
     /// Construct a ParseError whose position is already resolved. Used by
     /// `Parser::error`, which has the source on hand to compute line/col.
-    pub fn at(message: String, span: Span, expected: Array<String>, line: i32, col: i32) -> ParseError {
+    pub fn at(message: String, span: Span, expected: List<String>, line: i32, col: i32) -> ParseError {
         return ParseError { message, span, expected, line, col, rule_stack: [] };
     }
 
@@ -220,7 +220,7 @@ pub variant CstChild {
 pub struct CstNode {
     pub name: String,
     pub span: Span,
-    pub children: Array<CstChild>,
+    pub children: List<CstChild>,
 }
 
 impl CstNode {
@@ -323,8 +323,8 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// Text escaping follows `CommonToken.toString` (`vendor/antlr4/runtime/
 /// Java/src/org/antlr/v4/runtime/CommonToken.java`): only `\n`, `\r`,
 /// `\t` are escaped; backslashes and quotes pass through unchanged.
-pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
-    let chars: Array<char> = input.chars().collect();
+pub fn to_lexer_string(tokens: &List<Token>, input: &String, eof_kind: i32) -> String {
+    let chars: List<char> = input.chars().collect();
     let mut out = String::with_capacity(tokens.len() * 32);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
@@ -353,7 +353,7 @@ pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> 
 /// `to_lexer_string` for both main-stream tokens and interleaved
 /// non-default-channel trivia. `channel=N` is printed only for non-default
 /// channels, matching ANTLR4.
-fn emit_lexer_token(out: &mut String, tok: &Token, chars: &Array<char>, index: i32, eof_kind: i32) {
+fn emit_lexer_token(out: &mut String, tok: &Token, chars: &List<char>, index: i32, eof_kind: i32) {
     let is_eof = tok.kind == eof_kind;
     let mut text_buf = String::with_capacity(16);
     if is_eof {
@@ -380,7 +380,7 @@ fn emit_lexer_token(out: &mut String, tok: &Token, chars: &Array<char>, index: i
 
 /// Compute (line, column) at a 0-based char index in `chars`, with
 /// 1-based line and 0-based column to match ANTLR4's `Token` getters.
-fn line_col_at(chars: &Array<char>, pos: i32) -> [i32, i32] {
+fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
     let mut line = 1;
     let mut col = 0;
     let cap = if pos < chars.len() { pos } else { chars.len() };
@@ -409,9 +409,9 @@ pub struct HighlightOverride {
 /// passes to `Visitor::enter_rule`. The generator emits the names in
 /// parser-rule declaration order; index = rule id.
 pub struct HighlightMapping {
-    pub defaults: Array<String>,
-    pub rule_names: Array<String>,
-    pub overrides: Array<HighlightOverride>,
+    pub defaults: List<String>,
+    pub rule_names: List<String>,
+    pub overrides: List<HighlightOverride>,
 }
 
 /// A single highlight capture: a named range in the source text.
@@ -431,15 +431,15 @@ struct ResolvedOverride {
 
 /// HighlightVisitor collects highlight captures during a CST walk.
 pub struct HighlightVisitor {
-    defaults: Array<String>,
-    overrides: Array<ResolvedOverride>,
-    rule_stack: Array<i32>,
-    pub captures: Array<HighlightCapture>,
+    defaults: List<String>,
+    overrides: List<ResolvedOverride>,
+    rule_stack: List<i32>,
+    pub captures: List<HighlightCapture>,
 }
 
 impl HighlightVisitor {
     pub fn new(mapping: HighlightMapping) -> HighlightVisitor {
-        let mut overrides: Array<ResolvedOverride> = Array::with_capacity(mapping.overrides.len());
+        let mut overrides: List<ResolvedOverride> = List::with_capacity(mapping.overrides.len());
         for let ov of &mapping.overrides {
             let mut id: i32 = -1;
             for let mut i = 0; i < mapping.rule_names.len(); i += 1 {
@@ -553,7 +553,7 @@ fn push_class(out: &mut String, capture: &String) {
 
 /// Produce a highlighted HTML fragment from source text and captures.
 /// Captures must be sorted by start position (as produced by HighlightVisitor).
-pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> String {
+pub fn highlight_html(source: &String, captures: &List<HighlightCapture>) -> String {
     let mut out = String::with_capacity(source.len() * 5);
     let mut pos = 0;
     let mut iter = source.chars();
@@ -582,7 +582,7 @@ pub fn highlight_html(source: &String, captures: &Array<HighlightCapture>) -> St
     return out;
 }
 
-fn substr(chars: &Array<char>, start: i32, end: i32) -> String {
+fn substr(chars: &List<char>, start: i32, end: i32) -> String {
     let mut out = String::with_capacity(end - start);
     let mut i = start;
     while i < end && i < chars.len() {
@@ -611,7 +611,7 @@ pub trait Visitor {
 
 /// TreeRecorder is a Visitor that records events for building a CstNode tree.
 pub struct TreeRecorder {
-    events: Array<TreeEvent>,
+    events: List<TreeEvent>,
 }
 
 variant TreeEvent {
@@ -650,10 +650,10 @@ impl Visitor for TreeRecorder {
     }
 }
 
-fn tree_build_node(events: &Array<TreeEvent>, pos: &mut i32) -> CstNode {
+fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
     if let Enter(info) = events[*pos] {
         *pos += 1;
-        let mut children: Array<CstChild> = [];
+        let mut children: List<CstChild> = [];
         loop {
             if *pos >= events.len() {
                 break;
@@ -845,7 +845,7 @@ pub variant SqlStmtListOrErrorGroup {
 
 pub struct ParseNode {
     pub span: Span,
-    pub sql_stmt_list_or_error_list: Array<SqlStmtListOrErrorGroup>,
+    pub sql_stmt_list_or_error_list: List<SqlStmtListOrErrorGroup>,
     pub eof: Token,
 }
 
@@ -855,16 +855,16 @@ pub struct ErrorNode {
 }
 
 pub struct SemicolonListSqlStmtItem {
-    pub semicolon_list: Array<Token>,
+    pub semicolon_list: List<Token>,
     pub sql_stmt: SqlStmtNode,
 }
 
 pub struct SqlStmtListNode {
     pub span: Span,
-    pub semicolon_list: Array<Token>,
+    pub semicolon_list: List<Token>,
     pub sql_stmt: SqlStmtNode,
-    pub semicolon_sql_stmt_list: Array<SemicolonListSqlStmtItem>,
-    pub semicolon_list_2: Array<Token>,
+    pub semicolon_sql_stmt_list: List<SemicolonListSqlStmtItem>,
+    pub semicolon_list_2: List<Token>,
 }
 
 pub struct KQueryKPlanItem {
@@ -1033,7 +1033,7 @@ pub struct KOrderKByOrderingTermItemListItem {
     pub k_order: Token,
     pub k_by: Token,
     pub ordering_term: OrderingTermNode,
-    pub comma_ordering_term_list: Array<CommaOrderingTermItem>,
+    pub comma_ordering_term_list: List<CommaOrderingTermItem>,
 }
 
 pub struct ItemExprItem {
@@ -1051,7 +1051,7 @@ pub struct CompoundSelectStmtNode {
     pub span: Span,
     pub with_clause: Option<WithClauseNode>,
     pub select_core: SelectCoreNode,
-    pub item_select_core_list: Array<ItemSelectCoreItem>,
+    pub item_select_core_list: List<ItemSelectCoreItem>,
     pub k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemListItem>,
     pub k_limit_expr_item: Option<KLimitExprItemOptItem>,
 }
@@ -1084,7 +1084,7 @@ pub struct CreateIndexStmtNode {
     pub table_name: TableNameNode,
     pub lparen: Token,
     pub indexed_column: IndexedColumnNode,
-    pub comma_indexed_column_list: Array<CommaIndexedColumnItem>,
+    pub comma_indexed_column_list: List<CommaIndexedColumnItem>,
     pub rparen: Token,
     pub k_where_expr: Option<KWhereExprItem>,
 }
@@ -1112,8 +1112,8 @@ pub variant CreateTableStmtGroup0 {
 pub struct CreateTableStmtGroup0Alt0 {
     pub lparen: Token,
     pub column_def: ColumnDefNode,
-    pub comma_column_def_list: Array<CommaColumnDefItem>,
-    pub comma_table_constraint_list: Array<CommaTableConstraintItem>,
+    pub comma_column_def_list: List<CommaColumnDefItem>,
+    pub comma_table_constraint_list: List<CommaTableConstraintItem>,
     pub rparen: Token,
     pub k_without_identifier: Option<KWithoutIdentifierItem>,
 }
@@ -1161,7 +1161,7 @@ pub struct CommaColumnNameItem {
 pub struct KOfColumnNameItemListItem {
     pub k_of: Token,
     pub column_name: ColumnNameNode,
-    pub comma_column_name_list: Array<CommaColumnNameItem>,
+    pub comma_column_name_list: List<CommaColumnNameItem>,
 }
 
 pub variant CreateTriggerStmtGroup1 {
@@ -1222,7 +1222,7 @@ pub struct CreateTriggerStmtNode {
     pub k_for_k_each_k_row: Option<KForKEachKRowItem>,
     pub k_when_expr: Option<KWhenExprItem>,
     pub k_begin: Token,
-    pub item_semicolon_list: Array<ItemSemicolonItem>,
+    pub item_semicolon_list: List<ItemSemicolonItem>,
     pub k_end: Token,
 }
 
@@ -1246,7 +1246,7 @@ pub struct CommaModuleArgumentItem {
 pub struct LparenModuleArgumentItemListRparenItem {
     pub lparen: Token,
     pub module_argument: ModuleArgumentNode,
-    pub comma_module_argument_list: Array<CommaModuleArgumentItem>,
+    pub comma_module_argument_list: List<CommaModuleArgumentItem>,
     pub rparen: Token,
 }
 
@@ -1346,7 +1346,7 @@ pub struct FactoredSelectStmtNode {
     pub span: Span,
     pub with_clause: Option<WithClauseNode>,
     pub select_core: SelectCoreNode,
-    pub compound_operator_select_core_list: Array<CompoundOperatorSelectCoreItem>,
+    pub compound_operator_select_core_list: List<CompoundOperatorSelectCoreItem>,
     pub k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemListItem>,
     pub k_limit_expr_item: Option<KLimitExprItemOptItem>,
 }
@@ -1402,7 +1402,7 @@ pub struct InsertStmtGroup0Alt6 {
 pub struct LparenColumnNameItemListRparenItem {
     pub lparen: Token,
     pub column_name: ColumnNameNode,
-    pub comma_column_name_list: Array<CommaColumnNameItem>,
+    pub comma_column_name_list: List<CommaColumnNameItem>,
     pub rparen: Token,
 }
 
@@ -1415,7 +1415,7 @@ pub struct CommaLparenExprItemListRparenItem {
     pub comma: Token,
     pub lparen: Token,
     pub expr: ExprNode,
-    pub comma_expr_list: Array<CommaExprItem>,
+    pub comma_expr_list: List<CommaExprItem>,
     pub rparen: Token,
 }
 
@@ -1429,9 +1429,9 @@ pub struct InsertStmtGroup1Alt0 {
     pub k_values: Token,
     pub lparen: Token,
     pub expr: ExprNode,
-    pub comma_expr_list: Array<CommaExprItem>,
+    pub comma_expr_list: List<CommaExprItem>,
     pub rparen: Token,
-    pub comma_lparen_expr_item_rparen_list: Array<CommaLparenExprItemListRparenItem>,
+    pub comma_lparen_expr_item_rparen_list: List<CommaLparenExprItemListRparenItem>,
 }
 
 pub struct InsertStmtGroup1Alt1 {
@@ -1546,7 +1546,7 @@ pub struct SelectStmtNode {
     pub span: Span,
     pub with_clause: Option<WithClauseNode>,
     pub select_or_values: SelectOrValuesNode,
-    pub compound_operator_select_or_values_list: Array<CompoundOperatorSelectOrValuesItem>,
+    pub compound_operator_select_or_values_list: List<CompoundOperatorSelectOrValuesItem>,
     pub k_order_k_by_ordering_term_item: Option<KOrderKByOrderingTermItemListItem>,
     pub k_limit_expr_item: Option<KLimitExprItemOptItem>,
 }
@@ -1573,7 +1573,7 @@ pub variant SelectOrValuesGroup0 {
 
 pub struct SelectOrValuesGroup0Alt0 {
     pub table_or_subquery: TableOrSubqueryNode,
-    pub comma_table_or_subquery_list: Array<CommaTableOrSubqueryItem>,
+    pub comma_table_or_subquery_list: List<CommaTableOrSubqueryItem>,
 }
 
 pub struct SelectOrValuesGroup0Alt1 {
@@ -1594,7 +1594,7 @@ pub struct KGroupKByExprItemListItemOptItem {
     pub k_group: Token,
     pub k_by: Token,
     pub expr: ExprNode,
-    pub comma_expr_list: Array<CommaExprItem>,
+    pub comma_expr_list: List<CommaExprItem>,
     pub k_having_expr: Option<KHavingExprItem>,
 }
 
@@ -1603,7 +1603,7 @@ pub struct SelectOrValuesAlt0 {
     pub k_select: Token,
     pub k_distinct_or_k_all: Option<Token>,
     pub result_column: ResultColumnNode,
-    pub comma_result_column_list: Array<CommaResultColumnItem>,
+    pub comma_result_column_list: List<CommaResultColumnItem>,
     pub k_from_item: Option<KFromItemItem>,
     pub k_where_expr: Option<KWhereExprItem>,
     pub k_group_k_by_expr_item_item: Option<KGroupKByExprItemListItemOptItem>,
@@ -1614,9 +1614,9 @@ pub struct SelectOrValuesAlt1 {
     pub k_values: Token,
     pub lparen: Token,
     pub expr: ExprNode,
-    pub comma_expr_list: Array<CommaExprItem>,
+    pub comma_expr_list: List<CommaExprItem>,
     pub rparen: Token,
-    pub comma_lparen_expr_item_rparen_list: Array<CommaLparenExprItemListRparenItem>,
+    pub comma_lparen_expr_item_rparen_list: List<CommaLparenExprItemListRparenItem>,
 }
 
 pub variant UpdateStmtGroup0 {
@@ -1669,7 +1669,7 @@ pub struct UpdateStmtNode {
     pub column_name: ColumnNameNode,
     pub eq: Token,
     pub expr: ExprNode,
-    pub comma_column_name_eq_expr_list: Array<CommaColumnNameEqExprItem>,
+    pub comma_column_name_eq_expr_list: List<CommaColumnNameEqExprItem>,
     pub k_where_expr: Option<KWhereExprItem>,
 }
 
@@ -1716,7 +1716,7 @@ pub struct UpdateStmtLimitedNode {
     pub column_name: ColumnNameNode,
     pub eq: Token,
     pub expr: ExprNode,
-    pub comma_column_name_eq_expr_list: Array<CommaColumnNameEqExprItem>,
+    pub comma_column_name_eq_expr_list: List<CommaColumnNameEqExprItem>,
     pub k_where_expr: Option<KWhereExprItem>,
     pub item_k_limit_expr_item: Option<ItemOptKLimitExprItemOptItem>,
 }
@@ -1730,7 +1730,7 @@ pub struct ColumnDefNode {
     pub span: Span,
     pub column_name: ColumnNameNode,
     pub type_name: Option<TypeNameNode>,
-    pub column_constraint_list: Array<ColumnConstraintNode>,
+    pub column_constraint_list: List<ColumnConstraintNode>,
 }
 
 pub variant TypeNameGroup0 {
@@ -1754,7 +1754,7 @@ pub struct TypeNameGroup0Alt1 {
 
 pub struct TypeNameNode {
     pub span: Span,
-    pub name_list: Array<NameNode>,
+    pub name_list: List<NameNode>,
     pub group_0: Option<TypeNameGroup0>,
 }
 
@@ -1958,7 +1958,7 @@ pub struct ExprGroup1Alt0 {
 
 pub struct ExprGroup1Alt1 {
     pub expr: ExprNode,
-    pub comma_expr_list: Array<CommaExprItem>,
+    pub comma_expr_list: List<CommaExprItem>,
 }
 
 pub variant ExprGroup0 {
@@ -2007,7 +2007,7 @@ pub variant ExprGroup2 {
 pub struct ExprGroup2Alt0 {
     pub k_distinct: Option<Token>,
     pub expr: ExprNode,
-    pub comma_expr_list: Array<CommaExprItem>,
+    pub comma_expr_list: List<CommaExprItem>,
 }
 
 pub struct ExprGroup2Alt1 {
@@ -2131,7 +2131,7 @@ pub struct ExprAlt22 {
     pub span: Span,
     pub k_case: Token,
     pub expr: Option<ExprNode>,
-    pub k_when_expr_k_then_expr_list: Array<KWhenExprKThenExprItem>,
+    pub k_when_expr_k_then_expr_list: List<KWhenExprKThenExprItem>,
     pub k_else_expr: Option<KElseExprItem>,
     pub k_end: Token,
 }
@@ -2276,7 +2276,7 @@ pub struct TableConstraintGroup0Alt0 {
     pub group_1: Option<TableConstraintGroup1>,
     pub lparen: Token,
     pub indexed_column: IndexedColumnNode,
-    pub comma_indexed_column_list: Array<CommaIndexedColumnItem>,
+    pub comma_indexed_column_list: List<CommaIndexedColumnItem>,
     pub rparen: Token,
     pub conflict_clause: ConflictClauseNode,
 }
@@ -2293,7 +2293,7 @@ pub struct TableConstraintGroup0Alt2 {
     pub k_key: Token,
     pub lparen: Token,
     pub column_name: ColumnNameNode,
-    pub comma_column_name_list: Array<CommaColumnNameItem>,
+    pub comma_column_name_list: List<CommaColumnNameItem>,
     pub rparen: Token,
     pub foreign_key_clause: ForeignKeyClauseNode,
 }
@@ -2314,7 +2314,7 @@ pub struct WithClauseNode {
     pub k_with: Token,
     pub k_recursive: Option<Token>,
     pub common_table_expression: CommonTableExpressionNode,
-    pub comma_common_table_expression_list: Array<CommaCommonTableExpressionItem>,
+    pub comma_common_table_expression_list: List<CommaCommonTableExpressionItem>,
 }
 
 pub variant QualifiedTableNameGroup0 {
@@ -2450,7 +2450,7 @@ pub struct TableOrSubqueryAlt0 {
 
 pub struct ExprItemListItem {
     pub expr: ExprNode,
-    pub comma_expr_list: Array<CommaExprItem>,
+    pub comma_expr_list: List<CommaExprItem>,
 }
 
 pub struct TableOrSubqueryAlt1 {
@@ -2470,7 +2470,7 @@ pub variant TableOrSubqueryGroup1 {
 
 pub struct TableOrSubqueryGroup1Alt0 {
     pub table_or_subquery: TableOrSubqueryNode,
-    pub comma_table_or_subquery_list: Array<CommaTableOrSubqueryItem>,
+    pub comma_table_or_subquery_list: List<CommaTableOrSubqueryItem>,
 }
 
 pub struct TableOrSubqueryGroup1Alt1 {
@@ -2501,7 +2501,7 @@ pub struct JoinOperatorTableOrSubqueryJoinConstraintItem {
 pub struct JoinClauseNode {
     pub span: Span,
     pub table_or_subquery: TableOrSubqueryNode,
-    pub join_operator_table_or_subquery_join_constraint_list: Array<JoinOperatorTableOrSubqueryJoinConstraintItem>,
+    pub join_operator_table_or_subquery_join_constraint_list: List<JoinOperatorTableOrSubqueryJoinConstraintItem>,
 }
 
 pub variant JoinOperatorNode {
@@ -2554,7 +2554,7 @@ pub struct JoinConstraintGroup0Alt1 {
     pub k_using: Token,
     pub lparen: Token,
     pub column_name: ColumnNameNode,
-    pub comma_column_name_list: Array<CommaColumnNameItem>,
+    pub comma_column_name_list: List<CommaColumnNameItem>,
     pub rparen: Token,
 }
 
@@ -2573,7 +2573,7 @@ pub struct SelectCoreAlt0 {
     pub k_select: Token,
     pub k_distinct_or_k_all: Option<Token>,
     pub result_column: ResultColumnNode,
-    pub comma_result_column_list: Array<CommaResultColumnItem>,
+    pub comma_result_column_list: List<CommaResultColumnItem>,
     pub k_from_item: Option<KFromItemItem>,
     pub k_where_expr: Option<KWhereExprItem>,
     pub k_group_k_by_expr_item_item: Option<KGroupKByExprItemListItemOptItem>,
@@ -2584,9 +2584,9 @@ pub struct SelectCoreAlt1 {
     pub k_values: Token,
     pub lparen: Token,
     pub expr: ExprNode,
-    pub comma_expr_list: Array<CommaExprItem>,
+    pub comma_expr_list: List<CommaExprItem>,
     pub rparen: Token,
-    pub comma_lparen_expr_item_rparen_list: Array<CommaLparenExprItemListRparenItem>,
+    pub comma_lparen_expr_item_rparen_list: List<CommaLparenExprItemListRparenItem>,
 }
 
 pub variant CompoundOperatorNode {
@@ -3804,7 +3804,7 @@ global TK_LIT_LTGT: i32 = 181;
 global TK_LIT_TILDE: i32 = 182;
 
 struct Lexer {
-    chars: Array<char>,
+    chars: List<char>,
     pos: i32,
 }
 
@@ -3822,7 +3822,7 @@ impl Lexer {
     }
 }
 
-fn try_identifier(chars: &Array<char>, start: i32) -> i32 {
+fn try_identifier(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
     let mut alts_ok_0 = false;
@@ -3996,7 +3996,7 @@ fn try_identifier(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_numeric_literal(chars: &Array<char>, start: i32) -> i32 {
+fn try_numeric_literal(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_12 = pos;
     let mut alts_ok_12 = false;
@@ -4127,7 +4127,7 @@ fn try_numeric_literal(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_bind_parameter(chars: &Array<char>, start: i32) -> i32 {
+fn try_bind_parameter(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_23 = pos;
     let mut alts_ok_23 = false;
@@ -4163,7 +4163,7 @@ fn try_bind_parameter(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_string_literal(chars: &Array<char>, start: i32) -> i32 {
+fn try_string_literal(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
     pos += 1;
@@ -4208,7 +4208,7 @@ fn try_string_literal(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_blob_literal(chars: &Array<char>, start: i32) -> i32 {
+fn try_blob_literal(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == 'x' || chars[pos] == 'X') { return -1; }
@@ -4218,7 +4218,7 @@ fn try_blob_literal(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_single_line_comment(chars: &Array<char>, start: i32) -> i32 {
+fn try_single_line_comment(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '-' { return -1; }
     pos += 1;
@@ -4238,7 +4238,7 @@ fn try_single_line_comment(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_multiline_comment(chars: &Array<char>, start: i32) -> i32 {
+fn try_multiline_comment(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
@@ -4278,7 +4278,7 @@ fn try_multiline_comment(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_spaces(chars: &Array<char>, start: i32) -> i32 {
+fn try_spaces(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !(false || chars[pos] == ' ' || chars[pos] == '\u{b}' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
@@ -4286,166 +4286,166 @@ fn try_spaces(chars: &Array<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_unexpected_char(chars: &Array<char>, start: i32) -> i32 {
+fn try_unexpected_char(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_lit_semi(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_semi(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ';' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_dot(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_dot(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '.' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_comma(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_comma(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ',' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_lparen(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_lparen(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '(' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_rparen(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_rparen(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != ')' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_eq(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_eq(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '=' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_pipepipe(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_pipepipe(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '|' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '|' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_star(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_star(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '*' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_slash(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_slash(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '/' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_percent(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_percent(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '%' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_plus(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_plus(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '+' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_minus(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_minus(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '-' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_ltlt(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_ltlt(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '<' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '<' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_gtgt(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_gtgt(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '>' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '>' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_amp(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_amp(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '&' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_pipe(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_pipe(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '|' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_lt(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_lt(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '<' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_lteq(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_lteq(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '<' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '=' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_gt(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_gt(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '>' { return -1; }
     return pos + 1;
 }
 
-fn try_lit_gteq(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_gteq(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '>' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '=' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_eqeq(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_eqeq(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '=' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '=' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_bangeq(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_bangeq(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '!' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '=' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_ltgt(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_ltgt(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '<' { return -1; }
     if pos + 1 >= chars.len() || chars[pos + 1] != '>' { return -1; }
     return pos + 2;
 }
 
-fn try_lit_tilde(chars: &Array<char>, start: i32) -> i32 {
+fn try_lit_tilde(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '~' { return -1; }
     return pos + 1;
 }
 
-fn classify_keyword(chars: &Array<char>, start: i32, end: i32) -> i32 {
+fn classify_keyword(chars: &List<char>, start: i32, end: i32) -> i32 {
     let len = end - start;
     if len == 2 {
         if chars[start].eq_ignore_ascii_case(&'a') {
@@ -4673,10 +4673,10 @@ fn classify_keyword(chars: &Array<char>, start: i32, end: i32) -> i32 {
     return -1;
 }
 
-pub fn tokenize(input: &String) -> Array<Token> {
+pub fn tokenize(input: &String) -> List<Token> {
     let mut lexer = Lexer::new(input);
-    let mut tokens: Array<Token> = Array::with_capacity(lexer.chars.len() / 4 + 1);
-    let mut trivia: Array<Token> = [];
+    let mut tokens: List<Token> = List::with_capacity(lexer.chars.len() / 4 + 1);
+    let mut trivia: List<Token> = [];
     while !lexer.at_end() {
         let start = lexer.pos;
         let mut best_end: i32 = -1;
@@ -4991,17 +4991,17 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 struct Parser {
-    tokens: Array<Token>,
+    tokens: List<Token>,
     pos: i32,
-    chars: Array<char>,
+    chars: List<char>,
 }
 
 impl Parser {
-    fn new(tokens: Array<Token>, chars: Array<char>) -> Parser {
+    fn new(tokens: List<Token>, chars: List<char>) -> Parser {
         return Parser { tokens, pos: 0, chars };
     }
 
-    fn error(&self, message: String, span: Span, expected: Array<String>) -> ParseError {
+    fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
         let lc = line_col_at(&self.chars, span.start);
         return ParseError::at(message, span, expected, lc.0, lc.1);
     }
@@ -5068,7 +5068,7 @@ impl Parser {
         ));
     }
 
-    fn match_not(&mut self, excluded: Array<i32>) -> Result<Token, ParseError> {
+    fn match_not(&mut self, excluded: List<i32>) -> Result<Token, ParseError> {
         let k = self.tokens[self.pos].kind;
         if k != TK_EOF {
             let mut blocked = false;
@@ -5090,7 +5090,7 @@ impl Parser {
         ));
     }
 
-    fn match_set(&mut self, included: Array<i32>) -> Result<Token, ParseError> {
+    fn match_set(&mut self, included: List<i32>) -> Result<Token, ParseError> {
         let k = self.tokens[self.pos].kind;
         for let x of included {
             if x == k {
@@ -5109,7 +5109,7 @@ impl Parser {
     }
 }
 
-fn scan_parse(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_parse(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) {
         let sp = pos;
@@ -5137,14 +5137,14 @@ fn scan_parse(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_error(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_error(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_UNEXPECTED_CHAR { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_sql_stmt_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_sql_stmt_list(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos].kind == TK_LIT_SEMI {
         let sp = pos;
@@ -5184,7 +5184,7 @@ fn scan_sql_stmt_list(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     return pos;
 }
 
-fn scan_sql_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_sql_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_EXPLAIN && pos + 1 < tokens.len() && tokens[pos + 1].kind == TK_K_QUERY && pos + 2 < tokens.len() && tokens[pos + 2].kind == TK_K_PLAN {
         sol_2: {
@@ -5393,7 +5393,7 @@ fn scan_sql_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_alter_table_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_alter_table_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_ALTER { return -1; }
     pos += 1;
@@ -5448,7 +5448,7 @@ fn scan_alter_table_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     return pos;
 }
 
-fn scan_analyze_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_analyze_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_ANALYZE { return -1; }
     pos += 1;
@@ -5487,7 +5487,7 @@ fn scan_analyze_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     return pos;
 }
 
-fn scan_attach_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_attach_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_ATTACH { return -1; }
     pos += 1;
@@ -5505,7 +5505,7 @@ fn scan_attach_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_begin_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_begin_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_BEGIN { return -1; }
     pos += 1;
@@ -5551,7 +5551,7 @@ fn scan_begin_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_commit_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_commit_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_11 = pos;
     sg_11: {
@@ -5585,7 +5585,7 @@ fn scan_commit_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_compound_select_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_compound_select_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_WITH {
         let sp = pos;
@@ -5742,7 +5742,7 @@ fn scan_compound_select_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
     return pos;
 }
 
-fn scan_create_index_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_create_index_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_CREATE { return -1; }
     pos += 1;
@@ -5827,7 +5827,7 @@ fn scan_create_index_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     return pos;
 }
 
-fn scan_create_table_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_create_table_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_CREATE { return -1; }
     pos += 1;
@@ -5957,7 +5957,7 @@ fn scan_create_table_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     return pos;
 }
 
-fn scan_create_trigger_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_create_trigger_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_CREATE { return -1; }
     pos += 1;
@@ -6239,7 +6239,7 @@ fn scan_create_trigger_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
     return pos;
 }
 
-fn scan_create_view_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_create_view_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_CREATE { return -1; }
     pos += 1;
@@ -6304,7 +6304,7 @@ fn scan_create_view_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     return pos;
 }
 
-fn scan_create_virtual_table_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_create_virtual_table_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_CREATE { return -1; }
     pos += 1;
@@ -6382,7 +6382,7 @@ fn scan_create_virtual_table_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32
     return pos;
 }
 
-fn scan_delete_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_delete_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_WITH {
         let sp = pos;
@@ -6412,7 +6412,7 @@ fn scan_delete_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_delete_stmt_limited(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_delete_stmt_limited(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_WITH {
         let sp = pos;
@@ -6515,7 +6515,7 @@ fn scan_delete_stmt_limited(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
     return pos;
 }
 
-fn scan_detach_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_detach_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_DETACH { return -1; }
     pos += 1;
@@ -6529,7 +6529,7 @@ fn scan_detach_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_drop_index_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_drop_index_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_DROP { return -1; }
     pos += 1;
@@ -6568,7 +6568,7 @@ fn scan_drop_index_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i
     return pos;
 }
 
-fn scan_drop_table_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_drop_table_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_DROP { return -1; }
     pos += 1;
@@ -6607,7 +6607,7 @@ fn scan_drop_table_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i
     return pos;
 }
 
-fn scan_drop_trigger_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_drop_trigger_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_DROP { return -1; }
     pos += 1;
@@ -6646,7 +6646,7 @@ fn scan_drop_trigger_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     return pos;
 }
 
-fn scan_drop_view_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_drop_view_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_DROP { return -1; }
     pos += 1;
@@ -6685,7 +6685,7 @@ fn scan_drop_view_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     return pos;
 }
 
-fn scan_factored_select_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_factored_select_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_WITH {
         let sp = pos;
@@ -6776,7 +6776,7 @@ fn scan_factored_select_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
     return pos;
 }
 
-fn scan_insert_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_insert_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_WITH {
         let sp = pos;
@@ -6990,7 +6990,7 @@ fn scan_insert_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_pragma_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_pragma_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_PRAGMA { return -1; }
     pos += 1;
@@ -7039,7 +7039,7 @@ fn scan_pragma_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_reindex_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_reindex_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_REINDEX { return -1; }
     pos += 1;
@@ -7101,7 +7101,7 @@ fn scan_reindex_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     return pos;
 }
 
-fn scan_release_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_release_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_RELEASE { return -1; }
     pos += 1;
@@ -7115,7 +7115,7 @@ fn scan_release_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     return pos;
 }
 
-fn scan_rollback_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_rollback_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_ROLLBACK { return -1; }
     pos += 1;
@@ -7152,7 +7152,7 @@ fn scan_rollback_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     return pos;
 }
 
-fn scan_savepoint_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_savepoint_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_SAVEPOINT { return -1; }
     pos += 1;
@@ -7161,7 +7161,7 @@ fn scan_savepoint_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     return pos;
 }
 
-fn scan_simple_select_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_simple_select_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_WITH {
         let sp = pos;
@@ -7237,7 +7237,7 @@ fn scan_simple_select_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
     return pos;
 }
 
-fn scan_select_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_select_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_WITH {
         let sp = pos;
@@ -7328,7 +7328,7 @@ fn scan_select_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_select_or_values(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_select_or_values(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -7555,7 +7555,7 @@ fn scan_select_or_values(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     return pos;
 }
 
-fn scan_update_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_update_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_WITH {
         let sp = pos;
@@ -7660,7 +7660,7 @@ fn scan_update_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_update_stmt_limited(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_update_stmt_limited(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_WITH {
         let sp = pos;
@@ -7838,14 +7838,14 @@ fn scan_update_stmt_limited(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) 
     return pos;
 }
 
-fn scan_vacuum_stmt(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_vacuum_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_VACUUM { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_column_def(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_column_def(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_column_name(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -7863,7 +7863,7 @@ fn scan_column_def(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_type_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_type_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_name(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -7910,7 +7910,7 @@ fn scan_type_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_column_constraint(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_column_constraint(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_CONSTRAINT {
         let sp = pos;
@@ -8055,7 +8055,7 @@ fn scan_column_constraint(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     return pos;
 }
 
-fn scan_conflict_clause(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_conflict_clause(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_ON {
         let sp = pos;
@@ -8108,7 +8108,7 @@ fn scan_conflict_clause(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i
     return pos;
 }
 
-fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_expr_atom(tokens: &List<Token>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -8953,7 +8953,7 @@ fn scan_expr_atom(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_4(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_expr_lr_4(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_PIPEPIPE { return -1; }
     pos += 1;
@@ -8962,7 +8962,7 @@ fn scan_expr_lr_4(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_5(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_expr_lr_5(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_175 = pos;
     sg_175: {
@@ -8991,7 +8991,7 @@ fn scan_expr_lr_5(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_6(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_expr_lr_6(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_176 = pos;
     sg_176: {
@@ -9014,7 +9014,7 @@ fn scan_expr_lr_6(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_7(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_expr_lr_7(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_177 = pos;
     sg_177: {
@@ -9049,7 +9049,7 @@ fn scan_expr_lr_7(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_8(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_expr_lr_8(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_178 = pos;
     sg_178: {
@@ -9084,7 +9084,7 @@ fn scan_expr_lr_8(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_9(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_expr_lr_9(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_179 = pos;
     sg_179: {
@@ -9119,7 +9119,7 @@ fn scan_expr_lr_9(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_10(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_expr_lr_10(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_NOT {
         let sp = pos;
@@ -9205,7 +9205,7 @@ fn scan_expr_lr_10(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_11(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_expr_lr_11(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_AND { return -1; }
     pos += 1;
@@ -9214,7 +9214,7 @@ fn scan_expr_lr_11(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_12(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_expr_lr_12(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_OR { return -1; }
     pos += 1;
@@ -9223,7 +9223,7 @@ fn scan_expr_lr_12(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_16(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_expr_lr_16(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_COLLATE { return -1; }
     pos += 1;
@@ -9232,7 +9232,7 @@ fn scan_expr_lr_16(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_17(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_expr_lr_17(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_NOT {
         let sp = pos;
@@ -9286,7 +9286,7 @@ fn scan_expr_lr_17(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_18(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_expr_lr_18(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_186 = pos;
     let sgk_186 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -9318,7 +9318,7 @@ fn scan_expr_lr_18(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_19(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_expr_lr_19(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_IS { return -1; }
     pos += 1;
@@ -9332,7 +9332,7 @@ fn scan_expr_lr_19(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_20(tokens: &Array<Token>, pos: i32) -> i32 {
+fn scan_expr_lr_20(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_NOT {
         let sp = pos;
@@ -9350,7 +9350,7 @@ fn scan_expr_lr_20(tokens: &Array<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_expr(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_expr_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
@@ -9543,7 +9543,7 @@ fn scan_expr(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_foreign_key_clause(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_foreign_key_clause(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_REFERENCES { return -1; }
     pos += 1;
@@ -9742,7 +9742,7 @@ fn scan_foreign_key_clause(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -
     return pos;
 }
 
-fn scan_raise_function(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_raise_function(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_RAISE { return -1; }
     pos += 1;
@@ -9796,7 +9796,7 @@ fn scan_raise_function(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     return pos;
 }
 
-fn scan_indexed_column(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_indexed_column(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_column_name(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -9837,7 +9837,7 @@ fn scan_indexed_column(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i3
     return pos;
 }
 
-fn scan_table_constraint(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_table_constraint(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_CONSTRAINT {
         let sp = pos;
@@ -9954,7 +9954,7 @@ fn scan_table_constraint(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> 
     return pos;
 }
 
-fn scan_with_clause(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_with_clause(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_WITH { return -1; }
     pos += 1;
@@ -9983,7 +9983,7 @@ fn scan_with_clause(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_qualified_table_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_qualified_table_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) {
         let sp = pos;
@@ -10030,7 +10030,7 @@ fn scan_qualified_table_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0)
     return pos;
 }
 
-fn scan_ordering_term(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_ordering_term(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_expr(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -10071,7 +10071,7 @@ fn scan_ordering_term(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     return pos;
 }
 
-fn scan_pragma_value(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_pragma_value(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -10115,7 +10115,7 @@ fn scan_pragma_value(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 
     return pos;
 }
 
-fn scan_common_table_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_common_table_expression(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_table_name(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -10161,7 +10161,7 @@ fn scan_common_table_expression(tokens: &Array<Token>, pos: i32, min_prec: i32 =
     return pos;
 }
 
-fn scan_result_column(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_result_column(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -10235,7 +10235,7 @@ fn scan_result_column(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     return pos;
 }
 
-fn scan_table_or_subquery(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_table_or_subquery(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -10568,7 +10568,7 @@ fn scan_table_or_subquery(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     return pos;
 }
 
-fn scan_join_clause(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_join_clause(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_table_or_subquery(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -10592,7 +10592,7 @@ fn scan_join_clause(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_join_operator(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_join_operator(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -10656,7 +10656,7 @@ fn scan_join_operator(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     return pos;
 }
 
-fn scan_join_constraint(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_join_constraint(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_47(tokens[pos].kind) {
         let sp = pos;
@@ -10704,7 +10704,7 @@ fn scan_join_constraint(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i
     return pos;
 }
 
-fn scan_select_core(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_select_core(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -10931,7 +10931,7 @@ fn scan_select_core(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_compound_operator(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_compound_operator(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -10977,7 +10977,7 @@ fn scan_compound_operator(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) ->
     return pos;
 }
 
-fn scan_signed_number(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_signed_number(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_48(tokens[pos].kind) {
         let sp = pos;
@@ -11004,28 +11004,28 @@ fn scan_signed_number(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32
     return pos;
 }
 
-fn scan_literal_value(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_literal_value(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_30(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_unary_operator(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_unary_operator(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_63(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_error_message(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_error_message(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_module_argument(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_module_argument(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -11061,140 +11061,140 @@ fn scan_module_argument(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i
     return pos;
 }
 
-fn scan_column_alias(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_column_alias(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_42(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_keyword(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_keyword(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_49(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_function_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_function_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_database_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_database_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_schema_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_schema_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_table_function_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_table_function_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_table_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_table_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_table_or_index_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_table_or_index_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_new_table_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_new_table_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_column_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_column_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_collation_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_collation_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_foreign_table(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_foreign_table(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_index_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_index_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_trigger_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_trigger_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_view_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_view_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_module_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_module_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_pragma_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_pragma_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_savepoint_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_savepoint_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_table_alias(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_table_alias(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -11234,14 +11234,14 @@ fn scan_table_alias(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_transaction_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_transaction_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_any_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_any_name(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -11291,7 +11291,7 @@ fn scan_any_name(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_parse__inner(p: &mut Parser) -> Result<ParseNode, ParseError> {
     let start = p.peek().span.start;
-    let mut sql_stmt_list_or_error_list: Array<SqlStmtListOrErrorGroup> = [];
+    let mut sql_stmt_list_or_error_list: List<SqlStmtListOrErrorGroup> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -11366,7 +11366,7 @@ fn _parse_error(p: &mut Parser) -> Result<ErrorNode, ParseError> {
 
 fn _parse_sql_stmt_list__inner(p: &mut Parser) -> Result<SqlStmtListNode, ParseError> {
     let start = p.peek().span.start;
-    let mut semicolon_list: Array<Token> = [];
+    let mut semicolon_list: List<Token> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -11382,7 +11382,7 @@ fn _parse_sql_stmt_list__inner(p: &mut Parser) -> Result<SqlStmtListNode, ParseE
         semicolon_list.push(semicolon);
     }
     let sql_stmt = _parse_sql_stmt(p)?;
-    let mut semicolon_sql_stmt_list: Array<SemicolonListSqlStmtItem> = [];
+    let mut semicolon_sql_stmt_list: List<SemicolonListSqlStmtItem> = [];
     loop {
         let mut rep_scan_pos_2: i32 = -1;
         rep_scan_2: {
@@ -11408,7 +11408,7 @@ fn _parse_sql_stmt_list__inner(p: &mut Parser) -> Result<SqlStmtListNode, ParseE
             rep_scan_pos_2 = pos;
         }
         if rep_scan_pos_2 < 0 { break; }
-        let mut semicolon_list: Array<Token> = [];
+        let mut semicolon_list: List<Token> = [];
         let mut _plus_first = true;
         loop {
             if !_plus_first {
@@ -11434,7 +11434,7 @@ fn _parse_sql_stmt_list__inner(p: &mut Parser) -> Result<SqlStmtListNode, ParseE
         };
         semicolon_sql_stmt_list.push(semicolon_sql_stmt);
     }
-    let mut semicolon_list_2: Array<Token> = [];
+    let mut semicolon_list_2: List<Token> = [];
     loop {
         let mut rep_scan_pos_3: i32 = -1;
         rep_scan_3: {
@@ -12061,7 +12061,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser) -> Result<CompoundSelectSt
         null
     };
     let select_core = _parse_select_core(p)?;
-    let mut item_select_core_list: Array<ItemSelectCoreItem> = [];
+    let mut item_select_core_list: List<ItemSelectCoreItem> = [];
     let mut _plus_first = true;
     loop {
         if !_plus_first {
@@ -12150,7 +12150,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser) -> Result<CompoundSelectSt
         let k_order = p.expect(TK_K_ORDER)?;
         let k_by = p.expect(TK_K_BY)?;
         let ordering_term = _parse_ordering_term(p)?;
-        let mut comma_ordering_term_list: Array<CommaOrderingTermItem> = [];
+        let mut comma_ordering_term_list: List<CommaOrderingTermItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -12303,7 +12303,7 @@ fn _parse_create_index_stmt__inner(p: &mut Parser) -> Result<CreateIndexStmtNode
     let table_name = _parse_table_name(p)?;
     let lparen = p.expect(TK_LIT_LPAREN)?;
     let indexed_column = _parse_indexed_column(p)?;
-    let mut comma_indexed_column_list: Array<CommaIndexedColumnItem> = [];
+    let mut comma_indexed_column_list: List<CommaIndexedColumnItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -12442,7 +12442,7 @@ fn _parse_create_table_stmt__inner(p: &mut Parser) -> Result<CreateTableStmtNode
     if grp_kind == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;
         let column_def = _parse_column_def(p)?;
-        let mut comma_column_def_list: Array<CommaColumnDefItem> = [];
+        let mut comma_column_def_list: List<CommaColumnDefItem> = [];
         while (p.peek_kind() == TK_LIT_COMMA) && (_gale_kind_set_64(p.peek_at(1))) {
             let comma = p.expect(TK_LIT_COMMA)?;
             let column_def = _parse_column_def(p)?;
@@ -12452,7 +12452,7 @@ fn _parse_create_table_stmt__inner(p: &mut Parser) -> Result<CreateTableStmtNode
             };
             comma_column_def_list.push(comma_column_def);
         }
-        let mut comma_table_constraint_list: Array<CommaTableConstraintItem> = [];
+        let mut comma_table_constraint_list: List<CommaTableConstraintItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -12667,7 +12667,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser) -> Result<CreateTriggerStmt
         let k_of_column_name_item: Option<KOfColumnNameItemListItem> = if p.peek_kind() == TK_K_OF {
             let k_of = p.expect(TK_K_OF)?;
             let column_name = _parse_column_name(p)?;
-            let mut comma_column_name_list: Array<CommaColumnNameItem> = [];
+            let mut comma_column_name_list: List<CommaColumnNameItem> = [];
             loop {
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
@@ -12758,7 +12758,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser) -> Result<CreateTriggerStmt
         null
     };
     let k_begin = p.expect(TK_K_BEGIN)?;
-    let mut item_semicolon_list: Array<ItemSemicolonItem> = [];
+    let mut item_semicolon_list: List<ItemSemicolonItem> = [];
     let mut _plus_first = true;
     loop {
         if !_plus_first {
@@ -13032,7 +13032,7 @@ fn _parse_create_virtual_table_stmt__inner(p: &mut Parser) -> Result<CreateVirtu
     let lparen_module_argument_item_rparen: Option<LparenModuleArgumentItemListRparenItem> = if p.peek_kind() == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;
         let module_argument = _parse_module_argument(p)?;
-        let mut comma_module_argument_list: Array<CommaModuleArgumentItem> = [];
+        let mut comma_module_argument_list: List<CommaModuleArgumentItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -13231,7 +13231,7 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser) -> Result<DeleteStmtLimited
             let k_order = p.expect(TK_K_ORDER)?;
             let k_by = p.expect(TK_K_BY)?;
             let ordering_term = _parse_ordering_term(p)?;
-            let mut comma_ordering_term_list: Array<CommaOrderingTermItem> = [];
+            let mut comma_ordering_term_list: List<CommaOrderingTermItem> = [];
             loop {
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
@@ -13596,7 +13596,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser) -> Result<FactoredSelectSt
         null
     };
     let select_core = _parse_select_core(p)?;
-    let mut compound_operator_select_core_list: Array<CompoundOperatorSelectCoreItem> = [];
+    let mut compound_operator_select_core_list: List<CompoundOperatorSelectCoreItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -13628,7 +13628,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser) -> Result<FactoredSelectSt
         let k_order = p.expect(TK_K_ORDER)?;
         let k_by = p.expect(TK_K_BY)?;
         let ordering_term = _parse_ordering_term(p)?;
-        let mut comma_ordering_term_list: Array<CommaOrderingTermItem> = [];
+        let mut comma_ordering_term_list: List<CommaOrderingTermItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -13890,7 +13890,7 @@ fn _parse_insert_stmt__inner(p: &mut Parser) -> Result<InsertStmtNode, ParseErro
     let lparen_column_name_item_rparen: Option<LparenColumnNameItemListRparenItem> = if p.peek_kind() == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;
         let column_name = _parse_column_name(p)?;
-        let mut comma_column_name_list: Array<CommaColumnNameItem> = [];
+        let mut comma_column_name_list: List<CommaColumnNameItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -14002,7 +14002,7 @@ fn _parse_insert_stmt__inner(p: &mut Parser) -> Result<InsertStmtNode, ParseErro
             let k_values = p.expect(TK_K_VALUES)?;
             let lparen = p.expect(TK_LIT_LPAREN)?;
             let expr = _parse_expr(p)?;
-            let mut comma_expr_list: Array<CommaExprItem> = [];
+            let mut comma_expr_list: List<CommaExprItem> = [];
             loop {
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
@@ -14031,7 +14031,7 @@ fn _parse_insert_stmt__inner(p: &mut Parser) -> Result<InsertStmtNode, ParseErro
                 comma_expr_list.push(comma_expr);
             }
             let rparen = p.expect(TK_LIT_RPAREN)?;
-            let mut comma_lparen_expr_item_rparen_list: Array<CommaLparenExprItemListRparenItem> = [];
+            let mut comma_lparen_expr_item_rparen_list: List<CommaLparenExprItemListRparenItem> = [];
             loop {
                 let mut rep_scan_pos_2: i32 = -1;
                 rep_scan_2: {
@@ -14073,7 +14073,7 @@ fn _parse_insert_stmt__inner(p: &mut Parser) -> Result<InsertStmtNode, ParseErro
                 let comma = p.expect(TK_LIT_COMMA)?;
                 let lparen = p.expect(TK_LIT_LPAREN)?;
                 let expr = _parse_expr(p)?;
-                let mut comma_expr_list: Array<CommaExprItem> = [];
+                let mut comma_expr_list: List<CommaExprItem> = [];
                 loop {
                     let mut rep_scan_pos: i32 = -1;
                     rep_scan: {
@@ -14517,7 +14517,7 @@ fn _parse_simple_select_stmt__inner(p: &mut Parser) -> Result<SimpleSelectStmtNo
         let k_order = p.expect(TK_K_ORDER)?;
         let k_by = p.expect(TK_K_BY)?;
         let ordering_term = _parse_ordering_term(p)?;
-        let mut comma_ordering_term_list: Array<CommaOrderingTermItem> = [];
+        let mut comma_ordering_term_list: List<CommaOrderingTermItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -14629,7 +14629,7 @@ fn _parse_select_stmt__inner(p: &mut Parser) -> Result<SelectStmtNode, ParseErro
         null
     };
     let select_or_values = _parse_select_or_values(p)?;
-    let mut compound_operator_select_or_values_list: Array<CompoundOperatorSelectOrValuesItem> = [];
+    let mut compound_operator_select_or_values_list: List<CompoundOperatorSelectOrValuesItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -14661,7 +14661,7 @@ fn _parse_select_stmt__inner(p: &mut Parser) -> Result<SelectStmtNode, ParseErro
         let k_order = p.expect(TK_K_ORDER)?;
         let k_by = p.expect(TK_K_BY)?;
         let ordering_term = _parse_ordering_term(p)?;
-        let mut comma_ordering_term_list: Array<CommaOrderingTermItem> = [];
+        let mut comma_ordering_term_list: List<CommaOrderingTermItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -14799,7 +14799,7 @@ fn _parse_select_or_values__inner(p: &mut Parser) -> Result<SelectOrValuesNode, 
             null
         };
         let result_column = _parse_result_column(p)?;
-        let mut comma_result_column_list: Array<CommaResultColumnItem> = [];
+        let mut comma_result_column_list: List<CommaResultColumnItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -14850,7 +14850,7 @@ fn _parse_select_or_values__inner(p: &mut Parser) -> Result<SelectOrValuesNode, 
                     }));
                 } else {
                     let table_or_subquery = _parse_table_or_subquery(p)?;
-                    let mut comma_table_or_subquery_list: Array<CommaTableOrSubqueryItem> = [];
+                    let mut comma_table_or_subquery_list: List<CommaTableOrSubqueryItem> = [];
                     loop {
                         let mut rep_scan_pos: i32 = -1;
                         rep_scan: {
@@ -14908,7 +14908,7 @@ fn _parse_select_or_values__inner(p: &mut Parser) -> Result<SelectOrValuesNode, 
             let k_group = p.expect(TK_K_GROUP)?;
             let k_by = p.expect(TK_K_BY)?;
             let expr = _parse_expr(p)?;
-            let mut comma_expr_list: Array<CommaExprItem> = [];
+            let mut comma_expr_list: List<CommaExprItem> = [];
             loop {
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
@@ -14973,7 +14973,7 @@ fn _parse_select_or_values__inner(p: &mut Parser) -> Result<SelectOrValuesNode, 
         let k_values = p.expect(TK_K_VALUES)?;
         let lparen = p.expect(TK_LIT_LPAREN)?;
         let expr = _parse_expr(p)?;
-        let mut comma_expr_list: Array<CommaExprItem> = [];
+        let mut comma_expr_list: List<CommaExprItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -15002,7 +15002,7 @@ fn _parse_select_or_values__inner(p: &mut Parser) -> Result<SelectOrValuesNode, 
             comma_expr_list.push(comma_expr);
         }
         let rparen = p.expect(TK_LIT_RPAREN)?;
-        let mut comma_lparen_expr_item_rparen_list: Array<CommaLparenExprItemListRparenItem> = [];
+        let mut comma_lparen_expr_item_rparen_list: List<CommaLparenExprItemListRparenItem> = [];
         loop {
             let mut rep_scan_pos_2: i32 = -1;
             rep_scan_2: {
@@ -15044,7 +15044,7 @@ fn _parse_select_or_values__inner(p: &mut Parser) -> Result<SelectOrValuesNode, 
             let comma = p.expect(TK_LIT_COMMA)?;
             let lparen = p.expect(TK_LIT_LPAREN)?;
             let expr = _parse_expr(p)?;
-            let mut comma_expr_list: Array<CommaExprItem> = [];
+            let mut comma_expr_list: List<CommaExprItem> = [];
             loop {
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
@@ -15266,7 +15266,7 @@ fn _parse_update_stmt__inner(p: &mut Parser) -> Result<UpdateStmtNode, ParseErro
     let column_name = _parse_column_name(p)?;
     let eq = p.expect(TK_LIT_EQ)?;
     let expr = _parse_expr(p)?;
-    let mut comma_column_name_eq_expr_list: Array<CommaColumnNameEqExprItem> = [];
+    let mut comma_column_name_eq_expr_list: List<CommaColumnNameEqExprItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -15495,7 +15495,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser) -> Result<UpdateStmtLimited
     let column_name = _parse_column_name(p)?;
     let eq = p.expect(TK_LIT_EQ)?;
     let expr = _parse_expr(p)?;
-    let mut comma_column_name_eq_expr_list: Array<CommaColumnNameEqExprItem> = [];
+    let mut comma_column_name_eq_expr_list: List<CommaColumnNameEqExprItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -15616,7 +15616,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser) -> Result<UpdateStmtLimited
             let k_order = p.expect(TK_K_ORDER)?;
             let k_by = p.expect(TK_K_BY)?;
             let ordering_term = _parse_ordering_term(p)?;
-            let mut comma_ordering_term_list: Array<CommaOrderingTermItem> = [];
+            let mut comma_ordering_term_list: List<CommaOrderingTermItem> = [];
             loop {
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
@@ -15753,7 +15753,7 @@ fn _parse_column_def__inner(p: &mut Parser) -> Result<ColumnDefNode, ParseError>
     } else {
         null
     };
-    let mut column_constraint_list: Array<ColumnConstraintNode> = [];
+    let mut column_constraint_list: List<ColumnConstraintNode> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -15788,7 +15788,7 @@ fn _parse_column_def(p: &mut Parser) -> Result<ColumnDefNode, ParseError> {
 fn _parse_type_name__inner(p: &mut Parser) -> Result<TypeNameNode, ParseError> {
     let start = p.peek().span.start;
     let name = _parse_name(p)?;
-    let mut name_list: Array<NameNode> = [name];
+    let mut name_list: List<NameNode> = [name];
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.tokens;
@@ -16109,7 +16109,7 @@ fn _parse_expr__inner_bt_15(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr__inner_scan_15(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_15(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_CAST { return -1; }
     pos += 1;
@@ -16135,7 +16135,7 @@ fn _parse_expr__inner_bt_22(p: &mut Parser) -> Result<ExprNode, ParseError> {
     } else {
         null
     };
-    let mut k_when_expr_k_then_expr_list: Array<KWhenExprKThenExprItem> = [];
+    let mut k_when_expr_k_then_expr_list: List<KWhenExprKThenExprItem> = [];
     let mut _plus_first = true;
     loop {
         if !_plus_first {
@@ -16197,7 +16197,7 @@ fn _parse_expr__inner_bt_22(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr__inner_scan_22(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_22(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_CASE { return -1; }
     pos += 1;
@@ -16290,7 +16290,7 @@ fn _parse_expr__inner_bt_21(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr__inner_scan_21(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_21(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos].kind == TK_K_NOT && pos + 1 < tokens.len() && tokens[pos + 1].kind == TK_K_EXISTS {
         sol_325: {
@@ -16327,7 +16327,7 @@ fn _parse_expr__inner_bt_14(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr__inner_scan_14(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_14(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
@@ -16347,7 +16347,7 @@ fn _parse_expr__inner_bt_23(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr__inner_scan_23(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_23(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_raise_function(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -16363,7 +16363,7 @@ fn _parse_expr__inner_bt_0(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_literal_value(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -16425,7 +16425,7 @@ fn _parse_expr__inner_bt_13(p: &mut Parser) -> Result<ExprNode, ParseError> {
                 null
             };
             let expr = _parse_expr(p)?;
-            let mut comma_expr_list: Array<CommaExprItem> = [];
+            let mut comma_expr_list: List<CommaExprItem> = [];
             loop {
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
@@ -16478,7 +16478,7 @@ fn _parse_expr__inner_bt_13(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr__inner_scan_13(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_13(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_function_name(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -16540,7 +16540,7 @@ fn _parse_expr__inner_bt_3(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr__inner_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_3(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_unary_operator(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -16602,7 +16602,7 @@ fn _parse_expr__inner_bt_2(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr__inner_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_2(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) && pos + 1 < tokens.len() && tokens[pos + 1].kind == TK_LIT_DOT && pos + 2 < tokens.len() && _gale_kind_set_8(tokens[pos + 2].kind) && pos + 3 < tokens.len() && tokens[pos + 3].kind == TK_LIT_DOT {
         sol_332: {
@@ -17090,7 +17090,7 @@ fn _parse_expr__inner_lr_10(p: &mut Parser, left: ExprNode, start: i32) -> Resul
                         }));
                     } else {
                         let expr = _parse_expr(p, 9)?;
-                        let mut comma_expr_list: Array<CommaExprItem> = [];
+                        let mut comma_expr_list: List<CommaExprItem> = [];
                         loop {
                             let mut rep_scan_pos: i32 = -1;
                             rep_scan: {
@@ -17539,7 +17539,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser) -> Result<ForeignKeyClauseNo
     let lparen_column_name_item_rparen: Option<LparenColumnNameItemListRparenItem> = if p.peek_kind() == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;
         let column_name = _parse_column_name(p)?;
-        let mut comma_column_name_list: Array<CommaColumnNameItem> = [];
+        let mut comma_column_name_list: List<CommaColumnNameItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -18080,7 +18080,7 @@ fn _parse_table_constraint__inner(p: &mut Parser) -> Result<TableConstraintNode,
         let group_1 = group_1_inner;
         let lparen = p.expect(TK_LIT_LPAREN)?;
         let indexed_column = _parse_indexed_column(p)?;
-        let mut comma_indexed_column_list: Array<CommaIndexedColumnItem> = [];
+        let mut comma_indexed_column_list: List<CommaIndexedColumnItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -18134,7 +18134,7 @@ fn _parse_table_constraint__inner(p: &mut Parser) -> Result<TableConstraintNode,
         let k_key = p.expect(TK_K_KEY)?;
         let lparen = p.expect(TK_LIT_LPAREN)?;
         let column_name = _parse_column_name(p)?;
-        let mut comma_column_name_list: Array<CommaColumnNameItem> = [];
+        let mut comma_column_name_list: List<CommaColumnNameItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -18201,7 +18201,7 @@ fn _parse_with_clause__inner(p: &mut Parser) -> Result<WithClauseNode, ParseErro
         null
     };
     let common_table_expression = _parse_common_table_expression(p)?;
-    let mut comma_common_table_expression_list: Array<CommaCommonTableExpressionItem> = [];
+    let mut comma_common_table_expression_list: List<CommaCommonTableExpressionItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -18406,7 +18406,7 @@ fn _parse_pragma_value__inner_bt_1(p: &mut Parser) -> Result<PragmaValueNode, Pa
     }));
 }
 
-fn _parse_pragma_value__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_pragma_value__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_name(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -18422,7 +18422,7 @@ fn _parse_pragma_value__inner_bt_2(p: &mut Parser) -> Result<PragmaValueNode, Pa
     }));
 }
 
-fn _parse_pragma_value__inner_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_pragma_value__inner_scan_2(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_STRING_LITERAL { return -1; }
     pos += 1;
@@ -18488,7 +18488,7 @@ fn _parse_common_table_expression__inner(p: &mut Parser) -> Result<CommonTableEx
     let lparen_column_name_item_rparen: Option<LparenColumnNameItemListRparenItem> = if p.peek_kind() == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;
         let column_name = _parse_column_name(p)?;
-        let mut comma_column_name_list: Array<CommaColumnNameItem> = [];
+        let mut comma_column_name_list: List<CommaColumnNameItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -18564,7 +18564,7 @@ fn _parse_result_column__inner_bt_1(p: &mut Parser) -> Result<ResultColumnNode, 
     }));
 }
 
-fn _parse_result_column__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_result_column__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_table_name(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -18609,7 +18609,7 @@ fn _parse_result_column__inner_bt_2(p: &mut Parser) -> Result<ResultColumnNode, 
     }));
 }
 
-fn _parse_result_column__inner_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_result_column__inner_scan_2(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_expr(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -18720,7 +18720,7 @@ fn _parse_table_or_subquery__inner_bt_3(p: &mut Parser) -> Result<TableOrSubquer
     }));
 }
 
-fn _parse_table_or_subquery__inner_scan_3(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_table_or_subquery__inner_scan_3(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
@@ -18768,7 +18768,7 @@ fn _parse_table_or_subquery__inner_bt_2(p: &mut Parser) -> Result<TableOrSubquer
             }));
         } else {
             let table_or_subquery = _parse_table_or_subquery(p)?;
-            let mut comma_table_or_subquery_list: Array<CommaTableOrSubqueryItem> = [];
+            let mut comma_table_or_subquery_list: List<CommaTableOrSubqueryItem> = [];
             loop {
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
@@ -18812,7 +18812,7 @@ fn _parse_table_or_subquery__inner_bt_2(p: &mut Parser) -> Result<TableOrSubquer
     }));
 }
 
-fn _parse_table_or_subquery__inner_scan_2(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_table_or_subquery__inner_scan_2(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
@@ -18907,7 +18907,7 @@ fn _parse_table_or_subquery__inner_bt_1(p: &mut Parser) -> Result<TableOrSubquer
     }
     let expr_item: Option<ExprItemListItem> = if opt_scan_pos_2 >= 0 {
         let expr = _parse_expr(p)?;
-        let mut comma_expr_list: Array<CommaExprItem> = [];
+        let mut comma_expr_list: List<CommaExprItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -18979,7 +18979,7 @@ fn _parse_table_or_subquery__inner_bt_1(p: &mut Parser) -> Result<TableOrSubquer
     }));
 }
 
-fn _parse_table_or_subquery__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_table_or_subquery__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) {
         let sp = pos;
@@ -19151,7 +19151,7 @@ fn _parse_table_or_subquery__inner_bt_0(p: &mut Parser) -> Result<TableOrSubquer
     }));
 }
 
-fn _parse_table_or_subquery__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_table_or_subquery__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) {
         let sp = pos;
@@ -19296,7 +19296,7 @@ fn _parse_table_or_subquery(p: &mut Parser) -> Result<TableOrSubqueryNode, Parse
 fn _parse_join_clause__inner(p: &mut Parser) -> Result<JoinClauseNode, ParseError> {
     let start = p.peek().span.start;
     let table_or_subquery = _parse_table_or_subquery(p)?;
-    let mut join_operator_table_or_subquery_join_constraint_list: Array<JoinOperatorTableOrSubqueryJoinConstraintItem> = [];
+    let mut join_operator_table_or_subquery_join_constraint_list: List<JoinOperatorTableOrSubqueryJoinConstraintItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -19505,7 +19505,7 @@ fn _parse_join_constraint__inner(p: &mut Parser) -> Result<JoinConstraintNode, P
             let k_using = p.expect(TK_K_USING)?;
             let lparen = p.expect(TK_LIT_LPAREN)?;
             let column_name = _parse_column_name(p)?;
-            let mut comma_column_name_list: Array<CommaColumnNameItem> = [];
+            let mut comma_column_name_list: List<CommaColumnNameItem> = [];
             loop {
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
@@ -19595,7 +19595,7 @@ fn _parse_select_core__inner(p: &mut Parser) -> Result<SelectCoreNode, ParseErro
             null
         };
         let result_column = _parse_result_column(p)?;
-        let mut comma_result_column_list: Array<CommaResultColumnItem> = [];
+        let mut comma_result_column_list: List<CommaResultColumnItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -19646,7 +19646,7 @@ fn _parse_select_core__inner(p: &mut Parser) -> Result<SelectCoreNode, ParseErro
                     }));
                 } else {
                     let table_or_subquery = _parse_table_or_subquery(p)?;
-                    let mut comma_table_or_subquery_list: Array<CommaTableOrSubqueryItem> = [];
+                    let mut comma_table_or_subquery_list: List<CommaTableOrSubqueryItem> = [];
                     loop {
                         let mut rep_scan_pos: i32 = -1;
                         rep_scan: {
@@ -19704,7 +19704,7 @@ fn _parse_select_core__inner(p: &mut Parser) -> Result<SelectCoreNode, ParseErro
             let k_group = p.expect(TK_K_GROUP)?;
             let k_by = p.expect(TK_K_BY)?;
             let expr = _parse_expr(p)?;
-            let mut comma_expr_list: Array<CommaExprItem> = [];
+            let mut comma_expr_list: List<CommaExprItem> = [];
             loop {
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
@@ -19769,7 +19769,7 @@ fn _parse_select_core__inner(p: &mut Parser) -> Result<SelectCoreNode, ParseErro
         let k_values = p.expect(TK_K_VALUES)?;
         let lparen = p.expect(TK_LIT_LPAREN)?;
         let expr = _parse_expr(p)?;
-        let mut comma_expr_list: Array<CommaExprItem> = [];
+        let mut comma_expr_list: List<CommaExprItem> = [];
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -19798,7 +19798,7 @@ fn _parse_select_core__inner(p: &mut Parser) -> Result<SelectCoreNode, ParseErro
             comma_expr_list.push(comma_expr);
         }
         let rparen = p.expect(TK_LIT_RPAREN)?;
-        let mut comma_lparen_expr_item_rparen_list: Array<CommaLparenExprItemListRparenItem> = [];
+        let mut comma_lparen_expr_item_rparen_list: List<CommaLparenExprItemListRparenItem> = [];
         loop {
             let mut rep_scan_pos_2: i32 = -1;
             rep_scan_2: {
@@ -19840,7 +19840,7 @@ fn _parse_select_core__inner(p: &mut Parser) -> Result<SelectCoreNode, ParseErro
             let comma = p.expect(TK_LIT_COMMA)?;
             let lparen = p.expect(TK_LIT_LPAREN)?;
             let expr = _parse_expr(p)?;
-            let mut comma_expr_list: Array<CommaExprItem> = [];
+            let mut comma_expr_list: List<CommaExprItem> = [];
             loop {
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
@@ -19915,7 +19915,7 @@ fn _parse_compound_operator__inner_bt_1(p: &mut Parser) -> Result<CompoundOperat
     }));
 }
 
-fn _parse_compound_operator__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_compound_operator__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_UNION { return -1; }
     pos += 1;
@@ -19933,7 +19933,7 @@ fn _parse_compound_operator__inner_bt_0(p: &mut Parser) -> Result<CompoundOperat
     }));
 }
 
-fn _parse_compound_operator__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_compound_operator__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_K_UNION { return -1; }
     pos += 1;
@@ -20185,7 +20185,7 @@ fn _parse_module_argument__inner_bt_1(p: &mut Parser) -> Result<ModuleArgumentNo
     }));
 }
 
-fn _parse_module_argument__inner_scan_1(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_module_argument__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_column_def(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -20201,7 +20201,7 @@ fn _parse_module_argument__inner_bt_0(p: &mut Parser) -> Result<ModuleArgumentNo
     }));
 }
 
-fn _parse_module_argument__inner_scan_0(tokens: &Array<Token>, pos: i32) -> i32 {
+fn _parse_module_argument__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_expr(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -21593,7 +21593,7 @@ fn _parse_any_name(p: &mut Parser) -> Result<AnyNameNode, ParseError> {
     return r;
 }
 
-fn scan_sql_stmt_list__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_sql_stmt_list__follow_0(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_sql_stmt(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -21602,581 +21602,581 @@ fn scan_sql_stmt_list__follow_0(tokens: &Array<Token>, pos: i32, min_prec: i32 =
 
 pub fn parse_parse(input: &String) -> Result<ParseNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_parse(&mut parser);
 }
 
 pub fn parse_error(input: &String) -> Result<ErrorNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_error(&mut parser);
 }
 
 pub fn parse_sql_stmt_list(input: &String) -> Result<SqlStmtListNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_sql_stmt_list(&mut parser);
 }
 
 pub fn parse_sql_stmt(input: &String) -> Result<SqlStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_sql_stmt(&mut parser);
 }
 
 pub fn parse_alter_table_stmt(input: &String) -> Result<AlterTableStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_alter_table_stmt(&mut parser);
 }
 
 pub fn parse_analyze_stmt(input: &String) -> Result<AnalyzeStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_analyze_stmt(&mut parser);
 }
 
 pub fn parse_attach_stmt(input: &String) -> Result<AttachStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_attach_stmt(&mut parser);
 }
 
 pub fn parse_begin_stmt(input: &String) -> Result<BeginStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_begin_stmt(&mut parser);
 }
 
 pub fn parse_commit_stmt(input: &String) -> Result<CommitStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_commit_stmt(&mut parser);
 }
 
 pub fn parse_compound_select_stmt(input: &String) -> Result<CompoundSelectStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_compound_select_stmt(&mut parser);
 }
 
 pub fn parse_create_index_stmt(input: &String) -> Result<CreateIndexStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_create_index_stmt(&mut parser);
 }
 
 pub fn parse_create_table_stmt(input: &String) -> Result<CreateTableStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_create_table_stmt(&mut parser);
 }
 
 pub fn parse_create_trigger_stmt(input: &String) -> Result<CreateTriggerStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_create_trigger_stmt(&mut parser);
 }
 
 pub fn parse_create_view_stmt(input: &String) -> Result<CreateViewStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_create_view_stmt(&mut parser);
 }
 
 pub fn parse_create_virtual_table_stmt(input: &String) -> Result<CreateVirtualTableStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_create_virtual_table_stmt(&mut parser);
 }
 
 pub fn parse_delete_stmt(input: &String) -> Result<DeleteStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_delete_stmt(&mut parser);
 }
 
 pub fn parse_delete_stmt_limited(input: &String) -> Result<DeleteStmtLimitedNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_delete_stmt_limited(&mut parser);
 }
 
 pub fn parse_detach_stmt(input: &String) -> Result<DetachStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_detach_stmt(&mut parser);
 }
 
 pub fn parse_drop_index_stmt(input: &String) -> Result<DropIndexStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_drop_index_stmt(&mut parser);
 }
 
 pub fn parse_drop_table_stmt(input: &String) -> Result<DropTableStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_drop_table_stmt(&mut parser);
 }
 
 pub fn parse_drop_trigger_stmt(input: &String) -> Result<DropTriggerStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_drop_trigger_stmt(&mut parser);
 }
 
 pub fn parse_drop_view_stmt(input: &String) -> Result<DropViewStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_drop_view_stmt(&mut parser);
 }
 
 pub fn parse_factored_select_stmt(input: &String) -> Result<FactoredSelectStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_factored_select_stmt(&mut parser);
 }
 
 pub fn parse_insert_stmt(input: &String) -> Result<InsertStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_insert_stmt(&mut parser);
 }
 
 pub fn parse_pragma_stmt(input: &String) -> Result<PragmaStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_pragma_stmt(&mut parser);
 }
 
 pub fn parse_reindex_stmt(input: &String) -> Result<ReindexStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_reindex_stmt(&mut parser);
 }
 
 pub fn parse_release_stmt(input: &String) -> Result<ReleaseStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_release_stmt(&mut parser);
 }
 
 pub fn parse_rollback_stmt(input: &String) -> Result<RollbackStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_rollback_stmt(&mut parser);
 }
 
 pub fn parse_savepoint_stmt(input: &String) -> Result<SavepointStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_savepoint_stmt(&mut parser);
 }
 
 pub fn parse_simple_select_stmt(input: &String) -> Result<SimpleSelectStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_simple_select_stmt(&mut parser);
 }
 
 pub fn parse_select_stmt(input: &String) -> Result<SelectStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_select_stmt(&mut parser);
 }
 
 pub fn parse_select_or_values(input: &String) -> Result<SelectOrValuesNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_select_or_values(&mut parser);
 }
 
 pub fn parse_update_stmt(input: &String) -> Result<UpdateStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_update_stmt(&mut parser);
 }
 
 pub fn parse_update_stmt_limited(input: &String) -> Result<UpdateStmtLimitedNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_update_stmt_limited(&mut parser);
 }
 
 pub fn parse_vacuum_stmt(input: &String) -> Result<VacuumStmtNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_vacuum_stmt(&mut parser);
 }
 
 pub fn parse_column_def(input: &String) -> Result<ColumnDefNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_column_def(&mut parser);
 }
 
 pub fn parse_type_name(input: &String) -> Result<TypeNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_type_name(&mut parser);
 }
 
 pub fn parse_column_constraint(input: &String) -> Result<ColumnConstraintNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_column_constraint(&mut parser);
 }
 
 pub fn parse_conflict_clause(input: &String) -> Result<ConflictClauseNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_conflict_clause(&mut parser);
 }
 
 pub fn parse_expr(input: &String) -> Result<ExprNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_expr(&mut parser, 0);
 }
 
 pub fn parse_foreign_key_clause(input: &String) -> Result<ForeignKeyClauseNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_foreign_key_clause(&mut parser);
 }
 
 pub fn parse_raise_function(input: &String) -> Result<RaiseFunctionNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_raise_function(&mut parser);
 }
 
 pub fn parse_indexed_column(input: &String) -> Result<IndexedColumnNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_indexed_column(&mut parser);
 }
 
 pub fn parse_table_constraint(input: &String) -> Result<TableConstraintNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_table_constraint(&mut parser);
 }
 
 pub fn parse_with_clause(input: &String) -> Result<WithClauseNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_with_clause(&mut parser);
 }
 
 pub fn parse_qualified_table_name(input: &String) -> Result<QualifiedTableNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_qualified_table_name(&mut parser);
 }
 
 pub fn parse_ordering_term(input: &String) -> Result<OrderingTermNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_ordering_term(&mut parser);
 }
 
 pub fn parse_pragma_value(input: &String) -> Result<PragmaValueNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_pragma_value(&mut parser);
 }
 
 pub fn parse_common_table_expression(input: &String) -> Result<CommonTableExpressionNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_common_table_expression(&mut parser);
 }
 
 pub fn parse_result_column(input: &String) -> Result<ResultColumnNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_result_column(&mut parser);
 }
 
 pub fn parse_table_or_subquery(input: &String) -> Result<TableOrSubqueryNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_table_or_subquery(&mut parser);
 }
 
 pub fn parse_join_clause(input: &String) -> Result<JoinClauseNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_join_clause(&mut parser);
 }
 
 pub fn parse_join_operator(input: &String) -> Result<JoinOperatorNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_join_operator(&mut parser);
 }
 
 pub fn parse_join_constraint(input: &String) -> Result<JoinConstraintNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_join_constraint(&mut parser);
 }
 
 pub fn parse_select_core(input: &String) -> Result<SelectCoreNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_select_core(&mut parser);
 }
 
 pub fn parse_compound_operator(input: &String) -> Result<CompoundOperatorNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_compound_operator(&mut parser);
 }
 
 pub fn parse_signed_number(input: &String) -> Result<SignedNumberNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_signed_number(&mut parser);
 }
 
 pub fn parse_literal_value(input: &String) -> Result<LiteralValueNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_literal_value(&mut parser);
 }
 
 pub fn parse_unary_operator(input: &String) -> Result<UnaryOperatorNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_unary_operator(&mut parser);
 }
 
 pub fn parse_error_message(input: &String) -> Result<ErrorMessageNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_error_message(&mut parser);
 }
 
 pub fn parse_module_argument(input: &String) -> Result<ModuleArgumentNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_module_argument(&mut parser);
 }
 
 pub fn parse_column_alias(input: &String) -> Result<ColumnAliasNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_column_alias(&mut parser);
 }
 
 pub fn parse_keyword(input: &String) -> Result<KeywordNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_keyword(&mut parser);
 }
 
 pub fn parse_name(input: &String) -> Result<NameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_name(&mut parser);
 }
 
 pub fn parse_function_name(input: &String) -> Result<FunctionNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_function_name(&mut parser);
 }
 
 pub fn parse_database_name(input: &String) -> Result<DatabaseNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_database_name(&mut parser);
 }
 
 pub fn parse_schema_name(input: &String) -> Result<SchemaNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_schema_name(&mut parser);
 }
 
 pub fn parse_table_function_name(input: &String) -> Result<TableFunctionNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_table_function_name(&mut parser);
 }
 
 pub fn parse_table_name(input: &String) -> Result<TableNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_table_name(&mut parser);
 }
 
 pub fn parse_table_or_index_name(input: &String) -> Result<TableOrIndexNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_table_or_index_name(&mut parser);
 }
 
 pub fn parse_new_table_name(input: &String) -> Result<NewTableNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_new_table_name(&mut parser);
 }
 
 pub fn parse_column_name(input: &String) -> Result<ColumnNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_column_name(&mut parser);
 }
 
 pub fn parse_collation_name(input: &String) -> Result<CollationNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_collation_name(&mut parser);
 }
 
 pub fn parse_foreign_table(input: &String) -> Result<ForeignTableNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_foreign_table(&mut parser);
 }
 
 pub fn parse_index_name(input: &String) -> Result<IndexNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_index_name(&mut parser);
 }
 
 pub fn parse_trigger_name(input: &String) -> Result<TriggerNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_trigger_name(&mut parser);
 }
 
 pub fn parse_view_name(input: &String) -> Result<ViewNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_view_name(&mut parser);
 }
 
 pub fn parse_module_name(input: &String) -> Result<ModuleNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_module_name(&mut parser);
 }
 
 pub fn parse_pragma_name(input: &String) -> Result<PragmaNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_pragma_name(&mut parser);
 }
 
 pub fn parse_savepoint_name(input: &String) -> Result<SavepointNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_savepoint_name(&mut parser);
 }
 
 pub fn parse_table_alias(input: &String) -> Result<TableAliasNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_table_alias(&mut parser);
 }
 
 pub fn parse_transaction_name(input: &String) -> Result<TransactionNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_transaction_name(&mut parser);
 }
 
 pub fn parse_any_name(input: &String) -> Result<AnyNameNode, ParseError> {
     let tokens = tokenize(input);
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
     return _parse_any_name(&mut parser);
 }

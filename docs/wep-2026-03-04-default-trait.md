@@ -42,7 +42,7 @@ The following types implement `Default` in the standard library:
 | `bool`                    | `false`     |
 | `char`                    | `'\0'`      |
 | `String`                  | `""`        |
-| `Array<T>`                | `[]`        |
+| `List<T>`                 | `[]`        |
 | `Option<T>`               | `null`      |
 | `TreeMap<K, V>`           | `{}`        |
 
@@ -61,7 +61,7 @@ fn make_default<T: Default>() -> T {
 }
 
 let x = make_default::<i32>();      // 0
-let arr = make_default::<Array<String>>();  // []
+let arr = make_default::<List<String>>();  // []
 
 // User-defined types
 struct Config {

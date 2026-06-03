@@ -30,7 +30,7 @@ export fn run() with Stdout, Stderr, Preopens {
         // Write some data so the file is not empty
         let [w_rx, w_tx] = Stream::<u8>::new();
         let sub = file.write_via_stream(w_rx, 0 as Filesize);
-        let data: Array<u8> = [104, 105]; // "hi"
+        let data: List<u8> = [104, 105]; // "hi"
         w_tx.write(data);
         w_tx.drop();
         sub.drop();

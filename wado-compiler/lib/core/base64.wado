@@ -11,7 +11,7 @@
 // Usage:
 //   use { encode, decode, encode_url, encode_with, decode_bytes, Encoding } from "core:base64";
 //
-//   let data: Array<u8> = [72, 101, 108, 108, 111] as Array<u8>;
+//   let data: List<u8> = [72, 101, 108, 108, 111] as List<u8>;
 //   let b64 = encode(&data);           // "SGVsbG8="
 //   let url = encode_url(&data);       // "SGVsbG8"
 //   if let Some(decoded) = decode(b64) { ... }
@@ -22,7 +22,7 @@ pub flags Encoding {
     NoPadding,
 }
 
-global STANDARD_TABLE: Array<u8> = [
+global STANDARD_TABLE: List<u8> = [
     'A' as u8, 'B' as u8, 'C' as u8, 'D' as u8, 'E' as u8, 'F' as u8, 'G' as u8, 'H' as u8, 'I' as u8, 'J' as u8,
     'K' as u8, 'L' as u8, 'M' as u8, 'N' as u8, 'O' as u8, 'P' as u8, 'Q' as u8, 'R' as u8, 'S' as u8, 'T' as u8,
     'U' as u8, 'V' as u8, 'W' as u8, 'X' as u8, 'Y' as u8, 'Z' as u8, 'a' as u8, 'b' as u8, 'c' as u8, 'd' as u8,
@@ -32,7 +32,7 @@ global STANDARD_TABLE: Array<u8> = [
     '8' as u8, '9' as u8, '+' as u8, '/' as u8,
 ];
 
-global URL_SAFE_TABLE: Array<u8> = [
+global URL_SAFE_TABLE: List<u8> = [
     'A' as u8, 'B' as u8, 'C' as u8, 'D' as u8, 'E' as u8, 'F' as u8, 'G' as u8, 'H' as u8, 'I' as u8, 'J' as u8,
     'K' as u8, 'L' as u8, 'M' as u8, 'N' as u8, 'O' as u8, 'P' as u8, 'Q' as u8, 'R' as u8, 'S' as u8, 'T' as u8,
     'U' as u8, 'V' as u8, 'W' as u8, 'X' as u8, 'Y' as u8, 'Z' as u8, 'a' as u8, 'b' as u8, 'c' as u8, 'd' as u8,
@@ -42,8 +42,8 @@ global URL_SAFE_TABLE: Array<u8> = [
     '8' as u8, '9' as u8, '-' as u8, '_' as u8,
 ];
 
-fn build_decode_table() -> Array<u8> {
-    let mut table: Array<u8> = Array::filled(256, 255);
+fn build_decode_table() -> List<u8> {
+    let mut table: List<u8> = List::filled(256, 255);
 
     for let mut i = 0; i < 26; i += 1 {
         table['A' as i32 + i] = i as u8;
@@ -63,9 +63,9 @@ fn build_decode_table() -> Array<u8> {
     return table;
 }
 
-global DECODE_TABLE: Array<u8> = build_decode_table();
+global DECODE_TABLE: List<u8> = build_decode_table();
 
-fn encode_impl(data: &Array<u8>, table: &Array<u8>, pad: bool) -> String {
+fn encode_impl(data: &List<u8>, table: &List<u8>, pad: bool) -> String {
     let len = data.len();
     if len == 0 {
         return "";
@@ -108,18 +108,18 @@ fn encode_impl(data: &Array<u8>, table: &Array<u8>, pad: bool) -> String {
 }
 
 /// Encodes bytes as standard Base64 (RFC 4648 §4, padded).
-pub fn encode(data: &Array<u8>) -> String {
+pub fn encode(data: &List<u8>) -> String {
     return encode_impl(data, &STANDARD_TABLE, true);
 }
 
 /// Encodes bytes as URL-safe Base64 (RFC 4648 §5, no padding).
 /// Equivalent to `encode_with(data, Encoding::UrlSafe | Encoding::NoPadding)`.
-pub fn encode_url(data: &Array<u8>) -> String {
+pub fn encode_url(data: &List<u8>) -> String {
     return encode_impl(data, &URL_SAFE_TABLE, false);
 }
 
 /// Encodes bytes as Base64 with custom flags.
-pub fn encode_with(data: &Array<u8>, encoding: Encoding) -> String {
+pub fn encode_with(data: &List<u8>, encoding: Encoding) -> String {
     let url_safe = (encoding & Encoding::UrlSafe) as u32 != 0;
     let no_padding = (encoding & Encoding::NoPadding) as u32 != 0;
     if url_safe {
@@ -128,7 +128,7 @@ pub fn encode_with(data: &Array<u8>, encoding: Encoding) -> String {
     return encode_impl(data, &STANDARD_TABLE, !no_padding);
 }
 
-fn decode_impl(input: &Array<u8>, input_len: i32) -> Option<Array<u8>> {
+fn decode_impl(input: &List<u8>, input_len: i32) -> Option<List<u8>> {
     let mut end = input_len;
     while end > 0 && input[end - 1] == '=' as u8 {
         end -= 1;
@@ -147,7 +147,7 @@ fn decode_impl(input: &Array<u8>, input_len: i32) -> Option<Array<u8>> {
         out_len = out_len + 2;
     }
 
-    let mut out: Array<u8> = Array::with_capacity(out_len);
+    let mut out: List<u8> = List::with_capacity(out_len);
     let table = &DECODE_TABLE;
 
     let mut i = 0;
@@ -191,13 +191,13 @@ fn decode_impl(input: &Array<u8>, input_len: i32) -> Option<Array<u8>> {
 /// Decodes a Base64 string.
 /// Accepts both standard (+/) and URL-safe (-_) alphabets, with or without padding.
 /// Returns null on invalid input.
-pub fn decode(encoded: String) -> Option<Array<u8>> {
+pub fn decode(encoded: String) -> Option<List<u8>> {
     let bytes = encoded.bytes().collect();
     return decode_impl(&bytes, bytes.len());
 }
 
 /// Decodes Base64 from raw bytes (e.g., HTTP body, file content).
 /// Same lenient behavior as `decode`.
-pub fn decode_bytes(encoded: &Array<u8>) -> Option<Array<u8>> {
+pub fn decode_bytes(encoded: &List<u8>) -> Option<List<u8>> {
     return decode_impl(encoded, encoded.len());
 }

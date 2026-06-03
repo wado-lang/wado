@@ -294,7 +294,7 @@ export fn run() with Stdout {
 fn semantics_records_method_dispatch_per_call_site() {
     let source = r"
 export fn run() {
-    let xs: Array<i32> = [1, 2, 3];
+    let xs: List<i32> = [1, 2, 3];
     let _n = xs.len();
 }
 ";
@@ -359,8 +359,8 @@ export fn run() {
         x = x + i;
     }
 
-    // ForOfIterator (Array implements IntoIterator)
-    let xs: Array<i32> = [10, 20, 30];
+    // ForOfIterator (List implements IntoIterator)
+    let xs: List<i32> = [10, 20, 30];
     for let v of xs {
         x = x + v;
     }
@@ -509,12 +509,12 @@ export fn run() {
 /// literal target in `resolve_let`, the deferred coercion fixup for
 /// generic struct fields, and `recoerce_literal_args` after type-arg
 /// inference) still leave a coercion entry. Verify a representative
-/// `[1, 2, 3] as Array<i32>` cast records `tuple_to_sequence`.
+/// `[1, 2, 3] as List<i32>` cast records `tuple_to_sequence`.
 #[test]
 fn semantics_records_coercion_through_cast_bypass() {
     let source = r"
 export fn run() {
-    let _xs = [10, 20, 30] as Array<i32>;
+    let _xs = [10, 20, 30] as List<i32>;
 }
 ";
     let host = InMemoryHost::new();
@@ -530,7 +530,7 @@ export fn run() {
     });
     assert!(
         saw_tuple_to_sequence,
-        "`[1, 2, 3] as Array<i32>` must record a tuple_to_sequence coercion",
+        "`[1, 2, 3] as List<i32>` must record a tuple_to_sequence coercion",
     );
 }
 
@@ -586,7 +586,7 @@ export fn run() {
 fn semantics_skips_method_dispatch_when_lookup_failed() {
     let source = r"
 export fn run() {
-    let xs: Array<i32> = [1, 2, 3];
+    let xs: List<i32> = [1, 2, 3];
     let _ = xs.no_such_method();
 }
 ";

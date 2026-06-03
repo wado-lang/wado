@@ -135,7 +135,7 @@ Parses the query string into a TreeMap (insertion-order preserved).
 
 Returns the value for the given query parameter key.
 
-#### `pub fn query_get_all(&self, key: String) -> Array<String>`
+#### `pub fn query_get_all(&self, key: String) -> List<String>`
 
 Returns all values for the given query parameter key.
 Computed from the raw query string to preserve duplicate keys.

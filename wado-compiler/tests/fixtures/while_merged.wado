@@ -23,7 +23,7 @@ test "continue" {
 }
 
 test "while let basic" {
-    let items: Array<i32> = [1, 2, 3];
+    let items: List<i32> = [1, 2, 3];
     let mut iter = items.iter();
     let mut sum = 0;
     while let Some(x) = iter.next() {
@@ -34,7 +34,7 @@ test "while let basic" {
 
 test "while let chain" {
     // while let with guard - exits when guard fails (x >= 5)
-    let arr: Array<i32> = [1, 2, 3, 8, 9];
+    let arr: List<i32> = [1, 2, 3, 8, 9];
     let mut iter = arr.iter();
     let mut sum = 0;
     while let Some(x) = iter.next() && x < 5 {
@@ -43,8 +43,8 @@ test "while let chain" {
     assert sum == 6; // 1+2+3
 
     // Chained lets: consume two iterators in lockstep
-    let xs: Array<i32> = [1, 2, 3];
-    let ys: Array<i32> = [10, 20, 30];
+    let xs: List<i32> = [1, 2, 3];
+    let ys: List<i32> = [10, 20, 30];
     let mut ix = xs.iter();
     let mut iy = ys.iter();
     let mut total = 0;
@@ -54,7 +54,7 @@ test "while let chain" {
     assert total == 66; // (1+10)+(2+20)+(3+30)
 
     // Parenthesised logical && inside guard
-    let arr3: Array<i32> = [2, 4, 7, 8];
+    let arr3: List<i32> = [2, 4, 7, 8];
     let mut iter3 = arr3.iter();
     let min = 1;
     let max = 6;

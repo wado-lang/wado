@@ -394,7 +394,7 @@ impl<T: Serialize> Serialize for Option<T> {
     }
 }
 
-impl<T: Serialize> Serialize for Array<T> {
+impl<T: Serialize> Serialize for List<T> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         let seq = s.begin_seq(self.len())?;
         for let item of self {
@@ -543,15 +543,15 @@ impl<T: Deserialize> Deserialize for Option<T> {
     }
 }
 
-impl<T: Deserialize> Deserialize for Array<T> {
-    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Array<T>, DeserializeError> {
+impl<T: Deserialize> Deserialize for List<T> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<List<T>, DeserializeError> {
         let seq = d.begin_seq()?;
         // Peek at the first element before allocating backing storage.
         // Empty arrays (very common in practice) avoid any capacity allocation.
         // Non-empty arrays start at capacity 4, covering 1–4 elements without a grow.
         let first_opt = seq.next_element::<T>()?;
         if let Some(first_elem) = first_opt {
-            let mut items: Array<T> = Array::with_capacity(2);
+            let mut items: List<T> = List::with_capacity(2);
             items.push(first_elem);
             loop {
                 let next_opt = seq.next_element::<T>()?;
@@ -564,7 +564,7 @@ impl<T: Deserialize> Deserialize for Array<T> {
             }
         } else {
             seq.end()?;
-            return Result::Ok([] as Array<T>);
+            return Result::Ok([] as List<T>);
         }
     }
 }

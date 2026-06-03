@@ -7,13 +7,13 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let fields = Fields::new();
 
     // First append a value
-    let v1: Array<u8> = [111 as u8, 108 as u8, 100 as u8]; // "old"
+    let v1: List<u8> = [111 as u8, 108 as u8, 100 as u8]; // "old"
     let _ = fields.append("x-test" as FieldName, v1 as FieldValue);
     assert fields.has("x-test" as FieldName);
 
     // Now set() replaces all values for that name
-    let v2: Array<u8> = [110 as u8, 101 as u8, 119 as u8]; // "new"
-    let new_values: Array<FieldValue> = [v2 as FieldValue];
+    let v2: List<u8> = [110 as u8, 101 as u8, 119 as u8]; // "new"
+    let new_values: List<FieldValue> = [v2 as FieldValue];
     let set_result = fields.set("x-test" as FieldName, new_values);
     if let Err(e) = set_result {
         panic("set failed");

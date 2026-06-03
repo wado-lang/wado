@@ -13,17 +13,17 @@ use { Method, MatchResult, RoutePattern, Segment, no_match, parse_pattern } from
 
 struct LinearRoute {
     method: Method,
-    segments: Array<Segment>,
+    segments: List<Segment>,
     handler_id: i32,
 }
 
 pub struct LinearRouter {
-    routes: Array<LinearRoute>,
+    routes: List<LinearRoute>,
 }
 
 impl LinearRouter {
-    pub fn build(patterns: &Array<RoutePattern>) -> LinearRouter {
-        let mut routes: Array<LinearRoute> = [];
+    pub fn build(patterns: &List<RoutePattern>) -> LinearRouter {
+        let mut routes: List<LinearRoute> = [];
         for let p of patterns {
             routes.push(LinearRoute {
                 method: p.method,
@@ -50,7 +50,7 @@ impl LinearRouter {
 
 /// Walks `segments` against `path`, populating `params` on success.
 /// Returns true on full match.
-fn try_match(segments: &Array<Segment>, path: &String, params: &mut TreeMap<String, String>) -> bool {
+fn try_match(segments: &List<Segment>, path: &String, params: &mut TreeMap<String, String>) -> bool {
     let plen = path.len();
     // Skip leading '/'.
     let mut pos = if plen > 0 && path.get_byte_unchecked(0) == '/' as u8 { 1 } else { 0 };
@@ -126,7 +126,7 @@ test "linear: static hits" {
     let routes = [
         RoutePattern { method: Method::Get, path: "/health", handler_id: 1 },
         RoutePattern { method: Method::Get, path: "/api/v1/users/list", handler_id: 2 },
-    ] as Array<RoutePattern>;
+    ] as List<RoutePattern>;
     let r = LinearRouter::build(&routes);
     assert r.match_path(Method::Get, &"/health").handler_id == 1;
     assert r.match_path(Method::Get, &"/api/v1/users/list").handler_id == 2;
@@ -137,7 +137,7 @@ test "linear: param extraction" {
     let routes = [
         RoutePattern { method: Method::Get, path: "/api/v1/users/:id", handler_id: 7 },
         RoutePattern { method: Method::Get, path: "/api/v1/users/:id/posts/:pid", handler_id: 8 },
-    ] as Array<RoutePattern>;
+    ] as List<RoutePattern>;
     let r = LinearRouter::build(&routes);
 
     let m1 = r.match_path(Method::Get, &"/api/v1/users/42");
@@ -153,7 +153,7 @@ test "linear: param extraction" {
 test "linear: wildcard captures rest" {
     let routes = [
         RoutePattern { method: Method::Get, path: "/static/*path", handler_id: 5 },
-    ] as Array<RoutePattern>;
+    ] as List<RoutePattern>;
     let r = LinearRouter::build(&routes);
     let m = r.match_path(Method::Get, &"/static/css/main.css");
     assert m.handler_id == 5;
@@ -163,7 +163,7 @@ test "linear: wildcard captures rest" {
 test "linear: method mismatch is a miss" {
     let routes = [
         RoutePattern { method: Method::Post, path: "/login", handler_id: 1 },
-    ] as Array<RoutePattern>;
+    ] as List<RoutePattern>;
     let r = LinearRouter::build(&routes);
     assert r.match_path(Method::Get, &"/login").handler_id == -1;
 }
@@ -172,7 +172,7 @@ test "linear: root pattern matches /" {
     let routes = [
         RoutePattern { method: Method::Get, path: "/", handler_id: 7 },
         RoutePattern { method: Method::Get, path: "/foo", handler_id: 8 },
-    ] as Array<RoutePattern>;
+    ] as List<RoutePattern>;
     let r = LinearRouter::build(&routes);
     assert r.match_path(Method::Get, &"/").handler_id == 7;
     assert r.match_path(Method::Get, &"/foo").handler_id == 8;

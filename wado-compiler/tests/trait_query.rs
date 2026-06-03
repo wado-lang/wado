@@ -252,25 +252,25 @@ fn operator_mismatch_is_symmetric_in_operand_order() {
     // depending on operand order.
     let left_primitive = compile_err_contains(
         r"
-fn f(a: i32, lst: Array<i32>) -> i32 { return a - lst; }
+fn f(a: i32, lst: List<i32>) -> i32 { return a - lst; }
 export fn run() { let _ = f(1, [2, 3]); }
 ",
         "cannot be applied",
     );
     let left_non_primitive = compile_err_contains(
         r"
-fn f(a: i32, lst: Array<i32>) -> i32 { return lst - a; }
+fn f(a: i32, lst: List<i32>) -> i32 { return lst - a; }
 export fn run() { let _ = f(1, [2, 3]); }
 ",
         "cannot be applied",
     );
     // Both name the two operand types.
     assert!(
-        left_primitive.contains("i32") && left_primitive.contains("Array<i32>"),
+        left_primitive.contains("i32") && left_primitive.contains("List<i32>"),
         "expected both operand types, got: {left_primitive}"
     );
     assert!(
-        left_non_primitive.contains("i32") && left_non_primitive.contains("Array<i32>"),
+        left_non_primitive.contains("i32") && left_non_primitive.contains("List<i32>"),
         "expected both operand types, got: {left_non_primitive}"
     );
 }

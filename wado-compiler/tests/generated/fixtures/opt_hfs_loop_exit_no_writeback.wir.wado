@@ -24,12 +24,12 @@ struct wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado//State {
     mut counter: i32,
     mut total: i32,
     mut limit: i32,
-    mut data: ref "core:prelude//Array<i32>",
+    mut data: ref "core:prelude//List<i32>",
 }
 
 array builtin::array<i32> (mut i32);  // TypeId(4)
 
-struct core:prelude//Array<i32> {  // TypeId(5)
+struct core:prelude//List<i32> {  // TypeId(5)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
@@ -112,7 +112,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado/process"(state) {
     let index: i32;
     let _licm_limit_3: i32;
-    let _licm_data_4: ref "core:prelude//Array<i32>";
+    let _licm_data_4: ref "core:prelude//List<i32>";
     let _licm_used_5: i32;
     let _licm_repr_6: ref builtin::array<i32>;
     let __hfs_counter_7: i32;
@@ -138,7 +138,7 @@ fn "wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado/process"(st
 }
 
 fn "wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado/run"() {
-    let __b_0: ref "core:prelude//Array<i32>";
+    let __b_0: ref "core:prelude//List<i32>";
     let state: ref "wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado//State";
     let __v0_2: i32;
     let __cond_3: bool;
@@ -158,7 +158,7 @@ fn "wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado/run"() {
     let f_48: ref "core:prelude/format.wado//Formatter";
     let self_55: i32;
     let f_59: ref "core:prelude/format.wado//Formatter";
-    state = struct.new "wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado//State" { counter: 0, total: 0, limit: 5, data: ref.as_non_null(__b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30, 40, 50), used: 5 }; __b_0) };
+    state = struct.new "wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado//State" { counter: 0, total: 0, limit: 5, data: ref.as_non_null(__b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30, 40, 50), used: 5 }; __b_0) };
     "wado-compiler/tests/fixtures/opt_hfs_loop_exit_no_writeback.wado/process"(state);
     __v0_2 = state.total;
     __cond_3 = __v0_2 == 150;

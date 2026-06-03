@@ -22,7 +22,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
 
 array builtin::array<char> (mut char);  // TypeId(3)
 
-struct core:prelude//Array<char> {  // TypeId(4)
+struct core:prelude//List<char> {  // TypeId(4)
     mut repr: ref builtin::array<char>,
     mut used: i32,
 }
@@ -45,7 +45,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local.wado/count_a" = fn(ref "core:prelude//Array<char>") -> i32;  // TypeId(14)
+type "functype//wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local.wado/count_a" = fn(ref "core:prelude//List<char>") -> i32;  // TypeId(14)
 
 type "functype//wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local.wado/run" = fn();  // TypeId(15)
 
@@ -131,14 +131,14 @@ fn "wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local.wado/count_a"(c
 }
 
 fn "wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//Array<char>";
+    let __b_0: ref "core:prelude//List<char>";
     let __v0: i32;
     let __cond: bool;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let f_25: ref "core:prelude/format.wado//Formatter";
     let f_30: ref "core:prelude/format.wado//Formatter";
-    __b_0 = struct.new "core:prelude//Array<char>" { repr: array.new_fixed<char>(65, 98, 99, 97, 68, 97), used: 6 };
+    __b_0 = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(65, 98, 99, 97, 68, 97), used: 6 };
     __v0 = "wado-compiler/tests/fixtures/opt_elide_adjacent_struct_local.wado/count_a"(__b_0);
     __cond = __v0 == 3;
     if __cond == 0 {

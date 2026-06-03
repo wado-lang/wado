@@ -23,7 +23,7 @@ Wado's literal syntax is a **superset of JSON**. Any valid JSON document can be 
 - **Number format**: Decimal integers and floating-point with scientific notation
 - **Literals**: `true`, `false`, `null`
 - **Object syntax**: `{ "key": value }` with quoted keys
-- **Array syntax**: `[value, value, ...]`
+- **List syntax**: `[value, value, ...]`
 
 ### Wado Extensions Beyond JSON
 
@@ -59,8 +59,8 @@ This design choice prioritizes JSON interoperability over Rust syntax familiarit
 For homogeneous collections, explicit type annotation or `as` casting is used:
 
 ```wado
-let numbers: Array<i32> = [1, 2, 3];
-let names = ["Alice", "Bob"] as Array<String>;
+let numbers: List<i32> = [1, 2, 3];
+let names = ["Alice", "Bob"] as List<String>;
 ```
 
 ## Consequences
@@ -113,6 +113,6 @@ let names = ["Alice", "Bob"] as Array<String>;
 ## Related
 
 - WEP: JSON Module Import - Importing `.json` files as compile-time modules
-- WEP: Tuple and Array Literals - Detailed syntax specification for `[...]` literals
+- WEP: Tuple and List Literals - Detailed syntax specification for `[...]` literals
 - Current implementation: `wado-compiler/src/lexer.rs` (string/number parsing), `wado-compiler/src/parser.rs` (object/array literals)
 - Documentation: `docs/json-compatibility.md` (to be deprecated and replaced by this WEP)

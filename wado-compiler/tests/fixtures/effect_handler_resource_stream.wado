@@ -14,7 +14,7 @@
 use { println, Stdout } from "core:cli";
 
 struct MockStream {
-    log: Array<u8>,
+    log: List<u8>,
 }
 
 impl Stream<u8> for MockStream {
@@ -27,7 +27,7 @@ impl Stream<u8> for MockStream {
         let id: i32 = 0;
         resume [id as Stream<u8>, id as StreamWritable<u8>]
     }
-    fn read(&mut self, this: &Stream<u8>, max: i32) -> Array<u8> {
+    fn read(&mut self, this: &Stream<u8>, max: i32) -> List<u8> {
         let _ = this;
         let _ = max;
         let snapshot = self.log;
@@ -42,7 +42,7 @@ impl Stream<u8> for MockStream {
 }
 
 impl StreamWritable<u8> for MockStream {
-    fn write(&mut self, this: &StreamWritable<u8>, data: Array<u8>) {
+    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) {
         let _ = this;
         for let b of data {
             self.log.push(b);
@@ -60,7 +60,7 @@ export fn run() with Stdout {
     let mut s = MockStream { log: [] };
     with &mut s do {
         let [rx, tx] = Stream::<u8>::new();
-        let payload: Array<u8> = [104 as u8, 105 as u8]; // "hi"
+        let payload: List<u8> = [104 as u8, 105 as u8]; // "hi"
         tx.write(payload);
         let got = rx.read(16);
         assert got.len() == 2;

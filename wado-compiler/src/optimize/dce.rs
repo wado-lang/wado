@@ -243,7 +243,7 @@ fn extend_reachable_for_optimizer_passes(
     // call `array_clone::<T'>` for some `T'` whose helper isn't reachable
     // yet, and `compute_reachable` only follows direct call-graph edges
     // (it doesn't replay the array_clone scan). Single-pass would drop
-    // inner helpers for chains like `Array<Array<Array<T>>>`, panicking
+    // inner helpers for chains like `List<List<List<T>>>`, panicking
     // codegen with `WirInstr::ArrayClone references unknown helper ...`.
     loop {
         let mut added_this_round = false;
@@ -1063,7 +1063,7 @@ impl<'a> DceWalker<'a> {
     fn record_method_call(&mut self, receiver: &NirExpr, func: &crate::nir::FunctionRef) {
         let func_name = func.name.clone();
 
-        // Monomorphized methods (e.g. `Array<i32>::len`) already have
+        // Monomorphized methods (e.g. `List<i32>::len`) already have
         // their concrete name on `func`; non-monomorphized methods are
         // dispatched by `receiver`'s type below.
         if func.is_monomorphized() {

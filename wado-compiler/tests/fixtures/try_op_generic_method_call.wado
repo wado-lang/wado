@@ -20,7 +20,7 @@ impl Sink for StringSink {
     }
 }
 
-fn write_values(s: &mut StringSink, values: Array<i32>) -> Result<(), String> {
+fn write_values(s: &mut StringSink, values: List<i32>) -> Result<(), String> {
     for let v of values {
         s.put(&v)?;
     }
@@ -29,7 +29,7 @@ fn write_values(s: &mut StringSink, values: Array<i32>) -> Result<(), String> {
 
 export fn run() with Stdout {
     let mut s = StringSink { buf: "" };
-    let r = write_values(&mut s, [1, 2, 3] as Array<i32>);
+    let r = write_values(&mut s, [1, 2, 3] as List<i32>);
     if let Ok(_) = r {
         println(s.buf);
     }

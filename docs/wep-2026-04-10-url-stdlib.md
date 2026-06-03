@@ -152,7 +152,7 @@ impl Url {
 
     /// Returns all values for the given query parameter key.
     /// Computed from the raw query string to preserve duplicate keys.
-    pub fn query_get_all(&self, key: String) -> Array<String>
+    pub fn query_get_all(&self, key: String) -> List<String>
 
     /// Returns a new Url with the query string replaced by the given params.
     /// Keys and values are percent-encoded.
@@ -283,7 +283,7 @@ pub fn format_query(params: TreeMap<String, String>) -> String
 | `.resolve(ref)`             | `&self, String -> Result<Url, ParseError>`              | Relative resolution       |
 | `.query_pairs()`            | `&self -> TreeMap<String, String>`                      | Parse query params        |
 | `.query_get(key)`           | `&self, String -> Option<String>`                       | Get param value           |
-| `.query_get_all(key)`       | `&self, String -> Array<String>`                        | Get all values for key    |
+| `.query_get_all(key)`       | `&self, String -> List<String>`                         | Get all values for key    |
 | `.with_query_pairs(params)` | `&self, TreeMap<String, String> -> Url`                 | Replace query params      |
 | `percent_encode`            | `String -> String`                                      | Encode for URI component  |
 | `percent_decode`            | `String -> Result<String, ParseError>`                  | Decode %XX sequences      |
@@ -409,7 +409,7 @@ Key implementation details:
 
 - [WASI HTTP Integration](./wep-2026-02-21-wasi-http.md) — the primary consumer of `core:url`
 - [String Type Design](./wep-2026-01-15-string-type-design.md) — string manipulation used in URL parsing
-- [Redesign String and Array APIs](./wep-2026-03-29-redesign-string-array-api.md) — string methods used in implementation
+- [Redesign String and List APIs](./wep-2026-03-29-redesign-string-array-api.md) — string methods used in implementation
 - [Base64 Encoding API](./wep-2026-02-27-base64-api.md) — similar stdlib module design pattern
 
 ## References

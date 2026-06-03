@@ -191,8 +191,8 @@ fn range(start: i32, end: i32) with Generator<i32> {
     }
 }
 
-fn collect_all() -> Array<i32> {
-    let mut result: Array<i32> = [];
+fn collect_all() -> List<i32> {
+    let mut result: List<i32> = [];
 
     with handler Generator<i32> {
         yield(value) => |resume| {
@@ -255,7 +255,7 @@ fn collect_all() -> Array<i32> {
 
 ```wado
 handler MockStdout for Stdout {
-    let mut output: Array<u8> = [];
+    let mut output: List<u8> = [];
 
     write_via_stream(data) => {
         output.extend(collect_stream(data));
@@ -390,7 +390,7 @@ fn count_matching(input: &String, pattern: &String) -> i32 {
 ```
 
 Each line is produced lazily via `suspend` and consumed immediately by the handler —
-no intermediate `Array<String>` allocation.
+no intermediate `List<String>` allocation.
 
 ---
 

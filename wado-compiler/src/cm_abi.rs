@@ -134,7 +134,7 @@ fn cm_align_named(name: &str) -> u32 {
 fn cm_size_generic(generic: &GenericType) -> u32 {
     match generic.name.as_str() {
         // list<T> is (ptr: i32, len: i32)
-        "Array" => 8,
+        "List" => 8,
         // option<T>: discriminant byte + padding + payload
         "Option" if generic.args.len() == 1 => {
             let inner = &generic.args[0];
@@ -173,7 +173,7 @@ fn cm_size_generic(generic: &GenericType) -> u32 {
 /// Canonical ABI alignment for generic types.
 fn cm_align_generic(generic: &GenericType) -> u32 {
     match generic.name.as_str() {
-        "Array" => 4, // (ptr: i32, len: i32) — aligned to i32
+        "List" => 4, // (ptr: i32, len: i32) — aligned to i32
         "Option" if generic.args.len() == 1 => cm_align_option(&generic.args[0]),
         "Result" if generic.args.len() == 2 => cm_align_result(&generic.args[0], &generic.args[1]),
         "Tuple" => generic.args.iter().map(cm_align).max().unwrap_or(1),
@@ -356,7 +356,7 @@ fn flatten_type(ty: &Type, out: &mut Vec<CmValType>) {
             _ => out.push(CmValType::I32),
         },
         Type::Generic(generic) => match generic.name.as_str() {
-            "Array" => {
+            "List" => {
                 out.push(CmValType::I32); // ptr
                 out.push(CmValType::I32); // len
             }
@@ -505,11 +505,11 @@ mod tests {
     #[test]
     fn test_list_size() {
         // list<T> = (ptr: i32, len: i32) regardless of T
-        let list_i32 = generic_type("Array", vec![named_type("i32")]);
+        let list_i32 = generic_type("List", vec![named_type("i32")]);
         assert_eq!(cm_size(&list_i32), 8);
         assert_eq!(cm_align(&list_i32), 4);
 
-        let list_string = generic_type("Array", vec![named_type("String")]);
+        let list_string = generic_type("List", vec![named_type("String")]);
         assert_eq!(cm_size(&list_string), 8);
         assert_eq!(cm_align(&list_string), 4);
     }
@@ -704,7 +704,7 @@ mod tests {
     fn test_list_option_string() {
         // list<option<string>> is still just (ptr, len) = 8 bytes
         let inner = generic_type("Option", vec![named_type("String")]);
-        let list = generic_type("Array", vec![inner]);
+        let list = generic_type("List", vec![inner]);
         assert_eq!(cm_size(&list), 8);
         assert_eq!(cm_align(&list), 4);
     }
@@ -712,7 +712,7 @@ mod tests {
     #[test]
     fn test_option_list_u8() {
         // option<list<u8>>: disc(1) + 3 padding + list(8) = 12 bytes, align 4
-        let inner = generic_type("Array", vec![named_type("u8")]);
+        let inner = generic_type("List", vec![named_type("u8")]);
         let opt = generic_type("Option", vec![inner]);
         assert_eq!(cm_size(&opt), 12);
         assert_eq!(cm_align(&opt), 4);
@@ -751,7 +751,7 @@ mod tests {
 
     #[test]
     fn test_flat_list() {
-        let list = generic_type("Array", vec![named_type("i32")]);
+        let list = generic_type("List", vec![named_type("i32")]);
         assert_eq!(cm_flat_types(&list), vec![CmValType::I32, CmValType::I32]);
     }
 
@@ -835,7 +835,7 @@ mod tests {
     #[test]
     fn test_consistency_list_return() {
         // CmCallConvention uses outptr_alloc: Some((8, 4)) for list<T>
-        let list = generic_type("Array", vec![named_type("String")]);
+        let list = generic_type("List", vec![named_type("String")]);
         assert_eq!(cm_size(&list), 8);
         assert_eq!(cm_align(&list), 4);
     }

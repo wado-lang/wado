@@ -3,7 +3,7 @@ use { Stdin } from "wasi:cli";
 use { inflate_gzip, gzip_compress } from "core:zlib";
 
 test "gzip round-trip" {
-    let mut original: Array<u8> = [];
+    let mut original: List<u8> = [];
     for let mut i = 0; i < 1024; i = i + 1 {
         original.push((i % 256) as u8);
     }
@@ -19,7 +19,7 @@ export fn run() with Stdout, Stdin {
     let [stdin_stream, _done] = Stdin::read_via_stream();
 
     // Read all gzip data from stdin
-    let mut data: Array<u8> = [];
+    let mut data: List<u8> = [];
     loop {
         let chunk = stdin_stream.read(4096);
         if chunk.len() == 0 {

@@ -2,7 +2,7 @@ use { println, Stdout } from "core:cli";
 
 // from for_of_generic_tuple.wado
 struct Holder<K, V> {
-    items: Array<[K, V]>,
+    items: List<[K, V]>,
 }
 
 impl<K, V> Holder<K, V> {
@@ -14,7 +14,7 @@ impl<K, V> Holder<K, V> {
 }
 
 // from for_of_side_effect.wado
-fn get_numbers() -> Array<i32> with Stdout {
+fn get_numbers() -> List<i32> with Stdout {
     println("getting numbers");
     return [1, 2, 3];
 }
@@ -34,7 +34,7 @@ fn for_of_generic_tuple() with Stdout {
 
 // from for_of_mut.wado
 fn for_of_mut() with Stdout {
-    let numbers: Array<i32> = [1, 2, 3];
+    let numbers: List<i32> = [1, 2, 3];
     for let mut n of numbers {
         n = n * 2;
         println(`{n}`);
@@ -43,8 +43,8 @@ fn for_of_mut() with Stdout {
 
 // from for_of_nested.wado
 fn for_of_nested() with Stdout {
-    let outer: Array<i32> = [1, 2, 3];
-    let inner: Array<i32> = [10, 20];
+    let outer: List<i32> = [1, 2, 3];
+    let inner: List<i32> = [10, 20];
     for let i of outer {
         for let j of inner {
             println(`{i},{j}`);
@@ -62,7 +62,7 @@ fn for_of_side_effect() with Stdout {
 
 // from for_of_strings.wado
 fn for_of_strings() with Stdout {
-    let names: Array<String> = ["Alice", "Bob", "Charlie"];
+    let names: List<String> = ["Alice", "Bob", "Charlie"];
     for let name of names {
         println(`Hello, {name}!`);
     }
@@ -72,7 +72,7 @@ fn for_of_strings() with Stdout {
 fn for_of_structs() with Stdout {
     let p1 = Point { x: 1, y: 2 };
     let p2 = Point { x: 3, y: 4 };
-    let points: Array<Point> = [p1, p2];
+    let points: List<Point> = [p1, p2];
     for let p of points {
         println(`{p.x},{p.y}`);
     }
@@ -80,7 +80,7 @@ fn for_of_structs() with Stdout {
 
 // from for_of_tuple_array.wado
 fn for_of_tuple_array() with Stdout {
-    let items: Array<[String, i32]> = [["a", 1], ["b", 2]];
+    let items: List<[String, i32]> = [["a", 1], ["b", 2]];
     for let pair of items {
         println(pair.0);
     }
@@ -91,7 +91,7 @@ fn for_of_tuple_array() with Stdout {
 fn for_of_tuples() with Stdout {
     let t1: [i32, i32] = [1, 2];
     let t2: [i32, i32] = [3, 4];
-    let pairs: Array<[i32, i32]> = [t1, t2];
+    let pairs: List<[i32, i32]> = [t1, t2];
     for let p of pairs {
         println(`{p.0},{p.1}`);
     }

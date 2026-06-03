@@ -20,7 +20,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude//Array<u8> {  // TypeId(3)
+struct core:prelude//List<u8> {  // TypeId(3)
     mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
@@ -99,11 +99,11 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/dce_bytes_literals.wado/run"() with Stdout {
-    let data: ref "core:prelude//Array<u8>";
+    let data: ref "core:prelude//List<u8>";
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let self_9: i32;
-    data = struct.new "core:prelude//Array<u8>" { repr: array.new_data<u8>("Hello, World!
+    data = struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>("Hello, World!
 "), used: 14 };
     "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; self_9 = data.used; "core:prelude/primitive.wado/i32::fmt_decimal"(self_9, __local_2); __local_1);
 }

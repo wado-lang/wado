@@ -22,7 +22,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
 
 array builtin::array<u16> (mut u16);  // TypeId(3)
 
-struct core:prelude//Array<u16> {  // TypeId(4)
+struct core:prelude//List<u16> {  // TypeId(4)
     mut repr: ref builtin::array<u16>,
     mut used: i32,
 }
@@ -45,7 +45,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/condition_implication_field_chain_bound.wado/loop_guard_field_chain_bound" = fn(i32, ref "core:prelude//Array<u16>") -> i32;  // TypeId(14)
+type "functype//wado-compiler/tests/fixtures/condition_implication_field_chain_bound.wado/loop_guard_field_chain_bound" = fn(i32, ref "core:prelude//List<u16>") -> i32;  // TypeId(14)
 
 type "functype//wado-compiler/tests/fixtures/condition_implication_field_chain_bound.wado/run" = fn();  // TypeId(15)
 
@@ -127,14 +127,14 @@ fn "wado-compiler/tests/fixtures/condition_implication_field_chain_bound.wado/lo
 }
 
 fn "wado-compiler/tests/fixtures/condition_implication_field_chain_bound.wado/run"() with Stdout {
-    let src: ref "core:prelude//Array<u16>";
+    let src: ref "core:prelude//List<u16>";
     let r: i32;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let repr: ref builtin::array<u16>;
     repr = builtin::array_new<u16>(16);
     builtin::array_fill<u16>(repr, 0, 7, 16);
-    src = struct.new "core:prelude//Array<u16>" { repr: repr, used: 16 };
+    src = struct.new "core:prelude//List<u16>" { repr: repr, used: 16 };
     r = "wado-compiler/tests/fixtures/condition_implication_field_chain_bound.wado/loop_guard_field_chain_bound"(4, src);
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/i32::fmt_decimal"(r, __local_4); __local_3);
 }

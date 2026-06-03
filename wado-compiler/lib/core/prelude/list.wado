@@ -1,7 +1,7 @@
 #![no_prelude]
-#![stdlib("core:prelude/array.wado")]
-// Array type and iterators for Wado.
-// Provides Array<T>, ArrayIter<T>, and iterator combinators.
+#![stdlib("core:prelude/list.wado")]
+// List type and iterators for Wado.
+// Provides List<T>, ListIter<T>, and iterator combinators.
 
 
 use {
@@ -27,15 +27,15 @@ fn i32_max(a: i32, b: i32) -> i32 {
     return builtin::select(a > b, a, b);
 }
 
-#[compiler_item("array")]
-pub struct Array<T> {
+#[compiler_item("list")]
+pub struct List<T> {
     repr: builtin::array<T>,
     used: i32,
 }
 
-impl Array<T> {
-    pub fn with_capacity(capacity: i32) -> Array<T> {
-        return Array { repr: builtin::array_new(capacity), used: 0 };
+impl List<T> {
+    pub fn with_capacity(capacity: i32) -> List<T> {
+        return List { repr: builtin::array_new(capacity), used: 0 };
     }
 
     pub fn grow(&mut self) {
@@ -57,10 +57,10 @@ impl Array<T> {
         self.repr = new_repr;
     }
 
-    pub fn filled(n: i32, element: T) -> Array<T> {
+    pub fn filled(n: i32, element: T) -> List<T> {
         let repr: builtin::array<T> = builtin::array_new(n);
         builtin::array_fill(repr, 0, element, n);
-        return Array { repr, used: n };
+        return List { repr, used: n };
     }
 
     pub fn len(&self) -> i32 {
@@ -80,12 +80,12 @@ impl Array<T> {
         return self.repr;
     }
 
-    pub fn internal_from_raw(repr: builtin::array<T>, used: i32) -> Array<T> {
-        return Array { repr, used };
+    pub fn internal_from_raw(repr: builtin::array<T>, used: i32) -> List<T> {
+        return List { repr, used };
     }
 
     /// Appends a single element to the end.
-    #[compiler_item("array_push")]
+    #[compiler_item("list_push")]
     pub fn push(&mut self, value: T) with stores[value] {
         let used = self.used;
         if builtin::unlikely(used >= builtin::array_len(self.repr)) {
@@ -189,7 +189,7 @@ impl Array<T> {
     }
 
     /// Extends this array with elements from another array.
-    pub fn extend(&mut self, other: &Array<T>) {
+    pub fn extend(&mut self, other: &List<T>) {
         let other_len = other.used;
         if other_len == 0 {
             return;
@@ -216,13 +216,13 @@ impl Array<T> {
     }
 
     /// Returns a new array containing this array's elements repeated `n` times.
-    pub fn repeat(&self, n: i32) -> Array<T> {
+    pub fn repeat(&self, n: i32) -> List<T> {
         let total = self.used * n;
         let new_repr: builtin::array<T> = builtin::array_new(total);
         for let mut r = 0; r < n; r += 1 {
             builtin::array_copy(new_repr, r * self.used, self.repr, 0, self.used);
         }
-        return Array { repr: new_repr, used: total };
+        return List { repr: new_repr, used: total };
     }
 
     /// Copies `count` elements from `self[src_start..]` and appends them.
@@ -251,7 +251,7 @@ impl Array<T> {
     }
 }
 
-impl<T: Eq> Array<T> {
+impl<T: Eq> List<T> {
     /// Returns true if the array contains the given value.
     pub fn contains(&self, value: &T) -> bool {
         for let mut i = 0; i < self.used; i += 1 {
@@ -263,7 +263,7 @@ impl<T: Eq> Array<T> {
     }
 }
 
-impl IndexValue<i32> for Array<T> {
+impl IndexValue<i32> for List<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
@@ -274,7 +274,7 @@ impl IndexValue<i32> for Array<T> {
     }
 }
 
-impl IndexAssign<i32> for Array<T> {
+impl IndexAssign<i32> for List<T> {
     type Input = T;
 
     fn index_assign(&mut self, index: i32, value: Self::Input) with stores[value] {
@@ -285,7 +285,7 @@ impl IndexAssign<i32> for Array<T> {
     }
 }
 
-impl<T: Eq> Eq for Array<T> {
+impl<T: Eq> Eq for List<T> {
     pub fn eq(&self, other: &Self) -> bool {
         if self.used != other.used {
             return false;
@@ -299,7 +299,7 @@ impl<T: Eq> Eq for Array<T> {
     }
 }
 
-impl<T: Ord> Ord for Array<T> {
+impl<T: Ord> Ord for List<T> {
     pub fn cmp(&self, other: &Self) -> Ordering {
         let min_len = i32_min(self.used, other.used);
         for let mut i = 0; i < min_len; i += 1 {
@@ -321,13 +321,13 @@ impl<T: Ord> Ord for Array<T> {
         return Ordering::Equal;
     }
 }
-pub struct ArraySlice<T> {
+pub struct ListSlice<T> {
     repr: builtin::array<T>,
     start: i32,
     end: i32,
 }
 
-impl ArraySlice<T> {
+impl ListSlice<T> {
     pub fn len(&self) -> i32 {
         return self.end - self.start;
     }
@@ -343,28 +343,28 @@ impl ArraySlice<T> {
         return Option::Some(builtin::array_get(self.repr, self.start + index));
     }
 
-    pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T> {
+    pub fn slice(&self, start: i32, end: i32) -> ListSlice<T> {
         let abs_start = self.start + i32_max(start, 0);
         let abs_end = self.start + i32_min(end, self.end - self.start);
-        return ArraySlice {
+        return ListSlice {
             repr: self.repr,
             start: i32_min(abs_start, self.end),
             end: i32_max(abs_start, i32_min(abs_end, self.end)),
         };
     }
 
-    pub fn to_array(&self) -> Array<T> {
+    pub fn to_array(&self) -> List<T> {
         let len = self.end - self.start;
         if len <= 0 {
-            return Array::with_capacity(0);
+            return List::with_capacity(0);
         }
         let new_repr: builtin::array<T> = builtin::array_new(len);
         builtin::array_copy(new_repr, 0, self.repr, self.start, len);
-        return Array { repr: new_repr, used: len };
+        return List { repr: new_repr, used: len };
     }
 
-    pub fn iter(&self) -> ArrayIter<T> {
-        return ArrayIter {
+    pub fn iter(&self) -> ListIter<T> {
+        return ListIter {
             repr: self.repr,
             used: self.end,
             index: self.start,
@@ -372,7 +372,7 @@ impl ArraySlice<T> {
     }
 }
 
-impl IndexValue<i32> for ArraySlice<T> {
+impl IndexValue<i32> for ListSlice<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
@@ -383,20 +383,20 @@ impl IndexValue<i32> for ArraySlice<T> {
     }
 }
 
-impl<T> IntoIterator for ArraySlice<T> {
+impl<T> IntoIterator for ListSlice<T> {
     type Item = T;
-    type Iter = ArrayIter<T>;
+    type Iter = ListIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
         return self.iter();
     }
 }
 
-impl Array<T> {
-    pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T> {
+impl List<T> {
+    pub fn slice(&self, start: i32, end: i32) -> ListSlice<T> {
         let s = i32_max(start, 0);
         let e = i32_min(end, self.used);
-        return ArraySlice {
+        return ListSlice {
             repr: self.repr,
             start: i32_min(s, self.used),
             end: i32_max(s, e),
@@ -404,29 +404,29 @@ impl Array<T> {
     }
 }
 
-impl IndexValue<RangeExclusive<i32>> for Array<T> {
-    type Output = ArraySlice<T>;
+impl IndexValue<RangeExclusive<i32>> for List<T> {
+    type Output = ListSlice<T>;
 
-    fn index_value(&self, range: RangeExclusive<i32>) -> ArraySlice<T> {
+    fn index_value(&self, range: RangeExclusive<i32>) -> ListSlice<T> {
         return self.slice(range.start, range.end);
     }
 }
 
-impl IndexValue<RangeInclusive<i32>> for Array<T> {
-    type Output = ArraySlice<T>;
+impl IndexValue<RangeInclusive<i32>> for List<T> {
+    type Output = ListSlice<T>;
 
-    fn index_value(&self, range: RangeInclusive<i32>) -> ArraySlice<T> {
+    fn index_value(&self, range: RangeInclusive<i32>) -> ListSlice<T> {
         return self.slice(range.start, range.end + 1);
     }
 }
 
-pub struct ArrayIter<T> {
+pub struct ListIter<T> {
     repr: builtin::array<T>,
     used: i32,
     index: i32,
 }
 
-impl<T> Iterator for ArrayIter<T> {
+impl<T> Iterator for ListIter<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -439,37 +439,37 @@ impl<T> Iterator for ArrayIter<T> {
     }
 }
 
-impl<T> IntoIterator for ArrayIter<T> {
+impl<T> IntoIterator for ListIter<T> {
     type Item = T;
-    type Iter = ArrayIter<T>;
+    type Iter = ListIter<T>;
 
-    fn into_iter(&self) -> ArrayIter<T> {
+    fn into_iter(&self) -> ListIter<T> {
         return *self;
     }
 }
 
-impl<T> IntoIterator for Array<T> {
+impl<T> IntoIterator for List<T> {
     type Item = T;
-    type Iter = ArrayIter<T>;
+    type Iter = ListIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
-        return ArrayIter {
+        return ListIter {
             repr: self.repr,
             used: self.used,
             index: 0,
         };
     }
 }
-pub struct ArrayRefIter<T> {
+pub struct ListRefIter<T> {
     repr: builtin::array<T>,
     used: i32,
     index: i32,
 }
 
 // TODO: Iterator's default methods (collect, map, filter, fold, etc.) are eagerly
-// monomorphized for every T used with &Array<T>. This causes OOM when compiling
+// monomorphized for every T used with &List<T>. This causes OOM when compiling
 // large programs (e.g., gale). Needs lazy monomorphization of trait default methods.
-impl<T> Iterator for ArrayRefIter<T> {
+impl<T> Iterator for ListRefIter<T> {
     type Item = &T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -483,13 +483,13 @@ impl<T> Iterator for ArrayRefIter<T> {
     }
 }
 
-impl<T> IntoIterator for &Array<T> {
+impl<T> IntoIterator for &List<T> {
     type Item = &T;
-    type Iter = ArrayRefIter<T>;
+    type Iter = ListRefIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
         let arr = *self;
-        return ArrayRefIter {
+        return ListRefIter {
             repr: arr.repr,
             used: arr.used,
             index: 0,
@@ -497,13 +497,13 @@ impl<T> IntoIterator for &Array<T> {
     }
 }
 
-impl<T> IntoIterator for &mut Array<T> {
+impl<T> IntoIterator for &mut List<T> {
     type Item = &T;
-    type Iter = ArrayRefIter<T>;
+    type Iter = ListRefIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
         let arr = *self;
-        return ArrayRefIter {
+        return ListRefIter {
             repr: arr.repr,
             used: arr.used,
             index: 0,
@@ -511,9 +511,9 @@ impl<T> IntoIterator for &mut Array<T> {
     }
 }
 
-impl Array<T> {
-    pub fn iter(&self) -> ArrayIter<T> {
-        return ArrayIter {
+impl List<T> {
+    pub fn iter(&self) -> ListIter<T> {
+        return ListIter {
             repr: self.repr,
             used: self.used,
             index: 0,
@@ -563,11 +563,11 @@ impl Array<T> {
         }
     }
 
-    pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering) -> Array<T> {
+    pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering) -> List<T> {
         let n = self.used;
         let new_repr: builtin::array<T> = builtin::array_new(n);
         builtin::array_copy(new_repr, 0, self.repr, 0, n);
-        let mut copy = Array { repr: new_repr, used: n };
+        let mut copy = List { repr: new_repr, used: n };
         copy.sort_by(cmp);
         return copy;
     }
@@ -606,13 +606,13 @@ pub struct WindowsIter<T> {
 }
 
 impl<T> Iterator for WindowsIter<T> {
-    type Item = ArraySlice<T>;
+    type Item = ListSlice<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index + self.size > self.used {
             return null;
         }
-        let slice = ArraySlice {
+        let slice = ListSlice {
             repr: self.repr,
             start: self.index,
             end: self.index + self.size,
@@ -623,7 +623,7 @@ impl<T> Iterator for WindowsIter<T> {
 }
 
 impl<T> IntoIterator for WindowsIter<T> {
-    type Item = ArraySlice<T>;
+    type Item = ListSlice<T>;
     type Iter = WindowsIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
@@ -640,14 +640,14 @@ pub struct ChunksIter<T> {
 }
 
 impl<T> Iterator for ChunksIter<T> {
-    type Item = ArraySlice<T>;
+    type Item = ListSlice<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index >= self.used {
             return null;
         }
         let end = i32_min(self.index + self.size, self.used);
-        let slice = ArraySlice {
+        let slice = ListSlice {
             repr: self.repr,
             start: self.index,
             end,
@@ -658,7 +658,7 @@ impl<T> Iterator for ChunksIter<T> {
 }
 
 impl<T> IntoIterator for ChunksIter<T> {
-    type Item = ArraySlice<T>;
+    type Item = ListSlice<T>;
     type Iter = ChunksIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
@@ -667,24 +667,24 @@ impl<T> IntoIterator for ChunksIter<T> {
 }
 
 // sort/sorted require T: Ord (elements must be comparable via Ord::cmp)
-impl<T: Ord> Array<T> {
+impl<T: Ord> List<T> {
     pub fn sort(&mut self) {
         self.sort_by(|a: &T, b: &T| {
             return a.cmp(b);
         });
     }
 
-    pub fn sorted(&self) -> Array<T> {
+    pub fn sorted(&self) -> List<T> {
         let n = self.used;
         let new_repr: builtin::array<T> = builtin::array_new(n);
         builtin::array_copy(new_repr, 0, self.repr, 0, n);
-        let mut copy = Array { repr: new_repr, used: n };
+        let mut copy = List { repr: new_repr, used: n };
         copy.sort();
         return copy;
     }
 }
 
-impl<T: Display> Array<T> {
+impl<T: Display> List<T> {
     /// Joins elements into a string with the given separator.
     pub fn join(&self, separator: String) -> String {
         let mut buf = String::with_capacity(self.used * 8);
@@ -700,11 +700,11 @@ impl<T: Display> Array<T> {
     }
 }
 
-impl FromIterator<T> for Array<T> {
-    type Iter = ArrayIter<T>;
+impl FromIterator<T> for List<T> {
+    type Iter = ListIter<T>;
 
-    fn from_iter(iter: ArrayIter<T>) -> Array<T> {
-        let mut result: Array<T> = [];
+    fn from_iter(iter: ListIter<T>) -> List<T> {
+        let mut result: List<T> = [];
         for let item of iter {
             result.push(item);
         }
@@ -712,27 +712,27 @@ impl FromIterator<T> for Array<T> {
     }
 }
 
-// SequenceLiteralBuilder for [e0, e1, ...] -> Array<T>
-// The blanket impl in core:prelude automatically provides SequenceLiteral for Array<T>.
-impl SequenceLiteralBuilder for Array<T> {
+// SequenceLiteralBuilder for [e0, e1, ...] -> List<T>
+// The blanket impl in core:prelude automatically provides SequenceLiteral for List<T>.
+impl SequenceLiteralBuilder for List<T> {
     type Element = T;
-    type Output = Array<T>;
+    type Output = List<T>;
 
-    fn new_literal(capacity: i32) -> Array<T> {
-        return Array::with_capacity(capacity);
+    fn new_literal(capacity: i32) -> List<T> {
+        return List::with_capacity(capacity);
     }
 
     fn push_literal(&mut self, value: T) with stores[value] {
         self.push(value);
     }
 
-    fn build(&self) -> Array<T> {
+    fn build(&self) -> List<T> {
         return *self;
     }
 }
 
-impl ArrayIter<T> {
-    pub fn collect(&mut self) -> Array<T> {
+impl ListIter<T> {
+    pub fn collect(&mut self) -> List<T> {
         let remaining = self.used - self.index;
         let mut repr: builtin::array<T> = builtin::array_new(remaining);
         let mut result_used = 0;
@@ -742,19 +742,19 @@ impl ArrayIter<T> {
             result_used += 1;
         }
         self.index = self.used;
-        return Array { repr, used: result_used };
+        return List { repr, used: result_used };
     }
 }
 
 use { Add } from "core:prelude/traits.wado";
 
-impl<T: Add> ArrayIter<T> {
+impl<T: Add> ListIter<T> {
     pub fn sum(&mut self) -> Option<T> {
         return self.reduce(|a: T, b: T| a + b);
     }
 }
 
-impl<T: Ord> ArrayIter<T> {
+impl<T: Ord> ListIter<T> {
     pub fn min(&mut self) -> Option<T> {
         if let Some(first) = self.next() {
             let mut result = first;
@@ -784,8 +784,8 @@ impl<T: Ord> ArrayIter<T> {
     }
 }
 
-impl Default for Array<T> {
-    pub fn default() -> Array<T> {
-        return [] as Array<T>;
+impl Default for List<T> {
+    pub fn default() -> List<T> {
+        return [] as List<T>;
     }
 }

@@ -1066,7 +1066,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Like `resolve_if_stmt` but propagates `expected_type` to blocks for coercion.
     /// Used when an if statement is the last statement in a block that needs type coercion
-    /// (e.g., match arm returning Array<T> from an if-else with tuple literals).
+    /// (e.g., match arm returning List<T> from an if-else with tuple literals).
     fn resolve_if_stmt_with_expected(
         &mut self,
         if_stmt: &IfStmt,
@@ -2611,7 +2611,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// / `.next()` dispatches go through [`Self::resolve_method_call_with`]
     /// with `method_id: None`, so no use→def edges are recorded against
     /// `for_of.id` either — clicking the `for` keyword no longer drags the
-    /// user into `Iterator::next` in `core:prelude/array.wado`.
+    /// user into `Iterator::next` in `core:prelude/list.wado`.
     ///
     /// `for_of.iterable` is resolved as-is — if the user wrote
     /// `for let item of expr.enumerate()`, the `.enumerate()` is part of

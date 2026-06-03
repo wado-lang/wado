@@ -157,7 +157,7 @@ Rationale:
 - Makes dependencies explicit
 - Effect requirements (for `HashMap`) become visible at import site
 - Follows Rust's precedent (HashMap requires explicit import)
-- Encourages staged learning: start with `Array<T>`, progress to maps
+- Encourages staged learning: start with `List<T>`, progress to maps
 
 ### Literal Coercion
 

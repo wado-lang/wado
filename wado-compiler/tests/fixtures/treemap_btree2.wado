@@ -5,10 +5,10 @@ use { println, Stdout } from "core:cli";
 
 // B-tree node
 struct BTreeNode<K, V> {
-    keys: Array<K>,
-    values: Array<V>,
-    deleted: Array<bool>,
-    children: Array<&mut BTreeNode<K, V>>,
+    keys: List<K>,
+    values: List<V>,
+    deleted: List<bool>,
+    children: List<&mut BTreeNode<K, V>>,
     is_leaf: bool,
 }
 
@@ -52,9 +52,9 @@ impl<K, V> BTreeNode<K, V> {
     }
 
     fn compact(&mut self) {
-        let new_keys: Array<K> = [];
-        let new_values: Array<V> = [];
-        let new_deleted: Array<bool> = [];
+        let new_keys: List<K> = [];
+        let new_values: List<V> = [];
+        let new_deleted: List<bool> = [];
 
         for let mut i = 0; i < self.keys.len(); i += 1 {
             if !self.deleted[i] {
@@ -302,15 +302,15 @@ impl<K, V> TreeMap<K, V> {
         return self.size == 0;
     }
 
-    fn iter(&self) -> Array<[K, V]> {
-        let mut result: Array<[K, V]> = [];
+    fn iter(&self) -> List<[K, V]> {
+        let mut result: List<[K, V]> = [];
         if let Some(root) = self.root {
             self.collect_entries(root, &mut result);
         }
         return result;
     }
 
-    fn collect_entries(&self, node: &BTreeNode<K, V>, result: &mut Array<[K, V]>) {
+    fn collect_entries(&self, node: &BTreeNode<K, V>, result: &mut List<[K, V]>) {
         let mut i = 0;
 
         while i < node.keys.len() {

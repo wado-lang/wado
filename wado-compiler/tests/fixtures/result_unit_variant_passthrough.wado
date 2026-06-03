@@ -39,7 +39,7 @@ test "Err passthrough preserves variant case" {
 // (2) Same shape, but the Ok arm has a non-trivial body that builds and
 //     drops some locals before returning. This variant of the pattern
 //     mirrors `write_file_string` more closely.
-fn passthrough_with_ok_work(c: Result<i32, Color>, bytes: Array<u8>) -> Result<(), Color> {
+fn passthrough_with_ok_work(c: Result<i32, Color>, bytes: List<u8>) -> Result<(), Color> {
     match c {
         Err(e) => return Result::Err(e),
         Ok(_) => {
@@ -57,9 +57,9 @@ fn passthrough_with_ok_work(c: Result<i32, Color>, bytes: Array<u8>) -> Result<(
 }
 
 test "Ok arm with body still preserves Err passthrough" {
-    let arr: Array<u8> = [1, 2, 3];
+    let arr: List<u8> = [1, 2, 3];
     assert passthrough_with_ok_work(Result::<i32, Color>::Ok(1), arr) matches { Ok(_) };
-    let arr2: Array<u8> = [];
+    let arr2: List<u8> = [];
     assert passthrough_with_ok_work(
         Result::<i32, Color>::Err(Color::Green),
         arr2,

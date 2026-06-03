@@ -32,7 +32,7 @@ export fn run() with Stdout, Stderr, Preopens {
         let [write_rx, write_tx] = Stream::<u8>::new();
         let sub = src_file.write_via_stream(write_rx, 0 as Filesize);
         // Write "RENAME" (82, 69, 78, 65, 77, 69)
-        let data: Array<u8> = [82, 69, 78, 65, 77, 69];
+        let data: List<u8> = [82, 69, 78, 65, 77, 69];
         write_tx.write(data);
         write_tx.drop();
         sub.drop();

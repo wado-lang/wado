@@ -4,7 +4,7 @@
 //! After inlining, we often have patterns like:
 //!
 //! ```text
-//! let self: &Array<T> = &arr;
+//! let self: &List<T> = &arr;
 //! ... self.repr ...
 //! ```
 //!

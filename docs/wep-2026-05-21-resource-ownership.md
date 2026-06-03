@@ -225,7 +225,7 @@ The cost of "lightweight" is paid in expressiveness, deliberately:
   handles or plain values instead — consistent with the existing stdlib and
   with WEP 2026-04-28's `downcast` returning `Option<T>` by value.
 - An individual element cannot be moved out of a resource-bearing aggregate.
-  Operate on `Array<Descriptor>` by iteration: `for r in &arr` borrows each
+  Operate on `List<Descriptor>` by iteration: `for r in &arr` borrows each
   element, `for r in arr` consumes the array. Finer-grained element moves are
   an open question, not a v1 feature.
 

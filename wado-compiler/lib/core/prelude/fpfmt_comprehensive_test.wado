@@ -18,7 +18,7 @@ fn format_exp_padded(d: u64, p: i32, nd: i32) -> String {
 
     // Write digits
     let mut val = d;
-    let mut digit_chars: Array<u8> = [];
+    let mut digit_chars: List<u8> = [];
     for let mut i = 0; i < nd; i += 1 {
         digit_chars.push(0 as u8);
     }
@@ -90,7 +90,7 @@ fn f64_to_string_exp(f: f64, upper: bool) -> String {
 }
 
 
-fn run_batch(bits: &Array<i64>, expected: &Array<String>, batch_name: String) -> i32 with Stdout {
+fn run_batch(bits: &List<i64>, expected: &List<String>, batch_name: String) -> i32 with Stdout {
     let mut failures = 0;
     let n = bits.len();
 
@@ -134,7 +134,7 @@ test "comprehensive hardFloats" {
 }
 
 
-fn test_floats_bits() -> Array<i64> {
+fn test_floats_bits() -> List<i64> {
     return [
         0x0000000000000001, 0x0000000000000002, 0x0000000000000003, 0x0000000000000004, 0x0000000000000005,
         0x0000000000000007, 0x0000000000000008, 0x0000000000000009, 0x000000000000000F, 0x0000000000000010,
@@ -1775,7 +1775,7 @@ fn test_floats_bits() -> Array<i64> {
     ];
 }
 
-fn test_floats_expected() -> Array<String> {
+fn test_floats_expected() -> List<String> {
     return [
         "5e-324", "1e-323", "1.5e-323", "2e-323", "2.5e-323", "3.5e-323", "4e-323", "4.4e-323", "7.4e-323", "8e-323",
         "8.4e-323", "9.4e-323", "1e-322", "1.04e-322", "1.53e-322", "1.6e-322", "1.63e-322", "3.1e-322", "3.16e-322",
@@ -3754,7 +3754,7 @@ fn test_floats_expected() -> Array<String> {
     ];
 }
 
-fn hard_floats_bits() -> Array<i64> {
+fn hard_floats_bits() -> List<i64> {
     return [
         0x04C00000000000FF, 0x04CFFFFFFFFFFFE0, 0x04F00000000000FF, 0x04FFFFFFFFFFFFE0, 0x05200000000000FF,
         0x052FFFFFFFFFFFE0, 0x05500000000000FF, 0x055FFFFFFFFFFFE0, 0x05800000000000FF, 0x058FFFFFFFFFFFE0,
@@ -3833,7 +3833,7 @@ fn hard_floats_bits() -> Array<i64> {
     ];
 }
 
-fn hard_floats_expected() -> Array<String> {
+fn hard_floats_expected() -> List<String> {
     return [
         "8.40609136905955e-286", "1.681218273811809e-285", "6.72487309524764e-285", "1.3449746190494472e-284",
         "5.379898476198112e-284", "1.0759796952395577e-283", "4.30391878095849e-283", "8.607837561916462e-283",

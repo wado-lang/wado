@@ -1,42 +1,42 @@
-// Verifies that Array<T> literals go through SequenceLiteralBuilder
+// Verifies that List<T> literals go through SequenceLiteralBuilder
 // and the collapse_array_append_sequences WIR pass recovers ArrayNewFixed.
 use { println } from "core:cli";
 
 export fn run() with Stdout {
-    // Direct Array<T> literal via type annotation
-    let a: Array<i32> = [10, 20, 30];
+    // Direct List<T> literal via type annotation
+    let a: List<i32> = [10, 20, 30];
     assert a.len() == 3;
     assert a[0] == 10;
     assert a[1] == 20;
     assert a[2] == 30;
 
-    // Array<T> literal via explicit cast
-    let b = [100, 200] as Array<i32>;
+    // List<T> literal via explicit cast
+    let b = [100, 200] as List<i32>;
     assert b.len() == 2;
     assert b[0] == 100;
     assert b[1] == 200;
 
     // Empty array
-    let c: Array<i32> = [];
+    let c: List<i32> = [];
     assert c.len() == 0;
 
     // Single element
-    let d: Array<i32> = [42];
+    let d: List<i32> = [42];
     assert d.len() == 1;
     assert d[0] == 42;
 
     // Different element type
-    let e: Array<i64> = [1, 2, 3];
+    let e: List<i64> = [1, 2, 3];
     assert e.len() == 3;
     assert e[0] == 1;
 
     // Non-scalar element type (String)
-    let f: Array<String> = ["hello", "world"];
+    let f: List<String> = ["hello", "world"];
     assert f.len() == 2;
     assert f[0] == "hello";
     assert f[1] == "world";
 
-    // Wrapper type (SeqVec) also benefits from Array<T> optimization
+    // Wrapper type (SeqVec) also benefits from List<T> optimization
     let g: SeqVec<i32> = [5, 10, 15];
     assert g.items.len() == 3;
     assert g.items[0] == 5;
@@ -47,7 +47,7 @@ export fn run() with Stdout {
 }
 
 struct SeqVec<T> {
-    items: Array<T>,
+    items: List<T>,
 }
 
 impl SequenceLiteralBuilder for SeqVec<T> {
@@ -55,7 +55,7 @@ impl SequenceLiteralBuilder for SeqVec<T> {
     type Output = SeqVec<T>;
 
     fn new_literal(capacity: i32) -> SeqVec<T> {
-        return SeqVec { items: Array::<T>::with_capacity(capacity) };
+        return SeqVec { items: List::<T>::with_capacity(capacity) };
     }
 
     fn push_literal(&mut self, value: Self::Element) {
@@ -77,7 +77,7 @@ __DATA__
     ],
     "wir_not_expect:O2": [
         "SequenceLiteralBuilder::push_literal\"(",
-        "Array<String>::push\"(__local_",
-        "Array<i32>::push\"("
+        "List<String>::push\"(__local_",
+        "List<i32>::push\"("
     ]
 }

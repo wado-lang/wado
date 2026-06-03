@@ -11,7 +11,7 @@ struct core:prelude/string.wado//String {  // TypeId(1)
 
 array builtin::array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(2)
 
-struct core:prelude//Array<core:prelude/string.wado/String> {  // TypeId(3)
+struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(3)
     mut repr: ref "builtin::array<core:prelude/string.wado/String>",
     mut used: i32,
 }
@@ -36,7 +36,7 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/process" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>", ref "core:prelude//Array<core:prelude/string.wado/String>") -> ref "core:prelude/string.wado//String";  // TypeId(14)
+type "functype//wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/process" = fn(ref "core:prelude//List<core:prelude/string.wado/String>", ref "core:prelude//List<core:prelude/string.wado/String>") -> ref "core:prelude/string.wado//String";  // TypeId(14)
 
 type "functype//wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/run" = fn();  // TypeId(15)
 
@@ -72,7 +72,7 @@ type "functype//core:prelude/string.wado/String^Ord::cmp" = fn(ref "core:prelude
 
 type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(31)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/Array<core:prelude/string.wado/String>::sort_by$__Closure_2" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>");  // TypeId(32)
+type "functype//wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/List<core:prelude/string.wado/String>::sort_by$__Closure_2" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(32)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
 
@@ -95,12 +95,12 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/process"(a, b) {
-    let sorted: ref "core:prelude//Array<core:prelude/string.wado/String>";
-    let victim: ref "core:prelude//Array<core:prelude/string.wado/String>";
+    let sorted: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let victim: ref "core:prelude//List<core:prelude/string.wado/String>";
     let __local_4: ref "core:prelude/string.wado//String";
-    sorted = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone<ref "core:prelude/string.wado//String">(a.repr)), used: a.used };
-    "wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/Array<core:prelude/string.wado/String>::sort_by$__Closure_2"(sorted);
-    victim = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T26*/ b.repr)), used: b.used };
+    sorted = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone<ref "core:prelude/string.wado//String">(a.repr)), used: a.used };
+    "wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/List<core:prelude/string.wado/String>::sort_by$__Closure_2"(sorted);
+    victim = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T26*/ b.repr)), used: b.used };
     "core:prelude/string.wado/String::push"(if builtin::unlikely(0 >= victim.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -118,10 +118,10 @@ fn "wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/process"(a, 
 }
 
 fn "wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//Array<core:prelude/string.wado/String>";
-    let __b_2: ref "core:prelude//Array<core:prelude/string.wado/String>";
-    __b_0 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("q"), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("p"), used: 1 }), used: 2 };
-    __b_2 = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hi"), used: 2 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("yo"), used: 2 }), used: 2 };
+    let __b_0: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let __b_2: ref "core:prelude//List<core:prelude/string.wado/String>";
+    __b_0 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("q"), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("p"), used: 1 }), used: 2 };
+    __b_2 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hi"), used: 2 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("yo"), used: 2 }), used: 2 };
     "core:cli/println"("wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/process"(__b_0, __b_2));
 }
 
@@ -351,7 +351,7 @@ fn "core:prelude/string.wado/String::push"(self, c) {
     }
 }
 
-fn "wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/Array<core:prelude/string.wado/String>::sort_by$__Closure_2"(self) {
+fn "wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/List<core:prelude/string.wado/String>::sort_by$__Closure_2"(self) {
     let n: i32;
     let src: ref "builtin::array<core:prelude/string.wado/String>";
     let buf: ref "builtin::array<core:prelude/string.wado/String>";

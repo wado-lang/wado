@@ -170,7 +170,7 @@ impl String {
     ///
     /// # Safety (caller-side preconditions)
     /// - The resulting byte sequence (existing bytes + new bytes) must be valid UTF-8.
-    pub fn push_bytes_unchecked(&mut self, bytes: Array<u8>) {
+    pub fn push_bytes_unchecked(&mut self, bytes: List<u8>) {
         let n = bytes.len();
         if n == 0 {
             return;
@@ -1050,7 +1050,7 @@ impl String {
     /// Build a String from any iterable of bytes, validating that they form valid UTF-8.
     /// Returns Ok(String) on success, or Err(String) with an error message on failure.
     ///
-    /// Accepts any `IntoIterator` whose item is `u8`: `Array<u8>`, `StrUtf8ByteIter`, etc.
+    /// Accepts any `IntoIterator` whose item is `u8`: `List<u8>`, `StrUtf8ByteIter`, etc.
     pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String> {
         let mut builder = String::with_capacity(8);
         let mut iter = bytes.into_iter();
@@ -1124,7 +1124,7 @@ impl String {
 
     /// Build a String from any iterable of bytes, replacing invalid UTF-8 sequences with U+FFFD.
     ///
-    /// Accepts any `IntoIterator` whose item is `u8`: `Array<u8>`, `StrUtf8ByteIter`, etc.
+    /// Accepts any `IntoIterator` whose item is `u8`: `List<u8>`, `StrUtf8ByteIter`, etc.
     pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String {
         let mut builder = String::with_capacity(8);
         let mut iter = bytes.into_iter();
@@ -1217,7 +1217,7 @@ impl String {
 
     /// Build a String from any iterable of bytes without UTF-8 validation.
     ///
-    /// Accepts any `IntoIterator` whose item is `u8`: `Array<u8>`, `StrUtf8ByteIter`, etc.
+    /// Accepts any `IntoIterator` whose item is `u8`: `List<u8>`, `StrUtf8ByteIter`, etc.
     ///
     /// # Safety
     /// The caller must ensure the bytes form valid UTF-8, otherwise the resulting

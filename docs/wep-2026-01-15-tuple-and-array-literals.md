@@ -1,10 +1,10 @@
-# WEP: Tuple and Array Literal Syntax
+# WEP: Tuple and List Literal Syntax
 
 ## Context
 
 Wado needs to define syntax for tuple and array literals. The original spec used:
 
-- `[...]` for array literals: `[1, 2, 3]` → `Array<i32>`
+- `[...]` for array literals: `[1, 2, 3]` → `List<i32>`
 - `(...)` for tuple literals: `(1, "hello")` → `Tuple<i32, String>`
 
 This follows Rust's conventions. However, several factors suggest reconsidering this design.
@@ -15,7 +15,7 @@ TypeScript, the most likely source of Wado's target audience, uses `[...]` for b
 
 ```typescript
 // TypeScript
-let arr: number[] = [1, 2, 3]; // Array
+let arr: number[] = [1, 2, 3]; // List
 let tuple: [number, string] = [1, "hi"]; // Tuple
 ```
 
@@ -38,7 +38,7 @@ JSON arrays use `[...]` syntax and are inherently heterogeneous:
 }
 ```
 
-Since Wado's `Array<T>` is homogeneous (all elements same type), JSON's heterogeneous arrays naturally map to tuples. Having `[...]` represent tuples makes this mapping intuitive—the syntax visually matches between JSON and Wado.
+Since Wado's `List<T>` is homogeneous (all elements same type), JSON's heterogeneous arrays naturally map to tuples. Having `[...]` represent tuples makes this mapping intuitive—the syntax visually matches between JSON and Wado.
 
 ### Unit Type Consideration
 
@@ -75,7 +75,7 @@ let x: [i32, String] = ...;
 ### 3. Arrays Require Explicit Conversion
 
 ```wado
-let a = [1, 2, 3] as Array<i32>;  // Explicit conversion
+let a = [1, 2, 3] as List<i32>;  // Explicit conversion
 ```
 
 ### 4. Implicit Coercion at Compile-Time
@@ -83,7 +83,7 @@ let a = [1, 2, 3] as Array<i32>;  // Explicit conversion
 When the target type is known at compile time, implicit coercion is allowed:
 
 ```wado
-fn takes_array(a: Array<i32>) { ... }
+fn takes_array(a: List<i32>) { ... }
 
 takes_array([1, 2, 3]);  // OK - compiler knows target type
 ```
@@ -92,7 +92,7 @@ Runtime conversions require explicit `as`:
 
 ```wado
 let x = [1, 2, 3];               // Tuple (no context)
-let y = [1, 2, 3] as Array<i32>; // Explicit conversion
+let y = [1, 2, 3] as List<i32>; // Explicit conversion
 ```
 
 ### 5. Keep `()` for Unit Type
@@ -132,21 +132,21 @@ let t = [1, 2, 3,];  // OK
 
 ## Summary
 
-| Syntax                    | Type              | Notes                       |
-| ------------------------- | ----------------- | --------------------------- |
-| `()`                      | `()`              | Unit type/value (unchanged) |
-| `[]`                      | `[]`              | Empty tuple                 |
-| `[42]`                    | `[i32]`           | Single-element tuple        |
-| `[1, 2, 3]`               | `[i32, i32, i32]` | Tuple                       |
-| `[1, "a"]`                | `[i32, String]`   | Heterogeneous tuple         |
-| `[1, 2, 3,]`              | `[i32, i32, i32]` | Trailing comma OK           |
-| `[1, 2, 3] as Array<i32>` | `Array<i32>`      | Explicit array              |
+| Syntax                   | Type              | Notes                       |
+| ------------------------ | ----------------- | --------------------------- |
+| `()`                     | `()`              | Unit type/value (unchanged) |
+| `[]`                     | `[]`              | Empty tuple                 |
+| `[42]`                   | `[i32]`           | Single-element tuple        |
+| `[1, 2, 3]`              | `[i32, i32, i32]` | Tuple                       |
+| `[1, "a"]`               | `[i32, String]`   | Heterogeneous tuple         |
+| `[1, 2, 3,]`             | `[i32, i32, i32]` | Trailing comma OK           |
+| `[1, 2, 3] as List<i32>` | `List<i32>`       | Explicit array              |
 
 | Type Syntax          | Notes                     |
 | -------------------- | ------------------------- |
 | `[i32, String]`      | Tuple type (preferred)    |
 | `Tuple<i32, String>` | Alias for `[i32, String]` |
-| `Array<i32>`         | Array type (unchanged)    |
+| `List<i32>`          | List type (unchanged)     |
 | `()`                 | Unit type (unchanged)     |
 
 ## Consequences
@@ -164,7 +164,7 @@ let t = [1, 2, 3,];  // OK
 1. **Diverges from Rust**: Rust developers expect `()` for tuples and `[]` for arrays
    - **Mitigation**: TypeScript audience is primary target; clear documentation
 2. **Potential confusion**: `[1, 2, 3]` being a tuple (not array) may surprise some
-   - **Mitigation**: Consistent with TypeScript; explicit `as Array<T>` makes intent clear
+   - **Mitigation**: Consistent with TypeScript; explicit `as List<T>` makes intent clear
 3. **Two "empty" concepts**: Both `[]` (empty tuple) and `()` (unit) exist
    - **Mitigation**: They serve different purposes; `()` for unit semantics, `[]` for tuple consistency
 
@@ -172,4 +172,4 @@ let t = [1, 2, 3,];  // OK
 
 - [TypeScript Tuple Types](https://www.typescriptlang.org/docs/handbook/2/objects.html#tuple-types)
 - [JSON Specification](https://www.json.org/)
-- Current Wado spec: `spec.md` (Array Literals, Tuple Literals sections)
+- Current Wado spec: `spec.md` (List Literals, Tuple Literals sections)

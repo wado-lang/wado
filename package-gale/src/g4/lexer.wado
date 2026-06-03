@@ -2,12 +2,12 @@ use { Span, Token, LexerSlice } from "../runtime.wado";
 use { G4Token, make_token } from "./token.wado";
 
 pub struct G4Lexer {
-    chars: &Array<char>,
+    chars: &List<char>,
     pos: i32,
 }
 
 impl G4Lexer {
-    pub fn new(chars: &Array<char>) -> G4Lexer with stores[chars] {
+    pub fn new(chars: &List<char>) -> G4Lexer with stores[chars] {
         return G4Lexer { chars, pos: 0 };
     }
 
@@ -19,7 +19,7 @@ impl G4Lexer {
     /// source span (char classes, operators, EOF); identifiers and ints
     /// build their buffer inline while scanning.
     fn owned_token(&self, kind: G4Token, start: i32, end: i32) -> Token {
-        let mut buf: Array<char> = Array::with_capacity(end - start);
+        let mut buf: List<char> = List::with_capacity(end - start);
         for let mut i = start; i < end; i += 1 {
             buf.push(self.chars[i]);
         }
@@ -104,7 +104,7 @@ impl G4Lexer {
         // (escapes resolved), so it cannot alias the raw source. Build the
         // owned char buffer directly instead of going through an intermediate
         // String + re-collect.
-        let mut text: Array<char> = [];
+        let mut text: List<char> = [];
         loop {
             if self.at_end() {
                 return make_token(G4Token::Error, "unterminated string", start, self.pos);
@@ -121,7 +121,7 @@ impl G4Lexer {
         }
     }
 
-    fn read_string_escape(&mut self, text: &mut Array<char>) {
+    fn read_string_escape(&mut self, text: &mut List<char>) {
         let ec = self.chars[self.pos];
         self.pos += 1;
         if ec == 'u' {
@@ -191,7 +191,7 @@ impl G4Lexer {
 
     fn read_int_literal(&mut self) -> Token {
         let start = self.pos;
-        let mut buf: Array<char> = Array::with_capacity(4);
+        let mut buf: List<char> = List::with_capacity(4);
         while !self.at_end() {
             let c = self.chars[self.pos];
             if '0' <= c <= '9' {
@@ -206,7 +206,7 @@ impl G4Lexer {
 
     fn read_identifier(&mut self) -> Token {
         let start = self.pos;
-        let mut buf: Array<char> = Array::with_capacity(16);
+        let mut buf: List<char> = List::with_capacity(16);
         while !self.at_end() {
             let c = self.chars[self.pos];
             if is_ident_char(c) {
@@ -293,19 +293,19 @@ impl G4Lexer {
     }
 }
 
-pub fn tokenize(input: String) -> Array<Token> {
-    let chars: Array<char> = input.chars().collect();
+pub fn tokenize(input: String) -> List<Token> {
+    let chars: List<char> = input.chars().collect();
     return tokenize_chars(&chars);
 }
 
 /// Tokenize directly from an already-collected char buffer. `parse` uses
-/// this to share the single `Array<char>` collection between the lexer and
+/// this to share the single `List<char>` collection between the lexer and
 /// the parser (which keeps it for `rescan_balanced`), instead of collecting
 /// the whole input twice. Token text is owned (`owned_slice`), so
 /// the tokens do not alias `chars` and the buffer may be moved afterwards.
-pub fn tokenize_chars(chars: &Array<char>) -> Array<Token> {
+pub fn tokenize_chars(chars: &List<char>) -> List<Token> {
     let mut lexer = G4Lexer::new(chars);
-    let mut tokens: Array<Token> = [];
+    let mut tokens: List<Token> = [];
     loop {
         let tok = lexer.next_token();
         let is_eof = tok.kind == G4Token::Eof as i32;
@@ -321,14 +321,14 @@ pub fn tokenize_chars(chars: &Array<char>) -> Array<Token> {
 /// the `String` round-trip + re-`collect` that `LexerSlice::from_string`
 /// performs. Kept local to the g4 frontend so it is not inlined into every
 /// generated parser through `runtime.wado`.
-fn owned_slice(buf: Array<char>) -> LexerSlice {
+fn owned_slice(buf: List<char>) -> LexerSlice {
     let n = buf.len();
     return LexerSlice { chars: &buf, start: 0, end: n };
 }
 
 /// Compare an owned char buffer against a keyword literal. Callers gate on
 /// `buf.len()` first, so this only runs for length-matched candidates.
-fn buf_eq(buf: &Array<char>, lit: &String) -> bool {
+fn buf_eq(buf: &List<char>, lit: &String) -> bool {
     let mut i = 0;
     for let c of lit.chars() {
         if i >= buf.len() || buf[i] != c {

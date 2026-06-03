@@ -84,7 +84,7 @@ impl Monomorphizer {
     }
 
     /// Rewrite a single `type_id`: if it's a `GenericInstance`, return the concrete struct `type_id`.
-    /// Also handles container types (Array, Option, Tuple) that may contain `GenericInstance`.
+    /// Also handles container types (List, Option, Tuple) that may contain `GenericInstance`.
     pub fn rewrite_type_id(&self, type_id: TypeId, type_table: &mut TypeTable) -> TypeId {
         // First check direct substitution
         if let Some(&new_id) = self.structs.type_substitutions.get(&type_id) {
@@ -125,9 +125,9 @@ impl Monomorphizer {
                 module_source,
                 type_args,
             } => {
-                // Skip Array and Tuple - they have special codegen handling and should remain
+                // Skip List and Tuple - they have special codegen handling and should remain
                 // as GenericInstance, not be rewritten to Struct
-                if name == "Array" || TypeTable::is_tuple_type(&name, &module_source) {
+                if name == "List" || TypeTable::is_tuple_type(&name, &module_source) {
                     let new_args: Vec<TypeId> = type_args
                         .iter()
                         .map(|&id| self.rewrite_type_id(id, type_table))
@@ -180,9 +180,9 @@ impl Monomorphizer {
                     continue;
                 }
 
-                // Skip Array - it has special codegen handling and should not be
+                // Skip List - it has special codegen handling and should not be
                 // monomorphized as a regular struct
-                if name == "Array" {
+                if name == "List" {
                     continue;
                 }
 

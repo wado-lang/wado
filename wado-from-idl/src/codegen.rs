@@ -359,7 +359,7 @@ impl WadoCodeGenerator {
                     .map_or_else(|| "()".to_string(), |t| Self::format_type(t));
                 format!("Result<{ok_ty}, {err_ty}>")
             }
-            WadoType::Array(inner) => format!("Array<{}>", Self::format_type(inner)),
+            WadoType::List(inner) => format!("List<{}>", Self::format_type(inner)),
             WadoType::Tuple(types) => {
                 if types.is_empty() {
                     "()".to_string()

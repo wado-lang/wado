@@ -1,5 +1,5 @@
 test "push to empty array" {
-    let arr: Array<i32> = [];
+    let arr: List<i32> = [];
     arr.push(10);
     arr.push(20);
     arr.push(30);
@@ -10,7 +10,7 @@ test "push to empty array" {
 }
 
 test "push triggers growth" {
-    let arr: Array<i32> = [];
+    let arr: List<i32> = [];
     arr.push(10);
     arr.push(20);
     arr.push(30);
@@ -24,14 +24,14 @@ test "push triggers growth" {
 }
 
 test "filled creates array with repeated value" {
-    let arr = Array::filled(5, 42);
+    let arr = List::filled(5, 42);
     assert arr.len() == 5;
     assert arr[0] == 42;
     assert arr[4] == 42;
 }
 
 test "filled with booleans" {
-    let arr = Array::filled(3, true);
+    let arr = List::filled(3, true);
     assert arr.len() == 3;
     assert arr[0];
     assert arr[1];
@@ -39,47 +39,47 @@ test "filled with booleans" {
 }
 
 test "filled with zero length" {
-    let arr = Array::filled(0, 99);
+    let arr = List::filled(0, 99);
     assert arr.len() == 0;
     assert arr.is_empty();
 }
 
 test "is_empty on empty array" {
-    let arr: Array<i32> = [];
+    let arr: List<i32> = [];
     assert arr.is_empty();
 }
 
 test "is_empty on nonempty array" {
-    let arr: Array<i32> = [1, 2, 3];
+    let arr: List<i32> = [1, 2, 3];
     assert !arr.is_empty();
 }
 
 test "is_empty after push" {
-    let arr: Array<i32> = [];
+    let arr: List<i32> = [];
     assert arr.is_empty();
     arr.push(1);
     assert !arr.is_empty();
 }
 
 test "get returns Some for in-bounds" {
-    let arr: Array<i32> = [10, 20, 30];
+    let arr: List<i32> = [10, 20, 30];
     assert arr.get(0) matches { Some(v) && v == 10 };
     assert arr.get(2) matches { Some(v) && v == 30 };
 }
 
 test "get returns None for out-of-bounds" {
-    let arr: Array<i32> = [10, 20, 30];
+    let arr: List<i32> = [10, 20, 30];
     assert arr.get(3) matches { None };
     assert arr.get(-1) matches { None };
 }
 
 test "get on empty array" {
-    let arr: Array<i32> = [];
+    let arr: List<i32> = [];
     assert arr.get(0) matches { None };
 }
 
 test "basic slice" {
-    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let arr: List<i32> = [10, 20, 30, 40, 50];
     let s = arr.slice(1, 4);
     assert s.len() == 3;
     assert s[0] == 20;
@@ -88,7 +88,7 @@ test "basic slice" {
 }
 
 test "slice get with bounds check" {
-    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let arr: List<i32> = [10, 20, 30, 40, 50];
     let s = arr.slice(1, 4);
     assert s.get(0) matches { Some(v) && v == 20 };
     assert s.get(3) matches { None };
@@ -96,7 +96,7 @@ test "slice get with bounds check" {
 }
 
 test "sub-slice" {
-    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let arr: List<i32> = [10, 20, 30, 40, 50];
     let s = arr.slice(1, 4);
     let ss = s.slice(1, 2);
     assert ss.len() == 1;
@@ -104,14 +104,14 @@ test "sub-slice" {
 }
 
 test "empty slice" {
-    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let arr: List<i32> = [10, 20, 30, 40, 50];
     let empty = arr.slice(3, 3);
     assert empty.len() == 0;
     assert empty.is_empty();
 }
 
 test "slice clamping" {
-    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let arr: List<i32> = [10, 20, 30, 40, 50];
     let clamped = arr.slice(0, 100);
     assert clamped.len() == 5;
     let clamped2 = arr.slice(-5, 3);
@@ -119,7 +119,7 @@ test "slice clamping" {
 }
 
 test "slice to_array" {
-    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let arr: List<i32> = [10, 20, 30, 40, 50];
     let s = arr.slice(1, 4);
     let copied = s.to_array();
     assert copied.len() == 3;
@@ -128,7 +128,7 @@ test "slice to_array" {
 }
 
 test "slice iteration" {
-    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let arr: List<i32> = [10, 20, 30, 40, 50];
     let s = arr.slice(1, 4);
     let mut sum = 0;
     for let x of s {
@@ -138,7 +138,7 @@ test "slice iteration" {
 }
 
 test "slice iterator combinators" {
-    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let arr: List<i32> = [10, 20, 30, 40, 50];
     let s = arr.slice(1, 4);
 
     let doubled = s.iter().map(|x: i32| x * 2).collect();
@@ -152,7 +152,7 @@ test "slice iterator combinators" {
 }
 
 test "sort ascending" {
-    let mut arr: Array<i32> = [42, 17, 99, 3, 55, 1];
+    let mut arr: List<i32> = [42, 17, 99, 3, 55, 1];
     arr.sort();
     assert arr[0] == 1;
     assert arr[1] == 3;
@@ -163,7 +163,7 @@ test "sort ascending" {
 }
 
 test "sort_by ascending" {
-    let mut a: Array<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
+    let mut a: List<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
     a.sort_by(|x: &i32, y: &i32| {
         if *x < *y {
             return Ordering::Less;
@@ -178,7 +178,7 @@ test "sort_by ascending" {
 }
 
 test "sort_by descending" {
-    let mut a: Array<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
+    let mut a: List<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
     a.sort_by(|x: &i32, y: &i32| {
         if *x > *y {
             return Ordering::Less;
@@ -193,7 +193,7 @@ test "sort_by descending" {
 }
 
 test "sorted returns new array" {
-    let orig: Array<i32> = [7, 2, 5, 1, 8, 3];
+    let orig: List<i32> = [7, 2, 5, 1, 8, 3];
     let sorted = orig.sorted();
     // original unchanged
     assert orig[0] == 7;
@@ -208,7 +208,7 @@ test "sorted returns new array" {
 }
 
 test "sorted_by returns new array" {
-    let c: Array<i32> = [10, 30, 20, 50, 40];
+    let c: List<i32> = [10, 30, 20, 50, 40];
     let d = c.sorted_by(|x: &i32, y: &i32| {
         if *x < *y {
             return Ordering::Less;
@@ -230,46 +230,46 @@ test "sorted_by returns new array" {
 }
 
 test "sort empty array" {
-    let mut empty: Array<i32> = [];
+    let mut empty: List<i32> = [];
     empty.sort();
     assert empty.len() == 0;
 }
 
 test "sort single element" {
-    let mut single: Array<i32> = [42];
+    let mut single: List<i32> = [42];
     single.sort();
     assert single[0] == 42;
 }
 
 test "sort two elements" {
-    let mut two: Array<i32> = [2, 1];
+    let mut two: List<i32> = [2, 1];
     two.sort();
     assert two[0] == 1;
     assert two[1] == 2;
 }
 
-struct ArrayTestPoint {
+struct ListTestPoint {
     x: i32,
     y: i32,
 }
 
 test "inspect empty array" {
-    let arr: Array<i32> = [];
+    let arr: List<i32> = [];
     assert `{arr:?}` == "[]";
 }
 
 test "inspect array" {
-    let arr: Array<i32> = [1, 2, 3];
+    let arr: List<i32> = [1, 2, 3];
     assert `{arr:?}` == "[1, 2, 3]";
 }
 
 test "pretty-print empty array" {
-    let arr: Array<i32> = [];
+    let arr: List<i32> = [];
     assert `{arr:#?}` == "[]";
 }
 
 test "pretty-print array" {
-    let arr: Array<i32> = [1, 2, 3];
+    let arr: List<i32> = [1, 2, 3];
     assert `{arr:#?}` == "[
   1,
   2,
@@ -278,16 +278,16 @@ test "pretty-print array" {
 }
 
 test "pretty-print nested structs" {
-    let points: Array<ArrayTestPoint> = [
-        ArrayTestPoint { x: 1, y: 2 },
-        ArrayTestPoint { x: 3, y: 4 },
-    ] as Array<ArrayTestPoint>;
+    let points: List<ListTestPoint> = [
+        ListTestPoint { x: 1, y: 2 },
+        ListTestPoint { x: 3, y: 4 },
+    ] as List<ListTestPoint>;
     assert `{points:#?}` == "[
-  ArrayTestPoint {
+  ListTestPoint {
     x: 1,
     y: 2,
   },
-  ArrayTestPoint {
+  ListTestPoint {
     x: 3,
     y: 4,
   },
@@ -296,7 +296,7 @@ test "pretty-print nested structs" {
 
 test "sort stability" {
     // Sort by absolute value; -1 and 1 should keep relative order
-    let mut g: Array<i32> = [3, -1, -3, 2, -2, 1];
+    let mut g: List<i32> = [3, -1, -3, 2, -2, 1];
     g.sort_by(|a: &i32, b: &i32| {
         let va = if *a < 0 { 0 - *a } else { *a };
         let vb = if *b < 0 { 0 - *b } else { *b };
@@ -318,7 +318,7 @@ test "sort stability" {
 }
 
 test "pop from non-empty array" {
-    let mut arr: Array<i32> = [10, 20, 30];
+    let mut arr: List<i32> = [10, 20, 30];
     let v = arr.pop();
     assert v == Option::Some(30);
     assert arr.len() == 2;
@@ -328,27 +328,27 @@ test "pop from non-empty array" {
 }
 
 test "pop from empty array" {
-    let mut arr: Array<i32> = [];
+    let mut arr: List<i32> = [];
     let v = arr.pop();
     assert v matches { None };
     assert arr.len() == 0;
 }
 
 test "last on non-empty array" {
-    let arr: Array<i32> = [10, 20, 30];
+    let arr: List<i32> = [10, 20, 30];
     let v = arr.last();
     assert v == Option::Some(30);
     assert arr.len() == 3;
 }
 
 test "last on empty array" {
-    let arr: Array<i32> = [];
+    let arr: List<i32> = [];
     let v = arr.last();
     assert v matches { None };
 }
 
 test "truncate" {
-    let mut arr: Array<i32> = [10, 20, 30, 40, 50];
+    let mut arr: List<i32> = [10, 20, 30, 40, 50];
     arr.truncate(3);
     assert arr.len() == 3;
     assert arr[0] == 10;
@@ -356,13 +356,13 @@ test "truncate" {
 }
 
 test "truncate larger than len is no-op" {
-    let mut arr: Array<i32> = [1, 2];
+    let mut arr: List<i32> = [1, 2];
     arr.truncate(10);
     assert arr.len() == 2;
 }
 
 test "push to empty array" {
-    let arr: Array<i32> = [];
+    let arr: List<i32> = [];
     arr.push(10);
     arr.push(20);
     assert arr.len() == 2;
@@ -371,24 +371,24 @@ test "push to empty array" {
 }
 
 test "first on non-empty array" {
-    let arr: Array<i32> = [10, 20, 30];
+    let arr: List<i32> = [10, 20, 30];
     assert arr.first() == Option::Some(10);
 }
 
 test "first on empty array" {
-    let arr: Array<i32> = [];
+    let arr: List<i32> = [];
     assert arr.first() matches { None };
 }
 
 test "clear" {
-    let mut arr: Array<i32> = [1, 2, 3];
+    let mut arr: List<i32> = [1, 2, 3];
     arr.clear();
     assert arr.len() == 0;
     assert arr.is_empty();
 }
 
 test "capacity and reserve" {
-    let mut arr: Array<i32> = Array::with_capacity(2);
+    let mut arr: List<i32> = List::with_capacity(2);
     assert arr.capacity() >= 2;
     arr.push(1);
     arr.push(2);
@@ -399,7 +399,7 @@ test "capacity and reserve" {
 }
 
 test "shrink_to_fit" {
-    let mut arr: Array<i32> = Array::with_capacity(100);
+    let mut arr: List<i32> = List::with_capacity(100);
     arr.push(1);
     arr.push(2);
     arr.shrink_to_fit();
@@ -410,7 +410,7 @@ test "shrink_to_fit" {
 }
 
 test "insert at beginning" {
-    let mut arr: Array<i32> = [20, 30];
+    let mut arr: List<i32> = [20, 30];
     arr.insert(0, 10);
     assert arr.len() == 3;
     assert arr[0] == 10;
@@ -419,7 +419,7 @@ test "insert at beginning" {
 }
 
 test "insert at middle" {
-    let mut arr: Array<i32> = [10, 30];
+    let mut arr: List<i32> = [10, 30];
     arr.insert(1, 20);
     assert arr.len() == 3;
     assert arr[0] == 10;
@@ -428,14 +428,14 @@ test "insert at middle" {
 }
 
 test "insert at end" {
-    let mut arr: Array<i32> = [10, 20];
+    let mut arr: List<i32> = [10, 20];
     arr.insert(2, 30);
     assert arr.len() == 3;
     assert arr[2] == 30;
 }
 
 test "remove from beginning" {
-    let mut arr: Array<i32> = [10, 20, 30];
+    let mut arr: List<i32> = [10, 20, 30];
     let v = arr.remove(0);
     assert v == 10;
     assert arr.len() == 2;
@@ -444,7 +444,7 @@ test "remove from beginning" {
 }
 
 test "remove from middle" {
-    let mut arr: Array<i32> = [10, 20, 30];
+    let mut arr: List<i32> = [10, 20, 30];
     let v = arr.remove(1);
     assert v == 20;
     assert arr.len() == 2;
@@ -453,14 +453,14 @@ test "remove from middle" {
 }
 
 test "swap" {
-    let mut arr: Array<i32> = [10, 20, 30];
+    let mut arr: List<i32> = [10, 20, 30];
     arr.swap(0, 2);
     assert arr[0] == 30;
     assert arr[2] == 10;
 }
 
 test "reverse" {
-    let mut arr: Array<i32> = [1, 2, 3, 4, 5];
+    let mut arr: List<i32> = [1, 2, 3, 4, 5];
     arr.reverse();
     assert arr[0] == 5;
     assert arr[1] == 4;
@@ -470,18 +470,18 @@ test "reverse" {
 }
 
 test "reverse empty and single" {
-    let mut empty: Array<i32> = [];
+    let mut empty: List<i32> = [];
     empty.reverse();
     assert empty.len() == 0;
 
-    let mut single: Array<i32> = [42];
+    let mut single: List<i32> = [42];
     single.reverse();
     assert single[0] == 42;
 }
 
 test "extend" {
-    let mut arr: Array<i32> = [1, 2];
-    let other: Array<i32> = [3, 4, 5];
+    let mut arr: List<i32> = [1, 2];
+    let other: List<i32> = [3, 4, 5];
     arr.extend(&other);
     assert arr.len() == 5;
     assert arr[2] == 3;
@@ -489,18 +489,18 @@ test "extend" {
 }
 
 test "contains" {
-    let arr: Array<i32> = [10, 20, 30];
+    let arr: List<i32> = [10, 20, 30];
     assert arr.contains(&20);
     assert !arr.contains(&99);
 }
 
 test "contains empty" {
-    let arr: Array<i32> = [];
+    let arr: List<i32> = [];
     assert !arr.contains(&1);
 }
 
 test "repeat" {
-    let arr: Array<i32> = [1, 2];
+    let arr: List<i32> = [1, 2];
     let repeated = arr.repeat(3);
     assert repeated.len() == 6;
     assert repeated[0] == 1;
@@ -512,33 +512,33 @@ test "repeat" {
 }
 
 test "repeat zero" {
-    let arr: Array<i32> = [1, 2, 3];
+    let arr: List<i32> = [1, 2, 3];
     let empty = arr.repeat(0);
     assert empty.len() == 0;
 }
 
 test "join" {
-    let arr: Array<i32> = [1, 2, 3];
+    let arr: List<i32> = [1, 2, 3];
     assert arr.join(", ") == "1, 2, 3";
 }
 
 test "join single element" {
-    let arr: Array<i32> = [42];
+    let arr: List<i32> = [42];
     assert arr.join(", ") == "42";
 }
 
 test "join empty" {
-    let arr: Array<i32> = [];
+    let arr: List<i32> = [];
     assert arr.join(", ") == "";
 }
 
 test "join strings" {
-    let arr: Array<String> = ["hello", "world"];
+    let arr: List<String> = ["hello", "world"];
     assert arr.join(" ") == "hello world";
 }
 
 test "windows" {
-    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let arr: List<i32> = [1, 2, 3, 4, 5];
     let mut wins = arr.windows(3);
     let w0 = wins.next();
     assert w0 matches { Some(_) };
@@ -562,7 +562,7 @@ test "windows" {
 }
 
 test "chunks" {
-    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let arr: List<i32> = [1, 2, 3, 4, 5];
     let mut chs = arr.chunks(2);
     let c0 = chs.next();
     if let Some(s) = c0 {

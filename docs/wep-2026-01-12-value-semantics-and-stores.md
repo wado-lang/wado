@@ -282,13 +282,13 @@ fn make_container(data: &Data) -> Container with stores[data] {
 The method must declare `stores[...]`:
 
 ```wado
-impl Array<&Data> {
+impl List<&Data> {
     fn push(&mut self, item: &Data) with stores[item] {
         // stores item
     }
 }
 
-fn example(list: &mut Array<&Data>, data: &Data) with stores[data] {
+fn example(list: &mut List<&Data>, data: &Data) with stores[data] {
     list.push(data);  // Caller must also declare stores
 }
 ```
@@ -356,7 +356,7 @@ The `stores[...]` mechanism only applies **within a Wado component**. External W
 At Component Model boundaries, data is copied/serialized:
 
 - `struct` → `record` (copied)
-- `Array<T>` → `list<T>` (copied)
+- `List<T>` → `list<T>` (copied)
 - `String` → `string` (copied)
 - Resources use explicit `borrow<T>` / `own<T>`
 

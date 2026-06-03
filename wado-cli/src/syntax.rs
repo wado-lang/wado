@@ -419,7 +419,7 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
                     },
                     {
                         "name": "storage.type.builtin.wado",
-                        "match": "\\b(String|Array|Option|Result|Dict|Fn)\\b"
+                        "match": "\\b(String|List|Option|Result|Dict|Fn)\\b"
                     },
                     {
                         "name": "entity.name.type.wado",

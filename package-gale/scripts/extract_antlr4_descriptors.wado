@@ -58,7 +58,7 @@ fn status_file_path() -> String {
     return "package-gale/tests/antlr4-compat/status.toml";
 }
 
-fn default_categories() -> Array<String> {
+fn default_categories() -> List<String> {
     return ["Sets", "LexerExec", "ParseTrees"];
 }
 
@@ -86,7 +86,7 @@ struct DescriptorPair {
 
 struct ParsedDescriptor {
     grammar: String,
-    slave_grammars: Array<String>,
+    slave_grammars: List<String>,
     /// `[type]` block — `Parser`, `Lexer`, `CompositeParser`, or
     /// `CompositeLexer`. Stage A only emits for `Parser` because Gale's
     /// generated `parse(&input)` entry point exists only for parser-type
@@ -119,7 +119,7 @@ struct ParsedDescriptor {
 /// triple-quote / trailing-newline post-processing applied to each value.
 /// We only return the fields we care about (grammar text + slave grammars).
 fn parse_descriptor_text(text: &String) -> ParsedDescriptor {
-    let mut pairs: Array<DescriptorPair> = [];
+    let mut pairs: List<DescriptorPair> = [];
     let mut current_name: String = "";
     let mut have_current = false;
     let mut current_value = String::with_capacity(256);
@@ -152,7 +152,7 @@ fn parse_descriptor_text(text: &String) -> ParsedDescriptor {
     }
 
     let mut grammar: String = "";
-    let mut slaves: Array<String> = [];
+    let mut slaves: List<String> = [];
     let mut descriptor_type: String = "";
     let mut input: String = "";
     let mut output: String = "";
@@ -211,7 +211,7 @@ fn parse_descriptor_text(text: &String) -> ParsedDescriptor {
 /// them through preserves the upstream-equivalent input for the g4 lexer.
 fn unescape_st_text(s: &String) -> String {
     let mut out = String::with_capacity(s.len());
-    let chars: Array<char> = s.chars().collect();
+    let chars: List<char> = s.chars().collect();
     let n = chars.len();
     let mut i = 0;
     while i < n {
@@ -276,7 +276,7 @@ variant Triage {
 
 struct TriageMap {
     /// Entries keyed by `"Category/Name"` (no `.txt` suffix).
-    pub entries: Array<TriageEntry>,
+    pub entries: List<TriageEntry>,
 }
 
 struct TriageEntry {
@@ -429,7 +429,7 @@ fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorC
         },
     };
     let [stream, done] = opened.read_via_stream(0 as Filesize);
-    let mut bytes: Array<u8> = [];
+    let mut bytes: List<u8> = [];
     loop {
         let chunk = stream.read(8192);
         if chunk.len() == 0 {
@@ -459,7 +459,7 @@ fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Resul
             return Result::Err(e);
         },
     };
-    let bytes: Array<u8> = content.bytes().collect();
+    let bytes: List<u8> = content.bytes().collect();
     let [rx, tx] = Stream::<u8>::new();
     let sub = file.write_via_stream(rx, 0 as Filesize);
     tx.write(bytes);
@@ -496,8 +496,8 @@ fn open_dir(parent: &Descriptor, name: &String, mutate: bool) -> Result<Descript
     ).wait();
 }
 
-fn list_files_with_suffix(dir: &Descriptor, suffix: &String) -> Array<String> {
-    let mut out: Array<String> = [];
+fn list_files_with_suffix(dir: &Descriptor, suffix: &String) -> List<String> {
+    let mut out: List<String> = [];
     let [stream, done] = dir.read_directory();
     loop {
         let chunk = stream.read(64);
@@ -516,8 +516,8 @@ fn list_files_with_suffix(dir: &Descriptor, suffix: &String) -> Array<String> {
     return out;
 }
 
-fn list_subdirs(dir: &Descriptor) -> Array<String> {
-    let mut out: Array<String> = [];
+fn list_subdirs(dir: &Descriptor) -> List<String> {
+    let mut out: List<String> = [];
     let [stream, done] = dir.read_directory();
     loop {
         let chunk = stream.read(64);
@@ -585,11 +585,11 @@ struct DescriptorEntry {
     /// e.g. "Sets/CharSetLiteral.g4" (relative to `grammars/`).
     g4_relpath: String,
     /// Slave grammars (relative paths; empty for non-composite descriptors).
-    slave_relpaths: Array<String>,
+    slave_relpaths: List<String>,
     triage: Triage,
 }
 
-fn emit_test_file_for_category(category: &String, entries: &Array<DescriptorEntry>) -> String {
+fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry>) -> String {
     let mut w = CodeWriter::new();
     w.line(&generator_attr());
     w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
@@ -976,7 +976,7 @@ fn emit_stage_a_tokens_test_file(category: &String, name: &String, input: &Strin
 
 struct CliArgs {
     want_all: bool,
-    categories: Array<String>,
+    categories: List<String>,
     /// When true, skip the descriptor walk entirely and instead drain
     /// `tests/antlr4-compat/oracle-pending/` into
     /// `tests/antlr4-compat/stage_b_oracle/`. Driven by the shell
@@ -985,9 +985,9 @@ struct CliArgs {
     finalize_stage_b_oracle: bool,
 }
 
-fn parse_cli_args(arguments: Array<String>) -> CliArgs {
+fn parse_cli_args(arguments: List<String>) -> CliArgs {
     let mut want_all = false;
-    let mut categories: Array<String> = [];
+    let mut categories: List<String> = [];
     let mut finalize_stage_b_oracle = false;
     for let a of arguments {
         match a {
@@ -1176,7 +1176,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         };
 
         let txt_files = list_files_with_suffix(&cat_src_dir, &".txt");
-        let mut entries: Array<DescriptorEntry> = [];
+        let mut entries: List<DescriptorEntry> = [];
         // Tracks per-category I/O / parse failures separately from triage
         // skips. `entries.is_empty()` alone cannot distinguish "every
         // descriptor was [skip]-triaged" (intentional, we want to drop
@@ -1233,7 +1233,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
             }
 
             // Write slave grammars if present.
-            let mut slave_relpaths: Array<String> = [];
+            let mut slave_relpaths: List<String> = [];
             for let mut i = 0; i < parsed.slave_grammars.len(); i += 1 {
                 let slave_name = `{base}.slave{i + 1}.g4`;
                 if let Err(_) = write_file_string(&cat_out_dir, &slave_name, &parsed.slave_grammars[i]) {
@@ -1704,7 +1704,7 @@ fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment {
             },
         };
         let input_files = list_files_with_suffix(&pending_cat, &".input");
-        let mut keep_test_files: Array<String> = [];
+        let mut keep_test_files: List<String> = [];
         for let input_filename of &input_files {
             // Strip ".input" (6 chars) to get the descriptor base name.
             let base = input_filename.substr_bytes(0, input_filename.len() - 6);
@@ -1843,7 +1843,7 @@ fn normalize_output_for_stage_b(raw: &String) -> Option<String> {
     if !s.starts_with("(") {
         return null;
     }
-    let chars: Array<char> = s.chars().collect();
+    let chars: List<char> = s.chars().collect();
     if chars.len() < 2 {
         return null;
     }
@@ -1893,7 +1893,7 @@ fn is_tree_node_name_continue(c: char) -> bool {
 /// differs from `[start]`, the test must navigate down to the sub-tree
 /// rooted at this name before comparing.
 fn extract_root_rule_name(s: &String) -> Option<String> {
-    let chars: Array<char> = s.chars().collect();
+    let chars: List<char> = s.chars().collect();
     if chars.len() < 2 || chars[0] != '(' || !is_tree_node_name_start(chars[1]) {
         return null;
     }

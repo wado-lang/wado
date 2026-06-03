@@ -1009,7 +1009,7 @@ fn build_resource_fallback_call(
     // `method_type_args` stays empty: `ast::InterfaceMethod` carries no
     // type-parameter list, so resource / effect operations cannot
     // themselves be generic — only the resource type can. The `T` in
-    // `Stream<T>::read(self, max) -> Array<T>` is the resource's type
+    // `Stream<T>::read(self, max) -> List<T>` is the resource's type
     // parameter, already substituted by `substitute_operations` and
     // captured in `impl_type_args`.
     let monomorph_info = if type_args.is_empty() {

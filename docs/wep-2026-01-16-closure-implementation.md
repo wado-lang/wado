@@ -176,9 +176,9 @@ Functions that accept effectful closures use the `<effect E>` parameter form (pe
 
 ```wado
 fn map<T, B, effect E>(
-    arr: Array<T>,
+    arr: List<T>,
     f: fn mut(T) -> B with E,
-) -> Array<B> with E { ... }
+) -> List<B> with E { ... }
 ```
 
 At most one `<effect E>` parameter per function. Effects of all closure-typed parameters are unioned into `E` at the call site.

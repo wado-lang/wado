@@ -211,7 +211,7 @@ struct core:prelude/types.wado//Option<Stream<u8>>::Some {  // TypeId(34)
     payload_0: i32,
 }
 
-struct core:prelude//Array<u8> {  // TypeId(35)
+struct core:prelude//List<u8> {  // TypeId(35)
     mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
@@ -250,7 +250,7 @@ type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32
 
 type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(52)
 
-type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//Array<u8>");  // TypeId(53)
+type "functype//core:internal/cm_stream_write_u8" = fn(i32, ref "core:prelude//List<u8>");  // TypeId(53)
 
 type "functype//wasi/future-new" = fn() -> i64;  // TypeId(54)
 
@@ -281,7 +281,7 @@ import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 fn "wado-compiler/tests/fixtures/stream_http_response_body.wado/handle"(request) {
     let headers: i32;
     let response: i32;
-    let __b_8: ref "core:prelude//Array<u8>";
+    let __b_8: ref "core:prelude//List<u8>";
     let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let __tv_1: i32;
     let __tv_2: i32;
@@ -742,7 +742,7 @@ fn "wado-compiler/tests/fixtures/stream_http_response_body.wado/handle"(request)
         }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    __b_8 = struct.new "core:prelude//Array<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
+    __b_8 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
     "core:internal/cm_stream_write_u8"(__mv_hi_2, __b_8);
     "wasi/stream-drop-writable"(__mv_hi_2);
     let __fw_write_ptr_3: i32;

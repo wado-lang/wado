@@ -7,13 +7,13 @@
 //
 // The trigger here is `eq_ignore_ascii_case`, which takes `&char` parameters
 // and is small enough to be inlined. After inlining, the parameter is wrapped
-// in `Box<char>` whose `value` field reads from an Array (a heap read inside
+// in `Box<char>` whose `value` field reads from an List (a heap read inside
 // the inner block). The pre-existing `is_pure_for_elision`-gated pass refuses
 // to fold this; the new adjacent-use pass picks it up.
 
 use { Stdout } from "core:cli";
 
-fn count_a(chars: &Array<char>) -> i32 {
+fn count_a(chars: &List<char>) -> i32 {
     let mut n = 0;
     for let mut i = 0; i < chars.len(); i += 1 {
         if chars[i].eq_ignore_ascii_case(&'a') {
@@ -24,7 +24,7 @@ fn count_a(chars: &Array<char>) -> i32 {
 }
 
 export fn run() with Stdout {
-    let chars: Array<char> = ['A', 'b', 'c', 'a', 'D', 'a'];
+    let chars: List<char> = ['A', 'b', 'c', 'a', 'D', 'a'];
     assert count_a(&chars) == 3;
 }
 

@@ -32,32 +32,32 @@ array builtin::array<i32> (mut i32);  // TypeId(7)
 
 array builtin::array<u64> (mut u64);  // TypeId(8)
 
-struct core:prelude//Array<u64> {  // TypeId(9)
+struct core:prelude//List<u64> {  // TypeId(9)
     mut repr: ref builtin::array<u64>,
     mut used: i32,
 }
 
-struct core:prelude//Array<i32> {  // TypeId(10)
+struct core:prelude//List<i32> {  // TypeId(10)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
 
-struct core:prelude//Array<i64> {  // TypeId(11)
+struct core:prelude//List<i64> {  // TypeId(11)
     mut repr: ref builtin::array<i64>,
     mut used: i32,
 }
 
-struct core:prelude//Array<f32> {  // TypeId(12)
+struct core:prelude//List<f32> {  // TypeId(12)
     mut repr: ref builtin::array<f32>,
     mut used: i32,
 }
 
-struct core:prelude//Array<f64> {  // TypeId(13)
+struct core:prelude//List<f64> {  // TypeId(13)
     mut repr: ref builtin::array<f64>,
     mut used: i32,
 }
 
-struct core:prelude//Array<bool> {  // TypeId(14)
+struct core:prelude//List<bool> {  // TypeId(14)
     mut repr: ref builtin::array<bool>,
     mut used: i32,
 }
@@ -196,15 +196,15 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global global:core::prelude/fpfmt.wado::POW10: ref null "core:prelude//Array<u64>" = struct.new "core:prelude//Array<u64>" { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
+global global:core::prelude/fpfmt.wado::POW10: ref null "core:prelude//List<u64>" = struct.new "core:prelude//List<u64>" { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/index_assign_types.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//Array<i32>";
-    let __b_2: ref "core:prelude//Array<i64>";
-    let __b_4: ref "core:prelude//Array<f32>";
-    let __b_6: ref "core:prelude//Array<f64>";
-    let __b_8: ref "core:prelude//Array<bool>";
+    let __b_0: ref "core:prelude//List<i32>";
+    let __b_2: ref "core:prelude//List<i64>";
+    let __b_4: ref "core:prelude//List<f32>";
+    let __b_6: ref "core:prelude//List<f64>";
+    let __b_8: ref "core:prelude//List<bool>";
     let __local_10: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/format.wado//Formatter";
     let __local_12: ref "core:prelude/string.wado//String";
@@ -225,7 +225,7 @@ fn "wado-compiler/tests/fixtures/index_assign_types.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(0), used: 1 };
+    __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(0), used: 1 };
     if builtin::unlikely(0 >= __b_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -235,7 +235,7 @@ fn "wado-compiler/tests/fixtures/index_assign_types.wado/run"() with Stdout {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; self_34 = builtin::array_get<i32>(__b_0.repr, 0); "core:prelude/primitive.wado/i32::fmt_decimal"(self_34, __local_11); __local_10);
-    __b_2 = struct.new "core:prelude//Array<i64>" { repr: array.new_fixed<i64>(0_i64), used: 1 };
+    __b_2 = struct.new "core:prelude//List<i64>" { repr: array.new_fixed<i64>(0_i64), used: 1 };
     if builtin::unlikely(0 >= __b_2.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -245,7 +245,7 @@ fn "wado-compiler/tests/fixtures/index_assign_types.wado/run"() with Stdout {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; self_50 = builtin::array_get<i64>(__b_2.repr, 0); "core:prelude/primitive.wado/i64::fmt_decimal"(self_50, __local_13); __local_12);
-    __b_4 = struct.new "core:prelude//Array<f32>" { repr: array.new_fixed<f32>(0_f32), used: 1 };
+    __b_4 = struct.new "core:prelude//List<f32>" { repr: array.new_fixed<f32>(0_f32), used: 1 };
     if builtin::unlikely(0 >= __b_4.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -255,7 +255,7 @@ fn "wado-compiler/tests/fixtures/index_assign_types.wado/run"() with Stdout {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<f32>(__b_4.repr, 0), __local_15); __local_14);
-    __b_6 = struct.new "core:prelude//Array<f64>" { repr: array.new_fixed<f64>(0), used: 1 };
+    __b_6 = struct.new "core:prelude//List<f64>" { repr: array.new_fixed<f64>(0), used: 1 };
     if builtin::unlikely(0 >= __b_6.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -265,7 +265,7 @@ fn "wado-compiler/tests/fixtures/index_assign_types.wado/run"() with Stdout {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<f64>(__b_6.repr, 0), __local_17); __local_16);
-    __b_8 = struct.new "core:prelude//Array<bool>" { repr: array.new_fixed<bool>(0), used: 1 };
+    __b_8 = struct.new "core:prelude//List<bool>" { repr: array.new_fixed<bool>(0), used: 1 };
     if builtin::unlikely(0 >= __b_8.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -774,8 +774,8 @@ fn "core:prelude/fpfmt.wado/fixed_width_for_prec"(f, precision) {
     let u_33: u64;
     let n_34: i32;
     let u_39: u64;
-    let self_40: ref "core:prelude//Array<u64>";
-    let self_42: ref "core:prelude//Array<u64>";
+    let self_40: ref "core:prelude//List<u64>";
+    let self_42: ref "core:prelude//List<u64>";
     let unpack_mv_mantissa: u64;
     let unpack_mv_exponent: i32;
     multivalue_bind [unpack_mv_mantissa, unpack_mv_exponent] = "core:prelude/fpfmt.wado/unpack64"(f);
@@ -1341,7 +1341,7 @@ fn "core:prelude/primitive.wado/f32::fmt_into"(self, f) {
     let nd_17: i32;
     let x_18: i32;
     let self_22: ref "core:prelude/string.wado//String";
-    let self_25: ref "core:prelude//Array<u64>";
+    let self_25: ref "core:prelude//List<u64>";
     if f.precision >= 0 {
         precision = f.precision;
         v64 = builtin::f64_promote_f32(self);
@@ -1384,7 +1384,7 @@ fn "core:prelude/primitive.wado/f64::fmt_into"(self, f) {
     let nd_14: i32;
     let x_15: i32;
     let self_19: ref "core:prelude/string.wado//String";
-    let self_22: ref "core:prelude//Array<u64>";
+    let self_22: ref "core:prelude//List<u64>";
     if f.precision >= 0 {
         "core:prelude/primitive.wado/f64::fmt_fixed"(self, f.precision, f);
         return;
@@ -1427,7 +1427,7 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
     let nd_20: i32;
     let x_21: i32;
     let self_25: ref "core:prelude/string.wado//String";
-    let self_28: ref "core:prelude//Array<u64>";
+    let self_28: ref "core:prelude//List<u64>";
     let __pattern_temp_0_mv_0: bool;
     let __pattern_temp_0_mv_1: bool;
     let __pattern_temp_0_mv_2: "core:prelude/fpfmt.wado//enum:SpecialKind";

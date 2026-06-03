@@ -96,7 +96,7 @@ export fn run() with Stdout, IpNameLookup, TcpSocket, Connector, Error {
     data_tx.write(request.bytes().collect());
 
     // Read until the peer closes the connection.
-    let mut response: Array<u8> = [];
+    let mut response: List<u8> = [];
     loop {
         let chunk = tls_rx.read(4096);
         if chunk.len() == 0 {

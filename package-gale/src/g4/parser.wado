@@ -38,32 +38,32 @@ use { G4Token, make_token } from "./token.wado";
 use { tokenize_chars } from "./lexer.wado";
 
 pub struct G4Parser {
-    tokens: Array<Token>,
+    tokens: List<Token>,
     /// Snapshot of the source as a char array. Used by `rescan_balanced` to
     /// re-scan host-language regions (ARG_ACTION, action bodies) that the
     /// byte-level lexer cannot delimit on its own — those need bracket
     /// balance plus string-/comment-awareness, which only matters in
     /// host-language code.
-    chars: Array<char>,
+    chars: List<char>,
     pos: i32,
     /// User-defined channel names collected from `channels { }` blocks.
     /// Lexer command `channel(X)` with an identifier argument is resolved
     /// against this list; matching names map to id `index + 2` (0=DEFAULT,
     /// 1=HIDDEN are predefined).
-    channels: Array<String>,
+    channels: List<String>,
     /// Grammar-level options collected from the grammar prequel
     /// `options { ... }` blocks. Later blocks append to earlier ones.
-    options: Array<GrammarOption>,
+    options: List<GrammarOption>,
     /// Grammar-level `@name { ... }` named actions collected from the
     /// prequel. Action bodies are discarded; only the name/scope is kept.
-    named_actions: Array<NamedAction>,
+    named_actions: List<NamedAction>,
     /// Rule / token references encountered while parsing rule bodies.
     /// Each entry carries a `RefKind` tag so the post-parse validator
     /// (`check_references` in `ir.wado`) can resolve it against the right
     /// rule table. Emitted straight onto `Grammar.pending_refs` when
     /// `parse_grammar` returns, so a `merge_grammars` over split grammars
     /// can concatenate cross-file refs into a single validatable table.
-    pending_refs: Array<PendingRef>,
+    pending_refs: List<PendingRef>,
     /// Name of the rule currently being parsed. Used to tag pending refs
     /// so validator error messages can say where the bad reference came
     /// from. Empty outside of a rule body.
@@ -144,7 +144,7 @@ fn is_valid_not_set_element(elem: &Element) -> bool {
 }
 
 impl G4Parser {
-    pub fn new(tokens: Array<Token>, chars: Array<char>) -> G4Parser {
+    pub fn new(tokens: List<Token>, chars: List<char>) -> G4Parser {
         return G4Parser {
             tokens,
             chars,
@@ -182,7 +182,7 @@ impl G4Parser {
             self.pos += 1;
             return Result::<&Token, ParseError>::Ok(tok);
         }
-        let expected: Array<String> = [kind.name()];
+        let expected: List<String> = [kind.name()];
         return Result::<&Token, ParseError>::Err(
             ParseError::new(`expected {kind.name()}, got "{tok.text}"`, tok.span, expected),
         );
@@ -222,12 +222,12 @@ impl G4Parser {
         let name = name_tok.text.to_string();
         self.expect(G4Token::Semicolon)?;
 
-        let mut virtual_tokens: Array<String> = [];
+        let mut virtual_tokens: List<String> = [];
         self.skip_preamble_blocks(&mut virtual_tokens)?;
 
-        let mut parser_rules: Array<ParserRule> = [];
-        let mut lexer_rules: Array<LexerRule> = [];
-        let mut mode_names: Array<String> = ["DEFAULT_MODE"];
+        let mut parser_rules: List<ParserRule> = [];
+        let mut lexer_rules: List<LexerRule> = [];
+        let mut mode_names: List<String> = ["DEFAULT_MODE"];
         let mut current_mode: i32 = DEFAULT_MODE;
 
         while !self.at_eof() {
@@ -239,7 +239,7 @@ impl G4Parser {
             if self.is_kind(G4Token::Identifier) && LexerSlice::eq_str(&"mode", &self.peek().text) {
                 if is_parser_grammar {
                     let tok = self.peek();
-                    let expected: Array<String> = ["rule definition"];
+                    let expected: List<String> = ["rule definition"];
                     return Result::<Grammar, ParseError>::Err(
                         ParseError::new(
                             "mode declaration is only allowed in lexer grammars",
@@ -359,7 +359,7 @@ impl G4Parser {
         let named_actions = self.named_actions;
         let pending_refs = self.pending_refs;
         let kind = self.kind;
-        let source_files: Array<String> = [];
+        let source_files: List<String> = [];
         return Result::<Grammar, ParseError>::Ok(
             Grammar {
                 name,
@@ -376,7 +376,7 @@ impl G4Parser {
         );
     }
 
-    fn skip_preamble_blocks(&mut self, virtual_tokens: &mut Array<String>) -> Result<(), ParseError> {
+    fn skip_preamble_blocks(&mut self, virtual_tokens: &mut List<String>) -> Result<(), ParseError> {
         // ANTLR4 grammar prequel constructs (any order, repeatable):
         //   optionsSpec      : 'options'  '{' ... '}'
         //   delegateGrammars : 'import' id ('=' id)? (',' id ('=' id)?)* ';'
@@ -499,8 +499,8 @@ impl G4Parser {
     /// `parse_option_value` for the supported shapes. Malformed entries
     /// are silently tolerated to match the rest of the parser's recovery
     /// posture.
-    fn parse_options_block(&mut self) -> Array<GrammarOption> {
-        let mut out: Array<GrammarOption> = [];
+    fn parse_options_block(&mut self) -> List<GrammarOption> {
+        let mut out: List<GrammarOption> = [];
         if !self.is_kind(G4Token::LBrace) {
             return out;
         }
@@ -564,7 +564,7 @@ impl G4Parser {
             if !(self.is_kind(G4Token::Dot) && self.peek_kind_at(1) == G4Token::Identifier as i32) {
                 return OptionValue::Ident(head);
             }
-            let mut parts: Array<String> = [head];
+            let mut parts: List<String> = [head];
             while self.is_kind(G4Token::Dot) && self.peek_kind_at(1) == G4Token::Identifier as i32 {
                 self.advance();
                 parts.push(self.peek().text.to_string());
@@ -609,7 +609,7 @@ impl G4Parser {
     /// permissive parsing of legacy `.g4` files ported without cleanup.
     /// The assigned integer is discarded — Gale assigns token ids based on
     /// declaration order internally.
-    fn parse_tokens_block(&mut self, virtual_tokens: &mut Array<String>) -> Result<(), ParseError> {
+    fn parse_tokens_block(&mut self, virtual_tokens: &mut List<String>) -> Result<(), ParseError> {
         if !self.is_kind(G4Token::LBrace) {
             let tok = self.peek();
             return Result::<(), ParseError>::Err(
@@ -739,10 +739,10 @@ impl G4Parser {
     /// placeholders round-trip through the same code path as `options { ... }`.
     /// Malformed entries are tolerated (best-effort resync to the closing `>`)
     /// to match the rest of the parser's recovery posture.
-    fn parse_angle_options(&mut self) -> Result<Array<GrammarOption>, ParseError> {
-        let mut out: Array<GrammarOption> = [];
+    fn parse_angle_options(&mut self) -> Result<List<GrammarOption>, ParseError> {
+        let mut out: List<GrammarOption> = [];
         if !self.is_kind(G4Token::LAngle) {
-            return Result::<Array<GrammarOption>, ParseError>::Ok(out);
+            return Result::<List<GrammarOption>, ParseError>::Ok(out);
         }
         self.advance();
         let mut depth = 1;
@@ -792,7 +792,7 @@ impl G4Parser {
                     }
                 }
                 if !valid {
-                    return Result::<Array<GrammarOption>, ParseError>::Err(
+                    return Result::<List<GrammarOption>, ParseError>::Err(
                         ParseError::new(
                             `invalid <assoc=...> value: only "left" or "right" are accepted`,
                             value_span,
@@ -807,7 +807,7 @@ impl G4Parser {
                 self.advance();
             }
         }
-        return Result::<Array<GrammarOption>, ParseError>::Ok(out);
+        return Result::<List<GrammarOption>, ParseError>::Ok(out);
     }
 
     fn parse_parser_rule(&mut self, name: String) -> Result<ParserRule, ParseError> {
@@ -829,8 +829,8 @@ impl G4Parser {
     /// `@after`). ANTLR4 fixes the order of args/returns/throws/locals before
     /// the repeated `options{}`/`@id{}` block, but we accept any order here
     /// for resilience. Returns the union of any `options { ... }` entries.
-    fn skip_rule_prequel(&mut self) -> Array<GrammarOption> {
-        let mut options: Array<GrammarOption> = [];
+    fn skip_rule_prequel(&mut self) -> List<GrammarOption> {
+        let mut options: List<GrammarOption> = [];
         loop {
             if self.is_kind(G4Token::CharClass) {
                 // Bare ARG_ACTION right after the rule name → rule arguments.
@@ -920,8 +920,8 @@ impl G4Parser {
         }
     }
 
-    fn parse_alternatives(&mut self) -> Result<Array<Alternative>, ParseError> {
-        let mut alts: Array<Alternative> = [];
+    fn parse_alternatives(&mut self) -> Result<List<Alternative>, ParseError> {
+        let mut alts: List<Alternative> = [];
         let first = self.parse_alternative()?;
         alts.push(first);
 
@@ -930,12 +930,12 @@ impl G4Parser {
             let alt = self.parse_alternative()?;
             alts.push(alt);
         }
-        return Result::<Array<Alternative>, ParseError>::Ok(alts);
+        return Result::<List<Alternative>, ParseError>::Ok(alts);
     }
 
     fn parse_alternative(&mut self) -> Result<Alternative, ParseError> {
-        let mut elements: Array<Element> = [];
-        let mut options: Array<GrammarOption> = [];
+        let mut elements: List<Element> = [];
+        let mut options: List<GrammarOption> = [];
         let mut label: Option<String> = null;
 
         loop {
@@ -1020,7 +1020,7 @@ impl G4Parser {
                 self.skip_arg_action();
             }
             // Optional element options: `ID<assoc=right>`.
-            let mut options: Array<GrammarOption> = [];
+            let mut options: List<GrammarOption> = [];
             if self.is_kind(G4Token::LAngle) {
                 options = self.parse_angle_options()?;
             }
@@ -1049,7 +1049,7 @@ impl G4Parser {
             let tok = self.advance();
             let text = tok.text.to_string();
             // Optional element options: `'foo'<p=3>`.
-            let mut options: Array<GrammarOption> = [];
+            let mut options: List<GrammarOption> = [];
             if self.is_kind(G4Token::LAngle) {
                 options = self.parse_angle_options()?;
             }
@@ -1075,7 +1075,7 @@ impl G4Parser {
         if self.is_kind(G4Token::Dot) {
             self.advance();
             // Optional element options on wildcard: `.<...>`
-            let mut options: Array<GrammarOption> = [];
+            let mut options: List<GrammarOption> = [];
             if self.is_kind(G4Token::LAngle) {
                 options = self.parse_angle_options()?;
             }
@@ -1102,7 +1102,7 @@ impl G4Parser {
             );
         }
         let tok = self.peek();
-        let expected: Array<String> = ["identifier", "string", "(", ".", "~"];
+        let expected: List<String> = ["identifier", "string", "(", ".", "~"];
         return Result::<Element, ParseError>::Err(
             ParseError::new(`unexpected token "{tok.text}"`, tok.span, expected),
         );
@@ -1113,8 +1113,8 @@ impl G4Parser {
     /// alternative list. Returns the accumulated block-level options (empty
     /// if none appeared). Action bodies are still discarded — they are
     /// host-language code Gale cannot transpile.
-    fn parse_block_prequel(&mut self) -> Array<GrammarOption> {
-        let mut options: Array<GrammarOption> = [];
+    fn parse_block_prequel(&mut self) -> List<GrammarOption> {
+        let mut options: List<GrammarOption> = [];
         let mut consumed = false;
         loop {
             if self.is_kind(G4Token::Identifier) && LexerSlice::eq_str(&"options", &self.peek().text) {
@@ -1181,7 +1181,7 @@ impl G4Parser {
         return Result::<Element, ParseError>::Ok(elem);
     }
 
-    fn parse_lexer_rule(&mut self, name: String, is_fragment: bool, mode: i32, mode_names: &mut Array<String>) -> Result<LexerRule, ParseError> {
+    fn parse_lexer_rule(&mut self, name: String, is_fragment: bool, mode: i32, mode_names: &mut List<String>) -> Result<LexerRule, ParseError> {
         // Lexer rules in ANTLR4 also accept the rule prequel (rare but legal,
         // most commonly `locals [int n]`).
         let options = self.skip_rule_prequel();
@@ -1217,7 +1217,7 @@ impl G4Parser {
         );
     }
 
-    fn parse_lexer_actions(&mut self, actions: &mut LexerActions, mode_names: &mut Array<String>) -> Result<(), ParseError> {
+    fn parse_lexer_actions(&mut self, actions: &mut LexerActions, mode_names: &mut List<String>) -> Result<(), ParseError> {
         loop {
             let action_tok = self.advance();
             let action_text = &action_tok.text;
@@ -1295,8 +1295,8 @@ impl G4Parser {
         return Result::<(), ParseError>::Ok(());
     }
 
-    fn parse_lexer_alternatives(&mut self) -> Result<Array<LexerAlt>, ParseError> {
-        let mut alts: Array<LexerAlt> = [];
+    fn parse_lexer_alternatives(&mut self) -> Result<List<LexerAlt>, ParseError> {
+        let mut alts: List<LexerAlt> = [];
         let first = self.parse_lexer_alt()?;
         alts.push(first);
 
@@ -1305,11 +1305,11 @@ impl G4Parser {
             let alt = self.parse_lexer_alt()?;
             alts.push(alt);
         }
-        return Result::<Array<LexerAlt>, ParseError>::Ok(alts);
+        return Result::<List<LexerAlt>, ParseError>::Ok(alts);
     }
 
     fn parse_lexer_alt(&mut self) -> Result<LexerAlt, ParseError> {
-        let mut elements: Array<LexerElement> = [];
+        let mut elements: List<LexerElement> = [];
         loop {
             if self.at_eof()
                 || self.is_kind(G4Token::Pipe)
@@ -1378,7 +1378,7 @@ impl G4Parser {
             self.advance();
             if self.is_kind(G4Token::Dot) {
                 let tok = self.peek();
-                let expected: Array<String> = ["element"];
+                let expected: List<String> = ["element"];
                 return Result::<LexerElement, ParseError>::Err(
                     ParseError::new("unexpected '..' without preceding char literal", tok.span, expected),
                 );
@@ -1411,7 +1411,7 @@ impl G4Parser {
             );
         }
         let tok = self.peek();
-        let expected: Array<String> = ["string", "char-class", "identifier", "(", "~", "."];
+        let expected: List<String> = ["string", "char-class", "identifier", "(", "~", "."];
         return Result::<LexerElement, ParseError>::Err(
             ParseError::new(`unexpected token "{tok.text}" in lexer rule`, tok.span, expected),
         );
@@ -1460,13 +1460,13 @@ impl G4Parser {
     }
 }
 
-fn advance_char(chars: &Array<char>, pos: &mut i32) -> char {
+fn advance_char(chars: &List<char>, pos: &mut i32) -> char {
     let c = chars[*pos];
     *pos += 1;
     return c;
 }
 
-fn resolve_char(chars: &Array<char>, pos: &mut i32) -> char {
+fn resolve_char(chars: &List<char>, pos: &mut i32) -> char {
     let c = advance_char(chars, pos);
     if c != '\\' {
         return c;
@@ -1495,7 +1495,7 @@ fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
     let end = chars.len() - 1;
     let mut pos = 1;
     let mut negated = false;
-    let mut ranges: Array<CharRange> = [];
+    let mut ranges: List<CharRange> = [];
 
     if pos < end && chars[pos] == '^' {
         negated = true;
@@ -1533,7 +1533,7 @@ fn parse_char_class(text: &String) -> Result<CharClass, ParseError> {
 
 /// Expand a Unicode general category property into character ranges.
 /// This is an incomplete approximation covering ASCII and common Unicode blocks.
-fn expand_unicode_property(name: &String, ranges: &mut Array<CharRange>) {
+fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) {
     if *name == "L" || *name == "Letter" {
         // Basic Latin
         ranges.push(CharRange::range('A', 'Z'));
@@ -1605,7 +1605,7 @@ fn expand_unicode_property(name: &String, ranges: &mut Array<CharRange>) {
     // Unknown properties are silently ignored (empty expansion)
 }
 
-fn intern_mode(mode_names: &mut Array<String>, name: &String) -> i32 {
+fn intern_mode(mode_names: &mut List<String>, name: &String) -> i32 {
     for let mut i = 0; i < mode_names.len(); i += 1 {
         if mode_names[i] == *name {
             return i;
@@ -1624,7 +1624,7 @@ fn intern_mode(mode_names: &mut Array<String>, name: &String) -> i32 {
 /// regions (action bodies `{...}`, ARG_ACTION `[...]`) on its own — the
 /// host language may put the closing delimiter inside a string literal or
 /// nest the brackets (`int[] arr` in Java).
-fn rescan_balanced(chars: &Array<char>, start: i32, open_char: char, close_char: char) -> i32 {
+fn rescan_balanced(chars: &List<char>, start: i32, open_char: char, close_char: char) -> i32 {
     let n = chars.len();
     let mut pos = start + 1;  // skip opening delimiter
     let mut depth = 1;
@@ -1712,7 +1712,7 @@ pub fn parse(input: String) -> Result<Grammar, ParseError> {
     // Collect the source once and share it between the lexer and the parser.
     // Tokens own their text, so the buffer can be handed off to the parser
     // (which retains it for `rescan_balanced`) after tokenization.
-    let chars: Array<char> = input.chars().collect();
+    let chars: List<char> = input.chars().collect();
     let tokens = tokenize_chars(&chars);
     let mut parser = G4Parser::new(tokens, chars);
     return parser.parse_grammar();

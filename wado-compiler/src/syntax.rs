@@ -125,7 +125,7 @@ impl SyntaxDefinition {
                 "bool",
                 "char",
                 "String",
-                "Array",
+                "List",
                 "Option",
                 "Result",
                 "Default",

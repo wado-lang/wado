@@ -34,7 +34,7 @@ pub fn gc_array_to_memory(arr: builtin::array<u8>, ptr: i32, len: i32) {
 /// Internal helper for log_stdout and log_stderr.
 ///
 /// Uses write_raw to pass String's internal GC array directly to the stream,
-/// avoiding the intermediate String → Array<u8> byte-by-byte copy.
+/// avoiding the intermediate String → List<u8> byte-by-byte copy.
 pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
     let bytes = message.internal_raw_bytes();
     let len = message.len();
@@ -128,7 +128,7 @@ pub fn cm_lower_string(s: String) -> i64 {
     return ptr as i64 | len as i64 << 32;
 }
 
-/// Lowers a GC Array<u8> to CM linear memory representation.
+/// Lowers a GC List<u8> to CM linear memory representation.
 /// Returns (ptr | (len << 32)) as i64.
 /// The caller must free the allocated memory after the CM call.
 pub fn cm_lower_list_u8(data: builtin::array<u8>, len: i32) -> i64 {
@@ -137,9 +137,9 @@ pub fn cm_lower_list_u8(data: builtin::array<u8>, len: i32) -> i64 {
     return ptr as i64 | len as i64 << 32;
 }
 
-/// Lowers a GC Array<u8> (e.g., FieldValue) to CM linear memory representation.
+/// Lowers a GC List<u8> (e.g., FieldValue) to CM linear memory representation.
 /// Returns (ptr | (len << 32)) as i64.
-pub fn cm_lower_array_u8(arr: Array<u8>) -> i64 {
+pub fn cm_lower_array_u8(arr: List<u8>) -> i64 {
     let data = arr.internal_raw_data();
     let len = arr.len();
     return cm_lower_list_u8(data, len);
@@ -183,8 +183,8 @@ pub fn wait_for_blocked(handle: i32) -> i32 {
 
 /// CM adapter for stream.read(max) on Stream<u8>.
 /// Allocates linear memory, calls stream-read, handles BLOCKED,
-/// lifts bytes to GC array, constructs Array<u8>.
-pub fn cm_stream_read_u8(handle: i32, max: i32) -> Array<u8> {
+/// lifts bytes to GC array, constructs List<u8>.
+pub fn cm_stream_read_u8(handle: i32, max: i32) -> List<u8> {
     let ptr = builtin::realloc(0, 0, 1, max);
     let mut result = builtin::stream_read(handle, ptr, max);
     if result == -1 {
@@ -193,7 +193,7 @@ pub fn cm_stream_read_u8(handle: i32, max: i32) -> Array<u8> {
     let count = result >> 4;
     let arr = memory_to_gc_array(ptr, count);
     let freed = builtin::realloc(ptr, max, 1, 0);
-    return Array::internal_from_raw(arr, count);
+    return List::internal_from_raw(arr, count);
 }
 
 /// CM adapter for stream.read(max) on Stream<T> where T is a CM record.
@@ -211,11 +211,11 @@ pub fn cm_stream_read_raw(handle: i32, max: i32, element_size: i32, element_alig
     return [ptr, count];
 }
 
-/// Create a new empty Array<u8> with the given capacity.
+/// Create a new empty List<u8> with the given capacity.
 /// Used by synthesized stream-read binding functions for non-u8 types.
 /// The type parameter is monomorphized away during compilation.
-pub fn array_new_empty(capacity: i32) -> Array<u8> {
-    return Array::with_capacity(capacity);
+pub fn array_new_empty(capacity: i32) -> List<u8> {
+    return List::with_capacity(capacity);
 }
 
 /// Free a buffer previously allocated by cm_stream_read_raw.
@@ -224,8 +224,8 @@ pub fn cm_stream_read_raw_free(ptr: i32, byte_count: i32, element_align: i32) {
 }
 
 /// CM adapter for stream.write(data) on Stream<u8>.
-/// Lowers Array<u8> to linear memory, calls stream-write, handles BLOCKED.
-pub fn cm_stream_write_u8(handle: i32, data: Array<u8>) {
+/// Lowers List<u8> to linear memory, calls stream-write, handles BLOCKED.
+pub fn cm_stream_write_u8(handle: i32, data: List<u8>) {
     let packed = cm_lower_array_u8(data);
     let ptr = packed as i32;
     let len = (packed >> 32) as i32;

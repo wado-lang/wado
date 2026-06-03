@@ -8,7 +8,7 @@
 // function is called in a loop condition position.
 
 struct Iterator {
-    items: Array<i32>,
+    items: List<i32>,
     pos: i32,
 }
 
@@ -24,7 +24,7 @@ fn iter_next(it: &mut Iterator) -> Option<i32> {
 
 // --- Case 1: Simple while-let ---
 
-fn sum_iter(items: Array<i32>) -> i32 {
+fn sum_iter(items: List<i32>) -> i32 {
     let mut it = Iterator { items, pos: 0 };
     let mut sum = 0;
     while let Some(v) = iter_next(&mut it) {
@@ -46,7 +46,7 @@ fn classify(n: i32) -> Result<String, String> {
     return Result::<String, String>::Ok("positive");
 }
 
-fn count_positive(items: Array<i32>) -> i32 {
+fn count_positive(items: List<i32>) -> i32 {
     let mut it = Iterator { items, pos: 0 };
     let mut count = 0;
     while let Some(v) = iter_next(&mut it) {
@@ -65,7 +65,7 @@ fn count_positive(items: Array<i32>) -> i32 {
 
 // --- Case 3: Nested while-let (two iterators sharing backing array) ---
 
-fn cross_sum(a: Array<i32>, b: Array<i32>) -> i32 {
+fn cross_sum(a: List<i32>, b: List<i32>) -> i32 {
     let mut it_a = Iterator { items: a, pos: 0 };
     let mut sum = 0;
     while let Some(va) = iter_next(&mut it_a) {
@@ -79,18 +79,18 @@ fn cross_sum(a: Array<i32>, b: Array<i32>) -> i32 {
 
 export fn run() {
     // Case 1
-    let items: Array<i32> = [1, 2, 3, 4, 5];
+    let items: List<i32> = [1, 2, 3, 4, 5];
     assert sum_iter(items) == 15;
-    let empty: Array<i32> = [];
+    let empty: List<i32> = [];
     assert sum_iter(empty) == 0;
 
     // Case 2
-    let mixed: Array<i32> = [1, -1, 2, 0, 3, -5];
+    let mixed: List<i32> = [1, -1, 2, 0, 3, -5];
     assert count_positive(mixed) == 3;
 
     // Case 3
-    let a: Array<i32> = [1, 2, 3];
-    let b: Array<i32> = [10, 20];
+    let a: List<i32> = [1, 2, 3];
+    let b: List<i32> = [10, 20];
     assert cross_sum(a, b) == 180;
 }
 

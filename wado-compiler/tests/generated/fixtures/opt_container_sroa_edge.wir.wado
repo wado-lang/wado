@@ -24,12 +24,12 @@ array builtin::array<i64> (mut i64);  // TypeId(3)
 
 array builtin::array<i32> (mut i32);  // TypeId(4)
 
-struct core:prelude//Array<i32> {  // TypeId(5)
+struct core:prelude//List<i32> {  // TypeId(5)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
 
-struct core:prelude//Array<i64> {  // TypeId(6)
+struct core:prelude//List<i64> {  // TypeId(6)
     mut repr: ref builtin::array<i64>,
     mut used: i32,
 }
@@ -110,13 +110,13 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(44)
 
-type "functype//core:prelude/array.wado/Array<i64>::push" = fn(ref "core:prelude//Array<i64>", i64);  // TypeId(45)
+type "functype//core:prelude/list.wado/List<i64>::push" = fn(ref "core:prelude//List<i64>", i64);  // TypeId(45)
 
-type "functype//core:prelude/array.wado/Array<i32>::push" = fn(ref "core:prelude//Array<i32>", i32);  // TypeId(46)
+type "functype//core:prelude/list.wado/List<i32>::push" = fn(ref "core:prelude//List<i32>", i32);  // TypeId(46)
 
-type "functype//core:prelude/array.wado/Array<i32>::grow" = fn(ref "core:prelude//Array<i32>");  // TypeId(47)
+type "functype//core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(47)
 
-type "functype//core:prelude/array.wado/Array<i64>::grow" = fn(ref "core:prelude//Array<i64>");  // TypeId(48)
+type "functype//core:prelude/list.wado/List<i64>::grow" = fn(ref "core:prelude//List<i64>");  // TypeId(48)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(49)
 
@@ -139,12 +139,12 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/opt_container_sroa_edge.wado/_force_array_i32_monomorphization"() {
-    let x: ref "core:prelude//Array<i32>";
+    let x: ref "core:prelude//List<i32>";
     let first: i32;
     let len: i32;
-    x = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(4), used: 0 };
-    "core:prelude/array.wado/Array<i32>::push"(x, 1);
-    "core:prelude/array.wado/Array<i32>::push"(x, 2);
+    x = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(4), used: 0 };
+    "core:prelude/list.wado/List<i32>::push"(x, 1);
+    "core:prelude/list.wado/List<i32>::push"(x, 2);
     if builtin::unlikely(0 >= x.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -160,12 +160,12 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_edge.wado/_force_array_i32_m
 }
 
 fn "wado-compiler/tests/fixtures/opt_container_sroa_edge.wado/_force_array_i64_monomorphization"() {
-    let x: ref "core:prelude//Array<i64>";
+    let x: ref "core:prelude//List<i64>";
     let first: i64;
     let len: i64;
-    x = struct.new "core:prelude//Array<i64>" { repr: builtin::array_new<i64>(4), used: 0 };
-    "core:prelude/array.wado/Array<i64>::push"(x, 1_i64);
-    "core:prelude/array.wado/Array<i64>::push"(x, 2_i64);
+    x = struct.new "core:prelude//List<i64>" { repr: builtin::array_new<i64>(4), used: 0 };
+    "core:prelude/list.wado/List<i64>::push"(x, 1_i64);
+    "core:prelude/list.wado/List<i64>::push"(x, 2_i64);
     if builtin::unlikely(0 >= x.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -184,22 +184,22 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_edge.wado/generic_struct_mon
     let first_sum: i32;
     let second_sum: i64;
     let i: i32;
-    let __csroa_v_0: ref "core:prelude//Array<i32>";
-    let __csroa_v_1: ref "core:prelude//Array<i64>";
+    let __csroa_v_0: ref "core:prelude//List<i32>";
+    let __csroa_v_1: ref "core:prelude//List<i64>";
     let value_11: i32;
     let value_16: i64;
     let _licm_used_24: i32;
     let _licm_repr_25: ref builtin::array<i32>;
     let _licm_used_26: i32;
     let _licm_repr_27: ref builtin::array<i64>;
-    __csroa_v_0 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-    __csroa_v_1 = struct.new "core:prelude//Array<i64>" { repr: builtin::array_new<i64>(0), used: 0 };
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, 1);
-    "core:prelude/array.wado/Array<i64>::push"(__csroa_v_1, 100_i64);
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, 2);
-    "core:prelude/array.wado/Array<i64>::push"(__csroa_v_1, 200_i64);
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, 3);
-    "core:prelude/array.wado/Array<i64>::push"(__csroa_v_1, 300_i64);
+    __csroa_v_0 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    __csroa_v_1 = struct.new "core:prelude//List<i64>" { repr: builtin::array_new<i64>(0), used: 0 };
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_0, 1);
+    "core:prelude/list.wado/List<i64>::push"(__csroa_v_1, 100_i64);
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_0, 2);
+    "core:prelude/list.wado/List<i64>::push"(__csroa_v_1, 200_i64);
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_0, 3);
+    "core:prelude/list.wado/List<i64>::push"(__csroa_v_1, 300_i64);
     if builtin::unlikely(1 >= __csroa_v_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -247,20 +247,20 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_edge.wado/generic_struct_mon
 fn "wado-compiler/tests/fixtures/opt_container_sroa_edge.wado/private_fields_same_module"() {
     let sum: i32;
     let i: i32;
-    let __csroa_v_0: ref "core:prelude//Array<i32>";
-    let __csroa_v_1: ref "core:prelude//Array<i32>";
+    let __csroa_v_0: ref "core:prelude//List<i32>";
+    let __csroa_v_1: ref "core:prelude//List<i32>";
     let _licm_used_19: i32;
     let _licm_repr_20: ref builtin::array<i32>;
     let _licm_used_21: i32;
     let _licm_repr_22: ref builtin::array<i32>;
-    __csroa_v_0 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-    __csroa_v_1 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, 1);
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_1, 10);
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, 2);
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_1, 20);
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, 3);
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_1, 30);
+    __csroa_v_0 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    __csroa_v_1 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_0, 1);
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_1, 10);
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_0, 2);
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_1, 20);
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_0, 3);
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_1, 30);
     if builtin::unlikely(0 >= __csroa_v_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -296,14 +296,14 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_edge.wado/private_fields_sam
 fn "wado-compiler/tests/fixtures/opt_container_sroa_edge.wado/single_field_wrapper"() {
     let sum: i32;
     let i: i32;
-    let __csroa_v_0: ref "core:prelude//Array<i32>";
+    let __csroa_v_0: ref "core:prelude//List<i32>";
     let value: i32;
     let _licm_used_13: i32;
     let _licm_repr_14: ref builtin::array<i32>;
-    __csroa_v_0 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(4), used: 0 };
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, 5);
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, 10);
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, 15);
+    __csroa_v_0 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(4), used: 0 };
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_0, 5);
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_0, 10);
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_0, 15);
     if builtin::unlikely(2 >= __csroa_v_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -336,9 +336,9 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_edge.wado/three_field_mixed"
     let y_sum: i64;
     let z_sum: i32;
     let i: i32;
-    let __csroa_v_0: ref "core:prelude//Array<i32>";
-    let __csroa_v_1: ref "core:prelude//Array<i64>";
-    let __csroa_v_2: ref "core:prelude//Array<i32>";
+    let __csroa_v_0: ref "core:prelude//List<i32>";
+    let __csroa_v_1: ref "core:prelude//List<i64>";
+    let __csroa_v_2: ref "core:prelude//List<i32>";
     let value_14: i32;
     let value_19: i64;
     let value_24: i32;
@@ -348,18 +348,18 @@ fn "wado-compiler/tests/fixtures/opt_container_sroa_edge.wado/three_field_mixed"
     let _licm_repr_37: ref builtin::array<i64>;
     let _licm_used_38: i32;
     let _licm_repr_39: ref builtin::array<i32>;
-    __csroa_v_0 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-    __csroa_v_1 = struct.new "core:prelude//Array<i64>" { repr: builtin::array_new<i64>(0), used: 0 };
-    __csroa_v_2 = struct.new "core:prelude//Array<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, 1);
-    "core:prelude/array.wado/Array<i64>::push"(__csroa_v_1, 10_i64);
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_2, 100);
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, 2);
-    "core:prelude/array.wado/Array<i64>::push"(__csroa_v_1, 20_i64);
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_2, 200);
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_0, 3);
-    "core:prelude/array.wado/Array<i64>::push"(__csroa_v_1, 30_i64);
-    "core:prelude/array.wado/Array<i32>::push"(__csroa_v_2, 300);
+    __csroa_v_0 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    __csroa_v_1 = struct.new "core:prelude//List<i64>" { repr: builtin::array_new<i64>(0), used: 0 };
+    __csroa_v_2 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_0, 1);
+    "core:prelude/list.wado/List<i64>::push"(__csroa_v_1, 10_i64);
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_2, 100);
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_0, 2);
+    "core:prelude/list.wado/List<i64>::push"(__csroa_v_1, 20_i64);
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_2, 200);
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_0, 3);
+    "core:prelude/list.wado/List<i64>::push"(__csroa_v_1, 30_i64);
+    "core:prelude/list.wado/List<i32>::push"(__csroa_v_2, 300);
     if builtin::unlikely(2 >= __csroa_v_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -883,27 +883,27 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/Array<i64>::push"(self, value) {
+fn "core:prelude/list.wado/List<i64>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<i64>::grow"(self);
+        "core:prelude/list.wado/List<i64>::grow"(self);
     }
     builtin::array_set<i64>(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<i32>::push"(self, value) {
+fn "core:prelude/list.wado/List<i32>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<i32>::grow"(self);
+        "core:prelude/list.wado/List<i32>::grow"(self);
     }
     builtin::array_set<i32>(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<i32>::grow"(self) {
+fn "core:prelude/list.wado/List<i32>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<i32>;
@@ -916,7 +916,7 @@ fn "core:prelude/array.wado/Array<i32>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/array.wado/Array<i64>::grow"(self) {
+fn "core:prelude/list.wado/List<i64>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref builtin::array<i64>;

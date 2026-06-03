@@ -44,7 +44,7 @@ fn empty_grammar(name: &String) -> Grammar {
     };
 }
 
-fn no_lit_tokens() -> Array<LitToken> {
+fn no_lit_tokens() -> List<LitToken> {
     return [];
 }
 
@@ -69,7 +69,7 @@ fn str_contains(haystack: &String, needle: &String) -> bool {
     return false;
 }
 
-fn alt_of(elements: Array<Element>) -> Alternative {
+fn alt_of(elements: List<Element>) -> Alternative {
     return Alternative {
         label: null,
         options: [],
@@ -1733,7 +1733,7 @@ test "lower enumerates leaf field decls with span and Plain kinds" {
 }
 
 test "lower enumerates Repeat field decls with List/Optional kinds" {
-    // `r : INT* INT? ;` — Star produces `int_list: Array<Token>`,
+    // `r : INT* INT? ;` — Star produces `int_list: List<Token>`,
     // Optional produces `int: Option<Token>`.
     let mut g = empty_grammar(&"T");
     g.parser_rules = [
@@ -1763,7 +1763,7 @@ test "lower enumerates Repeat field decls with List/Optional kinds" {
         // [span, int_list, int]
         assert s.body.fields.len() == 3, `expected 3 fields, got {s.body.fields.len()}`;
         assert s.body.fields[1].name == "int_list";
-        assert s.body.fields[1].type_str == "Array<Token>";
+        assert s.body.fields[1].type_str == "List<Token>";
         if let List = &s.body.fields[1].kind {
             assert true;
         } else {
@@ -1781,10 +1781,10 @@ test "lower enumerates Repeat field decls with List/Optional kinds" {
     }
 }
 
-test "lower SingleAlt Group body enumerates list-label inner as Array field" {
+test "lower SingleAlt Group body enumerates list-label inner as List field" {
     // `r : ID (COMMA b+=ID)* ;` — the `(COMMA b+=ID)` SingleAlt
     // group's inner `b+=ID` is a list label. The SingleAlt struct
-    // must carry `b: Array<Token>`.
+    // must carry `b: List<Token>`.
     let mut g = empty_grammar(&"T");
     g.parser_rules = [
         ParserRule::new(
@@ -1837,7 +1837,7 @@ test "lower SingleAlt Group body enumerates list-label inner as Array field" {
                     assert inner_fields.len() == 2, `expected 2 inner fields, got {inner_fields.len()}`;
                     assert inner_fields[0].type_str == "Token";
                     assert inner_fields[1].name == "b", inner_fields[1].name;
-                    assert inner_fields[1].type_str == "Array<Token>", inner_fields[1].type_str;
+                    assert inner_fields[1].type_str == "List<Token>", inner_fields[1].type_str;
                 } else {
                     panic("expected GroupShape::SingleAlt");
                 }

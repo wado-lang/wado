@@ -74,7 +74,7 @@ that future adapter. See the M6.5-stage-2 notes in the WEP.
 
 #### `primary: InputFile`
 
-#### `inputs: Array<InputFile>`
+#### `inputs: List<InputFile>`
 
 #### `options: T`
 
@@ -127,7 +127,7 @@ directly.
 
 #### `primary: InputFile`
 
-#### `inputs: Array<InputFile>`
+#### `inputs: List<InputFile>`
 
 #### `options: String`
 
@@ -146,7 +146,7 @@ files are referenced from the entry via ordinary Wado `use`.
 
 ### `pub struct Response`
 
-#### `files: Array<OutputFile>`
+#### `files: List<OutputFile>`
 
 ## Variants
 

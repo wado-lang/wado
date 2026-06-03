@@ -162,7 +162,7 @@ impl SubstitutionContext {
                 {
                     return resolved;
                 }
-                // GenericInstance fallback: e.g. ArrayIter<i32>::Item -> i32
+                // GenericInstance fallback: e.g. ListIter<i32>::Item -> i32
                 if let Some(resolved) =
                     type_table.resolve_generic_assoc_type(concrete_id, &assoc_name)
                 {
@@ -434,7 +434,7 @@ pub enum ResolvedType {
         assoc_type_bindings: Vec<(String, TypeId)>,
     },
     /// Raw GC array intrinsic (`builtin::array<T>`)
-    /// This is the underlying storage type for String and Array<T> structs
+    /// This is the underlying storage type for String and List<T> structs
     BuiltinArray(TypeId),
     /// Newtype: a distinct type wrapping a base type with the same representation.
     /// Created by `type T = U;` declarations.
@@ -490,7 +490,7 @@ pub struct TypeTable {
     /// Generic associated type definitions: `(base_struct_name, assoc_name)` → `TypeId`.
     /// The `TypeId` is typically a `TypeParam` that can be substituted using the
     /// `GenericInstance`'s `type_args`. Populated when processing generic impl blocks
-    /// (e.g., `impl Iterator for ArrayIter<T> { type Item = T; }`).
+    /// (e.g., `impl Iterator for ListIter<T> { type Item = T; }`).
     /// Used by the monomorphizer to resolve associated types for `GenericInstance` types.
     generic_assoc_type_defs: IndexMap<(String, String), TypeId>,
     /// Erasure redirects: set by `erase_newtypes_and_flags()`.
@@ -1413,8 +1413,8 @@ impl TypeTable {
     }
 
     /// Register a generic associated type definition.
-    /// E.g., for `impl Iterator for ArrayIter<T> { type Item = T; }`,
-    /// register `("ArrayIter", "Item") → TypeParam(0, "T")`.
+    /// E.g., for `impl Iterator for ListIter<T> { type Item = T; }`,
+    /// register `("ListIter", "Item") → TypeParam(0, "T")`.
     pub fn register_generic_assoc_type_def(
         &mut self,
         base_struct_name: String,
@@ -1457,7 +1457,7 @@ impl TypeTable {
     }
 
     /// Resolve an associated type for a `GenericInstance` type using generic definitions.
-    /// For `ArrayIter<i32>::Item`: looks up `("ArrayIter", "Item")` → `TypeParam(0)`,
+    /// For `ListIter<i32>::Item`: looks up `("ListIter", "Item")` → `TypeParam(0)`,
     /// then substitutes using the instance's `type_args` to get `i32`.
     pub fn resolve_generic_assoc_type(
         &self,
@@ -1672,9 +1672,9 @@ impl TypeTable {
         })
     }
 
-    /// Create an Array<T> type (`GenericInstance` { name: "Array", ... })
-    pub fn make_array(&mut self, element: TypeId) -> TypeId {
-        self.make_generic_instance("Array".to_string(), ModuleSource::array(), vec![element])
+    /// Create an List<T> type (`GenericInstance` { name: "List", ... })
+    pub fn make_list(&mut self, element: TypeId) -> TypeId {
+        self.make_generic_instance("List".to_string(), ModuleSource::list(), vec![element])
     }
 
     /// Create a newtype wrapping a base type
@@ -1766,15 +1766,15 @@ impl TypeTable {
         self.get_ultimate_base_type(a) == self.get_ultimate_base_type(b)
     }
 
-    /// Check if a type is Array<T> and return the element type if so.
+    /// Check if a type is List<T> and return the element type if so.
     /// Also unwraps Ref/MutRef types to check the inner type.
-    pub fn as_array(&self, id: TypeId) -> Option<TypeId> {
+    pub fn as_list(&self, id: TypeId) -> Option<TypeId> {
         match self.get(id) {
             ResolvedType::GenericInstance {
                 name, type_args, ..
-            } if name == "Array" && type_args.len() == 1 => Some(type_args[0]),
+            } if name == "List" && type_args.len() == 1 => Some(type_args[0]),
             // Unwrap references and check the inner type
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.as_array(*inner),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.as_list(*inner),
             _ => None,
         }
     }
@@ -1907,7 +1907,7 @@ impl TypeTable {
     /// - Tuple: `Tuple<T1,T2,...>`
     /// - Option: `Option<T>`
     /// - Result: `Result<T,E>`
-    /// - Array: `Array<T>`
+    /// - List: `List<T>`
     /// - Function: `Fn<paramCount,returnType>`
     /// - `GenericInstance`: `Name<T1,T2,...>`
     /// - Ref/MutRef: inner type (references are stripped for mangling)
@@ -1940,7 +1940,7 @@ impl TypeTable {
     }
 
     /// Mangle a type name, resolving all newtypes/flags to their base types recursively.
-    /// E.g., `Array<FieldName>` → `Array<String>` when `FieldName = String`.
+    /// E.g., `List<FieldName>` → `List<String>` when `FieldName = String`.
     pub fn mangle_type_name_resolving_newtypes(&self, id: TypeId) -> String {
         let base = self.resolve_newtype_base(id);
         match self.get(base) {
@@ -2047,22 +2047,22 @@ impl TypeTable {
     /// is stable regardless of where the type was defined.
     ///
     /// Without `Struct` qualification, two same-named structs from
-    /// distinct modules collapsed to the same `Array<S>` mangled fq
-    /// at the WIR layer, leaving `Array<S>` registered with one
+    /// distinct modules collapsed to the same `List<S>` mangled fq
+    /// at the WIR layer, leaving `List<S>` registered with one
     /// module's element struct and code constructing the other module's
     /// struct stored into that array — a Wasm GC validation failure
     /// (regression `cross_module_same_name_struct_iter.wado`).
     ///
     /// Without `GenericInstance` qualification the mangled name flips
     /// at the substitution boundary `GenericInstance → Struct`
-    /// (`IterFilter<ArrayIter<i32>>` while still `GenericInstance` vs
-    /// `IterFilter<core:prelude/array.wado/ArrayIter<i32>>` once the
+    /// (`IterFilter<ListIter<i32>>` while still `GenericInstance` vs
+    /// `IterFilter<core:prelude/list.wado/ListIter<i32>>` once the
     /// inner is monomorphized to `Struct`), producing duplicate WIR
     /// registrations of the same logical struct.
     ///
     /// All sites that build a generic-instance identity, register a
     /// struct, or look one up by name must agree on this qualified
-    /// form. `wir_build::context::type_id_to_wir_type`'s `Array<T>`
+    /// form. `wir_build::context::type_id_to_wir_type`'s `List<T>`
     /// lookup, `wir_build::types::register_struct`'s fq construction,
     /// and the `synthesis::cm_binding` / `synthesis::serde_synth`
     /// name builders all flow through this function or through
@@ -2129,8 +2129,8 @@ impl TypeTable {
             // Ref / MutRef are preserved in the mangled output so that
             // `Box<T>` and `Box<&T>` (semantically distinct instantiations)
             // map to distinct mangled names. Stripping refs here used to
-            // collapse two `InstantiationKey`s like `[Array<char>]` and
-            // `[&Array<char>]` to the same mangled function name, breaking
+            // collapse two `InstantiationKey`s like `[List<char>]` and
+            // `[&List<char>]` to the same mangled function name, breaking
             // `function_id_for` injectivity in `project.functions`
             // (issue #1093). Sites that want the "base type name" use
             // `mangle_type_name` (or `base_type_name`), which peels refs by
@@ -2477,7 +2477,7 @@ pub enum TirExprKind {
     BoolLiteral(bool),
     CharLiteral(char),
     StringLiteral(String),
-    /// Byte array literal from `#include_bytes`. Lowered to `Array<u8>` via data segment.
+    /// Byte array literal from `#include_bytes`. Lowered to `List<u8>` via data segment.
     BytesLiteral(Vec<u8>),
     Null,
     Unit,
@@ -3132,7 +3132,7 @@ pub struct TirTypeParam {
 pub struct MonomorphInfo {
     /// Original generic name (e.g., "Box" for "Box<i32>", or "`BTreeNode`<`K,V>::insert`" for methods)
     pub generic_name: String,
-    /// Impl-level type arguments (from the struct/type, e.g. `[i32]` for `Array<i32>`)
+    /// Impl-level type arguments (from the struct/type, e.g. `[i32]` for `List<i32>`)
     pub impl_type_args: Vec<TypeId>,
     /// Method-level type arguments (from the method's own generics, e.g. `[String]` for `.transform::<String>()`)
     pub method_type_args: Vec<TypeId>,
@@ -3997,10 +3997,10 @@ mod tests {
     fn test_intern_deduplication() {
         let mut table = TypeTable::new();
         // Test that interning the same type returns the same TypeId
-        let arr1 = table.make_array(TypeTable::I32);
-        let arr2 = table.make_array(TypeTable::I32);
+        let arr1 = table.make_list(TypeTable::I32);
+        let arr2 = table.make_list(TypeTable::I32);
         assert_eq!(arr1, arr2);
         // Verify as_array works
-        assert_eq!(table.as_array(arr1), Some(TypeTable::I32));
+        assert_eq!(table.as_list(arr1), Some(TypeTable::I32));
     }
 }

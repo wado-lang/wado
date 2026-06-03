@@ -1468,7 +1468,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 .insert(binding.name.clone(), type_id);
 
                             // Register in TypeTable for substitution resolution
-                            // Only for concrete types (not generic impls like impl<T> Trait for Array<T>)
+                            // Only for concrete types (not generic impls like impl<T> Trait for List<T>)
                             if is_concrete {
                                 self.tysys
                                     .type_table

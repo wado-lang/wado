@@ -36,7 +36,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 /// * Direct `TypeParam` on the expected side (binds the type parameter)
 /// * Tuple types containing a `TypePack` element (variadic splice)
 /// * Same-named `GenericInstance` recursively on type arguments
-/// * `Array<K>` matched against a homogeneous tuple literal type
+/// * `List<K>` matched against a homogeneous tuple literal type
 /// * `BuiltinArray<T>` matched against `BuiltinArray<U>`
 /// * `Ref<T>` / `MutRef<T>` matched against the same shape
 /// * `Function` types matched parameter-by-parameter plus return type
@@ -46,10 +46,10 @@ pub(super) fn unify(
     actual: TypeId,
     bindings: &mut IndexMap<TypeId, TypeId>,
 ) {
-    let array_name = type_table
+    let list_name = type_table
         .borrow()
         .compiler_items()
-        .struct_name(crate::compiler_item::CompilerItem::Array)
+        .struct_name(crate::compiler_item::CompilerItem::List)
         .to_string();
     let expected_type = type_table.borrow().get(expected).clone();
     let actual_type = type_table.borrow().get(actual).clone();
@@ -58,7 +58,7 @@ pub(super) fn unify(
         // Direct type parameter mapping.
         //
         // `or_insert` prevents later fields with self-referential types
-        // (like `Array<&Node<K>>`) from overwriting earlier correct
+        // (like `List<&Node<K>>`) from overwriting earlier correct
         // mappings (like `K -> String`) with incorrect ones (`K -> K`).
         (ResolvedType::TypeParam { .. }, _) => {
             bindings.entry(expected).or_insert(actual);
@@ -133,7 +133,7 @@ pub(super) fn unify(
                 unify(type_table, exp_arg, act_arg, bindings);
             }
         }
-        // `Array<K>` (generic instance) matched against a homogeneous
+        // `List<K>` (generic instance) matched against a homogeneous
         // tuple literal: infer `K` from the tuple element type.
         (
             ResolvedType::GenericInstance {
@@ -146,7 +146,7 @@ pub(super) fn unify(
                 module_source: actual_module_source,
                 type_args: actual_elems,
             },
-        ) if name == &array_name
+        ) if name == &list_name
             && TypeTable::is_tuple_type(actual_name, actual_module_source)
             && expected_args.len() == 1
             && !actual_elems.is_empty() =>
@@ -202,7 +202,7 @@ pub(super) fn unify(
 ///    [`add_expected_return`]. The declaration's return type is unified
 ///    against the caller's expected type after every strong argument
 ///    constraint has run. An LHS type annotation
-///    (`let x: Array<u16> = Array::filled(n, 0)`) is more precise than
+///    (`let x: List<u16> = List::filled(n, 0)`) is more precise than
 ///    the default type of a numeric literal argument, so it is processed
 ///    before the literal-deferred pass and pins type parameters that no
 ///    typed argument constrains.

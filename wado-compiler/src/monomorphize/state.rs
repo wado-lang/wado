@@ -46,8 +46,8 @@ impl FuncInstState {
     /// because a generic impl's post-substitution function is materialised
     /// in the receiver type's module, not the impl block's module: that
     /// invariant is what `call_rewrite`'s "ref-blanket" path relies on to
-    /// route `&Array<i32>^Inspect::inspect` through the `&T`-blanket
-    /// instantiation rather than collapsing it to `Array<i32>::inspect`.
+    /// route `&List<i32>^Inspect::inspect` through the `&T`-blanket
+    /// instantiation rather than collapsing it to `List<i32>::inspect`.
     ///
     /// The lookup uses `info.struct_name` (the post-substitution type
     /// name) rather than `info.base_struct_name`, which mirrors the
@@ -85,7 +85,7 @@ impl FuncInstState {
 
     /// Module of any non-blanket `impl <trait> for <Type>` block — broader
     /// than [`Self::impl_module`] in that it also returns generic impls
-    /// (`impl<T> IntoIterator for Array<T>`) which live in the receiver
+    /// (`impl<T> IntoIterator for List<T>`) which live in the receiver
     /// type's own module by convention. Used by the type-param dispatch
     /// path to distinguish "the receiver type has a non-blanket impl,
     /// fall through to the receiver's module" from "no impl at all, use
@@ -212,7 +212,7 @@ impl Monomorphizer {
     /// arg, so the struct registered here and the `GenericInstance`
     /// looked up by mangled name in `substitute_type` agree on a single
     /// identity. Without this, a generic instantiated over a variant
-    /// (e.g. `IterMap<ArrayIter<Color>, String>`) was registered with an
+    /// (e.g. `IterMap<ListIter<Color>, String>`) was registered with an
     /// unqualified name from one side and looked up with a qualified
     /// name from the other, producing two distinct wasm-GC types for the
     /// same struct and an "expected (ref $type), found (ref $type)" ICE
@@ -296,7 +296,7 @@ impl Monomorphizer {
                 method_info.trait_name.as_deref(),
             )
         } else {
-            // Normal: append type args: "Array" → "Array<i32>"
+            // Normal: append type args: "List" → "List<i32>"
             MethodName::format_struct_with_args(
                 &method_info.struct_name,
                 &impl_arg_names,
@@ -317,7 +317,7 @@ impl Monomorphizer {
     }
 
     /// Get the struct name from a `type_id`, unwrapping references if needed
-    /// For generic instances, returns the mangled name with type args (e.g., "Array<i32>")
+    /// For generic instances, returns the mangled name with type args (e.g., "List<i32>")
     pub fn get_struct_name_from_type(
         &self,
         type_id: TypeId,
@@ -332,7 +332,7 @@ impl Monomorphizer {
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {
-                // Return the mangled name with type args (e.g., "Array<i32>", "Box<String>")
+                // Return the mangled name with type args (e.g., "List<i32>", "Box<String>")
                 let args: Vec<String> = type_args
                     .iter()
                     .map(|arg| type_table.mangle_type_arg_for_generic(*arg))
@@ -341,7 +341,7 @@ impl Monomorphizer {
             }
             ResolvedType::BuiltinArray(elem) => {
                 let arg = type_table.mangle_type_name(*elem);
-                Some(mangle_generic_name("Array", &[arg]))
+                Some(mangle_generic_name("List", &[arg]))
             }
             // Newtypes are transparent for method lookup — unwrap to base type,
             // same as Ref/MutRef. The elaborator already resolves methods through
@@ -366,7 +366,7 @@ impl Monomorphizer {
     ) -> Option<(String, Vec<TypeId>)> {
         match type_table.get(type_id) {
             ResolvedType::Struct { name, .. } => {
-                // For monomorphized structs with names like "Array<i32>", look up the
+                // For monomorphized structs with names like "List<i32>", look up the
                 // original InstantiationKey to get the base name and type_args
                 if let Some(key) = self.structs.mangled_to_key.get(name) {
                     Some((key.name.clone(), key.impl_type_args.clone()))

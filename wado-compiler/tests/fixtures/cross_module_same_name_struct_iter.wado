@@ -1,23 +1,23 @@
 // Cross-module struct-name collision regression — WIR codegen path.
 //
 // Two modules each declare `struct Pair` with disjoint field shapes.
-// Module A iterates `&mut Array<Pair>` and writes a field; module B
-// declares the public `Pair` plus an `Outer { items: Array<Pair> }`
+// Module A iterates `&mut List<Pair>` and writes a field; module B
+// declares the public `Pair` plus an `Outer { items: List<Pair> }`
 // wrapper. The test constructs `Outer { items: [Pair { ... }] }`.
 //
 // Without the fix, `mangle_type_arg_for_generic` produced an
 // unqualified mangled name for `Struct` arguments, so module A's
-// `Array<Pair>` and module B's `Array<Pair>` collapsed to the same
-// `core:prelude//Array<Pair>` fq. The single registered Array's
+// `List<Pair>` and module B's `List<Pair>` collapsed to the same
+// `core:prelude//List<Pair>` fq. The single registered List's
 // element field referenced module A's `Pair`, but module B's code
 // constructed module B's `Pair` and stored it into that array,
-// emitting `struct.new <module-A-id>` against an `Array<module-B>`
+// emitting `struct.new <module-A-id>` against an `List<module-B>`
 // element type and failing Wasm GC validation with
 //   "type mismatch: expected (ref null $T), found (ref (exact $T))".
 //
 // The fix qualifies `Struct` and `GenericInstance` in
 // `mangle_type_arg_for_generic` (by `ModuleSource`) so the two arrays
-// get distinct fqs, and aligns `wir_build::context`'s `Array<T>`
+// get distinct fqs, and aligns `wir_build::context`'s `List<T>`
 // lookup arm to use the same qualifier so registration and lookup
 // keys agree.
 

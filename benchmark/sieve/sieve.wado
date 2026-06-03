@@ -20,7 +20,7 @@ use { Benchmark } from "core:benchmark";
 // Sieve over a caller-owned buffer. Resets `is_prime` to all-true, then marks
 // composites and counts primes. The buffer is reused across iterations so no
 // allocation happens in the timed region.
-fn sieve_count(is_prime: &mut Array<bool>, limit: i32) -> i32 {
+fn sieve_count(is_prime: &mut List<bool>, limit: i32) -> i32 {
     // Reset the reused buffer to all-true.
     for let mut i = 0; i <= limit; i += 1 {
         is_prime[i] = true;
@@ -55,14 +55,14 @@ fn sieve_count(is_prime: &mut Array<bool>, limit: i32) -> i32 {
 
 test "smoke" {
     // π(100) = 25
-    let mut is_prime = Array::<bool>::filled(101, true);
+    let mut is_prime = List::<bool>::filled(101, true);
     assert sieve_count(&mut is_prime, 100) == 25;
 }
 
 export fn run() with Stdout, MonotonicClock {
     let limit = 10000000;
     // Allocate the sieve buffer once, outside the timed region.
-    let mut is_prime = Array::<bool>::filled(limit + 1, true);
+    let mut is_prime = List::<bool>::filled(limit + 1, true);
     let mut b = Benchmark::new(`sieve up to {limit}`);
     b.work_per_iter = Option::Some(limit as f64);
     b.unit = "numbers";

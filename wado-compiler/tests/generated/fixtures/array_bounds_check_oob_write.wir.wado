@@ -11,7 +11,7 @@ struct core:prelude/string.wado//String {  // TypeId(1)
 
 array builtin::array<i32> (mut i32);  // TypeId(2)
 
-struct core:prelude//Array<i32> {  // TypeId(3)
+struct core:prelude//List<i32> {  // TypeId(3)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
@@ -70,8 +70,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/array_bounds_check_oob_write.wado/run"() {
-    let __b_0: ref "core:prelude//Array<i32>";
-    __b_0 = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
+    let __b_0: ref "core:prelude//List<i32>";
+    __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
     if builtin::unlikely(1) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;

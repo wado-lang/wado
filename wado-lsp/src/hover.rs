@@ -465,7 +465,7 @@ mod tests {
         // a `let __iter_N` line that exposes compiler internals.
         futures::executor::block_on(async {
             let source = concat!(
-                "fn f(items: Array<i32>) -> i32 {\n",
+                "fn f(items: List<i32>) -> i32 {\n",
                 "    let mut total = 0;\n",
                 "    for let item of items {\n",
                 "        total = total + item;\n",

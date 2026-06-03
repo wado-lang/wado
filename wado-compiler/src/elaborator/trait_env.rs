@@ -171,7 +171,7 @@ pub struct TraitEnv {
     /// receiver type is declared (e.g. `impl Display for String` lives in
     /// `core:prelude/format`, not the module that declares `String`).
     /// Includes both fully concrete impls (`impl Display for String`) and
-    /// generic impls (`impl<T: Inspect> Inspect for Array<T>`).
+    /// generic impls (`impl<T: Inspect> Inspect for List<T>`).
     pub(crate) trait_impl_modules: TraitImplModuleIndex,
     /// Like [`trait_impl_modules`] but restricted to **fully concrete**
     /// impls — `impl <Trait> for <Type> { … }` blocks whose `type_params`
@@ -452,7 +452,7 @@ impl TraitEnv {
                         // Track the concrete subset separately: only impl
                         // blocks with no type parameters at all qualify
                         // (e.g. `impl Display for String`, not
-                        // `impl<T> Inspect for Array<T>`).
+                        // `impl<T> Inspect for List<T>`).
                         if impl_block.type_params.is_empty() {
                             let cmodules = concrete_trait_impl_modules.entry(key).or_default();
                             if !cmodules.contains(module_source) {
@@ -1268,9 +1268,9 @@ mod tests {
 
     #[test]
     fn test_classify_foreign_generic_is_foreign() {
-        // Array<T> — head Array is foreign
+        // List<T> — head List is foreign
         let tdx = make_type_decl_index(&[]);
-        let ty = generic("Array", vec![named("T")]);
+        let ty = generic("List", vec![named("T")]);
         assert!(matches!(
             classify_position(&ty, &["T".to_string()], &tdx),
             PositionKind::ForeignType
@@ -1378,9 +1378,9 @@ mod tests {
 
     #[test]
     fn test_rfc2451_foreign_generic_head_in_trait_arg_forbidden() {
-        // impl<T> From<Array<T>> for ForeignType → T0=ForeignType, T1=Array<T>(foreign head) → forbidden
+        // impl<T> From<List<T>> for ForeignType → T0=ForeignType, T1=List<T>(foreign head) → forbidden
         let tdx = make_type_decl_index(&[]);
-        let trait_ty = generic("From", vec![generic("Array", vec![named("T")])]);
+        let trait_ty = generic("From", vec![generic("List", vec![named("T")])]);
         let ib = impl_block(vec![type_param("T")], trait_ty, named("ForeignType"));
         assert!(!check_orphan_rfc2451(&ib, &tdx));
     }

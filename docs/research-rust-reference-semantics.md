@@ -45,7 +45,7 @@ Pitfall: `(&v).into_iter()` yields `&T`, not `T` (calls `IntoIterator` on the re
 
 ### Wado implications
 
-Wado has no ownership/move semantics, so the "consuming" `into_iter()` concept doesn't apply. Currently `for-of` on `&Array<T>` yields `T` by value (copy). Key decisions:
+Wado has no ownership/move semantics, so the "consuming" `into_iter()` concept doesn't apply. Currently `for-of` on `&List<T>` yields `T` by value (copy). Key decisions:
 
 - **Should `for let x of &arr` yield `&T` (like Rust) or `T` (copy, current behavior)?**
   - With value semantics and GC, yielding `T` (copy) is simpler and consistent.
@@ -219,7 +219,7 @@ generic(&s);  // T = &String, NOT &str
 
 Wado already auto-derefs for method calls (`(&point).sum()` works). Key decisions:
 
-- **Deref coercion chains**: Wado doesn't have `Deref` trait. `String` and `Array` are primitive types, not wrappers. So `&String → &str` coercion isn't relevant.
+- **Deref coercion chains**: Wado doesn't have `Deref` trait. `String` and `List` are primitive types, not wrappers. So `&String → &str` coercion isn't relevant.
 - **Operators with references**: Currently `&i32 + &i32` — should this auto-deref? Rust says no. Wado should probably auto-deref for arithmetic operators on primitive references for ergonomics.
 - **Multi-level deref (`&&T`, `&&&T`)**: Wado peels references for method calls. Should also work for comparison operators.
 

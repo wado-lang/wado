@@ -121,7 +121,7 @@ impl CodeWriter {
     pub fn raw(&mut self, text: &String) {
         self.buf.push_str(text);
         if text.len() > 0 {
-            let chars: Array<char> = text.chars().collect();
+            let chars: List<char> = text.chars().collect();
             self.fresh_line = chars[chars.len() - 1] == '\n';
         }
     }
@@ -157,7 +157,7 @@ impl FieldSpec {
 
 pub struct StructSpec {
     pub name: String,
-    fields: Array<FieldSpec>,
+    fields: List<FieldSpec>,
     is_pub: bool,
 }
 
@@ -204,7 +204,7 @@ pub struct VariantCase {
 
 pub struct VariantSpec {
     pub name: String,
-    cases: Array<VariantCase>,
+    cases: List<VariantCase>,
     is_pub: bool,
 }
 
@@ -252,7 +252,7 @@ pub struct EnumMember {
 
 pub struct EnumSpec {
     pub name: String,
-    members: Array<EnumMember>,
+    members: List<EnumMember>,
     is_pub: bool,
 }
 
@@ -295,7 +295,7 @@ impl EnumSpec {
 
 pub struct FlagsSpec {
     pub name: String,
-    members: Array<String>,
+    members: List<String>,
     is_pub: bool,
 }
 
@@ -343,7 +343,7 @@ impl ParamSpec {
 
 pub struct FnSpec {
     pub name: String,
-    params: Array<ParamSpec>,
+    params: List<ParamSpec>,
     return_type: Option<String>,
     is_pub: bool,
     receiver: Option<String>,
@@ -479,8 +479,8 @@ impl GlobalSpec {
 
 pub struct TraitSpec {
     name: String,
-    associated_types: Array<String>,
-    methods: Array<FnSpec>,
+    associated_types: List<String>,
+    methods: List<FnSpec>,
     is_pub: bool,
 }
 

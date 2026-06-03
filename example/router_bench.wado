@@ -34,7 +34,7 @@ global OUTER_ITERATIONS: i32 = 5_000;
 /// is uniform within a category. Larger inner count → noise floor sinks.
 global LINEAR_REPEAT: i32 = 50_000;
 
-fn run_mixed_linear(router: &LinearRouter, pattern: &Array<AccessRequest>) -> i32 {
+fn run_mixed_linear(router: &LinearRouter, pattern: &List<AccessRequest>) -> i32 {
     let mut acc: i32 = 0;
     for let mut k = 0; k < OUTER_ITERATIONS; k += 1 {
         for let req of pattern {
@@ -45,7 +45,7 @@ fn run_mixed_linear(router: &LinearRouter, pattern: &Array<AccessRequest>) -> i3
     return acc;
 }
 
-fn run_mixed_radix(router: &RadixRouter, pattern: &Array<AccessRequest>) -> i32 {
+fn run_mixed_radix(router: &RadixRouter, pattern: &List<AccessRequest>) -> i32 {
     let mut acc: i32 = 0;
     for let mut k = 0; k < OUTER_ITERATIONS; k += 1 {
         for let req of pattern {
@@ -56,7 +56,7 @@ fn run_mixed_radix(router: &RadixRouter, pattern: &Array<AccessRequest>) -> i32 
     return acc;
 }
 
-fn run_mixed_dfa(router: &DfaRouter, pattern: &Array<AccessRequest>) -> i32 {
+fn run_mixed_dfa(router: &DfaRouter, pattern: &List<AccessRequest>) -> i32 {
     let mut acc: i32 = 0;
     for let mut k = 0; k < OUTER_ITERATIONS; k += 1 {
         for let req of pattern {
@@ -101,7 +101,7 @@ fn maps_equal(a: &TreeMap<String, String>, b: &TreeMap<String, String>) -> bool 
 /// *and* identical params for every entry in the access pattern. Run
 /// before timing so a regression in one engine doesn't masquerade as a
 /// speedup.
-fn verify_engines_agree(linear: &LinearRouter, radix: &RadixRouter, dfa: &DfaRouter, pattern: &Array<AccessRequest>) with Stdout {
+fn verify_engines_agree(linear: &LinearRouter, radix: &RadixRouter, dfa: &DfaRouter, pattern: &List<AccessRequest>) with Stdout {
     let mut all_ok = true;
     for let req of pattern {
         let l = linear.match_path(req.method, &req.path);

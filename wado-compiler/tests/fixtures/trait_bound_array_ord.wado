@@ -1,4 +1,4 @@
-// Test that Array<T> comparison requires T: Ord
+// Test that List<T> comparison requires T: Ord
 
 variant NoOrd {
     A(i32),
@@ -10,9 +10,9 @@ struct Foo {
 }
 
 export fn run() {
-    let a: Array<Foo> = [Foo { x: NoOrd::A(1) }];
-    let b: Array<Foo> = [Foo { x: NoOrd::A(2) }];
-    // Foo does not implement Ord (NoOrd variant field), so < on Array<Foo> should fail
+    let a: List<Foo> = [Foo { x: NoOrd::A(1) }];
+    let b: List<Foo> = [Foo { x: NoOrd::A(2) }];
+    // Foo does not implement Ord (NoOrd variant field), so < on List<Foo> should fail
     assert a < b;
 }
 

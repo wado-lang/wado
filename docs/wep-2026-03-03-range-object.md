@@ -382,33 +382,33 @@ if 0 <= x < 256 {
 }
 ```
 
-### Array Slicing
+### List Slicing
 
 Ranges can be used as array index types to produce slices:
 
 ```wado
-let arr: Array<i32> = [10, 20, 30, 40, 50];
+let arr: List<i32> = [10, 20, 30, 40, 50];
 
-// Range slicing (produces ArraySlice<T>)
-let slice = arr[1..<4];    // ArraySlice<i32> containing [20, 30, 40]
-let slice = arr[2..=4];   // ArraySlice<i32> containing [30, 40, 50]
+// Range slicing (produces ListSlice<T>)
+let slice = arr[1..<4];    // ListSlice<i32> containing [20, 30, 40]
+let slice = arr[2..=4];   // ListSlice<i32> containing [30, 40, 50]
 ```
 
 This is implemented via `IndexValue` trait:
 
 ```wado
-impl IndexValue<RangeExclusive<i32>> for Array<T> {
-    type Output = ArraySlice<T>;
+impl IndexValue<RangeExclusive<i32>> for List<T> {
+    type Output = ListSlice<T>;
 
-    fn index_value(&self, range: RangeExclusive<i32>) -> ArraySlice<T> {
+    fn index_value(&self, range: RangeExclusive<i32>) -> ListSlice<T> {
         return self.slice(range.start, range.end);
     }
 }
 
-impl IndexValue<RangeInclusive<i32>> for Array<T> {
-    type Output = ArraySlice<T>;
+impl IndexValue<RangeInclusive<i32>> for List<T> {
+    type Output = ListSlice<T>;
 
-    fn index_value(&self, range: RangeInclusive<i32>) -> ArraySlice<T> {
+    fn index_value(&self, range: RangeInclusive<i32>) -> ListSlice<T> {
         return self.slice(range.start, range.end + 1);
     }
 }
@@ -607,7 +607,7 @@ For iteration, the `exhausted` flag is only present in `RangeInclusive` and only
 1. **Idiomatic counted loops**: `for let i of 0..<10` is clearer and more concise than C-style `for`
 2. **Works with existing iterator system**: Ranges plug directly into `for-of`, `map`, `filter`, `fold`, etc.
 3. **Type-safe membership testing**: `(0.0..<1.0).contains(&x)` works for any `Ord` type
-4. **Array slicing sugar**: `arr[1..<5]` is more natural than `arr.slice(1, 5)`
+4. **List slicing sugar**: `arr[1..<5]` is more natural than `arr.slice(1, 5)`
 5. **Range patterns in match**: `0..<10 => ...` and `'a'..='z' => ...` replace verbose guard chains
 6. **Symmetric naming**: `RangeExclusive` / `RangeInclusive` mirrors the operator symmetry of `..<` / `..=`
 7. **Explicit syntax**: Both `..<` and `..=` are self-documenting — no ambiguous "bare" `..`

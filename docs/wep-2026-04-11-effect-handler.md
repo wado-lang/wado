@@ -134,7 +134,7 @@ interface Stdin {
 }
 
 struct MockStdin {
-    responses: Array<String>,
+    responses: List<String>,
     mut index: i32,
 }
 
@@ -367,13 +367,13 @@ The real WASI runtime avoids this because `write_via_stream` starts an async tas
 
 ```wado
 struct StreamBuffer {
-    mut data: Array<u8>,
+    mut data: List<u8>,
     mut read_pos: i32,
     mut write_closed: bool,
 }
 
 struct MockCM {
-    mut stream_buffers: Array<StreamBuffer>,
+    mut stream_buffers: List<StreamBuffer>,
     mut future_count: i32,
 }
 
@@ -384,13 +384,13 @@ impl Stream<u8> for MockCM {
         resume [id as Stream<u8>, id as StreamWritable<u8>]
     }
 
-    fn read(&mut self, stream: &Stream<u8>, max: i32) -> Array<u8> {
+    fn read(&mut self, stream: &Stream<u8>, max: i32) -> List<u8> {
         let id = *stream as i32;
         let buf = &mut self.stream_buffers[id];
         let available = buf.data.len() - buf.read_pos;
         if available == 0 { resume [] }
         let count = i32::min(max, available);
-        let mut result: Array<u8> = [];
+        let mut result: List<u8> = [];
         for let mut i = 0; i < count; i += 1 {
             result.push(buf.data[buf.read_pos + i]);
         }
@@ -403,7 +403,7 @@ impl Stream<u8> for MockCM {
 }
 
 impl StreamWritable<u8> for MockCM {
-    fn write(&mut self, writable: &StreamWritable<u8>, data: Array<u8>) {
+    fn write(&mut self, writable: &StreamWritable<u8>, data: List<u8>) {
         let id = *writable as i32;
         self.stream_buffers[id].data.extend(data);
         resume ()  // buffered — never blocks
@@ -436,7 +436,7 @@ struct MockCMFutureSlot {
 }
 
 // MockCM also has:
-//   mut future_slots: Array<MockCMFutureSlot>,
+//   mut future_slots: List<MockCMFutureSlot>,
 
 impl<T> Future<T> for MockCM {
     fn new(&mut self) -> [Future<T>, FutureWritable<T>] {
@@ -503,7 +503,7 @@ MockStdout stores stream handles from each `write_via_stream` call. Because stre
 
 ```wado
 struct MockStdout {
-    mut streams: Array<Stream<u8>>,
+    mut streams: List<Stream<u8>>,
 }
 
 impl Stdout for MockStdout {
@@ -566,7 +566,7 @@ Testing code that calls `Client::send` (e.g., `example/http_get.wado`). The mock
 
 ```wado
 struct MockClient {
-    mut requests: Array<String>,
+    mut requests: List<String>,
     response_body: String,
     status: StatusCode,
 }
@@ -619,7 +619,7 @@ A timing middleware uses post-resume to measure request processing time. The han
 
 ```wado
 struct TimingMiddleware {
-    mut log: Array<[String, u64]>,
+    mut log: List<[String, u64]>,
 }
 
 impl Handler for TimingMiddleware {

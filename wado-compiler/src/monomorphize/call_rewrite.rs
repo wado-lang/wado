@@ -85,7 +85,7 @@ impl Monomorphizer {
             }
         } else if let Some(type_module) = type_module_hint {
             // Inherent methods: the impl block lives in the receiver type's
-            // own module (`impl<T> Array<T> { fn len(&self) -> i32 ... }`).
+            // own module (`impl<T> List<T> { fn len(&self) -> i32 ... }`).
             key.module_source = type_module.clone();
             if let Some(mangled) = self.lookup_function_instantiation(&key) {
                 let mangled = mangled.clone();
@@ -480,11 +480,11 @@ impl Monomorphizer {
         //
         // Skip this branch when the call carries a blanket-impl
         // `monomorph_info` (synthesized refs like `self.data.inspect(f)` for
-        // `data: &Array<i32>`). The impl_type_args derived from the
+        // `data: &List<i32>`). The impl_type_args derived from the
         // receiver's GenericInstance (`[i32]`) are NOT what the blanket
-        // instantiation was queued with (`[Array<i32>]`), so any match here
+        // instantiation was queued with (`[List<i32>]`), so any match here
         // would route the call to the inner-type's impl
-        // (`Array<i32>^Inspect`) and drop the leading `&` produced by the
+        // (`List<i32>^Inspect`) and drop the leading `&` produced by the
         // ref blanket body. Let the dedicated blanket-fallback branch below
         // handle these — it uses `mono.impl_type_args` which carries the
         // full ref-inner type.

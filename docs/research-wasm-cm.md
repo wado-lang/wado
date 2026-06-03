@@ -815,8 +815,8 @@ in the resource method signatures.
 | `future.write` — COMPLETED | Value delivered | Returns normally                          |
 | `future.write` — DROPPED   | Reader gone     | Returns normally (no-op, value discarded) |
 | `future.write` — BLOCKED   | (internal)      | Synthesis waits via waitable-set, retries |
-| `stream.read` — COMPLETED  | `count` items   | `Array<T>` with `count` elements          |
-| `stream.read` — DROPPED    | EOF, last items | Empty `Array<T>` (EOF signal)             |
+| `stream.read` — COMPLETED  | `count` items   | `List<T>` with `count` elements           |
+| `stream.read` — DROPPED    | EOF, last items | Empty `List<T>` (EOF signal)              |
 | `stream.read` — BLOCKED    | (internal)      | Synthesis waits via waitable-set, retries |
 | `stream.write` — COMPLETED | `count` items   | Returns normally                          |
 | `stream.write` — DROPPED   | Reader gone     | Returns normally (no-op)                  |

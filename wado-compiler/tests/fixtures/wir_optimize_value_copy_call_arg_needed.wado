@@ -2,20 +2,20 @@
 // to a function that could mutate it.
 //
 // Pattern:
-//   copy = value_copy Array<i32>(original)
+//   copy = value_copy List<i32>(original)
 //   mutate(copy)      // function call — may mutate via &mut self
 //
 // Without value_copy, the mutation would affect the original.
 
 use { println } from "core:cli";
 
-fn append_zero(mut arr: Array<i32>) -> i32 {
+fn append_zero(mut arr: List<i32>) -> i32 {
     arr.push(0);
     return arr.len();
 }
 
 export fn run() with Stdout {
-    let a: Array<i32> = [1, 2, 3];
+    let a: List<i32> = [1, 2, 3];
     let new_len = append_zero(a);
     println(`{a.len()}`);
     println(`{new_len}`);
@@ -24,5 +24,5 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "3\n4\n",
-    "wir_expect:O0": ["$value_copy$", "(ref \"core:prelude//Array<i32>\")"]
+    "wir_expect:O0": ["$value_copy$", "(ref \"core:prelude//List<i32>\")"]
 }

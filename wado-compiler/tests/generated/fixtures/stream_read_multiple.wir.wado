@@ -20,7 +20,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude//Array<u8> {  // TypeId(3)
+struct core:prelude//List<u8> {  // TypeId(3)
     mut repr: ref builtin::array<u8>,
     mut used: i32,
 }
@@ -71,7 +71,7 @@ type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32
 
 type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(26)
 
-type "functype//core:internal/cm_stream_read_u8" = fn(i32, i32) -> ref "core:prelude//Array<u8>";  // TypeId(27)
+type "functype//core:internal/cm_stream_read_u8" = fn(i32, i32) -> ref "core:prelude//List<u8>";  // TypeId(27)
 
 type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(28)
 
@@ -119,7 +119,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/stream_read_multiple.wado/run"() with Stdout {
     let reads: i32;
-    let chunk: ref "core:prelude//Array<u8>";
+    let chunk: ref "core:prelude//List<u8>";
     let __v0: i32;
     let __cond: bool;
     let __local_6: ref "core:prelude/string.wado//String";
@@ -294,7 +294,7 @@ fn "core:internal/cm_stream_read_u8"(handle, max) {
     count = result >> 4;
     arr = "core:internal/memory_to_gc_array"(ptr, count);
     drop("mem/realloc"(ptr, max, 1, 0));
-    return struct.new "core:prelude//Array<u8>" { repr: arr, used: count };
+    return struct.new "core:prelude//List<u8>" { repr: arr, used: count };
 }
 
 fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {

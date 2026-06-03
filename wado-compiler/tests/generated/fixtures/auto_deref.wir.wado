@@ -32,13 +32,13 @@ struct core:prelude/format.wado//Formatter {  // TypeId(4)
 
 array builtin::array<i32> (mut i32);  // TypeId(5)
 
-struct core:prelude/array.wado//ArrayRefIter<i32> {  // TypeId(6)
+struct core:prelude/list.wado//ListRefIter<i32> {  // TypeId(6)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
     mut index: i32,
 }
 
-struct core:prelude//Array<i32> {  // TypeId(7)
+struct core:prelude//List<i32> {  // TypeId(7)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
@@ -107,7 +107,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(39)
 
-type "functype//core:prelude/array.wado/ArrayRefIter<i32>^Iterator::next" = fn(ref "core:prelude/array.wado//ArrayRefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(40)
+type "functype//core:prelude/list.wado/ListRefIter<i32>^Iterator::next" = fn(ref "core:prelude/list.wado//ListRefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(40)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
 
@@ -132,9 +132,9 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/auto_deref.wado/auto_deref_for_of"() with Stdout {
-    let __b: ref "core:prelude//Array<i32>";
+    let __b: ref "core:prelude//List<i32>";
     let sum: i32;
-    let __iter_4: ref "core:prelude/array.wado//ArrayRefIter<i32>";
+    let __iter_4: ref "core:prelude/list.wado//ListRefIter<i32>";
     let x: ref "core:prelude/types.wado//Box<i32>";
     let __v0_6: i32;
     let __cond_7: bool;
@@ -152,12 +152,12 @@ fn "wado-compiler/tests/fixtures/auto_deref.wado/auto_deref_for_of"() with Stdou
     let f_40: ref "core:prelude/format.wado//Formatter";
     let f_48: ref "core:prelude/format.wado//Formatter";
     let f_53: ref "core:prelude/format.wado//Formatter";
-    __b = struct.new "core:prelude//Array<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     sum = 0;
-    __iter_4 = struct.new "core:prelude/array.wado//ArrayRefIter<i32>" { repr: __b.repr, used: 3, index: 0 };
+    __iter_4 = struct.new "core:prelude/list.wado//ListRefIter<i32>" { repr: __b.repr, used: 3, index: 0 };
     b0: block {
         l1: loop {
-            __match_19 = "core:prelude/array.wado/ArrayRefIter<i32>^Iterator::next"(__iter_4);
+            __match_19 = "core:prelude/list.wado/ListRefIter<i32>^Iterator::next"(__iter_4);
             if ref.is_null(__match_19) == 0 {
                 x = ref.as_non_null(__match_19);
                 sum = sum + x.value;
@@ -648,7 +648,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/array.wado/ArrayRefIter<i32>^Iterator::next"(self) {
+fn "core:prelude/list.wado/ListRefIter<i32>^Iterator::next"(self) {
     let val: ref "core:prelude/types.wado//Box<i32>";
     if self.index >= self.used {
         return ref.null none;

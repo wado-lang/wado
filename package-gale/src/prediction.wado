@@ -20,7 +20,7 @@ pub variant PredictionNode {
     Leaf(i32),
     Dispatch(PredictionDispatch),
     Consume(ConsumeNode),
-    Ambiguous(Array<i32>),
+    Ambiguous(List<i32>),
 }
 
 pub struct ConsumeNode {
@@ -30,18 +30,18 @@ pub struct ConsumeNode {
 
 pub struct PredictionDispatch {
     pub depth: i32,
-    pub branches: Array<PredictionBranch>,
+    pub branches: List<PredictionBranch>,
 }
 
 pub struct PredictionBranch {
-    pub tokens: Array<String>,
+    pub tokens: List<String>,
     pub child: PredictionNode,
 }
 
 /// Return the index of an existing branch whose child equals `child`, or -1
 /// when no branch matches. Callers use this to fold a new (token, child) entry
 /// into an existing branch instead of creating a duplicate.
-fn find_merge_branch(branches: &Array<PredictionBranch>, child: &PredictionNode) -> i32 {
+fn find_merge_branch(branches: &List<PredictionBranch>, child: &PredictionNode) -> i32 {
     for let mut b = 0; b < branches.len(); b += 1 {
         if prediction_node_eq(&branches[b].child, child) {
             return b;
@@ -50,9 +50,9 @@ fn find_merge_branch(branches: &Array<PredictionBranch>, child: &PredictionNode)
     return -1;
 }
 
-pub fn build_prediction(alt_indices: &Array<i32>, alt_elements: &Array<Array<Element>>, max_depth: i32, ctx: &mut GenContext) -> PredictionNode {
+pub fn build_prediction(alt_indices: &List<i32>, alt_elements: &List<List<Element>>, max_depth: i32, ctx: &mut GenContext) -> PredictionNode {
     // Build initial SLL configs: one per alternative, at element position 0.
-    let mut configs: Array<SllConfig> = [];
+    let mut configs: List<SllConfig> = [];
     for let mut i = 0; i < alt_indices.len(); i += 1 {
         configs.push(SllConfig {
             alt_index: alt_indices[i],
@@ -74,7 +74,7 @@ fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
         Consume(c) => {
             let child = strip_dead_consume(c.child);
             if prediction_contains_ambiguous(&child) {
-                let mut indices: Array<i32> = [];
+                let mut indices: List<i32> = [];
                 prediction_collect_all_indices(&child, &mut indices);
                 PredictionNode::Ambiguous(indices);
             } else {
@@ -82,7 +82,7 @@ fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
             }
         },
         Dispatch(d) => {
-            let mut new_branches: Array<PredictionBranch> = [];
+            let mut new_branches: List<PredictionBranch> = [];
             for let b of d.branches {
                 new_branches.push(PredictionBranch {
                     tokens: b.tokens,
@@ -111,7 +111,7 @@ fn prediction_contains_ambiguous(node: &PredictionNode) -> bool {
     };
 }
 
-fn prediction_collect_all_indices(node: &PredictionNode, out: &mut Array<i32>) {
+fn prediction_collect_all_indices(node: &PredictionNode, out: &mut List<i32>) {
     match *node {
         Ambiguous(indices) => {
             for let i of &indices {
@@ -136,15 +136,15 @@ fn prediction_collect_all_indices(node: &PredictionNode, out: &mut Array<i32>) {
 
 
 struct SllReturn {
-    elements: Array<Element>,
+    elements: List<Element>,
     pos: i32,
 }
 
 struct SllConfig {
     alt_index: i32,
-    elements: Array<Element>,
+    elements: List<Element>,
     pos: i32,
-    return_stack: Array<SllReturn>,
+    return_stack: List<SllReturn>,
 }
 
 fn sll_config_clone(c: &SllConfig) -> SllConfig {
@@ -156,8 +156,8 @@ fn sll_config_clone(c: &SllConfig) -> SllConfig {
     };
 }
 
-fn push_return(stack: &Array<SllReturn>, elements: Array<Element>, pos: i32) -> Array<SllReturn> {
-    let mut new_stack: Array<SllReturn> = [];
+fn push_return(stack: &List<SllReturn>, elements: List<Element>, pos: i32) -> List<SllReturn> {
+    let mut new_stack: List<SllReturn> = [];
     for let s of stack {
         new_stack.push(*s);
     }
@@ -168,7 +168,7 @@ fn push_return(stack: &Array<SllReturn>, elements: Array<Element>, pos: i32) -> 
 fn pop_return(c: &SllConfig) -> SllConfig {
     let last_idx = c.return_stack.len() - 1;
     let ret = &c.return_stack[last_idx];
-    let mut new_stack: Array<SllReturn> = [];
+    let mut new_stack: List<SllReturn> = [];
     for let mut i = 0; i < last_idx; i += 1 {
         new_stack.push(c.return_stack[i]);
     }
@@ -183,7 +183,7 @@ fn pop_return(c: &SllConfig) -> SllConfig {
 
 /// Identity closure — nullable handling is done in sll_config_first
 /// (first_of_elements_from) and sll_advance (explicit skip logic).
-fn sll_closure(configs: &Array<SllConfig>) -> Array<SllConfig> {
+fn sll_closure(configs: &List<SllConfig>) -> List<SllConfig> {
     return *configs;
 }
 
@@ -195,7 +195,7 @@ fn sll_closure(configs: &Array<SllConfig>) -> Array<SllConfig> {
 /// to the oldest, mirroring what a sequence of `pop_return` calls would
 /// expose. Walking by index keeps this O(n); the previous recursive
 /// implementation was O(n^2) because each `pop_return` rebuilt the entire
-/// surviving prefix of `return_stack` into a fresh `Array`.
+/// surviving prefix of `return_stack` into a fresh `List`.
 fn config_is_at_end(c: &SllConfig) -> bool {
     if c.pos < 0 {
         return false;
@@ -218,7 +218,7 @@ fn config_is_at_end(c: &SllConfig) -> bool {
 /// Compute FIRST set of the current position in a config.
 /// Includes tokens from nullable elements that were skipped by closure.
 /// When at end of elements with a return stack, pops and continues from caller.
-fn sll_config_first(c: &SllConfig, ctx: &mut GenContext) -> Array<String> {
+fn sll_config_first(c: &SllConfig, ctx: &mut GenContext) -> List<String> {
     if c.pos < 0 {
         return [];
     }
@@ -234,7 +234,7 @@ fn sll_config_first(c: &SllConfig, ctx: &mut GenContext) -> Array<String> {
 
 /// Advance a config by one token. For terminals, advance pos.
 /// For RuleRef, expand into the rule's alternatives (entering the rule).
-fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth: i32 = 0) -> Array<SllConfig> {
+fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth: i32 = 0) -> List<SllConfig> {
     // Limit inline expansion depth to prevent explosion from recursive rules.
     if inline_depth > 2 {
         return [];
@@ -254,15 +254,15 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
 
     // Nullable element (Optional, Star): either match its inner or skip it.
     if is_nullable(elem) {
-        let mut results: Array<SllConfig> = [];
-        let mut visiting: Array<String> = [];
+        let mut results: List<SllConfig> = [];
+        let mut visiting: List<String> = [];
         if first_contains(&ctx.first_of_element(elem, &mut visiting), token) {
             // Check if the inner element is a multi-token RuleRef.
             // If so, enter it via return stack instead of skipping to pos+1.
             let mut entered = false;
             if let Repeat(rep) = elem {
                 if let RuleRef(rr) = rep.element {
-                    let mut stv: Array<String> = [];
+                    let mut stv: List<String> = [];
                     if !ctx.rule_is_single_token(&rr.name, &mut stv) && c.return_stack.len() < 1 {
                         let inner_rule = ctx.find_rule(&rr.name);
                         let inner_alt_count = if let Some(r) = inner_rule {
@@ -275,7 +275,7 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
                             let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
                             if let Some(inner_rule) = inner_rule {
                                 for let alt of inner_rule.alternatives {
-                                    let mut v2: Array<String> = [];
+                                    let mut v2: List<String> = [];
                                     if !first_contains(&ctx.first_of_alt(&alt, &mut v2), token) {
                                         continue;
                                     }
@@ -307,7 +307,7 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
         // Also try skipping: advance past all consecutive nullables non-recursively.
         let mut skip_pos = c.pos + 1;
         while skip_pos < c.elements.len() && is_nullable(&c.elements[skip_pos]) {
-            let mut v: Array<String> = [];
+            let mut v: List<String> = [];
             if first_contains(&ctx.first_of_element(&c.elements[skip_pos], &mut v), token) {
                 results.push(SllConfig {
                     alt_index: c.alt_index,
@@ -339,9 +339,9 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
                     });
                 }
             } else if let RuleRef(r) = skipped_elem {
-                let mut v: Array<String> = [];
+                let mut v: List<String> = [];
                 if first_contains(&ctx.first_of_rule(&r.name, &mut v), token) {
-                    let mut stv: Array<String> = [];
+                    let mut stv: List<String> = [];
                     if ctx.rule_is_single_token(&r.name, &mut stv) {
                         results.push(SllConfig {
                             alt_index: c.alt_index,
@@ -359,7 +359,7 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
                     }
                 }
             } else {
-                let mut v: Array<String> = [];
+                let mut v: List<String> = [];
                 if first_contains(&ctx.first_of_element(skipped_elem, &mut v), token) {
                     results.push(SllConfig {
                         alt_index: c.alt_index,
@@ -405,12 +405,12 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
     // Multi-token rules return opaque (pos=-1); expansion happens in build_sll_node
     // only when needed to resolve ambiguity.
     if let RuleRef(r) = elem {
-        let mut visiting: Array<String> = [];
+        let mut visiting: List<String> = [];
         let rule_first = ctx.first_of_rule(&r.name, &mut visiting);
         if !first_contains(&rule_first, token) {
             return [];
         }
-        let mut st_visiting: Array<String> = [];
+        let mut st_visiting: List<String> = [];
         if ctx.rule_is_single_token(&r.name, &mut st_visiting) {
             // Single-token rule: safe to advance, element position == token position.
             return [
@@ -433,7 +433,7 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
     if let Group(g) = elem {
         let mut group_first = TreeSet::<String>::new();
         for let alt of g.alternatives {
-            let mut visiting: Array<String> = [];
+            let mut visiting: List<String> = [];
             let af = ctx.first_of_alt(&alt, &mut visiting);
             str_set_insert_all(&mut group_first, &af);
         }
@@ -452,8 +452,8 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
 
     // Repeat: treat as consuming the inner element.
     if let Repeat(rep) = elem {
-        let mut inner_first: Array<String> = [];
-        let mut visiting: Array<String> = [];
+        let mut inner_first: List<String> = [];
+        let mut visiting: List<String> = [];
         inner_first = ctx.first_of_element(&rep.element, &mut visiting);
         if first_contains(&inner_first, token) {
             // Advance past the repeat element (simplified: treat as consuming 1 token).
@@ -483,8 +483,8 @@ fn sll_advance(c: &SllConfig, token: &String, ctx: &mut GenContext, inline_depth
     return [];
 }
 
-fn replace_element_at(elements: &Array<Element>, pos: i32, replacement: &Element) -> Array<Element> {
-    let mut result: Array<Element> = [];
+fn replace_element_at(elements: &List<Element>, pos: i32, replacement: &Element) -> List<Element> {
+    let mut result: List<Element> = [];
     for let mut i = 0; i < elements.len(); i += 1 {
         if i == pos {
             result.push(*replacement);
@@ -496,8 +496,8 @@ fn replace_element_at(elements: &Array<Element>, pos: i32, replacement: &Element
 }
 
 /// Collect unique alt indices from configs.
-fn sll_unique_alts(configs: &Array<SllConfig>) -> Array<i32> {
-    let mut alts: Array<i32> = [];
+fn sll_unique_alts(configs: &List<SllConfig>) -> List<i32> {
+    let mut alts: List<i32> = [];
     for let c of configs {
         if !array_contains_i32(&alts, c.alt_index) {
             alts.push(c.alt_index);
@@ -509,9 +509,9 @@ fn sll_unique_alts(configs: &Array<SllConfig>) -> Array<i32> {
 /// Deduplicate configs: merge configs with the same (alt_index) that reach
 /// the same prediction outcome. For SLL, two configs with the same alt_index
 /// are equivalent for prediction purposes.
-fn sll_dedup_by_alt(configs: &Array<SllConfig>) -> Array<SllConfig> {
-    let mut seen_alts: Array<i32> = [];
-    let mut result: Array<SllConfig> = [];
+fn sll_dedup_by_alt(configs: &List<SllConfig>) -> List<SllConfig> {
+    let mut seen_alts: List<i32> = [];
+    let mut result: List<SllConfig> = [];
     for let c of configs {
         if !array_contains_i32(&seen_alts, c.alt_index) {
             seen_alts.push(c.alt_index);
@@ -521,7 +521,7 @@ fn sll_dedup_by_alt(configs: &Array<SllConfig>) -> Array<SllConfig> {
     return result;
 }
 
-fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &mut GenContext) -> PredictionNode {
+fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &mut GenContext) -> PredictionNode {
     let closed = sll_closure(configs);
 
     // Guard: if too many configs, fall back to Ambiguous (codegen scan-dispatches) to avoid explosion.
@@ -544,7 +544,7 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
     let common = sll_find_common_terminal(&closed);
     if let Some(elem) = common {
         // Advance all configs past this shared terminal.
-        let mut advanced: Array<SllConfig> = [];
+        let mut advanced: List<SllConfig> = [];
         for let c of closed {
             advanced.push(SllConfig {
                 alt_index: c.alt_index,
@@ -558,9 +558,9 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
     }
 
     // Compute FIRST set for each config.
-    let mut all_tokens: Array<String> = [];
+    let mut all_tokens: List<String> = [];
     let mut all_tokens_seen = TreeSet::<String>::new();
-    let mut config_firsts: Array<Array<String>> = [];
+    let mut config_firsts: List<List<String>> = [];
     for let c of closed {
         let first = sll_config_first(&c, ctx);
         for let tk of &first {
@@ -573,14 +573,14 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
     }
 
     // Build dispatch branches.
-    let mut branches: Array<PredictionBranch> = [];
+    let mut branches: List<PredictionBranch> = [];
 
     for let mut t = 0; t < all_tokens.len(); t += 1 {
         let tk = &all_tokens[t];
 
         // Advance all configs that can match this token.
-        let mut next_configs: Array<SllConfig> = [];
-        let mut opaque_alts: Array<i32> = [];
+        let mut next_configs: List<SllConfig> = [];
+        let mut opaque_alts: List<i32> = [];
         for let mut i = 0; i < closed.len(); i += 1 {
             if config_firsts[i].contains(tk) {
                 let advanced = sll_advance(&closed[i], tk, ctx);
@@ -653,7 +653,7 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
     //    Ambiguous so the codegen's longest-match scan dispatch picks the
     //    alt whose body actually parses (cf. ANTLR4's adaptive prediction).
     //  * Multiple at-end alts → true ambiguity → Ambiguous.
-    let mut at_end_alts: Array<i32> = [];
+    let mut at_end_alts: List<i32> = [];
     for let c of &closed {
         if config_is_at_end(c) && !array_contains_i32(&at_end_alts, c.alt_index) {
             at_end_alts.push(c.alt_index);
@@ -677,7 +677,7 @@ fn build_sll_node(configs: &Array<SllConfig>, depth: i32, max_depth: i32, ctx: &
 /// Uses ATN-style expansion: enter referenced rules, advance by one token,
 /// then compute FIRST sets at the decision point's lookahead level.
 /// Builds a flat Dispatch — never calls build_sll_node on expanded configs.
-fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_opaque_configs: &Array<SllConfig>, opaque_alts: Array<i32>, depth: i32, max_depth: i32, ctx: &mut GenContext) -> Option<PredictionNode> {
+fn try_expand_opaque(original_configs: &List<SllConfig>, token: &String, non_opaque_configs: &List<SllConfig>, opaque_alts: List<i32>, depth: i32, max_depth: i32, ctx: &mut GenContext) -> Option<PredictionNode> {
     if depth >= max_depth {
         return null;
     }
@@ -698,7 +698,7 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
         return null;
     }
     // Expand opaque configs by entering their RuleRefs and advancing by token.
-    let mut expanded_configs: Array<SllConfig> = [];
+    let mut expanded_configs: List<SllConfig> = [];
     for let c of original_configs {
         if !array_contains_i32(&opaque_alts, c.alt_index) {
             continue;
@@ -715,7 +715,7 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
                 let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
                 for let alt of found_rule.alternatives {
                     // Pre-filter: skip alternatives whose FIRST doesn't contain the token.
-                    let mut v: Array<String> = [];
+                    let mut v: List<String> = [];
                     if !first_contains(&ctx.first_of_alt(&alt, &mut v), token) {
                         continue;
                     }
@@ -741,7 +741,7 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
     // Combine non-opaque (already advanced) with expanded configs.
     // All configs have consumed the same number of input tokens (depth),
     // so their FIRST sets are all at the same lookahead level (depth).
-    let mut all_configs: Array<SllConfig> = [];
+    let mut all_configs: List<SllConfig> = [];
     for let c of non_opaque_configs {
         all_configs.push(sll_config_clone(c));
     }
@@ -749,9 +749,9 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
         all_configs.push(ec);
     }
     // Compute FIRST for each config at the decision point level.
-    let mut all_tokens: Array<String> = [];
+    let mut all_tokens: List<String> = [];
     let mut all_tokens_seen = TreeSet::<String>::new();
-    let mut config_firsts: Array<Array<String>> = [];
+    let mut config_firsts: List<List<String>> = [];
     for let c of all_configs {
         let first = sll_config_first(&c, ctx);
         for let tk of &first {
@@ -763,11 +763,11 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
         config_firsts.push(first);
     }
     // Build flat Dispatch: for each token, find which alt_indices match.
-    let mut branches: Array<PredictionBranch> = [];
+    let mut branches: List<PredictionBranch> = [];
     let mut has_improvement = false;
     for let mut t = 0; t < all_tokens.len(); t += 1 {
         let tk = &all_tokens[t];
-        let mut token_alts: Array<i32> = [];
+        let mut token_alts: List<i32> = [];
         for let mut i = 0; i < all_configs.len(); i += 1 {
             if config_firsts[i].contains(tk) {
                 if !array_contains_i32(&token_alts, all_configs[i].alt_index) {
@@ -803,7 +803,7 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
         }
     }
     // Safety: verify all original opaque alts appear in at least one branch.
-    let mut covered_alts: Array<i32> = [];
+    let mut covered_alts: List<i32> = [];
     for let b of branches {
         if let Leaf(idx) = b.child {
             if !array_contains_i32(&covered_alts, idx) {
@@ -821,7 +821,7 @@ fn try_expand_opaque(original_configs: &Array<SllConfig>, token: &String, non_op
 
 
 /// Check if all configs are at the same terminal element (for Consume).
-fn sll_find_common_terminal(configs: &Array<SllConfig>) -> Option<Element> {
+fn sll_find_common_terminal(configs: &List<SllConfig>) -> Option<Element> {
     if configs.len() < 2 {
         return null;
     }
@@ -888,7 +888,7 @@ fn element_eq(a: &Element, b: &Element) -> bool {
     };
 }
 
-fn array_contains_i32(arr: &Array<i32>, val: i32) -> bool {
+fn array_contains_i32(arr: &List<i32>, val: i32) -> bool {
     for let mut i = 0; i < arr.len(); i += 1 {
         if arr[i] == val {
             return true;

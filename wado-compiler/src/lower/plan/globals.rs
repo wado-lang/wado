@@ -118,7 +118,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
             ),
         },
         ResolvedType::Unit => TirExpr::new(TirExprKind::Unit, type_id, span),
-        // For reference types (String, Array, struct, etc.), use null
+        // For reference types (String, List, struct, etc.), use null
         _ => TirExpr::new(TirExprKind::Null, type_id, span),
     }
 }
@@ -127,7 +127,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
 fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never => false,
-        // Struct, Array, String, etc. are reference types in Wasm GC
+        // Struct, List, String, etc. are reference types in Wasm GC
         _ => true,
     }
 }

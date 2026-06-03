@@ -18,7 +18,7 @@
 use { println, Stdout } from "core:cli";
 
 struct BaseStream {
-    buf: Array<u8>,
+    buf: List<u8>,
 }
 
 impl Stream<u8> for BaseStream {
@@ -26,7 +26,7 @@ impl Stream<u8> for BaseStream {
         let id: i32 = 0;
         resume [id as Stream<u8>, id as StreamWritable<u8>]
     }
-    fn read(&mut self, this: &Stream<u8>, max: i32) -> Array<u8> {
+    fn read(&mut self, this: &Stream<u8>, max: i32) -> List<u8> {
         let _ = this;
         let _ = max;
         let snapshot = self.buf;
@@ -41,7 +41,7 @@ impl Stream<u8> for BaseStream {
 }
 
 impl StreamWritable<u8> for BaseStream {
-    fn write(&mut self, this: &StreamWritable<u8>, data: Array<u8>) {
+    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) {
         let _ = this;
         for let b of data {
             self.buf.push(b);
@@ -66,7 +66,7 @@ struct LoggingStream {
 }
 
 impl Stream<u8> for LoggingStream {
-    fn read(&mut self, this: &Stream<u8>, max: i32) -> Array<u8> {
+    fn read(&mut self, this: &Stream<u8>, max: i32) -> List<u8> {
         self.reads += 1;
         let inner = this.read(max);   // -> BaseStream via outer handler
         resume inner
@@ -75,7 +75,7 @@ impl Stream<u8> for LoggingStream {
 }
 
 impl StreamWritable<u8> for LoggingStream {
-    fn write(&mut self, this: &StreamWritable<u8>, data: Array<u8>) {
+    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) {
         self.writes += 1;
         this.write(data);             // -> BaseStream via outer handler
         resume ()
@@ -89,7 +89,7 @@ export fn run() with Stdout {
     with &mut base do {
         let [rx, tx] = Stream::<u8>::new();
         with &mut logger do {
-            let payload: Array<u8> = [104 as u8, 105 as u8]; // "hi"
+            let payload: List<u8> = [104 as u8, 105 as u8]; // "hi"
             tx.write(payload);
             let got = rx.read(16);
             assert got.len() == 2;

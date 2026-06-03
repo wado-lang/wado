@@ -1,5 +1,5 @@
 test "chars iter ASCII" {
-    let chars: Array<char> = "ABC".chars().collect();
+    let chars: List<char> = "ABC".chars().collect();
     assert chars.len() == 3;
     assert chars[0] == 'A';
     assert chars[1] == 'B';
@@ -7,33 +7,33 @@ test "chars iter ASCII" {
 }
 
 test "chars iter 2-byte UTF-8" {
-    let chars: Array<char> = "ñé".chars().collect();
+    let chars: List<char> = "ñé".chars().collect();
     assert chars.len() == 2;
     assert chars[0] as i32 == 0x00F1;
     assert chars[1] as i32 == 0x00E9;
 }
 
 test "chars iter 3-byte UTF-8" {
-    let chars: Array<char> = "日本".chars().collect();
+    let chars: List<char> = "日本".chars().collect();
     assert chars.len() == 2;
     assert chars[0] as i32 == 0x65E5;
     assert chars[1] as i32 == 0x672C;
 }
 
 test "chars iter 4-byte UTF-8" {
-    let chars: Array<char> = "😀".chars().collect();
+    let chars: List<char> = "😀".chars().collect();
     assert chars.len() == 1;
     assert chars[0] as i32 == 0x1F600;
 }
 
 test "chars iter empty string" {
     assert "".chars().count() == 0;
-    let chars: Array<char> = "".chars().collect();
+    let chars: List<char> = "".chars().collect();
     assert chars.len() == 0;
 }
 
 test "chars iter mixed encoding" {
-    let chars: Array<char> = "Aéï日😀".chars().collect();
+    let chars: List<char> = "Aéï日😀".chars().collect();
     assert chars.len() == 5;
     assert chars[0] == 'A';
     assert chars[1] as i32 == 0x00E9;
@@ -43,7 +43,7 @@ test "chars iter mixed encoding" {
 }
 
 test "chars iter single char" {
-    let chars: Array<char> = "X".chars().collect();
+    let chars: List<char> = "X".chars().collect();
     assert chars.len() == 1;
     assert chars[0] == 'X';
 }
@@ -60,7 +60,7 @@ test "chars iter for-of" {
 }
 
 test "bytes iter ASCII" {
-    let bytes: Array<u8> = "Hello".bytes().collect();
+    let bytes: List<u8> = "Hello".bytes().collect();
     assert bytes.len() == 5;
     assert bytes[0] == 'H' as u8;
     assert bytes[1] == 'e' as u8;
@@ -71,12 +71,12 @@ test "bytes iter ASCII" {
 
 test "bytes iter empty string" {
     assert "".bytes().count() == 0;
-    let bytes: Array<u8> = "".bytes().collect();
+    let bytes: List<u8> = "".bytes().collect();
     assert bytes.len() == 0;
 }
 
 test "bytes iter 3-byte UTF-8" {
-    let bytes: Array<u8> = "日".bytes().collect();
+    let bytes: List<u8> = "日".bytes().collect();
     assert bytes.len() == 3;
     assert bytes[0] == 0xE6;
     assert bytes[1] == 0x97;
@@ -84,14 +84,14 @@ test "bytes iter 3-byte UTF-8" {
 }
 
 test "bytes iter 2-byte UTF-8" {
-    let bytes: Array<u8> = "ñ".bytes().collect();
+    let bytes: List<u8> = "ñ".bytes().collect();
     assert bytes.len() == 2;
     assert bytes[0] == 0xC3;
     assert bytes[1] == 0xB1;
 }
 
 test "bytes iter 4-byte UTF-8" {
-    let bytes: Array<u8> = "😀".bytes().collect();
+    let bytes: List<u8> = "😀".bytes().collect();
     assert bytes.len() == 4;
     assert bytes[0] == 0xF0;
     assert bytes[1] == 0x9F;
@@ -149,13 +149,13 @@ test "bytes count equals len" {
 
 test "collect bytes then chars" {
     let s = "Hi!";
-    let bytes: Array<u8> = s.bytes().collect();
+    let bytes: List<u8> = s.bytes().collect();
     assert bytes.len() == 3;
     assert bytes[0] == 'H' as u8;
     assert bytes[1] == 'i' as u8;
     assert bytes[2] == '!' as u8;
 
-    let chars: Array<char> = s.chars().collect();
+    let chars: List<char> = s.chars().collect();
     assert chars.len() == 3;
     assert chars[0] == 'H';
     assert chars[1] == 'i';
@@ -164,12 +164,12 @@ test "collect bytes then chars" {
 
 test "collect multibyte chars" {
     let s = "日😀";
-    let chars: Array<char> = s.chars().collect();
+    let chars: List<char> = s.chars().collect();
     assert chars.len() == 2;
     assert chars[0] as i32 == 0x65E5;
     assert chars[1] as i32 == 0x1F600;
 
-    let bytes: Array<u8> = s.bytes().collect();
+    let bytes: List<u8> = s.bytes().collect();
     assert bytes.len() == 7;
 }
 
@@ -549,36 +549,36 @@ test "same prefix different suffix" {
 }
 
 test "String::from_utf8 empty" {
-    assert String::from_utf8([] as Array<u8>) matches { Ok(s) && s == "" };
+    assert String::from_utf8([] as List<u8>) matches { Ok(s) && s == "" };
 }
 
 test "String::from_utf8 ASCII" {
-    assert String::from_utf8([72, 101, 108, 108, 111] as Array<u8>) matches { Ok(s) && s == "Hello" };
+    assert String::from_utf8([72, 101, 108, 108, 111] as List<u8>) matches { Ok(s) && s == "Hello" };
 }
 
 test "String::from_utf8 2-byte UTF-8" {
     // ñ = 0xC3 0xB1
-    assert String::from_utf8([0xC3, 0xB1] as Array<u8>) matches { Ok(s) && s == "ñ" };
+    assert String::from_utf8([0xC3, 0xB1] as List<u8>) matches { Ok(s) && s == "ñ" };
 }
 
 test "String::from_utf8 3-byte UTF-8" {
     // 日 = 0xE6 0x97 0xA5
-    assert String::from_utf8([0xE6, 0x97, 0xA5] as Array<u8>) matches { Ok(s) && s == "日" };
+    assert String::from_utf8([0xE6, 0x97, 0xA5] as List<u8>) matches { Ok(s) && s == "日" };
 }
 
 test "String::from_utf8 4-byte UTF-8" {
     // 😀 = 0xF0 0x9F 0x98 0x80
-    assert String::from_utf8([0xF0, 0x9F, 0x98, 0x80] as Array<u8>) matches { Ok(s) && s == "😀" };
+    assert String::from_utf8([0xF0, 0x9F, 0x98, 0x80] as List<u8>) matches { Ok(s) && s == "😀" };
 }
 
 test "String::from_utf8 mixed valid UTF-8" {
     // "Aéï日😀" = 12 bytes
-    assert String::from_utf8([0x41, 0xC3, 0xA9, 0xC3, 0xAF, 0xE6, 0x97, 0xA5, 0xF0, 0x9F, 0x98, 0x80] as Array<u8>) matches { Ok(s) && s == "Aéï日😀" };
+    assert String::from_utf8([0x41, 0xC3, 0xA9, 0xC3, 0xAF, 0xE6, 0x97, 0xA5, 0xF0, 0x9F, 0x98, 0x80] as List<u8>) matches { Ok(s) && s == "Aéï日😀" };
 }
 
 test "String::from_utf8 roundtrip" {
     let original = "Hello, 世界! 😀";
-    let bytes: Array<u8> = original.bytes().collect();
+    let bytes: List<u8> = original.bytes().collect();
     assert String::from_utf8(bytes) matches { Ok(s) && s == original };
 }
 
@@ -588,146 +588,146 @@ test "String::from_utf8 from bytes iter" {
 }
 
 test "String::from_utf8 lonely continuation byte" {
-    assert String::from_utf8([0x80] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0x80] as List<u8>) matches { Err(_) };
 }
 
 test "String::from_utf8 overlong 2-byte 0xC0" {
-    assert String::from_utf8([0xC0, 0x80] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0xC0, 0x80] as List<u8>) matches { Err(_) };
 }
 
 test "String::from_utf8 overlong 2-byte 0xC1" {
-    assert String::from_utf8([0xC1, 0xBF] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0xC1, 0xBF] as List<u8>) matches { Err(_) };
 }
 
 test "String::from_utf8 bad continuation byte in 2-byte" {
     // 0xC3 should be followed by 0x80-0xBF; 0x41 ('A') is invalid
-    assert String::from_utf8([0xC3, 0x41] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0xC3, 0x41] as List<u8>) matches { Err(_) };
 }
 
 test "String::from_utf8 truncated 2-byte" {
-    assert String::from_utf8([0xC3] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0xC3] as List<u8>) matches { Err(_) };
 }
 
 test "String::from_utf8 truncated 3-byte" {
-    assert String::from_utf8([0xE6, 0x97] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0xE6, 0x97] as List<u8>) matches { Err(_) };
 }
 
 test "String::from_utf8 truncated 4-byte" {
-    assert String::from_utf8([0xF0, 0x9F, 0x98] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0xF0, 0x9F, 0x98] as List<u8>) matches { Err(_) };
 }
 
 test "String::from_utf8 overlong 3-byte" {
     // 0xE0 followed by < 0xA0 is overlong
-    assert String::from_utf8([0xE0, 0x80, 0x80] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0xE0, 0x80, 0x80] as List<u8>) matches { Err(_) };
 }
 
 test "String::from_utf8 surrogate" {
     // U+D800 encoded as UTF-8: 0xED 0xA0 0x80
-    assert String::from_utf8([0xED, 0xA0, 0x80] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0xED, 0xA0, 0x80] as List<u8>) matches { Err(_) };
 }
 
 test "String::from_utf8 overlong 4-byte" {
     // 0xF0 followed by < 0x90 is overlong
-    assert String::from_utf8([0xF0, 0x80, 0x80, 0x80] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0xF0, 0x80, 0x80, 0x80] as List<u8>) matches { Err(_) };
 }
 
 test "String::from_utf8 out of range 4-byte" {
     // 0xF4 followed by > 0x8F encodes > U+10FFFF
-    assert String::from_utf8([0xF4, 0x90, 0x80, 0x80] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0xF4, 0x90, 0x80, 0x80] as List<u8>) matches { Err(_) };
 }
 
 test "String::from_utf8 invalid byte 0xF5" {
-    assert String::from_utf8([0xF5, 0x80, 0x80, 0x80] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0xF5, 0x80, 0x80, 0x80] as List<u8>) matches { Err(_) };
 }
 
 test "String::from_utf8 invalid byte 0xFF" {
-    assert String::from_utf8([0xFF] as Array<u8>) matches { Err(_) };
+    assert String::from_utf8([0xFF] as List<u8>) matches { Err(_) };
 }
 
 test "String::from_utf8_lossy empty" {
-    assert String::from_utf8_lossy([] as Array<u8>) == "";
+    assert String::from_utf8_lossy([] as List<u8>) == "";
 }
 
 test "String::from_utf8_lossy ASCII passthrough" {
-    assert String::from_utf8_lossy([72, 101, 108, 108, 111] as Array<u8>) == "Hello";
+    assert String::from_utf8_lossy([72, 101, 108, 108, 111] as List<u8>) == "Hello";
 }
 
 test "String::from_utf8_lossy valid multibyte passthrough" {
     // "日" = 0xE6 0x97 0xA5, "😀" = 0xF0 0x9F 0x98 0x80
-    assert String::from_utf8_lossy([0xE6, 0x97, 0xA5, 0xF0, 0x9F, 0x98, 0x80] as Array<u8>) == "日😀";
+    assert String::from_utf8_lossy([0xE6, 0x97, 0xA5, 0xF0, 0x9F, 0x98, 0x80] as List<u8>) == "日😀";
 }
 
 test "String::from_utf8_lossy lone continuation byte" {
     // 0x80 → U+FFFD
-    assert String::from_utf8_lossy([0x80] as Array<u8>) == "\uFFFD";
+    assert String::from_utf8_lossy([0x80] as List<u8>) == "\uFFFD";
 }
 
 test "String::from_utf8_lossy invalid byte 0xFF" {
-    assert String::from_utf8_lossy([0xFF] as Array<u8>) == "\uFFFD";
+    assert String::from_utf8_lossy([0xFF] as List<u8>) == "\uFFFD";
 }
 
 test "String::from_utf8_lossy truncated 2-byte" {
     // 0xC3 alone → U+FFFD
-    assert String::from_utf8_lossy([0xC3] as Array<u8>) == "\uFFFD";
+    assert String::from_utf8_lossy([0xC3] as List<u8>) == "\uFFFD";
 }
 
 test "String::from_utf8_lossy truncated 3-byte" {
     // 0xE6 0x97 alone → U+FFFD
-    assert String::from_utf8_lossy([0xE6, 0x97] as Array<u8>) == "\uFFFD";
+    assert String::from_utf8_lossy([0xE6, 0x97] as List<u8>) == "\uFFFD";
 }
 
 test "String::from_utf8_lossy truncated 4-byte" {
     // 0xF0 0x9F 0x98 alone → U+FFFD
-    assert String::from_utf8_lossy([0xF0, 0x9F, 0x98] as Array<u8>) == "\uFFFD";
+    assert String::from_utf8_lossy([0xF0, 0x9F, 0x98] as List<u8>) == "\uFFFD";
 }
 
 test "String::from_utf8_lossy bad continuation replaced then ASCII continues" {
     // 0xC3 (2-byte lead) followed by 0x41 ('A', not a continuation) → FFFD + 'A'
-    assert String::from_utf8_lossy([0xC3, 0x41] as Array<u8>) == "\uFFFDA";
+    assert String::from_utf8_lossy([0xC3, 0x41] as List<u8>) == "\uFFFDA";
 }
 
 test "String::from_utf8_lossy overlong 2-byte" {
     // 0xC0, 0x80 → FFFD, FFFD
-    assert String::from_utf8_lossy([0xC0, 0x80] as Array<u8>) == "\uFFFD\uFFFD";
+    assert String::from_utf8_lossy([0xC0, 0x80] as List<u8>) == "\uFFFD\uFFFD";
 }
 
 test "String::from_utf8_lossy overlong 3-byte" {
     // 0xE0, 0x80, 0x80 → FFFD, FFFD, FFFD
-    assert String::from_utf8_lossy([0xE0, 0x80, 0x80] as Array<u8>) == "\uFFFD\uFFFD\uFFFD";
+    assert String::from_utf8_lossy([0xE0, 0x80, 0x80] as List<u8>) == "\uFFFD\uFFFD\uFFFD";
 }
 
 test "String::from_utf8_lossy surrogate" {
     // U+D800 = 0xED, 0xA0, 0x80 → FFFD, FFFD, FFFD
-    assert String::from_utf8_lossy([0xED, 0xA0, 0x80] as Array<u8>) == "\uFFFD\uFFFD\uFFFD";
+    assert String::from_utf8_lossy([0xED, 0xA0, 0x80] as List<u8>) == "\uFFFD\uFFFD\uFFFD";
 }
 
 test "String::from_utf8_lossy mixed valid and invalid" {
     // 'A' + 0xFF (invalid) + 'B' → "A" + FFFD + "B"
-    assert String::from_utf8_lossy([0x41, 0xFF, 0x42] as Array<u8>) == "A\uFFFDB";
+    assert String::from_utf8_lossy([0x41, 0xFF, 0x42] as List<u8>) == "A\uFFFDB";
 }
 
 test "String::from_utf8_lossy roundtrip valid" {
     let original = "Hello, 世界! 😀";
-    let bytes: Array<u8> = original.bytes().collect();
+    let bytes: List<u8> = original.bytes().collect();
     assert String::from_utf8_lossy(bytes) == original;
 }
 
 test "String::from_utf8_unchecked empty" {
-    assert String::from_utf8_unchecked([] as Array<u8>) == "";
+    assert String::from_utf8_unchecked([] as List<u8>) == "";
 }
 
 test "String::from_utf8_unchecked ASCII" {
-    assert String::from_utf8_unchecked([72, 101, 108, 108, 111] as Array<u8>) == "Hello";
+    assert String::from_utf8_unchecked([72, 101, 108, 108, 111] as List<u8>) == "Hello";
 }
 
 test "String::from_utf8_unchecked multibyte" {
     // "日" = 0xE6 0x97 0xA5
-    assert String::from_utf8_unchecked([0xE6, 0x97, 0xA5] as Array<u8>) == "日";
+    assert String::from_utf8_unchecked([0xE6, 0x97, 0xA5] as List<u8>) == "日";
 }
 
 test "String::from_utf8_unchecked roundtrip" {
     let original = "Hello, 世界! 😀";
-    let bytes: Array<u8> = original.bytes().collect();
+    let bytes: List<u8> = original.bytes().collect();
     assert String::from_utf8_unchecked(bytes) == original;
 }
 
@@ -804,14 +804,14 @@ test "shrink_to_fit" {
 }
 
 test "bytes collect" {
-    let bytes: Array<u8> = "Hello".bytes().collect();
+    let bytes: List<u8> = "Hello".bytes().collect();
     assert bytes.len() == 5;
     assert bytes[0] == 72;
     assert bytes[4] == 111;
 }
 
 test "bytes collect multibyte" {
-    let bytes: Array<u8> = "日".bytes().collect();
+    let bytes: List<u8> = "日".bytes().collect();
     assert bytes.len() == 3;
     assert bytes[0] == 0xE6;
     assert bytes[1] == 0x97;
@@ -932,7 +932,7 @@ test "replacen" {
 }
 
 test "split" {
-    let parts: Array<String> = "a,b,c".split(",").collect();
+    let parts: List<String> = "a,b,c".split(",").collect();
     assert parts.len() == 3;
     assert parts[0] == "a";
     assert parts[1] == "b";
@@ -940,13 +940,13 @@ test "split" {
 }
 
 test "split no match" {
-    let parts: Array<String> = "hello".split(",").collect();
+    let parts: List<String> = "hello".split(",").collect();
     assert parts.len() == 1;
     assert parts[0] == "hello";
 }
 
 test "splitn" {
-    let parts: Array<String> = "a,b,c,d".splitn(3, ",").collect();
+    let parts: List<String> = "a,b,c,d".splitn(3, ",").collect();
     assert parts.len() == 3;
     assert parts[0] == "a";
     assert parts[1] == "b";
@@ -954,40 +954,40 @@ test "splitn" {
 }
 
 test "split_whitespace" {
-    let parts: Array<String> = "  hello   world  ".split_whitespace().collect();
+    let parts: List<String> = "  hello   world  ".split_whitespace().collect();
     assert parts.len() == 2;
     assert parts[0] == "hello";
     assert parts[1] == "world";
 }
 
 test "split_whitespace empty" {
-    let parts: Array<String> = "   ".split_whitespace().collect();
+    let parts: List<String> = "   ".split_whitespace().collect();
     assert parts.len() == 0;
 }
 
 test "lines" {
-    let ls: Array<String> = "hello\nworld\n".lines().collect();
+    let ls: List<String> = "hello\nworld\n".lines().collect();
     assert ls.len() == 2;
     assert ls[0] == "hello";
     assert ls[1] == "world";
 }
 
 test "lines CRLF" {
-    let ls: Array<String> = "a\r\nb\r\n".lines().collect();
+    let ls: List<String> = "a\r\nb\r\n".lines().collect();
     assert ls.len() == 2;
     assert ls[0] == "a";
     assert ls[1] == "b";
 }
 
 test "lines no trailing newline" {
-    let ls: Array<String> = "a\nb".lines().collect();
+    let ls: List<String> = "a\nb".lines().collect();
     assert ls.len() == 2;
     assert ls[0] == "a";
     assert ls[1] == "b";
 }
 
 test "char_indices" {
-    let indices: Array<[i32, char]> = "Aé".char_indices().collect();
+    let indices: List<[i32, char]> = "Aé".char_indices().collect();
     assert indices.len() == 2;
     assert indices[0].0 == 0;
     assert indices[0].1 == 'A';
@@ -996,7 +996,7 @@ test "char_indices" {
 }
 
 test "char_indices multibyte" {
-    let indices: Array<[i32, char]> = "日本".char_indices().collect();
+    let indices: List<[i32, char]> = "日本".char_indices().collect();
     assert indices.len() == 2;
     assert indices[0].0 == 0;
     assert indices[1].0 == 3;
@@ -1078,21 +1078,21 @@ test "char_at_byte_unchecked multibyte" {
 
 test "push_bytes_unchecked ASCII" {
     let mut s = String::with_capacity(0);
-    let bytes: Array<u8> = ['h' as u8, 'i' as u8];
+    let bytes: List<u8> = ['h' as u8, 'i' as u8];
     s.push_bytes_unchecked(bytes);
     assert s == "hi";
 }
 
 test "push_bytes_unchecked empty" {
     let mut s = "abc";
-    let bytes: Array<u8> = [];
+    let bytes: List<u8> = [];
     s.push_bytes_unchecked(bytes);
     assert s == "abc";
 }
 
 test "push_bytes_unchecked multibyte" {
     let mut s = "x";
-    let bytes: Array<u8> = [0xE6, 0x97, 0xA5];  // "日"
+    let bytes: List<u8> = [0xE6, 0x97, 0xA5];  // "日"
     s.push_bytes_unchecked(bytes);
     assert s == "x日";
 }

@@ -78,7 +78,7 @@ test "nested counter" {
 }
 
 test "iterator chain" {
-    let nums: Array<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let nums: List<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
     let result = nums.iter().filter(|x: i32| x % 2 == 0).map(|x: i32| x * x).collect();
     assert result[0] == 4;
@@ -93,7 +93,7 @@ test "iterator chain" {
 }
 
 test "iterator filter" {
-    let nums: Array<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let nums: List<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
     let evens = nums.iter().filter(|x: i32| x % 2 == 0).collect();
     assert evens.len() == 5;
@@ -108,7 +108,7 @@ test "iterator filter" {
 }
 
 test "iterator fold" {
-    let nums: Array<i32> = [1, 2, 3, 4, 5];
+    let nums: List<i32> = [1, 2, 3, 4, 5];
 
     let sum = nums.iter().fold(0, |acc: i32, x: i32| acc + x);
     assert sum == 15;
@@ -134,7 +134,7 @@ test "iterator fold" {
 }
 
 test "iterator map" {
-    let nums: Array<i32> = [1, 2, 3, 4, 5];
+    let nums: List<i32> = [1, 2, 3, 4, 5];
 
     let doubled = nums.iter().map(|x: i32| x * 2).collect();
     assert doubled[0] == 2;
@@ -147,7 +147,7 @@ test "iterator map" {
 }
 
 test "sort_by ascending" {
-    let mut nums: Array<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
+    let mut nums: List<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
 
     nums.sort_by(|a: &i32, b: &i32| {
         if *a < *b {
@@ -165,7 +165,7 @@ test "sort_by ascending" {
 }
 
 test "sort_by descending" {
-    let mut nums: Array<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
+    let mut nums: List<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
 
     nums.sort_by(|a: &i32, b: &i32| {
         if *a > *b {
@@ -183,7 +183,7 @@ test "sort_by descending" {
 }
 
 test "sorted_by" {
-    let original: Array<i32> = [3, 1, 4, 1, 5, 9, 2, 6];
+    let original: List<i32> = [3, 1, 4, 1, 5, 9, 2, 6];
     let asc = original.sorted_by(|a: &i32, b: &i32| {
         if *a < *b {
             return Ordering::Less;

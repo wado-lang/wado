@@ -3,7 +3,7 @@
 use { println } from "core:cli";
 
 struct FrozenVec<T> {
-    items: Array<T>,
+    items: List<T>,
 }
 
 impl FrozenVec<T> {
@@ -17,7 +17,7 @@ impl FrozenVec<T> {
 }
 
 struct FrozenVecBuilder<T> {
-    items: Array<T>,
+    items: List<T>,
 }
 
 impl SequenceLiteralBuilder for FrozenVecBuilder<T> {
@@ -25,7 +25,7 @@ impl SequenceLiteralBuilder for FrozenVecBuilder<T> {
     type Output = FrozenVec<T>;
 
     fn new_literal(capacity: i32) -> FrozenVecBuilder<T> {
-        return FrozenVecBuilder { items: Array::<T>::with_capacity(capacity) };
+        return FrozenVecBuilder { items: List::<T>::with_capacity(capacity) };
     }
 
     fn push_literal(&mut self, value: T) {

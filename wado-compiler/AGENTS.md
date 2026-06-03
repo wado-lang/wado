@@ -108,7 +108,7 @@ __DATA__
 // WIR pattern test - verify optimization effects at a specific -Ox level
 // Use `wado dump [-O0|-O2] file.wado` to discover WIR patterns
 export fn run() {
-    let a: Array<i32> = [10, 20, 30];
+    let a: List<i32> = [10, 20, 30];
     assert a.len() == 3;
 }
 

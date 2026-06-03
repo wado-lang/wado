@@ -55,7 +55,7 @@ struct wado-compiler/tests/fixtures/serde_json_default.wado//Config {  // TypeId
     mut host: ref "core:prelude/string.wado//String",
     mut port: i32,
     mut verbose: bool,
-    mut tags: ref "core:prelude//Array<core:prelude/string.wado/String>",
+    mut tags: ref "core:prelude//List<core:prelude/string.wado/String>",
     mut description: ref null "core:prelude/string.wado//String",
 }
 
@@ -176,7 +176,7 @@ struct core:prelude/types.wado//Result<core:prelude/types.wado/Option<core:prelu
     payload_0: ref "core:serde//DeserializeError",
 }
 
-struct core:prelude//Array<core:prelude/string.wado/String> {  // TypeId(34)
+struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(34)
     mut repr: ref "builtin::array<core:prelude/string.wado/String>",
     mut used: i32,
 }
@@ -297,9 +297,9 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(92)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(93)
+type "functype//core:prelude/list.wado/List<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//List<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(93)
 
-type "functype//core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//Array<core:prelude/string.wado/String>");  // TypeId(94)
+type "functype//core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(94)
 
 type "functype//wado-compiler/tests/fixtures/serde_json_default.wado/Config^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_json_default.wado/Config,core:serde/DeserializeError>";  // TypeId(95)
 
@@ -323,7 +323,7 @@ type "functype//core:json/JsonDeserializer^Deserializer::deserialize_bool" = fn(
 
 type "functype//core:json/JsonStructAccess^DeserializeStruct::next_field<wado-compiler/tests/fixtures/serde_json_default.wado/Config>" = fn(ref "core:json//JsonStructAccess") -> [i32, ref null "core:prelude/types.wado//Option<i32>", ref null "core:serde//DeserializeError"];  // TypeId(105)
 
-type "functype//core:serde/Array<core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "core:prelude//Array<core:prelude/string.wado/String>", ref null "core:serde//DeserializeError"];  // TypeId(106)
+type "functype//core:serde/List<core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "core:prelude//List<core:prelude/string.wado/String>", ref null "core:serde//DeserializeError"];  // TypeId(106)
 
 type "functype//core:serde/Option<core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(107)
 
@@ -2590,17 +2590,17 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     }
 }
 
-fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(self, value) {
+fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
-        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self);
+        "core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self);
     }
     builtin::array_set<ref "core:prelude/string.wado//String">(self.repr, used, value);
     self.used = used + 1;
 }
 
-fn "core:prelude/array.wado/Array<core:prelude/string.wado/String>::grow"(self) {
+fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "builtin::array<core:prelude/string.wado/String>";
@@ -2620,14 +2620,14 @@ fn "wado-compiler/tests/fixtures/serde_json_default.wado/Config^Deserialize::des
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5_5: i32;
     let __local_6: bool;
-    let __local_7: ref "core:prelude//Array<core:prelude/string.wado/String>";
+    let __local_7: ref "core:prelude//List<core:prelude/string.wado/String>";
     let __local_8: ref null "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/types.wado//Option<i32>";
     let __local_11: i32;
     let __local_12: ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>";
     let __local_13: ref "core:prelude/string.wado//String";
-    let __local_19: ref "core:prelude//Array<core:prelude/string.wado/String>";
-    let __b: ref "core:prelude//Array<core:prelude/string.wado/String>";
+    let __local_19: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let __b: ref "core:prelude//List<core:prelude/string.wado/String>";
     let d_27: ref "core:json//JsonDeserializer";
     let d_29: ref "core:json//JsonDeserializer";
     let d_31: ref "core:json//JsonDeserializer";
@@ -2648,7 +2648,7 @@ fn "wado-compiler/tests/fixtures/serde_json_default.wado/Config^Deserialize::des
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
         __local_5_5 = 0;
         __local_6 = 0;
-        __b = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
+        __b = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
         __local_7 = __b;
         __local_8 = ref.null none;
         b370: block {
@@ -2697,9 +2697,9 @@ fn "wado-compiler/tests/fixtures/serde_json_default.wado/Config^Deserialize::des
                             }
                         } else if __local_11 == 3 {
                             let __sroa___local_18_discriminant: i32;
-                            let __sroa___local_18_case0_payload_0: ref null "core:prelude//Array<core:prelude/string.wado/String>";
+                            let __sroa___local_18_case0_payload_0: ref null "core:prelude//List<core:prelude/string.wado/String>";
                             let __sroa___local_18_case1_payload_0: ref null "core:serde//DeserializeError";
-                            multivalue_bind [__sroa___local_18_discriminant, __sroa___local_18_case0_payload_0, __sroa___local_18_case1_payload_0] = "core:serde/Array<core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>"(__local_2.de);
+                            multivalue_bind [__sroa___local_18_discriminant, __sroa___local_18_case0_payload_0, __sroa___local_18_case1_payload_0] = "core:serde/List<core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>"(__local_2.de);
                             if __sroa___local_18_discriminant == 0 {
                                 __local_19 = ref.as_non_null(__sroa___local_18_case0_payload_0);
                                 __local_7 = __local_19;
@@ -2874,7 +2874,7 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field<wado-compiler/tests
     return 0, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: idx_16 }, ref.null none;
 }
 
-fn "core:serde/Array<core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
+fn "core:serde/List<core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
     let __qm_v_1: ref "core:json//JsonSeqAccess";
     let __qm_e_2: ref "core:serde//DeserializeError";
     let seq: ref "core:json//JsonSeqAccess";
@@ -2882,9 +2882,9 @@ fn "core:serde/Array<core:prelude/string.wado/String>^Deserialize::deserialize<c
     let __qm_e_5: ref "core:serde//DeserializeError";
     let first_opt: ref null "core:prelude/string.wado//String";
     let __qm_e_8: ref "core:serde//DeserializeError";
-    let __b: ref "core:prelude//Array<core:prelude/string.wado/String>";
+    let __b: ref "core:prelude//List<core:prelude/string.wado/String>";
     let first_elem: ref "core:prelude/string.wado//String";
-    let items: ref "core:prelude//Array<core:prelude/string.wado/String>";
+    let items: ref "core:prelude//List<core:prelude/string.wado/String>";
     let __qm_v_12: ref null "core:prelude/string.wado//String";
     let __qm_e_13: ref "core:serde//DeserializeError";
     let next_opt: ref null "core:prelude/string.wado//String";
@@ -2920,8 +2920,8 @@ fn "core:serde/Array<core:prelude/string.wado/String>^Deserialize::deserialize<c
     });
     if ref.is_null(first_opt) == 0 {
         first_elem = ref.as_non_null(first_opt);
-        items = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(2), used: 0 };
-        "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(items, first_elem);
+        items = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(2), used: 0 };
+        "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(items, first_elem);
         block {
             l409: loop {
                 let __match_scrut_5: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<core:prelude/string.wado/String>,core:serde/DeserializeError>";
@@ -2935,7 +2935,7 @@ fn "core:serde/Array<core:prelude/string.wado/String>^Deserialize::deserialize<c
                 });
                 if ref.is_null(next_opt) == 0 {
                     item = ref.as_non_null(next_opt);
-                    "core:prelude/array.wado/Array<core:prelude/string.wado/String>::push"(items, item);
+                    "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(items, item);
                 } else {
                     __local_18 = "core:json/JsonDeserializer::expect_char"(seq.de, 93);
                     if ref.is_null(__local_18) {
@@ -2955,7 +2955,7 @@ fn "core:serde/Array<core:prelude/string.wado/String>^Deserialize::deserialize<c
             __qm_e_8 = ref.as_non_null(__local_19);
             return 1, ref.null none, __qm_e_8;
         }
-        return 0, ref.as_non_null(__b = struct.new "core:prelude//Array<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 }; __b), ref.null none;
+        return 0, ref.as_non_null(__b = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 }; __b), ref.null none;
     }
 }
 

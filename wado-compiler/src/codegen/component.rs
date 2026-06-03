@@ -559,7 +559,7 @@ fn emit_cm_val_type(
             *local_type_idx += 1;
             ComponentValType::Type(idx)
         }
-        Type::Generic(g) if g.name == "Array" && !g.args.is_empty() => {
+        Type::Generic(g) if g.name == "List" && !g.args.is_empty() => {
             let element_val_type = emit_cm_val_type(
                 &g.args[0],
                 instance_type,

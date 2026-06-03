@@ -3,19 +3,19 @@ use { LitToken } from "./lexer_gen.wado";
 use { CodeWriter, FnSpec, GlobalSpec } from "./wadopoet.wado";
 use { escape_string } from "./gen_util.wado";
 
-pub fn gen_highlight(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &Array<LitToken>) {
+pub fn gen_highlight(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
     gen_highlight_mapping(w, &grammar.lexer_rules, &grammar.parser_rules, lit_tokens);
     gen_highlight_fn(w, &grammar.parser_rules);
     gen_highlight_run(w);
 }
 
-fn gen_highlight_mapping(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, parser_rules: &Array<ParserRule>, lit_tokens: &Array<LitToken>) {
+fn gen_highlight_mapping(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, parser_rules: &List<ParserRule>, lit_tokens: &List<LitToken>) {
     let mut f = FnSpec::new("highlight_mapping");
     f.set_pub();
     f.set_return_type(&"HighlightMapping");
     f.emit_begin(w);
 
-    w.line(&"let defaults: Array<String> = [");
+    w.line(&"let defaults: List<String> = [");
     w.indent();
 
     for let rule of lexer_rules {
@@ -36,7 +36,7 @@ fn gen_highlight_mapping(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, par
 
     // Rule names indexed by rule_id (parser-rule declaration order). Must
     // match the ids the generated walker passes to Visitor::enter_rule.
-    w.line(&"let rule_names: Array<String> = [");
+    w.line(&"let rule_names: List<String> = [");
     w.indent();
     for let rule of parser_rules {
         w.line(&`{escape_string(&rule.name)},`);
@@ -44,14 +44,14 @@ fn gen_highlight_mapping(w: &mut CodeWriter, lexer_rules: &Array<LexerRule>, par
     w.dedent();
     w.line(&"];");
 
-    w.line(&"let overrides: Array<HighlightOverride> = [];");
+    w.line(&"let overrides: List<HighlightOverride> = [];");
     w.line(&"return HighlightMapping { defaults, rule_names, overrides };");
 
     w.end();
     w.blank();
 }
 
-fn gen_highlight_fn(w: &mut CodeWriter, parser_rules: &Array<ParserRule>) {
+fn gen_highlight_fn(w: &mut CodeWriter, parser_rules: &List<ParserRule>) {
     let root_rule = if parser_rules.len() > 0 { parser_rules[0].name } else { "" };
 
     let mut f = FnSpec::new("highlight");
@@ -94,7 +94,7 @@ fn gen_highlight_run(w: &mut CodeWriter) {
         &"let file = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait().unwrap();",
     );
     w.line(&"let [read_stream, _done] = file.read_via_stream(0 as Filesize);");
-    w.line(&"let mut bytes: Array<u8> = [];");
+    w.line(&"let mut bytes: List<u8> = [];");
     w.begin(&"loop");
     w.line(&"let chunk = read_stream.read(65536);");
     w.begin(&"if chunk.len() == 0");

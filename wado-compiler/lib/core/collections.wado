@@ -15,7 +15,7 @@ use {
 
 // Collections module for Wado.
 //
-// This module provides collection types beyond the built-in Array.//
+// This module provides collection types beyond the built-in List.//
 // TreeMap uses a two-part data structure inspired by Rust's indexmap crate:
 // 1. A self-balancing binary search tree (AA tree) for O(log n) key lookups
 // 2. A dense array (entries) for O(1) insertion-order iteration
@@ -57,8 +57,8 @@ struct TreeMapNode<K> {
 /// of a hash table for key lookups.
 pub struct TreeMap<K, V> {
     root: Option<i32>,
-    nodes: Array<TreeMapNode<K>>,
-    entries: Array<TreeMapEntry<K, V>>,
+    nodes: List<TreeMapNode<K>>,
+    entries: List<TreeMapEntry<K, V>>,
     size: i32,
     deleted_count: i32,
 }
@@ -245,7 +245,7 @@ impl<K: Ord> TreeMap<K, V> {
         }
 
         // Collect non-deleted entries in insertion order
-        let mut new_entries: Array<TreeMapEntry<K, V>> = [];
+        let mut new_entries: List<TreeMapEntry<K, V>> = [];
         for let entry of self.entries {
             if !entry.deleted {
                 new_entries.push(TreeMapEntry {
@@ -271,8 +271,8 @@ impl<K: Ord> TreeMap<K, V> {
     }
 
     /// Returns all keys in insertion order.
-    pub fn keys(&self) -> Array<K> {
-        let mut result: Array<K> = [];
+    pub fn keys(&self) -> List<K> {
+        let mut result: List<K> = [];
         for let entry of self.entries {
             if !entry.deleted {
                 result.push(entry.key);
@@ -282,8 +282,8 @@ impl<K: Ord> TreeMap<K, V> {
     }
 
     /// Returns all values in insertion order.
-    pub fn values(&self) -> Array<V> {
-        let mut result: Array<V> = [];
+    pub fn values(&self) -> List<V> {
+        let mut result: List<V> = [];
         for let entry of self.entries {
             if !entry.deleted {
                 result.push(entry.value);
@@ -293,8 +293,8 @@ impl<K: Ord> TreeMap<K, V> {
     }
 
     /// Returns all key-value pairs in insertion order.
-    pub fn entries(&self) -> Array<[K, V]> {
-        let mut result: Array<[K, V]> = [];
+    pub fn entries(&self) -> List<[K, V]> {
+        let mut result: List<[K, V]> = [];
         for let entry of self.entries {
             if !entry.deleted {
                 result.push([entry.key, entry.value]);
@@ -356,7 +356,7 @@ impl KeyValueLiteralBuilder for TreeMap<String, V> {
 
 /// An iterator over the elements of a `TreeSet<T>`, in insertion order.
 struct TreeSetIter<T> {
-    entries: Array<TreeMapEntry<T, ()>>,
+    entries: List<TreeMapEntry<T, ()>>,
     index: i32,
 }
 

@@ -81,7 +81,7 @@ Wado structs compile to `(ref (struct (field ...) ...))`. The CM GC proposal map
 
 ### 1.3 Arrays / Lists: Already Aligned
 
-Wado's `Array<T>` is `(ref (array (mut T')))`. The proposal maps `list<T>` to the same structure.
+Wado's `List<T>` is `(ref (array (mut T')))`. The proposal maps `list<T>` to the same structure.
 
 **Action:** None needed.
 
@@ -131,14 +131,14 @@ enum CmMode {
 
 The synthesizer already dispatches on type shape. In GC mode, most composite types become **identity** (pass through directly) instead of lower/lift through linear memory:
 
-| Type        | Linear Memory Mode                         | GC Mode                                            |
-| ----------- | ------------------------------------------ | -------------------------------------------------- |
-| Scalars     | identity                                   | identity                                           |
-| `String`    | `cm_lower_string` / `memory_to_gc_string`  | **identity** (same GC array type)                  |
-| `Array<u8>` | `cm_lower_array_u8` / `memory_to_gc_array` | **identity**                                       |
-| Records     | recursive field-by-field copy via LM       | **identity or shallow copy** (if rec groups match) |
-| Variants    | discriminant + payload via LM              | **ref.cast + unwrap** or identity                  |
-| Resources   | handle table (i32)                         | `externref` (unchanged)                            |
+| Type       | Linear Memory Mode                         | GC Mode                                            |
+| ---------- | ------------------------------------------ | -------------------------------------------------- |
+| Scalars    | identity                                   | identity                                           |
+| `String`   | `cm_lower_string` / `memory_to_gc_string`  | **identity** (same GC array type)                  |
+| `List<u8>` | `cm_lower_array_u8` / `memory_to_gc_array` | **identity**                                       |
+| Records    | recursive field-by-field copy via LM       | **identity or shallow copy** (if rec groups match) |
+| Variants   | discriminant + payload via LM              | **ref.cast + unwrap** or identity                  |
+| Resources  | handle table (i32)                         | `externref` (unchanged)                            |
 
 For most types, GC mode synthesis is **dramatically simpler** than linear memory mode — many types need no adapter at all.
 
@@ -196,13 +196,13 @@ Once the CM GC spec is merged and wasmtime enables it by default:
 
 The biggest wins are for data-heavy WASI calls:
 
-| Operation              | Current (LM)       | After (GC)    | Improvement |
-| ---------------------- | ------------------ | ------------- | ----------- |
-| `String` export        | O(n) copy GC→LM    | O(1) ref pass | major       |
-| `String` import        | O(n) copy LM→GC    | O(1) ref pass | major       |
-| `Array<u8>` round-trip | 2× O(n) copies     | 0 copies      | major       |
-| `i32` / scalar         | identity           | identity      | none        |
-| Record with 3 fields   | 3× store + 3× load | O(1) ref pass | moderate    |
+| Operation             | Current (LM)       | After (GC)    | Improvement |
+| --------------------- | ------------------ | ------------- | ----------- |
+| `String` export       | O(n) copy GC→LM    | O(1) ref pass | major       |
+| `String` import       | O(n) copy LM→GC    | O(1) ref pass | major       |
+| `List<u8>` round-trip | 2× O(n) copies     | 0 copies      | major       |
+| `i32` / scalar        | identity           | identity      | none        |
+| Record with 3 fields  | 3× store + 3× load | O(1) ref pass | moderate    |
 
 For HTTP handlers processing request/response bodies, this eliminates the dominant cost of crossing the CM boundary.
 

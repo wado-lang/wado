@@ -279,23 +279,23 @@ test "serialize Option None" {
     assert mock_serialize(&opt) == "null";
 }
 
-test "serialize Array<i32>" {
-    let arr: Array<i32> = [1, 2, 3];
+test "serialize List<i32>" {
+    let arr: List<i32> = [1, 2, 3];
     assert mock_serialize(&arr) == "[1,2,3]";
 }
 
-test "serialize empty Array" {
-    let arr: Array<i32> = [];
+test "serialize empty List" {
+    let arr: List<i32> = [];
     assert mock_serialize(&arr) == "[]";
 }
 
-test "serialize Array<String>" {
-    let arr: Array<String> = ["a", "b"];
+test "serialize List<String>" {
+    let arr: List<String> = ["a", "b"];
     assert mock_serialize(&arr) == `["a","b"]`;
 }
 
-test "serialize nested Option<Array>" {
-    let arr: Array<i32> = [10, 20];
-    let opt: Option<Array<i32>> = Option::Some(arr);
+test "serialize nested Option<List>" {
+    let arr: List<i32> = [10, 20];
+    let opt: Option<List<i32>> = Option::Some(arr);
     assert mock_serialize(&opt) == "[10,20]";
 }

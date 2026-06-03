@@ -246,10 +246,10 @@ get variant emit "for free" under the unified naming scheme
 
 Two complementary mask shapes:
 
-- **1-token mask** (`Array<String>`) — the canonical intersection
+- **1-token mask** (`List<String>`) — the canonical intersection
   `tail_greedy_first(rule) ∩ caller_follow`. The variant body's iter
   dispatch subtracts the mask from `body_first_set`.
-- **K-prefix mask** (`Array<Array<String>>`) — `mask[d]` is the set of
+- **K-prefix mask** (`List<List<String>>`) — `mask[d]` is the set of
   caller tokens at input depth `d`. At iter entry, the variant body
   checks `peek_at(d) ∈ mask[d]` for every depth; on full match it
   yields to the caller. Admits multi-token-inner `Repeat`s (`(X Y)+`,

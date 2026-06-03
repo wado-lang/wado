@@ -160,7 +160,7 @@ All composite types that store a resource value, struct field, or container slot
 
 | Type                  | Variance in `T`                                 |
 | --------------------- | ----------------------------------------------- |
-| `Array<T>`            | invariant                                       |
+| `List<T>`             | invariant                                       |
 | `Option<T>`           | invariant                                       |
 | `TreeMap<K, V>`       | invariant in both                               |
 | `[T, U, ...]` (tuple) | invariant in each element                       |
@@ -207,7 +207,7 @@ Implicit upcast is inserted at:
 Implicit upcast does **not** fire at:
 
 - Type parameter inference (`T` is solved to the most specific concrete type; the upcast happens later, at a use site)
-- Inside aggregate types where the rule above forces invariance — e.g., constructing `Array<Node>` from `[el1, el2]` where `el1: Element, el2: Element` requires an explicit annotation, because `Array<T>` is invariant
+- Inside aggregate types where the rule above forces invariance — e.g., constructing `List<Node>` from `[el1, el2]` where `el1: Element, el2: Element` requires an explicit annotation, because `List<T>` is invariant
 - Across the `i32`/`externref` representation boundary — by the rule from §"No cross-representation conversion in v1"
 
 #### Pattern matching and `match`
@@ -575,7 +575,7 @@ Lands as one milestone to avoid an intermediate "compiles but does not run" stat
 
 - [ ] `extends` keyword in lexer / AST / parser
 - [ ] Subtyping relation (reflexive, transitive, antisymmetric)
-- [ ] Variance rules: `&T` covariant, `&mut T` invariant, aggregates (`Array`, `Option`, `TreeMap`, tuple, struct field) invariant
+- [ ] Variance rules: `&T` covariant, `&mut T` invariant, aggregates (`List`, `Option`, `TreeMap`, tuple, struct field) invariant
 - [ ] Implicit upcast insertion at call args / return / annotated `let` / parent-typed field assignment / branch unify
 - [ ] Method resolution: walk extends chain + visible trait impls, ambiguity is an error
 - [ ] Corner cases: override forbidden / trait-vs-inherited collision error / static methods do not inherit / `Self` fixed at declaring resource / visibility judged at declaring module

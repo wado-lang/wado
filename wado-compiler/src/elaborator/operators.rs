@@ -790,7 +790,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                 } else {
                     // Mixed operand types that cannot combine under this
-                    // operator (e.g. `i32 - Array<i32>`). Reported the same
+                    // operator (e.g. `i32 - List<i32>`). Reported the same
                     // way regardless of which operand is non-primitive.
                     let _ = self.logger.error(TypeError::OperatorNotApplicable {
                         op: op_char.to_string(),
@@ -899,7 +899,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Reject &mut on struct field access when the field is a primitive type.
         // In Wasm GC, struct.get returns a value copy for primitives, so &mut field
         // creates a disconnected Box — mutations don't propagate back to the struct.
-        // For GC reference types (struct, String, Array, etc.), struct.get returns
+        // For GC reference types (struct, String, List, etc.), struct.get returns
         // the shared reference, so &mut field works correctly.
         if unary.op == UnaryOp::MutRef && matches!(&expr.kind, TirExprKind::FieldAccess { .. }) {
             let field_type = self.tysys.type_table.borrow().get(expr.type_id).clone();

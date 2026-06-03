@@ -895,7 +895,7 @@ impl<'a> Unparser<'a> {
     }
 
     /// Output an inherent impl type with type param bounds inlined into type args.
-    /// E.g.: `impl<T: Ord> Array<T>` → `impl Array<T: Ord>`
+    /// E.g.: `impl<T: Ord> List<T>` → `impl List<T: Ord>`
     fn unparse_impl(&mut self, i: &ImplBlock) {
         self.write_indent();
         self.output.push_str("impl");

@@ -73,7 +73,7 @@ pub(super) fn build_value_copy_helpers(
 ///   refuses to record fields for these locals (matches the OLD
 ///   WIR-level `const_forward` conservatism).
 /// - `alias_groups`: union-find over reference-typed `let dst = src`
-///   Local→Local copies in `body` (`Box<T>`, `Array<T>`, `&T`,
+///   Local→Local copies in `body` (`Box<T>`, `List<T>`, `&T`,
 ///   `&mut T`). Used to widen field-assignment invalidation: writing
 ///   `dst.field = …` drops the same field on every alias.
 pub(super) fn build_alias_info(
@@ -135,7 +135,7 @@ pub(super) fn recognize_value_copy<'a>(
 
 /// Build the alias-group map. Two locals end up in the same group
 /// when they're connected by a chain of `let dst = src` Local→Local
-/// copies of a reference-typed value (`Box<T>`, `Array<T>`, `&T`,
+/// copies of a reference-typed value (`Box<T>`, `List<T>`, `&T`,
 /// `&mut T`). For value-semantic types (plain structs, variants),
 /// `let dst = src` will later be wrapped in `$value_copy$T(src)` by
 /// the value-copy synthesis pass — `dst` is then a fresh allocation
@@ -241,21 +241,21 @@ fn collect_alias_groups(
 
 /// True when assigning a value of `type_id` from one local to another
 /// produces aliasing — both names refer to the same heap object. This
-/// is the case for reference types (`Box<T>`, `Array<T>`, `&T`,
+/// is the case for reference types (`Box<T>`, `List<T>`, `&T`,
 /// `&mut T`). Value-semantic types (plain structs, variants) are
 /// turned into a `$value_copy$T(src)` wrapper post-loop, so during
 /// the loop a `let dst = src` edge between two value-typed locals
 /// would over-merge groups that should stay separate.
 ///
-/// `Box<T>` and `Array<T>` may surface either as `GenericInstance`
+/// `Box<T>` and `List<T>` may surface either as `GenericInstance`
 /// (pre-monomorphization) or as concrete monomorphized `Struct`
 /// records carrying the original generic name in `base_name`.
 fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Ref(_) => true,
-        ResolvedType::GenericInstance { name, .. } if name == "Box" || name == "Array" => true,
+        ResolvedType::GenericInstance { name, .. } if name == "Box" || name == "List" => true,
         ResolvedType::Struct { base_name, .. }
-            if base_name.as_deref() == Some("Box") || base_name.as_deref() == Some("Array") =>
+            if base_name.as_deref() == Some("Box") || base_name.as_deref() == Some("List") =>
         {
             true
         }

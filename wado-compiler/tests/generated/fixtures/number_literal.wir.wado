@@ -27,7 +27,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
 
 array builtin::array<u64> (mut u64);  // TypeId(4)
 
-struct core:prelude//Array<u64> {  // TypeId(5)
+struct core:prelude//List<u64> {  // TypeId(5)
     mut repr: ref builtin::array<u64>,
     mut used: i32,
 }
@@ -170,7 +170,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global global:core::prelude/fpfmt.wado::POW10: ref null "core:prelude//Array<u64>" = struct.new "core:prelude//Array<u64>" { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
+global global:core::prelude/fpfmt.wado::POW10: ref null "core:prelude//List<u64>" = struct.new "core:prelude//List<u64>" { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/number_literal.wado/number_literal_coercion"() with Stdout {
@@ -740,8 +740,8 @@ fn "core:prelude/fpfmt.wado/fixed_width_for_prec"(f, precision) {
     let u_33: u64;
     let n_34: i32;
     let u_39: u64;
-    let self_40: ref "core:prelude//Array<u64>";
-    let self_42: ref "core:prelude//Array<u64>";
+    let self_40: ref "core:prelude//List<u64>";
+    let self_42: ref "core:prelude//List<u64>";
     let unpack_mv_mantissa: u64;
     let unpack_mv_exponent: i32;
     multivalue_bind [unpack_mv_mantissa, unpack_mv_exponent] = "core:prelude/fpfmt.wado/unpack64"(f);
@@ -1307,7 +1307,7 @@ fn "core:prelude/primitive.wado/f32::fmt_into"(self, f) {
     let nd_17: i32;
     let x_18: i32;
     let self_22: ref "core:prelude/string.wado//String";
-    let self_25: ref "core:prelude//Array<u64>";
+    let self_25: ref "core:prelude//List<u64>";
     if f.precision >= 0 {
         precision = f.precision;
         v64 = builtin::f64_promote_f32(self);
@@ -1350,7 +1350,7 @@ fn "core:prelude/primitive.wado/f64::fmt_into"(self, f) {
     let nd_14: i32;
     let x_15: i32;
     let self_19: ref "core:prelude/string.wado//String";
-    let self_22: ref "core:prelude//Array<u64>";
+    let self_22: ref "core:prelude//List<u64>";
     if f.precision >= 0 {
         "core:prelude/primitive.wado/f64::fmt_fixed"(self, f.precision, f);
         return;
@@ -1393,7 +1393,7 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
     let nd_20: i32;
     let x_21: i32;
     let self_25: ref "core:prelude/string.wado//String";
-    let self_28: ref "core:prelude//Array<u64>";
+    let self_28: ref "core:prelude//List<u64>";
     let __pattern_temp_0_mv_0: bool;
     let __pattern_temp_0_mv_1: bool;
     let __pattern_temp_0_mv_2: "core:prelude/fpfmt.wado//enum:SpecialKind";
