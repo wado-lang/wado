@@ -1,0 +1,46 @@
+// Identical immutable const globals are merged by
+// `wir_optimize::dedupe_const_globals`. Two functions each hoist the same
+// constant `[10, 20, 30, 40]` (via `const_object_globalization`), producing two
+// const globals with byte-identical inits; the dedup pass keeps one canonical
+// global, rewrites the other's reads to it, and drops it. Under value semantics
+// the merge is unobservable, and the output proves both reads still work.
+
+use { println, Stdout } from "core:cli";
+
+fn sum_a(n: i32) -> i32 {
+    let xs: List<i32> = [10, 20, 30, 40];
+    let mut s = 0;
+    let mut i = 0;
+    while i < n {
+        s = s + xs[i % 4];
+        i = i + 1;
+    }
+    return s;
+}
+
+fn sum_b(n: i32) -> i32 {
+    let ys: List<i32> = [10, 20, 30, 40];
+    let mut s = 0;
+    let mut i = 0;
+    while i < n {
+        s = s + ys[i % 4];
+        i = i + 1;
+    }
+    return s;
+}
+
+export fn run() with Stdout {
+    println(`{sum_a(4)},{sum_b(4)}`);
+}
+
+__DATA__
+{
+    "stdout": "100,100\n",
+    "wir_expect:O2": [
+        "global global:__const_obj_0",
+        "array.new_fixed<i32>(10, 20, 30, 40)"
+    ],
+    "wir_not_expect:O2": [
+        "global global:__const_obj_1"
+    ]
+}

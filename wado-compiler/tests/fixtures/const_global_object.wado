@@ -9,9 +9,13 @@
 //   Both become immutable Wasm globals with an eager init, so the
 //   `global:ORIGIN = …` / `global:NUMS = …` runtime assignments vanish from
 //   `__initialize_module`.
-// - `GREET` (string) stays lazy: a `String`'s `array.new_data<u8>` repr is
-//   not a valid Wasm constant instruction, so it must be initialized at
-//   runtime. This locks that documented limitation.
+// - `GREET` (short string, ≤ 8 bytes) is also eager: short strings get a
+//   constant `array.new_fixed<u8>` repr (a valid Wasm constant instruction)
+//   instead of a `array.new_data` data segment, so they promote too.
+// - `BANNER` (longer string, > 8 bytes) stays lazy: it keeps the compact
+//   `array.new_data<u8>` data-segment repr, which is not a valid Wasm constant
+//   instruction, so it must be initialized at runtime. This locks the
+//   short-string-eager threshold.
 
 use { println, Stdout } from "core:cli";
 
@@ -23,22 +27,26 @@ struct Point {
 global ORIGIN: Point = Point { x: 3, y: 4 };
 global NUMS: List<i32> = [10, 20, 30];
 global GREET: String = "hi";
+global BANNER: String = "welcome to wado";
 
 export fn run() with Stdout {
-    println(`{ORIGIN.x},{ORIGIN.y},{NUMS.len()},{GREET}`);
+    println(`{ORIGIN.x},{ORIGIN.y},{NUMS.len()},{GREET},{BANNER}`);
 }
 
 __DATA__
 {
-    "stdout": "3,4,3,hi\n",
+    "stdout": "3,4,3,hi,welcome to wado\n",
     "wir_expect:O2": [
         "global global:ORIGIN",
         "global global:NUMS",
         "array.new_fixed<i32>(10, 20, 30)",
-        "global mut global:GREET"
+        "global global:GREET",
+        "array.new_fixed<u8>(104, 105)",
+        "global mut global:BANNER"
     ],
     "wir_not_expect:O2": [
         "global mut global:ORIGIN",
-        "global mut global:NUMS"
+        "global mut global:NUMS",
+        "global mut global:GREET"
     ]
 }

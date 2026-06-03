@@ -470,7 +470,7 @@ condition: g.items[2] == 15
 "), used: 29 }); "core:prelude/string.wado/String::push_str"(__local_88, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("g.items[2]: "), used: 12 }); __local_89 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_88 }; f_370 = __local_89; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_50, f_370); "core:prelude/string.wado/String::push"(__local_88, 10); __local_88);
         unreachable;
     }
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
 fn "wado-compiler/tests/fixtures/array_append_collapse.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -847,9 +847,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
@@ -972,7 +972,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
     if truncated {
-        s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("..."), used: 3 };
+        s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
         "core:prelude/string.wado/String::push_str"(f.buf, s);
     }
 }

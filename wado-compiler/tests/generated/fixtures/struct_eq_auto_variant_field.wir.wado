@@ -114,12 +114,13 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" { x: 1, y: 2, color: ref.as_non_null(struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color" { 0 }) };
+global global:__const_obj_1: ref null "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" { x: 1, y: 2, color: ref.as_non_null(struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color::Blue" { discriminant: 2, payload_0: 42 }) };
+
 fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/run"() with Stdout {
     let p1: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel";
-    let p2: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel";
     let p3: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel";
     let p4: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel";
-    let p5: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel";
     let p6: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel";
     let p7: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel";
     let c1: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container";
@@ -127,19 +128,17 @@ fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/run"() with S
     let c3: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container";
     let c4: ref "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container";
     p1 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" { x: 1, y: 2, color: struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color" { 0 } };
-    p2 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" { x: 1, y: 2, color: struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color" { 0 } };
     p3 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" { x: 1, y: 2, color: struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color" { 1 } };
     p4 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" { x: 1, y: 2, color: struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color::Blue" { discriminant: 2, payload_0: 42 } };
-    p5 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" { x: 1, y: 2, color: struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color::Blue" { discriminant: 2, payload_0: 42 } };
     p6 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" { x: 1, y: 2, color: struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color::Blue" { discriminant: 2, payload_0: 7 } };
     p7 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Pixel" { x: 3, y: 2, color: struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Color" { 0 } };
-    if "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq"(p1, p2) {
+    if "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq"(p1, global:__const_obj_0) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("same pixel"), used: 10 });
     }
     if "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq"(p1, p3) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("different color case"), used: 20 });
     }
-    if "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq"(p4, p5) {
+    if "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq"(p4, global:__const_obj_1) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("same blue payload"), used: 17 });
     }
     if "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq"(p4, p6) == 0 {
@@ -148,10 +147,10 @@ fn "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/run"() with S
     if "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Pixel^Eq::eq"(p1, p7) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("different coords"), used: 16 });
     }
-    c1 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, value: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 } };
-    c2 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, value: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 } };
-    c3 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a"), used: 1 }, value: struct.new "core:prelude/types.wado//Option<i32>" { 1 } };
-    c4 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("b"), used: 1 }, value: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 } };
+    c1 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, value: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 } };
+    c2 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, value: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 } };
+    c3 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, value: struct.new "core:prelude/types.wado//Option<i32>" { 1 } };
+    c4 = struct.new "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado//Container" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }, value: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 } };
     if "wado-compiler/tests/fixtures/struct_eq_auto_variant_field.wado/Container^Eq::eq"(c1, c2) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("same container"), used: 14 });
     }

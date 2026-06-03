@@ -390,6 +390,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "core:prelude/int128.wado//i128" = struct.new "core:prelude/int128.wado//i128" { low: -1_i64, high: 9223372036854775807_i64 };
+global global:__const_obj_1: ref null "core:prelude/int128.wado//u128" = struct.new "core:prelude/int128.wado//u128" { low: -1_i64, high: -1_i64 };
+
 fn "wado-compiler/tests/fixtures/serde_json_large_int.wado/__test_0_i64_small_value_as_number"() {
     let s: ref "core:prelude/string.wado//String";
     let __cond: bool;
@@ -402,7 +405,7 @@ fn "wado-compiler/tests/fixtures/serde_json_large_int.wado/__test_0_i64_small_va
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<i64>"(42_i64);
     if __sroa_r_discriminant == 0 {
         s = ref.as_non_null(__sroa_r_case0_payload_0);
-        __cond = "core:prelude/string.wado/String^Eq::eq"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("42"), used: 2 });
+        __cond = "core:prelude/string.wado/String^Eq::eq"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(52, 50), used: 2 });
         if __cond == 0 {
             "core:internal/panic"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(115), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_i64_small_value_as_number"), used: 34 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_large_int.wado"), used: 54 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_10 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(12, f_10); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: s == \"42\"
@@ -564,17 +567,15 @@ condition: v == 18446744073709551615 as u64
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_large_int.wado/__test_7_i128_large_value_as_string"() {
-    let v: ref "core:prelude/int128.wado//i128";
     let s: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let f_12: ref "core:prelude/format.wado//Formatter";
-    v = struct.new "core:prelude/int128.wado//i128" { low: -1_i64, high: 9223372036854775807_i64 };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<core:prelude/int128.wado/i128>"(v);
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<core:prelude/int128.wado/i128>"(global:__const_obj_0);
     if __sroa_r_discriminant == 0 {
         s = ref.as_non_null(__sroa_r_case0_payload_0);
         __cond = "core:prelude/string.wado/String^Eq::eq"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\"170141183460469231731687303715884105727\""), used: 41 });
@@ -591,17 +592,15 @@ condition: s == `\"170141183460469231731687303715884105727\"`
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_large_int.wado/__test_8_u128_large_value_as_string"() {
-    let v: ref "core:prelude/int128.wado//u128";
     let s: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let f_12: ref "core:prelude/format.wado//Formatter";
-    v = struct.new "core:prelude/int128.wado//u128" { low: -1_i64, high: -1_i64 };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<core:prelude/int128.wado/u128>"(v);
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<core:prelude/int128.wado/u128>"(global:__const_obj_1);
     if __sroa_r_discriminant == 0 {
         s = ref.as_non_null(__sroa_r_case0_payload_0);
         __cond = "core:prelude/string.wado/String^Eq::eq"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\"340282366920938463463374607431768211455\""), used: 41 });
@@ -3381,9 +3380,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
@@ -3506,7 +3505,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
     if truncated {
-        s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("..."), used: 3 };
+        s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
         "core:prelude/string.wado/String::push_str"(f.buf, s);
     }
 }

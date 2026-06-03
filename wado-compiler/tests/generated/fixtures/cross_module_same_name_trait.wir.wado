@@ -113,16 +113,16 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "./sub/cross_module_same_name_trait_a.wado//Data" = struct.new "./sub/cross_module_same_name_trait_a.wado//Data" { x: 42 };
+
 fn "wado-compiler/tests/fixtures/cross_module_same_name_trait.wado/__test_0_cross_module_same_name_traits"() {
-    let a: ref "./sub/cross_module_same_name_trait_a.wado//Data";
     let __v0_1: ref "core:prelude/string.wado//String";
     let __cond_2: bool;
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let f_14: ref "core:prelude/format.wado//Formatter";
-    a = struct.new "./sub/cross_module_same_name_trait_a.wado//Data" { x: 42 };
-    __v0_1 = "./sub/cross_module_same_name_trait_a.wado/Data^Describe::describe"(a);
-    __cond_2 = "core:prelude/string.wado/String^Eq::eq"(__v0_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x=42"), used: 4 });
+    __v0_1 = "./sub/cross_module_same_name_trait_a.wado/Data^Describe::describe"(global:__const_obj_0);
+    __cond_2 = "core:prelude/string.wado/String^Eq::eq"(__v0_1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 61, 52, 50), used: 4 });
     if __cond_2 == 0 {
         "core:internal/panic"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(153), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_cross_module_same_name_traits"), used: 38 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/cross_module_same_name_trait.wado"), used: 62 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_14 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(15, f_14); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: get_description(&a) == \"x=42\"
@@ -451,9 +451,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
@@ -576,7 +576,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
     if truncated {
-        s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("..."), used: 3 };
+        s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
         "core:prelude/string.wado/String::push_str"(f.buf, s);
     }
 }
