@@ -1,0 +1,96 @@
+// User-module inherent impls on *foreign* types — the raw GC array `Array<T>`,
+// primitives (`i32`), and stdlib types (`String`) — must type-check (with the
+// receiver's element/type args substituted into the method's return type) and
+// monomorphize to a concrete function.
+//
+// Regression test for two bugs that compounded:
+//   1. `resolve_method_call_with` did not extract the impl-level type arg from a
+//      `BuiltinArray` receiver, so an `impl Array<T>` method returning `T` (or a
+//      generic view over `T`) kept its `T` unsubstituted → "expected 'T', found
+//      'i32'".
+//   2. `lookup_method_info` recorded no `impl_module` for a generic inherent
+//      impl, so a foreign-type method defined in a user module was looked up in
+//      the type's canonical (prelude) module during monomorphization, not found,
+//      and ICE'd: `[WIR] unresolved MethodCall: name="Array<i32>::first"`.
+//
+// These impls live in the *user* module, not the stdlib, which is the path that
+// was broken (stdlib impls dodged both bugs via the loaded-module lookup path).
+
+impl Array<T> {
+    fn first(&self) -> T {
+        return builtin::array_get(self, 0);
+    }
+}
+
+impl i32 {
+    fn doubled(&self) -> i32 {
+        return *self * 2;
+    }
+}
+
+impl String {
+    fn shout_len(&self) -> i32 {
+        return self.len();
+    }
+}
+
+// A generic view struct holding a `&Array<T>`, returned from an `impl Array<T>`
+// method with `stores[self]` — exercises return-type substitution into a nested
+// generic (`View<T>`) carrying a reference field.
+struct View<E> {
+    repr: &Array<E>,
+    start: i32,
+    end: i32,
+}
+
+impl View<E> {
+    fn len(&self) -> i32 {
+        return self.end - self.start;
+    }
+    fn at(&self, i: i32) -> E {
+        return builtin::array_get(self.repr, self.start + i);
+    }
+}
+
+impl Array<T> {
+    fn view(&self, start: i32, end: i32) -> View<T> with stores[self] {
+        return View { repr: self, start, end };
+    }
+}
+
+test "impl Array<T> method returns substituted T" {
+    let mut a: Array<i32> = Array::new(3);
+    a[0] = 11;
+    a[1] = 22;
+    assert a.first() == 11;
+}
+
+test "impl Array<String> method returns substituted T" {
+    let mut a: Array<String> = Array::new(2);
+    a[0] = "hi";
+    a[1] = "yo";
+    assert a.first() == "hi";
+}
+
+test "impl i32 in user module" {
+    let x: i32 = 21;
+    assert x.doubled() == 42;
+}
+
+test "impl String in user module" {
+    let s = "hello";
+    assert s.shout_len() == 5;
+}
+
+test "impl Array<T> returning generic view over &Array<T>" {
+    let mut a: Array<i32> = Array::new(5);
+    a[1] = 20;
+    a[3] = 40;
+    let v = a.view(1, 4);
+    assert v.len() == 3;
+    assert v.at(0) == 20;
+    assert v.at(2) == 40;
+}
+
+__DATA__
+{"test": {}}

@@ -682,7 +682,7 @@ impl TraitEnv {
 }
 
 /// Returns `true` if the module source is a user-local module (part of the current package).
-fn is_user_local(ms: &ModuleSource) -> bool {
+pub(super) fn is_user_local(ms: &ModuleSource) -> bool {
     matches!(
         ms,
         ModuleSource::Local { .. }
