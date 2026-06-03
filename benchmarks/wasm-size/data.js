@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780463293225,
+  "lastUpdate": 1780479261036,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29293,6 +29293,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8daad84c370ad9c8a33537695c36e041230b67a1",
+          "message": "Merge pull request #1279 from wado-lang/claude/cool-bell-LntfL\n\nfeat(compiler): builtin::array_* take &/&mut references (WEP Phase 1)",
+          "timestamp": "2026-06-03T18:25:40+09:00",
+          "tree_id": "c9446ff89db92ed384fdf49d1dc4a811202b2ac1",
+          "url": "https://github.com/wado-lang/wado/commit/8daad84c370ad9c8a33537695c36e041230b67a1"
+        },
+        "date": 1780479260523,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9687,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457437,
             "unit": "bytes"
           }
         ]
