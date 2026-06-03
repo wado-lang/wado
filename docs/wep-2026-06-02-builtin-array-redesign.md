@@ -298,10 +298,38 @@ operations stay as intrinsics, re-typed against `&Array<T>` / `&mut Array<T>`. A
 the type and a Wado wrapper `impl` — interface tidying, not a re-implementation of
 the lowering.
 
-- [ ] Declare the definition-less `Array<T>` (`compiler_item("array")`), generalize
+- [x] Declare the definition-less `Array<T>` (`compiler_item("array")`), generalize
       the parser for named definition-less types, re-type the `builtin::array_*`
       intrinsics, give `Array<T>` standalone value semantics, add the wrapper `impl`,
-      and point `List`'s `repr` at it.
+      and point `List`'s `repr` at it. Done across three commits:
+      - Value semantics: `needs_value_copy` returns `true` for the raw array and the
+      `$value_copy$T` synthesizer emits `array_clone::<T>(&v)` (the same intrinsic
+      that deep-copies a `List`/`String` `repr`); the stdlib sites that relied on
+      the old hidden aliasing (`List::sort_by` / `copy_within_append`) operate on
+      `self.repr` directly.
+      - A–C: a named definition-less `pub type Name<...>;` parses to a new
+      `Item::BuiltinTypeDecl`; `Array<T>` (`#[compiler_item("array")]`,
+      `core:prelude/array.wado`) resolves to `ResolvedType::BuiltinArray` in all
+      three type resolvers (elaborator, builtin registry, orchestration static
+      pre-pass); type display / WIR mangle / method-name spelling all read
+      `Array<T>`; every `builtin::array<T>` field/parameter in `lib/core/**` and
+      the fixtures migrates to `Array<T>`, with `List` / `String` `repr` pointed
+      at it. The `builtin::array_*` free-function intrinsics keep their names.
+      - D: `impl Array<T>` adds `new` / `filled` / `len` / `get` / `set` / `fill` /
+      `copy_from` plus `IndexValue<i32>` / `IndexAssign<i32>` (`arr[i]` /
+      `arr[i] = v`); the method/monomorphization machinery learns that the raw
+      array's method-owner base name is `Array`, and a named definition-less type
+      registers a `SymbolKind::BuiltinType` (LSP declaration site, `pub use`,
+      prelude collision protection).
+
+      P0 fix surfaced en route: the orchestration static type resolver did not
+      recognise the `Array<T>` spelling, so `String.repr` resolved to `Unknown`
+      (→ `i32`) in the struct-field registry; LICM then hoisted the field access
+      with the wrong type, producing an invalid core module ("expected i32, found
+      (ref …)") at `-O2` only (struct deserialization / kiln generators). Adding the
+      `"Array"` arm to the static resolver closes it; pinned by the
+      `serde_json_struct_deser_o2` fixture. `mise run test` and `mise run test-wado`
+      both green; `Array<T>` is covered by `lib/core/prelude/array_test.wado`.
 
 ### Phase 3 — Reference views
 
