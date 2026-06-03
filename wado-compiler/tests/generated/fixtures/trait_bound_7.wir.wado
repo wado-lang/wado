@@ -112,23 +112,25 @@ type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(r
 
 type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(40)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(41)
+type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(41)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(42)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(42)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(43)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(43)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(44)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(44)
 
-type "functype//wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min" = fn(ref "core:prelude//List<i32>") -> i32;  // TypeId(45)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(45)
 
-type "functype//core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq" = fn(ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>", ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>") -> bool;  // TypeId(46)
+type "functype//wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min" = fn(ref "core:prelude//List<i32>") -> i32;  // TypeId(46)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(47)
+type "functype//core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq" = fn(ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>", ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>") -> bool;  // TypeId(47)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(48)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(48)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(49)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(49)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(50)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -405,19 +407,28 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     self.used = new_used;
 }
 
+fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
+    let len_a: i32;
+    len_a = self.used;
+    if len_a != other.used {
+        return 0;
+    }
+    return "core:prelude/string.wado/String^Eq::eq_bytes"(self.repr, other.repr, len_a);
+}
+
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
     i = 0;
-    b21: block {
-        l22: loop {
+    b22: block {
+        l23: loop {
             if i >= len {
-                break b21;
+                break b22;
             }
             if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                 return 0;
             }
             i = i + 1;
-            continue l22;
+            continue l23;
         };
     };
     return 1;
@@ -453,14 +464,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b29: block {
-        l30: loop {
+    b30: block {
+        l31: loop {
             if i >= n {
-                break b29;
+                break b30;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l30;
+            continue l31;
         };
     };
 }
@@ -560,10 +571,10 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min"(self) {
     i = 1;
     _licm_used_12 = self.used;
     _licm_repr_13 = self.repr;
-    b50: block {
-        l51: loop {
+    b51: block {
+        l52: loop {
             if i >= _licm_used_12 {
-                break b50;
+                break b51;
             }
             if __inline_i32_Ord__cmp_3: block -> "core:prelude/traits.wado//enum:Ordering" {
                 self_8 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(_licm_repr_13, i) };
@@ -579,7 +590,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min"(self) {
                 m = builtin::array_get<i32>(_licm_repr_13, i);
             }
             i = i + 1;
-            continue l51;
+            continue l52;
         };
     };
     return m;
@@ -590,7 +601,6 @@ fn "core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(
     let b_3: i32;
     let a_4: ref "core:prelude/string.wado//String";
     let b_5: ref "core:prelude/string.wado//String";
-    let len_a: i32;
     return let __match_scrut_0: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>", __match_scrut_0 = self.value, (if ref.test "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(__match_scrut_0) -> bool {
         a_2 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(__match_scrut_0).payload_0;
         let __match_scrut_2: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
@@ -609,13 +619,7 @@ fn "core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(
             0;
         } else {
             b_5 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err"(__match_scrut_1).payload_0;
-            __inline_String_Eq__eq_0: block -> bool {
-                len_a = a_4.used;
-                if len_a != b_5.used {
-                    break __inline_String_Eq__eq_0: 0;
-                }
-                break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(a_4.repr, b_5.repr, len_a);
-            };
+            "core:prelude/string.wado/String^Eq::eq"(a_4, b_5);
         }
     });
 }

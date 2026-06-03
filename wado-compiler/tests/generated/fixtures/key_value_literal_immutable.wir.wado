@@ -102,29 +102,31 @@ type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(r
 
 type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(37)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(38)
+type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(38)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(39)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(39)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(40)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(40)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(41)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(41)
 
-type "functype//core:prelude/list.wado/List<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//List<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(42)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(42)
 
-type "functype//core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(43)
+type "functype//core:prelude/list.wado/List<core:prelude/string.wado/String>::push" = fn(ref "core:prelude//List<core:prelude/string.wado/String>", ref "core:prelude/string.wado//String");  // TypeId(43)
 
-type "functype//core:prelude/list.wado/List<i32>::push" = fn(ref "core:prelude//List<i32>", i32);  // TypeId(44)
+type "functype//core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(44)
 
-type "functype//core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(45)
+type "functype//core:prelude/list.wado/List<i32>::push" = fn(ref "core:prelude//List<i32>", i32);  // TypeId(45)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(46)
+type "functype//core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(46)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(47)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(47)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(48)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(48)
 
-type "functype//wado-compiler/tests/fixtures/key_value_literal_immutable.wado/FrozenMap<i32>::get" = fn(ref "wado-compiler/tests/fixtures/key_value_literal_immutable.wado//FrozenMap<i32>", ref "core:prelude/string.wado//String") -> [i32, i32];  // TypeId(49)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(49)
+
+type "functype//wado-compiler/tests/fixtures/key_value_literal_immutable.wado/FrozenMap<i32>::get" = fn(ref "wado-compiler/tests/fixtures/key_value_literal_immutable.wado//FrozenMap<i32>", ref "core:prelude/string.wado//String") -> [i32, i32];  // TypeId(50)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -490,19 +492,28 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     self.used = new_used;
 }
 
+fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
+    let len_a: i32;
+    len_a = self.used;
+    if len_a != other.used {
+        return 0;
+    }
+    return "core:prelude/string.wado/String^Eq::eq_bytes"(self.repr, other.repr, len_a);
+}
+
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
     i = 0;
-    b26: block {
-        l27: loop {
+    b27: block {
+        l28: loop {
             if i >= len {
-                break b26;
+                break b27;
             }
             if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                 return 0;
             }
             i = i + 1;
-            continue l27;
+            continue l28;
         };
     };
     return 1;
@@ -538,14 +549,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b34: block {
-        l35: loop {
+    b35: block {
+        l36: loop {
             if i >= n {
-                break b34;
+                break b35;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l35;
+            continue l36;
         };
     };
 }
@@ -632,43 +643,32 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 
 fn "wado-compiler/tests/fixtures/key_value_literal_immutable.wado/FrozenMap<i32>::get"(self, key) {
     let i: i32;
-    let self_6: ref "core:prelude/string.wado//String";
-    let len_a: i32;
-    let _licm_keys_11: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let _licm_values_12: ref "core:prelude//List<i32>";
-    let _licm_used_13: i32;
-    let _licm_repr_14: ref "builtin::array<core:prelude/string.wado/String>";
-    let _licm_used_15: i32;
-    let _licm_repr_16: ref builtin::array<i32>;
-    let _licm_used_21: i32;
+    let _licm_keys_8: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let _licm_values_9: ref "core:prelude//List<i32>";
+    let _licm_used_10: i32;
+    let _licm_repr_11: ref "builtin::array<core:prelude/string.wado/String>";
+    let _licm_used_12: i32;
+    let _licm_repr_13: ref builtin::array<i32>;
     i = 0;
-    _licm_keys_11 = self.keys;
-    _licm_values_12 = self.values;
-    _licm_used_13 = _licm_keys_11.used;
-    _licm_repr_14 = _licm_keys_11.repr;
-    _licm_used_15 = _licm_values_12.used;
-    _licm_repr_16 = _licm_values_12.repr;
-    _licm_used_21 = key.used;
-    b54: block {
-        l55: loop {
-            if i >= _licm_used_13 {
-                break b54;
+    _licm_keys_8 = self.keys;
+    _licm_values_9 = self.values;
+    _licm_used_10 = _licm_keys_8.used;
+    _licm_repr_11 = _licm_keys_8.repr;
+    _licm_used_12 = _licm_values_9.used;
+    _licm_repr_13 = _licm_values_9.repr;
+    b55: block {
+        l56: loop {
+            if i >= _licm_used_10 {
+                break b55;
             }
-            if __inline_String_Eq__eq_2: block -> bool {
-                self_6 = builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_14, i);
-                len_a = self_6.used;
-                if len_a != _licm_used_21 {
-                    break __inline_String_Eq__eq_2: 0;
-                }
-                break __inline_String_Eq__eq_2: "core:prelude/string.wado/String^Eq::eq_bytes"(self_6.repr, key.repr, len_a);
-            } {
-                return 0, if builtin::unlikely(i >= _licm_used_15) {
+            if "core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_11, i), key) {
+                return 0, if builtin::unlikely(i >= _licm_used_12) {
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
-                }; builtin::array_get<i32>(_licm_repr_16, i);
+                }; builtin::array_get<i32>(_licm_repr_13, i);
             }
             i = i + 1;
-            continue l55;
+            continue l56;
         };
     };
     return 1, 0;
