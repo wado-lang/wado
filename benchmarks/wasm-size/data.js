@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780494037584,
+  "lastUpdate": 1780519012842,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29425,6 +29425,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 457437,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6b572de873222d779a79c84e0d884d5763556aad",
+          "message": "Merge pull request #1283 from wado-lang/claude/global-const-optimization-MI5xy\n\nConstant object globalization + eager short-string globals + const-global dedup",
+          "timestamp": "2026-06-04T05:27:51+09:00",
+          "tree_id": "4bd086297e8692a5f851c251fb4413195fe83938",
+          "url": "https://github.com/wado-lang/wado/commit/6b572de873222d779a79c84e0d884d5763556aad"
+        },
+        "date": 1780519012319,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9659,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457424,
             "unit": "bytes"
           }
         ]
