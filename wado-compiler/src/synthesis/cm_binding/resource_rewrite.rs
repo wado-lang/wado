@@ -528,6 +528,7 @@ fn synthesize_stream_read_func(
         is_dispatch_wrapper: false,
         is_cm_export: false,
         is_ambient: false,
+        benign_effects: Vec::new(),
         inline_hint: InlineHint::Auto,
         compiler_item: None,
         export_name: None,

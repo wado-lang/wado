@@ -3258,6 +3258,12 @@ pub struct TirFunction {
     /// checker does not propagate those requirements to callers.
     pub is_ambient: bool,
 
+    /// Effects from `#[benign(E)]`. The checker admits each one in the body
+    /// without a `with E` clause and never propagates it to callers. Unlike
+    /// `is_ambient`, only the listed effects are suppressed; the world import
+    /// for `E` is still required since the body references the operation.
+    pub benign_effects: Vec<EffectRef>,
+
     /// Inline hint from `#[inline]`, `#[inline(always)]`, or `#[inline(never)]` attributes.
     pub inline_hint: InlineHint,
 

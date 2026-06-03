@@ -1144,6 +1144,7 @@ impl Monomorphizer {
             is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: false,
+            benign_effects: Vec::new(),
             inline_hint: generic.inline_hint,
             compiler_item: generic.compiler_item,
             export_name: generic.export_name.clone(),
