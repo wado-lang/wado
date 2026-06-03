@@ -1550,6 +1550,31 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 .collect(),
                             _ => Vec::new(),
                         };
+                        // Per-instantiation owner for a fully concrete impl
+                        // (`impl List<u8>`). Decided AST-side (excluding declared
+                        // impl type params) so it agrees with method dispatch's
+                        // `from_concrete_impl`; the name is built from the
+                        // resolved `self_type` so it matches how call sites
+                        // mangle the receiver (base name + per-arg mangle).
+                        let concrete_owner: Option<String> = if self
+                            .impl_is_concrete_instantiation(impl_block, &self.current_module_source)
+                        {
+                            let tt = self.tysys.type_table.borrow();
+                            match tt.get(tt.peel_refs(self_type)) {
+                                crate::tir::ResolvedType::GenericInstance {
+                                    name,
+                                    type_args,
+                                    ..
+                                } => {
+                                    let args: Vec<String> =
+                                        type_args.iter().map(|&a| tt.mangle_type_name(a)).collect();
+                                    Some(format!("{}<{}>", name, args.join(",")))
+                                }
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        };
                         self.record_impl_facts(
                             impl_block.id,
                             sem::types::ImplFacts {
@@ -1562,6 +1587,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 is_handler_method,
                                 is_ref_impl,
                                 struct_name: struct_name.clone(),
+                                concrete_owner,
                             },
                         );
                     }
@@ -1570,6 +1596,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     let provided_method_names: Vec<String> =
                         impl_block.methods.iter().map(|m| m.name.clone()).collect();
 
+                    let impl_is_concrete =
+                        self.impl_is_concrete_instantiation(impl_block, &self.current_module_source);
                     for method in &impl_block.methods {
                         if let Some(mut tir_func) = self.resolve_method(
                             method,
@@ -1577,6 +1605,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             &impl_block.ty,
                             trait_name.as_deref(),
                             impl_block.trait_type.as_ref(),
+                            impl_is_concrete,
                         ) {
                             tir_func.name = MethodName::format_local(
                                 &struct_name,
@@ -1669,6 +1698,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 &impl_block.ty,
                                 Some(trait_n),
                                 Some(trait_ast),
+                                impl_is_concrete,
                             );
 
                             // Swap back, take the populated synthetic out.

@@ -1,0 +1,20 @@
+// A method from a concrete-instantiation impl must NOT apply to a different
+// instantiation: `impl Box<i32>::only_int` is not callable on `Box<bool>`.
+
+struct Box<T> {
+    v: T,
+}
+
+impl Box<i32> {
+    pub fn only_int(&self) -> i32 {
+        return self.v;
+    }
+}
+
+export fn run() {
+    let b = Box { v: true };
+    let _ = b.only_int();
+}
+
+__DATA__
+{"compile_error": "no method 'only_int' found"}

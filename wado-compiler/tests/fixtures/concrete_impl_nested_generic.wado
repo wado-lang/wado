@@ -1,0 +1,20 @@
+// A concrete impl whose instantiation argument is itself generic
+// (`impl List<Box<u8>>`). Dispatch must match the exact nested instantiation.
+
+struct Box<T> {
+    v: T,
+}
+
+impl List<Box<u8>> {
+    pub fn tag(&self) -> i32 {
+        return 7;
+    }
+}
+
+test {
+    let xs: List<Box<u8>> = [];
+    assert xs.tag() == 7;
+}
+
+__DATA__
+{"test": {}}

@@ -7,7 +7,7 @@
 
 use { print, Stdout } from "core:cli";
 use { Stdin } from "wasi:cli";
-use { sha256, to_hex } from "core:digest";
+use { sha256 } from "core:digest";
 
 fn read_all_stdin() -> List<u8> with Stdin {
     let [stdin_stream, _done] = Stdin::read_via_stream();
@@ -28,5 +28,5 @@ fn read_all_stdin() -> List<u8> with Stdin {
 export fn run() with Stdout, Stdin {
     let input = read_all_stdin();
     let digest = sha256(&input);
-    print(to_hex(&digest));
+    print(digest.to_hex());
 }

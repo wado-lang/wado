@@ -700,6 +700,19 @@ impl<T: Display> List<T> {
     }
 }
 
+impl List<u8> {
+    /// Renders the bytes as a lowercase hexadecimal string, two digits per
+    /// byte (e.g. `[0x0f, 0xa0]` -> `"0fa0"`).
+    pub fn to_hex(&self) -> String {
+        let mut s = String::with_capacity(self.used * 2);
+        for let mut i = 0; i < self.used; i += 1 {
+            let byte = builtin::array_get(&self.repr, i);
+            s.push_str(&`{byte:02x}`);
+        }
+        return s;
+    }
+}
+
 impl FromIterator<T> for List<T> {
     type Iter = ListIter<T>;
 

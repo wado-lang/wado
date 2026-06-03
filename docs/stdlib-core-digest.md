@@ -13,10 +13,10 @@ the module name stable as more algorithms are added.
 Usage:
 
 ```wado
-use { sha256, to_hex } from "core:digest";
+use { sha256 } from "core:digest";
 
 let digest = sha256(&data);          // one-shot, returns List<u8>
-let hex = to_hex(&digest);           // lowercase hex String
+let hex = digest.to_hex();           // List<u8>::to_hex -> lowercase hex String
 ```
 
 Incremental hashing via the trait:
@@ -36,9 +36,8 @@ let digest = h.finalize();
 
 Hash a complete message with SHA-256, returning the 32-byte digest.
 
-### `pub fn to_hex(digest: &List<u8>) -> String`
-
-Render a digest (or any byte slice) as a lowercase hexadecimal string.
+Render the result as hex with `List<u8>::to_hex`, e.g.
+`sha256(&data).to_hex()`.
 
 ## Traits
 
