@@ -148,23 +148,26 @@ separate builder via the `SequenceLiteral { type Builder }` path; the exact
 builder shape is an implementation detail and does not leak into the front-end).
 
 The fast `array.new_fixed` form is produced **only by the optimizer**, never by
-the front-end. The optimizer recognizes the builder-call window
-(`new_literal` + N× `push_literal` + `build`) and materializes a NIR literal
-node, in the spirit of the existing
-[`NirExprKind::ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md). This keeps
-the compilation pipeline simple: the literal node is an optimizer-materialized
-normalization (like `Switch`), and `lower` never emits it.
+the front-end. The optimizer keeps a single literal node,
+[`NirExprKind::ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md), now wired to
+the raw `Array<T>`: it materializes from a recognized
+`array.new_default` + N× `array.set` window and lowers to
+`array.new_fixed<T>(e0, …, eN)`. Like `Switch`, it is an optimizer-materialized
+normalization that `lower` never emits.
 
-Two such nodes are likely needed after the split:
+No `ListLiteral` node is needed. `List<T>` is now a literal user-defined struct
+(`{ repr: Array<T>, used }`) whose `SequenceLiteralBuilder` impl is ordinary Wado
+code; once the builder methods are inlined, the `repr` construction _is_ a raw
+`array.new_default` + `set` window, so the same `ArrayLiteral` pass collapses it
+to `array.new_fixed`. The surrounding `List { repr: <ArrayLiteral>, used: N }` is
+just a normal `StructNew` the optimizer and codegen already handle. The `List`
+case thus falls out of the `Array` case for free — there is nothing
+`List`-specific left to special-case.
 
-- `ArrayLiteral` → lowers to `array.new_fixed<T>(e0, …, eN)` (the raw `Array<T>`).
-- `ListLiteral` → lowers to the `List<T>` struct `{ repr: array.new_fixed(…), used: N }`.
-
-Today's single `ArrayLiteral` already does the `List`-shaped job (it carries the
-growable struct's type and `wir_build` emits the `{ repr, used }` `StructNew`).
-The redesign factors it into the raw-array node plus a struct-wrapping node, so
-the raw `Array<T>` literal no longer pays for a `used` field it does not have.
-Both remain optimizer-only.
+This is a simplification over today, where the single `ArrayLiteral` carries the
+growable struct's type and `wir_build` emits the `{ repr, used }` `StructNew`
+itself. After the redesign `ArrayLiteral` carries the raw array type only, and
+the struct wrap is left to the generic `StructNew` path.
 
 ### 2. `List<T>` is the growable sequence
 
@@ -299,11 +302,12 @@ the same change, since the new view API depends on `stores` being real.
   `{ array T, i32 }`.
 - Element access semantics (value copy, no `iter_mut`) are unchanged from today;
   this WEP only makes the underlying reason (no GC interior references) explicit.
-- Sequence-literal handling is unchanged in spirit: the front-end still desugars
-  every `[…]` to the `SequenceLiteralBuilder` protocol, and `array.new_fixed` is
-  still produced only by the optimizer materializing a literal node. The redesign
-  just factors that node into `ArrayLiteral` (raw array) and `ListLiteral`
-  (struct wrap); both stay optimizer-only.
+- Sequence-literal handling is unchanged in spirit and slightly simpler: the
+  front-end still desugars every `[…]` to the `SequenceLiteralBuilder` protocol,
+  and the optimizer still owns the single `ArrayLiteral` node — now wired to the
+  raw `Array<T>` (→ `array.new_fixed`). `List<T>` literals need no dedicated node;
+  they reduce to `StructNew { repr: <ArrayLiteral>, used }` because `List` is an
+  ordinary struct.
 
 ## Implementation TODOs
 
@@ -323,9 +327,11 @@ the same change, since the new view API depends on `stores` being real.
 - [ ] Make `Array<T>` a `SequenceLiteralBuilder` target (separate builder) so
       `[…]: Array<T>` uses the same uniform front-end path as `List<T>`; no
       special-casing in the front-end or `lower`.
-- [ ] Split the optimizer's literal materialization into `ArrayLiteral`
-      (→ `array.new_fixed`) and `ListLiteral` (→ `{ repr, used }` struct); both
-      optimizer-only, never emitted by `lower`.
+- [ ] Re-wire the optimizer's `ArrayLiteral` node to the raw `Array<T>`
+      (materialize from `array.new_default` + `set`, lower to `array.new_fixed`);
+      drop the implicit `{ repr, used }` wrap from `wir_build` and let `List<T>`
+      literals reduce to a generic `StructNew` over an `ArrayLiteral`. No
+      `ListLiteral` node.
 - [ ] Rename the growable sequence `Array<T>` → `List<T>` (type, stdlib, fixtures,
       grammar, docs).
 - [ ] Introduce `Slice<T>` and re-base `ArrayIter` / `WindowsIter` / `ChunksIter`
