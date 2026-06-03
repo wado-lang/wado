@@ -161,9 +161,9 @@ Investigation against `benchmark/sqlite_parse` (Wado/Gale at `-O2`, ~137 ms/iter
 
 Profile (guest sampler, 5 ms interval) self-time top:
 
-|   Pct | Symbol                                                    |
-| ----: | --------------------------------------------------------- |
-| 27.9% | `tokenize`                                                |
+|   Pct | Symbol                                                   |
+| ----: | -------------------------------------------------------- |
+| 27.9% | `tokenize`                                               |
 | 26.0% | `List<Token>::push` (per-token `struct.new Token`)       |
 | 17.2% | `Parser::last_end` (4-step `Parser→List→Token→Span→end`) |
 |  4.4% | `List<Token>::grow`                                      |
