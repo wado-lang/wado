@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780446846791,
+  "lastUpdate": 1780463293225,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29229,6 +29229,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d6820624faa6c5f5b6f13e1da4f726d4297cba06"
         },
         "date": 1780446846273,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9687,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a2c9a3f60dd01dd7a8799cd9c00afb691b0be271",
+          "message": "Merge pull request #1278 from wado-lang/claude/builtin-array-redesign-z3zaY\n\nRename growable Array&lt;T&gt; → List&lt;T&gt; (Phase 0) + builtin::array redesign WEP",
+          "timestamp": "2026-06-03T13:59:33+09:00",
+          "tree_id": "616bae377dd633be0faa249df9c1ef9b8b2cc28a",
+          "url": "https://github.com/wado-lang/wado/commit/a2c9a3f60dd01dd7a8799cd9c00afb691b0be271"
+        },
+        "date": 1780463292697,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
