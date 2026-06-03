@@ -321,6 +321,9 @@ fn item_info(item: &Item, name: &str) -> Option<String> {
         Item::Flags(fl) if fl.name == name => Some(unparse::unparse_flags_header(fl)),
         Item::Trait(t) if t.name == name => Some(unparse::unparse_trait_header(t)),
         Item::Newtype(n) if n.name == name => Some(unparse::unparse_newtype_signature(n)),
+        Item::BuiltinTypeDecl(d) if d.name == name => {
+            Some(unparse::unparse_builtin_type_decl_signature(d))
+        }
         Item::Interface(e) if e.name == name => Some(format!("interface {name}")),
         Item::Global(g) if g.name == name => Some(unparse::unparse_global_signature(g)),
         Item::Impl(imp) => {
@@ -396,6 +399,21 @@ mod tests {
                     .contents
                     .value
                     .contains("fn add(a: i32, b: i32) -> i32"),
+                "got: {}",
+                result.contents.value
+            );
+        });
+    }
+
+    #[test]
+    fn builtin_type_decl_hover() {
+        futures::executor::block_on(async {
+            // A named definition-less type (`pub type Buf<T>;`) renders its
+            // signature on hover, like a newtype/struct declaration.
+            let source = "pub type Buf<T>;\nfn run() {}\n";
+            let result = hover_at(source, 0, 9).await.expect("hover on Buf");
+            assert!(
+                result.contents.value.contains("type Buf<T>"),
                 "got: {}",
                 result.contents.value
             );

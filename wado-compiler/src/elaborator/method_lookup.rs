@@ -242,7 +242,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The raw GC array's base method-owner name is "Array"
                 // (its type args are carried separately), not the full
                 // `type_name` spelling `Array<T>`.
-                ResolvedType::BuiltinArray(_) => return "Array".to_string(),
+                ResolvedType::BuiltinArray(_) => return TypeTable::ARRAY_TYPE_NAME.to_string(),
                 _ => return self.tysys.type_table.borrow().type_name(current),
             }
         }
@@ -531,9 +531,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Raw GC array `Array<T>` — methods live in `impl Array<T>`
             // (core:prelude/array.wado), keyed by the base name "Array".
             // `None` module triggers "search all loaded modules".
-            ResolvedType::BuiltinArray(elem) => {
-                ("Array".to_string(), None, Some(vec![*elem]), None)
-            }
+            ResolvedType::BuiltinArray(elem) => (
+                TypeTable::ARRAY_TYPE_NAME.to_string(),
+                None,
+                Some(vec![*elem]),
+                None,
+            ),
             // Unit type () - search for impl blocks in loaded modules
             ResolvedType::Unit => (TypeTable::UNIT_TYPE_NAME.to_string(), None, None, None),
             // Enum types - search for impl blocks by enum name

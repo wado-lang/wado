@@ -372,7 +372,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // this also resolves the builtin module's own signatures,
             // which are elaborated before the compiler-item registry is
             // populated.
-            "Array" => {
+            _ if name == TypeTable::ARRAY_TYPE_NAME => {
                 if args.len() != 1 {
                     let _ = self.logger.error(TypeError::ArgumentCountMismatch {
                         expected: 1,

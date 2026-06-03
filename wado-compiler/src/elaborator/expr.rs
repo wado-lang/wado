@@ -1675,7 +1675,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => name.clone(),
             // The raw GC array dispatches `[]` through `impl IndexValue /
             // IndexAssign for Array<T>`, keyed by the base name "Array".
-            ResolvedType::BuiltinArray(_) => "Array".to_string(),
+            ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
             _ => String::new(),
         };
 

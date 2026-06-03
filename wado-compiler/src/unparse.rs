@@ -3603,6 +3603,12 @@ pub fn unparse_newtype_signature(n: &Newtype) -> String {
     out
 }
 
+pub fn unparse_builtin_type_decl_signature(d: &BuiltinTypeDecl) -> String {
+    let mut out = String::new();
+    emit_decl_header(d.is_pub, "type ", &d.name, &d.type_params, &mut out);
+    out
+}
+
 pub fn unparse_global_signature(g: &GlobalDecl) -> String {
     let mut out = String::new();
     emit_kw_if_into(g.is_pub, "pub ", &mut out);

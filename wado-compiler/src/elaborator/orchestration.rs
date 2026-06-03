@@ -2656,7 +2656,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // builtin (`ResolvedType::BuiltinArray`); mirror the elaborator's
                 // `resolve_generic_type` "Array" arm so struct field types
                 // resolved through this static pre-pass match.
-                "Array" if !generic.args.is_empty() => {
+                _ if generic.name == TypeTable::ARRAY_TYPE_NAME && !generic.args.is_empty() => {
                     let elem = Self::resolve_type_static_with_params(
                         &generic.args[0],
                         type_table,

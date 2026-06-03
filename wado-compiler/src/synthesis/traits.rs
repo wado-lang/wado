@@ -3211,9 +3211,11 @@ fn decompose_type_for_method_name(
 ) -> (String, bool, Vec<String>) {
     match resolved {
         ResolvedType::TypeParam { name, .. } => (name.clone(), true, vec![]),
-        ResolvedType::BuiltinArray(elem) => {
-            ("Array".to_string(), false, vec![tt.mangle_type_name(*elem)])
-        }
+        ResolvedType::BuiltinArray(elem) => (
+            TypeTable::ARRAY_TYPE_NAME.to_string(),
+            false,
+            vec![tt.mangle_type_name(*elem)],
+        ),
         ResolvedType::GenericInstance {
             name, type_args, ..
         } => {
@@ -3304,7 +3306,7 @@ fn resolve_impl_module_via_env(
         | ResolvedType::Flags { name, .. }
         | ResolvedType::GenericInstance { name, .. }
         | ResolvedType::GenericResource { name, .. } => Some(name.clone()),
-        ResolvedType::BuiltinArray(_) => Some("Array".to_string()),
+        ResolvedType::BuiltinArray(_) => Some(TypeTable::ARRAY_TYPE_NAME.to_string()),
         _ => None,
     };
 
