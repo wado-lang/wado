@@ -15,22 +15,26 @@ struct Stepper {
 impl Counter for Stepper {
     fn next(&mut self) -> i32 {
         self.value += 1;
-        resume self.value
+        resume self.value;
     }
 }
 
 test "value-form with-do yields the block value" {
     let mut a = Stepper { value: 0 };
     let first = with Counter => &mut a do {
-        Counter::next()
+        Counter::next();
     };
     assert first == 1;
 }
 
 test "two value-form with-do blocks feed a comparison" {
     let mut b = Stepper { value: 10 };
-    let x = with Counter => &mut b do { Counter::next() };
-    let y = with Counter => &mut b do { Counter::next() };
+    let x = with Counter => &mut b do {
+        Counter::next();
+    };
+    let y = with Counter => &mut b do {
+        Counter::next();
+    };
     assert x == 11;
     assert y == 12;
     assert x < y;
@@ -38,8 +42,39 @@ test "two value-form with-do blocks feed a comparison" {
 
 test "value-form with-do binds with an explicit type annotation" {
     let mut c = Stepper { value: 41 };
-    let n: i64 = with Counter => &mut c do { Counter::next() as i64 };
+    let n: i64 = with Counter => &mut c do {
+        Counter::next() as i64;
+    };
     assert n == 42;
+}
+
+// The do-block's value can come from a value-producing tail that is not a bare
+// expression. `with ... do` now mirrors plain block-expression semantics: the
+// tail value is derived via `block_result_type` and preserved across the
+// handler restore for every tail kind, so an `if`/`else` tail (lowered to
+// `TirStmtKind::If`) works, and a `match` tail works wherever the result type
+// is known — exactly as it would in a `{ ... }` block expression.
+test "value-form with-do whose tail is an if-expression" {
+    let mut c = Stepper { value: 0 };
+    let x = with Counter => &mut c do {
+        if true {
+            Counter::next();
+        } else {
+            0;
+        }
+    };
+    assert x == 1;
+}
+
+test "value-form with-do whose tail is a match-expression" {
+    let mut c = Stepper { value: 0 };
+    let label: String = with Counter => &mut c do {
+        match Counter::next() {
+            1 => "one",
+            _ => "other",
+        }
+    };
+    assert label == "one";
 }
 
 __DATA__

@@ -1786,27 +1786,27 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
     let mut injector = RestoreInjector::new(&restore_seq, ctx);
     injector.visit_block(&mut body);
 
-    let mut stmts: Vec<TirStmt> =
-        Vec::with_capacity(prelude.len() + body.stmts.len() + restore_seq.len() + 1);
+    let mut stmts: Vec<TirStmt> = Vec::with_capacity(prelude.len() + body.stmts.len() + 2);
     stmts.extend(prelude);
 
-    // Value form (`let x = with E => h do { expr }`): the do-block's trailing
-    // value must survive the restore sequence. Bind it to a temp local while
-    // the handler is still installed, run the restore, then yield the local as
-    // the desugared block's tail. For the statement form the result type is
-    // `Unit` and the body has no value-producing tail, so this is skipped and
-    // the restore simply runs after the body as before.
-    let tail_value = if result_type == TypeTable::UNIT {
-        None
+    if result_type == TypeTable::UNIT || result_type == TypeTable::NEVER {
+        // Statement form (or a diverging body): the body produces no value to
+        // preserve, so the restore simply runs after it.
+        stmts.extend(body.stmts);
+        stmts.extend(restore_seq);
     } else {
-        take_tail_value(&mut body)
-    };
-
-    stmts.extend(body.stmts);
-
-    let tail_local = tail_value.map(|(value, tail_span)| {
+        // Value form (`let x = with E => h do { ... }`): the do-block's value
+        // must survive the restore sequence. Wrap the whole body in an inner
+        // block expression, bind its value to a temp local while the handler is
+        // still installed, run the restore, then yield the local as the
+        // desugared block's tail. Wrapping the entire body — rather than
+        // detaching its last statement — preserves the value for every tail
+        // kind (a bare expression, an `if`/`else`, a `match`, a labeled block),
+        // matching `synthesis::resource_cleanup::append_block_drops`.
+        let body_span = body.span;
         let local = ctx.alloc_local(result_type);
         let name = format!("__with_result_{local}");
+        let body_expr = TirExpr::new(TirExprKind::Block(body), result_type, body_span);
         stmts.push(TirStmt::new(
             TirStmtKind::Let {
                 name: name.clone(),
@@ -1814,50 +1814,24 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 is_mut: false,
                 is_reactive: false,
                 type_id: result_type,
-                value,
-                skip_value_copy: true,
+                value: body_expr,
+                skip_value_copy: false,
             },
-            tail_span,
+            body_span,
         ));
-        (local, name, tail_span)
-    });
-
-    stmts.extend(restore_seq);
-
-    if let Some((local, name, tail_span)) = tail_local {
+        stmts.extend(restore_seq);
         stmts.push(TirStmt::new(
             TirStmtKind::Expr(TirExpr::new(
                 TirExprKind::Local { index: local, name },
                 result_type,
-                tail_span,
+                body_span,
             )),
-            tail_span,
+            body_span,
         ));
     }
 
     expr.kind = TirExprKind::Block(TirBlock::new(stmts, span));
     expr.type_id = result_type;
-}
-
-/// Detach a block's trailing value-producing expression (the do-block result)
-/// so it can be re-sequenced around the handler-restore step. Returns the
-/// expression and its span, leaving the block holding the remaining statements;
-/// returns `None` (block unchanged) when the last statement is not a
-/// value-producing tail expression.
-fn take_tail_value(body: &mut TirBlock) -> Option<(TirExpr, crate::Span)> {
-    match body.stmts.last() {
-        Some(TirStmt {
-            kind: TirStmtKind::Expr(value),
-            ..
-        }) if value.type_id != TypeTable::UNIT => {}
-        _ => return None,
-    }
-    let stmt = body.stmts.pop()?;
-    let span = stmt.span;
-    match stmt.kind {
-        TirStmtKind::Expr(value) => Some((value, span)),
-        _ => unreachable!("tail kind re-checked after peek"),
-    }
 }
 
 /// Walks a `with`-body and splices the per-`with` restore sequence in

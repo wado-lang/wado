@@ -28,24 +28,10 @@
 use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::tir::{
-    EffectRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmtKind, TypeId, TypeTable,
-};
+use crate::tir::{EffectRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
-
-/// The value type of a block: its trailing expression statement's type, or
-/// `Unit` when the block has no value-producing tail. A block whose last
-/// statement is a non-expression (e.g. a `let`) or is empty evaluates to
-/// `Unit`. Shared by the annotate and reify `with`-handler paths so both type
-/// `WithHandler` as the do-block's value.
-pub(super) fn block_value_type(block: &TirBlock) -> TypeId {
-    match block.stmts.last().map(|stmt| &stmt.kind) {
-        Some(TirStmtKind::Expr(expr)) => expr.type_id,
-        _ => TypeTable::UNIT,
-    }
-}
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Annotate `with E1 => h1, ... do { body }`. Walks each handler
@@ -94,11 +80,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx.exit_scope();
 
         // `with ... do { ... }` is an expression: it evaluates to its body
-        // block's trailing value. Typing it as the body's value type (rather
-        // than a hardcoded `Unit`) is what makes the value form
-        // `let x = with E => h do { expr }` work; for the common statement
-        // form the body's tail is `Unit`, so this is unchanged.
-        let result_type = block_value_type(&body);
+        // block's value (the shared `block_result_type` handles every tail
+        // kind — a bare expression, an `if`/`else`, a `match`, a labeled
+        // block, or a diverging `return`). Typing it this way rather than a
+        // hardcoded `Unit` is what makes the value form
+        // `let x = with E => h do { ... }` work; for the common statement form
+        // the body's tail is `Unit`, so this is unchanged.
+        let result_type = crate::tir::block_result_type(&body);
 
         TirExpr::new(
             TirExprKind::WithHandler {
