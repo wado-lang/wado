@@ -319,6 +319,11 @@ all-at-once removes that window: after Phase 0 the name `Array` (and the
 `compiler_item` key `"array"`) are fully vacated, so the raw array can claim them
 without collision.
 
+Phase 1 is then the minimal, independent fix that makes `builtin::array` mutation
+visible to the optimizer; it ships on its own and unblocks other tracks that the
+hidden mutation was holding up. Phases 2+ are the longer first-classing tail,
+which interferes little with the rest of the compiler and can proceed steadily.
+
 ### Phase 0 — Rename current `Array` → `List` (exclusive, atomic)
 
 This phase introduces **no new behavior**; the build and all tests are green at
@@ -341,7 +346,33 @@ from the harness; the hand-edited surface is `lib/`, the hand-written fixtures,
 - [ ] Green gate: `mise run test` + `mise run test-wado` across `-O` levels
       (`WADO_FULL_TEST=1`), then `mise run format`.
 
-### Phase 1 — Introduce the raw `Array<T>` (renamed `builtin::array`)
+### Phase 1 — Make `builtin::array` operations take `&` / `&mut` (unblocking fix)
+
+The smallest change that pays off immediately, and independent of the rest.
+Today the `builtin::array_*` operations are free functions that take the array
+**by value** yet mutate it in place, so the mutation is invisible to the
+optimizer (the root cause in Context, problem 2). Change the first parameter to a
+borrow — `&mut` for the mutators, `&` for the readers — and update their call
+sites inside `List<T>` / `String`. Nothing else in the redesign needs to land
+first.
+
+This makes mutation visible to the optimizer, closing the latent
+invisible-mutator bug class, and **unblocks dependent work** that the hazard was
+holding up — for example, const-global globalization could not proceed while
+array mutation was invisible. The full first-classing (Phase 2+) is decoupled and
+follows steadily.
+
+- [ ] Change the `builtin::array` mutators (`set`, `fill`, `copy`) to take `&mut`
+      as the first argument; the readers (`get`, `len`) to take `&`.
+- [ ] Update call sites in `List<T>` / `String` to pass `&` / `&mut`.
+- [ ] Confirm the optimizer now sees the mutation; add a red/green e2e fixture
+      for the invisible-mutation case if one is missing.
+
+This phase is independent of Phase 0 (it touches `builtin::array_*`, which the
+rename does not), so the two could be sequenced either way; it is placed right
+after the rename because it is the minimal step that unblocks other tracks.
+
+### Phase 2 — First-class raw `Array<T>` (rename `builtin::array` → `Array`)
 
 - [ ] Declare `Array<T>` in the prelude as a definition-less
       `#[compiler_item("array")] pub type Array<T>;`, binding the builtin to
@@ -351,15 +382,16 @@ from the harness; the hand-edited surface is `lib/`, the hand-written fixtures,
 - [ ] Give `Array<T>` value semantics end to end (it already deep-copies when
       embedded; make it copy as a standalone value too).
 - [ ] Port the `builtin::array_*()` free functions to `Array<T>` methods
-      (`new`, `filled`, `len`, `get`, `set`, `fill`, `copy_from`); keep the
+      (`new`, `filled`, `len`, `get`, `set`, `fill`, `copy_from`); the Phase 1
+      `&` / `&mut` first parameters become `&self` / `&mut self`. Keep the
       `array.*` WIR lowering. Point `List<T>`'s `repr` at `Array<T>`.
 
-### Phase 2 — Borrowing views
+### Phase 3 — Borrowing views
 
 - [ ] Introduce `Slice<T>` and re-base `ArrayIter` / `WindowsIter` / `ChunksIter`
       onto `&Array<T>` borrows with `stores[self]`.
 
-### Phase 3 — Sequence literals
+### Phase 4 — Sequence literals
 
 - [ ] Make `Array<T>` a `SequenceLiteralBuilder` target (separate builder) so
       `[…]: Array<T>` uses the same uniform front-end path as `List<T>`; no
@@ -370,7 +402,7 @@ from the harness; the hand-edited surface is `lib/`, the hand-written fixtures,
       literals reduce to a generic `StructNew` over an `ArrayLiteral`. No
       `ListLiteral` node.
 
-### Phase 4 — Performance and documentation
+### Phase 5 — Performance and documentation
 
 - [ ] Audit stdlib call sites to take `&Array<T>` / `&List<T>` where appropriate.
 - [ ] Verify optimizer copy-elision for non-mutating value arguments; add a pass
