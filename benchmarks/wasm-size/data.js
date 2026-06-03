@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780519012842,
+  "lastUpdate": 1780522625149,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29449,6 +29449,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6b572de873222d779a79c84e0d884d5763556aad"
         },
         "date": 1780519012319,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9659,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457424,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "394169b08986e967cc45e808e77b99b5dc428ce8",
+          "message": "Merge pull request #1285 from wado-lang/claude/uuid-stdlib-versions-iZRZ2\n\nfeat(stdlib): add core:uuid (v4/v7), with two effect/SIMD compiler fixes",
+          "timestamp": "2026-06-04T06:28:19+09:00",
+          "tree_id": "b972632895ed48cee4c14b706ae43279c0b8fefc",
+          "url": "https://github.com/wado-lang/wado/commit/394169b08986e967cc45e808e77b99b5dc428ce8"
+        },
+        "date": 1780522624628,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
