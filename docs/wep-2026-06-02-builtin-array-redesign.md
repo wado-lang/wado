@@ -63,7 +63,7 @@ gains a declaration site, an `impl`, and trait impls.
 
 The `builtin::array_*()` operations stay as free-function intrinsics — they remain
 the lowering layer emitting `array.new` / `get` / `set` / `len` / `copy` / `fill` —
-but are now typed against `Array<T>` and the Phase 1 borrows:
+but are now typed against `Array<T>` and the Phase 1 references:
 
 ```wado
 builtin::array_get<T>(arr: &Array<T>, index: i32) -> T
@@ -98,8 +98,10 @@ a new key `"list"` (§2).
 #### Method surface
 
 Mutators take `&mut self`, pure operations take `&self` — making mutation visible
-to both the type system and the optimizer (the root cause of problem 2). Each body
-is a one-line wrapper over the matching `builtin::array_*()` intrinsic.
+to both the type system and the optimizer (the root cause of problem 2). Wado has
+no ownership or borrow checking; `&` / `&mut` are plain references with Java-like
+semantics, and the only purpose of the `mut` distinction is to surface mutation.
+Each body is a one-line wrapper over the matching `builtin::array_*()` intrinsic.
 
 ```wado
 impl<T> Array<T> {
@@ -167,7 +169,7 @@ pub struct String {
 }
 ```
 
-### 4. Views borrow the whole array (`&Array<T>`)
+### 4. Views reference the whole array (`&Array<T>`)
 
 Wasm GC has no interior references — there is no pointer to `array[i]` — so two
 rules become first-class:
@@ -190,19 +192,19 @@ pub struct Slice<T> {
 ```
 
 `&Array<T>` lowers transparently to the same Wasm type (the referent is already a
-GC reference), so the borrow is zero-cost.
+GC reference), so the reference is zero-cost.
 
-A view borrows the buffer as it is at creation. If the source `List<T>` later grows
+A view captures the buffer as it is at creation. If the source `List<T>` later grows
 and reallocates its `repr`, the view keeps referring to the **old** buffer — safe
 under GC, and a simple rule: _a view is a stable snapshot of the buffer it was taken
-from._ This differs from Go slices and Rust borrows and must be documented.
+from_ (it never observes later growth of its source). This must be documented.
 
 ### 5. `stores[self]` on view-returning methods
 
 A method that returns a view stores `&self` into the returned struct, so it declares
 `with stores[self]` — the existing reference-escape mechanism, implemented and
 enforced by `check_stores`. This is explicit for now; a later WEP may infer it for
-borrowing-view return types.
+methods that return a view type.
 
 ### 6. Documentation correctness fix
 
@@ -219,7 +221,7 @@ the view API depends on it being real, this WEP corrects those statements.
    (`&mut self`), closing the "invisible mutator" bug class.
 2. `Array<T>` gains a type definition, methods, and trait impls — usable and
    LSP-friendly — with names matching the runtime and common convention.
-3. Zero-copy slices and iterators are preserved via `&Array<T>` borrows, now on a
+3. Zero-copy slices and iterators are preserved via `&Array<T>` references, now on a
    principled footing (`stores`) rather than a hidden intrinsic.
 
 ### Negative
@@ -231,9 +233,9 @@ the view API depends on it being real, this WEP corrects those statements.
 2. Large rename churn from `Array` → `List` (stdlib, fixtures, grammar, docs,
    `compiler_item` wiring). Exposing `builtin::array` as `Array` adds far less — a
    declaration plus a Wado `impl`, with the intrinsic layer untouched.
-3. Two documented footguns with no borrow checker to forbid them (both memory-safe
-   under GC): a view does not track growth of its source (snapshot semantics), and
-   the source can be mutated through a separate path while a view borrow is alive.
+3. Two documented footguns that nothing statically forbids (both memory-safe under
+   GC): a view does not track growth of its source (snapshot semantics), and the
+   source can be mutated through a separate path while a view is alive.
 
 ### Neutral
 
@@ -267,7 +269,7 @@ and the VS Code grammar.
       grammar, docs — regenerate the WIR snapshots, and gate on green across `-O`
       levels.
 
-### Phase 1 — Borrow-typed `builtin::array` operations (unblocking fix)
+### Phase 1 — Reference-typed `builtin::array` operations (unblocking fix)
 
 The smallest, independent change with immediate payoff: give the `builtin::array_*`
 operations `&` / `&mut` first parameters so their mutation becomes visible to the
@@ -290,10 +292,10 @@ the lowering.
       intrinsics, give `Array<T>` standalone value semantics, add the wrapper `impl`,
       and point `List`'s `repr` at it.
 
-### Phase 3 — Borrowing views
+### Phase 3 — Reference views
 
 - [ ] Introduce `Slice<T>` and re-base `ArrayIter` / `WindowsIter` / `ChunksIter`
-      onto `&Array<T>` borrows with `stores[self]`.
+      onto `&Array<T>` references with `stores[self]`.
 
 ### Phase 4 — Sequence literals
 
