@@ -42,7 +42,7 @@ The K-prefix follow-mask path closes the multi-token tail-greedy gap at the oute
 
 ### Multi-alt `RuleRef` expansion in `deep_position_first_sets_from`
 
-The K-prefix caller-side mask analysis halts at a multi-alt `RuleRef` because the per-depth union of multi-alt prefixes would over-yield by matching cross-alt sequences that no real alt admits. A per-alt sequence representation (`Array<Array<Array<String>>>`) could extend the walk safely — useful when a caller's continuation passes through a multi-alt rule like `expr : literal | name`.
+The K-prefix caller-side mask analysis halts at a multi-alt `RuleRef` because the per-depth union of multi-alt prefixes would over-yield by matching cross-alt sequences that no real alt admits. A per-alt sequence representation (`List<List<List<String>>>`) could extend the walk safely — useful when a caller's continuation passes through a multi-alt rule like `expr : literal | name`.
 
 ### Multi-alt variant dispatcher emit — K-prefix cascade relaxation
 
@@ -164,20 +164,20 @@ Profile (guest sampler, 5 ms interval) self-time top:
 |   Pct | Symbol                                                    |
 | ----: | --------------------------------------------------------- |
 | 27.9% | `tokenize`                                                |
-| 26.0% | `Array<Token>::push` (per-token `struct.new Token`)       |
-| 17.2% | `Parser::last_end` (4-step `Parser→Array→Token→Span→end`) |
-|  4.4% | `Array<Token>::grow`                                      |
+| 26.0% | `List<Token>::push` (per-token `struct.new Token`)       |
+| 17.2% | `Parser::last_end` (4-step `Parser→List→Token→Span→end`) |
+|  4.4% | `List<Token>::grow`                                      |
 
-Combined: token-stream construction (`tokenize`, `Array<Token>::push`, and `Array<Token>::grow`) is 58% of self-time. Token reads via `Parser` are next.
+Combined: token-stream construction (`tokenize`, `List<Token>::push`, and `List<Token>::grow`) is 58% of self-time. Token reads via `Parser` are next.
 
 ### What does not work
 
-- **Inlining hot Parser methods.** `Parser::last_end` accounted for 17% self-time; both caching it as a field and forcing `#[inline]` eliminate the named function from the profile but do not move wall time. The cost was the actual loads (`Parser→Array→Token→Span→end`), not call overhead — inlining merely redistributes it into the callers (`parse_expr`, `Parser::expect`, …). wasmtime + Cranelift handles small Wasm function calls cheaply enough that hunting for inlinability is not a productive lever here.
+- **Inlining hot Parser methods.** `Parser::last_end` accounted for 17% self-time; both caching it as a field and forcing `#[inline]` eliminate the named function from the profile but do not move wall time. The cost was the actual loads (`Parser→List→Token→Span→end`), not call overhead — inlining merely redistributes it into the callers (`parse_expr`, `Parser::expect`, …). wasmtime + Cranelift handles small Wasm function calls cheaply enough that hunting for inlinability is not a productive lever here.
 - **Any micro-optimization on individual Parser methods.** Same reason: the bytes loaded are unchanged, so the work is unchanged.
 
 ### What would actually move the needle
 
-The dominant cost is **Wasm GC `(array (ref Token))` indirection plus per-token `struct.new Token` allocation**. A 5× improvement requires decomposing `Array<Token>` into parallel primitive arrays (`kinds`/`starts`/`ends` as `Array<i32>`, packed in Wasm GC) so that:
+The dominant cost is **Wasm GC `(array (ref Token))` indirection plus per-token `struct.new Token` allocation**. A 5× improvement requires decomposing `List<Token>` into parallel primitive arrays (`kinds`/`starts`/`ends` as `List<i32>`, packed in Wasm GC) so that:
 
 - `peek_kind` / `tokens[i].kind` becomes a single `array.get i32` instead of `array.get (ref Token)` + `struct.get`.
 - Per-token struct allocation disappears in the lex loop.
@@ -185,7 +185,7 @@ The dominant cost is **Wasm GC `(array (ref Token))` indirection plus per-token 
 Two non-overlapping paths to get there:
 
 1. **Gale-side**: redesign `Token` so the hot fields are flat primitives, with an opaque sidecar (or removal) for `text` / `leading_trivia`. Keep the public `Token` API as a view handle if needed for compatibility.
-2. **Wado-side**: extend `container_sroa` to handle (a) struct fields (currently locals only — see `wado-compiler/src/optimize/container_sroa.rs` "Future directions"), (b) inner structs with nested struct or reference fields, (c) cross-function rewrites for the `scan_*(&Array<Token>, ...)` parameter pattern (1100+ sites in the SQLite parser pass `&p.tokens` as a bare reference, currently always escaping). Today the pass fires on zero candidates in Gale-generated parsers.
+2. **Wado-side**: extend `container_sroa` to handle (a) struct fields (currently locals only — see `wado-compiler/src/optimize/container_sroa.rs` "Future directions"), (b) inner structs with nested struct or reference fields, (c) cross-function rewrites for the `scan_*(&List<Token>, ...)` parameter pattern (1100+ sites in the SQLite parser pass `&p.tokens` as a bare reference, currently always escaping). Today the pass fires on zero candidates in Gale-generated parsers.
 
 ### Lexer dispatch (independent secondary lever)
 
