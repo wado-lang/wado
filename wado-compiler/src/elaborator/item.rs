@@ -10,10 +10,10 @@ use crate::compiler_item::{
 use crate::hashmap::IndexSet;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName};
+use crate::name::MethodName;
 use crate::tir::{
     FunctionKind, TirEffect, TirEffectOp, TirFunction, TirGlobal, TirParam, TirResource, TirStruct,
-    TirTest, TirVariantCase, TirVariantDecl, TypeId, TypeTable,
+    TirTest, TirVariantDecl, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -38,6 +38,49 @@ pub(super) fn extract_compiler_item<H: CompilerHost>(
         });
     }
     items.into_iter().next()
+}
+
+/// Body-walk placeholder for a function / method / test. Stage 7-B: the
+/// combined walk records the signature facts (`fn_param_types`,
+/// `fn_return_types`, `decl_type_params`, `function_effects`,
+/// `method_names`, …) and resolves the body for its side-effect fact
+/// recording, but no longer assembles the function's TIR — reify is the
+/// sole producer. The returned `TirFunction` flows only into the
+/// discarded `tir_module` of `resolve_module`, so a minimal shell with
+/// the right name + span is all callers need.
+fn placeholder_function(name: String, span: Span) -> TirFunction {
+    TirFunction {
+        module_source: ModuleSource::default(),
+        name,
+        is_pub: false,
+        is_export: false,
+        is_async: false,
+        type_params: vec![],
+        impl_type_params: vec![],
+        monomorph_info: None,
+        method_info: None,
+        params: vec![],
+        return_type: TypeTable::UNIT,
+        task_return_type: None,
+        effects: vec![],
+        stores: vec![],
+        body: None,
+        span,
+        local_count: 0,
+        locals: vec![],
+        address_taken_locals: IndexSet::default(),
+        stores_aliased_locals: IndexSet::default(),
+        is_cm_binding: false,
+        is_dispatch_wrapper: false,
+        is_cm_export: false,
+        is_ambient: false,
+        inline_hint: crate::tir::InlineHint::Auto,
+        compiler_item: None,
+        export_name: None,
+        allocator_tag: None,
+        kind: FunctionKind::Regular,
+        return_abi: crate::tir::ReturnAbi::default(),
+    }
 }
 
 /// Push a [`RegisterError`] into the diagnostic stream. Duplicate
@@ -455,45 +498,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.trait_ctx.type_params.clear();
         scope.register_generic_params(&struct_decl.type_params, 0);
 
-        // Resolve field defaults in the struct's module scope. A field default
-        // is standalone (no self, no other fields in scope) and must be pure;
-        // the purity check runs in `effect_check`.
+        // Resolve field types (recorded below as `struct_field_types`) and
+        // walk each field default for its side-effect fact recording (the
+        // default's per-`AstId` expression types, which `reify_struct`'s
+        // `reify_expr` reads back). A field default is standalone (no self,
+        // no other fields in scope) and must be pure; the purity check runs
+        // in `effect_check`. The resolved default TIR itself is discarded —
+        // reify re-emits it from the AST + recorded types.
         let mut field_ctx =
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
-        let mut fields = Vec::new();
-        for (index, field) in struct_decl.fields.iter().enumerate() {
+        let mut struct_field_types: Vec<TypeId> = Vec::with_capacity(struct_decl.fields.len());
+        for field in &struct_decl.fields {
             let type_id = scope.resolve_type(&field.ty);
-            let serde_rename = field.attrs.iter().find_map(|a| {
-                if a.name == "serde" {
-                    a.kv_value("rename").map(str::to_string)
-                } else {
-                    None
-                }
-            });
-            let default_expr = field.default.as_ref().map(|default_ast| {
+            if let Some(default_ast) = &field.default {
                 let resolved = scope.resolve_expr(default_ast, &mut field_ctx, Some(type_id));
                 scope.typecheck(resolved.type_id, type_id, default_ast.span());
-                Box::new(resolved)
-            });
-            // A field with a declared default is implicitly non-required at
-            // deserialization time: the synthesized Deserialize uses the
-            // default expression when the field is absent (WEP 2026-04-11).
-            let serde_default = default_expr.is_some()
-                || field
-                    .attrs
-                    .iter()
-                    .any(|a| a.name == "serde" && a.has_arg("default"));
-            fields.push(crate::tir::TirField {
-                name: field.name.clone(),
-                is_pub: field.is_pub,
-                type_id,
-                index: index as u32,
-                span: field.span,
-                is_hidden: field.attrs.iter().any(|a| a.name == "hidden"),
-                serde_rename,
-                serde_default,
-                default_expr,
-            });
+            }
+            struct_field_types.push(type_id);
         }
 
         // Convert AST type params to TIR type params (while type params still in scope)
@@ -518,35 +539,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem
             .types
             .decl_type_params
-            .insert(self.ann_key(struct_decl.id), type_params.clone());
+            .insert(self.ann_key(struct_decl.id), type_params);
 
         // Record per-field resolved types for reify to read instead of
         // re-resolving them off the static decl pass + UNKNOWN-fallback.
         // The static pass cannot follow `pub use` re-export chains; the
         // resolution we just did, with `loaded_modules` in scope, can.
-        let struct_field_types: Vec<TypeId> = fields.iter().map(|f| f.type_id).collect();
         self.sem
             .types
             .struct_field_types
             .insert(self.ann_key(struct_decl.id), struct_field_types);
 
-        let serde_rename_all = struct_decl.attrs.iter().find_map(|a| {
-            if a.name == "serde" {
-                a.kv_value("rename_all").map(str::to_string)
-            } else {
-                None
-            }
-        });
-
+        // Stage 7-B: reify (`reify_struct`) emits the `TirStruct` from the
+        // recorded `struct_field_types` / `decl_type_params` + the AST.
+        // The combined walk's struct TIR is discarded, so a minimal shell
+        // is enough here.
         TirStruct {
             name: struct_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             is_pub: struct_decl.is_pub,
-            type_params,
-            monomorph_info: None, // Not from monomorphization
-            fields,
+            type_params: vec![],
+            monomorph_info: None,
+            fields: vec![],
             span: struct_decl.span,
-            serde_rename_all,
+            serde_rename_all: None,
         }
     }
 
@@ -735,29 +751,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The function name is used for #function compile-time literal (empty for global init)
         let mut ctx = FunctionContext::new(ty, format!("global:{}", global_decl.name));
 
-        // Resolve the initializer expression with expected type for type inference
+        // Resolve the initializer expression with expected type for type
+        // inference. The resolved TIR is discarded — its per-`AstId`
+        // expression types are recorded for reify (`reify_global`), which
+        // re-emits the initializer from the AST.
         let initializer = self.resolve_expr(&global_decl.initializer, &mut ctx, Some(ty));
 
         // Type check: initializer type must match declared type.
         self.typecheck(initializer.type_id, ty, global_decl.initializer.span());
 
+        // Stage 7-B: reify emits the `TirGlobal`; the combined walk's copy
+        // is discarded, so a minimal shell with the resolved type is enough.
         Some(TirGlobal {
             name: global_decl.name.clone(),
             ty,
-            initializer,
+            initializer: crate::tir::TirExpr::new(
+                crate::tir::TirExprKind::Unit,
+                ty,
+                global_decl.initializer.span(),
+            ),
             mutable: global_decl.mutable,
             wado_mutable: global_decl.mutable,
             is_pub: global_decl.is_pub,
             module_source: self.current_module_source.clone(),
             span: global_decl.span,
-            // Both flags are set by the lower phase: `is_nullable` for
-            // any global whose Wasm slot needs to accept `ref.null`, and
-            // `lazy_init` for globals whose initializer runs in
-            // `__initialize_module` (i.e. codegen narrows reads after
-            // init). Constant `null` initializers set only `is_nullable`.
             is_nullable: false,
             lazy_init: false,
-            locals: ctx.locals.clone(),
+            locals: vec![],
         })
     }
 
@@ -773,23 +793,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.trait_ctx.type_params.clear();
         scope.register_generic_params(&variant_decl.type_params, 0);
-
-        // Resolve each case - each variant case has exactly one payload type
-        let mut cases = Vec::new();
-        for (index, case) in variant_decl.cases.iter().enumerate() {
-            // Unit variants have `()` (unit type) payload
-            let payload = if let Some(payload_ty) = &case.payload {
-                scope.resolve_type(payload_ty)
-            } else {
-                TypeTable::UNIT
-            };
-            cases.push(TirVariantCase {
-                name: case.name.clone(),
-                index: index as u32,
-                payload,
-                span: case.span,
-            });
-        }
 
         // Convert AST type params to TIR type params (while type params still in scope)
         let type_params: Vec<crate::tir::TirTypeParam> = variant_decl
@@ -813,7 +816,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem
             .types
             .decl_type_params
-            .insert(self.ann_key(variant_decl.id), type_params.clone());
+            .insert(self.ann_key(variant_decl.id), type_params);
 
         register_variant_compiler_item(
             &self.tysys.type_table,
@@ -824,52 +827,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.logger,
         );
 
+        // Stage 7-B: reify (`reify_variant_decl`) emits the `TirVariantDecl`
+        // from `tysys.all_variant_cases` (payloads) + the recorded
+        // `decl_type_params` + the AST. The combined walk's variant TIR is
+        // discarded, so a minimal shell is enough here.
         TirVariantDecl {
             name: variant_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             is_pub: variant_decl.is_pub,
-            type_params,
-            cases,
+            type_params: vec![],
+            cases: vec![],
             span: variant_decl.span,
-        }
-    }
-
-    /// Extract custom wasm export name from `#[export_name("...")]` attribute.
-    pub(super) fn extract_export_name(attrs: &[crate::ast::Attribute]) -> Option<String> {
-        attrs
-            .iter()
-            .find(|a| a.name == "export_name")
-            .and_then(|a| a.args.first())
-            .map(|a| a.as_str().to_string())
-    }
-
-    /// Extract allocator tag from `#[allocator("...")]` attribute.
-    fn extract_allocator_tag(attrs: &[crate::ast::Attribute]) -> Option<String> {
-        attrs
-            .iter()
-            .find(|a| a.name == "allocator")
-            .and_then(|a| a.args.first())
-            .map(|a| a.as_str().to_string())
-    }
-
-    /// Extract `#[ambient]` marker from function attributes.
-    /// Ambient functions bypass effect-check propagation to callers: they may
-    /// declare effects for implementation purposes, but callers don't need to
-    /// list those effects. Intended for low-level helpers like `log_stdout`
-    /// that use an implicit ambient capability.
-    pub(super) fn extract_is_ambient(attrs: &[crate::ast::Attribute]) -> bool {
-        attrs.iter().any(|a| a.name == "ambient")
-    }
-
-    pub(super) fn extract_inline_hint(attrs: &[crate::ast::Attribute]) -> crate::tir::InlineHint {
-        let Some(attr) = attrs.iter().find(|a| a.name == "inline") else {
-            return crate::tir::InlineHint::Auto;
-        };
-        match attr.args.first().map(super::super::ast::AttrArg::as_str) {
-            Some("always") => crate::tir::InlineHint::Always,
-            Some("never") => crate::tir::InlineHint::Never,
-            None => crate::tir::InlineHint::Hint,
-            _ => crate::tir::InlineHint::Auto,
         }
     }
 
@@ -1106,7 +1074,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span: param.span,
                 });
             }
-            let default_expr = param.default.as_ref().map(|default_ast| {
+            // Walk the default for its side-effect fact recording (its
+            // per-`AstId` expression types, which reify reads back); the
+            // resolved TIR is discarded — reify re-emits it from the AST.
+            if let Some(default_ast) = &param.default {
                 if func.is_export {
                     let _ = scope.logger.error(TypeError::DefaultInExportFn {
                         function: func.name.clone(),
@@ -1116,8 +1087,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(type_id));
                 scope.typecheck(resolved.type_id, type_id, default_ast.span());
-                Box::new(resolved)
-            });
+            }
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
             scope.record_local_symbol(
                 param.id,
@@ -1126,12 +1096,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param.is_mut,
                 type_id,
             );
+            // `params` survives only to feed the recorded `fn_param_types`
+            // and `validate_stores`; the TIR `default_expr` is not built.
             params.push(TirParam {
                 name: param.name.clone(),
                 type_id,
                 local_index: index,
                 is_mut: param.is_mut,
-                default_expr,
+                default_expr: None,
                 span: param.span,
             });
         }
@@ -1148,11 +1120,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Validate stores declarations
         scope.validate_stores(&func.stores, &params, func.span);
 
-        // Resolve body
-        let body = func
-            .body
-            .as_ref()
-            .map(|b| scope.resolve_block(b, &mut ctx, None));
+        // Walk the body for its side-effect fact recording; the resolved
+        // `TirBlock` is discarded (reify re-emits it from the AST + facts).
+        if let Some(b) = func.body.as_ref() {
+            scope.resolve_block(b, &mut ctx, None);
+        }
 
         scope.validate_missing_return_ast(return_type, func.body.as_ref(), func.span);
 
@@ -1196,11 +1168,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `current_effect_param_decls`, so the annotate phase records
         // the already-resolved list here keyed by the function's `AstId`.
         let func_key = scope.ann_key(func.id);
-        scope
-            .sem
-            .types
-            .function_effects
-            .insert(func_key, effects.clone());
+        scope.sem.types.function_effects.insert(func_key, effects);
 
         // Stage 5: an async function's wasm return type is erased to
         // `()`; record the declared (pre-erasure) return type so reify
@@ -1232,49 +1200,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .types
             .fn_return_types
             .insert(sig_key.clone(), return_type);
-        self.sem
-            .types
-            .decl_type_params
-            .insert(sig_key, type_params.clone());
+        self.sem.types.decl_type_params.insert(sig_key, type_params);
 
-        Some(TirFunction {
-            module_source: ModuleSource::default(),
-            name: func.name.clone(),
-            is_pub: func.is_pub,
-            is_export: func.is_export,
-            is_async: func.is_async,
-            type_params,
-            impl_type_params: vec![], // Not a method, no impl type params
-            monomorph_info: None,     // Not from monomorphization
-            method_info: None,        // Not a method
-            params,
-            return_type,
-            task_return_type: if func.is_async {
-                Some(declared_return_type)
-            } else {
-                None
-            },
-            effects,
-            stores: func.stores.clone(),
-            body,
-            span: func.span,
-            local_count: ctx.next_local,
-            locals: ctx.locals.clone(),
-            address_taken_locals: ctx.address_taken_locals,
-            stores_aliased_locals: IndexSet::default(),
-            // Scratch local fields - computed by lower phase
-            is_cm_binding: false,
-            is_dispatch_wrapper: false,
-            is_cm_export: false,
-            is_ambient: Self::extract_is_ambient(&func.attrs),
-            inline_hint: Self::extract_inline_hint(&func.attrs),
-            compiler_item: extract_compiler_item(&func.attrs, func.span, self.logger),
-            export_name: Self::extract_export_name(&func.attrs),
-            allocator_tag: Self::extract_allocator_tag(&func.attrs),
-            kind: FunctionKind::Regular,
-
-            return_abi: crate::tir::ReturnAbi::default(),
-        })
+        // Stage 7-B: reify (`reify_function`) emits the `TirFunction` from
+        // the recorded signature facts + the AST. The combined walk's copy
+        // is discarded, so a minimal shell with the right name + span is
+        // all `resolve_module` needs.
+        Some(placeholder_function(func.name.clone(), func.span))
     }
 
     /// Resolve a test declaration to a `TirFunction` and `TirTest`
@@ -1324,46 +1256,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let return_type = TypeTable::UNIT;
         let mut ctx = FunctionContext::new(return_type, function_name.clone());
 
-        // Resolve the test body
-        let body = self.resolve_block(&test_decl.body, &mut ctx, None);
+        // Walk the test body for its side-effect fact recording (its
+        // per-`AstId` expression types, recorded under the `function_name`
+        // context so `#function` literals match what reify emits); the
+        // resolved `TirBlock` is discarded.
+        self.resolve_block(&test_decl.body, &mut ctx, None);
 
-        let tir_func = TirFunction {
-            module_source: ModuleSource::default(),
-            name: function_name.clone(),
-            is_pub: false,    // Tests are not public
-            is_export: false, // Tests are not world exports
-            is_async: false,  // Tests are never async
-            type_params: vec![],
-            impl_type_params: vec![],
-            monomorph_info: None,
-            method_info: None,
-            params: vec![], // Tests have no parameters
-            return_type,
-            task_return_type: None,
-            effects: vec![], // Tests can have any effects (they're allowed to do I/O)
-            stores: vec![],
-            body: Some(body),
-            span: test_decl.span,
-            local_count: ctx.next_local,
-            locals: ctx.locals.clone(),
-            address_taken_locals: ctx.address_taken_locals,
-            stores_aliased_locals: IndexSet::default(),
-            is_cm_binding: false,
-            is_dispatch_wrapper: false,
-            is_cm_export: false,
-            is_ambient: false,
-            inline_hint: crate::tir::InlineHint::Auto,
-            compiler_item: None,
-            export_name: None,
-            allocator_tag: None,
-            kind: FunctionKind::Regular,
-
-            return_abi: crate::tir::ReturnAbi::default(),
-        };
-
+        // Stage 7-B: reify (`reify_test_decl`) emits both the `TirFunction`
+        // and the `TirTest` from the AST + recorded facts. The combined
+        // walk's copies are discarded, so minimal shells are enough.
         let tir_test = TirTest {
             name: test_decl.name.clone(),
-            function_name,
+            function_name: function_name.clone(),
             line: test_decl.span.line,
             span: test_decl.span,
             expect_trap,
@@ -1371,7 +1275,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             timeout_ms,
         };
 
-        Some((tir_func, tir_test))
+        Some((
+            placeholder_function(function_name, test_decl.span),
+            tir_test,
+        ))
     }
 
     /// Resolve a method (function with &self parameter)
@@ -1401,9 +1308,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // so dispatch synthesis can tell two same-named effects /
         // resources apart.
         let base_trait_name: Option<String> = trait_type.map(|t| scope.get_type_name(t));
-        let base_trait_module: Option<ModuleSource> = base_trait_name
-            .as_deref()
-            .map(|n| scope.canonical_decl_key(n).0);
 
         // First, collect type params from impl block's generic type (e.g., impl Box<T>)
         // Also build impl_type_params for the TirFunction
@@ -1660,21 +1564,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let old_self_type = scope.trait_ctx.self_type;
         scope.trait_ctx.self_type = Some(scope.resolve_type(impl_type));
 
-        // Concrete `TypeId`s of the trait/resource type arguments at this
-        // impl site (e.g. `[u8]` for `impl Stream<u8> for MockCM`). Resolved
-        // here — after impl-block + method-level type params are in scope —
-        // so that generic impls (`impl<T> Stream<T>`) round-trip the right
-        // `TypeParam` TypeId. Used by the dispatch synthesis to key
-        // per-monomorphisation infrastructure off `(base_trait, trait_type_args)`.
-        let trait_type_args: Vec<TypeId> = match trait_type {
-            Some(ast::Type::Generic(generic)) => generic
-                .args
-                .iter()
-                .map(|arg| scope.resolve_type(arg))
-                .collect(),
-            _ => Vec::new(),
-        };
-
         // Resolve return type
         let return_type = func
             .return_type
@@ -1770,11 +1659,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span: default_ast.span(),
                 });
             }
-            let default_expr = param.default.as_ref().map(|default_ast| {
+            // Walk the default for its side-effect fact recording; the
+            // resolved TIR is discarded (reify re-emits it from the AST).
+            if let Some(default_ast) = &param.default {
                 let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(type_id));
                 scope.typecheck(resolved.type_id, type_id, default_ast.span());
-                Box::new(resolved)
-            });
+            }
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
             scope.record_local_symbol(
                 param.id,
@@ -1783,12 +1673,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param.is_mut,
                 type_id,
             );
+            // `params` survives only to feed the recorded `fn_param_types`
+            // and `validate_stores`; the TIR `default_expr` is not built.
             params.push(TirParam {
                 name: param.name.clone(),
                 type_id,
                 local_index: index,
                 is_mut: param.is_mut,
-                default_expr,
+                default_expr: None,
                 span: param.span,
             });
         }
@@ -1796,11 +1688,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Validate stores declarations
         scope.validate_stores(&func.stores, &params, func.span);
 
-        // Resolve body
-        let body = func
-            .body
-            .as_ref()
-            .map(|b| scope.resolve_block(b, &mut ctx, None));
+        // Walk the body for its side-effect fact recording; the resolved
+        // `TirBlock` is discarded (reify re-emits it from the AST + facts).
+        if let Some(b) = func.body.as_ref() {
+            scope.resolve_block(b, &mut ctx, None);
+        }
 
         scope.validate_missing_return_ast(return_type, func.body.as_ref(), func.span);
 
@@ -1853,11 +1745,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `current_effect_param_decls`, so the annotate phase records
         // the already-resolved list here keyed by the method's `AstId`.
         let method_key = scope.ann_key(func.id);
-        scope
-            .sem
-            .types
-            .function_effects
-            .insert(method_key, effects.clone());
+        scope.sem.types.function_effects.insert(method_key, effects);
 
         // Restore effect params and Self type. `trait_ctx` is auto-restored on
         // `drop(scope)`, which replaces everything set up above.
@@ -1881,7 +1769,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem
             .types
             .decl_type_params
-            .insert(self.ann_key(func.id), type_params.clone());
+            .insert(self.ann_key(func.id), type_params);
 
         // Store type parameters for generic methods (for call site substitution)
         if !func.type_params.is_empty() {
@@ -1895,50 +1783,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .insert(mangled_name, method_resolved_param_types);
         }
 
-        Some(TirFunction {
-            module_source: ModuleSource::default(),
-            name: func.name.clone(), // Will be mangled by caller
-            is_pub: func.is_pub,
-            is_export: false, // Methods are not world exports
-            is_async: false,  // Methods are never async
-            type_params,
-            impl_type_params, // Type params from impl block (e.g., T from impl Counter<T>)
-            monomorph_info: None, // Not from monomorphization
-            method_info: Some(LocalMethodName {
-                struct_name: struct_name.to_string(),
-                base_struct_name: struct_name.to_string(),
-                trait_name: trait_name.map(String::from),
-                base_trait_name,
-                base_trait_module,
-                trait_type_args,
-                method_name: func.name.clone(),
-                method_type_args: vec![],
-                is_type_param_receiver: false,
-                is_ref_impl: false,
-                cm_name: None,
-            }),
-            params,
-            return_type,
-            task_return_type: None,
-            effects,
-            stores: func.stores.clone(),
-            body,
-            span: func.span,
-            local_count: ctx.next_local,
-            locals: ctx.locals.clone(),
-            address_taken_locals: ctx.address_taken_locals,
-            stores_aliased_locals: IndexSet::default(),
-            is_cm_binding: false,
-            is_dispatch_wrapper: false,
-            is_cm_export: false,
-            is_ambient: Self::extract_is_ambient(&func.attrs),
-            inline_hint: Self::extract_inline_hint(&func.attrs),
-            compiler_item: extract_compiler_item(&func.attrs, func.span, self.logger),
-            export_name: None,
-            allocator_tag: None,
-            kind: FunctionKind::Regular,
-
-            return_abi: crate::tir::ReturnAbi::default(),
-        })
+        // Stage 7-B: reify (`reify_method`) emits the method's `TirFunction`
+        // from the recorded facts (`method_impl_type_params`,
+        // `method_names`, `fn_param_types`, `fn_return_types`,
+        // `decl_type_params`, `function_effects`, the impl facts, …) + the
+        // AST. The combined walk's copy is discarded, so a minimal shell
+        // is all `resolve_module` needs.
+        Some(placeholder_function(func.name.clone(), func.span))
     }
 }
