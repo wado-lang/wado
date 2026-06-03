@@ -112,6 +112,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "wado-compiler/tests/fixtures/stores_with_effects.wado//Data" = struct.new "wado-compiler/tests/fixtures/stores_with_effects.wado//Data" { value: 99 };
+
 fn "wado-compiler/tests/fixtures/stores_with_effects.wado/store_and_log"(data) with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
@@ -121,7 +123,6 @@ fn "wado-compiler/tests/fixtures/stores_with_effects.wado/store_and_log"(data) w
 }
 
 fn "wado-compiler/tests/fixtures/stores_with_effects.wado/run"() with Stdout {
-    let d: ref "wado-compiler/tests/fixtures/stores_with_effects.wado//Data";
     let c: ref "wado-compiler/tests/fixtures/stores_with_effects.wado//Container";
     let __v0: i32;
     let __cond: bool;
@@ -129,8 +130,7 @@ fn "wado-compiler/tests/fixtures/stores_with_effects.wado/run"() with Stdout {
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let f_10: ref "core:prelude/format.wado//Formatter";
     let f_15: ref "core:prelude/format.wado//Formatter";
-    d = struct.new "wado-compiler/tests/fixtures/stores_with_effects.wado//Data" { value: 99 };
-    c = "wado-compiler/tests/fixtures/stores_with_effects.wado/store_and_log"(d);
+    c = "wado-compiler/tests/fixtures/stores_with_effects.wado/store_and_log"(global:__const_obj_0);
     __v0 = c.data.value;
     __cond = __v0 == 99;
     if __cond == 0 {

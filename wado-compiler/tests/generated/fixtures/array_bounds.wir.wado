@@ -111,6 +111,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30)), used: 3 };
+
 fn "wado-compiler/tests/fixtures/array_bounds.wado/array_bounds_check"() with Stdout {
     let __b: ref "core:prelude//List<i32>";
     let __local_2: ref "core:prelude/string.wado//String";
@@ -147,7 +149,6 @@ fn "wado-compiler/tests/fixtures/array_bounds.wado/array_bounds_check"() with St
 }
 
 fn "wado-compiler/tests/fixtures/array_bounds.wado/array_bounds_elim_redundant"() with Stdout {
-    let __b: ref "core:prelude//List<i32>";
     let sum: i32;
     let i: i32;
     let a: i32;
@@ -163,11 +164,10 @@ fn "wado-compiler/tests/fixtures/array_bounds.wado/array_bounds_elim_redundant"(
     let self_41: i32;
     let _licm_used_43: i32;
     let _licm_repr_44: ref builtin::array<i32>;
-    __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
     sum = 0;
     i = 0;
-    _licm_used_43 = 3;
-    _licm_repr_44 = __b.repr;
+    _licm_used_43 = global:__const_obj_0.used;
+    _licm_repr_44 = global:__const_obj_0.repr;
     b5: block {
         l6: loop {
             if i >= _licm_used_43 {

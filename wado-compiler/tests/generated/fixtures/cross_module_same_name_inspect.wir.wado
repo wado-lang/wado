@@ -119,9 +119,10 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "./sub/cross_module_same_name_method_a.wado//Widget" = struct.new "./sub/cross_module_same_name_method_a.wado//Widget" { id: 1 };
+global global:__const_obj_1: ref null "./sub/cross_module_same_name_method_b.wado//Widget" = struct.new "./sub/cross_module_same_name_method_b.wado//Widget" { id: 2 };
+
 fn "wado-compiler/tests/fixtures/cross_module_same_name_inspect.wado/__test_0_auto_derived_inspect_picks_the_receiver_type_s_own_module"() {
-    let a: ref "./sub/cross_module_same_name_method_a.wado//Widget";
-    let b: ref "./sub/cross_module_same_name_method_b.wado//Widget";
     let __cond_5: bool;
     let __cond_7: bool;
     let __local_8: ref "core:prelude/string.wado//String";
@@ -134,14 +135,12 @@ fn "wado-compiler/tests/fixtures/cross_module_same_name_inspect.wado/__test_0_au
     let __local_15: ref "core:prelude/format.wado//Formatter";
     let f_25: ref "core:prelude/format.wado//Formatter";
     let f_32: ref "core:prelude/format.wado//Formatter";
-    a = struct.new "./sub/cross_module_same_name_method_a.wado//Widget" { id: 1 };
-    b = struct.new "./sub/cross_module_same_name_method_b.wado//Widget" { id: 2 };
     __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 };
-    "./sub/cross_module_same_name_method_a.wado/Widget^Inspect::inspect"(a, __local_9);
+    "./sub/cross_module_same_name_method_a.wado/Widget^Inspect::inspect"(global:__const_obj_0, __local_9);
     __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 };
-    "./sub/cross_module_same_name_method_b.wado/Widget^Inspect::inspect"(b, __local_11);
+    "./sub/cross_module_same_name_method_b.wado/Widget^Inspect::inspect"(global:__const_obj_1, __local_11);
     __cond_5 = "core:prelude/string.wado/String^Eq::eq"(__local_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Widget { id: 1 }"), used: 16 });
     if __cond_5 == 0 {
         "core:internal/panic"(__local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(137), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_auto_derived_inspect_picks_the_receiver_type_s_own_module"), used: 66 }); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push"(__local_12, 97); "core:prelude/string.wado/String::push"(__local_12, 116); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/cross_module_same_name_inspect.wado"), used: 64 }); "core:prelude/string.wado/String::push"(__local_12, 58); __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_12 }; f_25 = __local_13; "core:prelude/primitive.wado/i32::fmt_decimal"(18, f_25); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("

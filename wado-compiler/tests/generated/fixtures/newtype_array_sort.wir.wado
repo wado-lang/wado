@@ -115,9 +115,10 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(3, 1, 2)), used: 3 };
+
 fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/run"() with Stdout {
     let __b_0: ref "core:prelude//List<i32>";
-    let __b_2: ref "core:prelude//List<i32>";
     let sorted: ref "core:prelude//List<i32>";
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
@@ -152,8 +153,7 @@ fn "wado-compiler/tests/fixtures/newtype_array_sort.wado/run"() with Stdout {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; self_49 = builtin::array_get<i32>(__b_0.repr, 3); "core:prelude/primitive.wado/i32::fmt_decimal"(self_49, f_46); __local_5);
-    __b_2 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 1, 2), used: 3 };
-    sorted = "core:prelude/list.wado/List<wado-compiler/tests/fixtures/newtype_array_sort.wado/Score>::sorted"(__b_2);
+    sorted = "core:prelude/list.wado/List<wado-compiler/tests/fixtures/newtype_array_sort.wado/Score>::sorted"(global:__const_obj_0);
     "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(60), used: 0 }; "core:prelude/string.wado/String::push"(__local_7, 115); "core:prelude/string.wado/String::push"(__local_7, 111); "core:prelude/string.wado/String::push"(__local_7, 114); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 101); "core:prelude/string.wado/String::push"(__local_7, 100); "core:prelude/string.wado/String::push"(__local_7, 58); "core:prelude/string.wado/String::push"(__local_7, 32); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; f_63 = __local_8; if builtin::unlikely(0 >= sorted.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;

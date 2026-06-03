@@ -390,6 +390,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "core:prelude/int128.wado//i128" = struct.new "core:prelude/int128.wado//i128" { low: -1_i64, high: 9223372036854775807_i64 };
+global global:__const_obj_1: ref null "core:prelude/int128.wado//u128" = struct.new "core:prelude/int128.wado//u128" { low: -1_i64, high: -1_i64 };
+
 fn "wado-compiler/tests/fixtures/serde_json_large_int.wado/__test_0_i64_small_value_as_number"() {
     let s: ref "core:prelude/string.wado//String";
     let __cond: bool;
@@ -564,17 +567,15 @@ condition: v == 18446744073709551615 as u64
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_large_int.wado/__test_7_i128_large_value_as_string"() {
-    let v: ref "core:prelude/int128.wado//i128";
     let s: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let f_12: ref "core:prelude/format.wado//Formatter";
-    v = struct.new "core:prelude/int128.wado//i128" { low: -1_i64, high: 9223372036854775807_i64 };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<core:prelude/int128.wado/i128>"(v);
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<core:prelude/int128.wado/i128>"(global:__const_obj_0);
     if __sroa_r_discriminant == 0 {
         s = ref.as_non_null(__sroa_r_case0_payload_0);
         __cond = "core:prelude/string.wado/String^Eq::eq"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\"170141183460469231731687303715884105727\""), used: 41 });
@@ -591,17 +592,15 @@ condition: s == `\"170141183460469231731687303715884105727\"`
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_large_int.wado/__test_8_u128_large_value_as_string"() {
-    let v: ref "core:prelude/int128.wado//u128";
     let s: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let f_12: ref "core:prelude/format.wado//Formatter";
-    v = struct.new "core:prelude/int128.wado//u128" { low: -1_i64, high: -1_i64 };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<core:prelude/int128.wado/u128>"(v);
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<core:prelude/int128.wado/u128>"(global:__const_obj_1);
     if __sroa_r_discriminant == 0 {
         s = ref.as_non_null(__sroa_r_case0_payload_0);
         __cond = "core:prelude/string.wado/String^Eq::eq"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\"340282366920938463463374607431768211455\""), used: 41 });

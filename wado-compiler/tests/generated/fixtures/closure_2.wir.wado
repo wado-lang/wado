@@ -264,6 +264,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "wado-compiler/tests/fixtures/closure_2.wado//__Closure_7" = struct.new "wado-compiler/tests/fixtures/closure_2.wado//__Closure_7" { __capture_0: 1, __capture_1: 2, __capture_2: 3 };
+
 fn "wado-compiler/tests/fixtures/closure_2.wado/scale_and_add"(items, scale, base) {
     let total: i32;
     let __iter_5: ref "core:prelude/list.wado//ListIter<i32>";
@@ -305,14 +307,12 @@ condition: r5 == 15
 }
 
 fn "wado-compiler/tests/fixtures/closure_2.wado/__test_1_capture_multiple"() {
-    let format_all: ref "wado-compiler/tests/fixtures/closure_2.wado//__Closure_7";
     let __v0_10: ref "core:prelude/string.wado//String";
     let __cond_11: bool;
     let __local_25: ref "core:prelude/string.wado//String";
     let __local_26: ref "core:prelude/format.wado//Formatter";
     let f_48: ref "core:prelude/format.wado//Formatter";
-    format_all = struct.new "wado-compiler/tests/fixtures/closure_2.wado//__Closure_7" { __capture_0: 1, __capture_1: 2, __capture_2: 3 };
-    __v0_10 = "wado-compiler/tests/fixtures/closure_2.wado/__Closure_7::__call"(format_all);
+    __v0_10 = "wado-compiler/tests/fixtures/closure_2.wado/__Closure_7::__call"(global:__const_obj_0);
     __cond_11 = "core:prelude/string.wado/String^Eq::eq"(__v0_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("1,2,3"), used: 5 });
     if __cond_11 == 0 {
         "core:internal/panic"(__local_25 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(140), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_capture_multiple"), used: 25 }); "core:prelude/string.wado/String::push"(__local_25, 32); "core:prelude/string.wado/String::push"(__local_25, 97); "core:prelude/string.wado/String::push"(__local_25, 116); "core:prelude/string.wado/String::push"(__local_25, 32); "core:prelude/string.wado/String::push_str"(__local_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/closure_2.wado"), used: 43 }); "core:prelude/string.wado/String::push"(__local_25, 58); __local_26 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_25 }; f_48 = __local_26; "core:prelude/primitive.wado/i32::fmt_decimal"(64, f_48); "core:prelude/string.wado/String::push_str"(__local_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("

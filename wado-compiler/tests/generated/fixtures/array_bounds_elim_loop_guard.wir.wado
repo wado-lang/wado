@@ -109,8 +109,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30, 40, 50)), used: 5 };
+
 fn "wado-compiler/tests/fixtures/array_bounds_elim_loop_guard.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//List<i32>";
     let sum: i32;
     let i: i32;
     let __v0: i32;
@@ -124,11 +125,10 @@ fn "wado-compiler/tests/fixtures/array_bounds_elim_loop_guard.wado/run"() with S
     let self_42: i32;
     let _licm_used_44: i32;
     let _licm_repr_45: ref builtin::array<i32>;
-    __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30, 40, 50), used: 5 };
     sum = 0;
     i = 0;
-    _licm_used_44 = 5;
-    _licm_repr_45 = __b_0.repr;
+    _licm_used_44 = global:__const_obj_0.used;
+    _licm_repr_45 = global:__const_obj_0.repr;
     b0: block {
         l1: loop {
             if i >= _licm_used_44 {

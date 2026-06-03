@@ -97,21 +97,20 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "wado-compiler/tests/fixtures/wir_optimize_value_copy_if_fresh.wado//Wrapper" = struct.new "wado-compiler/tests/fixtures/wir_optimize_value_copy_if_fresh.wado//Wrapper" { inner: 10 };
+global global:__const_obj_1: ref null "wado-compiler/tests/fixtures/wir_optimize_value_copy_if_fresh.wado//Wrapper" = struct.new "wado-compiler/tests/fixtures/wir_optimize_value_copy_if_fresh.wado//Wrapper" { inner: 20 };
+
 fn "wado-compiler/tests/fixtures/wir_optimize_value_copy_if_fresh.wado/run"() with Stdout {
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    let w_8: ref "wado-compiler/tests/fixtures/wir_optimize_value_copy_if_fresh.wado//Wrapper";
-    let w_10: ref "wado-compiler/tests/fixtures/wir_optimize_value_copy_if_fresh.wado//Wrapper";
     let self_15: i32;
     let self_21: i32;
     let s_24: ref "core:prelude/string.wado//String";
     let s_26: ref "core:prelude/string.wado//String";
-    w_8 = struct.new "wado-compiler/tests/fixtures/wir_optimize_value_copy_if_fresh.wado//Wrapper" { inner: 10 };
-    w_10 = struct.new "wado-compiler/tests/fixtures/wir_optimize_value_copy_if_fresh.wado//Wrapper" { inner: 20 };
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; self_15 = w_8.inner; "core:prelude/primitive.wado/i32::fmt_decimal"(self_15, __local_3); __local_2);
-    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; self_21 = w_10.inner; "core:prelude/primitive.wado/i32::fmt_decimal"(self_21, __local_5); __local_4);
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; self_15 = global:__const_obj_0.inner; "core:prelude/primitive.wado/i32::fmt_decimal"(self_15, __local_3); __local_2);
+    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; self_21 = global:__const_obj_1.inner; "core:prelude/primitive.wado/i32::fmt_decimal"(self_21, __local_5); __local_4);
     "core:cli/println"(s_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("yes"), used: 3 }; s_24);
     "core:cli/println"(s_26 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no"), used: 2 }; s_26);
 }

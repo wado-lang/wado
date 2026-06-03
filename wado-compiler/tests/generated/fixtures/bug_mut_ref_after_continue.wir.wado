@@ -113,8 +113,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30, 40, 50)), used: 5 };
+
 fn "wado-compiler/tests/fixtures/bug_mut_ref_after_continue.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//List<i32>";
     let pos_2: ref "core:prelude/types.wado//Box<i32>";
     let __cond_5: bool;
     let __v0_6: i32;
@@ -155,10 +156,9 @@ fn "wado-compiler/tests/fixtures/bug_mut_ref_after_continue.wado/run"() with Std
     let f_121: ref "core:prelude/format.wado//Formatter";
     let _licm_used_124: i32;
     let _licm_repr_125: ref builtin::array<i32>;
-    __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30, 40, 50), used: 5 };
     pos_2 = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
-    _licm_used_124 = 5;
-    _licm_repr_125 = __b_0.repr;
+    _licm_used_124 = global:__const_obj_0.used;
+    _licm_repr_125 = global:__const_obj_0.repr;
     b0: block {
         l1: loop {
             if pos_2.value >= _licm_used_124 {

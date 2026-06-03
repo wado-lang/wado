@@ -388,18 +388,18 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "wado-compiler/tests/fixtures/serde_json_rename_all.wado//Config" = struct.new "wado-compiler/tests/fixtures/serde_json_rename_all.wado//Config" { max_retries: 3, timeout_ms: 5000_i64, is_verbose: 1 };
+
 fn "wado-compiler/tests/fixtures/serde_json_rename_all.wado/__test_0_serialize_with_rename_all_snake_case"() {
-    let c: ref "wado-compiler/tests/fixtures/serde_json_rename_all.wado//Config";
     let s: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let f_10: ref "core:prelude/format.wado//Formatter";
-    c = struct.new "wado-compiler/tests/fixtures/serde_json_rename_all.wado//Config" { max_retries: 3, timeout_ms: 5000_i64, is_verbose: 1 };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_json_rename_all.wado/Config>"(c);
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_json_rename_all.wado/Config>"(global:__const_obj_0);
     if __sroa_r_discriminant == 0 {
         s = ref.as_non_null(__sroa_r_case0_payload_0);
         __cond = "core:prelude/string.wado/String^Eq::eq"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"max_retries\":3,\"timeout_ms\":5000,\"is_verbose\":true}"), used: 53 });

@@ -1,0 +1,76 @@
+// Constant Object Globalization — body globalization (WEP-2026-05-31).
+//
+// A constant, read-only aggregate `let` binding inside a function body is
+// hoisted into a shared immutable module global, so it is built once at
+// instantiation instead of rebuilt on every call / loop iteration. The
+// `nir/const_object_globalization` pass emits an inline `GlobalVarSet` for the
+// hoisted value; `wir_optimize::const_global` then promotes the global to an
+// eager Wasm constant and drops the assignment.
+//
+// This was deferred until WEP-2026-06-02 Phase 1 gave `builtin::array_*` ops
+// `&` / `&mut` first parameters, so the read-only gate can distinguish an
+// `array_get` read from an `array_set` mutation through `.repr`.
+
+use { println, Stdout } from "core:cli";
+
+// A constant lookup table indexed dynamically in a loop survives optimization
+// as a real heap object (it cannot be scalarized), so it is the prime target.
+// Read-only: every use of `table` is a `.repr` / `.used` read. It is hoisted
+// to an immutable `global:__const_obj_*`.
+fn lookup(n: i32) -> i32 {
+    let table: List<i32> = [10, 20, 30, 40];
+    let mut sum = 0;
+    let mut i = 0;
+    while i < n {
+        sum = sum + table[i % 4];
+        i = i + 1;
+    }
+    return sum;
+}
+
+// A mutated constant array must NOT be globalized: `arr[0] = 99` lowers to
+// `array_set(&mut arr.repr, …)`, which the read-only gate rejects. The output
+// proves the mutation still applies (a wrongly-shared global would corrupt it).
+fn mutated() -> i32 {
+    let mut arr: List<i32> = [1, 2, 3];
+    arr[0] = 99;
+    return arr[0] + arr[1] + arr[2];
+}
+
+// Regression for a corruption bug: a const struct stored into an array slot by
+// indexed assignment lowers to `array_set(&mut codes.repr, i, ec)`, which moves
+// `ec`'s reference into the slot with no copy (the value-copy machinery elides
+// the copy of a fresh literal). If `ec` were globalized and shared, every slot
+// would alias the one global, so the later element mutation `codes[0].code = 7`
+// would set all three — returning 21 instead of 7. `ec` must NOT be globalized.
+// This mirrors the zlib encoder static-tree initialization.
+struct EncCode { code: i32, len: i32 }
+
+fn stored_then_mutated() -> i32 {
+    let mut codes: List<EncCode> =
+        [EncCode { code: 0, len: 0 }, EncCode { code: 0, len: 0 }, EncCode { code: 0, len: 0 }];
+    let mut i = 0;
+    while i < 3 {
+        let ec: EncCode = EncCode { code: 0, len: 8 };
+        codes[i] = ec;
+        i = i + 1;
+    }
+    codes[0].code = 7;
+    return codes[0].code + codes[1].code + codes[2].code;
+}
+
+export fn run() with Stdout {
+    println(`{lookup(8)},{mutated()},{stored_then_mutated()}`);
+}
+
+__DATA__
+{
+    "stdout": "200,104,7\n",
+    "wir_expect:O2": [
+        "global global:__const_obj",
+        "array.new_fixed<i32>(10, 20, 30, 40)"
+    ],
+    "wir_not_expect:O2": [
+        "global mut global:__const_obj"
+    ]
+}

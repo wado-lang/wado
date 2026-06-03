@@ -252,6 +252,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(1, 2, 3)), used: 3 };
+
 fn "wado-compiler/tests/fixtures/serde_json_array_string.wado/__test_0_serialize_list_string_"() {
     let __b: ref "core:prelude//List<core:prelude/string.wado/String>";
     let s: ref "core:prelude/string.wado//String";
@@ -280,17 +282,15 @@ condition: s == `[\"hello\",\"world\"]`
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_array_string.wado/__test_1_serialize_list_i32_"() {
-    let __b: ref "core:prelude//List<i32>";
     let s: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let f_20: ref "core:prelude/format.wado//Formatter";
-    __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<core:prelude/list.wado/List<i32>>"(__b);
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<core:prelude/list.wado/List<i32>>"(global:__const_obj_0);
     if __sroa_r_discriminant == 0 {
         s = ref.as_non_null(__sroa_r_case0_payload_0);
         __cond = "core:prelude/string.wado/String^Eq::eq"(s, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("[1,2,3]"), used: 7 });

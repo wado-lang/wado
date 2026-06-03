@@ -87,23 +87,62 @@ redirected it to a WIR pass:
   instead of re-translating a NIR aggregate (which would risk divergence from the
   real translator). The decision is still made once, post-optimization.
 
-`register_globals` does gain a path to lower an aggregate-literal initializer
-directly (reusing the expression translator), so a global that already carries an
-aggregate const init — the intended output of body globalization below — becomes
-eager without a round-trip through `__initialize_module`.
+An earlier draft planned to give `register_globals` a path to lower an
+aggregate-literal initializer directly, so a body-globalized global could carry
+an eager aggregate `init`. Body globalization instead routes through the existing
+`__initialize_module`-style promotion (an inline `GlobalVarSet` promoted by
+`wir_optimize::const_global`), so this path is not needed and was never added —
+`translate_global_init` still handles only scalar / `null` inits. See "Body
+globalization — landed" below.
 
-### Body globalization — deferred
+### Body globalization — landed
 
-Hoisting constant-aggregate `let` bindings out of function bodies into shared
-immutable globals (`const_object_globalization`, a NIR pass) is deferred. A
-read-only / projection-only gate is _unsound_ as a first cut: at `-O2`,
-`arr[i] = v` lowers to a builtin `array_set(arr.repr, i, v)`, a mutation through
-the `arr.repr` projection that a "every use is a projection read" gate misreads as
-a read — so a mutated array could be hoisted and shared, corrupting it. A sound
-gate needs effect-aware analysis (distinguishing `array_get` reads from
-`array_set` mutations through `.repr`), which deserves its own change with
-dedicated tests. The `register_globals` aggregate-init path above is the landing
-spot for it.
+`const_object_globalization` (a NIR pass,
+`optimize/const_object_globalization.rs`) hoists constant-aggregate `let`
+bindings out of function bodies into shared immutable globals. It was deferred
+until the original soundness blocker was removed: at `-O2`, `arr[i] = v` lowered
+to a builtin `array_set(arr.repr, i, v)`, a mutation through the `arr.repr`
+projection that a "every use is a projection read" gate misread as a read.
+[Phase 1 of the `builtin::array` redesign](./wep-2026-06-02-builtin-array-redesign.md)
+gave the `builtin::array_*` ops `&` / `&mut` first parameters, so the mutation is
+now an explicit `&mut arr.repr` the gate rejects.
+
+Two independent gates:
+
+- Closed const aggregate (`is_globalizable_const`). The initializer must be a
+  side-effect-free constant with no free locals: literals, nested
+  `Struct` / `Tuple` / `Array` / `Enum` / `Variant` constructors, and the
+  builder-temp block (`{ let __b = …; *__b }`) an array literal leaves. Strings
+  (`array.new_data`), `BytesLiteral`, calls, and reads of other globals are
+  excluded — a free local or side effect would make hoisting to module scope
+  unsound, and a non-const value cannot promote.
+- Read-only (`is_readonly`). Every use must be a borrowing / reading position.
+  Modelled on `value_copy_demote`'s element-immutability walk but stricter:
+  because the _whole_ object is shared, even a spine mutation (`push`) corrupts
+  it, so any `&mut self` method, any `&mut` of a projection, and any assignment
+  to the binding or a projection disqualifies it. A bare whole-value read in a
+  consuming position (return, block tail, `let y = xs`, an aggregate element) is
+  also rejected — the value-copy machinery may have elided the copy treating `xs`
+  as a movable local, which globalizing would break. By-`&` borrows, by-value
+  arguments (the callee gets an independent copy), field / index reads, and
+  `&self` methods are admitted.
+
+The pass runs once after the optimizer fixpoint converges, on the stable
+post-inline shape. It does **not** re-translate the aggregate or extend
+`register_globals`: it emits a fresh Wasm-mutable / Wado-immutable global with a
+`null` placeholder init (mirroring `extract`) plus an inline `GlobalVarSet` at
+the original `let`, and rewrites the binding's reads to `GlobalVarGet`. The
+existing `wir_optimize::const_global` classifier then promotes the global to an
+eager Wasm constant and drops the assignment — reusing that machinery wholesale,
+so soundness rests on the read-only gate alone: if a value turns out not to be
+WIR-const-expressible, the global merely stays lazy-assigned each call, still
+correct. (This supersedes the earlier idea of a `register_globals` aggregate-init
+path, which is therefore not needed.)
+
+Only aggregates that _survive_ optimization are reachable targets: a const struct
+that is only field-read is scalarized away by SROA before this pass runs, so the
+prime beneficiary is a constant `List` / `Array` indexed dynamically in a loop
+(the lookup-table case), which cannot be scalarized.
 
 ### Enablers (other WEPs)
 
@@ -141,14 +180,18 @@ Landed:
 - [x] `wir_optimize::const_global::promote_const_global_inits` — single classifier
       (recurses into inlined/duplicated init blocks); `WirGlobal.wado_mutable`
       added; NIR `const_global_promotion` deleted.
-- [x] `register_globals` lowers an aggregate-literal initializer directly.
+- [x] `const_object_globalization` NIR pass — hoists constant, read-only
+      aggregate `let` bindings into shared immutable globals via an inline
+      `GlobalVarSet` that `wir_optimize::const_global` promotes. Two gates
+      (`is_globalizable_const`, `is_readonly`); the `&mut`-aware read-only gate
+      is unblocked by builtin-array Phase 1. E2E fixture
+      `const_object_globalization` (loop-indexed `List` globalized; mutated array
+      and returned/escaping bindings left alone).
 - [x] E2E fixtures: `const_global_object` (struct/array eager, string lazy),
       `const_global_entry` (inlined-init promotion).
 
 Deferred:
 
-- [ ] `const_object_globalization` NIR pass — needs an effect-aware (array_get vs
-      array_set) read-only gate before it is sound; dedicated change + tests.
 - [ ] Fold user-immutable globals' reads from their initializers (`niri`
       `GlobalEnv` keyed on `wado_mutable`) — overlaps
       [niri Evolution WEP](./wep-2026-04-27-nir-interpreter.md) (Stage 6).

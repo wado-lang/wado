@@ -132,6 +132,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global mut global:__const_obj_0: ref null "core:prelude//List<core:prelude/list.wado/List<i32>>" = ref.null none;
+global mut global:__const_obj_1: ref null "core:prelude//List<core:prelude/list.wado/List<i32>>" = ref.null none;
+
 fn "wado-compiler/tests/fixtures/trait_bound_4.wado/trait_bound_nested_generic"() with Stdout {
     let __b_0: ref "core:prelude//List<core:prelude/list.wado/List<i32>>";
     let __b_1: ref "core:prelude//List<i32>";
@@ -140,8 +143,10 @@ fn "wado-compiler/tests/fixtures/trait_bound_4.wado/trait_bound_nested_generic"(
     let __b_5: ref "core:prelude//List<i32>";
     let __b_6: ref "core:prelude//List<i32>";
     __b_0 = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(__b_1 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }; __b_1, __b_2 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 }; __b_2), used: 2 };
+    global:__const_obj_0 = __b_0;
     __b_4 = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(__b_5 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }; __b_5, __b_6 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 }; __b_6), used: 2 };
-    if "core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^Eq::eq"(__b_0, __b_4) {
+    global:__const_obj_1 = __b_4;
+    if "core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^Eq::eq"(global:__const_obj_0, global:__const_obj_1) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("equal"), used: 5 });
     } else {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not equal"), used: 9 });

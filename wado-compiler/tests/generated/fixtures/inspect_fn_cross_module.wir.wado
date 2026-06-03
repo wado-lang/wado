@@ -83,6 +83,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:./sub/inspect_fn_cross_module_helper.wado::__const_obj_0: ref null "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado//__Closure_0" = struct.new "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado//__Closure_0" {  };
+
 fn "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado/run"() with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
@@ -101,11 +103,9 @@ fn "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado/__cm_export__run"(
 }
 
 fn "./sub/inspect_fn_cross_module_helper.wado/show_in_helper"() with Stdout {
-    let pred: ref "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado//__Closure_0";
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
-    pred = struct.new "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado//__Closure_0" {  };
-    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("from helper: "), used: 13 }); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado/__Closure_0^Inspect::inspect"(pred, __local_2); __local_1);
+    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("from helper: "), used: 13 }); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado/__Closure_0^Inspect::inspect"(global:./sub/inspect_fn_cross_module_helper.wado::__const_obj_0, __local_2); __local_1);
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

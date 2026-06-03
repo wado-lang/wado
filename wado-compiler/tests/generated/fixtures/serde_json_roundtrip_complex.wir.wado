@@ -1318,6 +1318,8 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 global global:core::prelude/fpfmt.wado::POW10: ref null "core:prelude//List<u64>" = struct.new "core:prelude//List<u64>" { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
 global mut global:__modules_initialized: bool = 0;
+global global:__const_obj_0: ref null "core:prelude//List<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Direction>" = struct.new "core:prelude//List<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Direction>" { repr: ref.as_non_null(array.new_fixed<i32>(0, 1, 2, 3)), used: 4 };
+global global:__const_obj_1: ref null "core:prelude//List<core:prelude/types.wado/Option<i32>>" = struct.new "core:prelude//List<core:prelude/types.wado/Option<i32>>" { repr: ref.as_non_null(array.new_fixed<ref "core:prelude/types.wado//Option<i32>">(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 1 }, struct.new "core:prelude/types.wado//Option<i32>" { 1 }, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 3 })), used: 3 };
 
 fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/__test_0_full_struct_roundtrip_with_all_fields"() {
     let __b: ref "core:prelude//List<core:prelude/string.wado/String>";
@@ -2175,7 +2177,6 @@ condition: json == `\"North\"`
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/__test_11_all_enum_variants_roundtrip"() {
-    let __b_0: ref "core:prelude//List<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Direction>";
     let __b_2: ref "core:prelude//List<core:prelude/string.wado/String>";
     let i: i32;
     let json: ref "core:prelude/string.wado//String";
@@ -2188,11 +2189,10 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/__test_11_all
     let _licm_repr_47: ref "builtin::array<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Direction>";
     let _licm_used_48: i32;
     let _licm_repr_49: ref "builtin::array<core:prelude/string.wado/String>";
-    __b_0 = struct.new "core:prelude//List<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Direction>" { repr: array.new_fixed<i32>(0, 1, 2, 3), used: 4 };
     __b_2 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("North"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("South"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("East"), used: 4 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("West"), used: 4 }), used: 4 };
     i = 0;
-    _licm_used_46 = 4;
-    _licm_repr_47 = __b_0.repr;
+    _licm_used_46 = global:__const_obj_0.used;
+    _licm_repr_47 = global:__const_obj_0.repr;
     _licm_used_48 = 4;
     _licm_repr_49 = __b_2.repr;
     b72: block {
@@ -2688,7 +2688,6 @@ condition: json == \"null\"
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/__test_21_list_of_options_roundtrip"() {
-    let __b: ref "core:prelude//List<core:prelude/types.wado/Option<i32>>";
     let json: ref "core:prelude/string.wado//String";
     let __cond_5: bool;
     let arr: ref "core:prelude//List<core:prelude/types.wado/Option<i32>>";
@@ -2716,11 +2715,10 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/__test_21_lis
     let f_65: ref "core:prelude/format.wado//Formatter";
     let f_75: ref "core:prelude/format.wado//Formatter";
     let f_80: ref "core:prelude/format.wado//Formatter";
-    __b = struct.new "core:prelude//List<core:prelude/types.wado/Option<i32>>" { repr: array.new_fixed<ref "core:prelude/types.wado//Option<i32>">(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 1 }, struct.new "core:prelude/types.wado//Option<i32>" { 1 }, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 3 }), used: 3 };
     let __sroa_json_r_discriminant: i32;
     let __sroa_json_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_json_r_case1_payload_0: ref null "core:serde//SerializeError";
-    multivalue_bind [__sroa_json_r_discriminant, __sroa_json_r_case0_payload_0, __sroa_json_r_case1_payload_0] = "core:json/core/json/to_string<core:prelude/list.wado/List<core:prelude/types.wado/Option<i32>>>"(__b);
+    multivalue_bind [__sroa_json_r_discriminant, __sroa_json_r_case0_payload_0, __sroa_json_r_case1_payload_0] = "core:json/core/json/to_string<core:prelude/list.wado/List<core:prelude/types.wado/Option<i32>>>"(global:__const_obj_1);
     if __sroa_json_r_discriminant == 0 {
         json = ref.as_non_null(__sroa_json_r_case0_payload_0);
         __cond_5 = "core:prelude/string.wado/String^Eq::eq"(json, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("[1,null,3]"), used: 10 });

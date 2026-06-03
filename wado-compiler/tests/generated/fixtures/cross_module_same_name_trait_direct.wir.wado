@@ -113,15 +113,15 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "./sub/cross_module_same_name_trait_a.wado//Data" = struct.new "./sub/cross_module_same_name_trait_a.wado//Data" { x: 7 };
+
 fn "wado-compiler/tests/fixtures/cross_module_same_name_trait_direct.wado/__test_0_cross_module_same_name_traits__direct_dispatch"() {
-    let a: ref "./sub/cross_module_same_name_trait_a.wado//Data";
     let __v0_2: ref "core:prelude/string.wado//String";
     let __cond_3: bool;
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let f_14: ref "core:prelude/format.wado//Formatter";
-    a = struct.new "./sub/cross_module_same_name_trait_a.wado//Data" { x: 7 };
-    __v0_2 = "./sub/cross_module_same_name_trait_a.wado/Data^Describe::describe"(a);
+    __v0_2 = "./sub/cross_module_same_name_trait_a.wado/Data^Describe::describe"(global:__const_obj_0);
     __cond_3 = "core:prelude/string.wado/String^Eq::eq"(__v0_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x=7"), used: 3 });
     if __cond_3 == 0 {
         "core:internal/panic"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(132), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_cross_module_same_name_traits__direct_dispatch"), used: 55 }); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/cross_module_same_name_trait_direct.wado"), used: 69 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_14 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(30, f_14); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
