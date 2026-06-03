@@ -1,0 +1,18 @@
+// Test: `#[benign(A, B)]` accepts multiple effects. `emit` performs both
+// `Stdout` and `Stderr` internally, yet `run` calls it without declaring
+// either.
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+
+#[benign(Stdout, Stderr)]
+fn emit() {
+    println("out");
+    eprintln("err");
+}
+
+export fn run() {
+    emit();
+}
+
+__DATA__
+{"stdout": "out\n", "stderr": "err\n"}

@@ -4326,6 +4326,18 @@ fn critical_path() -> i32 { return 1; }
 fn error_handler() { panic("error"); }
 ```
 
+#### `#[benign(E, ...)]`
+
+Lets a function perform the listed effects without declaring `with E`, and stops them from propagating to callers — for effects that are observationally pure (unobservable through the function's interface). Only the named effects are suppressed; others propagate normally, and the world import for each is still required. The compiler cannot verify observational purity, so this is an unchecked assertion that must be audited. See [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md).
+
+```wado
+#[benign(InsecureSeed)]
+fn make<K, V>() -> HashMap<K, V> {
+    let seed = get_insecure_seed(); // performed here, not required of callers
+    return HashMap { seed, /* ... */ };
+}
+```
+
 #### `#[hidden]`
 
 Hides a struct field from debug/inspect output (the `:?` format specifier).

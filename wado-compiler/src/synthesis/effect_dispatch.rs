@@ -943,6 +943,7 @@ fn build_dispatch_wrapper_function(
         is_dispatch_wrapper: true,
         is_cm_export: false,
         is_ambient: false,
+        benign_effects: Vec::new(),
         inline_hint: InlineHint::Auto,
         compiler_item: None,
         export_name: None,
