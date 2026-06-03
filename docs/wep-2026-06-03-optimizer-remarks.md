@@ -88,20 +88,32 @@ kinds.
 
 A deep copy is a call to a synthesized `$value_copy$T` helper
 (`FunctionKind::ValueCopy`), and the `value_copy_elide` pass strips the wrapper
-wherever the copy is provably unnecessary. A copy that survives optimization is
-therefore a remaining `$value_copy$T(...)` call in the final NIR. The remark
-collects those survivors for aggregate types above a size threshold and maps each
-back to its source span (proposed output, not yet implemented):
+wherever the copy is provably unnecessary. But a copy is not always removed _or_
+left intact: `value_copy_demote` rewrites a deep copy whose elements are never
+mutated into a shallow spine copy, lowered as a `builtin::array_clone` /
+`array_clone_shallow` call on the backing array. So a value copy that survives
+optimization appears in the final NIR as one of: a remaining `$value_copy$T(...)`
+call, or an `array_clone` / `array_clone_shallow` / `copy_value` call. The remark
+collects all of these in entry-module functions. (`array_copy` is excluded — it
+is bulk buffer movement inside stdlib helpers like `String::push`, not a
+value-semantic copy.) Actual shipped output, where `b` is a `List<i32>` copied
+then mutated:
 
 ```
-remark: a deep copy of `Matrix` survives optimization here [stats.wado:12:18]
-  note: `frobenius` receives `Matrix` by value; the copy could not be elided
-  suggestion: take `m: &Matrix` if the callee only reads it
+src.wado:5:5: info: remark: a copy of `List<i32>` survives optimization
 ```
 
-The _why_ is the surviving copy, the _where_ is the call site, and the _how_
-applies when the value is read-only: the reference escape hatch (`&T` / `&mut T`)
-is the only construct that shares rather than copies (spec.md).
+Why the final NIR and not the final WIR: the WIR is the last IR before codegen
+and would be the most authoritative "this copy executes" signal, but `WirInstr`
+carries no per-instruction span (only function-level `WirMeta` does), so a
+WIR-sourced remark could not point at the source. The optimized NIR is the last
+IR with per-expression spans, and `wir_build` lowers these copies one-to-one, so
+NIR is both span-accurate and faithful. Even so the synthesized copy nodes
+(`array_clone`, demoted spine copies) carry no user span themselves, so the
+remark is anchored to the enclosing statement — the `let mut b = a;` that performs
+the copy. The reference escape hatch (`&T` / `&mut T`) is the only construct that
+shares rather than copies (spec.md); naming it as a suggestion is deferred to the
+read-only-vs-required classification below.
 
 ### Surviving aggregate allocations (failed SROA)
 
@@ -137,25 +149,30 @@ the first two kinds.
   and derive firing from facts observable in the final NIR (residual
   `$value_copy$T` calls; aggregate allocations the SROA passes left in place),
   not from any pass's internals.
-- Opt-in, not on by default. Errors name one rejected program and are rich by
-  default (the Diagnostic Reason Chains stance); a cost remark is advisory and
-  could be plentiful, so it is gated behind an explicit surface (proposed:
-  `--remarks` on `wado compile`, plus `wado dump` exposure). Within that surface
-  the default-rich, never-vague principle holds in full.
+- Surfaced as an info-level `remark:` diagnostic through the existing logger, not
+  a dedicated flag. It rides `--log-level`: shown at the default `Info` level,
+  silenced by `--log-level warn`. This needs no new configuration surface for an
+  agent to discover, and the low-noise-by-construction property (the optimizer
+  has already removed the easy copies) keeps the default-on volume small. The
+  never-vague principle still holds: a remark that cannot supply why + where is
+  not emitted.
 - Never vague: a remark that cannot supply why + where stays silent, since the
   paper shows vague remarks are net-negative.
 
-### MVP scope (proposed)
+### MVP scope
 
-- Start with surviving value copies: walk the final NIR, collect residual
-  `$value_copy$T(...)` calls for aggregate types above a size threshold, emit one
-  remark per survivor with its source span. Surfacing the survivor set with spans
-  is already the valuable information.
-- Then add failed-SROA remarks, reusing the SROA passes' existing hard-escape
-  classification for the _why_ and the escape site for a second span.
-- E2E fixtures pin each at a fixed `-Ox`: a fixture where the cost survives
-  asserts the remark fires; a fixture where the optimizer removes it asserts it
-  does not.
+Shipped: surviving value copies. `remarks::collect_value_copy_remarks` walks the
+optimized NIR's entry-module functions, collects residual `$value_copy$T` calls
+and `array_clone` / `array_clone_shallow` / `copy_value` calls, and emits one
+info-level remark per survivor anchored to the enclosing statement.
+`logger.remark` carries the span and the entry filename; tests
+(`wado-compiler/tests/remarks.rs`) pin the behavior at `-O2` — a `List<i32>`
+copied then mutated fires one remark on the copy line; a `Point` that SROA
+scalarizes fires none. No size threshold yet: a synthesized copy helper only
+exists for non-trivial aggregates, so survivors are already non-trivial.
+
+Next: failed-SROA remarks, reusing the SROA passes' existing hard-escape
+classification for the _why_ and the escape site for a second span.
 
 ### Reusing existing infrastructure
 
@@ -168,19 +185,24 @@ capability the type/trait reason chains want. Building it once serves both.
 
 ## Consequences
 
-This WEP is design-stage; nothing below is implemented yet.
+Shipped:
 
-- [ ] Decide the remark surface: `--remarks` on `wado compile`, `wado dump`
-      exposure, and/or `--log-level` integration.
-- [ ] Define how the final-NIR walk collects residual `$value_copy$T` calls and
-      surviving aggregate allocations with source provenance and a size threshold.
-- [ ] MVP: residual value-copy remarks with why + where, plus the survives /
-      elided fixture pair at a fixed `-Ox`.
+- [x] Remark surface: info-level `remark:` diagnostic via `logger.remark`, gated
+      by `--log-level` (no dedicated flag). `Code::Remark`.
+- [x] Final-NIR walk (`remarks::collect_value_copy_remarks`) over entry-module
+      functions, detecting `$value_copy$T` and `array_clone` / `array_clone_shallow`
+      / `copy_value` survivors, anchored to the enclosing statement span.
+- [x] Surviving value-copy remarks with why + where, plus the survives / elided
+      test pair at `-O2` (`wado-compiler/tests/remarks.rs`).
+
+Next:
+
 - [ ] Failed-SROA remarks: surface the surviving allocation and reuse the SROA
       passes' hard-escape classification for the cause and escape-site span.
 - [ ] Classify each survivor's actionability (read-only copy → suggest `&`;
       removable escape → suggest restructuring; otherwise explain why the cost is
       required) so a suggestion is offered only when a fix would actually help.
+- [ ] Broaden beyond the entry module to all user (non-stdlib) modules.
 
 Trade-offs and boundaries:
 

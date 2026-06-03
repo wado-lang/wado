@@ -31,6 +31,7 @@ pub mod nir_visitor;
 pub mod optimize;
 pub mod package;
 pub mod parser;
+pub mod remarks;
 pub mod semantics;
 pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
@@ -62,6 +63,7 @@ pub use compiler_host::{
     Severity, SourceError,
 };
 pub use logger::{Bail, Logger};
+pub use remarks::{Remark, collect_value_copy_remarks};
 pub use semantics::{
     Cursor, Definition, Semantics, lex_error_diagnostic, parse_error_diagnostic, semantics,
     semantics_of,
@@ -300,6 +302,9 @@ fn compile_after_load<H: CompilerHost>(
     Bail,
 > {
     let module_name = filename.unwrap_or_else(|| "module".to_string());
+    // Kept for attributing optimizer remarks to the entry file; `module_name`
+    // itself is moved into the `Package` before remarks are emitted.
+    let entry_filename = module_name.clone();
     let implicit_modules = load_result.implicit_modules.clone();
     let entry_ast = load_result.entry_ast.clone();
     let mut load_result = load_result;
@@ -633,6 +638,16 @@ fn compile_after_load<H: CompilerHost>(
             logger,
         )
     };
+
+    // Emit optimizer remarks for residual value-semantic copies that survived
+    // the NIR pipeline. NIR is the last IR with per-expression spans; see
+    // `remarks` and WEP `wep-2026-06-03-optimizer-remarks.md`.
+    for remark in remarks::collect_value_copy_remarks(&nir) {
+        logger.remark(
+            remark.message,
+            compiler_host::DiagnosticSpan::from_span(&remark.span, Some(&entry_filename)),
+        );
+    }
 
     // === Phase 12: Build WIR (NirPackage → WirPackage) ===
     let mut wir_package = {
