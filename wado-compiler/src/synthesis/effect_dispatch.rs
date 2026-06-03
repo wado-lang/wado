@@ -1796,10 +1796,10 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
     // the desugared block's tail. For the statement form the result type is
     // `Unit` and the body has no value-producing tail, so this is skipped and
     // the restore simply runs after the body as before.
-    let tail_value = if result_type != TypeTable::UNIT {
-        take_tail_value(&mut body)
-    } else {
+    let tail_value = if result_type == TypeTable::UNIT {
         None
+    } else {
+        take_tail_value(&mut body)
     };
 
     stmts.extend(body.stmts);
