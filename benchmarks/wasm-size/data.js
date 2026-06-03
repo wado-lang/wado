@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780444479191,
+  "lastUpdate": 1780446846791,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29185,6 +29185,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/87e1faa6ab6a2b1daded9b6bf52c930b4a137eb8"
         },
         "date": 1780444478674,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9687,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457432,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d6820624faa6c5f5b6f13e1da4f726d4297cba06",
+          "message": "Merge pull request #1277 from wado-lang/claude/elaborator-refactor-stage-7-d81g5\n\nelaborator: Stage 7-B — make the call / operator surface record-only",
+          "timestamp": "2026-06-03T09:25:29+09:00",
+          "tree_id": "3280d3dede0b37db124556e010b5e5d74fa191da",
+          "url": "https://github.com/wado-lang/wado/commit/d6820624faa6c5f5b6f13e1da4f726d4297cba06"
+        },
+        "date": 1780446846273,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
