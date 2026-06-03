@@ -32,6 +32,7 @@ use crate::nir::{
     NirUnaryOp,
 };
 use crate::nir_package::NirPackage;
+use crate::nir_visitor::{expr_mentions_local, is_local, strip_refs};
 use crate::tir::{ResolvedType, TypeTable};
 
 type FuncKey = (ModuleSource, String);
@@ -1037,28 +1038,6 @@ impl Analyzer<'_> {
     fn arg_local_is_element_clean(&mut self, fn_body: &NirBlock, idx: u32) -> bool {
         self.handle_is_element_clean(fn_body, idx)
     }
-}
-
-fn is_local(expr: &NirExpr, idx: u32) -> bool {
-    matches!(&expr.kind, NirExprKind::Local { index, .. } if *index == idx)
-}
-
-/// Strip outer auto-ref / deref wrappers from a method-call receiver.
-fn strip_refs(expr: &NirExpr) -> &NirExpr {
-    match &expr.kind {
-        NirExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
-            expr: inner,
-        } => strip_refs(inner),
-        _ => expr,
-    }
-}
-
-fn expr_mentions_local(expr: &NirExpr, idx: u32) -> bool {
-    if is_local(expr, idx) {
-        return true;
-    }
-    expr_children(expr).any(|c| expr_mentions_local(c, idx))
 }
 
 /// True when `expr` produces a value that may alias `self`'s storage — the

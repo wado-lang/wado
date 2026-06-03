@@ -40,7 +40,7 @@
 
 use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind};
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::expr_has_break_to;
+use crate::nir_visitor::{expr_has_break_to, is_local};
 use crate::tir::TypeId;
 
 pub fn fuse_labeled_blocks(project: &mut NirPackage) -> bool {
@@ -997,7 +997,7 @@ fn count_local_uses_in_stmt(stmt: &NirStmt, local_idx: u32) -> usize {
 
 fn count_local_uses_in_expr(expr: &NirExpr, local_idx: u32) -> usize {
     match &expr.kind {
-        NirExprKind::Local { index, .. } => usize::from(*index == local_idx),
+        NirExprKind::Local { .. } => usize::from(is_local(expr, local_idx)),
         NirExprKind::Binary { left, right, .. } => {
             count_local_uses_in_expr(left, local_idx) + count_local_uses_in_expr(right, local_idx)
         }
@@ -1150,7 +1150,7 @@ fn count_variant_payload_uses_in_expr(expr: &NirExpr, local_idx: u32, case_index
             case_index: ci,
             ..
         } if *ci == case_index => {
-            if matches!(inner.kind, NirExprKind::Local { index, .. } if index == local_idx) {
+            if is_local(inner, local_idx) {
                 return 1;
             }
             count_variant_payload_uses_in_expr(inner, local_idx, case_index)

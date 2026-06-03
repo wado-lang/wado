@@ -65,7 +65,7 @@ use crate::nir::{
     NirUnaryOp,
 };
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::NirMutVisitor;
+use crate::nir_visitor::{NirMutVisitor, expr_mentions_local, is_local, strip_refs};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 type FuncKey = (ModuleSource, String);
@@ -600,47 +600,4 @@ fn stmt_blocks_mut(stmt: &mut NirStmt) -> Vec<&mut NirBlock> {
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => vec![body],
         _ => Vec::new(),
     }
-}
-
-// ---------------------------------------------------------------------------
-// Shared helpers
-// ---------------------------------------------------------------------------
-
-fn is_local(expr: &NirExpr, idx: u32) -> bool {
-    matches!(&expr.kind, NirExprKind::Local { index, .. } if *index == idx)
-}
-
-/// Strip outer auto-ref / deref wrappers from a method-call receiver.
-fn strip_refs(expr: &NirExpr) -> &NirExpr {
-    match &expr.kind {
-        NirExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
-            expr: inner,
-        } => strip_refs(inner),
-        _ => expr,
-    }
-}
-
-/// Complete check for whether `idx` appears anywhere in `expr`'s subtree,
-/// using the immutable visitor so every nested statement (including let-values
-/// inside expression-position blocks) is covered.
-fn expr_mentions_local(expr: &NirExpr, idx: u32) -> bool {
-    use crate::nir_visitor::NirRefVisitor;
-    struct Mentions {
-        idx: u32,
-        found: bool,
-    }
-    impl NirRefVisitor for Mentions {
-        fn visit_expr(&mut self, expr: &NirExpr) {
-            if is_local(expr, self.idx) {
-                self.found = true;
-            }
-            if !self.found {
-                self.walk_expr(expr);
-            }
-        }
-    }
-    let mut v = Mentions { idx, found: false };
-    v.visit_expr(expr);
-    v.found
 }

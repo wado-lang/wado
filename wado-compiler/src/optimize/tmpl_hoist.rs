@@ -39,6 +39,7 @@ use crate::nir::{
     NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind, NirUnaryOp,
 };
 use crate::nir_package::NirPackage;
+use crate::nir_visitor::is_local;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
@@ -1066,12 +1067,12 @@ fn buf_field_references_local(expr: &NirExpr, local_index: u32) -> bool {
         NirExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
-        } => matches!(&inner.kind, NirExprKind::Local { index, .. } if *index == local_index),
+        } => is_local(inner, local_index),
         // ref.as_non_null(__tmpl_buf) (WIR level / after lowering)
         NirExprKind::Call { func, args, .. } => {
             func.name.contains("ref.as_non_null")
                 && args.len() == 1
-                && matches!(&args[0].expr.kind, NirExprKind::Local { index, .. } if *index == local_index)
+                && is_local(&args[0].expr, local_index)
         }
         _ => false,
     }

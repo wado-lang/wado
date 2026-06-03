@@ -39,7 +39,9 @@ use crate::compiler_item::CompilerItem;
 use crate::hashmap::IndexSet;
 use crate::nir::{NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind};
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::{NirOptVisitor, opt_walk_block};
+use crate::nir_visitor::{
+    NirOptVisitor, expr_mentions_local, is_local, opt_walk_block, stmt_mentions_local,
+};
 
 /// The builtin generic name of the raw array allocation (`builtin::array_new`).
 const ARRAY_NEW: &str = "array_new";
@@ -217,12 +219,12 @@ impl Collapser<'_> {
         // sub-expression rather than a bare `Local`). Either residual read
         // would dangle the dropped binding, so bail.
         let rest = &stmts[start + 1 + consumed..];
-        let reads_after = |idx: u32| rest.iter().any(|s| stmt_reads_local(s, idx));
+        let reads_after = |idx: u32| rest.iter().any(|s| stmt_mentions_local(s, idx));
         let reads_in_element = |idx: u32| {
             pushes_per_target
                 .iter()
                 .flatten()
-                .any(|e| expr_reads_local(e, idx))
+                .any(|e| expr_mentions_local(e, idx))
         };
         if bindings
             .iter()
@@ -288,50 +290,6 @@ fn temp_binding(kind: &NirStmtKind, allow_impure: bool) -> Option<(u32, &NirExpr
         }
         _ => None,
     }
-}
-
-/// Visitor that records whether a given local is read anywhere in a subtree.
-struct LocalReads {
-    local: u32,
-    found: bool,
-}
-
-impl crate::nir_visitor::NirRefVisitor for LocalReads {
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        if let NirExprKind::Local { index, .. } = &expr.kind
-            && *index == self.local
-        {
-            self.found = true;
-        }
-        self.walk_expr(expr);
-    }
-}
-
-/// Whether `stmt` reads `local` anywhere in its subtree.
-fn stmt_reads_local(stmt: &NirStmt, local: u32) -> bool {
-    use crate::nir_visitor::NirRefVisitor;
-    let mut v = LocalReads {
-        local,
-        found: false,
-    };
-    v.visit_stmt(stmt);
-    v.found
-}
-
-/// Whether `expr` reads `local` anywhere in its subtree.
-fn expr_reads_local(expr: &NirExpr, local: u32) -> bool {
-    use crate::nir_visitor::NirRefVisitor;
-    let mut v = LocalReads {
-        local,
-        found: false,
-    };
-    v.visit_expr(expr);
-    v.found
-}
-
-/// Whether `expr` is a bare `Local(index)` reference.
-fn is_local(expr: &NirExpr, index: u32) -> bool {
-    matches!(&expr.kind, NirExprKind::Local { index: i, .. } if *i == index)
 }
 
 /// A detected `List<T> { repr: array_new(N), used: 0 }` struct, with the
