@@ -566,7 +566,7 @@ fn "wado-compiler/tests/fixtures/simd_v128_inspect.wado/Wrap^Inspect::inspect"(s
     "core:simd/v128^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<v128>" { value: self.bytes }, f);
     s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as u8x16"), used: 9 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
-    s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" }"), used: 2 };
+    s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_11);
 }
 
@@ -600,9 +600,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
