@@ -309,21 +309,58 @@ the same change, since the new view API depends on `stores` being real.
   they reduce to `StructNew { repr: <ArrayLiteral>, used }` because `List` is an
   ordinary struct.
 
-## Implementation TODOs
+## Implementation roadmap
+
+The work is phased. Phase 0 (the rename) is **exclusive and atomic**: it must be
+carried to completion before any other phase starts. The hazard it avoids is a
+window in which the name `Array` denotes two types at once — anyone reading
+`Array` mid-migration would have to ask "old or new?". Doing the rename
+all-at-once removes that window: after Phase 0 the name `Array` (and the
+`compiler_item` key `"array"`) are fully vacated, so the raw array can claim them
+without collision.
+
+### Phase 0 — Rename current `Array` → `List` (exclusive, atomic)
+
+This phase introduces **no new behavior**; the build and all tests are green at
+its end. It is purely the largest, most mechanical step. It is tractable because
+`List` is currently an unused name (the only occurrence in the tree is the
+English word "List" in a doc comment), so `Array` → `List` is unambiguous and
+total. The generated `tests/generated/fixtures/*.wir.wado` snapshots regenerate
+from the harness; the hand-edited surface is `lib/`, the hand-written fixtures,
+`src/`, `docs/`, and the VS Code grammar.
+
+- [ ] Rename the type `Array<T>` → `List<T>` everywhere: prelude
+      (`array.wado` → `list.wado`), stdlib, hand-written fixtures, VS Code
+      grammar, docs.
+- [ ] Rust side: `CompilerItem::Array` → `CompilerItem::List`; reassign the key
+      `"array"` → `"list"` (`attr_name`, `from_attr_name`, `ALL`,
+      `expected_kind`); update the struct attribute to `#[compiler_item("list")]`.
+- [ ] Regenerate the `*.wir.wado` snapshots; confirm no stray growable-`Array`
+      reference remains (`grep -w Array` is clean except deliberate raw-array WIR
+      `array.*` ops, which Phase 1 owns).
+- [ ] Green gate: `mise run test` + `mise run test-wado` across `-O` levels
+      (`WADO_FULL_TEST=1`), then `mise run format`.
+
+### Phase 1 — Introduce the raw `Array<T>` (renamed `builtin::array`)
 
 - [ ] Declare `Array<T>` in the prelude as a definition-less
       `#[compiler_item("array")] pub type Array<T>;`, binding the builtin to
       `core:prelude` and giving it a declaration site for impls and LSP.
 - [ ] Generalize the parser: accept a named definition-less `type Name<...>;`
       declaration, not only the tuple form `type [..T];`.
-- [ ] Reassign the `compiler_item` keys: `"array"` → raw GC array (above), new
-      `"list"` → growable sequence. Add `CompilerItem::List` (enum variant, `ALL`,
-      `attr_name`, `expected_kind`) in `compiler_item.rs`.
 - [ ] Give `Array<T>` value semantics end to end (it already deep-copies when
       embedded; make it copy as a standalone value too).
 - [ ] Port the `builtin::array_*()` free functions to `Array<T>` methods
       (`new`, `filled`, `len`, `get`, `set`, `fill`, `copy_from`); keep the
-      `array.*` WIR lowering.
+      `array.*` WIR lowering. Point `List<T>`'s `repr` at `Array<T>`.
+
+### Phase 2 — Borrowing views
+
+- [ ] Introduce `Slice<T>` and re-base `ArrayIter` / `WindowsIter` / `ChunksIter`
+      onto `&Array<T>` borrows with `stores[self]`.
+
+### Phase 3 — Sequence literals
+
 - [ ] Make `Array<T>` a `SequenceLiteralBuilder` target (separate builder) so
       `[…]: Array<T>` uses the same uniform front-end path as `List<T>`; no
       special-casing in the front-end or `lower`.
@@ -332,10 +369,9 @@ the same change, since the new view API depends on `stores` being real.
       drop the implicit `{ repr, used }` wrap from `wir_build` and let `List<T>`
       literals reduce to a generic `StructNew` over an `ArrayLiteral`. No
       `ListLiteral` node.
-- [ ] Rename the growable sequence `Array<T>` → `List<T>` (type, stdlib, fixtures,
-      grammar, docs).
-- [ ] Introduce `Slice<T>` and re-base `ArrayIter` / `WindowsIter` / `ChunksIter`
-      onto `&Array<T>` borrows with `stores[self]`.
+
+### Phase 4 — Performance and documentation
+
 - [ ] Audit stdlib call sites to take `&Array<T>` / `&List<T>` where appropriate.
 - [ ] Verify optimizer copy-elision for non-mutating value arguments; add a pass
       if missing (gates the performance story).
@@ -343,4 +379,3 @@ the same change, since the new view API depends on `stores` being real.
 - [ ] Update `docs/cheatsheet.md`, `docs/spec.md`, and the generated
       `docs/stdlib-core-prelude.md`.
 - [x] Add the WEP to the index in `docs/CLAUDE.md`.
-- [ ] `mise run format`.
