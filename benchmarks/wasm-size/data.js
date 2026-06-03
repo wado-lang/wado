@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780522625149,
+  "lastUpdate": 1780523300811,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29508,6 +29508,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 17183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457424,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2c4813fd9dd50731ae2aa9051bf30a2581b69bb7",
+          "message": "Merge pull request #1282 from wado-lang/claude/builtin-array-redesign-jpsvC\n\nfeat(compiler): expose raw GC array as first-class `Array<T>` (WEP Phase 2)",
+          "timestamp": "2026-06-04T06:37:32+09:00",
+          "tree_id": "771d2ddf2facf9aaed010ce22e7d02dbcadd05bc",
+          "url": "https://github.com/wado-lang/wado/commit/2c4813fd9dd50731ae2aa9051bf30a2581b69bb7"
+        },
+        "date": 1780523300279,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9659,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17177,
             "unit": "bytes"
           },
           {
