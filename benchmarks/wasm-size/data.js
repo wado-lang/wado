@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780523300811,
+  "lastUpdate": 1780527604795,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29537,6 +29537,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2c4813fd9dd50731ae2aa9051bf30a2581b69bb7"
         },
         "date": 1780523300279,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9659,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17177,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457424,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d8e39c3f381369373bd53de52303bab0736c02e6",
+          "message": "Merge pull request #1284 from wado-lang/claude/sha256-wado-impl-PZS00\n\nSHA-256 example + core:digest, and inherent/trait impls on concrete generic instantiations",
+          "timestamp": "2026-06-04T07:51:30+09:00",
+          "tree_id": "fd2dffc6afa2c15f40e61036e49a87ecff912703",
+          "url": "https://github.com/wado-lang/wado/commit/d8e39c3f381369373bd53de52303bab0736c02e6"
+        },
+        "date": 1780527604272,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
