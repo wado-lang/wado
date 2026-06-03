@@ -1,0 +1,22 @@
+// A nested-generic concrete impl must NOT match a different nested
+// instantiation: `impl List<Box<u8>>::tag` is not callable on `List<Box<i32>>`.
+// (Regression: the arg matcher must recurse into nested generics, not silently
+// accept and then ICE in WIR build.)
+
+struct Box<T> {
+    v: T,
+}
+
+impl List<Box<u8>> {
+    pub fn tag(&self) -> i32 {
+        return 7;
+    }
+}
+
+export fn run() {
+    let xs: List<Box<i32>> = [];
+    let _ = xs.tag();
+}
+
+__DATA__
+{"compile_error": "no method 'tag' found on type 'List<Box<i32>>'"}

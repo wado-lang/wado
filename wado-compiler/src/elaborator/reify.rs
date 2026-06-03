@@ -1011,10 +1011,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return Vec::new();
         };
 
+        // Per-instantiation owner (`"List<u8>"`) for a fully concrete impl —
+        // decided AST-side by the elaborator and recorded on the facts so it
+        // agrees with method dispatch's `from_concrete_impl` (and is not fooled
+        // by a param named like a known type). Methods become concrete fns.
+        let concrete_owner: Option<String> = facts.concrete_owner.clone();
+
         impl_block
             .methods
             .iter()
-            .filter_map(|method| self.reify_method(method, &facts))
+            .filter_map(|method| self.reify_method(method, &facts, concrete_owner.as_deref()))
             .collect()
     }
 
@@ -1054,6 +1060,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return Vec::new();
         };
         let struct_name = facts.struct_name.clone();
+
+        // Concrete generic instantiation owner (`"List<u8>"`) for
+        // `impl Tag for List<u8>`, so default methods are also per-instantiation
+        // concrete functions. Recorded AST-side by the elaborator.
+        let concrete_owner: Option<String> = facts.concrete_owner.clone();
 
         // Same trait-decl lookup the combined walk does.
         let trait_decl_name = super::Elaborator::<H>::get_type_name_static(trait_ast);
@@ -1106,7 +1117,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 std::mem::replace(&mut self.current_module_source, trait_module.clone());
             let saved_module_items = std::mem::replace(&mut self.current_module_items, trait_items);
 
-            let tir_func_opt = self.reify_method(default_method, &facts);
+            let tir_func_opt = self.reify_method(default_method, &facts, concrete_owner.as_deref());
 
             self.current_module_items = saved_module_items;
             self.current_module_source = saved_module_source;
@@ -1121,7 +1132,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // safety net for the synthesis path and matches the
                 // combined walk byte-for-byte.
                 tir_func.name = MethodName::format_local(
-                    &struct_name,
+                    concrete_owner.as_deref().unwrap_or(&struct_name),
                     Some(&trait_name_mangled),
                     &default_method.name,
                 );
@@ -1147,6 +1158,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         func: &ast::Function,
         facts: &super::sem::types::ImplFacts,
+        // `Some("List<u8>")` when the impl is on a concrete generic
+        // instantiation. The method is then a per-instantiation *concrete*
+        // function: named `List<u8>::method`, with no impl type params and no
+        // monomorphization, so distinct instantiations stay distinct and call
+        // sites resolve it directly (mirroring a monomorphized instance).
+        concrete_owner: Option<&str>,
     ) -> Option<TirFunction> {
         use crate::ast::SelfKind;
         use crate::name::LocalMethodName;
@@ -1158,7 +1175,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // rehydrated from the snapshot's already-reified TIR), so the fact is
         // always present — a missing entry is a contract violation, not a
         // fallback case.
-        let impl_type_params: Vec<crate::tir::TirTypeParam> =
+        let mut impl_type_params: Vec<crate::tir::TirTypeParam> =
             self.ann_method_impl_type_params(func.id).expect(
                 "resolve_method records the impl-type-param scheme for every \
                  impl method reify emits",
@@ -1231,10 +1248,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             "resolve_method records the mangled + display names for every impl method reify emits",
         );
         let display_name = method_names.display;
-        let mangled_name = method_names.mangled;
-        let method_info = {
+        let mut mangled_name = method_names.mangled;
+        let mut method_info = {
             let mut info = LocalMethodName::new(
-                base_struct_name,
+                base_struct_name.clone(),
                 facts.trait_name_mangled.clone(),
                 func.name.clone(),
             );
@@ -1252,6 +1269,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             info
         };
+
+        // Concrete generic instantiation (`impl List<u8>`): emit a
+        // per-instantiation concrete function. Its name and `method_info`
+        // carry the concrete owner (`List<u8>`), it has no impl type params,
+        // and it is not monomorphized — structurally identical to a
+        // monomorphized instance, so DCE / WIR / cross-module inclusion all
+        // handle it, and `impl List<u8>` vs `impl List<i32>` stay distinct.
+        if let Some(owner) = concrete_owner {
+            mangled_name = crate::name::MethodName::format_local(
+                owner,
+                facts.trait_name_mangled.as_deref(),
+                &func.name,
+            );
+            method_info = method_info.with_substituted_struct_name(owner, &base_struct_name);
+            impl_type_params = Vec::new();
+        }
 
         // Single source of truth: read the return type `resolve_method`
         // resolved, rather than re-resolving the return annotation.

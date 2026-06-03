@@ -908,6 +908,15 @@ pub(crate) struct ImplFacts {
     /// canonical name on the impl facts prevents the parity-bug class
     /// called out in WEP 2026-05-26 §"Stage 7 gap".
     pub(crate) struct_name: String,
+    /// Per-instantiation owner name (`"List<u8>"`) when this impl is a fully
+    /// concrete generic instantiation (`impl List<u8>`, `impl Tag for
+    /// List<u8>`) — `None` otherwise. Reify names such methods
+    /// `List<u8>::method` and emits them as standalone concrete functions
+    /// (no impl type params, no monomorphization). Computed AST-side (with
+    /// declared impl type params excluded) so it agrees with method dispatch's
+    /// `from_concrete_impl`, regardless of how `self_type` resolved a param
+    /// that happens to be named like a known type.
+    pub(crate) concrete_owner: Option<String>,
 }
 
 /// Operator-dispatch decision recorded when the elaborator lowers a

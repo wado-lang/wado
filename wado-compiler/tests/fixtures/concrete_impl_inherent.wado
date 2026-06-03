@@ -1,0 +1,39 @@
+// Inherent impls on concrete generic instantiations (`impl Box<i32>`).
+// Distinct instantiations get distinct concrete methods (no collision), and a
+// generic `impl<T> Box<T>` coexists with them.
+
+struct Box<T> {
+    v: T,
+}
+
+impl Box<i32> {
+    pub fn kind(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Box<bool> {
+    pub fn kind(&self) -> i32 {
+        return 2;
+    }
+}
+
+impl<T> Box<T> {
+    pub fn get(&self) -> T {
+        return self.v;
+    }
+}
+
+test {
+    let a = Box { v: 7 };
+    let b = Box { v: true };
+    // Concrete-instantiation dispatch picks the matching impl.
+    assert a.kind() == 1;
+    assert b.kind() == 2;
+    // The generic impl still applies to every instantiation.
+    assert a.get() == 7;
+    assert b.get() == true;
+}
+
+__DATA__
+{"test": {}}

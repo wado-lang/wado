@@ -3644,6 +3644,11 @@ The last chunk may be shorter. Panics if `size` is 0.
 
 Joins elements into a string with the given separator.
 
+#### `pub fn to_hex(&self) -> String`
+
+Renders the bytes as a lowercase hexadecimal string, two digits per
+byte (e.g. `[0x0f, 0xa0]` -> `"0fa0"`).
+
 #### `impl IndexValue<i32> for List<T>`
 
 ##### `fn index_value(&self, index: i32) -> Self::Output`

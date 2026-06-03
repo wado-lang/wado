@@ -1319,7 +1319,63 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ))
     }
 
-    /// Resolve a method (function with &self parameter)
+    /// Whether an impl type argument is a concrete (already-declared) type
+    /// rather than a free type parameter. `u8` / `MyStruct` are concrete; a
+    /// bare `T` is not — and neither is a name that, although it matches a
+    /// known type, was *declared as an impl type parameter* (e.g. the `i32`
+    /// in `impl<i32> Trait for Wrapper<i32>`, which shadows the primitive).
+    pub(super) fn is_concrete_type_arg(
+        &self,
+        arg: &ast::Type,
+        impl_params: &[ast::GenericParam],
+        impl_module: &ModuleSource,
+    ) -> bool {
+        match arg {
+            ast::Type::Named(named) => {
+                self.tysys.is_known_type_name_in(impl_module, &named.name)
+                    && !impl_params.iter().any(|p| p.name == named.name)
+            }
+            ast::Type::Generic(generic) => generic
+                .args
+                .iter()
+                .all(|a| self.is_concrete_type_arg(a, impl_params, impl_module)),
+            _ => false,
+        }
+    }
+
+    /// Whether `impl_block` is a concrete generic instantiation (`impl List<u8>`,
+    /// `impl Tag for List<u8>`): its self type is a generic type all of whose
+    /// arguments are concrete (no free type params, accounting for any
+    /// impl-declared parameters). Methods on such an impl are per-instantiation
+    /// concrete functions, named `List<u8>::method` and called directly.
+    pub(super) fn impl_is_concrete_instantiation(
+        &self,
+        impl_block: &ast::ImplBlock,
+        impl_module: &ModuleSource,
+    ) -> bool {
+        let inner = match &impl_block.ty {
+            ast::Type::Reference(i) | ast::Type::MutReference(i) => i.as_ref(),
+            other => other,
+        };
+        matches!(inner, ast::Type::Generic(g)
+        if !g.args.is_empty()
+            && g.args.iter().all(|a| {
+                self.is_concrete_type_arg(a, &impl_block.type_params, impl_module)
+            }))
+    }
+
+    /// Resolve a method (function with &self parameter).
+    ///
+    /// `impl_is_concrete` is `true` when the surrounding impl is a fully
+    /// concrete generic instantiation (`impl List<u8>`, all args concrete).
+    /// Such impls define per-instantiation *concrete* methods. Unlike a
+    /// partially-generic impl (`impl TreeMap<String, V>`, where `String` must
+    /// keep its positional slot so `V`'s index stays aligned for
+    /// monomorphization), a fully-concrete impl has no free param to align, so
+    /// its args are NOT registered as impl type params: the method's `self` /
+    /// param / return types resolve to the concrete instantiation (`&List<u8>`,
+    /// not `&List<TypeParam>`), and reify emits a standalone concrete function
+    /// named `List<u8>::method`.
     pub(super) fn resolve_method(
         &mut self,
         func: &Function,
@@ -1327,6 +1383,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_type: &Type,
         trait_name: Option<&str>,
         trait_type: Option<&Type>,
+        impl_is_concrete: bool,
     ) -> Option<TirFunction> {
         // Use an inherited scope so the caller's `assoc_type_bindings` (set up
         // for the surrounding impl block) remain visible — `Self::Output` etc.
@@ -1355,7 +1412,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
             other => other,
         };
-        if let ast::Type::Generic(generic) = impl_type_inner {
+        if let ast::Type::Generic(generic) = impl_type_inner
+            && !impl_is_concrete
+        {
             for (i, arg) in generic.args.iter().enumerate() {
                 if let ast::Type::Named(named) = arg {
                     let name = &named.name;

@@ -1,0 +1,33 @@
+// A user type whose name collides with a prelude impl's free type parameter
+// (`E` in `impl Result<T, E>`) must NOT make the prelude treat that parameter
+// as a concrete instantiation argument.
+//
+// Concrete-instantiation impl matching keys off whether an impl argument is a
+// known *type* or a free type parameter. That decision has to be made from the
+// impl's own module perspective: `core:prelude/types` cannot see a user-defined
+// `variant E`, so `E` stays a free parameter there and `Result::unwrap` keeps
+// resolving on every instantiation. Resolving it against the global type-name
+// union instead would let the user's `E` shadow the parameter and break method
+// lookup on `Result`.
+
+use { println } from "core:cli";
+
+variant E { Lit, Alt }
+
+fn make_result() -> Result<i32, String> {
+    return Result::<i32, String>::Ok(42);
+}
+
+export fn run() with Stdout {
+    let a = make_result().unwrap();
+    assert a == 42;
+    // The user variant still works as its own type alongside the prelude one.
+    let e: E = E::Lit;
+    assert e matches { E::Lit };
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}

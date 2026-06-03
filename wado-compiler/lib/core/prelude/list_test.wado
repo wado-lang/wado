@@ -583,3 +583,13 @@ test "chunks" {
     }
     assert chs.next() matches { None };
 }
+
+test "List<u8> to_hex renders lowercase hex" {
+    let bytes: List<u8> = [0x00, 0x0f, 0xa0, 0xff] as List<u8>;
+    assert bytes.to_hex() == "000fa0ff";
+}
+
+test "List<u8> to_hex on empty list" {
+    let bytes: List<u8> = [];
+    assert bytes.to_hex() == "";
+}

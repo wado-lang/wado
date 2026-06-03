@@ -6404,6 +6404,27 @@ fn i32_max(a: i32, b: i32) -> i32 {
     return "core::builtin::core/builtin/select<i32>"((a > b), a, b);
 }
 
+pub fn "List<u8>::to_hex"(self: &List<u8>) -> String {
+    let mut s: String = "core::prelude/string.wado::String::with_capacity"((self.used * 2));
+    let mut i: i32 = 0;
+    loop {
+        if !(i < self.used) {
+            break;
+        }
+        __for_0_body: {
+            let byte: u8 = "core::builtin::core/builtin/array_get<u8>"(&self.repr, i);
+            s.String::push_str(&__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(16);
+                let mut __f: Formatter = Formatter { fill: '0', align: Alignment::Right, sign_plus: false, zero_pad: true, width: 2, precision: -2, indent: 0, buf: &mut __r };
+                Box<u8> { value: byte }."u8^LowerHex::fmt"(&mut __f);
+                break __tmpl: __r;
+            });
+        }
+        i = (i + 1);
+    }
+    return s;
+}
+
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
     f.Formatter::write_str(&"StreamWritable<u8>");
 }
@@ -18567,6 +18588,8 @@ fn "List<u8>^SequenceLiteralBuilder::push_literal"(self: &mut List<u8>, value: u
 fn "List<u8>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<u8> {
     return "core::prelude/list.wado::List<u8>::with_capacity"(capacity);
 }
+
+fn "core/builtin/array_get<u8>"(arr: &Array<u8>, idx: i32) -> u8;
 
 fn "core/builtin/select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
 

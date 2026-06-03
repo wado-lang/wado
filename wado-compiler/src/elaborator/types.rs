@@ -1197,6 +1197,18 @@ pub(super) struct MethodInfo {
     /// perform (either the method is non-generic, or its type args come from a
     /// separate method-AST lookup such as [`Elaborator::infer_method_type_args`]).
     pub(super) method_type_param_ids: Vec<TypeId>,
+    /// The module the matched `impl` block lives in. For inherent methods this
+    /// is where the method body is registered, which is NOT always the receiver
+    /// type's defining module (e.g. a user-written `impl List<u8>` on the
+    /// prelude `List`). The call site uses this for the body's `module_source`
+    /// so cross-module inherent impls resolve. `None` when the producer did not
+    /// determine it (callers fall back to the receiver type's module).
+    pub(super) impl_module: Option<ModuleSource>,
+    /// True when the matched impl is on a concrete generic instantiation
+    /// (`impl List<u8>` / `impl Tag for List<u8>`). Such a method is a concrete
+    /// function named per-instantiation (`List<u8>::method`) and called
+    /// directly, so the call site emits no `monomorph_info` for it.
+    pub(super) from_concrete_impl: bool,
 }
 
 /// Labeled block expression target for tracking break types
