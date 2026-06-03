@@ -801,7 +801,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         //   3. In the receiver type's module otherwise — inherent methods
         //      live alongside the type they're declared on.
         let method_module_source = trait_impl_module_source
-            .clone()
             // Inherent methods: the body lives in the module that declares the
             // `impl` block, which may differ from the receiver type's module
             // (a user-written `impl List<u8>` on the prelude `List`). Prefer

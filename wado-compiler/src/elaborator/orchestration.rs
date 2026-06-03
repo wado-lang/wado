@@ -870,7 +870,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 src: &IndexMap<ModuleSource, IndexMap<String, V>>,
                 out: &mut IndexMap<ModuleSource, IndexSet<String>>,
             ) {
-                for (ms, inner) in src.iter() {
+                for (ms, inner) in src {
                     let entry = out.entry(ms.clone()).or_default();
                     for name in inner.keys() {
                         entry.insert(name.clone());
@@ -895,14 +895,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         || name.as_str() == "builtin")
             };
             let mut prelude_types: IndexSet<String> = IndexSet::default();
-            for (ms, names) in local.iter() {
+            for (ms, names) in &local {
                 if is_auto_visible(ms) {
                     prelude_types.extend(names.iter().cloned());
                 }
             }
 
             let mut visible: IndexMap<ModuleSource, IndexSet<String>> = IndexMap::default();
-            for (ms, module) in modules.iter() {
+            for (ms, module) in modules {
                 let mut set: IndexSet<String> = IndexSet::default();
                 for prim in crate::tir::PrimitiveType::all_primitive_names() {
                     set.insert(prim.to_string());
@@ -919,7 +919,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Some(entry_module_source),
                     &invocations,
                 );
-                for (local_name, src) in imports.iter() {
+                for (local_name, src) in &imports {
                     let original = originals.get(local_name).unwrap_or(local_name);
                     if local.get(src).is_some_and(|s| s.contains(original)) {
                         set.insert(local_name.clone());

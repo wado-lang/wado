@@ -742,8 +742,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     );
                                     drop(scope);
 
-                                    let from_concrete_impl =
-                                        self.impl_is_concrete_instantiation(impl_block, module_source);
+                                    let from_concrete_impl = self
+                                        .impl_is_concrete_instantiation(impl_block, module_source);
                                     return Some(MethodInfo {
                                         return_type,
                                         self_kind,
@@ -769,7 +769,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Search all loaded modules if no specific module (for prelude types)
         // Only check inherent impls (not trait impls) - trait impls are handled separately
         if struct_module_source.is_none() {
-            for (search_module_source, module) in self.loaded_modules.iter() {
+            for (search_module_source, module) in self.loaded_modules {
                 for item in &module.items {
                     if let Item::Impl(impl_block) = item {
                         // Skip trait impls - only look at inherent impls
@@ -859,8 +859,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                                     drop(scope);
 
-                                    let from_concrete_impl =
-                                        self.impl_is_concrete_instantiation(impl_block, search_module_source);
+                                    let from_concrete_impl = self.impl_is_concrete_instantiation(
+                                        impl_block,
+                                        search_module_source,
+                                    );
                                     return Some(MethodInfo {
                                         return_type,
                                         self_kind,
@@ -1169,8 +1171,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 non_self.iter().map(|p| p.default.clone()).collect();
                             let param_names: Vec<String> =
                                 non_self.iter().map(|p| p.name.clone()).collect();
-                            let is_concrete_impl = self
-                                .impl_is_concrete_instantiation(impl_block, &self.current_module_source);
+                            let is_concrete_impl = self.impl_is_concrete_instantiation(
+                                impl_block,
+                                &self.current_module_source,
+                            );
                             found_method = Some((
                                 self_kind,
                                 param_types,

@@ -1358,10 +1358,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             other => other,
         };
         matches!(inner, ast::Type::Generic(g)
-            if !g.args.is_empty()
-                && g.args.iter().all(|a| {
-                    self.is_concrete_type_arg(a, &impl_block.type_params, impl_module)
-                }))
+        if !g.args.is_empty()
+            && g.args.iter().all(|a| {
+                self.is_concrete_type_arg(a, &impl_block.type_params, impl_module)
+            }))
     }
 
     /// Resolve a method (function with &self parameter).

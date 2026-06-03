@@ -1596,8 +1596,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     let provided_method_names: Vec<String> =
                         impl_block.methods.iter().map(|m| m.name.clone()).collect();
 
-                    let impl_is_concrete =
-                        self.impl_is_concrete_instantiation(impl_block, &self.current_module_source);
+                    let impl_is_concrete = self
+                        .impl_is_concrete_instantiation(impl_block, &self.current_module_source);
                     for method in &impl_block.methods {
                         if let Some(mut tir_func) = self.resolve_method(
                             method,
