@@ -1212,7 +1212,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.record_index_assign_dispatch(
                             index_expr.id,
                             super::sem::types::OperatorDispatch {
-                                function_ref: func.clone(),
+                                function_ref: func,
                                 self_kind: trait_info.self_kind,
                                 arg_ref_wraps: vec![false, false],
                                 return_type: TypeTable::UNIT,

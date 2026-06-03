@@ -801,11 +801,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &func,
                 self_kind,
                 is_ref_impl,
-                param_is_mut.clone(),
+                param_is_mut,
                 param_names,
                 param_defaults,
                 return_type,
-                method_type_args.clone(),
+                method_type_args,
             );
             // Side-channel for synthetic callers (Gap 6 of Stage 5):
             // for-of's `.into_iter()` / `.next()` dispatches pass
@@ -1469,9 +1469,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem.types.static_method_dispatch.insert(
             key,
             super::sem::types::StaticMethodDispatch {
-                function_ref: func_ref.clone(),
-                param_is_mut: param_is_mut.clone(),
-                type_args: method_type_args.clone(),
+                function_ref: func_ref,
+                param_is_mut,
+                type_args: method_type_args,
             },
         );
 
@@ -2710,8 +2710,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             name: final_mangled_name,
             monomorph_info,
             method_info: Some({
-                let mut m =
-                    LocalMethodName::new(actual_struct_name, trait_name_opt, method_name.to_string());
+                let mut m = LocalMethodName::new(
+                    actual_struct_name,
+                    trait_name_opt,
+                    method_name.to_string(),
+                );
                 m.cm_name = cm_name;
                 m
             }),

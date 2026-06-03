@@ -1275,7 +1275,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             timeout_ms,
         };
 
-        Some((placeholder_function(function_name, test_decl.span), tir_test))
+        Some((
+            placeholder_function(function_name, test_decl.span),
+            tir_test,
+        ))
     }
 
     /// Resolve a method (function with &self parameter)

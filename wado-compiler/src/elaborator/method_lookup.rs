@@ -18,7 +18,7 @@ use super::types::{
     IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, SequenceLiteralTraitInfo, TypeError,
 };
 
-/// Body-walk placeholder for the IndexMut method-call rewrite. Stage 7-B:
+/// Body-walk placeholder for the `IndexMut` method-call rewrite. Stage 7-B:
 /// the combined walk records the inner `operator_dispatch`, the outer
 /// `method_dispatch`, and the `IndexMutMethodCall` desugar; reify rebuilds
 /// the full `*recv.index_mut(idx).method(args)` expansion from those facts.
@@ -3526,11 +3526,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &func,
             self_kind,
             method_is_ref_impl,
-            method_param_is_mut.clone(),
+            method_param_is_mut,
             method_param_names,
             method_param_defaults,
             return_type,
-            type_args.clone(),
+            type_args,
         );
         self.record_desugar(
             method_call.id,
