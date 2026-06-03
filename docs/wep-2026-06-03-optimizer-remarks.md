@@ -1,4 +1,4 @@
-# WEP: Optimizer Remarks for Residual Value-Copy Costs
+# WEP: Optimizer Remarks for Missed Optimizations
 
 ## Context
 
@@ -21,8 +21,8 @@ auto-vectorization on the TSVC suite, it found:
   further 40–59 points.
 - The split is precise-vs-vague, and vague is _worse than nothing_. A remark
   like "unsafe dependent memory operations in loop" triggered semantic-breaking
-  hallucinations; a precise remark naming the dependence kind and both source
-  locations let the agent fix the source.
+  hallucinations; a precise remark naming the obstacle and both source locations
+  let the agent fix the source.
 - The three ingredients of a useful remark: the _why_ (the fact that blocked the
   optimization), _where_ (file:line:col for each participant), and a
   _prescriptive suggestion_ (the source change that would help).
@@ -67,41 +67,31 @@ cost, the fact disappears from the final IR and the remark self-retires. That is
 the correct behavior, and it directly answers "don't write code to fit the
 current optimizer."
 
-## The flagship case: residual value-copy costs
+## The flagship costs: residual aggregates
 
 Value semantics is Wado's defining feature: assignment, parameter passing, and
-return all deep-copy the value; references (`&T`, `&mut T`) are the only escape
-hatch (spec.md). A large part of the optimizer exists precisely to remove these
-hidden copies, and most of them are in fact removed. Concretely, a deep copy is
-a call to a synthesized `$value_copy$T` helper (`FunctionKind::ValueCopy`), and
-the `value_copy_elide` pass strips the wrapper wherever the copy is provably
-unnecessary.
+return all deep-copy the value, and aggregates (structs, tuples, `List<T>`) are
+GC-managed heap objects (spec.md). Two of the optimizer's heaviest jobs exist to
+remove the hidden cost of that model — redundant deep copies, and the
+allocations themselves — and most of the time they succeed. The cost that
+remains is invisible at the source: `f(x)` looks free, and a struct literal looks
+like a register's worth of work, whether or not either survives as a runtime
+copy or heap allocation.
 
-The problem is observability. While coding, you cannot see which copies the
-optimizer eliminated and which survived. `f(x)` looks free; whether it
-deep-copies a whole aggregate at runtime is invisible at the source. This is the
-gap an agent (or human) tuning a hot Wado function falls into — not "I wrote a
-copy" (the optimizer usually erases that) but "I have no way to know which copies
-actually remain."
+Both costs share the structure the principle wants: the optimizer represents each
+as a concrete construct in the IR and tries to remove it, so a _survivor_ is an
+observable fact in the final NIR, rare because the easy cases are already gone,
+and self-retiring as the optimizer matures. They become the first two remark
+kinds.
 
-A residual-copy remark closes exactly that gap. After optimization, a deep copy
-that survived is literally a remaining `$value_copy$T(...)` call in the final
-NIR. The remark walks the final NIR, collects those survivors for aggregate types
-above a size threshold, and maps each back to its source span. The design is
-self-justifying:
+### Surviving value copies
 
-- Low-noise by construction — the optimizer has already erased the easy copies,
-  so a survivor is rare and meaningful.
-- Self-decoupling — fewer survivors as the optimizer matures; the remark count
-  tracks genuine residual cost rather than today's heuristics.
-- Wado-specific — it teaches the cost model agents most often mispredict when
-  they carry priors from borrow-checked or reference-default languages.
-
-Its primary value is observability: the residual-copy set is information
-otherwise unobtainable during coding. Where the copied value is only read, the
-remark can also prescribe the reference escape hatch.
-
-Example (proposed output, not yet implemented):
+A deep copy is a call to a synthesized `$value_copy$T` helper
+(`FunctionKind::ValueCopy`), and the `value_copy_elide` pass strips the wrapper
+wherever the copy is provably unnecessary. A copy that survives optimization is
+therefore a remaining `$value_copy$T(...)` call in the final NIR. The remark
+collects those survivors for aggregate types above a size threshold and maps each
+back to its source span (proposed output, not yet implemented):
 
 ```
 remark: a deep copy of `Matrix` survives optimization here [stats.wado:12:18]
@@ -109,16 +99,44 @@ remark: a deep copy of `Matrix` survives optimization here [stats.wado:12:18]
   suggestion: take `m: &Matrix` if the callee only reads it
 ```
 
-This carries the why (a deep copy of `Matrix` remains), the where (the call
-site), and a how that applies when the value is read-only — never a bare "copy
-not elided".
+The _why_ is the surviving copy, the _where_ is the call site, and the _how_
+applies when the value is read-only: the reference escape hatch (`&T` / `&mut T`)
+is the only construct that shares rather than copies (spec.md).
+
+### Surviving aggregate allocations (failed SROA)
+
+Scalar Replacement of Aggregates (`sroa`, `container_sroa`, `field_scalarize`,
+`sroa_param`) dissolves a struct or tuple into individual scalar locals, removing
+the GC heap allocation entirely — by the pass's own note, "the single most
+impactful optimization for WasmGC-targeting compilers." It is gated by escape
+analysis: an aggregate used only for field access is scalarized; one with _soft_
+escapes (call argument, return, nested literal) is scalarized with reconstruction
+at the escape site; one with a _hard_ escape (address taken, closure capture,
+bare local assignment, reference stored) is left as a heap allocation.
+
+The observable survivor is an aggregate allocation that remains in the final IR.
+The remark reports it with the hard-escape reason the pass already classified —
+so the _why_ is the analysis fact, not a guess:
+
+```
+remark: `Point` stays heap-allocated here; SROA could not scalarize it [path.wado:30:13]
+  note: the value escapes by being captured in a closure at path.wado:33:20
+  suggestion: pass the fields the closure needs instead of capturing `Point`
+```
+
+Because SROA already distinguishes hard from soft escapes, the remark can name
+the precise escape that blocked it, and can stay silent on soft escapes that were
+scalarized anyway.
 
 ## Decision
 
-Introduce optimizer remarks, with residual value-copy remarks as the first kind.
+Introduce optimizer remarks, with residual value-copy and failed-SROA remarks as
+the first two kinds.
 
-- Bind to the semantic cost model; derive firing from facts observable in the
-  final NIR — residual `$value_copy$T` calls — not from any pass's internals.
+- Bind to the semantic cost model — Wado's aggregate copies and allocations —
+  and derive firing from facts observable in the final NIR (residual
+  `$value_copy$T` calls; aggregate allocations the SROA passes left in place),
+  not from any pass's internals.
 - Opt-in, not on by default. Errors name one rejected program and are rich by
   default (the Diagnostic Reason Chains stance); a cost remark is advisory and
   could be plentiful, so it is gated behind an explicit surface (proposed:
@@ -129,21 +147,23 @@ Introduce optimizer remarks, with residual value-copy remarks as the first kind.
 
 ### MVP scope (proposed)
 
-- Walk the final NIR; collect residual `$value_copy$T(...)` calls for aggregate
-  types above a size threshold; emit one remark per survivor with its source
-  span. Surfacing the survivor set with spans is already the valuable
-  information; this is the MVP.
-- E2E fixtures pin the behavior at a fixed `-Ox`: one fixture where a copy
-  survives asserts the remark fires, one where the optimizer elides it asserts
-  it does not.
+- Start with surviving value copies: walk the final NIR, collect residual
+  `$value_copy$T(...)` calls for aggregate types above a size threshold, emit one
+  remark per survivor with its source span. Surfacing the survivor set with spans
+  is already the valuable information.
+- Then add failed-SROA remarks, reusing the SROA passes' existing hard-escape
+  classification for the _why_ and the escape site for a second span.
+- E2E fixtures pin each at a fixed `-Ox`: a fixture where the cost survives
+  asserts the remark fires; a fixture where the optimizer removes it asserts it
+  does not.
 
 ### Reusing existing infrastructure
 
 Remarks are diagnostics with spans, so they reuse the rendering path the
 Diagnostic Reason Chains WEP already exercises (headline + indented `note:` /
 `suggestion:` lines). That WEP's open follow-up — structured, independently-
-spanned notes on `Diagnostic` — is a shared dependency: a remark that points at
-both the call site and the parameter definition needs multi-span notes, the same
+spanned notes on `Diagnostic` — is a shared dependency: a failed-SROA remark
+naming both the allocation and its escape site needs two spans, the same
 capability the type/trait reason chains want. Building it once serves both.
 
 ## Consequences
@@ -152,24 +172,25 @@ This WEP is design-stage; nothing below is implemented yet.
 
 - [ ] Decide the remark surface: `--remarks` on `wado compile`, `wado dump`
       exposure, and/or `--log-level` integration.
-- [ ] Define how the final-NIR walk collects residual `$value_copy$T` calls with
-      source provenance and a size threshold.
+- [ ] Define how the final-NIR walk collects residual `$value_copy$T` calls and
+      surviving aggregate allocations with source provenance and a size threshold.
 - [ ] MVP: residual value-copy remarks with why + where, plus the survives /
       elided fixture pair at a fixed `-Ox`.
-- [ ] Classify each survivor (read-only → suggest `&`; mutated / stored /
-      returned → explain why the copy is required) so the suggestion is offered
-      only when a reference would actually do.
+- [ ] Failed-SROA remarks: surface the surviving allocation and reuse the SROA
+      passes' hard-escape classification for the cause and escape-site span.
+- [ ] Classify each survivor's actionability (read-only copy → suggest `&`;
+      removable escape → suggest restructuring; otherwise explain why the cost is
+      required) so a suggestion is offered only when a fix would actually help.
 
 Trade-offs and boundaries:
 
 - Pure observability is valuable even without a suggestion: knowing which copies
-  remain is information the source cannot otherwise reveal.
+  and allocations remain is information the source cannot otherwise reveal.
 - Self-retiring as the optimizer matures is a feature, not a regression: the
-  remark reports residual cost, so its disappearance means the cost is gone.
-- Not every survivor is reference-fixable; some copies are semantically required
-  (an independent mutable value, a stored or returned aggregate). The MVP
-  surfaces the fact; the read-only-vs-required classification is the follow-up
-  above, and until it lands the suggestion is withheld rather than guessed.
+  remarks report residual cost, so their disappearance means the cost is gone.
+- Not every survivor is fixable; some copies are semantically required, and some
+  escapes are inherent. The MVP surfaces the fact; the actionability
+  classification above withholds the suggestion rather than guessing.
 - The paper's specific task (auto-vectorization) is intentionally out of scope:
   Wado leaves SIMD to the JIT. Only the remark mechanism transfers.
 - Rejected alternatives, recorded for design history: inlining remarks (fail
