@@ -1453,3 +1453,97 @@ fn rename_local_in_expr(expr: &mut NirExpr, old_index: u32, new_index: u32, new_
         _ => {}
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::module_source::ModuleSource;
+    use crate::nir::{CallArg, FunctionRef};
+    use crate::tir::TypeId;
+
+    fn local(idx: u32) -> NirExpr {
+        NirExpr::new(
+            NirExprKind::Local {
+                index: idx,
+                name: format!("__l{idx}"),
+            },
+            TypeId(0),
+            Span::default(),
+        )
+    }
+
+    fn unary(op: NirUnaryOp, inner: NirExpr) -> NirExpr {
+        NirExpr::new(
+            NirExprKind::Unary {
+                op,
+                expr: Box::new(inner),
+            },
+            TypeId(0),
+            Span::default(),
+        )
+    }
+
+    /// `foo(arg)` — a free-function call carrying `arg`. The result is an
+    /// independent value, so the call only *mentions* `arg`, it is not an
+    /// alias of it.
+    fn call_with(arg: NirExpr) -> NirExpr {
+        NirExpr::new(
+            NirExprKind::Call {
+                func: FunctionRef {
+                    module_source: ModuleSource::entry_point_synthetic(),
+                    name: "foo".to_string(),
+                    monomorph_info: None,
+                    method_info: None,
+                },
+                type_args: vec![],
+                args: vec![CallArg {
+                    expr: arg,
+                    is_mut: false,
+                }],
+            },
+            TypeId(0),
+            Span::default(),
+        )
+    }
+
+    /// `references_local` decides whether an intermediate `let buf_inner = <e>`
+    /// binding makes `buf_inner` an *alias* of the hoisted template buffer.
+    /// When it answers yes, `extract_fmt_candidates` force-rewrites the matched
+    /// Formatter's `buf` field to `&mut <hoisted buffer>` — so a false positive
+    /// redirects the Formatter to the wrong buffer (a miscompile).
+    ///
+    /// It must therefore match only genuine alias shapes — a bare `Local` or a
+    /// `&mut` chain down to it — and reject any expression that merely *mentions*
+    /// the local (a call argument, an operand, …). Broadening it to a full
+    /// "mentions anywhere" walk (e.g. `expr_mentions_local`) reintroduces that
+    /// miscompile; these assertions exist to fail the moment someone does.
+    #[test]
+    fn references_local_matches_only_aliases_not_mentions() {
+        const IDX: u32 = 7;
+
+        // Genuine aliases — must match.
+        assert!(references_local(&local(IDX), IDX));
+        assert!(references_local(
+            &unary(NirUnaryOp::MutRef, local(IDX)),
+            IDX
+        ));
+        assert!(references_local(
+            &unary(NirUnaryOp::MutRef, unary(NirUnaryOp::MutRef, local(IDX))),
+            IDX
+        ));
+
+        // A different local is unrelated.
+        assert!(!references_local(&local(IDX + 1), IDX));
+
+        // Non-alias *mentions* — must NOT match (this is the guard against
+        // `expr_mentions_local`, which would return true for all of these and
+        // miscompile the Formatter buffer rewrite).
+        assert!(!references_local(&call_with(local(IDX)), IDX));
+        assert!(!references_local(
+            &unary(NirUnaryOp::MutRef, call_with(local(IDX))),
+            IDX
+        ));
+        // `&buf` (shared ref) is not the `&mut` alias shape the hoist normalizes.
+        assert!(!references_local(&unary(NirUnaryOp::Ref, local(IDX)), IDX));
+    }
+}
