@@ -150,12 +150,12 @@ the first two kinds.
   `$value_copy$T` calls; aggregate allocations the SROA passes left in place),
   not from any pass's internals.
 - Surfaced as an info-level `remark:` diagnostic through the existing logger, not
-  a dedicated flag. It rides `--log-level`: shown at the default `Info` level,
-  silenced by `--log-level warn`. This needs no new configuration surface for an
-  agent to discover, and the low-noise-by-construction property (the optimizer
-  has already removed the easy copies) keeps the default-on volume small. The
-  never-vague principle still holds: a remark that cannot supply why + where is
-  not emitted.
+  a dedicated flag. It rides `--log-level`, which is the opt-in mechanism: the
+  CLI is quiet by default (default `warn`), so remarks appear under
+  `wado compile --log-level info`. This resolves the original opt-in goal without
+  a new configuration surface — the remark keeps its semantically-correct `Info`
+  severity, and the standard verbosity knob gates it. The never-vague principle
+  still holds: a remark that cannot supply why + where is not emitted.
 - Never vague: a remark that cannot supply why + where stays silent, since the
   paper shows vague remarks are net-negative.
 
