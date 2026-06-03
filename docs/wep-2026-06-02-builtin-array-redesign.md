@@ -178,7 +178,7 @@ rules become first-class:
   (`IndexValue`), never `&T`. The reference-returning `Index<I> -> &Self::Output` is
   _not_ implemented for `Array` / `List` / `Slice`, and `iter_mut()` stays
   unavailable; in-place element mutation goes through `set` / `[i] = v`.
-- **A view borrows the whole backing array**, not a pointer+len. Every zero-copy
+- **A view references the whole backing array**, not a pointer+len. Every zero-copy
   view holds `&Array<T>` plus offsets — `Slice<T>`, `ArrayIter<T>`,
   `WindowsIter<T>`, `ChunksIter<T>` alike. (Held by value, under value semantics a
   view would deep-copy the whole backing on construction.)
