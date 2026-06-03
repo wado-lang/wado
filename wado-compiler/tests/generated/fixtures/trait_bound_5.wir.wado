@@ -146,10 +146,10 @@ fn "wado-compiler/tests/fixtures/trait_bound_5.wado/trait_bound_option_propagati
     b = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 42 };
     c = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     if "core:prelude/types.wado/Option<i32>^Eq::eq"(struct.new "core:prelude/types.wado//Box<Option<i32>>" { value: a }, struct.new "core:prelude/types.wado//Box<Option<i32>>" { value: b }) {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 32, 61, 61, 32, 98), used: 6 });
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a == b"), used: 6 });
     }
     if "core:prelude/types.wado/Option<i32>^Eq::eq"(struct.new "core:prelude/types.wado//Box<Option<i32>>" { value: a }, struct.new "core:prelude/types.wado//Box<Option<i32>>" { value: c }) == 0 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 32, 33, 61, 32, 99), used: 6 });
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a != c"), used: 6 });
     }
 }
 

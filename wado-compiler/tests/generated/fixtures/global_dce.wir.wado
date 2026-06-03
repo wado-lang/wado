@@ -105,7 +105,7 @@ fn "wado-compiler/tests/fixtures/global_dce.wado/run"() with Stdout {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        global:USED_STRING = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 108, 105, 118, 101), used: 5 };
+        global:USED_STRING = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alive"), used: 5 };
         global:__modules_initialized = 1;
     };
     global:USED_MUT = global:USED_MUT + 1;
@@ -121,7 +121,7 @@ fn "wado-compiler/tests/fixtures/global_dce.wado/__cm_export__run"() {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
         }
-        global:USED_STRING = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 108, 105, 118, 101), used: 5 };
+        global:USED_STRING = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alive"), used: 5 };
         global:__modules_initialized = 1;
     };
     "wado-compiler/tests/fixtures/global_dce.wado/run"();

@@ -86,7 +86,7 @@ fn "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__cm_bind
 fn "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__cm_export__run"() {
     let sql: ref "core:prelude/string.wado//String";
     let f: ref "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado//__Closure_2";
-    sql = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 101, 108, 101, 99, 116, 32, 49), used: 8 };
+    sql = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("select 1"), used: 8 };
     f = struct.new "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado//__Closure_2" { __capture_0: sql };
     "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__Closure_2::__call"(f);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
@@ -245,7 +245,7 @@ fn "wado-compiler/tests/fixtures/closure_iflet_template_collision.wado/__Closure
     let __sroa___fused_payload_2_message: ref "core:prelude/string.wado//String";
     __fused___inline_parse_0: block {
         if self.__capture_0.used == 0 {
-            __sroa___fused_payload_2_message = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101, 109, 112, 116, 121), used: 5 };
+            __sroa___fused_payload_2_message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("empty"), used: 5 };
             "core:internal/panic"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Parse error: "), used: 13 }); "core:prelude/string.wado/String::push_str"(__local_3, __sroa___fused_payload_2_message); __local_3);
             unreachable;
             break __fused___inline_parse_0;

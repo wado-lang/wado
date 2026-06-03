@@ -11,15 +11,6 @@ use crate::wir::{WirInstr, WirType};
 
 use super::translate::FunctionTranslator;
 
-/// Strings of this many UTF-8 bytes or fewer get a constant `array.new_fixed<u8>`
-/// repr instead of a passive `array.new_data` data segment. `array.new_fixed` is
-/// a valid Wasm constant instruction, so a constant string global of this size
-/// can be promoted to an eager Wasm constant by `wir_optimize::const_global`;
-/// longer strings keep the compact data-segment repr (not a constant
-/// instruction) and stay lazy. The threshold bounds the extra const-expr /
-/// code size: each byte becomes one `i32.const` operand of `array.new_fixed`.
-pub(super) const STRING_INLINE_MAX_BYTES: usize = 8;
-
 /// Classification of a TIR primitive type by the Wasm numeric type family
 /// it is represented as, together with signedness for integer types.
 ///
@@ -118,7 +109,7 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::I32Const(0),
                 ],
             )
-        } else if byte_len <= STRING_INLINE_MAX_BYTES {
+        } else if byte_len <= self.ctx.package.string_inline_max_bytes {
             // Short string: materialize the bytes with `array.new_fixed<u8>`, a
             // valid Wasm *constant* instruction. This lets a constant string
             // global be promoted to an eager Wasm constant by

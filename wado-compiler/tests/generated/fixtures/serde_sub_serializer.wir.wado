@@ -150,7 +150,7 @@ fn "wado-compiler/tests/fixtures/serde_sub_serializer.wado/run"() with Stdout {
     ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     "core:prelude/string.wado/String::push"(ser.buf, 123);
     s_7 = struct.new "wado-compiler/tests/fixtures/serde_sub_serializer.wado//TextStructSerializer" { parent: ser, count: 0 };
-    name_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 108, 105, 99, 101), used: 5 };
+    name_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 };
     drop("wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>"(s_7, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 97, 109, 101), used: 4 }, name_8));
     age = struct.new "core:prelude/types.wado//Box<i32>" { value: 30 };
     drop("wado-compiler/tests/fixtures/serde_sub_serializer.wado/TextStructSerializer^SerializeStruct::field<i32>"(s_7, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 103, 101), used: 3 }, age));

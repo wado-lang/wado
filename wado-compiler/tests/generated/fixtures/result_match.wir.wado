@@ -120,7 +120,7 @@ fn "wado-compiler/tests/fixtures/result_match.wado/run"() with Stdout {
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
     ok_val = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: 42 };
-    err_val = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101, 114, 114, 111, 114), used: 5 } };
+    err_val = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("error"), used: 5 } };
     x = (if ref.test "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(ok_val) -> i32 {
         v_2 = ref.cast "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok"(ok_val).payload_0;
         v_2 * 2;

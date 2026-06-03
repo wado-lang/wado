@@ -122,7 +122,7 @@ fn "wado-compiler/tests/fixtures/match_null_arm_infers_option_inner.wado/__test_
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/format.wado//Formatter";
     let __match_scrut_0: ref null "core:prelude/string.wado//String";
-    __match_scrut_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
+    __match_scrut_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     some_value = (if ref.is_null(__match_scrut_0) == 0 -> ref null "core:prelude/string.wado//String" {
         s_0 = ref.as_non_null(__match_scrut_0);
         s_0;
@@ -131,7 +131,7 @@ fn "wado-compiler/tests/fixtures/match_null_arm_infers_option_inner.wado/__test_
     });
     __cond_3 = (if ref.is_null(some_value) == 0 -> bool {
         v = ref.as_non_null(some_value);
-        "core:prelude/string.wado/String^Eq::eq"(v, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 });
+        "core:prelude/string.wado/String^Eq::eq"(v, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
     } else {
         0;
     });

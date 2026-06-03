@@ -142,7 +142,7 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado/try_divide"(a, b
 
 fn "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado/make_payload"(x) {
     if x < 0 {
-        return 1, ref.null none, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 101, 103, 97, 116, 105, 118, 101), used: 8 };
+        return 1, ref.null none, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 };
     }
     return 0, struct.new "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado//Payload" { value: x * 2 }, ref.null none;
 }
@@ -271,7 +271,7 @@ condition: use_payload(-1) == -1
         unreachable;
     }
     __v0_12 = "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado/use_err_branch"(-1);
-    __cond_13 = "core:prelude/string.wado/String^Eq::eq"(__v0_12, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 101, 103, 97, 116, 105, 118, 101), used: 8 });
+    __cond_13 = "core:prelude/string.wado/String^Eq::eq"(__v0_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 });
     if __cond_13 == 0 {
         "core:internal/panic"(__local_28 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(155), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_28, 114); "core:prelude/string.wado/String::push"(__local_28, 117); "core:prelude/string.wado/String::push"(__local_28, 110); "core:prelude/string.wado/String::push"(__local_28, 32); "core:prelude/string.wado/String::push"(__local_28, 97); "core:prelude/string.wado/String::push"(__local_28, 116); "core:prelude/string.wado/String::push"(__local_28, 32); "core:prelude/string.wado/String::push_str"(__local_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado"), used: 59 }); "core:prelude/string.wado/String::push"(__local_28, 58); __local_29 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_28 }; f_102 = __local_29; "core:prelude/primitive.wado/i32::fmt_decimal"(75, f_102); "core:prelude/string.wado/String::push_str"(__local_28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: use_err_branch(-1) == \"negative\"

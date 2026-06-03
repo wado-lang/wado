@@ -151,9 +151,9 @@ fn "wado-compiler/tests/fixtures/trait_bound_1.wado/trait_bound_bounded_impl_for
     let b: ref "wado-compiler/tests/fixtures/trait_bound_1.wado//Pair<i32>";
     b = struct.new "wado-compiler/tests/fixtures/trait_bound_1.wado//Pair<i32>" { first: 1, second: 3 };
     if "wado-compiler/tests/fixtures/trait_bound_1.wado/Pair<i32>^Ord::cmp"(struct.new "wado-compiler/tests/fixtures/trait_bound_1.wado//Pair<i32>" { first: 1, second: 2 }, b) == 0 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 32, 60, 32, 98), used: 5 });
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a < b"), used: 5 });
     }
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 32, 61, 61, 32, 97), used: 6 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a == a"), used: 6 });
 }
 
 fn "wado-compiler/tests/fixtures/trait_bound_1.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -163,7 +163,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_1.wado/__cm_binding__Stdout_write_v
 fn "wado-compiler/tests/fixtures/trait_bound_1.wado/__cm_export__run"() {
     "wado-compiler/tests/fixtures/trait_bound_1.wado/trait_bound_array_of_ref"();
     "wado-compiler/tests/fixtures/trait_bound_1.wado/trait_bound_bounded_impl_for_trait"();
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
     "wasi/task-return"(0);
 }
 

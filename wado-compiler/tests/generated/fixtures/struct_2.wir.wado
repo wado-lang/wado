@@ -275,7 +275,7 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_if_let"() with Stdout {
     x_3 = 5;
     y_4 = 15;
     "core:cli/println"(__local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_11 }; self_30 = x_3 + y_4; "core:prelude/primitive.wado/i32::fmt_decimal"(self_30, __local_12); __local_11);
-    person = struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPerson" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 108, 105, 99, 101), used: 5 }, age: 30, email: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alice@test.com"), used: 14 } };
+    person = struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPerson" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, age: 30, email: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alice@test.com"), used: 14 } };
     name = person.name;
     "core:cli/println"(name);
     a = 5;
@@ -336,7 +336,7 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_rename"() with Stdout {
     x = 10;
     vertical2 = 20;
     "core:cli/println"(__local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }; __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_11 }; f_33 = __local_12; "core:prelude/primitive.wado/i32::fmt_decimal"(x, f_33); "core:prelude/string.wado/String::push"(__local_11, 44); "core:prelude/string.wado/String::push"(__local_11, 32); __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_11 }; f_38 = __local_12; "core:prelude/primitive.wado/i32::fmt_decimal"(vertical2, f_38); __local_11);
-    __sroa_person_name = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 108, 105, 99, 101), used: 5 };
+    __sroa_person_name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 };
     "core:cli/println"(__sroa_person_name);
     a = 10;
     b = 20;
@@ -391,20 +391,20 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_match"() with Stdout {
     } else {
         0;
     }) -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(112, 111, 115, 105, 116, 105, 118, 101), used: 8 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("positive"), used: 8 };
     x_3 = 10;
     } else if x_3 > 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("positive x"), used: 10 };
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 116, 104, 101, 114), used: 5 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
     });
     "core:cli/println"(label);
     label2 = (if x_5 = 10; y_6 = 20; (x_5 + y_6) > 25 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(108, 97, 114, 103, 101), used: 5 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("large"), used: 5 };
     } else {
         x_7 = 10;
         y_8 = 20;
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 109, 97, 108, 108), used: 5 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("small"), used: 5 };
     });
     "core:cli/println"(label2);
     desc = (if h_10 = 10; v_11 = 20; h_10 == v_11 -> ref "core:prelude/string.wado//String" {
@@ -455,10 +455,10 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_matches"() with Stdout {
     if (x_3 + y_4) > 25 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("large point"), used: 11 });
     }
-    drop(struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPerson" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 108, 105, 99, 101), used: 5 }, age: 30, email: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alice@test.com"), used: 14 } });
+    drop(struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPerson" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, age: 30, email: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alice@test.com"), used: 14 } });
     age = 30;
     if age >= 18 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 100, 117, 108, 116), used: 5 });
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("adult"), used: 5 });
     }
     x_7 = 10;
     y_8 = 20;
@@ -468,7 +468,7 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_matches"() with Stdout {
         0;
     });
     if is_origin {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 114, 105, 103, 105, 110), used: 6 });
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("origin"), used: 6 });
     } else {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not origin"), used: 10 });
     }
@@ -510,7 +510,7 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_literal"() with Stdout {
         "core:prelude/string.wado/String::push_str"(__local_16, label_1);
         __local_16;
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 109, 97, 116, 99, 104), used: 8 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no match"), used: 8 };
     });
     "core:cli/println"(result);
     bp = struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDBoolPair" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 111, 111, 108), used: 4 }, flag: 1 };
@@ -537,17 +537,17 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_literal"() with Stdout {
         "core:prelude/string.wado/String::push_str"(__local_19, label_8);
         __local_19;
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 109, 97, 116, 99, 104), used: 8 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no match"), used: 8 };
     });
     "core:cli/println"(result4);
-    sp = struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDStringPair" { first: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 }, second: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 111, 114, 108, 100), used: 5 } };
-    result5 = (if first = sp.first; __local_26 = sp.second; "core:prelude/string.wado/String^Eq::eq"(__local_26, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 111, 114, 108, 100), used: 5 }) -> ref "core:prelude/string.wado//String" {
+    sp = struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDStringPair" { first: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, second: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
+    result5 = (if first = sp.first; __local_26 = sp.second; "core:prelude/string.wado/String^Eq::eq"(__local_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 }) -> ref "core:prelude/string.wado//String" {
         __local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
         "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matched string: "), used: 16 });
         "core:prelude/string.wado/String::push_str"(__local_20, first);
         __local_20;
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 109, 97, 116, 99, 104), used: 8 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no match"), used: 8 };
     });
     "core:cli/println"(result5);
     ip2 = struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDIntPair" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116), used: 4 }, value: 0 };
@@ -557,6 +557,7 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_literal"() with Stdout {
         "core:cli/println"(__local_21 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(28), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("if-let int: "), used: 12 }); "core:prelude/string.wado/String::push_str"(__local_21, label_14); __local_21);
     } else {
     }
+    drop(struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDBoolPair" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("check"), used: 5 }, flag: 0 });
     __local_28 = 0;
     if __local_28 == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matches bool"), used: 12 });

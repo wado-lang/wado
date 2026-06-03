@@ -137,7 +137,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/serde_serialize_struct.wado/run"() with Stdout {
     let user: ref "wado-compiler/tests/fixtures/serde_serialize_struct.wado//User";
     let ser: ref "wado-compiler/tests/fixtures/serde_serialize_struct.wado//JsonSerializer";
-    user = struct.new "wado-compiler/tests/fixtures/serde_serialize_struct.wado//User" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 108, 105, 99, 101), used: 5 }, age: 30, active: 1 };
+    user = struct.new "wado-compiler/tests/fixtures/serde_serialize_struct.wado//User" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, age: 30, active: 1 };
     ser = struct.new "wado-compiler/tests/fixtures/serde_serialize_struct.wado//JsonSerializer" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     drop("wado-compiler/tests/fixtures/serde_serialize_struct.wado/User^Serialize::serialize<wado-compiler/tests/fixtures/serde_serialize_struct.wado/JsonSerializer>"(user, ser));
     "core:cli/println"(ser.buf);
@@ -488,9 +488,9 @@ fn "wado-compiler/tests/fixtures/serde_serialize_struct.wado/User^Serialize::ser
     let st_3: ref "wado-compiler/tests/fixtures/serde_serialize_struct.wado//JsonStructSerializer";
     "core:prelude/string.wado/String::push"(s.buf, 123);
     st_3 = struct.new "wado-compiler/tests/fixtures/serde_serialize_struct.wado//JsonStructSerializer" { ser: s, count: 0 };
-    drop("wado-compiler/tests/fixtures/serde_serialize_struct.wado/JsonStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>"(st_3, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(117, 115, 101, 114, 78, 97, 109, 101), used: 8 }, self.name));
+    drop("wado-compiler/tests/fixtures/serde_serialize_struct.wado/JsonStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>"(st_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("userName"), used: 8 }, self.name));
     drop("wado-compiler/tests/fixtures/serde_serialize_struct.wado/JsonStructSerializer^SerializeStruct::field<i32>"(st_3, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 103, 101), used: 3 }, struct.new "core:prelude/types.wado//Box<i32>" { value: self.age }));
-    drop("wado-compiler/tests/fixtures/serde_serialize_struct.wado/JsonStructSerializer^SerializeStruct::field<bool>"(st_3, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 99, 116, 105, 118, 101), used: 6 }, struct.new "core:prelude/types.wado//Box<bool>" { value: self.active }));
+    drop("wado-compiler/tests/fixtures/serde_serialize_struct.wado/JsonStructSerializer^SerializeStruct::field<bool>"(st_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("active"), used: 6 }, struct.new "core:prelude/types.wado//Box<bool>" { value: self.active }));
     return "core:prelude/string.wado/String::push"(st_3.ser.buf, 125), ref.null none;
 }
 

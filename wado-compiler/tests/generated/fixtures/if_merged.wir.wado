@@ -128,15 +128,15 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/if_merged.wado/classify"(n) {
     if n < 0 {
-        return struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 101, 103, 97, 116, 105, 118, 101), used: 8 };
+        return struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 };
     } else if n == 0 {
         return struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 101, 114, 111), used: 4 };
     } else if n < 10 {
-        return struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 109, 97, 108, 108), used: 5 };
+        return struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("small"), used: 5 };
     } else if n < 100 {
-        return struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(109, 101, 100, 105, 117, 109), used: 6 };
+        return struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("medium"), used: 6 };
     } else {
-        return struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(108, 97, 114, 103, 101), used: 5 };
+        return struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("large"), used: 5 };
     }
 }
 
@@ -461,7 +461,7 @@ fn "wado-compiler/tests/fixtures/if_merged.wado/test_if_let_expr"() with Stdout 
     "core:cli/println"(opt_28 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 5 }; label_30 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(opt_28) -> ref "core:prelude/string.wado//String" {
         n_29 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt_28).payload_0;
         if n_29 > 0 -> ref "core:prelude/string.wado//String" {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(112, 111, 115, 105, 116, 105, 118, 101), used: 8 };
+            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("positive"), used: 8 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("non-positive"), used: 12 };
         }
@@ -471,7 +471,7 @@ fn "wado-compiler/tests/fixtures/if_merged.wado/test_if_let_expr"() with Stdout 
     "core:cli/println"(opt_31 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: -3 }; label_33 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(opt_31) -> ref "core:prelude/string.wado//String" {
         n_32 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt_31).payload_0;
         if n_32 > 0 -> ref "core:prelude/string.wado//String" {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(112, 111, 115, 105, 116, 105, 118, 101), used: 8 };
+            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("positive"), used: 8 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("non-positive"), used: 12 };
         }
@@ -481,7 +481,7 @@ fn "wado-compiler/tests/fixtures/if_merged.wado/test_if_let_expr"() with Stdout 
     "core:cli/println"(opt_34 = struct.new "core:prelude/types.wado//Option<i32>" { 1 }; label_36 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(opt_34) -> ref "core:prelude/string.wado//String" {
         n_35 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt_34).payload_0;
         if n_35 > 0 -> ref "core:prelude/string.wado//String" {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(112, 111, 115, 105, 116, 105, 118, 101), used: 8 };
+            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("positive"), used: 8 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("non-positive"), used: 12 };
         }

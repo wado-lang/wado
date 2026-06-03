@@ -445,7 +445,7 @@ fn "wado-compiler/tests/fixtures/serde_json_tuple.wado/__test_0_tuple_serialize_
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let f_10: ref "core:prelude/format.wado//Formatter";
-    t = struct.new "tuple//[i32, String, bool]" { 0: 42, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 }, 2: 1 };
+    t = struct.new "tuple//[i32, String, bool]" { 0: 42, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
@@ -480,7 +480,7 @@ fn "wado-compiler/tests/fixtures/serde_json_tuple.wado/__test_1_tuple_roundtrip_
     let f_16: ref "core:prelude/format.wado//Formatter";
     let f_21: ref "core:prelude/format.wado//Formatter";
     let f_27: ref "core:prelude/format.wado//Formatter";
-    t = struct.new "tuple//[i32, String]" { 0: 10, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 111, 114, 108, 100), used: 5 } };
+    t = struct.new "tuple//[i32, String]" { 0: 10, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
     let __sroa_json_r_discriminant: i32;
     let __sroa_json_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_json_r_case1_payload_0: ref null "core:serde//SerializeError";
@@ -502,7 +502,7 @@ condition: parsed.0 == 10
                 unreachable;
             }
             __v0_7 = parsed.1;
-            __cond_8 = "core:prelude/string.wado/String^Eq::eq"(__v0_7, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 111, 114, 108, 100), used: 5 });
+            __cond_8 = "core:prelude/string.wado/String^Eq::eq"(__v0_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 });
             if __cond_8 == 0 {
                 "core:internal/panic"(__local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(132), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_tuple_roundtrip__i32__string_"), used: 38 }); "core:prelude/string.wado/String::push"(__local_11, 32); "core:prelude/string.wado/String::push"(__local_11, 97); "core:prelude/string.wado/String::push"(__local_11, 116); "core:prelude/string.wado/String::push"(__local_11, 32); "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_tuple.wado"), used: 50 }); "core:prelude/string.wado/String::push"(__local_11, 58); __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_11 }; f_27 = __local_12; "core:prelude/primitive.wado/i32::fmt_decimal"(23, f_27); "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: parsed.1 == \"world\"

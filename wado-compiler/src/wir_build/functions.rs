@@ -477,7 +477,7 @@ fn register_string_data(ctx: &mut WirContext<'_>) {
         // Short strings are materialized inline with a constant
         // `array.new_fixed<u8>` repr (see `translate_string_literal`) and need
         // no data segment; registering one would leave a dead passive segment.
-        if s.len() > super::primitive_ops::STRING_INLINE_MAX_BYTES {
+        if s.len() > package.string_inline_max_bytes {
             ctx.register_string_literal(s);
         }
     }

@@ -160,7 +160,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado/make_point"(n) {
     if n < 0 {
-        return 1, ref.null none, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 101, 103, 97, 116, 105, 118, 101), used: 8 };
+        return 1, ref.null none, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 };
     }
     return 0, struct.new "wado-compiler/tests/fixtures/opt_copy_prop_multi_field.wado//Point" { x: n, y: n * 2 }, ref.null none;
 }

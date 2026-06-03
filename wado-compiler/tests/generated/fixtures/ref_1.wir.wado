@@ -312,13 +312,13 @@ fn "wado-compiler/tests/fixtures/ref_1.wado/ref_primitive_types"() with Stdout {
     "core:cli/println"(__local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }; "core:prelude/string.wado/String::push"(__local_11, 98); "core:prelude/string.wado/String::push"(__local_11, 111); "core:prelude/string.wado/String::push"(__local_11, 111); "core:prelude/string.wado/String::push"(__local_11, 108); "core:prelude/string.wado/String::push"(__local_11, 58); "core:prelude/string.wado/String::push"(__local_11, 32); __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_11 }; r_45 = c.value; "core:prelude/format.wado/Formatter::pad"(__local_12, (if r_45 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 97, 108, 115, 101), used: 5 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     })); __local_11);
     c.value = 0;
     "core:cli/println"(__local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }; "core:prelude/string.wado/String::push"(__local_13, 98); "core:prelude/string.wado/String::push"(__local_13, 111); "core:prelude/string.wado/String::push"(__local_13, 111); "core:prelude/string.wado/String::push"(__local_13, 108); "core:prelude/string.wado/String::push"(__local_13, 58); "core:prelude/string.wado/String::push"(__local_13, 32); __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_13 }; self_54 = c.value; "core:prelude/format.wado/Formatter::pad"(__local_14, (if self_54 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 97, 108, 115, 101), used: 5 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     })); __local_13);
 }
 
@@ -492,9 +492,9 @@ fn "wado-compiler/tests/fixtures/ref_1.wado/run"() with Stdout {
     "wado-compiler/tests/fixtures/ref_1.wado/ref_primitive_read"();
     "wado-compiler/tests/fixtures/ref_1.wado/ref_primitive_semantic"();
     "wado-compiler/tests/fixtures/ref_1.wado/ref_primitive_types"();
-    greeting = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
+    greeting = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     "core:cli/println"(greeting);
-    __deref_val_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(103, 111, 111, 100, 98, 121, 101), used: 7 };
+    __deref_val_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("goodbye"), used: 7 };
     greeting.repr = __deref_val_2.repr;
     greeting.used = 7;
     "core:cli/println"(greeting);

@@ -69,11 +69,11 @@ fn "wado-compiler/tests/fixtures/option_match.wado/__cm_export__run"() {
     let opt_3: ref null "core:prelude/string.wado//String";
     let opt_4: ref null "core:prelude/string.wado//String";
     let x: ref "core:prelude/string.wado//String";
-    opt_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(118, 97, 108, 117, 101), used: 5 };
+    opt_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value"), used: 5 };
     if ref.is_null(opt_2) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matched none"), used: 12 });
     } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 116, 32, 110, 111, 110, 101), used: 8 });
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not none"), used: 8 });
     }
     opt_3 = ref.null none;
     if ref.is_null(opt_3) {
@@ -81,7 +81,7 @@ fn "wado-compiler/tests/fixtures/option_match.wado/__cm_export__run"() {
     } else {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("has value"), used: 9 });
     }
-    opt_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
+    opt_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     if ref.is_null(opt_4) == 0 {
         x = ref.as_non_null(opt_4);
         "core:cli/println"(x);

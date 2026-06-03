@@ -293,7 +293,7 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/__test_0_flags_seri
     multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms>"(p);
     if __sroa_r_discriminant == 0 {
         json = ref.as_non_null(__sroa_r_case0_payload_0);
-        __cond = "core:prelude/string.wado/String^Eq::eq"(json, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(91, 34, 82, 101, 97, 100, 34, 93), used: 8 });
+        __cond = "core:prelude/string.wado/String^Eq::eq"(json, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("[\"Read\"]"), used: 8 });
         if __cond == 0 {
             "core:internal/panic"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(127), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_flags_serialize_single"), used: 31 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_synth_flags.wado"), used: 56 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_10 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(17, f_10); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: json == `[\"Read\"]`
@@ -1562,10 +1562,10 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Serialize::se
         drop("core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(__fused_payload_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 97, 100), used: 4 }));
     }
     if (self.value & 2) != 0 {
-        drop("core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(__fused_payload_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(87, 114, 105, 116, 101), used: 5 }));
+        drop("core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(__fused_payload_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Write"), used: 5 }));
     }
     if (self.value & 4) != 0 {
-        drop("core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(__fused_payload_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(69, 120, 101, 99, 117, 116, 101), used: 7 }));
+        drop("core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(__fused_payload_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Execute"), used: 7 }));
     }
     return "core:prelude/string.wado/String::push"(__fused_payload_4.buf, 93), ref.null none;
 }
@@ -1603,11 +1603,11 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_flags.wado/Perms^Deserialize::
                             __local_3_3 = __local_3_3 | 1;
                             continue l176;
                         }
-                        if "core:prelude/string.wado/String^Eq::eq"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(87, 114, 105, 116, 101), used: 5 }) {
+                        if "core:prelude/string.wado/String^Eq::eq"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Write"), used: 5 }) {
                             __local_3_3 = __local_3_3 | 2;
                             continue l176;
                         }
-                        if "core:prelude/string.wado/String^Eq::eq"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(69, 120, 101, 99, 117, 116, 101), used: 7 }) {
+                        if "core:prelude/string.wado/String^Eq::eq"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Execute"), used: 7 }) {
                             __local_3_3 = __local_3_3 | 4;
                             continue l176;
                         }

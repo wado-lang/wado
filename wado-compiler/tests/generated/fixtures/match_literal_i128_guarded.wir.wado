@@ -89,9 +89,9 @@ fn "wado-compiler/tests/fixtures/match_literal_i128_guarded.wado/run"() with Std
     } else {
         0;
     }) -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 110, 115, 119, 101, 114), used: 6 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 116, 104, 101, 114), used: 5 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
     });
     "core:cli/println"(r1);
     r2 = (if (if (if 42_i64 == 42_i64 -> i32 {
@@ -109,9 +109,9 @@ fn "wado-compiler/tests/fixtures/match_literal_i128_guarded.wado/run"() with Std
     } else {
         0;
     }) -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 110, 115, 119, 101, 114), used: 6 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 116, 104, 101, 114), used: 5 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
     });
     "core:cli/println"(r2);
     r3 = (if (if 7_i64 == 7_i64 -> i32 {
@@ -125,9 +125,9 @@ fn "wado-compiler/tests/fixtures/match_literal_i128_guarded.wado/run"() with Std
     } else {
         0;
     }) -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 101, 118, 101, 110), used: 5 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("seven"), used: 5 };
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 116, 104, 101, 114), used: 5 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
     });
     "core:cli/println"(r3);
     r4 = (if (if (if 7_i64 == 7_i64 -> i32 {
@@ -141,7 +141,7 @@ fn "wado-compiler/tests/fixtures/match_literal_i128_guarded.wado/run"() with Std
     }) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("should_not_fire"), used: 15 };
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 116, 104, 101, 114), used: 5 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
     });
     "core:cli/println"(r4);
     bind = struct.new "core:prelude/int128.wado//i128" { low: 99_i64, high: 0_i64 };
@@ -150,11 +150,11 @@ fn "wado-compiler/tests/fixtures/match_literal_i128_guarded.wado/run"() with Std
     } else {
         0;
     }) -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 110, 115, 119, 101, 114), used: 6 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
     } else if "core:prelude/int128.wado/i128^Ord::cmp"(bind, struct.new "core:prelude/int128.wado//i128" { low: 10_i64, high: 0_i64 }) == 2 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 105, 103), used: 3 };
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 116, 104, 101, 114), used: 5 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
     });
     "core:cli/println"(r5);
 }

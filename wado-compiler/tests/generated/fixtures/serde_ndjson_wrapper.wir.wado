@@ -692,7 +692,7 @@ fn "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/ErrorMessage^Serializ
     __result = struct.new "core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:json//JsonStructSerializer" { buf: s.buf, count: 0 } };
     if ref.test "core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde/SerializeError>::Ok"(__result) {
         __local_3 = ref.cast "core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde/SerializeError>::Ok"(__result).payload_0;
-        drop("core:json/JsonStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101, 114, 114, 111, 114), used: 5 }, self.error));
+        drop("core:json/JsonStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("error"), used: 5 }, self.error));
         return "core:prelude/string.wado/String::push"(__local_3.buf, 125), ref.null none;
     } else {
         return ref.cast "core:prelude/types.wado//Result<core:json/JsonStructSerializer,core:serde/SerializeError>::Err"(__result).payload_0;

@@ -158,12 +158,12 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/sum_iter"(items) {
 
 fn "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/classify"(n) {
     if n < 0 {
-        return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 101, 103, 97, 116, 105, 118, 101), used: 8 };
+        return 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 };
     }
     if n == 0 {
         return 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 101, 114, 111), used: 4 };
     }
-    return 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(112, 111, 115, 105, 116, 105, 118, 101), used: 8 };
+    return 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("positive"), used: 8 };
 }
 
 fn "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/count_positive"(items) {
@@ -183,7 +183,7 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/count_positive"(it
                 multivalue_bind [__sroa_result_discriminant, __sroa_result_payload_0] = "wado-compiler/tests/fixtures/opt_copy_prop_while_let.wado/classify"(__sroa___match_6_payload_0);
                 if __sroa_result_discriminant == 0 {
                     label = ref.as_non_null(__sroa_result_payload_0);
-                    if "core:prelude/string.wado/String^Eq::eq"(label, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(112, 111, 115, 105, 116, 105, 118, 101), used: 8 }) {
+                    if "core:prelude/string.wado/String^Eq::eq"(label, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("positive"), used: 8 }) {
                         count = count + 1;
                     }
                 } else {

@@ -214,7 +214,7 @@ fn "wado-compiler/tests/fixtures/return_merged.wado/__test_3_tuple_var"() {
     let f_13: ref "core:prelude/format.wado//Formatter";
     let f_18: ref "core:prelude/format.wado//Formatter";
     let f_24: ref "core:prelude/format.wado//Formatter";
-    t = struct.new "tuple//[i32, String]" { 0: 42, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 } };
+    t = struct.new "tuple//[i32, String]" { 0: 42, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
     __v0_1 = 42;
     __cond_2 = __v0_1 == 42;
     if __cond_2 == 0 {
@@ -224,7 +224,7 @@ condition: pair.0 == 42
         unreachable;
     }
     __v0_3 = t.1;
-    __cond_4 = "core:prelude/string.wado/String^Eq::eq"(__v0_3, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 });
+    __cond_4 = "core:prelude/string.wado/String^Eq::eq"(__v0_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
     if __cond_4 == 0 {
         "core:internal/panic"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_3_tuple_var"), used: 18 }); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push"(__local_7, 97); "core:prelude/string.wado/String::push"(__local_7, 116); "core:prelude/string.wado/String::push"(__local_7, 32); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/return_merged.wado"), used: 47 }); "core:prelude/string.wado/String::push"(__local_7, 58); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; f_24 = __local_8; "core:prelude/primitive.wado/i32::fmt_decimal"(41, f_24); "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: pair.1 == \"hello\"
