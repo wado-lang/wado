@@ -165,7 +165,7 @@ fn "wado-compiler/tests/fixtures/wasm_import_user_wat.wado/run"() with Stdout {
     let __local_1: ref "core:prelude/format.wado//Formatter";
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
-    let self_8: i32;
+    let __sroa_self_value: i32;
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
             break __inline___initialize_modules_0;
@@ -173,7 +173,7 @@ fn "wado-compiler/tests/fixtures/wasm_import_user_wat.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("add_one(41) = "), used: 14 }); __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; self_8 = "wasm:./sub/wasm_import_user.wat/add_one"(41); "core:prelude/primitive.wado/i32::fmt_decimal"(self_8, __local_1); __local_0);
+    "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("add_one(41) = "), used: 14 }); __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; __sroa_self_value = "wasm:./sub/wasm_import_user.wat/add_one"(41); "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value, __local_1); __local_0);
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("twice(1.5) = "), used: 13 }); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/f64::fmt_into"("wasm:./sub/wasm_import_user.wat/twice"(1.5), __local_3); __local_2);
 }
 

@@ -109,39 +109,38 @@ fn "wado-compiler/tests/fixtures/array_bounds_elim_le_guard.wado/run"() with Std
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let repr: ref builtin::array<i32>;
     let value: i32;
-    let self_20: i32;
-    let _licm_repr_23: ref builtin::array<i32>;
-    let _licm_repr_25: ref builtin::array<i32>;
+    let _licm_repr_24: ref builtin::array<i32>;
+    let _licm_repr_26: ref builtin::array<i32>;
     repr = builtin::array_new<i32>(11);
     builtin::array_fill<i32>(repr, 0, 0, 11);
     arr = struct.new "core:prelude//List<i32>" { repr: repr, used: 11 };
     i_2 = 0;
-    _licm_repr_23 = arr.repr;
+    _licm_repr_24 = arr.repr;
     b0: block {
         l1: loop {
             if i_2 > 10 {
                 break b0;
             }
             value = i_2 * i_2;
-            builtin::array_set<i32>(_licm_repr_23, i_2, value);
+            builtin::array_set<i32>(_licm_repr_24, i_2, value);
             i_2 = i_2 + 1;
             continue l1;
         };
     };
     sum = 0;
     i_4 = 0;
-    _licm_repr_25 = arr.repr;
+    _licm_repr_26 = arr.repr;
     b3: block {
         l4: loop {
             if i_4 > 10 {
                 break b3;
             }
-            sum = sum + builtin::array_get<i32>(_licm_repr_25, i_4);
+            sum = sum + builtin::array_get<i32>(_licm_repr_26, i_4);
             i_4 = i_4 + 1;
             continue l4;
         };
     };
-    "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; self_20 = sum; "core:prelude/primitive.wado/i32::fmt_decimal"(self_20, __local_6); __local_5);
+    "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; "core:prelude/primitive.wado/i32::fmt_decimal"(sum, __local_6); __local_5);
 }
 
 fn "wado-compiler/tests/fixtures/array_bounds_elim_le_guard.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

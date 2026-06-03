@@ -113,36 +113,35 @@ fn "wado-compiler/tests/fixtures/hfs_match_guard_cross_arm_side_effect.wado/run"
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let f_10: ref "core:prelude/format.wado//Formatter";
-    let self_11: i32;
     let f_15: ref "core:prelude/format.wado//Formatter";
-    let self_16: i32;
     let f_20: ref "core:prelude/format.wado//Formatter";
-    let self_21: i32;
-    let __hfs_value_23: i32;
+    let __sroa_self_value_24: i32;
+    let __sroa_self_value_25: i32;
+    let __hfs_value_26: i32;
     state = struct.new "wado-compiler/tests/fixtures/hfs_match_guard_cross_arm_side_effect.wado//State" { value: 0, seen: 0 };
     sum = 0;
     i = 0;
-    __hfs_value_23 = state.value;
+    __hfs_value_26 = state.value;
     b0: block {
         l1: loop {
             if i >= 3 {
                 break b0;
             }
             if "wado-compiler/tests/fixtures/hfs_match_guard_cross_arm_side_effect.wado/probe"(state) > 0 {
-                __hfs_value_23 = -1;
+                __hfs_value_26 = -1;
             } else {
-                __hfs_value_23 = state.value;
-                sum = sum + __hfs_value_23;
-                __hfs_value_23 = __hfs_value_23 + 1;
+                __hfs_value_26 = state.value;
+                sum = sum + __hfs_value_26;
+                __hfs_value_26 = __hfs_value_26 + 1;
             }
-            sum = sum + __hfs_value_23;
-            __hfs_value_23 = __hfs_value_23 + 1000;
+            sum = sum + __hfs_value_26;
+            __hfs_value_26 = __hfs_value_26 + 1000;
             i = i + 1;
-            state.value = __hfs_value_23;
+            state.value = __hfs_value_26;
             continue l1;
         };
     };
-    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_10 = __local_5; self_11 = sum; "core:prelude/primitive.wado/i32::fmt_decimal"(self_11, f_10); "core:prelude/string.wado/String::push"(__local_4, 32); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_15 = __local_5; self_16 = state.value; "core:prelude/primitive.wado/i32::fmt_decimal"(self_16, f_15); "core:prelude/string.wado/String::push"(__local_4, 32); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_20 = __local_5; self_21 = state.seen; "core:prelude/primitive.wado/i32::fmt_decimal"(self_21, f_20); __local_4);
+    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 }; __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; f_10 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(sum, f_10); "core:prelude/string.wado/String::push"(__local_4, 32); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; __sroa_self_value_24 = state.value; f_15 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_24, f_15); "core:prelude/string.wado/String::push"(__local_4, 32); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; __sroa_self_value_25 = state.seen; f_20 = __local_5; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_25, f_20); __local_4);
 }
 
 fn "wado-compiler/tests/fixtures/hfs_match_guard_cross_arm_side_effect.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
