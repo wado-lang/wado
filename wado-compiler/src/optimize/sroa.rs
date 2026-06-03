@@ -31,8 +31,8 @@ use crate::nir::{
     NirStructField, NirUnaryOp,
 };
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::NirRefVisitor;
-use crate::tir::{TypeId, TypeTable};
+use crate::nir_visitor::{NirMutVisitor, NirRefVisitor};
+use crate::tir::TypeId;
 use crate::token::Span;
 
 /// Maps (`module_source`, `func_name`) → set of parameter indices that have `stores` declared.
@@ -82,12 +82,11 @@ fn build_stores_lookup(project: &NirPackage) -> StoresLookup {
 /// Apply SROA to all functions in the project.
 pub fn scalar_replace_aggregates(project: &mut NirPackage) -> bool {
     let stores_lookup = build_stores_lookup(project);
-    let type_table = project.type_table.borrow();
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         let module_source = func.module_source.clone();
-        changed |= sroa_in_function(&mut func, &type_table, &stores_lookup, &module_source);
+        changed |= sroa_in_function(&mut func, &stores_lookup, &module_source);
     }
     changed
 }
@@ -95,7 +94,6 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage) -> bool {
 /// Apply SROA within a single function.
 fn sroa_in_function(
     func: &mut NirFunction,
-    type_table: &TypeTable,
     stores_lookup: &StoresLookup,
     current_module: &ModuleSource,
 ) -> bool {
@@ -104,7 +102,7 @@ fn sroa_in_function(
     };
 
     // Step 1: Identify candidate Let bindings (struct/tuple literals).
-    let candidates = collect_candidates(&body.stmts, type_table);
+    let candidates = collect_candidates(&body.stmts);
     if candidates.is_empty() {
         return false;
     }
@@ -200,14 +198,14 @@ fn sroa_in_function(
     mark_ref_field_locals_as_aliased(body, &all_sroa, &mut func.stores_aliased_locals);
 
     // Step 4: Rewrite — expand Let statements and replace field accesses.
-    rewrite_block(
-        body,
-        &all_sroa,
-        &field_local_map,
-        &field_info_map,
-        &candidate_mut,
-        &reconstruct_info,
-    );
+    RewriteVisitor {
+        safe_set: &all_sroa,
+        field_map: &field_local_map,
+        info_map: &field_info_map,
+        candidate_mut: &candidate_mut,
+        reconstruct_info: &reconstruct_info,
+    }
+    .visit_block(body);
 
     true
 }
@@ -219,174 +217,32 @@ fn mark_ref_field_locals_as_aliased(
     decomposed: &IndexSet<u32>,
     stores_aliased: &mut IndexSet<u32>,
 ) {
-    for stmt in &body.stmts {
-        mark_ref_fields_in_stmt(stmt, decomposed, stores_aliased);
+    RefFieldMarker {
+        decomposed,
+        stores_aliased,
     }
+    .visit_block(body);
 }
 
-fn mark_ref_fields_in_stmt(
-    stmt: &NirStmt,
-    decomposed: &IndexSet<u32>,
-    stores_aliased: &mut IndexSet<u32>,
-) {
-    match &stmt.kind {
-        NirStmtKind::Let {
+/// Walks the body and, for every decomposed candidate's `Let`, records the
+/// locals that appear as `&local` / `&mut local` field values so a later SROA
+/// iteration won't decompose them (their references may outlive the field).
+struct RefFieldMarker<'a> {
+    decomposed: &'a IndexSet<u32>,
+    stores_aliased: &'a mut IndexSet<u32>,
+}
+
+impl NirRefVisitor for RefFieldMarker<'_> {
+    fn visit_stmt(&mut self, stmt: &NirStmt) {
+        if let NirStmtKind::Let {
             local_index, value, ..
-        } => {
-            if decomposed.contains(local_index) {
-                // This candidate is being decomposed — scan field values for &local
-                collect_ref_locals_in_fields(value, stores_aliased);
-            }
-            mark_ref_fields_in_expr(value, decomposed, stores_aliased);
+        } = &stmt.kind
+            && self.decomposed.contains(local_index)
+        {
+            // This candidate is being decomposed — scan field values for &local.
+            collect_ref_locals_in_fields(value, self.stores_aliased);
         }
-        NirStmtKind::Expr(expr) => {
-            mark_ref_fields_in_expr(expr, decomposed, stores_aliased);
-        }
-        NirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                mark_ref_fields_in_expr(v, decomposed, stores_aliased);
-            }
-        }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            mark_ref_fields_in_expr(condition, decomposed, stores_aliased);
-            mark_ref_field_locals_as_aliased(then_block, decomposed, stores_aliased);
-            if let Some(eb) = else_block {
-                mark_ref_field_locals_as_aliased(eb, decomposed, stores_aliased);
-            }
-        }
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            mark_ref_field_locals_as_aliased(body, decomposed, stores_aliased);
-        }
-        NirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                mark_ref_fields_in_expr(v, decomposed, stores_aliased);
-            }
-        }
-        NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => {
-            mark_ref_fields_in_expr(value, decomposed, stores_aliased);
-        }
-    }
-}
-
-fn mark_ref_fields_in_expr(
-    expr: &NirExpr,
-    decomposed: &IndexSet<u32>,
-    stores_aliased: &mut IndexSet<u32>,
-) {
-    match &expr.kind {
-        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
-            mark_ref_field_locals_as_aliased(block, decomposed, stores_aliased);
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            mark_ref_fields_in_expr(condition, decomposed, stores_aliased);
-            mark_ref_field_locals_as_aliased(then_branch, decomposed, stores_aliased);
-            if let Some(eb) = else_branch {
-                mark_ref_field_locals_as_aliased(eb, decomposed, stores_aliased);
-            }
-        }
-        NirExprKind::Match { expr: inner, arms } => {
-            mark_ref_fields_in_expr(inner, decomposed, stores_aliased);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    mark_ref_fields_in_expr(guard, decomposed, stores_aliased);
-                }
-                mark_ref_fields_in_expr(&arm.body, decomposed, stores_aliased);
-            }
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            mark_ref_fields_in_expr(scrutinee, decomposed, stores_aliased);
-            for arm in arms {
-                mark_ref_field_locals_as_aliased(arm, decomposed, stores_aliased);
-            }
-            mark_ref_field_locals_as_aliased(default, decomposed, stores_aliased);
-        }
-        NirExprKind::Binary { left, right, .. } => {
-            mark_ref_fields_in_expr(left, decomposed, stores_aliased);
-            mark_ref_fields_in_expr(right, decomposed, stores_aliased);
-        }
-        NirExprKind::Unary { expr: inner, .. }
-        | NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::Cast { expr: inner, .. }
-        | NirExprKind::VariantTag { expr: inner }
-        | NirExprKind::VariantTest { expr: inner, .. }
-        | NirExprKind::VariantPayload { expr: inner, .. }
-        | NirExprKind::ClosureToCanonical { functor: inner, .. } => {
-            mark_ref_fields_in_expr(inner, decomposed, stores_aliased);
-        }
-        NirExprKind::Assign { target, value } => {
-            mark_ref_fields_in_expr(target, decomposed, stores_aliased);
-            mark_ref_fields_in_expr(value, decomposed, stores_aliased);
-        }
-        NirExprKind::Index { expr: inner, index } => {
-            mark_ref_fields_in_expr(inner, decomposed, stores_aliased);
-            mark_ref_fields_in_expr(index, decomposed, stores_aliased);
-        }
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                mark_ref_fields_in_expr(&arg.expr, decomposed, stores_aliased);
-            }
-        }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                mark_ref_fields_in_expr(arg, decomposed, stores_aliased);
-            }
-        }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            mark_ref_fields_in_expr(receiver, decomposed, stores_aliased);
-            for arg in args {
-                mark_ref_fields_in_expr(&arg.expr, decomposed, stores_aliased);
-            }
-        }
-        NirExprKind::IndirectCall { callee, args } => {
-            mark_ref_fields_in_expr(callee, decomposed, stores_aliased);
-            for arg in args {
-                mark_ref_fields_in_expr(arg, decomposed, stores_aliased);
-            }
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                mark_ref_fields_in_expr(&field.value, decomposed, stores_aliased);
-            }
-        }
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            for elem in elements {
-                mark_ref_fields_in_expr(elem, decomposed, stores_aliased);
-            }
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                mark_ref_fields_in_expr(p, decomposed, stores_aliased);
-            }
-        }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            mark_ref_fields_in_expr(value, decomposed, stores_aliased);
-        }
-        // Leaf nodes
-        NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::EnumConstruct { .. } => {}
+        self.walk_stmt(stmt);
     }
 }
 
@@ -425,35 +281,31 @@ struct ReconstructInfo {
 }
 
 /// Collect SROA candidates from `Let` statements binding struct/tuple literals.
-fn collect_candidates(stmts: &[NirStmt], type_table: &TypeTable) -> Vec<SroaCandidate> {
-    let mut candidates = Vec::new();
-    collect_candidates_in_stmts(stmts, type_table, &mut candidates);
-    candidates
-}
-
-fn collect_candidates_in_stmts(
-    stmts: &[NirStmt],
-    type_table: &TypeTable,
-    candidates: &mut Vec<SroaCandidate>,
-) {
+fn collect_candidates(stmts: &[NirStmt]) -> Vec<SroaCandidate> {
+    let mut collector = CandidateCollector {
+        candidates: Vec::new(),
+    };
     for stmt in stmts {
-        collect_candidates_in_stmt(stmt, type_table, candidates);
+        collector.visit_stmt(stmt);
     }
+    collector.candidates
 }
 
-fn collect_candidates_in_stmt(
-    stmt: &NirStmt,
-    type_table: &TypeTable,
-    candidates: &mut Vec<SroaCandidate>,
-) {
-    match &stmt.kind {
-        NirStmtKind::Let {
+/// Records every `Let` that binds a struct or tuple literal as an SROA candidate.
+struct CandidateCollector {
+    candidates: Vec<SroaCandidate>,
+}
+
+impl NirRefVisitor for CandidateCollector {
+    fn visit_stmt(&mut self, stmt: &NirStmt) {
+        if let NirStmtKind::Let {
             name,
             local_index,
             is_mut,
             value,
             ..
-        } => {
+        } = &stmt.kind
+        {
             match &value.kind {
                 NirExprKind::StructLiteral {
                     struct_name,
@@ -464,7 +316,7 @@ fn collect_candidates_in_stmt(
                         .iter()
                         .map(|f| (f.name.clone(), f.value.type_id))
                         .collect();
-                    candidates.push(SroaCandidate {
+                    self.candidates.push(SroaCandidate {
                         local_index: *local_index,
                         local_name: name.clone(),
                         fields: field_info,
@@ -479,7 +331,7 @@ fn collect_candidates_in_stmt(
                         .enumerate()
                         .map(|(i, e)| (i.to_string(), e.type_id))
                         .collect();
-                    candidates.push(SroaCandidate {
+                    self.candidates.push(SroaCandidate {
                         local_index: *local_index,
                         local_name: name.clone(),
                         fields: field_info,
@@ -490,89 +342,9 @@ fn collect_candidates_in_stmt(
                 }
                 _ => {}
             }
-            // Also recurse into the value expression (for nested blocks etc.)
-            collect_candidates_in_expr(value, type_table, candidates);
         }
-        NirStmtKind::Expr(expr) => {
-            collect_candidates_in_expr(expr, type_table, candidates);
-        }
-        NirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                collect_candidates_in_expr(v, type_table, candidates);
-            }
-        }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            collect_candidates_in_expr(condition, type_table, candidates);
-            collect_candidates_in_stmts(&then_block.stmts, type_table, candidates);
-            if let Some(eb) = else_block {
-                collect_candidates_in_stmts(&eb.stmts, type_table, candidates);
-            }
-        }
-        NirStmtKind::Loop { body } => {
-            collect_candidates_in_stmts(&body.stmts, type_table, candidates);
-        }
-        NirStmtKind::LabeledBlock { block, .. } => {
-            collect_candidates_in_stmts(&block.stmts, type_table, candidates);
-        }
-        NirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                collect_candidates_in_expr(v, type_table, candidates);
-            }
-        }
-        NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => {
-            collect_candidates_in_expr(value, type_table, candidates);
-        }
-    }
-}
-
-fn collect_candidates_in_expr(
-    expr: &NirExpr,
-    type_table: &TypeTable,
-    candidates: &mut Vec<SroaCandidate>,
-) {
-    match &expr.kind {
-        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
-            collect_candidates_in_stmts(&block.stmts, type_table, candidates);
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            collect_candidates_in_expr(condition, type_table, candidates);
-            collect_candidates_in_stmts(&then_branch.stmts, type_table, candidates);
-            if let Some(eb) = else_branch {
-                collect_candidates_in_stmts(&eb.stmts, type_table, candidates);
-            }
-        }
-        NirExprKind::Match { expr: inner, arms } => {
-            collect_candidates_in_expr(inner, type_table, candidates);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    collect_candidates_in_expr(guard, type_table, candidates);
-                }
-                collect_candidates_in_expr(&arm.body, type_table, candidates);
-            }
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            collect_candidates_in_expr(scrutinee, type_table, candidates);
-            for arm in arms {
-                collect_candidates_in_stmts(&arm.stmts, type_table, candidates);
-            }
-            collect_candidates_in_stmts(&default.stmts, type_table, candidates);
-        }
-        // Other expression kinds don't contain Let statements
-        _ => {}
+        // Recurse into children (nested blocks, match arms, etc.).
+        self.walk_stmt(stmt);
     }
 }
 
@@ -894,283 +666,122 @@ fn is_candidate_local(expr: &NirExpr, candidates: &IndexSet<u32>) -> Option<u32>
     None
 }
 
-/// Rewrite a block: expand Let statements for candidates and replace field accesses.
-fn rewrite_block(
-    block: &mut NirBlock,
-    safe_set: &IndexSet<u32>,
-    field_map: &IndexMap<(u32, u32), u32>,
-    info_map: &IndexMap<(u32, u32), (String, TypeId)>,
-    candidate_mut: &IndexMap<u32, bool>,
-    reconstruct_info: &IndexMap<u32, ReconstructInfo>,
-) {
-    // Process statements, potentially expanding one statement into multiple.
-    let old_stmts = std::mem::take(&mut block.stmts);
-    let mut new_stmts = Vec::with_capacity(old_stmts.len());
+/// Rewrites field accesses on SROA'd candidates into their per-field scalar
+/// locals, expands each candidate's `Let` into per-field `Let`s, and
+/// re-materializes the aggregate at soft-escape sites.
+struct RewriteVisitor<'a> {
+    safe_set: &'a IndexSet<u32>,
+    field_map: &'a IndexMap<(u32, u32), u32>,
+    info_map: &'a IndexMap<(u32, u32), (String, TypeId)>,
+    candidate_mut: &'a IndexMap<u32, bool>,
+    reconstruct_info: &'a IndexMap<u32, ReconstructInfo>,
+}
 
-    for mut stmt in old_stmts {
-        if let NirStmtKind::Let { local_index, .. } = &stmt.kind
-            && safe_set.contains(local_index)
-        {
-            let local_idx = *local_index;
-            let span = stmt.span;
-            let is_mut = candidate_mut.get(&local_idx).copied().unwrap_or(false);
-
-            // Expand into per-field Let statements
-            match stmt.kind {
-                NirStmtKind::Let { value, .. } => {
-                    expand_struct_let(
-                        value,
-                        local_idx,
+impl RewriteVisitor<'_> {
+    /// Expand a candidate `Let` value (`StructLiteral` / `TupleLiteral`) into one
+    /// per-field `Let`, rewriting each field expression as it goes.
+    fn expand_struct_let(
+        &mut self,
+        value: NirExpr,
+        local_idx: u32,
+        is_mut: bool,
+        span: Span,
+        new_stmts: &mut Vec<NirStmt>,
+    ) {
+        match value.kind {
+            NirExprKind::StructLiteral { fields, .. } => {
+                let mut sorted_fields: Vec<_> = fields.into_iter().collect();
+                sorted_fields.sort_by_key(|f| f.field_index);
+                for mut field in sorted_fields {
+                    self.visit_expr(&mut field.value);
+                    self.push_field_let(
+                        (local_idx, field.field_index),
                         is_mut,
                         span,
-                        safe_set,
-                        field_map,
-                        info_map,
-                        candidate_mut,
-                        reconstruct_info,
-                        &mut new_stmts,
+                        field.value,
+                        new_stmts,
                     );
                 }
-                _ => unreachable!("candidate must be Let statement"),
             }
-            continue;
+            NirExprKind::TupleLiteral { elements, .. } => {
+                for (i, mut elem) in elements.into_iter().enumerate() {
+                    self.visit_expr(&mut elem);
+                    self.push_field_let((local_idx, i as u32), is_mut, span, elem, new_stmts);
+                }
+            }
+            _ => unreachable!("candidate must be struct or tuple literal"),
         }
-
-        // Not a candidate Let — rewrite field accesses in the statement.
-        rewrite_stmt(
-            &mut stmt,
-            safe_set,
-            field_map,
-            info_map,
-            candidate_mut,
-            reconstruct_info,
-        );
-        new_stmts.push(stmt);
     }
 
-    block.stmts = new_stmts;
-}
-
-/// Expand a Let value (`StructLiteral`, `TupleLiteral`, or Move-wrapped) into per-field Lets.
-fn expand_struct_let(
-    value: NirExpr,
-    local_idx: u32,
-    is_mut: bool,
-    span: Span,
-    safe_set: &IndexSet<u32>,
-    field_map: &IndexMap<(u32, u32), u32>,
-    info_map: &IndexMap<(u32, u32), (String, TypeId)>,
-    candidate_mut: &IndexMap<u32, bool>,
-    reconstruct_info: &IndexMap<u32, ReconstructInfo>,
-    new_stmts: &mut Vec<NirStmt>,
-) {
-    match value.kind {
-        NirExprKind::StructLiteral { fields, .. } => {
-            let mut sorted_fields: Vec<_> = fields.into_iter().collect();
-            sorted_fields.sort_by_key(|f| f.field_index);
-            for mut field in sorted_fields {
-                rewrite_expr(
-                    &mut field.value,
-                    safe_set,
-                    field_map,
-                    info_map,
-                    candidate_mut,
-                    reconstruct_info,
-                );
-                let key = (local_idx, field.field_index);
-                let new_local = field_map[&key];
-                let (new_name, field_type) = &info_map[&key];
-                new_stmts.push(NirStmt::new(
-                    NirStmtKind::Let {
-                        name: new_name.clone(),
-                        local_index: new_local,
-                        is_mut,
-                        is_reactive: false,
-                        type_id: *field_type,
-                        value: field.value,
-                        // The original struct/tuple literal was a fresh value, so
-                        // its fields don't need value_copy — the field expressions
-                        // are directly consumed by the fresh construction. Without
-                        // this flag, the WIR builder would insert a deep copy for
-                        // each field, breaking reference sharing semantics.
-                        skip_value_copy: true,
-                    },
-                    span,
-                ));
-            }
-        }
-        NirExprKind::TupleLiteral { elements, .. } => {
-            for (i, mut elem) in elements.into_iter().enumerate() {
-                rewrite_expr(
-                    &mut elem,
-                    safe_set,
-                    field_map,
-                    info_map,
-                    candidate_mut,
-                    reconstruct_info,
-                );
-                let key = (local_idx, i as u32);
-                let new_local = field_map[&key];
-                let (new_name, field_type) = &info_map[&key];
-                new_stmts.push(NirStmt::new(
-                    NirStmtKind::Let {
-                        name: new_name.clone(),
-                        local_index: new_local,
-                        is_mut,
-                        is_reactive: false,
-                        type_id: *field_type,
-                        value: elem,
-                        skip_value_copy: true,
-                    },
-                    span,
-                ));
-            }
-        }
-        _ => unreachable!("candidate must be struct or tuple literal"),
-    }
-}
-
-fn rewrite_stmt(
-    stmt: &mut NirStmt,
-    safe_set: &IndexSet<u32>,
-    field_map: &IndexMap<(u32, u32), u32>,
-    info_map: &IndexMap<(u32, u32), (String, TypeId)>,
-    candidate_mut: &IndexMap<u32, bool>,
-    reconstruct_info: &IndexMap<u32, ReconstructInfo>,
-) {
-    match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } => {
-            rewrite_expr(
+    /// Push one `Let __sroa_..._field = value` for a single decomposed field.
+    fn push_field_let(
+        &self,
+        key: (u32, u32),
+        is_mut: bool,
+        span: Span,
+        value: NirExpr,
+        new_stmts: &mut Vec<NirStmt>,
+    ) {
+        let new_local = self.field_map[&key];
+        let (new_name, field_type) = &self.info_map[&key];
+        new_stmts.push(NirStmt::new(
+            NirStmtKind::Let {
+                name: new_name.clone(),
+                local_index: new_local,
+                is_mut,
+                is_reactive: false,
+                type_id: *field_type,
                 value,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        NirStmtKind::Expr(expr) => {
-            rewrite_expr(
-                expr,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        NirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                rewrite_expr(
-                    v,
-                    safe_set,
-                    field_map,
-                    info_map,
-                    candidate_mut,
-                    reconstruct_info,
-                );
-            }
-        }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            rewrite_expr(
-                condition,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-            rewrite_block(
-                then_block,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-            if let Some(eb) = else_block {
-                rewrite_block(
-                    eb,
-                    safe_set,
-                    field_map,
-                    info_map,
-                    candidate_mut,
-                    reconstruct_info,
-                );
-            }
-        }
-        NirStmtKind::Loop { body } => {
-            rewrite_block(
-                body,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        NirStmtKind::LabeledBlock { block, .. } => {
-            rewrite_block(
-                block,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        NirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                rewrite_expr(
-                    v,
-                    safe_set,
-                    field_map,
-                    info_map,
-                    candidate_mut,
-                    reconstruct_info,
-                );
-            }
-        }
-        NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => {
-            rewrite_expr(
-                value,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
+                // The original struct/tuple literal was a fresh value, so its
+                // fields don't need value_copy — the field expressions are
+                // directly consumed by the fresh construction. Without this
+                // flag, the WIR builder would insert a deep copy for each field,
+                // breaking reference sharing semantics.
+                skip_value_copy: true,
+            },
+            span,
+        ));
     }
 }
 
-/// Rewrite an expression: replace `s.field` with the corresponding scalar local,
-/// and reconstruct struct literals at soft-escape sites.
-fn rewrite_expr(
-    expr: &mut NirExpr,
-    safe_set: &IndexSet<u32>,
-    field_map: &IndexMap<(u32, u32), u32>,
-    info_map: &IndexMap<(u32, u32), (String, TypeId)>,
-    candidate_mut: &IndexMap<u32, bool>,
-    reconstruct_info: &IndexMap<u32, ReconstructInfo>,
-) {
-    // Check for field access on a candidate local: s.field → scalar local
-    if let NirExprKind::FieldAccess {
-        expr: inner,
-        field_index,
-        ..
-    } = &expr.kind
-    {
-        // Direct: candidate.field
-        if let Some(local_idx) = is_candidate_local(inner, safe_set) {
+impl NirMutVisitor for RewriteVisitor<'_> {
+    fn visit_block(&mut self, block: &mut NirBlock) {
+        // Process statements, expanding each candidate `Let` into multiple.
+        let old_stmts = std::mem::take(&mut block.stmts);
+        let mut new_stmts = Vec::with_capacity(old_stmts.len());
+
+        for mut stmt in old_stmts {
+            if let NirStmtKind::Let { local_index, .. } = &stmt.kind
+                && self.safe_set.contains(local_index)
+            {
+                let local_idx = *local_index;
+                let span = stmt.span;
+                let is_mut = self.candidate_mut.get(&local_idx).copied().unwrap_or(false);
+                let NirStmtKind::Let { value, .. } = stmt.kind else {
+                    unreachable!("candidate must be Let statement");
+                };
+                self.expand_struct_let(value, local_idx, is_mut, span, &mut new_stmts);
+                continue;
+            }
+            self.visit_stmt(&mut stmt);
+            new_stmts.push(stmt);
+        }
+
+        block.stmts = new_stmts;
+    }
+
+    fn visit_expr(&mut self, expr: &mut NirExpr) {
+        // Field read: candidate.field -> scalar local
+        if let NirExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } = &expr.kind
+            && let Some(local_idx) = is_candidate_local(inner, self.safe_set)
+        {
             let key = (local_idx, *field_index);
-            if let Some(&new_local) = field_map.get(&key) {
-                let (new_name, _) = &info_map[&key];
+            if let Some(&new_local) = self.field_map.get(&key) {
+                let (new_name, _) = &self.info_map[&key];
                 expr.kind = NirExprKind::Local {
                     index: new_local,
                     name: new_name.clone(),
@@ -1178,392 +789,39 @@ fn rewrite_expr(
                 return;
             }
         }
-    }
 
-    // Check for field write: candidate.field = value → scalar_local = value
-    if let NirExprKind::Assign { target, value } = &mut expr.kind
-        && let NirExprKind::FieldAccess {
-            expr: inner,
-            field_index,
-            ..
-        } = &target.kind
-        && let Some(local_idx) = is_candidate_local(inner, safe_set)
-    {
-        let key = (local_idx, *field_index);
-        if let Some(&new_local) = field_map.get(&key) {
-            let (new_name, _) = &info_map[&key];
-            // Rewrite: Assign { target: FieldAccess, value } → Assign { target: Local, value }
-            target.kind = NirExprKind::Local {
-                index: new_local,
-                name: new_name.clone(),
-            };
-            rewrite_expr(
-                value,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
+        // Field write: candidate.field = value -> scalar_local = value
+        if let NirExprKind::Assign { target, value } = &mut expr.kind
+            && let NirExprKind::FieldAccess {
+                expr: inner,
+                field_index,
+                ..
+            } = &target.kind
+            && let Some(local_idx) = is_candidate_local(inner, self.safe_set)
+        {
+            let key = (local_idx, *field_index);
+            if let Some(&new_local) = self.field_map.get(&key) {
+                let (new_name, _) = &self.info_map[&key];
+                target.kind = NirExprKind::Local {
+                    index: new_local,
+                    name: new_name.clone(),
+                };
+                self.visit_expr(value);
+                return;
+            }
+        }
+
+        // Reconstruct: bare Local of a soft-escape candidate -> re-materialize
+        if let NirExprKind::Local { index, .. } = &expr.kind
+            && let Some(info) = self.reconstruct_info.get(index)
+        {
+            let idx = *index;
+            let span = expr.span;
+            reconstruct_aggregate(expr, idx, info, self.field_map, self.info_map, span);
             return;
         }
-    }
 
-    // Reconstruct: bare Local reference to a soft-escape candidate → re-materialize struct/tuple
-    if let NirExprKind::Local { index, .. } = &expr.kind
-        && let Some(info) = reconstruct_info.get(index)
-    {
-        let idx = *index;
-        let span = expr.span;
-        reconstruct_aggregate(expr, idx, info, field_map, info_map, span);
-        return;
-    }
-
-    // Recurse into child expressions
-    match &mut expr.kind {
-        NirExprKind::FieldAccess { expr: inner, .. } => {
-            rewrite_expr(
-                inner,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        NirExprKind::Assign { target, value } => {
-            rewrite_expr(
-                target,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-            rewrite_expr(
-                value,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        NirExprKind::Binary { left, right, .. } => {
-            rewrite_expr(
-                left,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-            rewrite_expr(
-                right,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        NirExprKind::Unary { expr: inner, .. } => {
-            rewrite_expr(
-                inner,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        NirExprKind::Cast { expr: inner, .. } => {
-            rewrite_expr(
-                inner,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                rewrite_expr(
-                    &mut arg.expr,
-                    safe_set,
-                    field_map,
-                    info_map,
-                    candidate_mut,
-                    reconstruct_info,
-                );
-            }
-        }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                rewrite_expr(
-                    arg,
-                    safe_set,
-                    field_map,
-                    info_map,
-                    candidate_mut,
-                    reconstruct_info,
-                );
-            }
-        }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            rewrite_expr(
-                receiver,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-            for arg in args {
-                rewrite_expr(
-                    &mut arg.expr,
-                    safe_set,
-                    field_map,
-                    info_map,
-                    candidate_mut,
-                    reconstruct_info,
-                );
-            }
-        }
-        NirExprKind::IndirectCall { callee, args, .. } => {
-            rewrite_expr(
-                callee,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-            for arg in args {
-                rewrite_expr(
-                    arg,
-                    safe_set,
-                    field_map,
-                    info_map,
-                    candidate_mut,
-                    reconstruct_info,
-                );
-            }
-        }
-        NirExprKind::ClosureToCanonical { functor, .. } => {
-            rewrite_expr(
-                functor,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        NirExprKind::Index {
-            expr: inner, index, ..
-        } => {
-            rewrite_expr(
-                inner,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-            rewrite_expr(
-                index,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
-            rewrite_block(
-                block,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            rewrite_expr(
-                condition,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-            rewrite_block(
-                then_branch,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-            if let Some(eb) = else_branch {
-                rewrite_block(
-                    eb,
-                    safe_set,
-                    field_map,
-                    info_map,
-                    candidate_mut,
-                    reconstruct_info,
-                );
-            }
-        }
-        NirExprKind::Match { expr: inner, arms } => {
-            rewrite_expr(
-                inner,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-            for arm in arms {
-                if let Some(guard) = &mut arm.guard {
-                    rewrite_expr(
-                        guard,
-                        safe_set,
-                        field_map,
-                        info_map,
-                        candidate_mut,
-                        reconstruct_info,
-                    );
-                }
-                rewrite_expr(
-                    &mut arm.body,
-                    safe_set,
-                    field_map,
-                    info_map,
-                    candidate_mut,
-                    reconstruct_info,
-                );
-            }
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                rewrite_expr(
-                    &mut field.value,
-                    safe_set,
-                    field_map,
-                    info_map,
-                    candidate_mut,
-                    reconstruct_info,
-                );
-            }
-        }
-        NirExprKind::TupleLiteral { elements, .. } | NirExprKind::ArrayLiteral { elements, .. } => {
-            for elem in elements {
-                rewrite_expr(
-                    elem,
-                    safe_set,
-                    field_map,
-                    info_map,
-                    candidate_mut,
-                    reconstruct_info,
-                );
-            }
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                rewrite_expr(
-                    p,
-                    safe_set,
-                    field_map,
-                    info_map,
-                    candidate_mut,
-                    reconstruct_info,
-                );
-            }
-        }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            rewrite_expr(
-                value,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        NirExprKind::VariantTag { expr } | NirExprKind::VariantTest { expr, .. } => {
-            rewrite_expr(
-                expr,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        NirExprKind::VariantPayload { expr, .. } => {
-            rewrite_expr(
-                expr,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            rewrite_expr(
-                scrutinee,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-            for arm in arms {
-                rewrite_block(
-                    arm,
-                    safe_set,
-                    field_map,
-                    info_map,
-                    candidate_mut,
-                    reconstruct_info,
-                );
-            }
-            rewrite_block(
-                default,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        // Leaf nodes — nothing to rewrite
-        NirExprKind::Local { .. }
-        | NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
+        self.walk_expr(expr);
     }
 }
 
