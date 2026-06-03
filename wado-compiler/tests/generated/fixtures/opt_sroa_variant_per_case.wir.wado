@@ -172,7 +172,7 @@ fn "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado/use_err_branch"(
         return msg;
     } else {
     }
-    return struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 };
+    return struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 };
 }
 
 fn "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado/run"() {
@@ -279,7 +279,7 @@ condition: use_err_branch(-1) == \"negative\"
         unreachable;
     }
     __v0_14 = "wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado/use_err_branch"(5);
-    __cond_15 = "core:prelude/string.wado/String^Eq::eq"(__v0_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 });
+    __cond_15 = "core:prelude/string.wado/String^Eq::eq"(__v0_14, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
     if __cond_15 == 0 {
         "core:internal/panic"(__local_30 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(147), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_30, 114); "core:prelude/string.wado/String::push"(__local_30, 117); "core:prelude/string.wado/String::push"(__local_30, 110); "core:prelude/string.wado/String::push"(__local_30, 32); "core:prelude/string.wado/String::push"(__local_30, 97); "core:prelude/string.wado/String::push"(__local_30, 116); "core:prelude/string.wado/String::push"(__local_30, 32); "core:prelude/string.wado/String::push_str"(__local_30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_sroa_variant_per_case.wado"), used: 59 }); "core:prelude/string.wado/String::push"(__local_30, 58); __local_31 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_30 }; f_109 = __local_31; "core:prelude/primitive.wado/i32::fmt_decimal"(76, f_109); "core:prelude/string.wado/String::push_str"(__local_30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: use_err_branch(5) == \"ok\"
@@ -601,9 +601,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
@@ -726,7 +726,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
     if truncated {
-        s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("..."), used: 3 };
+        s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
         "core:prelude/string.wado/String::push_str"(f.buf, s);
     }
 }

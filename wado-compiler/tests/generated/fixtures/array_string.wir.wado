@@ -102,7 +102,7 @@ fn "wado-compiler/tests/fixtures/array_string.wado/join_names"(names) {
 fn "wado-compiler/tests/fixtures/array_string.wado/array_string"() with Stdout {
     let __b: ref "core:prelude//List<core:prelude/string.wado/String>";
     let __local_2: ref "core:prelude/string.wado//String";
-    __b = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Bob"), used: 3 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Charlie"), used: 7 }), used: 3 };
+    __b = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 111, 98), used: 3 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Charlie"), used: 7 }), used: 3 };
     "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_2, if builtin::unlikely(0 >= __b.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -139,7 +139,7 @@ fn "wado-compiler/tests/fixtures/array_string.wado/__cm_export__run"() {
     let result: ref "core:prelude/string.wado//String";
     "wado-compiler/tests/fixtures/array_string.wado/array_string"();
     "wado-compiler/tests/fixtures/array_string.wado/array_string_cast"();
-    result = "wado-compiler/tests/fixtures/array_string.wado/join_names"(__b_2 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Bob"), used: 3 }), used: 2 }; __b_2);
+    result = "wado-compiler/tests/fixtures/array_string.wado/join_names"(__b_2 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 111, 98), used: 3 }), used: 2 }; __b_2);
     "core:cli/println"(result);
     "wasi/task-return"(0);
 }

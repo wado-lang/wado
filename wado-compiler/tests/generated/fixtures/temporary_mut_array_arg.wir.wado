@@ -151,7 +151,7 @@ fn "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/__cm_binding__Stdo
 fn "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/__cm_export__run"() {
     let __b_1: ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
     let result: ref "core:prelude/string.wado//String";
-    result = "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/helper"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("foo"), used: 3 }, __b_1 = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>" { repr: builtin::array_new<ref "tuple//[String, i32]">(0), used: 0 }; __b_1);
+    result = "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/helper"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 111, 111), used: 3 }, __b_1 = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>" { repr: builtin::array_new<ref "tuple//[String, i32]">(0), used: 0 }; __b_1);
     "core:cli/println"(result);
     "wasi/task-return"(0);
 }
@@ -419,9 +419,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

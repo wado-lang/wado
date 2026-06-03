@@ -132,20 +132,20 @@ fn "wado-compiler/tests/fixtures/opt_hfs_immut_ref_sync.wado/run"() {
     let f_35: ref "core:prelude/format.wado//Formatter";
     let f_41: ref "core:prelude/format.wado//Formatter";
     let f_46: ref "core:prelude/format.wado//Formatter";
-    let __hfs_x_49: i32;
+    let __hfs_x_55: i32;
     c = struct.new "wado-compiler/tests/fixtures/opt_hfs_immut_ref_sync.wado//Counter" { x: 0, y: 0 };
     total = 0;
     i = 0;
-    __hfs_x_49 = c.x;
+    __hfs_x_55 = c.x;
     b0: block {
         l1: loop {
             if i >= 5 {
                 break b0;
             }
-            __hfs_x_49 = __hfs_x_49 + 1;
-            total = total + __hfs_x_49;
-            total = total + __hfs_x_49;
-            c.x = __hfs_x_49;
+            __hfs_x_55 = __hfs_x_55 + 1;
+            total = total + __hfs_x_55;
+            total = total + __hfs_x_55;
+            c.x = __hfs_x_55;
             total = total + "wado-compiler/tests/fixtures/opt_hfs_immut_ref_sync.wado/read_x"(c);
             "wado-compiler/tests/fixtures/opt_hfs_immut_ref_sync.wado/bump_y"(c);
             i = i + 1;
@@ -424,9 +424,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

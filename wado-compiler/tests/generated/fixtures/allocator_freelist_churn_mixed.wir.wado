@@ -142,14 +142,34 @@ fn "wado-compiler/tests/fixtures/allocator_freelist_churn_mixed.wado/run"() with
     let f_76: ref "core:prelude/format.wado//Formatter";
     let f_81: ref "core:prelude/format.wado//Formatter";
     let f_86: ref "core:prelude/format.wado//Formatter";
+<<<<<<< HEAD
     let _licm_used_89: i32;
     let _licm_used_90: i32;
     let _licm_repr_91: ref Array<i32>;
     let _licm_repr_92: ref Array<i32>;
     let _licm_repr_93: ref Array<i32>;
+||||||| 8daad84c
+    let _licm_used_89: i32;
+    let _licm_used_90: i32;
+    let _licm_repr_91: ref builtin::array<i32>;
+    let _licm_repr_92: ref builtin::array<i32>;
+    let _licm_repr_93: ref builtin::array<i32>;
+=======
+>>>>>>> origin/main
     let _licm_used_94: i32;
     let _licm_used_95: i32;
+<<<<<<< HEAD
     let _licm_repr_96: ref Array<i32>;
+||||||| 8daad84c
+    let _licm_repr_96: ref builtin::array<i32>;
+=======
+    let _licm_repr_96: ref builtin::array<i32>;
+    let _licm_repr_97: ref builtin::array<i32>;
+    let _licm_repr_98: ref builtin::array<i32>;
+    let _licm_used_99: i32;
+    let _licm_used_100: i32;
+    let _licm_repr_101: ref builtin::array<i32>;
+>>>>>>> origin/main
     __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(24, 200, 56, 512, 8, 96, 312, 40), used: 8 };
     __b_2 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     __iter_4 = struct.new "core:prelude/list.wado//ListIter<i32>" { repr: __b_0.repr, used: 8, index: 0 };
@@ -167,19 +187,19 @@ fn "wado-compiler/tests/fixtures/allocator_freelist_churn_mixed.wado/run"() with
         };
     };
     i_6 = 0;
-    _licm_used_89 = 8;
-    _licm_used_90 = __b_2.used;
-    _licm_repr_91 = __b_2.repr;
-    _licm_repr_92 = __b_0.repr;
+    _licm_used_94 = 8;
+    _licm_used_95 = __b_2.used;
+    _licm_repr_96 = __b_2.repr;
+    _licm_repr_97 = __b_0.repr;
     b3: block {
         l4: loop {
-            if i_6 >= _licm_used_89 {
+            if i_6 >= _licm_used_94 {
                 break b3;
             }
-            drop("mem/realloc"(if builtin::unlikely(i_6 >= _licm_used_90) {
+            drop("mem/realloc"(if builtin::unlikely(i_6 >= _licm_used_95) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
-            }; builtin::array_get<i32>(_licm_repr_91, i_6), builtin::array_get<i32>(_licm_repr_92, i_6), 8, 0));
+            }; builtin::array_get<i32>(_licm_repr_96, i_6), builtin::array_get<i32>(_licm_repr_97, i_6), 8, 0));
             i_6 = i_6 + 1;
             continue l4;
         };
@@ -187,15 +207,15 @@ fn "wado-compiler/tests/fixtures/allocator_freelist_churn_mixed.wado/run"() with
     before = "mem/realloc"(0, 0, 8, 1024);
     drop("mem/realloc"(before, 1024, 8, 0));
     i_8 = 0;
-    _licm_repr_93 = __b_0.repr;
-    _licm_used_94 = 8;
+    _licm_repr_98 = __b_0.repr;
+    _licm_used_99 = 8;
     b7: block {
         l8: loop {
             if i_8 >= 1000 {
                 break b7;
             }
             __b_9 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-            __iter_11 = struct.new "core:prelude/list.wado//ListIter<i32>" { repr: _licm_repr_93, used: _licm_used_94, index: 0 };
+            __iter_11 = struct.new "core:prelude/list.wado//ListIter<i32>" { repr: _licm_repr_98, used: _licm_used_99, index: 0 };
             b10: block {
                 l11: loop {
                     let __sroa___match_23_discriminant: i32;
@@ -210,20 +230,20 @@ fn "wado-compiler/tests/fixtures/allocator_freelist_churn_mixed.wado/run"() with
                 };
             };
             k = __b_9.used - 1;
-            _licm_used_95 = __b_9.used;
-            _licm_repr_96 = __b_9.repr;
+            _licm_used_100 = __b_9.used;
+            _licm_repr_101 = __b_9.repr;
             b13: block {
                 l14: loop {
                     if k < 0 {
                         break b13;
                     }
-                    drop("mem/realloc"(if builtin::unlikely(k >= _licm_used_95) {
+                    drop("mem/realloc"(if builtin::unlikely(k >= _licm_used_100) {
                         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
-                    }; builtin::array_get<i32>(_licm_repr_96, k), if builtin::unlikely(k >= _licm_used_94) {
+                    }; builtin::array_get<i32>(_licm_repr_101, k), if builtin::unlikely(k >= _licm_used_99) {
                         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
-                    }; builtin::array_get<i32>(_licm_repr_93, k), 8, 0));
+                    }; builtin::array_get<i32>(_licm_repr_98, k), 8, 0));
                     k = k - 1;
                     continue l14;
                 };
@@ -241,7 +261,7 @@ condition: after == before
         unreachable;
     }
     drop("mem/realloc"(after, 1024, 8, 0));
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ok"), used: 2 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
 }
 
 fn "wado-compiler/tests/fixtures/allocator_freelist_churn_mixed.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -523,9 +543,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

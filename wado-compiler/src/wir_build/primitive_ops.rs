@@ -76,7 +76,8 @@ impl PrimitiveKind {
 impl FunctionTranslator<'_, '_> {
     /// Translate a string literal to WIR instructions.
     ///
-    /// Creates a String struct from a passive data segment:
+    /// Short strings use a constant `array.new_fixed<u8>` repr; longer strings
+    /// use a passive `array.new_data` data segment:
     ///   `array.new_data` $`u8_array`, $`data_idx` (offset=0, len=bytes)
     ///   struct.new $String (repr=array, used=len)
     pub(super) fn translate_string_literal(&self, s: &str) -> WirInstr {
@@ -94,6 +95,8 @@ impl FunctionTranslator<'_, '_> {
             panic!("[WIR] String literal: u8 array or String struct type not registered");
         };
 
+        let len_i32 = i32::try_from(byte_len).unwrap_or(0);
+
         if byte_len == 0 {
             // Empty string: array.new_default + struct.new
             self.struct_new(
@@ -106,11 +109,30 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::I32Const(0),
                 ],
             )
+        } else if byte_len <= self.ctx.package.string_inline_max_bytes {
+            // Short string: materialize the bytes with `array.new_fixed<u8>`, a
+            // valid Wasm *constant* instruction. This lets a constant string
+            // global be promoted to an eager Wasm constant by
+            // `wir_optimize::const_global` (the data-segment form below is not a
+            // constant instruction, so longer strings stay lazy). `u8` elements
+            // are carried as `I32Const`, like every other `u8` array literal.
+            let elements = s
+                .bytes()
+                .map(|b| WirInstr::I32Const(i32::from(b)))
+                .collect();
+            self.struct_new(
+                string_type_id,
+                vec![
+                    WirInstr::ArrayNewFixed {
+                        type_id: array_type_id,
+                        elements,
+                    },
+                    WirInstr::I32Const(len_i32),
+                ],
+            )
         } else {
-            // Non-empty string: look up data segment
+            // Longer string: passive data segment (compact, but not constant).
             let data_index = self.ctx.string_literal_map.get(s).copied().unwrap_or(0);
-            let len_i32 = i32::try_from(byte_len).unwrap_or(0);
-
             self.struct_new(
                 string_type_id,
                 vec![

@@ -469,7 +469,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
     let __local_24: ref "core:prelude/string.wado//String";
     let __local_25: ref "core:prelude/format.wado//Formatter";
     let __block_v_26: ref null "wasi:filesystem/types.wado//ErrorCode";
-    let self_82: i32;
+    let __sroa_self_value_92: i32;
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
@@ -554,7 +554,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/run"() with Stdou
         }) {
             "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncated content is ABCDE (correct)"), used: 46 });
         } else {
-            "core:cli/eprintln"(__local_22 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(60), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncated content unexpected, len="), used: 44 }); __local_23 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_22 }; self_82 = content.used; "core:prelude/primitive.wado/i32::fmt_decimal"(self_82, __local_23); __local_22);
+            "core:cli/eprintln"(__local_22 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(60), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("set_size: truncated content unexpected, len="), used: 44 }); __local_23 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_22 }; __sroa_self_value_92 = content.used; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_92, __local_23); __local_22);
         }
         extend_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/__cm_binding__Descriptor_set_size"(file, 8_i64));
         if ref.is_null(extend_result) {
@@ -1628,9 +1628,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
