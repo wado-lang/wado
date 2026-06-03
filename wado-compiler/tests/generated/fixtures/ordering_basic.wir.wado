@@ -125,9 +125,9 @@ fn "wado-compiler/tests/fixtures/ordering_basic.wado/run"() with Stdout {
     if "core:prelude/list.wado/List<i32>^Eq::eq"(__b_3, __b_7) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 == arr3"), used: 12 });
     }
-    s1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
-    s2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 };
-    s3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
+    s1 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 112, 112, 108, 101), used: 5 };
+    s2 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 97, 110, 97, 110, 97), used: 6 };
+    s3 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 112, 112, 108, 101), used: 5 };
     if "core:prelude/string.wado/String^Ord::cmp"(s1, s2) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple < banana"), used: 14 });
     }

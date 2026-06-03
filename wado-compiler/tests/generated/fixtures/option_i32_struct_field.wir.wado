@@ -120,7 +120,7 @@ fn "wado-compiler/tests/fixtures/option_i32_struct_field.wado/run"() with Stdout
         drop(ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_7).payload_0);
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("should not print"), used: 16 });
     } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no width"), used: 8 });
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 119, 105, 100, 116, 104), used: 8 });
     }
 }
 
@@ -369,9 +369,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

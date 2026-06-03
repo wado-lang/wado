@@ -261,9 +261,9 @@ fn "wado-compiler/tests/fixtures/match_variant_2.wado/match_variant_loop"() with
     left = struct.new "wado-compiler/tests/fixtures/match_variant_2.wado//FormatSpec" { align: struct.new "wado-compiler/tests/fixtures/match_variant_2.wado//Align" { 0 }, width: 10, fill: 42 };
     center = struct.new "wado-compiler/tests/fixtures/match_variant_2.wado//FormatSpec" { align: struct.new "wado-compiler/tests/fixtures/match_variant_2.wado//Align" { 1 }, width: 10, fill: 42 };
     right = struct.new "wado-compiler/tests/fixtures/match_variant_2.wado//FormatSpec" { align: struct.new "wado-compiler/tests/fixtures/match_variant_2.wado//Align" { 2 }, width: 10, fill: 42 };
-    "core:cli/println"("wado-compiler/tests/fixtures/match_variant_2.wado/apply_padding"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test"), used: 4 }, left));
-    "core:cli/println"("wado-compiler/tests/fixtures/match_variant_2.wado/apply_padding"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test"), used: 4 }, center));
-    "core:cli/println"("wado-compiler/tests/fixtures/match_variant_2.wado/apply_padding"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test"), used: 4 }, right));
+    "core:cli/println"("wado-compiler/tests/fixtures/match_variant_2.wado/apply_padding"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116), used: 4 }, left));
+    "core:cli/println"("wado-compiler/tests/fixtures/match_variant_2.wado/apply_padding"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116), used: 4 }, center));
+    "core:cli/println"("wado-compiler/tests/fixtures/match_variant_2.wado/apply_padding"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116), used: 4 }, right));
 }
 
 fn "wado-compiler/tests/fixtures/match_variant_2.wado/match_variant_simple"() with Stdout {
@@ -318,13 +318,13 @@ fn "wado-compiler/tests/fixtures/match_variant_2.wado/__cm_export__run"() {
     "wado-compiler/tests/fixtures/match_variant_2.wado/match_variant_loop"();
     dir = struct.new "wado-compiler/tests/fixtures/match_variant_2.wado//Direction" { 1 };
     if dir.discriminant == 0 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("go left"), used: 7 });
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(103, 111, 32, 108, 101, 102, 116), used: 7 });
     } else if dir.discriminant == 1 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("go center"), used: 9 });
     } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("go right"), used: 8 });
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(103, 111, 32, 114, 105, 103, 104, 116), used: 8 });
     }
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("done"), used: 4 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 });
     "wado-compiler/tests/fixtures/match_variant_2.wado/match_variant_simple"();
     "wasi/task-return"(0);
 }
@@ -1165,13 +1165,13 @@ fn "core:prelude/primitive.wado/fmt_float_special"(f, is_neg, kind, zero_repr) {
         "core:prelude/string.wado/String::push"(f.buf, 78);
     } else if kind == 2 {
         "core:prelude/string.wado/String::push_str"(f.buf, (if is_neg -> ref "core:prelude/string.wado//String" {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-inf"), used: 4 };
+            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45, 105, 110, 102), used: 4 };
         } else {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("inf"), used: 3 };
+            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 102), used: 3 };
         }));
     } else {
         "core:prelude/string.wado/String::push_str"(f.buf, (if is_neg -> ref "core:prelude/string.wado//String" {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
         }));
@@ -1200,7 +1200,7 @@ fn "core:prelude/primitive.wado/f64::fmt_into"(self, f) {
     let __pattern_temp_0_mv_2: "core:prelude/fpfmt.wado//enum:SpecialKind";
     multivalue_bind [__pattern_temp_0_mv_0, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2] = "core:prelude/fpfmt.wado/check_special"(self);
     if __pattern_temp_0_mv_0 {
-        "core:prelude/primitive.wado/fmt_float_special"(f, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("0"), used: 1 });
+        "core:prelude/primitive.wado/fmt_float_special"(f, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48), used: 1 });
         return;
     }
     abs_f = select f64(__pattern_temp_0_mv_1, builtin::f64_neg(self), self);
@@ -1244,7 +1244,7 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
         } else {
             __pattern_temp_0_mv_2 == 2;
         }) {
-            "core:prelude/primitive.wado/fmt_float_special"(f, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("0"), used: 1 });
+            "core:prelude/primitive.wado/fmt_float_special"(f, __pattern_temp_0_mv_1, __pattern_temp_0_mv_2, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48), used: 1 });
             return;
         }
         self_16 = f.buf;

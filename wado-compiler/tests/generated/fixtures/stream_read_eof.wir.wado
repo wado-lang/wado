@@ -141,7 +141,7 @@ condition: result.len() == 0
         unreachable;
     }
     "wasi/stream-drop-readable"(__mv_lo_1);
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("eof ok"), used: 6 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101, 111, 102, 32, 111, 107), used: 6 });
 }
 
 fn "wado-compiler/tests/fixtures/stream_read_eof.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -457,9 +457,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

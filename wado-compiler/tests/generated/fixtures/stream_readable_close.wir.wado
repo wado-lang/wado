@@ -73,7 +73,7 @@ fn "wado-compiler/tests/fixtures/stream_readable_close.wado/run"() with Stdout {
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
     "wasi/stream-drop-readable"(__mv_lo_1);
     "wasi/stream-drop-writable"(__mv_hi_1);
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("close ok"), used: 8 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 108, 111, 115, 101, 32, 111, 107), used: 8 });
 }
 
 fn "wado-compiler/tests/fixtures/stream_readable_close.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

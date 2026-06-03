@@ -159,10 +159,10 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/trait_bound_result_eq"() wit
     let d: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
     a = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: 42 };
     b = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: 42 };
-    c = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fail"), used: 4 } };
-    d = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fail"), used: 4 } };
+    c = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 97, 105, 108), used: 4 } };
+    d = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 97, 105, 108), used: 4 } };
     if "core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(struct.new "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>" { value: a }, struct.new "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>" { value: b }) {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Ok == Ok"), used: 8 });
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 107, 32, 61, 61, 32, 79, 107), used: 8 });
     }
     if "core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(struct.new "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>" { value: a }, struct.new "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>" { value: c }) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Ok != Err"), used: 9 });
@@ -489,9 +489,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

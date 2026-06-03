@@ -171,7 +171,7 @@ fn "wado-compiler/tests/fixtures/match_nested_guard_variant_in_tuple.wado/run"()
         "core:prelude/primitive.wado/i32::fmt_decimal"(b_4, __local_9);
         __local_8;
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 116, 104, 101, 114), used: 5 };
     });
     "core:cli/println"(desc);
 }
@@ -421,9 +421,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

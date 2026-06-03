@@ -156,7 +156,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/trait_default.wado/trait_default_calls_default"() with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
     let __sroa_item_name: ref "core:prelude/string.wado//String";
-    __sroa_item_name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Widget"), used: 6 };
+    __sroa_item_name = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(87, 105, 100, 103, 101, 116), used: 6 };
     "core:cli/println"(__sroa_item_name);
     "core:cli/println"("wado-compiler/tests/fixtures/trait_default.wado/Item^Describable::short_desc"(struct.new "wado-compiler/tests/fixtures/trait_default.wado//Item" { name: __sroa_item_name }));
     "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Description: "), used: 13 }); "core:prelude/string.wado/String::push_str"(__local_1, "wado-compiler/tests/fixtures/trait_default.wado/Item^Describable::short_desc"(struct.new "wado-compiler/tests/fixtures/trait_default.wado//Item" { name: __sroa_item_name })); __local_1);
@@ -198,7 +198,7 @@ fn "wado-compiler/tests/fixtures/trait_default.wado/__cm_export__run"() {
     let r: ref "wado-compiler/tests/fixtures/trait_default.wado//Robot";
     let a: ref "wado-compiler/tests/fixtures/trait_default.wado//Article";
     let t: ref "wado-compiler/tests/fixtures/trait_default.wado//Tweet";
-    p = struct.new "wado-compiler/tests/fixtures/trait_default.wado//Person" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 } };
+    p = struct.new "wado-compiler/tests/fixtures/trait_default.wado//Person" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 108, 105, 99, 101), used: 5 } };
     "core:cli/println"("wado-compiler/tests/fixtures/trait_default.wado/Person^Greet::greet"(p));
     r = struct.new "wado-compiler/tests/fixtures/trait_default.wado//Robot" { id: 42 };
     "core:cli/println"("wado-compiler/tests/fixtures/trait_default.wado/Robot^Greet::greet"(r));
@@ -479,9 +479,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

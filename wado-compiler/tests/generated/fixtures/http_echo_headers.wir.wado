@@ -490,10 +490,10 @@ fn "wado-compiler/tests/fixtures/http_echo_headers.wado/handle"(request) {
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
     resp_headers = "wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_new"();
-    if "wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_has"(req_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-echo"), used: 6 }) {
-        values = "wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_get"(req_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-echo"), used: 6 });
+    if "wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_has"(req_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 45, 101, 99, 104, 111), used: 6 }) {
+        values = "wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_get"(req_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 45, 101, 99, 104, 111), used: 6 });
         if values.used > 0 {
-            drop("wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_append"(resp_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-echoed"), used: 8 }, if builtin::unlikely(0 >= values.used) {
+            drop("wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_append"(resp_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 45, 101, 99, 104, 111, 101, 100), used: 8 }, if builtin::unlikely(0 >= values.used) {
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<ref "core:prelude//List<u8>">(values.repr, 0)));

@@ -40,8 +40,15 @@ Wasm constant instructions. Codegen's `push_const_instrs` emits exactly this set
 and mirrors the predicate; a node reaching the emitter that fails the predicate is
 an ICE, not a silent `i32.const 0`.
 
-This corrects the original premise: a `String`'s `array.new_data<u8>` repr cannot
-be an eager const global, so string globals stay lazy.
+This shapes how strings are materialized: a `String`'s `array.new_data<u8>` repr
+is not const-expressible, so a string built that way cannot be an eager const
+global. `translate_string_literal` therefore gives a **short** string (≤
+`STRING_INLINE_MAX_BYTES`, currently 8 UTF-8 bytes) a constant `array.new_fixed<u8>`
+repr instead — one `i32.const` per byte — so a short constant string global _does_
+promote to eager. Longer strings keep the compact data-segment repr and stay lazy
+(each byte as an `array.new_fixed` operand would bloat code unboundedly). The
+threshold also skips registering a passive data segment for short strings, since
+the inline repr does not read one.
 
 ### One classifier — `wir_optimize::const_global`
 
@@ -160,7 +167,9 @@ prime beneficiary is a constant `List` / `Array` indexed dynamically in a loop
 - The const predicate lives once (`WirInstr::is_const_expressible`), codegen
   mirrors it, and the scalar-only NIR promotion plus its duplicate predicate are
   gone.
-- String globals stay lazy (data-segment repr is not const-expressible).
+- Short string globals (≤ `STRING_INLINE_MAX_BYTES`, currently 8 bytes) are eager
+  via a constant `array.new_fixed<u8>` repr; longer string globals stay lazy
+  (compact `array.new_data` data-segment repr is not const-expressible).
 - Known limitation: a derived scalar global (`global B = A + 10`) is still
   promoted to an eager const, but its _reads_ no longer fold at use sites the way
   the in-loop NIR pass enabled — `niri`'s `GlobalEnv` keys on Wasm-mutability
@@ -187,7 +196,12 @@ Landed:
       is unblocked by builtin-array Phase 1. E2E fixture
       `const_object_globalization` (loop-indexed `List` globalized; mutated array
       and returned/escaping bindings left alone).
-- [x] E2E fixtures: `const_global_object` (struct/array eager, string lazy),
+- [x] Short string globals eager: `translate_string_literal` gives a string of
+      ≤ `STRING_INLINE_MAX_BYTES` (8) bytes a constant `array.new_fixed<u8>` repr
+      (skipping its data segment); longer strings keep `array.new_data` and stay
+      lazy.
+- [x] E2E fixtures: `const_global_object` (struct/array/short-string eager,
+      long-string lazy),
       `const_global_entry` (inlined-init promotion).
 
 Deferred:

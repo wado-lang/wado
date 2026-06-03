@@ -153,7 +153,7 @@ fn "wado-compiler/tests/fixtures/loop_nested.wado/loop_nested_deep"() with Stdou
             continue l1;
         };
     };
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("done"), used: 4 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 });
 }
 
 fn "wado-compiler/tests/fixtures/loop_nested.wado/loop_nested_loop"() with Stdout {
@@ -186,7 +186,7 @@ fn "wado-compiler/tests/fixtures/loop_nested.wado/loop_nested_loop"() with Stdou
             continue l13;
         };
     };
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("done"), used: 4 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 });
 }
 
 fn "wado-compiler/tests/fixtures/loop_nested.wado/loop_nested_mixed"() with Stdout {
@@ -240,7 +240,7 @@ fn "wado-compiler/tests/fixtures/loop_nested.wado/loop_nested_mixed"() with Stdo
             continue l19;
         };
     };
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("done"), used: 4 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 });
 }
 
 fn "wado-compiler/tests/fixtures/loop_nested.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -490,9 +490,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

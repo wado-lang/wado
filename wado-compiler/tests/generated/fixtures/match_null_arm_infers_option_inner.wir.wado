@@ -122,7 +122,7 @@ fn "wado-compiler/tests/fixtures/match_null_arm_infers_option_inner.wado/__test_
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/format.wado//Formatter";
     let __match_scrut_0: ref null "core:prelude/string.wado//String";
-    __match_scrut_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+    __match_scrut_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
     some_value = (if ref.is_null(__match_scrut_0) == 0 -> ref null "core:prelude/string.wado//String" {
         s_0 = ref.as_non_null(__match_scrut_0);
         s_0;
@@ -131,7 +131,7 @@ fn "wado-compiler/tests/fixtures/match_null_arm_infers_option_inner.wado/__test_
     });
     __cond_3 = (if ref.is_null(some_value) == 0 -> bool {
         v = ref.as_non_null(some_value);
-        "core:prelude/string.wado/String^Eq::eq"(v, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
+        "core:prelude/string.wado/String^Eq::eq"(v, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 });
     } else {
         0;
     });
@@ -523,9 +523,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;

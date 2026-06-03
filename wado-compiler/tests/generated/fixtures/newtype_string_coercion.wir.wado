@@ -95,7 +95,7 @@ fn "wado-compiler/tests/fixtures/newtype_string_coercion.wado/greet"(name) {
     let __local_1: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/format.wado//Formatter";
     let s: ref "core:prelude/string.wado//String";
-    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }, "core:prelude/string.wado/String::push"(__local_1, 72), "core:prelude/string.wado/String::push"(__local_1, 101), "core:prelude/string.wado/String::push"(__local_1, 108), "core:prelude/string.wado/String::push"(__local_1, 108), "core:prelude/string.wado/String::push"(__local_1, 111), "core:prelude/string.wado/String::push"(__local_1, 44), "core:prelude/string.wado/String::push"(__local_1, 32), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, "core:prelude/format.wado/String^Inspect::inspect"(name, __local_2), s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" as Name"), used: 8 }, "core:prelude/string.wado/String::push_str"(__local_2.buf, s), "core:prelude/string.wado/String::push"(__local_1, 33), __local_1;
+    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }, "core:prelude/string.wado/String::push"(__local_1, 72), "core:prelude/string.wado/String::push"(__local_1, 101), "core:prelude/string.wado/String::push"(__local_1, 108), "core:prelude/string.wado/String::push"(__local_1, 108), "core:prelude/string.wado/String::push"(__local_1, 111), "core:prelude/string.wado/String::push"(__local_1, 44), "core:prelude/string.wado/String::push"(__local_1, 32), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, "core:prelude/format.wado/String^Inspect::inspect"(name, __local_2), s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 115, 32, 78, 97, 109, 101), used: 8 }, "core:prelude/string.wado/String::push_str"(__local_2.buf, s), "core:prelude/string.wado/String::push"(__local_1, 33), __local_1;
 }
 
 fn "wado-compiler/tests/fixtures/newtype_string_coercion.wado/run"() with Stdout {
@@ -103,9 +103,9 @@ fn "wado-compiler/tests/fixtures/newtype_string_coercion.wado/run"() with Stdout
     let greeting: ref "core:prelude/string.wado//String";
     let x: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
-    label = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    greeting = "wado-compiler/tests/fixtures/newtype_string_coercion.wado/greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 });
-    x = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
+    label = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
+    greeting = "wado-compiler/tests/fixtures/newtype_string_coercion.wado/greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 108, 105, 99, 101), used: 5 });
+    x = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 111, 114, 108, 100), used: 5 };
     __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     "core:prelude/string.wado/String::push"(__local_4, 104);
     "core:prelude/string.wado/String::push"(__local_4, 101);
@@ -364,7 +364,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
     if truncated {
-        s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("..."), used: 3 };
+        s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
         "core:prelude/string.wado/String::push_str"(f.buf, s);
     }
 }

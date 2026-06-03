@@ -200,8 +200,8 @@ fn "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/run"() with S
     let value: ref "./sub/cross_module_treemap_variant_helper.wado//Value";
     let __sroa_obj_value: ref "./sub/cross_module_treemap_variant_helper.wado//Value";
     map = struct.new "core:collections//TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: ref.as_non_null(__b_3 = struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(0), used: 0 }; __b_3), entries: ref.as_non_null(__b_4 = struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>">(0), used: 0 }; __b_4), size: 0, deleted_count: 0 };
-    key = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    value = struct.new "./sub/cross_module_treemap_variant_helper.wado//Value::Str" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
+    key = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
+    value = struct.new "./sub/cross_module_treemap_variant_helper.wado//Value::Str" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 111, 114, 108, 100), used: 5 } };
     "core:collections/TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>::insert"(map, key, value);
     __sroa_obj_value = struct.new "./sub/cross_module_treemap_variant_helper.wado//Value::Obj" { discriminant: 1, payload_0: map };
     "core:cli/println"("./sub/cross_module_treemap_variant_helper.wado/stringify"(__sroa_obj_value));
@@ -238,7 +238,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify"(v) {
         __local_8;
     } else {
         map = ref.cast "./sub/cross_module_treemap_variant_helper.wado//Value::Obj"(v).payload_0;
-        result = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{"), used: 1 };
+        result = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123), used: 1 };
         entries = "core:collections/TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>::entries"(map);
         i = 0;
         b1: block {

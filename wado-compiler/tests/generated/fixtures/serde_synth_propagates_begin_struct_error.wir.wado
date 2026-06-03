@@ -271,7 +271,7 @@ fn "wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado//Foo";
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_string<wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/Foo>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nope"), used: 4 });
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_string<wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/Foo>"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 112, 101), used: 4 });
     __cond = (if __sroa_r_discriminant == 1 -> bool {
         e = ref.as_non_null(__sroa_r_case1_payload_0);
         e.kind == 6;
@@ -296,7 +296,7 @@ fn "wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado//Foo";
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_string<wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/Foo>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nope"), used: 4 });
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_string<wado-compiler/tests/fixtures/serde_synth_propagates_begin_struct_error.wado/Foo>"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 112, 101), used: 4 });
     if __sroa_r_discriminant == 1 {
         e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = e.message;
@@ -2013,9 +2013,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
@@ -2138,7 +2138,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
     if truncated {
-        s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("..."), used: 3 };
+        s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
         "core:prelude/string.wado/String::push_str"(f.buf, s);
     }
 }

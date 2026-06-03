@@ -71,14 +71,14 @@ fn "wado-compiler/tests/fixtures/enum_match_if_let.wado/run"() with Stdout {
     let msg: ref "core:prelude/string.wado//String";
     d = 0;
     if d == 0 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("is up"), used: 5 });
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 115, 32, 117, 112), used: 5 });
     } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not up"), used: 6 });
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 116, 32, 117, 112), used: 6 });
     }
     if d == 1 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("is down"), used: 7 });
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 115, 32, 100, 111, 119, 110), used: 7 });
     } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not down"), used: 8 });
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 116, 32, 100, 111, 119, 110), used: 8 });
     }
     if d == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matches up"), used: 10 });
@@ -86,14 +86,14 @@ fn "wado-compiler/tests/fixtures/enum_match_if_let.wado/run"() with Stdout {
     if d == 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matches left"), used: 12 });
     } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not left"), used: 8 });
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 116, 32, 108, 101, 102, 116), used: 8 });
     }
     label = (if d == 0 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("up!"), used: 3 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(117, 112, 33), used: 3 };
     } else if d == 1 -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("down!"), used: 5 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 119, 110, 33), used: 5 };
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 116, 104, 101, 114), used: 5 };
     });
     "core:cli/println"(label);
     x = 3;
@@ -104,7 +104,7 @@ fn "wado-compiler/tests/fixtures/enum_match_if_let.wado/run"() with Stdout {
     } else if x == 3 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("right and small"), used: 15 };
     } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 116, 104, 101, 114), used: 5 };
     });
     "core:cli/println"(msg);
 }

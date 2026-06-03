@@ -280,7 +280,7 @@ fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/__test_0_recurs
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let f_19: ref "core:prelude/format.wado//Formatter";
-    alt = struct.new "./sub/variant_deref_helper.wado//Alt" { label: ref.null none, elements: ref.as_non_null(__b = struct.new "core:prelude//List<./sub/variant_deref_helper.wado/Elem>" { repr: array.new_fixed<ref "./sub/variant_deref_helper.wado//Elem">(struct.new "./sub/variant_deref_helper.wado//Elem::TokenRef" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } }, struct.new "./sub/variant_deref_helper.wado//Elem::Repeat" { discriminant: 3, payload_0: struct.new "./sub/variant_deref_helper.wado//RepeatElem" { element: struct.new "./sub/variant_deref_helper.wado//Elem::Literal" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" world"), used: 6 } } } }), used: 2 }; __b) };
+    alt = struct.new "./sub/variant_deref_helper.wado//Alt" { label: ref.null none, elements: ref.as_non_null(__b = struct.new "core:prelude//List<./sub/variant_deref_helper.wado/Elem>" { repr: array.new_fixed<ref "./sub/variant_deref_helper.wado//Elem">(struct.new "./sub/variant_deref_helper.wado//Elem::TokenRef" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 } }, struct.new "./sub/variant_deref_helper.wado//Elem::Repeat" { discriminant: 3, payload_0: struct.new "./sub/variant_deref_helper.wado//RepeatElem" { element: struct.new "./sub/variant_deref_helper.wado//Elem::Literal" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 119, 111, 114, 108, 100), used: 6 } } } }), used: 2 }; __b) };
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
     "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process_all"(alt, out);
     __v0 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(out.repr)), used: out.used };
@@ -606,9 +606,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
@@ -731,7 +731,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
     if truncated {
-        s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("..."), used: 3 };
+        s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
         "core:prelude/string.wado/String::push_str"(f.buf, s);
     }
 }

@@ -116,7 +116,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_3.wado/__cm_binding__Stdout_write_v
 fn "wado-compiler/tests/fixtures/trait_bound_3.wado/__cm_export__run"() {
     let p: ref "wado-compiler/tests/fixtures/trait_bound_3.wado//Player";
     "wado-compiler/tests/fixtures/trait_bound_3.wado/trait_bound_method_on_type_param_chain"();
-    p = struct.new "wado-compiler/tests/fixtures/trait_bound_3.wado//Player" { player_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, player_score: 100 };
+    p = struct.new "wado-compiler/tests/fixtures/trait_bound_3.wado//Player" { player_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 108, 105, 99, 101), used: 5 }, player_score: 100 };
     "core:cli/println"("wado-compiler/tests/fixtures/trait_bound_3.wado/describe<wado-compiler/tests/fixtures/trait_bound_3.wado/Player>"(p));
     "wasi/task-return"(0);
 }
@@ -364,9 +364,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     let offset_13: i32;
     sign = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if is_negative {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("-"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45), used: 1 };
     } else if self.sign_plus {
-        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("+"), used: 1 };
+        sign = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(43), used: 1 };
     }
     sign_len = sign.used;
     prefix_len = prefix.used;
