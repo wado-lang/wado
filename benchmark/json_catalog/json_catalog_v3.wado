@@ -137,7 +137,7 @@ fn tokenize(input: String) -> List<u64> {
     loop {
         // skip ws
         while pos < len {
-            let b = builtin::array_get_u8(raw, pos) as i32;
+            let b = builtin::array_get_u8(&raw, pos) as i32;
             if b > 32 {
                 break;
             }
@@ -151,7 +151,7 @@ fn tokenize(input: String) -> List<u64> {
             return tape;
         }
 
-        let b = builtin::array_get_u8(raw, pos) as i32;
+        let b = builtin::array_get_u8(&raw, pos) as i32;
         if b == '{' as i32 {
             tape.push(pack_token(TOK_OBJECT_START, pos, pos + 1));
             pos += 1;
@@ -194,7 +194,7 @@ fn tokenize(input: String) -> List<u64> {
             pos = s;
             // scan for closing " (handle escapes by skipping next byte after \)
             while pos < len {
-                let bb = builtin::array_get_u8(raw, pos) as i32;
+                let bb = builtin::array_get_u8(&raw, pos) as i32;
                 if bb == '"' as i32 {
                     break;
                 }
@@ -213,7 +213,7 @@ fn tokenize(input: String) -> List<u64> {
                 pos += 1;
             }
             while pos < len {
-                let bb = builtin::array_get_u8(raw, pos) as i32;
+                let bb = builtin::array_get_u8(&raw, pos) as i32;
                 if '0' as i32 <= bb <= '9' as i32
                     || bb == '.' as i32
                     || bb == 'e' as i32
@@ -296,13 +296,13 @@ impl Cursor {
         let mut pos = tok_start(t);
         let end = tok_end(t);
         let mut neg = false;
-        if pos < end && builtin::array_get_u8(raw, pos) as i32 == '-' as i32 {
+        if pos < end && builtin::array_get_u8(&raw, pos) as i32 == '-' as i32 {
             neg = true;
             pos += 1;
         }
         let mut result: i64 = 0;
         while pos < end {
-            let b = builtin::array_get_u8(raw, pos) as i32;
+            let b = builtin::array_get_u8(&raw, pos) as i32;
             if '0' as i32 <= b <= '9' as i32 {
                 result = result * 10 + (b - '0' as i32) as i64;
                 pos += 1;
@@ -325,7 +325,7 @@ impl Cursor {
         let raw = self.repr;
         let mut p = s;
         while p < e {
-            if builtin::array_get_u8(raw, p) as i32 == '\\' as i32 {
+            if builtin::array_get_u8(&raw, p) as i32 == '\\' as i32 {
                 return self.read_string_with_escapes(s, e);
             }
             p += 1;
@@ -338,13 +338,13 @@ impl Cursor {
         let mut result = String::with_capacity(e - s);
         let mut pos = s;
         while pos < e {
-            let b = builtin::array_get_u8(raw, pos) as i32;
+            let b = builtin::array_get_u8(&raw, pos) as i32;
             if b == '\\' as i32 {
                 pos += 1;
                 if pos >= e {
                     panic("EOF after \\");
                 }
-                let esc = builtin::array_get_u8(raw, pos) as u8 as char;
+                let esc = builtin::array_get_u8(&raw, pos) as u8 as char;
                 pos += 1;
                 match esc {
                     '"' => result.push('"'),
@@ -361,7 +361,7 @@ impl Cursor {
                         }
                         let mut code: u32 = 0;
                         for let mut i = 0; i < 4; i += 1 {
-                            let ch = builtin::array_get_u8(raw, pos + i) as u8 as char;
+                            let ch = builtin::array_get_u8(&raw, pos + i) as u8 as char;
                             code = code * 16 + ch.hex_digit_value() as u32;
                         }
                         pos += 4;
@@ -461,10 +461,10 @@ impl Cursor {
             self.idx += 1;
             let ks = tok_start(key_tok);
             let klen = tok_end(key_tok) - ks;
-            let g0 = builtin::array_get_u8(self.repr, ks) as i32;
+            let g0 = builtin::array_get_u8(&self.repr, ks) as i32;
             let mut handled = false;
             if klen == 2 {
-                if g0 == 'i' as i32 && builtin::array_get_u8(self.repr, ks + 1) as i32 == 'd' as i32 {
+                if g0 == 'i' as i32 && builtin::array_get_u8(&self.repr, ks + 1) as i32 == 'd' as i32 {
                     id = self.parse_i64();
                     handled = true;
                 }
@@ -489,7 +489,7 @@ impl Cursor {
                     description = self.parse_optional_string();
                     handled = true;
                 } else if g0 == 's' as i32 {
-                    let g3 = builtin::array_get_u8(self.repr, ks + 3) as i32;
+                    let g3 = builtin::array_get_u8(&self.repr, ks + 3) as i32;
                     if g3 == 'T' as i32 {
                         sub_topic_ids = self.parse_array_i64();
                         handled = true;
@@ -524,7 +524,7 @@ impl Cursor {
             self.idx += 1;
             let ks = tok_start(key_tok);
             let klen = tok_end(key_tok) - ks;
-            let g0 = builtin::array_get_u8(self.repr, ks) as i32;
+            let g0 = builtin::array_get_u8(&self.repr, ks) as i32;
             let mut handled = false;
             if klen == 6 && g0 == 'a' as i32 {
                 amount = self.parse_i64();
@@ -577,7 +577,7 @@ impl Cursor {
             self.idx += 1;
             let ks = tok_start(key_tok);
             let klen = tok_end(key_tok) - ks;
-            let g0 = builtin::array_get_u8(self.repr, ks) as i32;
+            let g0 = builtin::array_get_u8(&self.repr, ks) as i32;
             let mut handled = false;
             if klen == 6 && g0 == 'a' as i32 {
                 area_id = self.parse_i64();
@@ -627,7 +627,7 @@ impl Cursor {
             self.idx += 1;
             let ks = tok_start(key_tok);
             let klen = tok_end(key_tok) - ks;
-            let g0 = builtin::array_get_u8(self.repr, ks) as i32;
+            let g0 = builtin::array_get_u8(&self.repr, ks) as i32;
             let mut handled = false;
             if klen == 5 && g0 == 'a' as i32 {
                 areas = self.parse_array_area();
@@ -695,7 +695,7 @@ impl Cursor {
             self.idx += 1;
             let ks = tok_start(key_tok);
             let klen = tok_end(key_tok) - ks;
-            let g0 = builtin::array_get_u8(self.repr, ks) as i32;
+            let g0 = builtin::array_get_u8(&self.repr, ks) as i32;
             let mut handled = false;
             if klen == 2 && g0 == 'i' as i32 {
                 id = self.parse_i64();
@@ -849,7 +849,7 @@ impl Cursor {
             self.idx += 1;
             let ks = tok_start(key_tok);
             let klen = tok_end(key_tok) - ks;
-            let g0 = builtin::array_get_u8(self.repr, ks) as i32;
+            let g0 = builtin::array_get_u8(&self.repr, ks) as i32;
             let mut handled = false;
             if klen == 6 && g0 == 'e' as i32 {
                 events = self.parse_event_map();

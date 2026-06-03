@@ -26,7 +26,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
     TirExprKind, TirField, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind, TirStruct,
-    TirStructField, TypeId, TypeTable,
+    TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -762,11 +762,20 @@ fn make_field_copy(
             }),
             method_info: None,
         };
+        let ref_type = type_table.borrow_mut().make_ref(field.type_id);
+        let arr_ref = TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref,
+                expr: Box::new(field_access),
+            },
+            ref_type,
+            span,
+        );
         return TirExpr::new(
             TirExprKind::Call {
                 func: array_clone_ref,
                 type_args: vec![elem_type],
-                args: vec![CallArg::new(field_access, false)],
+                args: vec![CallArg::new(arr_ref, false)],
             },
             field.type_id,
             span,

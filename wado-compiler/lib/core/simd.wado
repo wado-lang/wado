@@ -1141,24 +1141,24 @@ impl u8x16 {
     /// Load 16 bytes from a String at the given byte offset into a u8x16.
     /// The caller must ensure `offset + 16 <= s.len()`.
     pub fn from_string(s: &String, offset: i32) -> u8x16 {
-        let arr = s.internal_raw_bytes();
+        let mut arr = s.internal_raw_bytes();
         let v: u8x16 = [
-            builtin::array_get_u8(arr, offset) as i32,
-            builtin::array_get_u8(arr, offset + 1) as i32,
-            builtin::array_get_u8(arr, offset + 2) as i32,
-            builtin::array_get_u8(arr, offset + 3) as i32,
-            builtin::array_get_u8(arr, offset + 4) as i32,
-            builtin::array_get_u8(arr, offset + 5) as i32,
-            builtin::array_get_u8(arr, offset + 6) as i32,
-            builtin::array_get_u8(arr, offset + 7) as i32,
-            builtin::array_get_u8(arr, offset + 8) as i32,
-            builtin::array_get_u8(arr, offset + 9) as i32,
-            builtin::array_get_u8(arr, offset + 10) as i32,
-            builtin::array_get_u8(arr, offset + 11) as i32,
-            builtin::array_get_u8(arr, offset + 12) as i32,
-            builtin::array_get_u8(arr, offset + 13) as i32,
-            builtin::array_get_u8(arr, offset + 14) as i32,
-            builtin::array_get_u8(arr, offset + 15) as i32,
+            builtin::array_get_u8(&arr, offset) as i32,
+            builtin::array_get_u8(&arr, offset + 1) as i32,
+            builtin::array_get_u8(&arr, offset + 2) as i32,
+            builtin::array_get_u8(&arr, offset + 3) as i32,
+            builtin::array_get_u8(&arr, offset + 4) as i32,
+            builtin::array_get_u8(&arr, offset + 5) as i32,
+            builtin::array_get_u8(&arr, offset + 6) as i32,
+            builtin::array_get_u8(&arr, offset + 7) as i32,
+            builtin::array_get_u8(&arr, offset + 8) as i32,
+            builtin::array_get_u8(&arr, offset + 9) as i32,
+            builtin::array_get_u8(&arr, offset + 10) as i32,
+            builtin::array_get_u8(&arr, offset + 11) as i32,
+            builtin::array_get_u8(&arr, offset + 12) as i32,
+            builtin::array_get_u8(&arr, offset + 13) as i32,
+            builtin::array_get_u8(&arr, offset + 14) as i32,
+            builtin::array_get_u8(&arr, offset + 15) as i32,
         ];
         return v;
     }
@@ -1166,24 +1166,24 @@ impl u8x16 {
     /// Append 16 bytes from this u8x16 to a String.
     pub fn store_to_string(&self, s: &mut String) {
         let base = s.internal_reserve_uninit(16);
-        let arr = s.internal_raw_bytes();
+        let mut arr = s.internal_raw_bytes();
         let v = *self as v128;
-        builtin::array_set_u8(arr, base, builtin::i8x16_extract_lane_u(0, v) as u8);
-        builtin::array_set_u8(arr, base + 1, builtin::i8x16_extract_lane_u(1, v) as u8);
-        builtin::array_set_u8(arr, base + 2, builtin::i8x16_extract_lane_u(2, v) as u8);
-        builtin::array_set_u8(arr, base + 3, builtin::i8x16_extract_lane_u(3, v) as u8);
-        builtin::array_set_u8(arr, base + 4, builtin::i8x16_extract_lane_u(4, v) as u8);
-        builtin::array_set_u8(arr, base + 5, builtin::i8x16_extract_lane_u(5, v) as u8);
-        builtin::array_set_u8(arr, base + 6, builtin::i8x16_extract_lane_u(6, v) as u8);
-        builtin::array_set_u8(arr, base + 7, builtin::i8x16_extract_lane_u(7, v) as u8);
-        builtin::array_set_u8(arr, base + 8, builtin::i8x16_extract_lane_u(8, v) as u8);
-        builtin::array_set_u8(arr, base + 9, builtin::i8x16_extract_lane_u(9, v) as u8);
-        builtin::array_set_u8(arr, base + 10, builtin::i8x16_extract_lane_u(10, v) as u8);
-        builtin::array_set_u8(arr, base + 11, builtin::i8x16_extract_lane_u(11, v) as u8);
-        builtin::array_set_u8(arr, base + 12, builtin::i8x16_extract_lane_u(12, v) as u8);
-        builtin::array_set_u8(arr, base + 13, builtin::i8x16_extract_lane_u(13, v) as u8);
-        builtin::array_set_u8(arr, base + 14, builtin::i8x16_extract_lane_u(14, v) as u8);
-        builtin::array_set_u8(arr, base + 15, builtin::i8x16_extract_lane_u(15, v) as u8);
+        builtin::array_set_u8(&mut arr, base, builtin::i8x16_extract_lane_u(0, v) as u8);
+        builtin::array_set_u8(&mut arr, base + 1, builtin::i8x16_extract_lane_u(1, v) as u8);
+        builtin::array_set_u8(&mut arr, base + 2, builtin::i8x16_extract_lane_u(2, v) as u8);
+        builtin::array_set_u8(&mut arr, base + 3, builtin::i8x16_extract_lane_u(3, v) as u8);
+        builtin::array_set_u8(&mut arr, base + 4, builtin::i8x16_extract_lane_u(4, v) as u8);
+        builtin::array_set_u8(&mut arr, base + 5, builtin::i8x16_extract_lane_u(5, v) as u8);
+        builtin::array_set_u8(&mut arr, base + 6, builtin::i8x16_extract_lane_u(6, v) as u8);
+        builtin::array_set_u8(&mut arr, base + 7, builtin::i8x16_extract_lane_u(7, v) as u8);
+        builtin::array_set_u8(&mut arr, base + 8, builtin::i8x16_extract_lane_u(8, v) as u8);
+        builtin::array_set_u8(&mut arr, base + 9, builtin::i8x16_extract_lane_u(9, v) as u8);
+        builtin::array_set_u8(&mut arr, base + 10, builtin::i8x16_extract_lane_u(10, v) as u8);
+        builtin::array_set_u8(&mut arr, base + 11, builtin::i8x16_extract_lane_u(11, v) as u8);
+        builtin::array_set_u8(&mut arr, base + 12, builtin::i8x16_extract_lane_u(12, v) as u8);
+        builtin::array_set_u8(&mut arr, base + 13, builtin::i8x16_extract_lane_u(13, v) as u8);
+        builtin::array_set_u8(&mut arr, base + 14, builtin::i8x16_extract_lane_u(14, v) as u8);
+        builtin::array_set_u8(&mut arr, base + 15, builtin::i8x16_extract_lane_u(15, v) as u8);
     }
 
     pub fn extract_lane(&self, lane: i32) -> i32 {
