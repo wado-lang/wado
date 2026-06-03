@@ -71,10 +71,14 @@ public, with two changes:
   surface). These attach to its declaration site in the prelude (see
   Declaration).
 
-There is no separate "internal intrinsic" name anymore: `Array<T>` is both the
-user-facing type and the lowering target. The `array.new` / `array.get` /
-`array.set` / `array.len` / `array.copy` / `array.fill` instructions are emitted
-by `Array<T>`'s methods.
+`Array<T>` is the public spelling of the existing `builtin::array<T>` intrinsic —
+the same underlying GC array type, now with a name, a declaration site, and an
+`impl`. The low-level `builtin::array_*()` intrinsics stay exactly as they are and
+remain the lowering layer (they emit `array.new` / `array.get` / `array.set` /
+`array.len` / `array.copy` / `array.fill`). `Array<T>`'s methods are thin Wado
+wrappers that call those intrinsics. The redesign adds a public interface; it does
+not re-implement the lowering, and it does not remove the internal
+`builtin::array_*` layer — users simply stop calling it directly.
 
 The only type with reference semantics is now the reference itself (`&T` /
 `&mut T`). The hidden "value type that is secretly a reference" is gone.
@@ -113,7 +117,11 @@ Two pieces of plumbing follow from this:
 
 Mutators take `&mut self`; pure operations take `&self`. This makes mutation
 visible to both the type system and the optimizer — the root cause of the
-optimizer bug in problem (2).
+optimizer bug in problem (2). Each body is a thin Wado wrapper over the matching
+`builtin::array_*()` intrinsic (the trailing comment shows the `array.*`
+instruction it ultimately lowers to); e.g. `get` calls
+`builtin::array_get(self, index)` and `set` calls
+`builtin::array_set(self, index, value)`.
 
 ```wado
 impl<T> Array<T> {
@@ -285,9 +293,10 @@ the same change, since the new view API depends on `stores` being real.
    - Verify the optimizer elides the copy for a value argument the callee does
      not mutate; add a copy-elision pass if it does not. This is a gating
      correctness/performance item, tracked below.
-2. Large rename churn: `Array` → `List` and `builtin::array` → `Array` touch
-   stdlib, tests/fixtures, the VS Code grammar, generated docs, and the
-   `#[compiler_item("array")]` wiring.
+2. Large rename churn from `Array` → `List` (stdlib, tests/fixtures, the VS Code
+   grammar, generated docs, and the `#[compiler_item("array")]` wiring). Exposing
+   `builtin::array` as `Array` adds far less: a declaration plus a Wado `impl`,
+   with the intrinsic layer untouched.
 3. Snapshot view semantics is a new rule users must learn (a view does not track
    growth of its source).
 4. Mutation-through-alias is observable: while a `Slice`/`ArrayIter` borrow is
@@ -372,7 +381,11 @@ This phase is independent of Phase 0 (it touches `builtin::array_*`, which the
 rename does not), so the two could be sequenced either way; it is placed right
 after the rename because it is the minimal step that unblocks other tracks.
 
-### Phase 2 — First-class raw `Array<T>` (rename `builtin::array` → `Array`)
+### Phase 2 — Expose the raw GC array as a public `Array<T>`
+
+`builtin::array<T>` and its `builtin::array_*()` intrinsics stay; this phase adds
+the public `Array<T>` spelling and a Wado `impl` over them. It is an
+interface-tidying phase, not a re-implementation of the lowering.
 
 - [ ] Declare `Array<T>` in the prelude as a definition-less
       `#[compiler_item("array")] pub type Array<T>;`, binding the builtin to
@@ -381,10 +394,12 @@ after the rename because it is the minimal step that unblocks other tracks.
       declaration, not only the tuple form `type [..T];`.
 - [ ] Give `Array<T>` value semantics end to end (it already deep-copies when
       embedded; make it copy as a standalone value too).
-- [ ] Port the `builtin::array_*()` free functions to `Array<T>` methods
-      (`new`, `filled`, `len`, `get`, `set`, `fill`, `copy_from`); the Phase 1
-      `&` / `&mut` first parameters become `&self` / `&mut self`. Keep the
-      `array.*` WIR lowering. Point `List<T>`'s `repr` at `Array<T>`.
+- [ ] Add `impl<T> Array<T>` in Wado whose methods (`new`, `filled`, `len`,
+      `get`, `set`, `fill`, `copy_from`) are thin wrappers calling the existing
+      `builtin::array_*()` intrinsics — the intrinsics and the `builtin::array<T>`
+      spelling stay as the lowering layer. The Phase 1 `&` / `&mut` first
+      parameters line up with `&self` / `&mut self`. Point `List<T>`'s `repr` at
+      `Array<T>`.
 
 ### Phase 3 — Borrowing views
 
