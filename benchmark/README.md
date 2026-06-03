@@ -87,9 +87,9 @@ Deserialize twitter.json (631514 bytes).
 
 | Implementation          |  Throughput |  ms/iter | vs best |
 | ----------------------- | ----------: | -------: | ------: |
-| Rust (serde_json)       | 964.76 MB/s | 0.655 ms |   1.00x |
-| JavaScript (JSON.parse) | 426.93 MB/s | 1.330 ms |   2.26x |
-| **Wado** (core:json)    | 190.72 MB/s | 3.311 ms |   5.06x |
+| Rust (serde_json)       | 954.83 MB/s | 0.661 ms |   1.00x |
+| JavaScript (JSON.parse) | 442.30 MB/s | 1.284 ms |   2.16x |
+| **Wado** (core:json)    | 201.56 MB/s | 3.133 ms |   4.74x |
 
 ## JSON: canada
 
@@ -97,9 +97,9 @@ Deserialize canada.json (2251051 bytes, geographic coordinates).
 
 | Implementation          |  Throughput |   ms/iter | vs best |
 | ----------------------- | ----------: | --------: | ------: |
-| Rust (serde_json)       | 277.82 MB/s |  8.102 ms |   1.00x |
-| JavaScript (JSON.parse) | 253.62 MB/s |  8.876 ms |   1.10x |
-| **Wado** (core:json)    |  56.74 MB/s | 39.675 ms |   4.90x |
+| Rust (serde_json)       | 296.68 MB/s |  7.587 ms |   1.00x |
+| JavaScript (JSON.parse) | 278.84 MB/s |  8.073 ms |   1.06x |
+| **Wado** (core:json)    |  76.02 MB/s | 29.609 ms |   3.90x |
 
 ## JSON: catalog
 
@@ -107,10 +107,10 @@ Deserialize citm_catalog.json (1727204 bytes, event catalog).
 
 | Implementation              |  Throughput |   ms/iter | vs best |
 | --------------------------- | ----------: | --------: | ------: |
-| Rust (serde_json)           | 728.03 MB/s |  2.372 ms |   1.00x |
-| JavaScript (JSON.parse)     | 541.16 MB/s |  3.191 ms |   1.35x |
-| **Wado** (v2, hand-rolled¹) | 227.23 MB/s |  7.601 ms |   3.20x |
-| **Wado** (core:json)        | 118.20 MB/s | 14.612 ms |   6.16x |
+| Rust (serde_json)           | 795.56 MB/s |  2.171 ms |   1.00x |
+| JavaScript (JSON.parse)     | 595.07 MB/s |  2.902 ms |   1.34x |
+| **Wado** (v2, hand-rolled¹) | 266.94 MB/s |  6.470 ms |   2.98x |
+| **Wado** (core:json)        | 136.58 MB/s | 12.646 ms |   5.83x |
 
 ¹ `json_catalog/json_catalog_v2.wado` is a hand-rolled CitmCatalog parser
 PoC (no `core:json` / `core:serde`). Kept as a marker of the upper bound
