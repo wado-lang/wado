@@ -137,28 +137,34 @@ exactly as for `List<T>`.
 
 #### Sequence literals
 
-`Array<T>` is a first-class sequence-literal target: `[e0, …, eN]` can produce a
-raw GC array directly. This is in fact the _primitive_ literal form. A sequence
-literal has a statically known arity, which is exactly the fixed length an
-`Array<T>` wants, so it lowers straight to `array.new_fixed<T>(e0, …, eN)` — one
-allocation, no growth, no `used` bookkeeping.
+Both `Array<T>` and `List<T>` are sequence-literal targets, and both go through
+the **same uniform front-end path**: a `[…]` literal desugars to the
+`SequenceLiteralBuilder` protocol (`new_literal` / `push_literal` / `build`),
+exactly as today. The front-end and `lower` add **no** special casing for either
+type — keeping the literal path uniform is the whole point. `Array<T>`
+participates by being a `SequenceLiteralBuilder` target like any other type
+(because a raw array has nowhere to hold a write cursor, its builder is a
+separate builder via the `SequenceLiteral { type Builder }` path; the exact
+builder shape is an implementation detail and does not leak into the front-end).
 
-This makes `Array<T>` the natural home of the existing
-[`NirExprKind::ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md) node. Today
-that node carries the growable struct's type and `wir_build` lowers it to a
-`{ repr: array.new_fixed(…), used: N }` `StructNew`; after this redesign the node
-_is_ the raw `Array<T>`, lowering to `array.new_fixed` with no wrapper. A
-`List<T>` literal is then just that raw-array literal wrapped as
-`{ repr: <Array literal>, used: N }`.
+The fast `array.new_fixed` form is produced **only by the optimizer**, never by
+the front-end. The optimizer recognizes the builder-call window
+(`new_literal` + N× `push_literal` + `build`) and materializes a NIR literal
+node, in the spirit of the existing
+[`NirExprKind::ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md). This keeps
+the compilation pipeline simple: the literal node is an optimizer-materialized
+normalization (like `Switch`), and `lower` never emits it.
 
-`Array<T>` does **not** implement `SequenceLiteralBuilder`. That trait models a
-grow-by-`push_literal` builder, which is the wrong shape for a fixed-length array
-(it would force `array.new_default` + N× `array.set` instead of one
-`array.new_fixed`). The literal-to-`Array` path is handled directly by the
-elaborator/lowering, keyed off `compiler_item("array")`, not through the builder
-trait. `List<T>` keeps its `SequenceLiteralBuilder` impl (self-as-builder via
-`push`), unchanged from today. So both are literal targets, by different routes:
-`Array<T>` directly, `List<T>` through the builder.
+Two such nodes are likely needed after the split:
+
+- `ArrayLiteral` → lowers to `array.new_fixed<T>(e0, …, eN)` (the raw `Array<T>`).
+- `ListLiteral` → lowers to the `List<T>` struct `{ repr: array.new_fixed(…), used: N }`.
+
+Today's single `ArrayLiteral` already does the `List`-shaped job (it carries the
+growable struct's type and `wir_build` emits the `{ repr, used }` `StructNew`).
+The redesign factors it into the raw-array node plus a struct-wrapping node, so
+the raw `Array<T>` literal no longer pays for a `used` field it does not have.
+Both remain optimizer-only.
 
 ### 2. `List<T>` is the growable sequence
 
@@ -293,11 +299,11 @@ the same change, since the new view API depends on `stores` being real.
   `{ array T, i32 }`.
 - Element access semantics (value copy, no `iter_mut`) are unchanged from today;
   this WEP only makes the underlying reason (no GC interior references) explicit.
-- Sequence-literal lowering is unchanged in spirit: `array.new_fixed` is still
-  the bottom of every literal. The redesign just relocates the existing
-  `NirExprKind::ArrayLiteral` onto the raw `Array<T>` (the node's natural type),
-  and `List<T>` literals wrap it. `[…]: Array<T>` no longer needs the optimizer
-  to recover a fixed array from a `push` loop.
+- Sequence-literal handling is unchanged in spirit: the front-end still desugars
+  every `[…]` to the `SequenceLiteralBuilder` protocol, and `array.new_fixed` is
+  still produced only by the optimizer materializing a literal node. The redesign
+  just factors that node into `ArrayLiteral` (raw array) and `ListLiteral`
+  (struct wrap); both stay optimizer-only.
 
 ## Implementation TODOs
 
@@ -314,10 +320,12 @@ the same change, since the new view API depends on `stores` being real.
 - [ ] Port the `builtin::array_*()` free functions to `Array<T>` methods
       (`new`, `filled`, `len`, `get`, `set`, `fill`, `copy_from`); keep the
       `array.*` WIR lowering.
-- [ ] Make `Array<T>` a sequence-literal target: lower `[…]: Array<T>` directly
-      to `array.new_fixed` (keyed off `compiler_item("array")`), re-base
-      `NirExprKind::ArrayLiteral` onto the raw array, and route `List<T>`
-      literals through it as `{ repr, used }`.
+- [ ] Make `Array<T>` a `SequenceLiteralBuilder` target (separate builder) so
+      `[…]: Array<T>` uses the same uniform front-end path as `List<T>`; no
+      special-casing in the front-end or `lower`.
+- [ ] Split the optimizer's literal materialization into `ArrayLiteral`
+      (→ `array.new_fixed`) and `ListLiteral` (→ `{ repr, used }` struct); both
+      optimizer-only, never emitted by `lower`.
 - [ ] Rename the growable sequence `Array<T>` → `List<T>` (type, stdlib, fixtures,
       grammar, docs).
 - [ ] Introduce `Slice<T>` and re-base `ArrayIter` / `WindowsIter` / `ChunksIter`
