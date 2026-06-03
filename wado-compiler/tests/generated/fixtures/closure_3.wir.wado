@@ -6,10 +6,10 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(0)
     mut value: i32,
 }
 
-array builtin::array<u8> (mut u8);  // TypeId(1)
+array Array<u8> (mut u8);  // TypeId(1)
 
 struct core:prelude/string.wado//String {  // TypeId(2)
-    mut repr: ref builtin::array<u8>,
+    mut repr: ref Array<u8>,
     mut used: i32,
 }
 
@@ -56,7 +56,7 @@ struct wado-compiler/tests/fixtures/closure_3.wado//__Closure_2 {  // TypeId(14)
     mut __capture_0: i32,
 }
 
-array builtin::array<i32> (mut i32);  // TypeId(15)
+array Array<i32> (mut i32);  // TypeId(15)
 
 struct core:prelude/traits.wado//IterMap<core:prelude/list.wado/ListIter<i32>,i32> {  // TypeId(16)
     mut inner: ref "core:prelude/list.wado//ListIter<i32>",
@@ -74,7 +74,7 @@ struct core:prelude/traits.wado//IterFilter<core:prelude/list.wado/ListIter<i32>
 }
 
 struct core:prelude/list.wado//ListIter<i32> {  // TypeId(19)
-    mut repr: ref builtin::array<i32>,
+    mut repr: ref Array<i32>,
     mut used: i32,
     mut index: i32,
 }
@@ -90,7 +90,7 @@ struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(21)
 }
 
 struct core:prelude//List<i32> {  // TypeId(22)
-    mut repr: ref builtin::array<i32>,
+    mut repr: ref Array<i32>,
     mut used: i32,
 }
 
@@ -190,7 +190,7 @@ type "functype//wado-compiler/tests/fixtures/closure_3.wado/__cm_export____test_
 
 type "functype//wado-compiler/tests/fixtures/closure_3.wado/__cm_export____test_12_generic_method_delegation" = fn();  // TypeId(64)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(65)
+type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(65)
 
 type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(66)
 
@@ -198,15 +198,15 @@ type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//St
 
 type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(68)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(69)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(69)
 
 type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(70)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(71)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(71)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(72)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(73)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(73)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(74)
 
@@ -1194,9 +1194,9 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
 }
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
-    let bytes: ref builtin::array<u8>;
+    let bytes: ref Array<u8>;
     let len: i32;
-    let new_repr: ref builtin::array<u8>;
+    let new_repr: ref Array<u8>;
     bytes = message.repr;
     len = message.used;
     if add_newline {
@@ -1322,7 +1322,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
 fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref builtin::array<u8>;
+    let new_repr: ref Array<u8>;
     let a_5: i32;
     let a_7: i32;
     capacity = builtin::array_len(self.repr);
@@ -1488,8 +1488,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 
 fn "core:prelude/list.wado/List<i32>::sort_by"(self, cmp) {
     let n: i32;
-    let src: ref builtin::array<i32>;
-    let buf: ref builtin::array<i32>;
+    let buf: ref Array<i32>;
     let width: i32;
     let start: i32;
     let mid: i32;
@@ -1497,17 +1496,18 @@ fn "core:prelude/list.wado/List<i32>::sort_by"(self, cmp) {
     let i: i32;
     let j: i32;
     let k: i32;
-    let a_12: ref "core:prelude/types.wado//Box<i32>";
-    let b_13: ref "core:prelude/types.wado//Box<i32>";
-    let __match_14: "core:prelude/traits.wado//enum:Ordering";
-    let a_15: i32;
+    let a_11: ref "core:prelude/types.wado//Box<i32>";
+    let b_12: ref "core:prelude/types.wado//Box<i32>";
+    let __match_13: "core:prelude/traits.wado//enum:Ordering";
+    let a_14: i32;
+    let _licm_repr_16: ref Array<i32>;
     n = self.used;
     if n <= 1 {
         return;
     }
-    src = self.repr;
     buf = builtin::array_new<i32>(n);
     width = 1;
+    _licm_repr_16 = self.repr;
     b127: block {
         l128: loop {
             if width >= n {
@@ -1521,8 +1521,8 @@ fn "core:prelude/list.wado/List<i32>::sort_by"(self, cmp) {
                     }
                     mid = start + width;
                     if mid < n {
-                        a_15 = start + (width * 2);
-                        end = select i32(a_15 < n, a_15, n);
+                        a_14 = start + (width * 2);
+                        end = select i32(a_14 < n, a_14, n);
                         i = start;
                         j = mid;
                         k = start;
@@ -1533,33 +1533,33 @@ fn "core:prelude/list.wado/List<i32>::sort_by"(self, cmp) {
                                 }
                                 if i < mid {
                                     if j < end {
-                                        a_12 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(src, i) };
-                                        b_13 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(src, j) };
-                                        __match_14 = block -> "core:prelude/traits.wado//enum:Ordering" {
+                                        a_11 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(_licm_repr_16, i) };
+                                        b_12 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(_licm_repr_16, j) };
+                                        __match_13 = block -> "core:prelude/traits.wado//enum:Ordering" {
                                             let __indirect_call_0: ref "canonical//CanonicalClosure_3";
                                             __indirect_call_0 = ref.cast "canonical//CanonicalClosure_3"(cmp);
-                                            call_ref "functype/$canonical_closure_fn_3"(__indirect_call_0.func, __indirect_call_0.env, a_12, b_13);
+                                            call_ref "functype/$canonical_closure_fn_3"(__indirect_call_0.func, __indirect_call_0.env, a_11, b_12);
                                         };
-                                        if __match_14 == 2 {
-                                            builtin::array_set<i32>(buf, k, b_13.value);
+                                        if __match_13 == 2 {
+                                            builtin::array_set<i32>(buf, k, b_12.value);
                                             j = j + 1;
                                         } else {
-                                            builtin::array_set<i32>(buf, k, a_12.value);
+                                            builtin::array_set<i32>(buf, k, a_11.value);
                                             i = i + 1;
                                         }
                                     } else {
-                                        builtin::array_set<i32>(buf, k, builtin::array_get<i32>(src, i));
+                                        builtin::array_set<i32>(buf, k, builtin::array_get<i32>(_licm_repr_16, i));
                                         i = i + 1;
                                     }
                                 } else {
-                                    builtin::array_set<i32>(buf, k, builtin::array_get<i32>(src, j));
+                                    builtin::array_set<i32>(buf, k, builtin::array_get<i32>(_licm_repr_16, j));
                                     j = j + 1;
                                 }
                                 k = k + 1;
                                 continue l135;
                             };
                         };
-                        builtin::array_copy<i32>(src, start, buf, start, end - start);
+                        builtin::array_copy<i32>(_licm_repr_16, start, buf, start, end - start);
                     }
                     start = start + (width * 2);
                     continue l131;
@@ -1710,7 +1710,7 @@ fn "core:prelude/traits.wado/IterMap<core:prelude/list.wado/ListIter<i32>,i32>^I
 fn "core:prelude/list.wado/List<i32>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref builtin::array<i32>;
+    let new_repr: ref Array<i32>;
     let a: i32;
     capacity = builtin::array_len(self.repr);
     a = capacity * 2;
@@ -1773,8 +1773,7 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/__Closure_20::__call"(a, b) {
 
 fn "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sort_by$__Closure_18"(self) {
     let n: i32;
-    let src: ref builtin::array<i32>;
-    let buf: ref builtin::array<i32>;
+    let buf: ref Array<i32>;
     let width: i32;
     let start: i32;
     let mid: i32;
@@ -1782,17 +1781,18 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sort_by$__Closure_18"
     let i: i32;
     let j: i32;
     let k: i32;
-    let __match_14: "core:prelude/traits.wado//enum:Ordering";
-    let a_14: i32;
+    let __match_13: "core:prelude/traits.wado//enum:Ordering";
+    let a_13: i32;
+    let _licm_repr_18: ref Array<i32>;
     let __sroa_a_value: i32;
     let __sroa_b_value: i32;
     n = self.used;
     if n <= 1 {
         return;
     }
-    src = self.repr;
     buf = builtin::array_new<i32>(n);
     width = 1;
+    _licm_repr_18 = self.repr;
     b164: block {
         l165: loop {
             if width >= n {
@@ -1806,8 +1806,8 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sort_by$__Closure_18"
                     }
                     mid = start + width;
                     if mid < n {
-                        a_14 = start + (width * 2);
-                        end = select i32(a_14 < n, a_14, n);
+                        a_13 = start + (width * 2);
+                        end = select i32(a_13 < n, a_13, n);
                         i = start;
                         j = mid;
                         k = start;
@@ -1818,9 +1818,9 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sort_by$__Closure_18"
                                 }
                                 if i < mid {
                                     if j < end {
-                                        __sroa_a_value = builtin::array_get<i32>(src, i);
-                                        __sroa_b_value = builtin::array_get<i32>(src, j);
-                                        __match_14 = __inline___Closure_18____call_1: block -> "core:prelude/traits.wado//enum:Ordering" {
+                                        __sroa_a_value = builtin::array_get<i32>(_licm_repr_18, i);
+                                        __sroa_b_value = builtin::array_get<i32>(_licm_repr_18, j);
+                                        __match_13 = __inline___Closure_18____call_1: block -> "core:prelude/traits.wado//enum:Ordering" {
                                             if __sroa_a_value < __sroa_b_value {
                                                 break __inline___Closure_18____call_1: 0;
                                             }
@@ -1829,7 +1829,7 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sort_by$__Closure_18"
                                             }
                                             break __inline___Closure_18____call_1: 1;
                                         };
-                                        if __match_14 == 2 {
+                                        if __match_13 == 2 {
                                             builtin::array_set<i32>(buf, k, __sroa_b_value);
                                             j = j + 1;
                                         } else {
@@ -1837,18 +1837,18 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sort_by$__Closure_18"
                                             i = i + 1;
                                         }
                                     } else {
-                                        builtin::array_set<i32>(buf, k, builtin::array_get<i32>(src, i));
+                                        builtin::array_set<i32>(buf, k, builtin::array_get<i32>(_licm_repr_18, i));
                                         i = i + 1;
                                     }
                                 } else {
-                                    builtin::array_set<i32>(buf, k, builtin::array_get<i32>(src, j));
+                                    builtin::array_set<i32>(buf, k, builtin::array_get<i32>(_licm_repr_18, j));
                                     j = j + 1;
                                 }
                                 k = k + 1;
                                 continue l172;
                             };
                         };
-                        builtin::array_copy<i32>(src, start, buf, start, end - start);
+                        builtin::array_copy<i32>(_licm_repr_18, start, buf, start, end - start);
                     }
                     start = start + (width * 2);
                     continue l168;
@@ -1862,8 +1862,7 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sort_by$__Closure_18"
 
 fn "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sort_by$__Closure_19"(self) {
     let n: i32;
-    let src: ref builtin::array<i32>;
-    let buf: ref builtin::array<i32>;
+    let buf: ref Array<i32>;
     let width: i32;
     let start: i32;
     let mid: i32;
@@ -1871,17 +1870,18 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sort_by$__Closure_19"
     let i: i32;
     let j: i32;
     let k: i32;
-    let __match_14: "core:prelude/traits.wado//enum:Ordering";
-    let a_14: i32;
+    let __match_13: "core:prelude/traits.wado//enum:Ordering";
+    let a_13: i32;
+    let _licm_repr_18: ref Array<i32>;
     let __sroa_a_value: i32;
     let __sroa_b_value: i32;
     n = self.used;
     if n <= 1 {
         return;
     }
-    src = self.repr;
     buf = builtin::array_new<i32>(n);
     width = 1;
+    _licm_repr_18 = self.repr;
     b180: block {
         l181: loop {
             if width >= n {
@@ -1895,8 +1895,8 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sort_by$__Closure_19"
                     }
                     mid = start + width;
                     if mid < n {
-                        a_14 = start + (width * 2);
-                        end = select i32(a_14 < n, a_14, n);
+                        a_13 = start + (width * 2);
+                        end = select i32(a_13 < n, a_13, n);
                         i = start;
                         j = mid;
                         k = start;
@@ -1907,9 +1907,9 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sort_by$__Closure_19"
                                 }
                                 if i < mid {
                                     if j < end {
-                                        __sroa_a_value = builtin::array_get<i32>(src, i);
-                                        __sroa_b_value = builtin::array_get<i32>(src, j);
-                                        __match_14 = __inline___Closure_19____call_1: block -> "core:prelude/traits.wado//enum:Ordering" {
+                                        __sroa_a_value = builtin::array_get<i32>(_licm_repr_18, i);
+                                        __sroa_b_value = builtin::array_get<i32>(_licm_repr_18, j);
+                                        __match_13 = __inline___Closure_19____call_1: block -> "core:prelude/traits.wado//enum:Ordering" {
                                             if __sroa_a_value > __sroa_b_value {
                                                 break __inline___Closure_19____call_1: 0;
                                             }
@@ -1918,7 +1918,7 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sort_by$__Closure_19"
                                             }
                                             break __inline___Closure_19____call_1: 1;
                                         };
-                                        if __match_14 == 2 {
+                                        if __match_13 == 2 {
                                             builtin::array_set<i32>(buf, k, __sroa_b_value);
                                             j = j + 1;
                                         } else {
@@ -1926,18 +1926,18 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sort_by$__Closure_19"
                                             i = i + 1;
                                         }
                                     } else {
-                                        builtin::array_set<i32>(buf, k, builtin::array_get<i32>(src, i));
+                                        builtin::array_set<i32>(buf, k, builtin::array_get<i32>(_licm_repr_18, i));
                                         i = i + 1;
                                     }
                                 } else {
-                                    builtin::array_set<i32>(buf, k, builtin::array_get<i32>(src, j));
+                                    builtin::array_set<i32>(buf, k, builtin::array_get<i32>(_licm_repr_18, j));
                                     j = j + 1;
                                 }
                                 k = k + 1;
                                 continue l188;
                             };
                         };
-                        builtin::array_copy<i32>(src, start, buf, start, end - start);
+                        builtin::array_copy<i32>(_licm_repr_18, start, buf, start, end - start);
                     }
                     start = start + (width * 2);
                     continue l184;
@@ -1951,7 +1951,7 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sort_by$__Closure_19"
 
 fn "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sorted_by$__Closure_20"(self, cmp) {
     let n: i32;
-    let new_repr: ref builtin::array<i32>;
+    let new_repr: ref Array<i32>;
     let copy: ref "core:prelude//List<i32>";
     n = self.used;
     new_repr = builtin::array_new<i32>(n);

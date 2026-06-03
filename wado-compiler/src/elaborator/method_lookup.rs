@@ -239,6 +239,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::GenericInstance { name, .. } => return name,
                 ResolvedType::Newtype { base_type, .. } => current = base_type,
                 ResolvedType::Flags { .. } => return "u32".to_string(),
+                // The raw GC array's base method-owner name is "Array"
+                // (its type args are carried separately), not the full
+                // `type_name` spelling `Array<T>`.
+                ResolvedType::BuiltinArray(_) => return TypeTable::ARRAY_TYPE_NAME.to_string(),
                 _ => return self.tysys.type_table.borrow().type_name(current),
             }
         }
@@ -306,6 +310,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Item::Enum(e) if e.name == struct_name => {
                     return self.current_module_source.clone();
                 }
+                Item::BuiltinTypeDecl(d) if d.name == struct_name => {
+                    return self.current_module_source.clone();
+                }
                 _ => {}
             }
         }
@@ -324,6 +331,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return module_source.clone();
                     }
                     Item::Enum(e) if e.name == struct_name => {
+                        return module_source.clone();
+                    }
+                    Item::BuiltinTypeDecl(d) if d.name == struct_name => {
                         return module_source.clone();
                     }
                     _ => {}
@@ -518,6 +528,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Use None to trigger "search all loaded modules" logic
                 (prim.as_str().to_string(), None, None, None)
             }
+            // Raw GC array `Array<T>` — methods live in `impl Array<T>`
+            // (core:prelude/array.wado), keyed by the base name "Array".
+            // `None` module triggers "search all loaded modules".
+            ResolvedType::BuiltinArray(elem) => (
+                TypeTable::ARRAY_TYPE_NAME.to_string(),
+                None,
+                Some(vec![*elem]),
+                None,
+            ),
             // Unit type () - search for impl blocks in loaded modules
             ResolvedType::Unit => (TypeTable::UNIT_TYPE_NAME.to_string(), None, None, None),
             // Enum types - search for impl blocks by enum name
@@ -2987,7 +3006,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             ResolvedType::BuiltinArray(elem) => {
-                format!("builtin::array<{}>", self.type_id_to_string(elem))
+                format!("Array<{}>", self.type_id_to_string(elem))
             }
             ResolvedType::Ref(inner) => format!("&{}", self.type_id_to_string(inner)),
             ResolvedType::MutRef(inner) => format!("&mut {}", self.type_id_to_string(inner)),
@@ -3032,14 +3051,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return cached.clone();
         }
 
-        // Get concrete type arguments from the base type (for generic instances like Triple<i32>)
+        // Get concrete type arguments from the base type (for generic instances like Triple<i32>).
+        // The raw GC array `Array<T>` carries its element type as the single
+        // type arg, mirroring a generic instance, so `impl IndexValue for Array<T>`
+        // binds `T` to the element type.
         let concrete_type_args: Vec<TypeId> =
-            if let ResolvedType::GenericInstance { type_args, .. } =
-                self.tysys.type_table.borrow().get(base_type_id).clone()
-            {
-                type_args
-            } else {
-                Vec::new()
+            match self.tysys.type_table.borrow().get(base_type_id).clone() {
+                ResolvedType::GenericInstance { type_args, .. } => type_args,
+                ResolvedType::BuiltinArray(elem) => vec![elem],
+                _ => Vec::new(),
             };
 
         let impl_refs = self.collect_trait_impl_refs(struct_name);

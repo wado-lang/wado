@@ -166,6 +166,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
             } => (name.clone(), module_source.clone()),
+            // Raw GC array `Array<T>`: inherent methods live in
+            // `impl Array<T>` (core:prelude/array.wado), keyed by "Array".
+            ResolvedType::BuiltinArray(_) => (
+                TypeTable::ARRAY_TYPE_NAME.to_string(),
+                ModuleSource::array(),
+            ),
             _ => (
                 self.tysys
                     .type_table
@@ -664,6 +670,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mangled = format!("{}<{}>", name, type_arg_names.join(","));
                 (mangled, name, type_arg_names, Some(type_args))
             }
+            // The raw GC array splits like a generic instance: the receiver
+            // name is the full `Array<T>` spelling, but the method-owner base
+            // name is "Array" (matching `impl Array<T>`'s registration).
+            ResolvedType::BuiltinArray(elem) => {
+                let arg_name = self.tysys.type_table.borrow().mangle_type_name(elem);
+                let mangled = crate::name::mangle_builtin_array_type(&arg_name);
+                (
+                    mangled,
+                    TypeTable::ARRAY_TYPE_NAME.to_string(),
+                    vec![arg_name],
+                    Some(vec![elem]),
+                )
+            }
             _ => {
                 let name = self
                     .tysys
@@ -760,7 +779,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ResolvedType::Primitive(_) | ResolvedType::Unit => {
                             Some(ModuleSource::primitive())
                         }
-                        ResolvedType::BuiltinArray(_) => Some(ModuleSource::list()),
+                        ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
                         _ => None,
                     }
                 })

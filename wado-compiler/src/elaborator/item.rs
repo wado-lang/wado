@@ -424,6 +424,43 @@ pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
     }
 }
 
+/// Register a named definition-less type (`pub type Array<T>;`) carrying a
+/// `#[compiler_item("...")]` annotation. Binds the builtin type's name and
+/// owning module so the type resolver can map the name to its builtin
+/// `ResolvedType`.
+pub(super) fn register_builtin_type_compiler_item<H: CompilerHost>(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    name: &str,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) {
+    let Some(item) = extract_compiler_item(attrs, span, logger) else {
+        return;
+    };
+    if !check_compiler_item_placement(
+        item,
+        CompilerItemKind::BuiltinType,
+        module_source,
+        span,
+        logger,
+    ) {
+        return;
+    }
+    let resolved = Resolved::BuiltinType {
+        module_source: module_source.clone(),
+        name: name.to_string(),
+    };
+    if let Err(err) = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved)
+    {
+        report_register_error(err, span, logger);
+    }
+}
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Recursively check whether `type_id` mentions a `fn(...)` / `fn mut(...)`
     /// closure type. Used to reject closures crossing the Component Model

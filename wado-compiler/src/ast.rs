@@ -418,6 +418,12 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
             v.visit_type(&n.ty);
         }
         Item::TupleTypeDecl(t) => v.visit_id(t.id, t.span),
+        Item::BuiltinTypeDecl(d) => {
+            v.visit_id(d.id, d.span);
+            for p in &d.type_params {
+                v.visit_id(p.id, p.span);
+            }
+        }
         Item::Impl(i) => {
             v.visit_id(i.id, i.span);
             for p in &i.type_params {
@@ -915,6 +921,7 @@ pub enum Item {
     Flags(FlagsDecl),
     Newtype(Newtype),
     TupleTypeDecl(TupleTypeDecl),
+    BuiltinTypeDecl(BuiltinTypeDecl),
     Impl(ImplBlock),
     Trait(TraitDecl),
     Resource(ResourceDecl),
@@ -2952,6 +2959,24 @@ pub struct Newtype {
 pub struct TupleTypeDecl {
     pub id: AstId,
     pub is_pub: bool,
+    pub attrs: Vec<Attribute>,
+    pub span: Span,
+}
+
+/// Named, definition-less type declaration: `pub type Array<T>;`
+///
+/// Anchors a compiler builtin type (carrying its `#[compiler_item("...")]`)
+/// to its owning module, giving it a declaration site and a name that
+/// `impl` / trait-impl blocks can attach to. Generates no code; its
+/// resolution to a builtin `ResolvedType` is wired in the elaborator.
+#[derive(Debug, Clone)]
+pub struct BuiltinTypeDecl {
+    pub id: AstId,
+    pub name: String,
+    /// Span of the type name identifier.
+    pub name_span: Span,
+    pub is_pub: bool,
+    pub type_params: Vec<GenericParam>,
     pub attrs: Vec<Attribute>,
     pub span: Span,
 }

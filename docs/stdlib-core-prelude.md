@@ -759,7 +759,7 @@ Opaque i32 handle managed by the runtime.
 
 Write a chunk of data to the stream.
 
-#### `fn write_raw(&self, data: builtin::array<T>, len: i32)`
+#### `fn write_raw(&self, data: Array<T>, len: i32)`
 
 Write raw GC array directly to the stream.
 `len` is the number of valid elements (may be less than array capacity).
@@ -3049,12 +3049,12 @@ Write the byte at `index` without bounds or UTF-8 checks.
 - The resulting byte sequence must remain valid UTF-8. This is the
   caller's responsibility (cf. Rust's `as_bytes_mut`, which is `unsafe`).
 
-#### `pub fn internal_raw_bytes(&self) -> builtin::array<u8>`
+#### `pub fn internal_raw_bytes(&self) -> Array<u8>`
 
 Internal: Get raw bytes array (stdlib use only)
 Returns the underlying byte array. Caller must respect `len()` boundary.
 
-#### `pub fn internal_from_utf8_raw(bytes: builtin::array<u8>, len: i32) -> String`
+#### `pub fn internal_from_utf8_raw(bytes: Array<u8>, len: i32) -> String`
 
 Internal: Create String from raw UTF-8 bytes (stdlib use only)
 The bytes must be valid UTF-8. No validation is performed.
@@ -3379,7 +3379,7 @@ Returns an iterator over characters with their byte indices.
 
 ##### `pub fn eq(&self, other: &Self) -> bool`
 
-##### `fn eq_bytes(a: &builtin::array<u8>, b: &builtin::array<u8>, len: i32) -> bool`
+##### `fn eq_bytes(a: &Array<u8>, b: &Array<u8>, len: i32) -> bool`
 
 #### `impl Ord for String`
 
@@ -3547,9 +3547,9 @@ _Fields are private._
 
 Returns the total number of elements the array can hold without reallocating.
 
-#### `pub fn internal_raw_data(&self) -> builtin::array<T>`
+#### `pub fn internal_raw_data(&self) -> Array<T>`
 
-#### `pub fn internal_from_raw(repr: builtin::array<T>, used: i32) -> List<T>`
+#### `pub fn internal_from_raw(repr: Array<T>, used: i32) -> List<T>`
 
 #### `pub fn push(&mut self, value: T)`
 
