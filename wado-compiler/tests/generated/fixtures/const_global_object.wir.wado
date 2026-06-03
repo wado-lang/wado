@@ -27,7 +27,7 @@ struct wado-compiler/tests/fixtures/const_global_object.wado//Point {  // TypeId
 
 array builtin::array<i32> (mut i32);  // TypeId(4)
 
-struct core:prelude//Array<i32> {  // TypeId(5)
+struct core:prelude//List<i32> {  // TypeId(5)
     mut repr: ref builtin::array<i32>,
     mut used: i32,
 }
@@ -108,7 +108,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global global:ORIGIN: ref null "wado-compiler/tests/fixtures/const_global_object.wado//Point" = struct.new "wado-compiler/tests/fixtures/const_global_object.wado//Point" { x: 3, y: 4 };
-global global:NUMS: ref null "core:prelude//Array<i32>" = struct.new "core:prelude//Array<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30)), used: 3 };
+global global:NUMS: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30)), used: 3 };
 global mut global:GREET: ref null "core:prelude/string.wado//String" = ref.null none;
 global mut global:__modules_initialized: bool = 0;
 
@@ -120,7 +120,7 @@ fn "wado-compiler/tests/fixtures/const_global_object.wado/run"() with Stdout {
     let f_11: ref "core:prelude/format.wado//Formatter";
     let self_12: i32;
     let f_16: ref "core:prelude/format.wado//Formatter";
-    let self_17: ref "core:prelude//Array<i32>";
+    let self_17: ref "core:prelude//List<i32>";
     let self_18: i32;
     __inline___initialize_modules_0: block {
         if global:__modules_initialized {
