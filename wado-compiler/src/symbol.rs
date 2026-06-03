@@ -48,6 +48,10 @@ pub enum SymbolKind {
     Trait(TraitSymbol),
     /// A newtype
     Newtype(NewtypeSymbol),
+    /// A named, definition-less builtin type (`pub type Array<T>;`). It has
+    /// a declaration site (for LSP and `pub use`) but no fields/cases; its
+    /// resolution to a builtin `ResolvedType` is wired in the elaborator.
+    BuiltinType,
     /// A local variable
     Variable(VariableSymbol),
     /// A resource definition
@@ -429,6 +433,7 @@ impl SymbolTable {
                     | SymbolKind::Flags(_)
                     | SymbolKind::Newtype(_)
                     | SymbolKind::Resource(_)
+                    | SymbolKind::BuiltinType
             );
         }
         false

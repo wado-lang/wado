@@ -441,6 +441,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
                 wado_compiler::symbol::SymbolKind::Newtype(t) => {
                     format!("type = {}", t.aliased_type)
                 }
+                wado_compiler::symbol::SymbolKind::BuiltinType => "builtin type".to_string(),
                 wado_compiler::symbol::SymbolKind::Variable(v) => {
                     let mut flags = Vec::new();
                     if v.is_mut {

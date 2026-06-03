@@ -341,7 +341,7 @@ impl Monomorphizer {
             }
             ResolvedType::BuiltinArray(elem) => {
                 let arg = type_table.mangle_type_name(*elem);
-                Some(mangle_generic_name("List", &[arg]))
+                Some(mangle_generic_name("Array", &[arg]))
             }
             // Newtypes are transparent for method lookup — unwrap to base type,
             // same as Ref/MutRef. The elaborator already resolves methods through
@@ -377,6 +377,9 @@ impl Monomorphizer {
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => Some((name.clone(), type_args.clone())),
+            // The raw GC array's methods live in `impl Array<T>`; its base
+            // method-owner name is "Array" with the element as the type arg.
+            ResolvedType::BuiltinArray(elem) => Some(("Array".to_string(), vec![*elem])),
             // Newtypes are transparent — unwrap to base type for struct info lookup
             ResolvedType::Newtype { base_type, .. } => {
                 self.get_struct_info_from_type(*base_type, type_table)

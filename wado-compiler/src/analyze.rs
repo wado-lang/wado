@@ -550,10 +550,18 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     // Tuple type family declaration — handled in orchestration
                 }
 
-                Item::BuiltinTypeDecl(_) => {
-                    // Named definition-less builtin type (`pub type Array<T>;`)
-                    // — its compiler_item + name binding is handled in
-                    // orchestration; no plain symbol to define.
+                Item::BuiltinTypeDecl(decl) => {
+                    // Named definition-less builtin type (`pub type Array<T>;`).
+                    // Register a type symbol so it has a declaration site (LSP,
+                    // `pub use`, prelude collision protection); its resolution
+                    // to a builtin `ResolvedType` is wired in the elaborator.
+                    self.define_unique(
+                        module_source,
+                        decl.id,
+                        &decl.name,
+                        SymbolKind::BuiltinType,
+                        decl.span,
+                    );
                 }
 
                 Item::Error(_) => {

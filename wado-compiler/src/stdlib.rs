@@ -34,6 +34,7 @@ pub const CORE_BUILTIN: &str = include_str!("../lib/core/builtin.wado");
 pub const CORE_PRELUDE_TRAITS: &str = include_str!("../lib/core/prelude/traits.wado");
 pub const CORE_PRELUDE_INT128: &str = include_str!("../lib/core/prelude/int128.wado");
 pub const CORE_PRELUDE_TYPES: &str = include_str!("../lib/core/prelude/types.wado");
+pub const CORE_PRELUDE_ARRAY: &str = include_str!("../lib/core/prelude/array.wado");
 pub const CORE_PRELUDE_PRIMITIVE: &str = include_str!("../lib/core/prelude/primitive.wado");
 pub const CORE_PRELUDE_FORMAT: &str = include_str!("../lib/core/prelude/format.wado");
 pub const CORE_PRELUDE_LIST: &str = include_str!("../lib/core/prelude/list.wado");
@@ -125,6 +126,7 @@ pub const ALL_CORE_MODULES: &[(&str, &str)] = &[
     ("core:collections", CORE_COLLECTIONS),
     ("core:internal", CORE_INTERNAL),
     ("core:prelude", CORE_PRELUDE),
+    ("core:prelude/array.wado", CORE_PRELUDE_ARRAY),
     ("core:prelude/list.wado", CORE_PRELUDE_LIST),
     ("core:prelude/format.wado", CORE_PRELUDE_FORMAT),
     ("core:prelude/fpfmt.wado", CORE_PRELUDE_FPFMT),
