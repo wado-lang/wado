@@ -80,7 +80,7 @@ impl P {
         let len = self.len;
         let mut pos = self.pos;
         while pos < len {
-            let b = builtin::array_get_u8(raw, pos) as i32;
+            let b = builtin::array_get_u8(&raw, pos) as i32;
             if b > 32 {
                 self.pos = pos;
                 return;
@@ -100,7 +100,7 @@ impl P {
         if self.pos >= self.len {
             return -1;
         }
-        return builtin::array_get_u8(self.repr, self.pos) as i32;
+        return builtin::array_get_u8(&self.repr, self.pos) as i32;
     }
 
     #[inline(always)]
@@ -109,7 +109,7 @@ impl P {
         if self.pos >= self.len {
             panic(`unexpected EOF, expected '{c as u8 as char}'`);
         }
-        let b = builtin::array_get_u8(self.repr, self.pos) as i32;
+        let b = builtin::array_get_u8(&self.repr, self.pos) as i32;
         if b != c {
             panic(`expected '{c as u8 as char}' at {self.pos}, got '{b as u8 as char}'`);
         }
@@ -137,13 +137,13 @@ impl P {
         let len = self.len;
         let mut pos = self.pos;
         let mut neg = false;
-        if pos < len && builtin::array_get_u8(raw, pos) as i32 == '-' as i32 {
+        if pos < len && builtin::array_get_u8(&raw, pos) as i32 == '-' as i32 {
             neg = true;
             pos += 1;
         }
         let mut result: i64 = 0;
         while pos < len {
-            let b = builtin::array_get_u8(raw, pos) as i32;
+            let b = builtin::array_get_u8(&raw, pos) as i32;
             if '0' as i32 <= b <= '9' as i32 {
                 result = result * 10 + (b - '0' as i32) as i64;
                 pos += 1;
@@ -165,7 +165,7 @@ impl P {
         let mut pos = self.pos;
         let start = pos;
         while pos < len {
-            let b = builtin::array_get_u8(raw, pos) as i32;
+            let b = builtin::array_get_u8(&raw, pos) as i32;
             if b == '"' as i32 {
                 let end = pos;
                 self.pos = pos + 1;
@@ -367,13 +367,13 @@ impl P {
         let raw = self.repr;
         let len = self.len;
         let mut pos = self.pos;
-        if pos >= len || builtin::array_get_u8(raw, pos) as i32 != '"' as i32 {
+        if pos >= len || builtin::array_get_u8(&raw, pos) as i32 != '"' as i32 {
             panic(`expected key at {pos}`);
         }
         pos += 1;
         let start = pos;
         while pos < len {
-            let b = builtin::array_get_u8(raw, pos) as i32;
+            let b = builtin::array_get_u8(&raw, pos) as i32;
             if b == '"' as i32 {
                 let end = pos;
                 self.pos = pos + 1;
@@ -402,7 +402,7 @@ impl P {
         let raw = self.repr;
         let len = self.len;
         let mut pos = self.pos;
-        if pos < len && builtin::array_get_u8(raw, pos) as i32 == ']' as i32 {
+        if pos < len && builtin::array_get_u8(&raw, pos) as i32 == ']' as i32 {
             self.pos = pos + 1;
             return [];
         }
@@ -410,7 +410,7 @@ impl P {
         loop {
             // skip ws
             while pos < len {
-                let b = builtin::array_get_u8(raw, pos) as i32;
+                let b = builtin::array_get_u8(&raw, pos) as i32;
                 if b > 32 {
                     break;
                 }
@@ -422,13 +422,13 @@ impl P {
             }
             // parse i64 inline
             let mut neg = false;
-            if pos < len && builtin::array_get_u8(raw, pos) as i32 == '-' as i32 {
+            if pos < len && builtin::array_get_u8(&raw, pos) as i32 == '-' as i32 {
                 neg = true;
                 pos += 1;
             }
             let mut result: i64 = 0;
             while pos < len {
-                let b = builtin::array_get_u8(raw, pos) as i32;
+                let b = builtin::array_get_u8(&raw, pos) as i32;
                 if '0' as i32 <= b <= '9' as i32 {
                     result = result * 10 + (b - '0' as i32) as i64;
                     pos += 1;
@@ -439,7 +439,7 @@ impl P {
             arr.push(if neg { -result } else { result });
             // skip ws
             while pos < len {
-                let b = builtin::array_get_u8(raw, pos) as i32;
+                let b = builtin::array_get_u8(&raw, pos) as i32;
                 if b > 32 {
                     break;
                 }
@@ -452,7 +452,7 @@ impl P {
             if pos >= len {
                 panic("array<i64>: EOF");
             }
-            let c = builtin::array_get_u8(raw, pos) as i32;
+            let c = builtin::array_get_u8(&raw, pos) as i32;
             if c == ']' as i32 {
                 self.pos = pos + 1;
                 return arr;
@@ -626,7 +626,7 @@ impl P {
         let mut pos = self.pos;
         // skip ws + '{'
         while pos < len {
-            let b = builtin::array_get_u8(raw, pos) as i32;
+            let b = builtin::array_get_u8(&raw, pos) as i32;
             if b > 32 {
                 break;
             }
@@ -636,7 +636,7 @@ impl P {
                 break;
             }
         }
-        if pos >= len || builtin::array_get_u8(raw, pos) as i32 != '{' as i32 {
+        if pos >= len || builtin::array_get_u8(&raw, pos) as i32 != '{' as i32 {
             panic("area: expected '{'");
         }
         pos += 1;
@@ -646,7 +646,7 @@ impl P {
 
         // skip ws (peek for '}')
         while pos < len {
-            let b = builtin::array_get_u8(raw, pos) as i32;
+            let b = builtin::array_get_u8(&raw, pos) as i32;
             if b > 32 {
                 break;
             }
@@ -656,14 +656,14 @@ impl P {
                 break;
             }
         }
-        if pos < len && builtin::array_get_u8(raw, pos) as i32 == '}' as i32 {
+        if pos < len && builtin::array_get_u8(&raw, pos) as i32 == '}' as i32 {
             self.pos = pos + 1;
             return Area { area_id, block_ids };
         }
         loop {
             // skip ws before key
             while pos < len {
-                let b = builtin::array_get_u8(raw, pos) as i32;
+                let b = builtin::array_get_u8(&raw, pos) as i32;
                 if b > 32 {
                     break;
                 }
@@ -673,13 +673,13 @@ impl P {
                     break;
                 }
             }
-            if pos >= len || builtin::array_get_u8(raw, pos) as i32 != '"' as i32 {
+            if pos >= len || builtin::array_get_u8(&raw, pos) as i32 != '"' as i32 {
                 panic("area: expected key");
             }
             pos += 1;
             let key_start = pos;
             while pos < len {
-                let b = builtin::array_get_u8(raw, pos) as i32;
+                let b = builtin::array_get_u8(&raw, pos) as i32;
                 if b == '"' as i32 {
                     break;
                 }
@@ -691,7 +691,7 @@ impl P {
 
             // skip ws + ':'
             while pos < len {
-                let b = builtin::array_get_u8(raw, pos) as i32;
+                let b = builtin::array_get_u8(&raw, pos) as i32;
                 if b > 32 {
                     break;
                 }
@@ -701,13 +701,13 @@ impl P {
                     break;
                 }
             }
-            if pos >= len || builtin::array_get_u8(raw, pos) as i32 != ':' as i32 {
+            if pos >= len || builtin::array_get_u8(&raw, pos) as i32 != ':' as i32 {
                 panic("area: expected ':'");
             }
             pos += 1;
 
             // dispatch by length+first-byte
-            let g0 = builtin::array_get_u8(raw, key_start) as i32;
+            let g0 = builtin::array_get_u8(&raw, key_start) as i32;
             if klen == 6 && g0 == 'a' as i32 {
                 self.pos = pos;
                 area_id = self.parse_i64();
@@ -724,7 +724,7 @@ impl P {
 
             // skip ws + check ',' or '}'
             while pos < len {
-                let b = builtin::array_get_u8(raw, pos) as i32;
+                let b = builtin::array_get_u8(&raw, pos) as i32;
                 if b > 32 {
                     break;
                 }
@@ -737,7 +737,7 @@ impl P {
             if pos >= len {
                 panic("area: EOF");
             }
-            let c = builtin::array_get_u8(raw, pos) as i32;
+            let c = builtin::array_get_u8(&raw, pos) as i32;
             if c == '}' as i32 {
                 self.pos = pos + 1;
                 return Area { area_id, block_ids };

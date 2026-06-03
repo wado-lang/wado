@@ -98,27 +98,29 @@ type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(r
 
 type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(32)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(33)
+type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(33)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(34)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(34)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(35)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(35)
 
-type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(36)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(36)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(37)
+type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(37)
 
-type "functype//core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String>^Eq::eq" = fn(ref "tuple//[i32, String]", ref "tuple//[i32, String]") -> bool;  // TypeId(38)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(38)
 
-type "functype//core:prelude/tuple.wado/Tuple<i32>^Eq::eq" = fn(ref "tuple//[i32]", ref "tuple//[i32]") -> bool;  // TypeId(39)
+type "functype//core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String>^Eq::eq" = fn(ref "tuple//[i32, String]", ref "tuple//[i32, String]") -> bool;  // TypeId(39)
 
-type "functype//core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String,bool>^Eq::eq" = fn(ref "tuple//[i32, String, bool]", ref "tuple//[i32, String, bool]") -> bool;  // TypeId(40)
+type "functype//core:prelude/tuple.wado/Tuple<i32>^Eq::eq" = fn(ref "tuple//[i32]", ref "tuple//[i32]") -> bool;  // TypeId(40)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
+type "functype//core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String,bool>^Eq::eq" = fn(ref "tuple//[i32, String, bool]", ref "tuple//[i32, String, bool]") -> bool;  // TypeId(41)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(42)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(43)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(44)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -517,19 +519,28 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     self.used = new_used;
 }
 
+fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
+    let len_a: i32;
+    len_a = self.used;
+    if len_a != other.used {
+        return 0;
+    }
+    return "core:prelude/string.wado/String^Eq::eq_bytes"(self.repr, other.repr, len_a);
+}
+
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
     i = 0;
-    b35: block {
-        l36: loop {
+    b36: block {
+        l37: loop {
             if i >= len {
-                break b35;
+                break b36;
             }
             if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                 return 0;
             }
             i = i + 1;
-            continue l36;
+            continue l37;
         };
     };
     return 1;
@@ -565,14 +576,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b43: block {
-        l44: loop {
+    b44: block {
+        l45: loop {
             if i >= n {
-                break b43;
+                break b44;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l44;
+            continue l45;
         };
     };
 }
@@ -690,7 +701,6 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 }
 
 fn "core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String>^Eq::eq"(self, other) {
-    let len_a: i32;
     let __sroa___sroa___tuple_2_0_0: i32;
     let __sroa___sroa___tuple_2_0_1: i32;
     let __sroa___sroa___tuple_2_1_0: ref "core:prelude/string.wado//String";
@@ -702,13 +712,7 @@ fn "core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String>^Eq::eq"(s
     if __sroa___sroa___tuple_2_0_0 != __sroa___sroa___tuple_2_0_1 {
         return 0;
     }
-    if __inline_String_Eq__eq_0: block -> bool {
-        len_a = __sroa___sroa___tuple_2_1_0.used;
-        if len_a != __sroa___sroa___tuple_2_1_1.used {
-            break __inline_String_Eq__eq_0: 0;
-        }
-        break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(__sroa___sroa___tuple_2_1_0.repr, __sroa___sroa___tuple_2_1_1.repr, len_a);
-    } == 0 {
+    if "core:prelude/string.wado/String^Eq::eq"(__sroa___sroa___tuple_2_1_0, __sroa___sroa___tuple_2_1_1) == 0 {
         return 0;
     }
     return 1;
@@ -726,7 +730,6 @@ fn "core:prelude/tuple.wado/Tuple<i32>^Eq::eq"(self, other) {
 }
 
 fn "core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String,bool>^Eq::eq"(self, other) {
-    let len_a: i32;
     let __sroa___sroa___tuple_2_0_0: i32;
     let __sroa___sroa___tuple_2_0_1: i32;
     let __sroa___sroa___tuple_2_1_0: ref "core:prelude/string.wado//String";
@@ -742,13 +745,7 @@ fn "core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String,bool>^Eq::
     if __sroa___sroa___tuple_2_0_0 != __sroa___sroa___tuple_2_0_1 {
         return 0;
     }
-    if __inline_String_Eq__eq_0: block -> bool {
-        len_a = __sroa___sroa___tuple_2_1_0.used;
-        if len_a != __sroa___sroa___tuple_2_1_1.used {
-            break __inline_String_Eq__eq_0: 0;
-        }
-        break __inline_String_Eq__eq_0: "core:prelude/string.wado/String^Eq::eq_bytes"(__sroa___sroa___tuple_2_1_0.repr, __sroa___sroa___tuple_2_1_1.repr, len_a);
-    } == 0 {
+    if "core:prelude/string.wado/String^Eq::eq"(__sroa___sroa___tuple_2_1_0, __sroa___sroa___tuple_2_1_1) == 0 {
         return 0;
     }
     if __sroa___sroa___tuple_2_2_0 != __sroa___sroa___tuple_2_2_1 {

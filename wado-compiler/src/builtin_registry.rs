@@ -206,6 +206,14 @@ impl BuiltinRegistry {
                     .collect();
                 type_table.borrow_mut().make_tuple(element_types)
             }
+            Type::Reference(inner) => {
+                let inner_id = Self::resolve_type(inner, type_params, type_table);
+                type_table.borrow_mut().make_ref(inner_id)
+            }
+            Type::MutReference(inner) => {
+                let inner_id = Self::resolve_type(inner, type_params, type_table);
+                type_table.borrow_mut().make_mut_ref(inner_id)
+            }
             _ => TypeTable::UNIT, // Other types default to UNIT
         }
     }

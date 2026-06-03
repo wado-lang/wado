@@ -44,7 +44,7 @@ impl u128 {
         let bytes = s.internal_raw_bytes();
         let ten: u128 = 10;
         while i < len {
-            let byte = builtin::array_get_u8(bytes, i);
+            let byte = builtin::array_get_u8(&bytes, i);
             let digit = byte as i32 - '0' as i32;
             if 0 <= digit && digit <= 9 {
                 result = result * ten + u128::from_u64(digit as u64);
@@ -221,8 +221,8 @@ impl u128 {
     fn fmt_decimal(&self, f: &mut Formatter) {
         if *self == 0 {
             let offset = f.prepare_int_write(false, "", 1);
-            let arr = f.buf.internal_raw_bytes();
-            builtin::array_set_u8(arr, offset, '0' as u8);
+            let mut arr = f.buf.internal_raw_bytes();
+            builtin::array_set_u8(&mut arr, offset, '0' as u8);
             return;
         }
 
@@ -236,14 +236,14 @@ impl u128 {
         }
 
         let offset = f.prepare_int_write(false, "", digit_count);
-        let arr = f.buf.internal_raw_bytes();
+        let mut arr = f.buf.internal_raw_bytes();
 
         // Write digits in reverse order
         let mut pos = offset + digit_count;
         for let mut temp = *self; temp > 0; temp /= ten {
             pos -= 1;
             let digit: i32 = (temp % ten).low() as i64 as i32;
-            builtin::array_set_u8(arr, pos, ('0' as i32 + digit) as u8);
+            builtin::array_set_u8(&mut arr, pos, ('0' as i32 + digit) as u8);
         }
     }
 
@@ -292,10 +292,10 @@ impl u128 {
         };
 
         let offset = f.prepare_int_write(false, prefix, digit_count);
-        let arr = f.buf.internal_raw_bytes();
+        let mut arr = f.buf.internal_raw_bytes();
 
         if is_zero {
-            builtin::array_set_u8(arr, offset, '0' as u8);
+            builtin::array_set_u8(&mut arr, offset, '0' as u8);
         } else {
             let mut pos = offset + digit_count;
             let mut lo: u64 = self.low;
@@ -311,7 +311,7 @@ impl u128 {
                 } else {
                     'a' as i32 + digit - 10;
                 };
-                builtin::array_set_u8(arr, pos, ch as u8);
+                builtin::array_set_u8(&mut arr, pos, ch as u8);
                 // Shift right: move bits from hi into lo
                 // For shift amounts 1,3,4 this works correctly
                 let hi_bits = hi << 64 - shift_u64;
@@ -648,7 +648,7 @@ impl i128 {
         let bytes = s.internal_raw_bytes();
 
         // Check for negative sign
-        let first_byte = builtin::array_get_u8(bytes, 0);
+        let first_byte = builtin::array_get_u8(&bytes, 0);
         let is_negative = first_byte == '-' as u8;
         let start_idx = if is_negative { 1 } else { 0 };
 
@@ -657,7 +657,7 @@ impl i128 {
         let mut i = start_idx;
         let ten: u128 = 10;
         while i < len {
-            let byte = builtin::array_get_u8(bytes, i);
+            let byte = builtin::array_get_u8(&bytes, i);
             let digit = byte as i32 - '0' as i32;
             if 0 <= digit && digit <= 9 {
                 abs_value = abs_value * ten + u128::from_u64(digit as u64);
@@ -852,8 +852,8 @@ impl i128 {
         let abs_val = self.abs_u128();
         if abs_val.low == 0 && abs_val.high == 0 {
             let offset = f.prepare_int_write(false, "", 1);
-            let arr = f.buf.internal_raw_bytes();
-            builtin::array_set_u8(arr, offset, '0' as u8);
+            let mut arr = f.buf.internal_raw_bytes();
+            builtin::array_set_u8(&mut arr, offset, '0' as u8);
             return;
         }
 
@@ -865,14 +865,14 @@ impl i128 {
         }
 
         let offset = f.prepare_int_write(is_neg, "", digit_count);
-        let arr = f.buf.internal_raw_bytes();
+        let mut arr = f.buf.internal_raw_bytes();
 
         let mut pos = offset + digit_count;
         temp = abs_val;
         for let mut temp = abs_val; temp > 0; temp /= ten {
             pos -= 1;
             let digit = (temp % ten).low() as i64 as i32;
-            builtin::array_set_u8(arr, pos, ('0' as i32 + digit) as u8);
+            builtin::array_set_u8(&mut arr, pos, ('0' as i32 + digit) as u8);
         }
     }
 
@@ -920,10 +920,10 @@ impl i128 {
         };
 
         let offset = f.prepare_int_write(is_neg, prefix, digit_count);
-        let arr = f.buf.internal_raw_bytes();
+        let mut arr = f.buf.internal_raw_bytes();
 
         if is_zero {
-            builtin::array_set_u8(arr, offset, '0' as u8);
+            builtin::array_set_u8(&mut arr, offset, '0' as u8);
         } else {
             let mut pos = offset + digit_count;
             let mut lo: u64 = abs_val.low;
@@ -939,7 +939,7 @@ impl i128 {
                 } else {
                     'a' as i32 + digit - 10;
                 };
-                builtin::array_set_u8(arr, pos, ch as u8);
+                builtin::array_set_u8(&mut arr, pos, ch as u8);
                 let hi_bits = hi << 64 - shift_u64;
                 lo = lo >> shift_u64 | hi_bits;
                 hi = hi >> shift_u64;

@@ -87,23 +87,25 @@ type "functype//core:prelude/string.wado/String::internal_reserve_uninit" = fn(r
 
 type "functype//core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(34)
 
-type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(35)
+type "functype//core:prelude/string.wado/String^Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(35)
 
-type "functype//core:prelude/string.wado/String^Ord::cmp" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(36)
+type "functype//core:prelude/string.wado/String^Eq::eq_bytes" = fn(ref builtin::array<u8>, ref builtin::array<u8>, i32) -> bool;  // TypeId(36)
 
-type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(37)
+type "functype//core:prelude/string.wado/String^Ord::cmp" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(37)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(38)
+type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(38)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(39)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(39)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_demote.wado/List<core:prelude/string.wado/String>::sort_by$__Closure_2" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(40)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(40)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
+type "functype//wado-compiler/tests/fixtures/value_copy_demote.wado/List<core:prelude/string.wado/String>::sort_by$__Closure_2" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(41)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(42)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(43)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(44)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -124,39 +126,26 @@ fn "wado-compiler/tests/fixtures/value_copy_demote.wado/distinct_count"(tokens) 
     let n: i32;
     let i: i32;
     let index_10: i32;
-    let self_11: ref "core:prelude/string.wado//String";
-    let other: ref "core:prelude/string.wado//String";
-    let len_a: i32;
-    let _licm_used_14: i32;
-    let _licm_repr_15: ref "builtin::array<core:prelude/string.wado/String>";
+    let _licm_used_11: i32;
+    let _licm_repr_12: ref "builtin::array<core:prelude/string.wado/String>";
     sorted = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone<ref "core:prelude/string.wado//String">(tokens.repr)), used: tokens.used };
     "wado-compiler/tests/fixtures/value_copy_demote.wado/List<core:prelude/string.wado/String>::sort_by$__Closure_2"(sorted);
     n = 0;
     i = 0;
-    _licm_used_14 = sorted.used;
-    _licm_repr_15 = sorted.repr;
+    _licm_used_11 = sorted.used;
+    _licm_repr_12 = sorted.repr;
     b0: block {
         l1: loop {
-            if i >= _licm_used_14 {
+            if i >= _licm_used_11 {
                 break b0;
             }
             if (if i == 0 -> i32 {
                 1;
             } else {
-                __inline_String_Eq__eq_5: block -> bool {
-                    self_11 = builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_15, i);
-                    index_10 = i - 1;
-                    if builtin::unlikely(index_10 >= _licm_used_14) {
-                        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                        unreachable;
-                    }
-                    other = builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_15, index_10);
-                    len_a = self_11.used;
-                    if len_a != other.used {
-                        break __inline_String_Eq__eq_5: 0;
-                    }
-                    break __inline_String_Eq__eq_5: "core:prelude/string.wado/String^Eq::eq_bytes"(self_11.repr, other.repr, len_a);
-                } == 0;
+                "core:prelude/string.wado/String^Eq::eq"(builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_12, i), index_10 = i - 1; if builtin::unlikely(index_10 >= _licm_used_11) {
+                    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+                    unreachable;
+                }; builtin::array_get<ref "core:prelude/string.wado//String">(_licm_repr_12, index_10)) == 0;
             }) {
                 n = n + 1;
             }
@@ -224,14 +213,14 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b10: block {
-        l11: loop {
+    b9: block {
+        l10: loop {
             if i >= len {
-                break b10;
+                break b9;
             }
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l11;
+            continue l10;
         };
     };
 }
@@ -314,14 +303,14 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b16: block {
-        l17: loop {
+    b15: block {
+        l16: loop {
             if t <= 0_i64 {
-                break b16;
+                break b15;
             }
             n = n + 1;
             t = t / 10_i64;
-            continue l17;
+            continue l16;
         };
     };
     return n;
@@ -335,15 +324,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b20: block {
-            l21: loop {
+        b19: block {
+            l20: loop {
                 if temp <= 0_i64 {
-                    break b20;
+                    break b19;
                 }
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l21;
+                continue l20;
             };
         };
     }
@@ -405,6 +394,15 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
+}
+
+fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
+    let len_a: i32;
+    len_a = self.used;
+    if len_a != other.used {
+        return 0;
+    }
+    return "core:prelude/string.wado/String^Eq::eq_bytes"(self.repr, other.repr, len_a);
 }
 
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {

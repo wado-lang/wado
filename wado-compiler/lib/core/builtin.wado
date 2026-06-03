@@ -45,35 +45,35 @@ fn select<T>(cond: bool, if_true: T, if_false: T) -> T;
 /// argument is provably fresh.
 fn copy_value<T>(value: T) -> T;
 /// Returns the length of a GC array.
-fn array_len(arr: builtin::array<u8>) -> i32;
+fn array_len(arr: &builtin::array<u8>) -> i32;
 
 /// Returns a byte from a u8 array at the given index.
-fn array_get_u8(arr: builtin::array<u8>, idx: i32) -> u8;
+fn array_get_u8(arr: &builtin::array<u8>, idx: i32) -> u8;
 
 /// Sets a byte in a u8 array at the given index.
-fn array_set_u8(arr: builtin::array<u8>, idx: i32, value: u8);
+fn array_set_u8(arr: &mut builtin::array<u8>, idx: i32, value: u8);
 
 /// Creates a new builtin::array<T> with given length, initialized to default values.
 fn array_new<T>(len: i32) -> builtin::array<T>;
 
 /// Returns an element from a builtin::array<T> at the given index.
-fn array_get<T>(arr: builtin::array<T>, idx: i32) -> T;
+fn array_get<T>(arr: &builtin::array<T>, idx: i32) -> T;
 
 /// Sets an element in a builtin::array<T> at the given index.
-fn array_set<T>(arr: builtin::array<T>, idx: i32, value: T);
+fn array_set<T>(arr: &mut builtin::array<T>, idx: i32, value: T);
 
 /// Copies elements between builtin::arrays.
 /// Copies `len` elements from src[src_offset..] to dst[dst_offset..].
-fn array_copy<T>(dst: builtin::array<T>, dst_offset: i32, src: builtin::array<T>, src_offset: i32, len: i32);
+fn array_copy<T>(dst: &mut builtin::array<T>, dst_offset: i32, src: &builtin::array<T>, src_offset: i32, len: i32);
 
 /// Allocates a new builtin::array<T> and copies every element of `src` into
 /// it. Used by the synthesized `$value_copy$` functions to deep-copy raw
 /// array fields of value-semantic structs.
-fn array_clone<T>(src: builtin::array<T>) -> builtin::array<T>;
+fn array_clone<T>(src: &builtin::array<T>) -> builtin::array<T>;
 
 /// Fills a builtin::array<T> with a value.
 /// Fills `len` elements starting at `offset` with `value`.
-fn array_fill<T>(arr: builtin::array<T>, offset: i32, value: T, len: i32);
+fn array_fill<T>(arr: &mut builtin::array<T>, offset: i32, value: T, len: i32);
 /// Loads an i32 from linear memory (Wasm i32.load).
 fn i32_load(addr: i32) -> i32;
 

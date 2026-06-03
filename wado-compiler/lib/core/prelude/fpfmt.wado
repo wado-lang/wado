@@ -597,8 +597,8 @@ pub fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
         fill_zeros(buf, nd + 1);
         write_digits_at(buf, start, d, nd);
         // Shift fractional part right by 1 and insert '.'
-        let raw = buf.internal_raw_bytes();
-        builtin::array_copy(raw, start + decimal_pos + 1, raw, start + decimal_pos, nd - decimal_pos);
+        let mut raw = buf.internal_raw_bytes();
+        builtin::array_copy(&mut raw, start + decimal_pos + 1, &raw, start + decimal_pos, nd - decimal_pos);
         buf.set_byte_unchecked(start + decimal_pos, '.' as u8);
     }
 }
@@ -627,8 +627,8 @@ pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
         let start = buf.len();
         fill_zeros(buf, nd + 1);
         write_digits_at(buf, start, d, nd);
-        let raw = buf.internal_raw_bytes();
-        builtin::array_copy(raw, start + 2, raw, start + 1, nd - 1);
+        let mut raw = buf.internal_raw_bytes();
+        builtin::array_copy(&mut raw, start + 2, &raw, start + 1, nd - 1);
         buf.set_byte_unchecked(start + 1, '.' as u8);
     } else {
         let start = buf.len();
@@ -722,8 +722,8 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
             let start = buf.len();
             fill_zeros(buf, total);
             write_digits_at(buf, start, trim_d, output_nd);
-            let raw = buf.internal_raw_bytes();
-            builtin::array_copy(raw, start + decimal_pos + 1, raw, start + decimal_pos, output_nd - decimal_pos);
+            let mut raw = buf.internal_raw_bytes();
+            builtin::array_copy(&mut raw, start + decimal_pos + 1, &raw, start + decimal_pos, output_nd - decimal_pos);
             buf.set_byte_unchecked(start + decimal_pos, '.' as u8);
             return;
         }
@@ -731,8 +731,8 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
         let start = buf.len();
         fill_zeros(buf, nd + 1);
         write_digits_at(buf, start, d, nd);
-        let raw = buf.internal_raw_bytes();
-        builtin::array_copy(raw, start + decimal_pos + 1, raw, start + decimal_pos, nd - decimal_pos);
+        let mut raw = buf.internal_raw_bytes();
+        builtin::array_copy(&mut raw, start + decimal_pos + 1, &raw, start + decimal_pos, nd - decimal_pos);
         buf.set_byte_unchecked(start + decimal_pos, '.' as u8);
         fill_zeros(buf, trailing);
     }
@@ -767,8 +767,8 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
             skip = skip - 1;
         }
         write_digits_at(buf, start, trim_d, digit_count);
-        let raw = buf.internal_raw_bytes();
-        builtin::array_copy(raw, start + 2, raw, start + 1, digit_count - 1);
+        let mut raw = buf.internal_raw_bytes();
+        builtin::array_copy(&mut raw, start + 2, &raw, start + 1, digit_count - 1);
         buf.set_byte_unchecked(start + 1, '.' as u8);
         fill_zeros(buf, trailing);
     } else {

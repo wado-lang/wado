@@ -3379,7 +3379,7 @@ Returns an iterator over characters with their byte indices.
 
 ##### `pub fn eq(&self, other: &Self) -> bool`
 
-##### `fn eq_bytes(a: builtin::array<u8>, b: builtin::array<u8>, len: i32) -> bool`
+##### `fn eq_bytes(a: &builtin::array<u8>, b: &builtin::array<u8>, len: i32) -> bool`
 
 #### `impl Ord for String`
 

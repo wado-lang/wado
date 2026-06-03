@@ -39,27 +39,27 @@ impl List<T> {
     }
 
     pub fn grow(&mut self) {
-        let capacity = builtin::array_len(self.repr);
+        let capacity = builtin::array_len(&self.repr);
         let new_capacity = i32_max(capacity * 2, 4);
-        let new_repr: builtin::array<T> = builtin::array_new(new_capacity);
-        builtin::array_copy(new_repr, 0, self.repr, 0, self.used);
+        let mut new_repr: builtin::array<T> = builtin::array_new(new_capacity);
+        builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
         self.repr = new_repr;
     }
 
     fn grow_to(&mut self, min_capacity: i32) {
-        let capacity = builtin::array_len(self.repr);
+        let capacity = builtin::array_len(&self.repr);
         if min_capacity <= capacity {
             return;
         }
         let new_capacity = i32_max(i32_max(capacity * 2, min_capacity), 4);
-        let new_repr: builtin::array<T> = builtin::array_new(new_capacity);
-        builtin::array_copy(new_repr, 0, self.repr, 0, self.used);
+        let mut new_repr: builtin::array<T> = builtin::array_new(new_capacity);
+        builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
         self.repr = new_repr;
     }
 
     pub fn filled(n: i32, element: T) -> List<T> {
-        let repr: builtin::array<T> = builtin::array_new(n);
-        builtin::array_fill(repr, 0, element, n);
+        let mut repr: builtin::array<T> = builtin::array_new(n);
+        builtin::array_fill(&mut repr, 0, element, n);
         return List { repr, used: n };
     }
 
@@ -73,7 +73,7 @@ impl List<T> {
 
     /// Returns the total number of elements the array can hold without reallocating.
     pub fn capacity(&self) -> i32 {
-        return builtin::array_len(self.repr);
+        return builtin::array_len(&self.repr);
     }
 
     pub fn internal_raw_data(&self) -> builtin::array<T> {
@@ -88,10 +88,10 @@ impl List<T> {
     #[compiler_item("list_push")]
     pub fn push(&mut self, value: T) with stores[value] {
         let used = self.used;
-        if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        if builtin::unlikely(used >= builtin::array_len(&self.repr)) {
             self.grow();
         }
-        builtin::array_set(self.repr, used, value);
+        builtin::array_set(&mut self.repr, used, value);
         self.used = used + 1;
     }
 
@@ -100,7 +100,7 @@ impl List<T> {
             return null;
         }
         self.used -= 1;
-        return Option::Some(builtin::array_get(self.repr, self.used));
+        return Option::Some(builtin::array_get(&self.repr, self.used));
     }
 
     /// Returns the first element, or None if empty.
@@ -108,33 +108,33 @@ impl List<T> {
         if self.used == 0 {
             return null;
         }
-        return Option::Some(builtin::array_get(self.repr, 0));
+        return Option::Some(builtin::array_get(&self.repr, 0));
     }
 
     pub fn last(&self) -> Option<T> {
         if self.used == 0 {
             return null;
         }
-        return Option::Some(builtin::array_get(self.repr, self.used - 1));
+        return Option::Some(builtin::array_get(&self.repr, self.used - 1));
     }
 
     pub fn get(&self, index: i32) -> Option<T> {
         if index < 0 || index >= self.used {
             return null;
         }
-        return Option::Some(builtin::array_get(self.repr, index));
+        return Option::Some(builtin::array_get(&self.repr, index));
     }
 
     /// Inserts an element at the given index, shifting all elements after it to the right.
     /// Panics if `index > len()`.
     pub fn insert(&mut self, index: i32, value: T) with stores[value] {
         assert index >= 0 && index <= self.used, "index out of bounds";
-        if builtin::unlikely(self.used >= builtin::array_len(self.repr)) {
+        if builtin::unlikely(self.used >= builtin::array_len(&self.repr)) {
             self.grow();
         }
         // Shift elements right
-        builtin::array_copy(self.repr, index + 1, self.repr, index, self.used - index);
-        builtin::array_set(self.repr, index, value);
+        builtin::array_copy(&mut self.repr, index + 1, &self.repr, index, self.used - index);
+        builtin::array_set(&mut self.repr, index, value);
         self.used += 1;
     }
 
@@ -142,9 +142,9 @@ impl List<T> {
     /// Panics if `index >= len()`.
     pub fn remove(&mut self, index: i32) -> T {
         assert index >= 0 && index < self.used, "index out of bounds";
-        let value = builtin::array_get(self.repr, index);
+        let value = builtin::array_get(&self.repr, index);
         // Shift elements left
-        builtin::array_copy(self.repr, index, self.repr, index + 1, self.used - 1 - index);
+        builtin::array_copy(&mut self.repr, index, &self.repr, index + 1, self.used - 1 - index);
         self.used -= 1;
         return value;
     }
@@ -154,9 +154,9 @@ impl List<T> {
     pub fn swap(&mut self, a: i32, b: i32) {
         assert a >= 0 && a < self.used, "index out of bounds";
         assert b >= 0 && b < self.used, "index out of bounds";
-        let tmp = builtin::array_get(self.repr, a);
-        builtin::array_set(self.repr, a, builtin::array_get(self.repr, b));
-        builtin::array_set(self.repr, b, tmp);
+        let tmp = builtin::array_get(&self.repr, a);
+        builtin::array_set(&mut self.repr, a, builtin::array_get(&self.repr, b));
+        builtin::array_set(&mut self.repr, b, tmp);
     }
 
     pub fn truncate(&mut self, len: i32) {
@@ -173,17 +173,17 @@ impl List<T> {
     /// Reserves capacity for at least `additional` more elements.
     pub fn reserve(&mut self, additional: i32) {
         let required = self.used + additional;
-        if builtin::unlikely(required > builtin::array_len(self.repr)) {
+        if builtin::unlikely(required > builtin::array_len(&self.repr)) {
             self.grow_to(required);
         }
     }
 
     /// Shrinks the capacity to match the current length.
     pub fn shrink_to_fit(&mut self) {
-        let capacity = builtin::array_len(self.repr);
+        let capacity = builtin::array_len(&self.repr);
         if capacity > self.used {
-            let new_repr: builtin::array<T> = builtin::array_new(self.used);
-            builtin::array_copy(new_repr, 0, self.repr, 0, self.used);
+            let mut new_repr: builtin::array<T> = builtin::array_new(self.used);
+            builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
             self.repr = new_repr;
         }
     }
@@ -195,10 +195,10 @@ impl List<T> {
             return;
         }
         let new_used = self.used + other_len;
-        if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        if builtin::unlikely(new_used > builtin::array_len(&self.repr)) {
             self.grow_to(new_used);
         }
-        builtin::array_copy(self.repr, self.used, other.repr, 0, other_len);
+        builtin::array_copy(&mut self.repr, self.used, &other.repr, 0, other_len);
         self.used = new_used;
     }
 
@@ -207,9 +207,9 @@ impl List<T> {
         let mut lo = 0;
         let mut hi = self.used - 1;
         while lo < hi {
-            let tmp = builtin::array_get(self.repr, lo);
-            builtin::array_set(self.repr, lo, builtin::array_get(self.repr, hi));
-            builtin::array_set(self.repr, hi, tmp);
+            let tmp = builtin::array_get(&self.repr, lo);
+            builtin::array_set(&mut self.repr, lo, builtin::array_get(&self.repr, hi));
+            builtin::array_set(&mut self.repr, hi, tmp);
             lo += 1;
             hi -= 1;
         }
@@ -218,9 +218,9 @@ impl List<T> {
     /// Returns a new array containing this array's elements repeated `n` times.
     pub fn repeat(&self, n: i32) -> List<T> {
         let total = self.used * n;
-        let new_repr: builtin::array<T> = builtin::array_new(total);
+        let mut new_repr: builtin::array<T> = builtin::array_new(total);
         for let mut r = 0; r < n; r += 1 {
-            builtin::array_copy(new_repr, r * self.used, self.repr, 0, self.used);
+            builtin::array_copy(&mut new_repr, r * self.used, &self.repr, 0, self.used);
         }
         return List { repr: new_repr, used: total };
     }
@@ -231,21 +231,21 @@ impl List<T> {
     #[inline(always)]
     pub fn copy_within_append(&mut self, src_start: i32, count: i32) {
         let new_used = self.used + count;
-        let capacity = builtin::array_len(self.repr);
+        let capacity = builtin::array_len(&self.repr);
         if builtin::unlikely(new_used > capacity) {
             let new_capacity = i32_max(new_used, capacity * 2);
-            let new_repr: builtin::array<T> = builtin::array_new(new_capacity);
-            builtin::array_copy(new_repr, 0, self.repr, 0, self.used);
+            let mut new_repr: builtin::array<T> = builtin::array_new(new_capacity);
+            builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
             self.repr = new_repr;
         }
-        let raw = self.repr;
+        let mut raw = self.repr;
         let base = self.used;
         // Forward element-by-element copy intentionally propagates just-written
         // values for DEFLATE-style run-length back-references (src < dst, overlap).
         // `builtin::array_copy` uses copy-as-if-buffered semantics, so it cannot
         // replace this loop.
         for let mut i = 0; i < count; i += 1 {
-            builtin::array_set(raw, base + i, builtin::array_get(raw, src_start + i));
+            builtin::array_set(&mut raw, base + i, builtin::array_get(&raw, src_start + i));
         }
         self.used = new_used;
     }
@@ -255,7 +255,7 @@ impl<T: Eq> List<T> {
     /// Returns true if the array contains the given value.
     pub fn contains(&self, value: &T) -> bool {
         for let mut i = 0; i < self.used; i += 1 {
-            if builtin::array_get(self.repr, i) == *value {
+            if builtin::array_get(&self.repr, i) == *value {
                 return true;
             }
         }
@@ -270,7 +270,7 @@ impl IndexValue<i32> for List<T> {
         if builtin::unlikely(index >= self.used) {
             panic("index out of bounds");
         }
-        return builtin::array_get(self.repr, index);
+        return builtin::array_get(&self.repr, index);
     }
 }
 
@@ -281,7 +281,7 @@ impl IndexAssign<i32> for List<T> {
         if builtin::unlikely(index >= self.used) {
             panic("index out of bounds");
         }
-        builtin::array_set(self.repr, index, value);
+        builtin::array_set(&mut self.repr, index, value);
     }
 }
 
@@ -291,7 +291,7 @@ impl<T: Eq> Eq for List<T> {
             return false;
         }
         for let mut i = 0; i < self.used; i += 1 {
-            if builtin::array_get(self.repr, i) != builtin::array_get(other.repr, i) {
+            if builtin::array_get(&self.repr, i) != builtin::array_get(&other.repr, i) {
                 return false;
             }
         }
@@ -303,8 +303,8 @@ impl<T: Ord> Ord for List<T> {
     pub fn cmp(&self, other: &Self) -> Ordering {
         let min_len = i32_min(self.used, other.used);
         for let mut i = 0; i < min_len; i += 1 {
-            let a = builtin::array_get(self.repr, i);
-            let b = builtin::array_get(other.repr, i);
+            let a = builtin::array_get(&self.repr, i);
+            let b = builtin::array_get(&other.repr, i);
             if a < b {
                 return Ordering::Less;
             }
@@ -340,7 +340,7 @@ impl ListSlice<T> {
         if index < 0 || index >= self.end - self.start {
             return null;
         }
-        return Option::Some(builtin::array_get(self.repr, self.start + index));
+        return Option::Some(builtin::array_get(&self.repr, self.start + index));
     }
 
     pub fn slice(&self, start: i32, end: i32) -> ListSlice<T> {
@@ -358,8 +358,8 @@ impl ListSlice<T> {
         if len <= 0 {
             return List::with_capacity(0);
         }
-        let new_repr: builtin::array<T> = builtin::array_new(len);
-        builtin::array_copy(new_repr, 0, self.repr, self.start, len);
+        let mut new_repr: builtin::array<T> = builtin::array_new(len);
+        builtin::array_copy(&mut new_repr, 0, &self.repr, self.start, len);
         return List { repr: new_repr, used: len };
     }
 
@@ -379,7 +379,7 @@ impl IndexValue<i32> for ListSlice<T> {
         if builtin::unlikely(index < 0 || index >= self.end - self.start) {
             panic("index out of bounds");
         }
-        return builtin::array_get(self.repr, self.start + index);
+        return builtin::array_get(&self.repr, self.start + index);
     }
 }
 
@@ -433,7 +433,7 @@ impl<T> Iterator for ListIter<T> {
         if self.index >= self.used {
             return null;
         }
-        let item = builtin::array_get(self.repr, self.index);
+        let item = builtin::array_get(&self.repr, self.index);
         self.index += 1;
         return Option::Some(item);
     }
@@ -476,7 +476,7 @@ impl<T> Iterator for ListRefIter<T> {
         if self.index >= self.used {
             return null;
         }
-        let val = builtin::array_get(self.repr, self.index);
+        let val = builtin::array_get(&self.repr, self.index);
         let ref_val = &val;
         self.index += 1;
         return Option::Some(ref_val);
@@ -526,8 +526,8 @@ impl List<T> {
         if n <= 1 {
             return;
         }
-        let src = self.repr;
-        let buf: builtin::array<T> = builtin::array_new(n);
+        let mut src = self.repr;
+        let mut buf: builtin::array<T> = builtin::array_new(n);
         let mut width = 1;
         for ; width < n; width = width * 2 {
             for let mut start = 0; start < n; start += width * 2 {
@@ -539,25 +539,25 @@ impl List<T> {
                     for let mut k = start; k < end; k += 1 {
                         if i < mid {
                             if j < end {
-                                let a = builtin::array_get(src, i);
-                                let b = builtin::array_get(src, j);
+                                let a = builtin::array_get(&src, i);
+                                let b = builtin::array_get(&src, j);
                                 if let Greater = cmp(&a, &b) {
-                                    builtin::array_set(buf, k, b);
+                                    builtin::array_set(&mut buf, k, b);
                                     j += 1;
                                 } else {
-                                    builtin::array_set(buf, k, a);
+                                    builtin::array_set(&mut buf, k, a);
                                     i += 1;
                                 }
                             } else {
-                                builtin::array_set(buf, k, builtin::array_get(src, i));
+                                builtin::array_set(&mut buf, k, builtin::array_get(&src, i));
                                 i += 1;
                             }
                         } else {
-                            builtin::array_set(buf, k, builtin::array_get(src, j));
+                            builtin::array_set(&mut buf, k, builtin::array_get(&src, j));
                             j += 1;
                         }
                     }
-                    builtin::array_copy(src, start, buf, start, end - start);
+                    builtin::array_copy(&mut src, start, &buf, start, end - start);
                 }
             }
         }
@@ -565,8 +565,8 @@ impl List<T> {
 
     pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering) -> List<T> {
         let n = self.used;
-        let new_repr: builtin::array<T> = builtin::array_new(n);
-        builtin::array_copy(new_repr, 0, self.repr, 0, n);
+        let mut new_repr: builtin::array<T> = builtin::array_new(n);
+        builtin::array_copy(&mut new_repr, 0, &self.repr, 0, n);
         let mut copy = List { repr: new_repr, used: n };
         copy.sort_by(cmp);
         return copy;
@@ -676,8 +676,8 @@ impl<T: Ord> List<T> {
 
     pub fn sorted(&self) -> List<T> {
         let n = self.used;
-        let new_repr: builtin::array<T> = builtin::array_new(n);
-        builtin::array_copy(new_repr, 0, self.repr, 0, n);
+        let mut new_repr: builtin::array<T> = builtin::array_new(n);
+        builtin::array_copy(&mut new_repr, 0, &self.repr, 0, n);
         let mut copy = List { repr: new_repr, used: n };
         copy.sort();
         return copy;
@@ -693,7 +693,7 @@ impl<T: Display> List<T> {
             if i > 0 {
                 f.write_str(&separator);
             }
-            let item = builtin::array_get(self.repr, i);
+            let item = builtin::array_get(&self.repr, i);
             item.fmt(&mut f);
         }
         return buf;
@@ -737,8 +737,8 @@ impl ListIter<T> {
         let mut repr: builtin::array<T> = builtin::array_new(remaining);
         let mut result_used = 0;
         for let mut i = self.index; i < self.used; i += 1 {
-            let item = builtin::array_get(self.repr, i);
-            builtin::array_set(repr, result_used, item);
+            let item = builtin::array_get(&self.repr, i);
+            builtin::array_set(&mut repr, result_used, item);
             result_used += 1;
         }
         self.index = self.used;
