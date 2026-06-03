@@ -79,7 +79,10 @@ pub(super) fn dedupe_const_globals(module: &mut WirPackage) {
         let key = (
             g.lazy_init,
             g.wado_mutable,
-            matches!(&g.ty, WirType::Ref { nullable: true, .. } | WirType::AbstractRef { nullable: true, .. }),
+            matches!(
+                &g.ty,
+                WirType::Ref { nullable: true, .. } | WirType::AbstractRef { nullable: true, .. }
+            ),
             format!("{:?}", g.ty),
             format!("{:?}", g.init),
         );
@@ -151,7 +154,10 @@ fn module_has_ref_eq(module: &WirPackage) -> bool {
         .flatten()
         .any(has)
         || module.globals.iter().any(|g| has(&g.init))
-        || module.data.iter().any(|d| d.offset.as_ref().is_some_and(has))
+        || module
+            .data
+            .iter()
+            .any(|d| d.offset.as_ref().is_some_and(has))
         || module.elements.iter().any(|e| has(&e.offset))
 }
 
