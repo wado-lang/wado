@@ -801,7 +801,19 @@ impl Analyzer<'_> {
                 let is_builtin = builtin_gname(func).is_some();
                 for a in args {
                     if is_builtin {
-                        if !self.verify_expr(&a.expr, tainted, visiting) {
+                        // The `array_*` intrinsics now take `&` / `&mut`
+                        // first parameters (WEP-2026-06-02 Phase 1). A
+                        // `&mut self.repr` arg to a spine builtin is a
+                        // spine handoff, not an element-mutating escape, so
+                        // peel the reference wrapper before recursing.
+                        let inner = match &a.expr.kind {
+                            NirExprKind::Unary {
+                                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                                expr,
+                            } => expr.as_ref(),
+                            _ => &a.expr,
+                        };
+                        if !self.verify_expr(inner, tainted, visiting) {
                             return false;
                         }
                     } else if !self.verify_call_arg(&a.expr, tainted, visiting) {

@@ -137,7 +137,14 @@ impl FunctionTranslator<'_, '_> {
     /// already a deep copy.
     fn array_element_copy_func(&self, src_type_id: TypeId) -> Option<String> {
         use crate::tir::ResolvedType;
-        let elem = match self.type_table.get(src_type_id) {
+        let mut ty = src_type_id;
+        loop {
+            match self.type_table.get(ty) {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => ty = *inner,
+                _ => break,
+            }
+        }
+        let elem = match self.type_table.get(ty) {
             ResolvedType::BuiltinArray(elem) => *elem,
             _ => return None,
         };
