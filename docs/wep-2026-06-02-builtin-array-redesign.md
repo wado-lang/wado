@@ -277,9 +277,19 @@ operations `&` / `&mut` first parameters so their mutation becomes visible to th
 optimizer. This closes the invisible-mutator bug class and **unblocks dependent
 work** the hazard was holding up (e.g. const-global globalization).
 
-- [ ] Give the `builtin::array_*` mutators `&mut` / readers `&` first parameters,
+- [x] Give the `builtin::array_*` mutators `&mut` / readers `&` first parameters,
       fix their call sites in `List` / `String`, and confirm the optimizer now sees
-      the mutation (add a red/green fixture if missing).
+      the mutation. Done: 9 intrinsic signatures take `&` / `&mut` in
+      `lib/core/builtin.wado`; every call site in `lib/core/**` and the
+      hand-written test fixtures / benchmarks passes `&` / `&mut` explicitly (no
+      auto-ref); `BuiltinRegistry::resolve_type` learns the reference types so
+      monomorphization still pins `T`; the `$value_copy$T` synthesizer wraps the
+      array-clone arg in `Ref` to match the new signature. Downstream consumers
+      that pattern-matched on the by-value shape were updated: WIR-level
+      `array_element_copy_func` peels `Ref` / `MutRef` before discovering the
+      per-element copy helper, and `value_copy_demote` peels the same wrapper for
+      spine-builtin args so a `&mut self.repr` handoff is not misread as element
+      escape. `mise run test` and `mise run test-wado` both green.
 
 ### Phase 2 — Expose the raw GC array as a public `Array<T>`
 
