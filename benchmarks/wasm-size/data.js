@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780490684859,
+  "lastUpdate": 1780494037584,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29361,6 +29361,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/dea5f64ccdd6f5ceb7099be9a7110390232aa385"
         },
         "date": 1780490684342,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9687,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17183,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457437,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "20e2b0c1d28f99f54c4c2d4e4ccdee36a25b9db7",
+          "message": "Merge pull request #1281 from wado-lang/claude/sroa-refactor-smells-R4luC\n\nrefactor(sroa): migrate hand-written IR walks to visitor traits",
+          "timestamp": "2026-06-03T22:31:35+09:00",
+          "tree_id": "fce1b539075c066b37b39b502ee22347a78d57f6",
+          "url": "https://github.com/wado-lang/wado/commit/20e2b0c1d28f99f54c4c2d4e4ccdee36a25b9db7"
+        },
+        "date": 1780494037082,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
