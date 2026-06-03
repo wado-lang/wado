@@ -138,9 +138,7 @@ impl FunctionTranslator<'_, '_> {
     fn array_element_copy_func(&self, src_type_id: TypeId) -> Option<String> {
         use crate::tir::ResolvedType;
         let mut ty = src_type_id;
-        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
-            self.type_table.get(ty)
-        {
+        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = self.type_table.get(ty) {
             ty = *inner;
         }
         let elem = match self.type_table.get(ty) {
