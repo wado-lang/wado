@@ -357,7 +357,7 @@ heap-aware return values stay deferred (call them Stage 3.5+).
     require modelling struct values).
   - `IndirectCall` / `CmRawCall` (closure / CM-import calls).
   - Multi-statement bodies (let-sequences, multi-return).
-  - Heap-aware return values (`String`, `Array`, struct literals,
+  - Heap-aware return values (`String`, `List`, struct literals,
     variant payloads). The body's lattice naturally stays
     `Unevaluated` for those, so we just bail.
   - User-facing `const fn` / `#[const_eval]` syntax.
@@ -422,7 +422,7 @@ globals and needs `niri` to see through them so the fold cascades.
       `value_to_expr_kind` leaf-rewrite.
 - [ ] Generalize the local `field_env` to project nested aggregate fields
       (today scalar `Value` only), reusing Phase C's heap-aware
-      `Value::{Struct, Array, Variant}`.
+      `Value::{Struct, List, Variant}`.
 - [ ] Loop effect: a globalized constant's field/element reads fold to
       scalars module-wide → `const_global_promotion` / `const_fold` /
       `const_branch_prune` reduce further → the now-unread global is removed
@@ -498,7 +498,7 @@ incurs one codegen.
 
 - User-facing CTFE syntax (`#[const_eval]`, `const fn`). Decide later
   once we see real usage demand.
-- Heap-allocated values (`Array`, `String`) in the in-process `Value`
+- Heap-allocated values (`List`, `String`) in the in-process `Value`
   type — Stages 1-3 are primitive-only. The wasm backend doesn't need
   this since it returns whatever wasm returns.
 - Salsa-style demand-driven reanalysis across compiler runs.

@@ -2,7 +2,7 @@
 
 ## Context
 
-Wado uses `[...]` syntax for both tuple literals and tuple types (see [Tuple and Array Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md)). Tuple destructuring allows extracting individual elements from a tuple value into separate bindings using a mirrored `[...]` pattern.
+Wado uses `[...]` syntax for both tuple literals and tuple types (see [Tuple and List Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md)). Tuple destructuring allows extracting individual elements from a tuple value into separate bindings using a mirrored `[...]` pattern.
 
 This feature is the tuple counterpart to [Struct Destructuring](./wep-2026-02-22-struct-destructuring.md). While struct patterns use field names, tuple patterns use positional correspondence.
 
@@ -155,7 +155,7 @@ let area = match shape {
 #### For-Of
 
 ```wado
-let pairs: Array<[i32, String]> = [[1, "one"], [2, "two"]];
+let pairs: List<[i32, String]> = [[1, "one"], [2, "two"]];
 for let [num, name] of pairs {
     println(`{num}: {name}`);
 }
@@ -188,10 +188,10 @@ if pair matches { [x, y] && x + y > 25 } {
 ### Not Included (Possible Future Extensions)
 
 - **Middle/leading rest** (`let [first, .., last] = tuple`): Requires compile-time length arithmetic. Low priority since large tuples should use structs.
-- **Slice patterns**: Destructuring `Array<T>` with patterns like `[first, ...rest]` where `rest` is a sub-array. Separate feature from tuple destructuring.
+- **Slice patterns**: Destructuring `List<T>` with patterns like `[first, ...rest]` where `rest` is a sub-array. Separate feature from tuple destructuring.
 
 ## See Also
 
-- [Tuple and Array Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md) — tuple syntax design
+- [Tuple and List Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md) — tuple syntax design
 - [Struct Destructuring](./wep-2026-02-22-struct-destructuring.md) — the struct counterpart
 - [Variant Payload Design](./wep-2026-01-25-variant-payload-design.md) — tuple payloads in variants

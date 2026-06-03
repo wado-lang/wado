@@ -38,7 +38,7 @@ Returns the fully specialized name without signature:
 | -------------- | ---------------------------- |
 | Free function  | `my_function`                |
 | Method         | `Point::distance`            |
-| Generic method | `Array<String>::len`         |
+| Generic method | `List<String>::len`          |
 | Closure        | `parent_function::{closure}` |
 
 ### `#data`

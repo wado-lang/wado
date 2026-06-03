@@ -7,7 +7,7 @@ contexts, via a trait-based mechanism that is extensible to user-defined collect
 
 ```wado
 let d: TreeMap<String, i32> = { width: 1920, height: 1080 };  // KeyValueLiteral
-let a: Array<i32>            = [1, 2, 3];                      // SequenceLiteral
+let a: List<i32>            = [1, 2, 3];                      // SequenceLiteral
 ```
 
 The design must:
@@ -30,8 +30,8 @@ Coercion is **literal-only** — it does not apply to bound variables:
 
 ```wado
 let t = [1, 2, 3];           // t: [i32, i32, i32] (tuple, no coercion)
-let arr: Array<i32> = t;     // ERROR: not a literal
-let arr: Array<i32> = [1, 2, 3];  // OK
+let arr: List<i32> = t;     // ERROR: not a literal
+let arr: List<i32> = [1, 2, 3];  // OK
 ```
 
 Struct literal priority: if the target type is a struct with matching fields, it is
@@ -166,11 +166,11 @@ When the compiler sees `[e0, e1, ...]` targeting type `T: SequenceLiteral<Elemen
 
 A known type (struct, enum, variant, flags, newtype, primitive) in a generic
 position of an impl is treated as a concrete constraint, not a free type parameter.
-This includes nested generic types (e.g. `Array<String>`):
+This includes nested generic types (e.g. `List<String>`):
 
 ```wado
 enum Direction { North, South }
-struct DirMap<D, V> { keys: Array<String>, values: Array<V> }
+struct DirMap<D, V> { keys: List<String>, values: List<V> }
 
 impl KeyValueLiteralBuilder for DirMap<Direction, V> {
     type Value = V;
@@ -186,14 +186,14 @@ let m: DirMap<String, i32>    = { a: 1 };       // ERROR: String != Direction
 // Nested generic type in concrete position
 struct NestedMap<K, V> { ... }
 
-impl KeyValueLiteralBuilder for NestedMap<Array<String>, V> {
+impl KeyValueLiteralBuilder for NestedMap<List<String>, V> {
     type Value = V;
-    type Output = NestedMap<Array<String>, V>;
+    type Output = NestedMap<List<String>, V>;
     ...
 }
 
-let m: NestedMap<Array<String>, i32> = { a: 1 };   // OK
-let m: NestedMap<Array<i32>, i32>    = { a: 1 };   // ERROR: Array<i32> != Array<String>
+let m: NestedMap<List<String>, i32> = { a: 1 };   // OK
+let m: NestedMap<List<i32>, i32>    = { a: 1 };   // ERROR: List<i32> != List<String>
 ```
 
 The validation is recursive: `impl_type_matches_concrete` descends into nested
@@ -237,12 +237,12 @@ impl KeyValueLiteralBuilder for TreeMap<String, V> {
 Same pattern for `SequenceLiteralBuilder`:
 
 ```wado
-impl SequenceLiteralBuilder for Array<T> {
+impl SequenceLiteralBuilder for List<T> {
     type Element = T;
-    type Output = Array<T>;
+    type Output = List<T>;
 
     fn new_literal(capacity: i32) -> Self {
-        return Array::<T>::with_capacity(capacity);
+        return List::<T>::with_capacity(capacity);
     }
 
     fn push_literal(&mut self, value: T) {
@@ -298,7 +298,7 @@ pub variant JSONValue {
     Bool(bool),
     Number(f64),
     Str(String),
-    Array(Array<JSONValue>),
+    List(List<JSONValue>),
     Object(TreeMap<String, JSONValue>),
 }
 
@@ -322,11 +322,11 @@ impl SequenceLiteralBuilder for JSONValue {
     type Output = JSONValue;
 
     fn new_literal(capacity: i32) -> Self {
-        return JSONValue::Array(Array::<JSONValue>::with_capacity(capacity));
+        return JSONValue::List(List::<JSONValue>::with_capacity(capacity));
     }
 
     fn push_literal(&mut self, value: JSONValue) {
-        if let Array(arr) = self { arr.push(value); }
+        if let List(arr) = self { arr.push(value); }
     }
 
     fn build(self) -> Self { return self; }
@@ -338,7 +338,7 @@ With both builder traits (and blanket impls), JSONValue supports nested literals
 ```wado
 let data: JSONValue = {
     "name": "Alice",
-    "scores": [10, 20, 30],       // SequenceLiteral → JSONValue::Array
+    "scores": [10, 20, 30],       // SequenceLiteral → JSONValue::List
     "meta": { "active": true },   // KeyValueLiteral → JSONValue::Object
 };
 ```
@@ -352,7 +352,7 @@ let data: JSONValue = {
 | **FromIterator**           | Iterator → collection         | No (homo only)  |
 | **IntoIterator**           | Collection → iterator         | N/A             |
 
-Heterogeneous element coercion (e.g., `[1, "hello", true]` → `JSONValue::Array`)
+Heterogeneous element coercion (e.g., `[1, "hello", true]` → `JSONValue::List`)
 is deferred: it requires an `Into<E>` conversion per element.
 
 ## Consequences
@@ -373,7 +373,7 @@ is deferred: it requires an `Into<E>` conversion per element.
 5. **Extensible**: any type — user-defined or standard — can implement either trait
 6. **Compile-time only**: all expansion happens at compile time; no runtime overhead
 7. **Key position safety**: concrete types in impl positions are correctly validated,
-   including nested generics (e.g. `Array<String>` in `impl Trait for Foo<Array<String>, V>`)
+   including nested generics (e.g. `List<String>` in `impl Trait for Foo<List<String>, V>`)
 
 ### Negative
 
@@ -394,7 +394,7 @@ is deferred: it requires an `Into<E>` conversion per element.
 
 ## Related WEPs
 
-- [Tuple and Array Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md)
+- [Tuple and List Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md)
 - [Iterator Traits Design](./wep-2026-01-24-iterator-traits.md)
 - [Struct and Trait System](./wep-2026-01-13-struct-and-trait.md)
 - [Associated Types in Traits](./wep-2026-01-20-associated-types.md)

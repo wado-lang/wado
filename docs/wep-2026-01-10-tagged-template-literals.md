@@ -4,7 +4,7 @@
 
 Wado programs frequently need to embed binary data (images, cryptographic keys, compiled assets) or validate complex string literals (regular expressions, SQL queries, DSL syntax) at compile time. Several challenges arise:
 
-1. **Binary data embedding**: Developers need to embed base64-encoded or hex-encoded data as `Array<u8>` literals without runtime decoding overhead
+1. **Binary data embedding**: Developers need to embed base64-encoded or hex-encoded data as `List<u8>` literals without runtime decoding overhead
 2. **DSL validation**: String literals representing domain-specific languages (regex, SQL, GraphQL) should be validated at compile time to catch errors early
 3. **Zero runtime cost**: These operations should happen at compile time with no runtime overhead
 4. **Extensibility**: Users should be able to define their own compile-time transformations without language modifications
@@ -78,14 +78,14 @@ fn tag(input: String) -> T {
 
 ```wado
 // In core:encoding
-pub fn base64(input: String) -> Array<u8> {
+pub fn base64(input: String) -> List<u8> {
     match decode_base64_impl(input) {
         Ok(data) => data,
         Err(e) => panic(`Invalid base64 encoding: {e}`),
     }
 }
 
-pub fn hex(input: String) -> Array<u8> {
+pub fn hex(input: String) -> List<u8> {
     match decode_hex_impl(input) {
         Ok(data) => data,
         Err(e) => panic(`Invalid hex encoding: {e}`),

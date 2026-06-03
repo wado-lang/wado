@@ -22,8 +22,8 @@ We need a unified desugaring strategy that:
 Tag function signatures determine which form of string parts is provided. Two newtype aliases are defined:
 
 ```wado
-type CookedStrings = Array<String>;  // Escape sequences processed (\n -> newline)
-type RawStrings = Array<String>;     // Escape sequences preserved (\n -> "\\n")
+type CookedStrings = List<String>;  // Escape sequences processed (\n -> newline)
+type RawStrings = List<String>;     // Escape sequences preserved (\n -> "\\n")
 ```
 
 The compiler inspects the tag function's first parameter type and generates only the needed form:
@@ -79,7 +79,7 @@ The tag function is a generic function that receives the values as a tuple, pres
 ```wado
 fn sql<Values>(strings: CookedStrings, values: Values) -> SqlQuery {
     let mut query = strings[0];
-    let mut params: Array<SqlParam> = [];
+    let mut params: List<SqlParam> = [];
     for let [i, v] of values.enumerate() {
         params.push(v.to_sql_param());
         query.push_str("?");
@@ -121,7 +121,7 @@ Compile-time base64 decoding. Uses `CookedStrings` since there are no escape seq
 
 ```wado
 impl String {
-    fn base64(strings: CookedStrings, values: []) -> Array<u8> {
+    fn base64(strings: CookedStrings, values: []) -> List<u8> {
         // values must be empty (no interpolation allowed)
         // Decoded at compile time
         return __builtin_base64_decode__(strings[0]);

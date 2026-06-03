@@ -108,8 +108,8 @@ Rules:
 /// routes; in that case all three fields point at shared empty singletons.
 pub struct PathParams {
     path: &String,
-    names: &Array<String>,
-    ranges: &Array<i32>,
+    names: &List<String>,
+    ranges: &List<i32>,
 }
 
 impl PathParams {
@@ -157,7 +157,7 @@ A typical match allocates:
   living in the router. `Option<&RouteMatch<H>>` is encoded as a nullable
   reference (niche optimization), so the `Option` itself does not box.
 - For a dynamic-route hit with N captured params: **1 allocation** for the
-  flat `Array<i32>` of byte ranges (length `2N`). The `PathParams` and
+  flat `List<i32>` of byte ranges (length `2N`). The `PathParams` and
   `RouteMatch` are heap-promoted by the compiler.
 
 Compare to the previous `TreeMap<String, String>` design, which allocated
@@ -235,7 +235,7 @@ impl<H> Router<H> {
     /// uncountable). Useful for emitting the `Allow:` header on a 405
     /// response. Returns an empty array on a genuine 404 or when only an
     /// `any` handler is registered (in which case 405 is unreachable).
-    pub fn allowed_methods(&self, path: &String) -> Array<Method>
+    pub fn allowed_methods(&self, path: &String) -> List<Method>
 
     /// Matches against a `wasi:http` `Request`, splitting the path from the
     /// query string internally. Recommended entry point for HTTP services.
@@ -326,13 +326,13 @@ In addition, each terminal carries a single optional `any` handler (likewise for
 The implementation lives in `wado-compiler/lib/core/router.wado` and is ported from `example/router_dfa.wado`, with the following changes:
 
 - `RouteMatch` is generic over `H`; the example uses a concrete `i32 handler_id`.
-- A `handlers: Array<H>` arena is added to `Router<H>`; terminal states reference handlers by `i32` index. This keeps `DfaState` non-generic, which avoids the monomorphization blow-up of including `H` inside every state.
+- A `handlers: List<H>` arena is added to `Router<H>`; terminal states reference handlers by `i32` index. This keeps `DfaState` non-generic, which avoids the monomorphization blow-up of including `H` inside every state.
 - `route()` validates patterns and panics on malformed input.
-- Method dispatch supports multiple methods per terminal via an `Array<MethodEntry>` per terminal, scanned linearly on lookup (per-terminal method count is in the single digits, so a sorted array + binary search is overkill). (The example assumes one method per terminal.)
+- Method dispatch supports multiple methods per terminal via an `List<MethodEntry>` per terminal, scanned linearly on lookup (per-terminal method count is in the single digits, so a sorted array + binary search is overkill). (The example assumes one method per terminal.)
 - Each terminal and wildcard node carries an extra `any_handler_idx: i32` (`-1` when absent) for `Router::any` dispatch.
 - A `match_request` adapter handles path/query split.
-- Patterns with no `:param`/`*wildcard` segments are routed through a sorted side-table (`static_entries: Array<StaticEntry<H>>`) with binary search and pre-built `RouteMatch` shells. The DFA only stores dynamic patterns. Static-route hits return a reference into the side-table — zero allocations per match.
-- Each DFA terminal caches the captured parameter-name list (`terminal_names: Array<String>`) so a match can construct `PathParams` without re-walking the path. Wildcard transitions similarly cache `wildcard_names = terminal_names + [wildcard_name]`.
+- Patterns with no `:param`/`*wildcard` segments are routed through a sorted side-table (`static_entries: List<StaticEntry<H>>`) with binary search and pre-built `RouteMatch` shells. The DFA only stores dynamic patterns. Static-route hits return a reference into the side-table — zero allocations per match.
+- Each DFA terminal caches the captured parameter-name list (`terminal_names: List<String>`) so a match can construct `PathParams` without re-walking the path. Wildcard transitions similarly cache `wildcard_names = terminal_names + [wildcard_name]`.
 
 ```
 wado-compiler/lib/core/router.wado        Implementation (~250 lines)

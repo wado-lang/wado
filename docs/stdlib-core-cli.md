@@ -27,7 +27,7 @@ Prints to stdout without a trailing newline.
 
 Prints to stderr without a trailing newline.
 
-### `pub fn print_bytes(data: Array<u8>) with Stdout`
+### `pub fn print_bytes(data: List<u8>) with Stdout`
 
 Writes raw bytes to stdout.
 
@@ -35,7 +35,7 @@ Writes raw bytes to stdout.
 
 Returns the value of an environment variable by name.
 
-### `pub fn args() -> Array<String> with Environment`
+### `pub fn args() -> List<String> with Environment`
 
 Returns all command-line arguments.
 

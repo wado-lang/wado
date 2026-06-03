@@ -289,7 +289,7 @@ trait Shr {
 
 #### Compound Assignment Operators (Essential for Efficiency)
 
-Compound assignment operators enable in-place mutation, avoiding temporary object creation. This is especially important for `String`, `Array`, and other types where cloning is expensive.
+Compound assignment operators enable in-place mutation, avoiding temporary object creation. This is especially important for `String`, `List`, and other types where cloning is expensive.
 
 ```wado
 trait AddAssign<Rhs = Self> {
@@ -355,7 +355,7 @@ v1 += v2;  // Desugars to: v1.add_assign(v2)
 - Takes `&mut self` for in-place mutation
 - RHS is taken by value (more flexible than by reference)
 - No return value (`Output` type) - always mutates in place
-- Useful for `String` concatenation, `Array` extension, numeric types
+- Useful for `String` concatenation, `List` extension, numeric types
 
 **Example with String**:
 
@@ -388,7 +388,7 @@ trait IndexMut<Idx> {
 
 ```wado
 struct Matrix {
-    data: Array<f64>,
+    data: List<f64>,
     rows: u32,
     cols: u32,
 }
@@ -569,8 +569,8 @@ impl Add for String {
     }
 }
 
-// Array indexing
-impl<T> Index<usize> for Array<T> {
+// List indexing
+impl<T> Index<usize> for List<T> {
     type Output = T;
     fn index(&self, idx: usize) -> &T {
         // bounds checking
@@ -578,7 +578,7 @@ impl<T> Index<usize> for Array<T> {
     }
 }
 
-impl<T> IndexMut<usize> for Array<T> {
+impl<T> IndexMut<usize> for List<T> {
     type Output = T;
     fn index_mut(&mut self, idx: usize) -> &mut T {
         // bounds checking
@@ -782,7 +782,7 @@ fn run() with Stdout {
 
 ```wado
 struct Matrix {
-    data: Array<f64>,
+    data: List<f64>,
     rows: u32,
     cols: u32,
 }
@@ -790,7 +790,7 @@ struct Matrix {
 impl Matrix {
     pub fn new(rows: u32, cols: u32) -> Matrix {
         let size = rows * cols;
-        let mut data: Array<f64> = [];
+        let mut data: List<f64> = [];
         for let mut i = 0; i < size; i += 1 {
             data.push(0.0);
         }

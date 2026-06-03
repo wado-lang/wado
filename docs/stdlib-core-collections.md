@@ -44,15 +44,15 @@ Returns the value corresponding to the key, or null if not found.
 Removes a key from the map and returns true if the key was present.
 Preserves insertion order of remaining elements.
 
-#### `pub fn keys(&self) -> Array<K>`
+#### `pub fn keys(&self) -> List<K>`
 
 Returns all keys in insertion order.
 
-#### `pub fn values(&self) -> Array<V>`
+#### `pub fn values(&self) -> List<V>`
 
 Returns all values in insertion order.
 
-#### `pub fn entries(&self) -> Array<[K, V]>`
+#### `pub fn entries(&self) -> List<[K, V]>`
 
 Returns all key-value pairs in insertion order.
 

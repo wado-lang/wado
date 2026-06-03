@@ -23,13 +23,13 @@ Items without e2e test coverage are listed in [Untested Features](#untested-feat
 
 - [x] `fn new() -> Fields` (`http-fields`, `http-200`)
 - [x] `fn from_list(entries) -> Result<Fields, HeaderError>` — Ok and Err(InvalidSyntax) verified (`http-fields-from-list`, `http-fields-from-list-error`)
-- [x] `fn get(name) -> Array<FieldValue>` — existing and non-existing names (`http-fields-set`, `http-client-advanced`)
+- [x] `fn get(name) -> List<FieldValue>` — existing and non-existing names (`http-fields-set`, `http-client-advanced`)
 - [x] `fn has(name) -> bool` — true and false (`http-fields`, `http-request-headers`, `http-echo-headers`)
 - [x] `fn set(name, value) -> Result<(), HeaderError>` — Ok and Err(immutable) verified (`http-fields-set`, `http-fields-immutable-errors`)
 - [x] `fn delete(name) -> Result<(), HeaderError>` — Ok and Err(immutable) verified (`http-fields`, `http-fields-immutable-errors`)
-- [x] `fn get_and_delete(name) -> Result<Array<FieldValue>, HeaderError>` — Ok and Err(immutable) verified (`http-fields-get-and-delete`, `http-fields-immutable-errors`)
+- [x] `fn get_and_delete(name) -> Result<List<FieldValue>, HeaderError>` — Ok and Err(immutable) verified (`http-fields-get-and-delete`, `http-fields-immutable-errors`)
 - [x] `fn append(name, value) -> Result<(), HeaderError>` — Ok and Err(immutable) verified (`http-fields`, `http-echo-headers`, `http-fields-immutable-errors`)
-- [x] `fn copy_all() -> Array<[FieldName, FieldValue]>` (`http-fields-copy-all`, `http-fields-immutable-errors`)
+- [x] `fn copy_all() -> List<[FieldName, FieldValue]>` (`http-fields-copy-all`, `http-fields-immutable-errors`)
 - [x] `fn clone() -> Fields` (`http-fields`, `http-fields-immutable-errors`)
 
 ### Request

@@ -1,4 +1,4 @@
-# WEP: `NirExprKind::ArrayLiteral` — a NIR-Materialized Array Node
+# WEP: `NirExprKind::ArrayLiteral` — a NIR-Materialized List Node
 
 ## Context
 
@@ -15,7 +15,7 @@ Full e2e suite green at O0/O2 with the WIR pass removed.
 
 ### Why NIR cannot see array literals today
 
-An array literal such as `[1, 2, 3] as Array<i32>` never reaches NIR as a
+An array literal such as `[1, 2, 3] as List<i32>` never reaches NIR as a
 literal. During elaboration it is coerced through the
 `SequenceLiteralBuilder` trait path (see
 [Iterator-Based Literal Coercion](./wep-2026-01-18-iterator-based-literal-coercion.md)).
@@ -23,7 +23,7 @@ After that path is inlined, the construction reaches NIR as an imperative
 builder sequence over a fresh local:
 
 ```text
-let arr = Array::<i32>::with_capacity(3);
+let arr = List::<i32>::with_capacity(3);
 arr.push_literal(1);
 arr.push_literal(2);
 arr.push_literal(3);
@@ -57,7 +57,7 @@ it collapses the `String::with_capacity` + `push_str_literal` builder
 window at the NIR level _specifically so that later NIR passes (cse,
 const_folding) see the normalized form_ — its module doc says so, and that
 it mirrors the WIR `collapse_array_push_sequences` but runs earlier on
-purpose. `ArrayLiteral` is the same move for `Array<T>`. And
+purpose. `ArrayLiteral` is the same move for `List<T>`. And
 `match_to_switch` is the precedent for the category: a node that `lower`
 never emits and that exists only because an optimizer pass materializes it.
 
@@ -73,7 +73,7 @@ sibling `TupleLiteral`:
 /// from an inlined `SequenceLiteralBuilder` push sequence. `lower` never
 /// emits this; it is an optimizer-materialized normalization, like
 /// `Switch`. The element type and array type are carried by the enclosing
-/// `NirExpr::type_id` (the `Array<T>` struct type), exactly as
+/// `NirExpr::type_id` (the `List<T>` struct type), exactly as
 /// `TupleLiteral` relies on `type_id` for the tuple's struct type.
 ArrayLiteral {
     elements: Vec<NirExpr>,
@@ -83,7 +83,7 @@ ArrayLiteral {
 Rationale for the minimal shape:
 
 - No `element_type` / `array_type` field. `NirExpr` already carries
-  `type_id`, and the array's `Array<T>` struct type is recoverable from
+  `type_id`, and the array's `List<T>` struct type is recoverable from
   it, just as `wir_build` recovers a tuple's struct type from
   `expr.type_id` in `build_tuple_literal`. Adding a redundant type field
   would create a second source of truth that every clone and rewrite must
@@ -98,39 +98,39 @@ Rationale for the minimal shape:
 
 ### The pass that materializes it: `optimize::array_literal`
 
-A new NIR optimizer pass that recognizes the canonical `Array<T>`
+A new NIR optimizer pass that recognizes the canonical `List<T>`
 construction window and rewrites it to `ArrayLiteral`. It runs **after**
 `nir/inline` in the fixed-point loop: the `SequenceLiteralBuilder`
 `new_literal` / `push_literal` / `build` methods — and, for custom builders
-that wrap an `Array<T>`, the `push_literal → self.field.push` delegation —
-must be inlined first so the raw `Array<T> { array_new(N) } + Array::push`
+that wrap an `List<T>`, the `push_literal → self.field.push` delegation —
+must be inlined first so the raw `List<T> { array_new(N) } + List::push`
 window is exposed. Later `cse` / `const_fold` in the same loop then see the
 normalized literal.
 
 The matched window, on a block's statement list, is:
 
 1. An init statement (`Let` or `Assign`-to-local) whose value embeds one or
-   more `Array<T> { repr: array_new(N), used: 0 }` structs. The struct may be
-   the bound value directly (a direct `Array<T>` literal) or a field of a
-   wrapper struct (`SeqVec { items: Array<T> }`, `Bag { keys, values }`),
+   more `List<T> { repr: array_new(N), used: 0 }` structs. The struct may be
+   the bound value directly (a direct `List<T>` literal) or a field of a
+   wrapper struct (`SeqVec { items: List<T> }`, `Bag { keys, values }`),
    reached by a field-index **path** from the bound local. The matcher also
    descends the `{ …; *__b }` block tail that direct literals carry.
 2. The following statements, until each target array has received exactly its
-   `array_new` capacity in `Array::push` calls rooted at the bound local
+   `array_new` capacity in `List::push` calls rooted at the bound local
    (`place.push(e)` or `place.field.push(e)`, peeling the `&mut`). Pushes to
    different array fields may interleave (`Bag`). Inlining `push_literal`
    leaves single-use, _pure_ element temps (`let v = e; place.push(v)`)
    between the pushes; these are resolved to their value and consumed with
    the window.
 
-On a match, each `Array<T> { array_new(N), used: 0 }` struct is rewritten in
+On a match, each `List<T> { array_new(N), used: 0 }` struct is rewritten in
 place to `ArrayLiteral { elements }`, and the consumed push (and resolved
 temp) statements are removed. The enclosing init keeps its shape, so a
 wrapper builder's output struct is preserved with its array field now a
 literal.
 
-`Array::push` is matched by membership in the set of its
-`CompilerItem::ArrayPush` monomorphizations (each element type is a distinct
+`List::push` is matched by membership in the set of its
+`CompilerItem::ListPush` monomorphizations (each element type is a distinct
 `NirFunction`), not by canonical path — mirroring how `string_push`
 identifies its methods. `array_new` is matched by its builtin generic name.
 
@@ -186,7 +186,7 @@ Sequencing (each step with a green checkpoint), as landed:
 - [x] Land the NIR `ArrayLiteral` pass and the `wir_build` → `ArrayNewFixed`
       lowering, then delete `collapse_array_push_sequences` and its helpers,
       keeping `forward_struct_field_constants` (bounds-check elimination now
-      keys on the `StructNew Array<T>` that `wir_build` emits directly).
+      keys on the `StructNew List<T>` that `wir_build` emits directly).
 - [x] Verify WIR output is equivalent across the e2e suite. The array
       fixtures (`array_bounds_elim_const_wir`, `array_append_collapse`,
       `opt_crossmod_array`, `wir_optimize_dce_orphan_push`, …) assert
@@ -196,21 +196,21 @@ Sequencing (each step with a green checkpoint), as landed:
 The implementation went through two designs; the second is what landed:
 
 - A first cut matched the _pre-inline_ `__seq_lit:` `SequenceLiteralBuilder`
-  block and gated on the result type being `Array<T>`. That gate was needed
+  block and gated on the result type being `List<T>`. That gate was needed
   because the pre-inline block shape is identical for every builder, so the
   type was the only discriminator — but it also _excluded_ custom builders
-  that wrap an `Array<T>` (`SeqVec`, `FrozenVec`), whose inner array the old
+  that wrap an `List<T>` (`SeqVec`, `FrozenVec`), whose inner array the old
   WIR pass collapsed (its `ArrayAccessPath::Field` case). Retiring the WIR
   pass under that design was a silent performance regression: those wrappers
-  reverted to imperative `Array::push` chains, a gap the existing fixtures
+  reverted to imperative `List::push` chains, a gap the existing fixtures
   did not assert against.
-- The landed design matches the _post-inline_ `Array<T> { array_new(N) } +
-Array::push` window at any place (direct local or `local.field`), so direct
+- The landed design matches the _post-inline_ `List<T> { array_new(N) } +
+List::push` window at any place (direct local or `local.field`), so direct
   and wrapper arrays collapse uniformly to `array.new_fixed` — reproducing
   the old WIR pass's full coverage, including its field case, without a type
   gate. `array_append_collapse` gains
   `array.new_fixed<i32>(5, 10, 15)` plus a `wir_not_expect` on the wrapper's
-  inner `Array<i32>::push` to lock the wrapper case in;
+  inner `List<i32>::push` to lock the wrapper case in;
   `array_bounds_elim_const_wir` is unchanged from `main` (the post-inline
   pass reproduces the old `__b_0` output exactly).
 
@@ -249,7 +249,7 @@ machinery. As landed, the variant is handled in:
       `TupleLiteral` arm (identical aggregate shape).
 - [x] `nir_unparse.rs` — renders as `[e0, e1, …]`, joined to `TupleLiteral`.
 - [x] `wir_build/translate.rs` — `build_array_literal` lowers to the
-      `Array<T>` `{ repr: array.new_fixed, used: N }` struct.
+      `List<T>` `{ repr: array.new_fixed, used: N }` struct.
 - [x] `optimize/array_literal.rs` — the materializing pass, registered in
       `optimize.rs` (`mod array_literal;` + `step!("nir/array_literal", …)`).
 - [x] Every other NIR exhaustive match (~30 optimize passes) — joined to
@@ -322,8 +322,8 @@ code (TIR, `lower`) needs to know about it.
   proposal.
 - [Iterator-Based Literal Coercion](./wep-2026-01-18-iterator-based-literal-coercion.md)
   — why array literals reach NIR as builder push sequences.
-- [Tuple and Array Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md)
-  — the surface syntax and the `[…] as Array<T>` coercion this node
+- [Tuple and List Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md)
+  — the surface syntax and the `[…] as List<T>` coercion this node
   ultimately represents.
 - [Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md)
   — a primary downstream consumer.

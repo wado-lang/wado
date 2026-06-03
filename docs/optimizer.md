@@ -37,7 +37,7 @@ The optimizer runs after lowering and before Wasm emission. `optimize.rs` orches
    5. Short `push_str` Simplification
    6. Single-Field Parameter SROA
    7. Function Inlining
-   8. Array-Literal Materialization
+   8. List-Literal Materialization
    9. Adjacent-Use Box-Local Elision
    10. LabeledBlock Fusion
    11. Reference Elimination
@@ -70,9 +70,9 @@ Replaces small pure-function calls with their body, sized by an expression-count
 
 E2E: [opt_inline.wado](../wado-compiler/tests/fixtures/opt_inline.wado), [opt_inline_backtrack_miscompile.wado](../wado-compiler/tests/fixtures/opt_inline_backtrack_miscompile.wado).
 
-### Array-Literal Materialization (`array_literal.rs`)
+### List-Literal Materialization (`array_literal.rs`)
 
-Rewrites the `Array<T>` builder window — an `Array<T> { repr: array_new(N), used: 0 }` struct followed by `N` `Array::push` calls — into `NirExprKind::ArrayLiteral { elements }`, giving a constant array the same first-class, analyzable value shape `StructLiteral` / `TupleLiteral` already have (`wir_build` lowers it to `array.new_fixed`). Runs after `inline`, which expands the `SequenceLiteralBuilder` `new_literal` / `push_literal` / `build` methods to expose the raw window. The push place may be the bound local (a direct `[…] as Array<T>` literal) or a field of it (a custom `SequenceLiteralBuilder` that wraps an `Array<T>`, e.g. `SeqVec { items: Array<T> }`, `Bag { keys, values }` with interleaved per-field pushes). `Array::push` is matched by its `CompilerItem::ArrayPush` marker. Single-use pure element temps that inlining leaves between pushes are resolved and dropped, guarded so a temp read elsewhere is never dangled. Empty literals (`array_new(0)`) are left growable. Subsumes the retired WIR `collapse_array_push_sequences`; see [WEP 2026-05-31](./wep-2026-05-31-nir-array-literal.md).
+Rewrites the `List<T>` builder window — an `List<T> { repr: array_new(N), used: 0 }` struct followed by `N` `List::push` calls — into `NirExprKind::ArrayLiteral { elements }`, giving a constant array the same first-class, analyzable value shape `StructLiteral` / `TupleLiteral` already have (`wir_build` lowers it to `array.new_fixed`). Runs after `inline`, which expands the `SequenceLiteralBuilder` `new_literal` / `push_literal` / `build` methods to expose the raw window. The push place may be the bound local (a direct `[…] as List<T>` literal) or a field of it (a custom `SequenceLiteralBuilder` that wraps an `List<T>`, e.g. `SeqVec { items: List<T> }`, `Bag { keys, values }` with interleaved per-field pushes). `List::push` is matched by its `CompilerItem::ListPush` marker. Single-use pure element temps that inlining leaves between pushes are resolved and dropped, guarded so a temp read elsewhere is never dangled. Empty literals (`array_new(0)`) are left growable. Subsumes the retired WIR `collapse_array_push_sequences`; see [WEP 2026-05-31](./wep-2026-05-31-nir-array-literal.md).
 
 E2E: [array_literal_nir_materialize.wado](../wado-compiler/tests/fixtures/array_literal_nir_materialize.wado), [array_literal_side_effect_element.wado](../wado-compiler/tests/fixtures/array_literal_side_effect_element.wado), [array_append_collapse.wado](../wado-compiler/tests/fixtures/array_append_collapse.wado).
 
@@ -100,28 +100,28 @@ E2E: [value_copy_elide_qmark.wado](../wado-compiler/tests/fixtures/value_copy_el
 
 ### Value-Copy Demotion (`value_copy_demote.rs`)
 
-Demotes a deep `$value_copy$T` of an `Array<E>` to a shallow spine copy when the binding's elements are provably never mutated through it. Where `value_copy_elide` removes a copy whose target is fully read-only (aliasing the binding to the source), demotion handles a copy whose target is only _spine_-mutated (`sort`, `push`, …): full elision is unsound, but a shallow copy is still safe — the binding gets its own `repr` spine while sharing the element objects, which are immutable through this handle. The deep per-element copy (`array_clone` over a value-typed element) is rewritten to a shallow `array_clone_shallow` via a synthesized `$value_copy$T<id>$shallow` sibling helper.
+Demotes a deep `$value_copy$T` of an `List<E>` to a shallow spine copy when the binding's elements are provably never mutated through it. Where `value_copy_elide` removes a copy whose target is fully read-only (aliasing the binding to the source), demotion handles a copy whose target is only _spine_-mutated (`sort`, `push`, …): full elision is unsound, but a shallow copy is still safe — the binding gets its own `repr` spine while sharing the element objects, which are immutable through this handle. The deep per-element copy (`array_clone` over a value-typed element) is rewritten to a shallow `array_clone_shallow` via a synthesized `$value_copy$T<id>$shallow` sibling helper.
 
-The precondition is verified by an element-immutability analysis. A `&mut self` method (`Array::sort`, `push`, …) is _element-immutable_ when, by a taint walk over its body, no value derived from `self` (its spine or an element) is field-written, `&mut`-borrowed, or handed to an opaque callee — only spine builtins and `&`-immutable forwarding are allowed. The demote site itself is eligible when every use of the bound handle (and of the source the copy reads from) is element-clean: spine-only methods, index/field reads, by-value or `&` argument passing.
+The precondition is verified by an element-immutability analysis. A `&mut self` method (`List::sort`, `push`, …) is _element-immutable_ when, by a taint walk over its body, no value derived from `self` (its spine or an element) is field-written, `&mut`-borrowed, or handed to an opaque callee — only spine builtins and `&`-immutable forwarding are allowed. The demote site itself is eligible when every use of the bound handle (and of the source the copy reads from) is element-clean: spine-only methods, index/field reads, by-value or `&` argument passing.
 
 The analysis is conservative — an unrecognized shape rejects demotion (no change), never miscompiles. Naming compiler intrinsics (`builtin::array_*`) is sound because they are not stdlib identifiers; stdlib method behaviour is _derived_ from the body, never hardcoded by name.
 
 <!-- TODO(optimizer): expose the element-immutability analysis to `container_sroa` so its hardcoded `push`/`is_empty`/`len`/indexing whitelist can be replaced by a query that accepts any element-immutable `&self`/`&mut self` method. -->
-<!-- TODO(optimizer): support nested-container demotion (`Array<Array<T>>`). The recursion guard at `is_element_immutable_method` returns `false` for any recursive call site, so the immutability proof bottoms out at the first unknown shape. -->
+<!-- TODO(optimizer): support nested-container demotion (`List<List<T>>`). The recursion guard at `is_element_immutable_method` returns `false` for any recursive call site, so the immutability proof bottoms out at the first unknown shape. -->
 
 E2E: [value_copy_demote.wado](../wado-compiler/tests/fixtures/value_copy_demote.wado).
 
 ### Container SROA (`container_sroa.rs`)
 
-Decomposes `Array<Tuple<...>>` and `Array<UserStruct>` locals into N parallel `Array<T_k>` locals (AoS → SoA), eliminating the per-element `struct.new` for the container payload. Tuples and user structs are both WasmGC structs at the Wasm level, so the pass treats them uniformly.
+Decomposes `List<Tuple<...>>` and `List<UserStruct>` locals into N parallel `List<T_k>` locals (AoS → SoA), eliminating the per-element `struct.new` for the container payload. Tuples and user structs are both WasmGC structs at the Wasm level, so the pass treats them uniformly.
 
-A candidate is decomposed only when every use matches a whitelist: `v.push(literal)`, `v.push(other[j])` from another candidate, `v[i] = literal`, `v[i].field`, `v.len()`, `v.is_empty()`, or initialization via `[]` / `Array::with_capacity`. Any other use (bare reference, closure capture, opaque method) marks the local as escaped and propagates to its sources via fixpoint. Cross-candidate index sources require the index to be `is_duplicable_expr` because the rewrite clones it N times. The pass runs first in the loop so the whitelist sees unobfuscated patterns before inlining rewrites them.
+A candidate is decomposed only when every use matches a whitelist: `v.push(literal)`, `v.push(other[j])` from another candidate, `v[i] = literal`, `v[i].field`, `v.len()`, `v.is_empty()`, or initialization via `[]` / `List::with_capacity`. Any other use (bare reference, closure capture, opaque method) marks the local as escaped and propagates to its sources via fixpoint. Cross-candidate index sources require the index to be `is_duplicable_expr` because the rewrite clones it N times. The pass runs first in the loop so the whitelist sees unobfuscated patterns before inlining rewrites them.
 
 E2E: [opt_container_sroa_struct.wado](../wado-compiler/tests/fixtures/opt_container_sroa_struct.wado), [opt_container_sroa_tuple.wado](../wado-compiler/tests/fixtures/opt_container_sroa_tuple.wado), [opt_container_sroa_edge.wado](../wado-compiler/tests/fixtures/opt_container_sroa_edge.wado), [opt_container_sroa_nondup_idx.wado](../wado-compiler/tests/fixtures/opt_container_sroa_nondup_idx.wado).
 
 Future directions:
 
-- [ ] Nested containers (`Array<Array<T>>`). Tracked at `container_sroa.rs:16`.
+- [ ] Nested containers (`List<List<T>>`). Tracked at `container_sroa.rs:16`.
 - [ ] Container fields of structs (via HFS hoisting).
 - [ ] Push-to-literal fusion with `array.new_fixed`.
 - [ ] Parallel index-assign coalescing.
@@ -343,7 +343,7 @@ Two complementary variants run in sequence:
 
 ### Phase 3: Data Flow
 
-Array literals arrive as `array.new_fixed` directly (the NIR [Array-Literal Materialization](#array-literal-materialization-array_literalrs) pass + `wir_build` lowering); the WIR-level collapse that used to reconstruct them here is retired.
+List literals arrive as `array.new_fixed` directly (the NIR [List-Literal Materialization](#array-literal-materialization-array_literalrs) pass + `wir_build` lowering); the WIR-level collapse that used to reconstruct them here is retired.
 
 - Forward struct field constants — tracks known field values (constants and `LocalGet` references) through `StructGet` for constant-index bounds-check elimination. Resolves block-result `StructNew` patterns for single-exit blocks. Uses `stores`-aware alias analysis: locals passed to functions without `stores` declarations are not marked aliased, enabling field forwarding across calls. E2E: [array_bounds_elim_const_wir.wado](../wado-compiler/tests/fixtures/array_bounds_elim_const_wir.wado).
 
@@ -376,7 +376,7 @@ Trivial init-guard removal — removes compiler-generated module-initialization 
 
 ### Phase 8: Final DCE and Compaction
 
-- Dead defined-function elimination — `mark_unreachable_defined_functions` walks `module.exports` + `module.elements` and BFSes the WIR call graph, marking unreachable defined-function indices as dead. Catches functions whose only call site never materialized (e.g. `Array<T>::push` / `::grow` instantiations for a single-element array literal, whose `push` chain the NIR [Array-Literal Materialization](#array-literal-materialization-array_literalrs) pass turns into `array.new_fixed`). Marks via `module.dead_func_indices`; the actual removal + reindexing happens in compaction. The pass reads the `WirFuncId` ↔ array-index offset from `WirPackage::defined_func_base`, so the same implementation handles both the GC module (`DEFINED_FUNC_BASE`) and the linear-memory module (`0`); the latter is invoked from `codegen/component.rs::lower_core_module` where `dead_type_indices` is also populated to mirror the mem module's 1:1 function/type correspondence. E2E: [wir_optimize_dce_orphan_push.wado](../wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado).
+- Dead defined-function elimination — `mark_unreachable_defined_functions` walks `module.exports` + `module.elements` and BFSes the WIR call graph, marking unreachable defined-function indices as dead. Catches functions whose only call site never materialized (e.g. `List<T>::push` / `::grow` instantiations for a single-element array literal, whose `push` chain the NIR [List-Literal Materialization](#array-literal-materialization-array_literalrs) pass turns into `array.new_fixed`). Marks via `module.dead_func_indices`; the actual removal + reindexing happens in compaction. The pass reads the `WirFuncId` ↔ array-index offset from `WirPackage::defined_func_base`, so the same implementation handles both the GC module (`DEFINED_FUNC_BASE`) and the linear-memory module (`0`); the latter is invoked from `codegen/component.rs::lower_core_module` where `dead_type_indices` is also populated to mirror the mem module's 1:1 function/type correspondence. E2E: [wir_optimize_dce_orphan_push.wado](../wado-compiler/tests/fixtures/wir_optimize_dce_orphan_push.wado).
 - Dead type elimination — removes GC type definitions not referenced by any live code (transitive).
 - Compact dead items — removes all items marked dead from the module.
 
@@ -400,7 +400,7 @@ Trivial init-guard removal — removes compiler-generated module-initialization 
 ## Tried and Found Ineffective
 
 - Empty-array singleton for struct field defaults — sharing a single `array.new<u8>(0)` global across all default `String` initializations in serde `Deserialize` impls. Measured no performance improvement; the GC allocator handles tiny zero-length arrays efficiently enough that the overhead is negligible.
-- `array.copy` for `Array::grow` — replacing the element-by-element copy loop with the Wasm `array.copy` instruction. Was several times slower than the loop, likely due to poor JIT optimization of `array.copy` in current runtimes.
+- `array.copy` for `List::grow` — replacing the element-by-element copy loop with the Wasm `array.copy` instruction. Was several times slower than the loop, likely due to poor JIT optimization of `array.copy` in current runtimes.
 
 ## Testing Strategy
 
@@ -424,7 +424,7 @@ Trivial init-guard removal — removes compiler-generated module-initialization 
 
 ### Bounds Check Elimination
 
-- [Array Bounds Check Elimination in CLR](https://learn.microsoft.com/en-us/archive/blogs/clrcodegeneration/array-bounds-check-elimination-in-the-clr)
+- [List Bounds Check Elimination in CLR](https://learn.microsoft.com/en-us/archive/blogs/clrcodegeneration/array-bounds-check-elimination-in-the-clr)
 
 ### WebAssembly
 

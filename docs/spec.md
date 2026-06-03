@@ -137,7 +137,7 @@ struct Item { of: i32 }
 let item = Item { of: 10 };
 
 // 'of' as a for-of binding
-let arr: Array<i32> = [1, 2, 3];
+let arr: List<i32> = [1, 2, 3];
 for let of of arr {
     println(`{of}`);
 }
@@ -411,7 +411,7 @@ while i < 10 {
 `while let` allows iterating while a pattern matches:
 
 ```wado
-let items: Array<i32> = [1, 2, 3];
+let items: List<i32> = [1, 2, 3];
 let mut iter = items.iter();
 
 while let Some(x) = iter.next() {
@@ -448,7 +448,7 @@ for ;; {
 The condition part of a C-style for loop can use `let` pattern matching:
 
 ```wado
-let items: Array<i32> = [10, 20, 30];
+let items: List<i32> = [10, 20, 30];
 let mut iter = items.iter();
 
 for ; let Some(x) = iter.next(); {
@@ -469,7 +469,7 @@ The loop continues as long as the pattern matches. This is useful for iterating 
 For iterating over any type that implements `IntoIterator`:
 
 ```wado
-let numbers: Array<i32> = [1, 2, 3, 4, 5];
+let numbers: List<i32> = [1, 2, 3, 4, 5];
 for let n of numbers {
     println(`{n}`);
 }
@@ -779,7 +779,7 @@ if opt matches { Some(x) && x > 0 } { }  // OK
 
 See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
 
-Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `Array<T>` all follow this rule uniformly. The only exceptions are reference types (`&T`, `&mut T`), which alias the underlying value.
+Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `List<T>` all follow this rule uniformly. The only exceptions are reference types (`&T`, `&mut T`), which alias the underlying value.
 
 ```wado
 struct Point { x: i32, y: i32 }
@@ -823,7 +823,7 @@ This separation allows Wado to use optimal internal representations (e.g., Wasm 
 | `f32`, `f64`              | `f32`, `f64`                 | `f32`, `f64`                         | Floating point                                   |
 | `f16`                     | -                            | -                                    | TODO: Wasm half-precision proposal (Phase 1)     |
 | `String`                  | GC `array i8` (UTF-8)        | `string`                             | UTF-8 string, GC-managed internally              |
-| `Array<T>`                | GC `array T`                 | `list<T>`                            | Dynamic array, GC-managed internally             |
+| `List<T>`                 | GC `array T`                 | `list<T>`                            | Dynamic array, GC-managed internally             |
 | `[T1, T2, ...]`           | GC `struct {T1, T2, ...}`    | `tuple<T1, T2, ...>`                 | Tuple types                                      |
 | `Option<T>`               | GC variant                   | `option<T>`                          | Optional value                                   |
 | `Result<T, E>`            | GC variant                   | `result<T, E>`                       | Result type                                      |
@@ -843,7 +843,7 @@ The **prelude** (`core:prelude`) is automatically imported into every module, pr
 **Automatically Available:**
 
 - `String` - UTF-8 string type
-- `Array<T>` - Dynamic array type
+- `List<T>` - Dynamic array type
 - `Tuple<T1, T2, ...>` - Alias for `[T1, T2, ...]`
 - `Option<T>` and its variants: `Some(x)`, `None` (also accessible via `null` keyword)
 - `Result<T, E>` and its variants: `Ok(x)`, `Err(e)`
@@ -858,7 +858,7 @@ The **prelude** (`core:prelude`) is automatically imported into every module, pr
 #![no_prelude]  // At the top of a module
 
 // Now you must explicitly import everything
-use {String, Array, Tuple, Option, Result, Stream, Future, Pollable} from "core:prelude";
+use {String, List, Tuple, Option, Result, Stream, Future, Pollable} from "core:prelude";
 ```
 
 ### Primitive Types
@@ -1074,7 +1074,7 @@ fn normalize(mut s: String) -> String {
 }
 ```
 
-The `mut` keyword grants write access to the local parameter binding inside the function. Wado uses value semantics for every parameter: every value is deeply copied when passed to a function, except references (`&T`, `&mut T`) which share state with the caller. This applies uniformly to primitives, structs, `String`, and `Array<T>`. Inside the callee, both reassignment (`p = new_value`) and in-place mutations — field writes (`p.x = ...`), method calls (`s.push_str("!")`, `arr.push(0)`), and index writes (`arr[0] = ...`) — operate on the callee's local copy and are not visible to the caller. To let the callee mutate the caller's value, declare the parameter as `&mut T` and pass a `&mut`-reference at the call site.
+The `mut` keyword grants write access to the local parameter binding inside the function. Wado uses value semantics for every parameter: every value is deeply copied when passed to a function, except references (`&T`, `&mut T`) which share state with the caller. This applies uniformly to primitives, structs, `String`, and `List<T>`. Inside the callee, both reassignment (`p = new_value`) and in-place mutations — field writes (`p.x = ...`), method calls (`s.push_str("!")`, `arr.push(0)`), and index writes (`arr[0] = ...`) — operate on the callee's local copy and are not visible to the caller. To let the callee mutate the caller's value, declare the parameter as `&mut T` and pass a `&mut`-reference at the call site.
 
 ```wado
 fn countdown(mut n: i32) with Stdout {
@@ -1120,7 +1120,7 @@ fn bad(n: i32) {
 **Semantics and Encoding**:
 
 - Semantically, a `String` is a sequence of Unicode scalar values
-- Internally represented as a UTF-8 byte array (`Array<u8>`)
+- Internally represented as a UTF-8 byte array (`List<u8>`)
 - Invalid UTF-8 byte sequences are not allowed; all String values must be valid UTF-8
 - This ensures interoperability with Component Model `string` type and safe string operations
 
@@ -1151,11 +1151,11 @@ Use explicit methods instead:
 
 ```wado
 // Byte-level access
-let bytes: Array<u8> = s.bytes();
+let bytes: List<u8> = s.bytes();
 let first_byte = bytes[0];
 
 // Character-level access
-let chars: Array<char> = s.chars();
+let chars: List<char> = s.chars();
 let first_char = chars[0];
 
 // Other methods
@@ -1299,7 +1299,7 @@ Note: `null` is a language keyword, while `None` is an identifier from the prelu
 
 #### Character Literals
 
-Character literals use single quotes and represent a Unicode scalar value. While internally represented as a 32-bit value (like `u32`), `char` is a distinct type with Unicode semantics—similar to how `String` differs from `Array<u8>`:
+Character literals use single quotes and represent a Unicode scalar value. While internally represented as a 32-bit value (like `u32`), `char` is a distinct type with Unicode semantics—similar to how `String` differs from `List<u8>`:
 
 ```wado
 let letter = 'A';
@@ -1593,32 +1593,32 @@ fn fail(msg: String) -> ! {
 }
 ```
 
-#### Array Literals
+#### List Literals
 
 Arrays require explicit conversion from tuple literals using `as` or implicit coercion when the target type is known at compile time.
 
 ```wado
 // Explicit conversion with `as`
-let numbers = [1, 2, 3, 4, 5] as Array<i32>;
+let numbers = [1, 2, 3, 4, 5] as List<i32>;
 
 // Implicit coercion (target type known)
-fn takes_array(a: Array<i32>) { ... }
-takes_array([1, 2, 3]);  // OK - compiler knows Array<i32> is expected
+fn takes_array(a: List<i32>) { ... }
+takes_array([1, 2, 3]);  // OK - compiler knows List<i32> is expected
 
 // Type annotation
-let explicit: Array<i32> = [1, 2, 3];  // Coerced to array
+let explicit: List<i32> = [1, 2, 3];  // Coerced to array
 ```
 
 **Coercion Rules:**
 
 - **Compile-time**: When the target type is known (function parameter, type annotation), implicit coercion is allowed
-- **Runtime/ambiguous**: Explicit `as Array<T>` is required
+- **Runtime/ambiguous**: Explicit `as List<T>` is required
 
 ```wado
 let t = [1, 2, 3];               // Tuple [i32, i32, i32] - no context
-let a = [1, 2, 3] as Array<i32>; // Array - explicit conversion
+let a = [1, 2, 3] as List<i32>; // List - explicit conversion
 
-fn process(data: Array<i32>) { ... }
+fn process(data: List<i32>) { ... }
 process([1, 2, 3]);              // OK - implicit coercion
 ```
 
@@ -1638,21 +1638,21 @@ use config from "./config.json" with { type: "json" };
 
 See `docs/wep-2026-01-15-tuple-and-array-literals.md` for detailed rationale.
 
-**Array Operations:**
+**List Operations:**
 
 Arrays support index-based access and assignment:
 
-**Array Constructors:**
+**List Constructors:**
 
 ```wado
-let arr = Array::<i32>::with_capacity(10);     // empty array with pre-allocated capacity
-let bools = Array::<bool>::filled(100, true);  // array of 100 elements, all true
+let arr = List::<i32>::with_capacity(10);     // empty array with pre-allocated capacity
+let bools = List::<bool>::filled(100, true);  // array of 100 elements, all true
 ```
 
-**Array Operations:**
+**List Operations:**
 
 ```wado
-let mut arr: Array<i32> = [1, 2, 3];
+let mut arr: List<i32> = [1, 2, 3];
 
 // Index access (read)
 let first = arr[0];  // 1
@@ -1661,7 +1661,7 @@ let first = arr[0];  // 1
 arr[0] = 100;        // Requires mutable array
 arr[1] = 200;
 
-// Array methods
+// List methods
 arr.push(4);         // Add element to end
 let len = arr.len(); // Get length
 ```
@@ -1682,10 +1682,10 @@ let len = arr.len(); // Get length
 | `sorted_by()` | No       | Custom `fn(&T, &T) -> Ordering` |
 
 ```wado
-let mut nums: Array<i32> = [5, 3, 8, 1];
+let mut nums: List<i32> = [5, 3, 8, 1];
 nums.sort();                             // in-place ascending
 
-let orig: Array<i32> = [5, 3, 8, 1];
+let orig: List<i32> = [5, 3, 8, 1];
 let asc = orig.sorted();                // returns new sorted array
 ```
 
@@ -1696,7 +1696,7 @@ coerced to any collection type by implementing the corresponding builder trait:
 
 | Literal         | Trait                    | Example target       |
 | --------------- | ------------------------ | -------------------- |
-| `[e0, e1, ...]` | `SequenceLiteralBuilder` | `Array<T>`           |
+| `[e0, e1, ...]` | `SequenceLiteralBuilder` | `List<T>`            |
 | `{ k: v, ... }` | `KeyValueLiteralBuilder` | `TreeMap<String, V>` |
 
 **Builder Traits:**
@@ -1724,7 +1724,7 @@ When a type implements `SequenceLiteralBuilder<Output = Self>` or `KeyValueLiter
 **Usage:**
 
 ```wado
-let arr: Array<i32> = [1, 2, 3];
+let arr: List<i32> = [1, 2, 3];
 
 use { TreeMap } from "core:collections";
 let map: TreeMap<String, i32> = { width: 1920, height: 1080 };
@@ -1739,14 +1739,14 @@ for desugaring rules, the immutable-output (separate builder) pattern, and concr
 
 Compile-time location literals provide source location information at compile time. They use the `#` prefix to clearly signal compile-time evaluation.
 
-| Literal                  | Type        | Value                                              |
-| ------------------------ | ----------- | -------------------------------------------------- |
-| `#file`                  | `String`    | Current source file path                           |
-| `#line`                  | `i32`       | Current line number (1-indexed)                    |
-| `#function`              | `String`    | Fully specialized function name                    |
-| `#data`                  | `String`    | `__DATA__` section content (compile error if none) |
-| `#include_str("path")`   | `String`    | External file content as string                    |
-| `#include_bytes("path")` | `Array<u8>` | External file content as bytes                     |
+| Literal                  | Type       | Value                                              |
+| ------------------------ | ---------- | -------------------------------------------------- |
+| `#file`                  | `String`   | Current source file path                           |
+| `#line`                  | `i32`      | Current line number (1-indexed)                    |
+| `#function`              | `String`   | Fully specialized function name                    |
+| `#data`                  | `String`   | `__DATA__` section content (compile error if none) |
+| `#include_str("path")`   | `String`   | External file content as string                    |
+| `#include_bytes("path")` | `List<u8>` | External file content as bytes                     |
 
 ```wado
 fn example() {
@@ -1771,13 +1771,13 @@ __DATA__
 
 **`#include_str` and `#include_bytes`:**
 
-`#include_str("path")` reads an external file at compile time and returns its content as a `String`. The file must be valid UTF-8; otherwise, a compile error is raised. `#include_bytes("path")` returns the raw bytes as `Array<u8>` without UTF-8 validation.
+`#include_str("path")` reads an external file at compile time and returns its content as a `String`. The file must be valid UTF-8; otherwise, a compile error is raised. `#include_bytes("path")` returns the raw bytes as `List<u8>` without UTF-8 validation.
 
 The path argument must be a string literal. Paths are resolved relative to the source file containing the expression. See [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).
 
 ```wado
 let template = #include_str("./templates/header.html");
-let icon: Array<u8> = #include_bytes("./assets/logo.png");
+let icon: List<u8> = #include_bytes("./assets/logo.png");
 ```
 
 **`#function` Format:**
@@ -1788,7 +1788,7 @@ Returns the fully specialized name without signature:
 | -------------- | ---------------------------- |
 | Free function  | `my_function`                |
 | Method         | `Point::distance`            |
-| Generic method | `Array<String>::len`         |
+| Generic method | `List<String>::len`          |
 | Closure        | `parent_function::{closure}` |
 
 ### Closures
@@ -1949,8 +1949,8 @@ Where `tag` is an effect-free function that executes at compile time.
 use {base64, hex} from "core:encoding";
 
 // base64 and hex are standard library functions, not keywords
-let embedded_image = base64`iVBORw0KGgoAAAANSUhEUgAAAAUA...`;  // Type: Array<u8>
-let crypto_key = hex`48656c6c6f20576f726c64`;                // Type: Array<u8>
+let embedded_image = base64`iVBORw0KGgoAAAANSUhEUgAAAAUA...`;  // Type: List<u8>
+let crypto_key = hex`48656c6c6f20576f726c64`;                // Type: List<u8>
 
 // Invalid base64 causes compile error
 let invalid = base64`!!!invalid!!!`;  // Compile error: Invalid base64 encoding
@@ -1988,7 +1988,7 @@ The `core:encoding` module provides common binary encodings:
 use {base64, hex} from "core:encoding";
 
 // Base64 decoding (RFC 4648)
-pub fn base64(input: String) -> Array<u8> {
+pub fn base64(input: String) -> List<u8> {
     match decode_base64_impl(input) {
         Ok(data) => data,
         Err(e) => panic(`Invalid base64 encoding: {e}`),
@@ -1996,7 +1996,7 @@ pub fn base64(input: String) -> Array<u8> {
 }
 
 // Hexadecimal decoding
-pub fn hex(input: String) -> Array<u8> {
+pub fn hex(input: String) -> List<u8> {
     match decode_hex_impl(input) {
         Ok(data) => data,
         Err(e) => panic(`Invalid hex encoding: {e}`),
@@ -2461,9 +2461,9 @@ fn max<T: Ord>(a: T, b: T) -> T {
 }
 
 // Bounded impl blocks - methods only available when T: Ord
-impl Array<T: Ord> {
+impl List<T: Ord> {
     pub fn sort(&mut self) { ... }
-    pub fn sorted(&self) -> Array<T> { ... }
+    pub fn sorted(&self) -> List<T> { ... }
 }
 
 // Bounded trait implementations - Pair<T> implements Eq only when T: Eq
@@ -2503,7 +2503,7 @@ For `impl<P1..Pn> Trait<A1..Am> for T0`, the implementation is **valid** if and 
 1. `Trait` is **local** (defined in the current package), or
 2. The **sequence** `T0, A1, A2, …, Am` contains a local type at some position `i`, and no **uncovered type parameter** appears at any position `j < i`.
 
-**Uncovered type parameter:** A type parameter `Pk` is _uncovered_ at position `i` if the type at position `i` is literally `Pk` (bare, not wrapped inside another type constructor). `Array<Pk>` is covered; `Pk` alone is uncovered.
+**Uncovered type parameter:** A type parameter `Pk` is _uncovered_ at position `i` if the type at position `i` is literally `Pk` (bare, not wrapped inside another type constructor). `List<Pk>` is covered; `Pk` alone is uncovered.
 
 **Fundamental types:** `&T` and `&mut T` are _fundamental_ — they are looked through when checking positions. `impl Trait for &LocalType` counts as having `LocalType` at position `T0`.
 
@@ -2518,7 +2518,7 @@ For `impl<P1..Pn> Trait<A1..Am> for T0`, the implementation is **valid** if and 
 | `impl<T> From<MyType<T>> for String` | **Allowed**   | `MyType` (local head) at A1, no uncovered param before it  |
 | `impl<T> From<T> for MyType`         | **Allowed**   | `MyType` is local at T0, reached before T1=`T`             |
 | `impl Eq for String`                 | **Forbidden** | Both `Eq` and `String` are foreign                         |
-| `impl Eq for Array<i32>`             | **Forbidden** | `Eq` foreign, `Array` (head of T0) is foreign              |
+| `impl Eq for List<i32>`              | **Forbidden** | `Eq` foreign, `List` (head of T0) is foreign               |
 | `impl<T> Eq for T`                   | **Forbidden** | T0 is uncovered type parameter, `Eq` is foreign            |
 | `impl<T> From<T> for String`         | **Forbidden** | T0=`String` (foreign), T1=`T` (uncovered) before any local |
 | `impl From<String> for i32`          | **Forbidden** | T0=`i32` (foreign), A1=`String` (foreign), no local found  |
@@ -2569,32 +2569,32 @@ pub trait FromIterator<T> {
 }
 ```
 
-**ArrayIter:**
+**ListIter:**
 
-The prelude provides `ArrayIter<T>` as the iterator type for `Array<T>`:
+The prelude provides `ListIter<T>` as the iterator type for `List<T>`:
 
 ```wado
-/// Iterator over Array<T> elements
-pub struct ArrayIter<T> {
+/// Iterator over List<T> elements
+pub struct ListIter<T> {
     // internal fields
 }
 
-impl Iterator for ArrayIter<T> {
+impl Iterator for ListIter<T> {
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> { ... }
 }
 
-impl IntoIterator for Array<T> {
+impl IntoIterator for List<T> {
     type Item = T;
-    type Iter = ArrayIter<T>;
-    fn into_iter(&self) -> ArrayIter<T> { ... }
+    type Iter = ListIter<T>;
+    fn into_iter(&self) -> ListIter<T> { ... }
 }
 ```
 
 **Usage:**
 
 ```wado
-let arr: Array<i32> = [1, 2, 3, 4, 5];
+let arr: List<i32> = [1, 2, 3, 4, 5];
 
 // for-of uses IntoIterator automatically
 for let x of arr {
@@ -2628,8 +2628,8 @@ for let mut i = 0; i < arr.len(); i += 1 {
 Any type can be made iterable by implementing `IntoIterator`:
 
 ```wado
-struct Stack<T> { items: Array<T> }
-struct StackIter<T> { items: Array<T>, index: i32 }
+struct Stack<T> { items: List<T> }
+struct StackIter<T> { items: List<T>, index: i32 }
 
 impl Iterator for StackIter<T> {
     type Item = T;
@@ -2651,7 +2651,7 @@ for let x of stack { ... }
 Iterators support `map`, `filter`, and `fold` for functional-style data processing:
 
 ```wado
-let arr: Array<i32> = [1, 2, 3, 4, 5];
+let arr: List<i32> = [1, 2, 3, 4, 5];
 
 // map - transform each element
 let doubled = arr.iter().map(|x: i32| x * 2).collect();
@@ -2722,7 +2722,7 @@ Comparison operators use `Ord::cmp`:
 
 **Default Implementations:**
 
-`String` and `Array<T>` implement `Eq` and `Ord` with lexicographic comparison:
+`String` and `List<T>` implement `Eq` and `Ord` with lexicographic comparison:
 
 ```wado
 impl Eq for String { ... }  // byte-by-byte equality
@@ -2755,7 +2755,7 @@ pub trait Default {
 | `bool`                                                               | `false`     |
 | `char`                                                               | `'\0'`      |
 | `String`                                                             | `""`        |
-| `Array<T>`                                                           | `[]`        |
+| `List<T>`                                                            | `[]`        |
 | `Option<T>`                                                          | `null`      |
 | `TreeMap<K, V>`                                                      | `{}`        |
 
@@ -2770,7 +2770,7 @@ let s = String::default();        // ""
 fn make_default<T: Default>() -> T { return T::default(); }
 
 let x = make_default::<i32>();              // 0
-let arr = make_default::<Array<String>>();  // []
+let arr = make_default::<List<String>>();  // []
 ```
 
 **Auto-Derivation:**
@@ -2832,10 +2832,10 @@ pub trait Index<IndexType> {
 
 **Design Note:** `IndexValue` returns by value because Wasm GC's `array.get` instruction copies elements. For primitives like `i32`, you cannot get `&i32` from an array element. `Index` is for containers of reference-type elements where returning a reference is possible.
 
-`Array<T>` implements `IndexValue` and `IndexAssign`:
+`List<T>` implements `IndexValue` and `IndexAssign`:
 
 ```wado
-let mut arr: Array<i32> = [1, 2, 3];
+let mut arr: List<i32> = [1, 2, 3];
 let x = arr[0];    // IndexValue::index_value
 arr[1] = 100;      // IndexAssign::index_assign
 ```
@@ -3038,7 +3038,7 @@ let v = map["x"];                 // panics if key not found
 let opt = map.get("x");          // returns Option<V>
 
 // Keys preserve insertion order
-let keys = map.keys();  // returns Array<K> in insertion order
+let keys = map.keys();  // returns List<K> in insertion order
 ```
 
 ### Access Methods
@@ -3458,7 +3458,7 @@ assert x > 0, "x must be checked elsewhere";
 To keep a failure readable, each captured operand is rendered with `Inspect`
 (`:?`), which caps sequence types at a default length (`DEFAULT_SEQ_LIMIT` = 256):
 a `String` operand is truncated to 256 characters with a `...` marker and an
-`Array` operand to 256 elements (see [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md)).
+`List` operand to 256 elements (see [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md)).
 Non-sequence operands such as floats keep their natural rendering. The optional
 user message is formatted with the user's own template specifiers (typically
 `Display`, which is never capped) — opt into a longer dump by formatting the
@@ -3802,8 +3802,8 @@ interface Stderr {
 }
 
 interface Environment {
-    fn get_environment() -> Array<[String, String]>;
-    fn get_arguments() -> Array<String>;
+    fn get_environment() -> List<[String, String]>;
+    fn get_arguments() -> List<String>;
     fn get_initial_cwd() -> Option<String>;
 }
 
@@ -3830,8 +3830,8 @@ interface Dom {
 ```wado
 // Methods can declare required effects
 impl TcpStream {
-    fn read(&mut self, buffer: &mut Array<u8>) -> Result<i32, IoError> with Network;
-    fn write(&mut self, data: &Array<u8>) -> Result<i32, IoError> with Network;
+    fn read(&mut self, buffer: &mut List<u8>) -> Result<i32, IoError> with Network;
+    fn write(&mut self, data: &List<u8>) -> Result<i32, IoError> with Network;
     fn close(&mut self) with Network;
 }
 
@@ -3942,7 +3942,7 @@ fn wrapper<effect E>(f: fn() with E) with E {
     f();
 }
 
-fn map<T, U, effect E>(arr: Array<T>, f: fn(T) -> U with E) -> Array<U> with E {
+fn map<T, U, effect E>(arr: List<T>, f: fn(T) -> U with E) -> List<U> with E {
     // ...
 }
 ```
@@ -4421,7 +4421,7 @@ Module-level inner attribute. Indicates that the module contains machine-generat
 The attribute accepts optional metadata so that generators can attach provenance information directly to the attribute instead of as free-form comments. Two argument shapes are supported inside the parentheses:
 
 - Scalar `key = "value"` pairs (e.g. `by = "wado-from-idl"`).
-- Array `key = ["v1", "v2", ...]` pairs whose values are a comma-separated list of string literals (e.g. `sources = ["a.wit", "b.wit"]`).
+- List `key = ["v1", "v2", ...]` pairs whose values are a comma-separated list of string literals (e.g. `sources = ["a.wit", "b.wit"]`).
 
 Conventional keys are `by` (the tool that produced the file) and `sources` (the list of source paths it was generated from). Unknown keys are tolerated, so generators can introduce additional metadata without requiring a spec change.
 

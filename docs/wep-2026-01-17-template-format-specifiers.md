@@ -118,21 +118,21 @@ For arrays, precision specifies the maximum number of elements. `Display`
 truncates silently; `Inspect` appends `, ...` when elements are dropped:
 
 ```wado
-let a: Array<i32> = [1, 2, 3, 4, 5];
+let a: List<i32> = [1, 2, 3, 4, 5];
 println(`{a:.3?}`);         // => "[1, 2, 3, ...]"
 println(`{a:.3}`);          // => "[1, 2, 3]"
 ```
 
 The truncation point is uniform across collection-like types: precision caps the
-number of rendered items (characters for `String`, elements for `Array`). A
+number of rendered items (characters for `String`, elements for `List`). A
 shared `Formatter` flows into nested element rendering, so an explicit precision
 also bounds elements inside collections (e.g. long `String` elements of an
-`Array`). Tuples and structs are fixed-size, so their own arity is never capped,
-but their `String` / `Array` fields still honor the active precision.
+`List`). Tuples and structs are fixed-size, so their own arity is never capped,
+but their `String` / `List` fields still honor the active precision.
 
 ##### Default Inspect cap and the precision sentinels
 
-`Inspect` / `InspectAlt` (`:?` / `:#?`) of a `String` or `Array` apply a default
+`Inspect` / `InspectAlt` (`:?` / `:#?`) of a `String` or `List` apply a default
 length cap of `DEFAULT_SEQ_LIMIT` (256 items) even when no precision is given, so
 debug output — including power-assert operand dumps — stays readable. `Display`
 never applies the default cap: a plain `{s}` renders the full value.

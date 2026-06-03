@@ -6,13 +6,13 @@ Wado needs iterator traits to enable:
 
 1. **Generic iteration**: `for-of` loops over any iterable type
 2. **Iterator combinators**: `map`, `filter`, `fold`, `collect`, etc.
-3. **Literal coercion**: `[1, 2, 3]` → `Array<i32>` via `FromIterator`
+3. **Literal coercion**: `[1, 2, 3]` → `List<i32>` via `FromIterator`
 4. **User-defined iterables**: Custom collections can be iterated
 
 ### Current State
 
-- **For-of loops**: Hardcoded to only work with `Array<T>`
-- **Tuple-to-Array coercion**: Hardcoded special-case logic
+- **For-of loops**: Hardcoded to only work with `List<T>`
+- **Tuple-to-List coercion**: Hardcoded special-case logic
 - **Associated types**: Implemented and working
 - **Trait bounds**: Not yet implemented
 
@@ -47,7 +47,7 @@ iter.next();  // { value: 2, done: false }
 
 ```wado
 // Wado
-let arr: Array<i32> = [1, 2, 3];
+let arr: List<i32> = [1, 2, 3];
 let mut iter = arr.into_iter();  // IntoIterator → Iterator
 iter.next();  // Option::Some(1)
 iter.next();  // Option::Some(2)
@@ -61,22 +61,22 @@ Rust requires three iteration methods (`iter()`, `iter_mut()`, `into_iter()`) be
 
 Understanding the difference between `Iterator` and `IntoIterator`:
 
-| Trait            | Question it answers                    | Example types                                |
-| ---------------- | -------------------------------------- | -------------------------------------------- |
-| **Iterator**     | "Can I call `next()` on this?"         | `ArrayIter<T>`, `RangeExclusive<T>`, `Chars` |
-| **IntoIterator** | "Can I convert this into an iterator?" | `Array<T>`, `String`, `Stack<T>`             |
+| Trait            | Question it answers                    | Example types                               |
+| ---------------- | -------------------------------------- | ------------------------------------------- |
+| **Iterator**     | "Can I call `next()` on this?"         | `ListIter<T>`, `RangeExclusive<T>`, `Chars` |
+| **IntoIterator** | "Can I convert this into an iterator?" | `List<T>`, `String`, `Stack<T>`             |
 
-A collection (like `Array<T>`) is **not** an iterator itself—it doesn't have iteration state. Instead, it implements `IntoIterator` to create a separate iterator object that tracks the current position:
+A collection (like `List<T>`) is **not** an iterator itself—it doesn't have iteration state. Instead, it implements `IntoIterator` to create a separate iterator object that tracks the current position:
 
 ```wado
-// Array<T> implements IntoIterator, NOT Iterator
-let arr: Array<i32> = [1, 2, 3];
+// List<T> implements IntoIterator, NOT Iterator
+let arr: List<i32> = [1, 2, 3];
 
-// arr.next() would NOT work - Array has no next() method
+// arr.next() would NOT work - List has no next() method
 // Instead, convert to an iterator first:
-let mut iter: ArrayIter<i32> = arr.into_iter();
+let mut iter: ListIter<i32> = arr.into_iter();
 
-// ArrayIter<T> implements Iterator
+// ListIter<T> implements Iterator
 iter.next();  // Some(1) - advances internal index from 0 to 1
 iter.next();  // Some(2) - advances internal index from 1 to 2
 iter.next();  // Some(3) - advances internal index from 2 to 3
@@ -159,7 +159,7 @@ In Wado:
 Wasm GC's `array.get` and `array.set` instructions only support **value copy** operations. You cannot obtain a reference to an array element:
 
 ```wado
-let mut arr: Array<i32> = [1, 2, 3];
+let mut arr: List<i32> = [1, 2, 3];
 
 // This is impossible in Wasm GC:
 let r: &mut i32 = &mut arr[0];  // ❌ Cannot get reference to array element
@@ -170,7 +170,7 @@ This is why Wado has separate traits for indexing:
 - `IndexValue<I>` - Returns element by value (copy)
 - `Index<I>` - Returns element by reference (only for reference-type elements)
 
-For `Array<i32>`, only `IndexValue` can be implemented, not `Index`. Since `iter_mut()` would need to yield `&mut T`, it's fundamentally impossible for primitive arrays.
+For `List<i32>`, only `IndexValue` can be implemented, not `Index`. Since `iter_mut()` would need to yield `&mut T`, it's fundamentally impossible for primitive arrays.
 
 #### Mutation via Indexed Access
 
@@ -178,7 +178,7 @@ For in-place mutation, use indexed access:
 
 ```wado
 // Wado: iter() returns copies (value semantics)
-let arr: Array<i32> = [1, 2, 3];
+let arr: List<i32> = [1, 2, 3];
 for let x of arr.iter() {
     // x is a copy of each element
 }
@@ -191,22 +191,22 @@ for let mut i = 0; i < arr.len(); i += 1 {
 
 This pattern works universally for all element types and is idiomatic in Wado.
 
-### 5. Array Iterator Implementation
+### 5. List Iterator Implementation
 
 ```wado
-/// Iterator over Array<T> elements
-pub struct ArrayIter<T> {
-    array: Array<T>,
+/// Iterator over List<T> elements
+pub struct ListIter<T> {
+    array: List<T>,
     index: i32,
 }
 
-impl ArrayIter<T> {
-    pub fn new(array: Array<T>) -> ArrayIter<T> {
-        return ArrayIter { array, index: 0 };
+impl ListIter<T> {
+    pub fn new(array: List<T>) -> ListIter<T> {
+        return ListIter { array, index: 0 };
     }
 }
 
-impl Iterator for ArrayIter<T> {
+impl Iterator for ListIter<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -219,20 +219,20 @@ impl Iterator for ArrayIter<T> {
     }
 }
 
-impl IntoIterator for Array<T> {
+impl IntoIterator for List<T> {
     type Item = T;
-    type Iter = ArrayIter<T>;
+    type Iter = ListIter<T>;
 
-    fn into_iter(self) -> ArrayIter<T> {
-        return ArrayIter::new(self);
+    fn into_iter(self) -> ListIter<T> {
+        return ListIter::new(self);
     }
 }
 
-impl Array<T> {
+impl List<T> {
     /// Returns an iterator over the array elements
-    pub fn iter(&self) -> ArrayIter<T> {
+    pub fn iter(&self) -> ListIter<T> {
         // Note: self is copied (value semantics), so iterator owns a copy
-        return ArrayIter::new(*self);
+        return ListIter::new(*self);
     }
 }
 ```
@@ -241,7 +241,7 @@ impl Array<T> {
 
 ### 6. For-Of Loop Desugaring
 
-Currently for-of is hardcoded for `Array<T>`. It should be generalized:
+Currently for-of is hardcoded for `List<T>`. It should be generalized:
 
 ```wado
 // Source
@@ -392,7 +392,7 @@ Homogeneous tuples implement `IntoIterator`:
 ```wado
 /// Iterator over tuple elements
 pub struct TupleIter<T> {
-    elements: Array<T>,
+    elements: List<T>,
     index: i32,
 }
 
@@ -415,7 +415,7 @@ impl IntoIterator for [T, T] {
     type Iter = TupleIter<T>;
 
     fn into_iter(self) -> TupleIter<T> {
-        let elements: Array<T> = [self.0, self.1];
+        let elements: List<T> = [self.0, self.1];
         return TupleIter { elements, index: 0 };
     }
 }
@@ -425,7 +425,7 @@ impl IntoIterator for [T, T, T] {
     type Iter = TupleIter<T>;
 
     fn into_iter(self) -> TupleIter<T> {
-        let elements: Array<T> = [self.0, self.1, self.2];
+        let elements: List<T> = [self.0, self.1, self.2];
         return TupleIter { elements, index: 0 };
     }
 }
@@ -585,16 +585,16 @@ for let [i, x] of arr.iter().enumerate() {
 
 #### Phase 1: Minimal Core (No Compiler Changes)
 
-Define traits and Array implementation in prelude:
+Define traits and List implementation in prelude:
 
 - `Iterator` trait with `next()`
 - `IntoIterator` trait
-- `ArrayIter<T>` struct
-- `impl Iterator for ArrayIter<T>`
-- `impl IntoIterator for Array<T>`
-- `Array::iter()` method
+- `ListIter<T>` struct
+- `impl Iterator for ListIter<T>`
+- `impl IntoIterator for List<T>`
+- `List::iter()` method
 
-For-of loop remains hardcoded for `Array<T>`.
+For-of loop remains hardcoded for `List<T>`.
 
 #### Phase 2: For-Of Generalization
 
@@ -602,7 +602,7 @@ Modify compiler to:
 
 1. Resolve `for-of` via `IntoIterator` trait lookup
 2. Desugar to `into_iter()` + `next()` loop
-3. Remove hardcoded `Array<T>` check
+3. Remove hardcoded `List<T>` check
 
 #### Phase 3: Tuple IntoIterator
 
@@ -611,7 +611,7 @@ Compiler-generated `IntoIterator` impls for homogeneous tuples.
 #### Phase 4: FromIterator and Coercion
 
 - `FromIterator<T>` trait
-- `impl FromIterator<T> for Array<T>`
+- `impl FromIterator<T> for List<T>`
 - Replace hardcoded tuple-to-array coercion with trait-based coercion
 
 #### Phase 5: Iterator Combinators
@@ -648,7 +648,7 @@ When a generic struct `Foo<T>` implements a trait with `type Item = T`, and a tr
 
 ```wado
 // This pattern fails to resolve correctly:
-impl Iterator for ArrayIter<T> {
+impl Iterator for ListIter<T> {
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> { ... }  // Error: Unknown type
 }
@@ -666,7 +666,7 @@ impl Iterator for ArrayIter<T> {
 2. **Familiar**: Rust-like API for iterator chains
 3. **Extensible**: User types can implement `Iterator`/`IntoIterator`
 4. **Unified for-of**: Works for any `IntoIterator` type
-5. **No special cases**: Array coercion via standard traits
+5. **No special cases**: List coercion via standard traits
 
 ### Negative
 
@@ -695,7 +695,7 @@ impl Iterator for ArrayIter<T> {
 use {println, Stdout} from "core:cli";
 
 fn run() with Stdout {
-    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let arr: List<i32> = [1, 2, 3, 4, 5];
 
     // Using for-of (desugars to IntoIterator)
     for let x of arr {
@@ -714,10 +714,10 @@ fn run() with Stdout {
 
 ```wado
 fn run() with Stdout {
-    let numbers: Array<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let numbers: List<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
     // Filter and map
-    let even_squares: Array<i32> = numbers
+    let even_squares: List<i32> = numbers
         .iter()
         .filter(|x| x % 2 == 0)
         .map(|x| x * x)
@@ -743,7 +743,7 @@ fn run() with Stdout {
     println(`Sum 1-100: {sum}`);  // 5050
 
     // Generate squares
-    let squares: Array<i32> = (1..<6)
+    let squares: List<i32> = (1..<6)
         .map(|x: i32| x * x)
         .collect();
     // [1, 4, 9, 16, 25]
@@ -779,7 +779,7 @@ impl Iterator for Fibonacci {
 fn run() with Stdout {
     let fib = Fibonacci::new();
     // Take first 10 Fibonacci numbers
-    let fibs: Array<i64> = fib.take(10).collect();
+    let fibs: List<i64> = fib.take(10).collect();
     for let f of fibs {
         println(`{f}`);
     }
@@ -790,7 +790,7 @@ fn run() with Stdout {
 
 ```wado
 struct Stack<T> {
-    items: Array<T>,
+    items: List<T>,
 }
 
 impl Stack<T> {
@@ -805,7 +805,7 @@ impl Stack<T> {
 
 // Make Stack iterable
 struct StackIter<T> {
-    items: Array<T>,
+    items: List<T>,
     index: i32,
 }
 
@@ -852,10 +852,10 @@ fn run() with Stdout {
 
 - [x] `Iterator` trait definition in prelude
 - [x] `IntoIterator` trait definition in prelude
-- [x] `ArrayIter<T>` struct
-- [x] `impl Iterator for ArrayIter<T>`
-- [x] `impl IntoIterator for Array<T>`
-- [x] `Array::iter()` method
+- [x] `ListIter<T>` struct
+- [x] `impl Iterator for ListIter<T>`
+- [x] `impl IntoIterator for List<T>`
+- [x] `List::iter()` method
 - [x] Generic associated type resolution bug fixed
 - [x] For-of loop generalization (Phase 2)
 - [ ] Tuple `IntoIterator` (Phase 3) - compiler magic, separate task

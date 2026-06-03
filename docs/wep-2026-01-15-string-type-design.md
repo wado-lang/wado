@@ -58,8 +58,8 @@ s[i]      // Compile error
 s[i..j]   // Compile error
 
 // Explicit methods instead
-s.bytes() -> Array<u8>      // Get as byte array
-s.chars() -> Array<char>    // Get as character array
+s.bytes() -> List<u8>      // Get as byte array
+s.chars() -> List<char>    // Get as character array
 s.len() -> usize
 s.is_empty() -> bool
 ```
@@ -159,7 +159,7 @@ This makes the special treatment a general mechanism available to user types.
    - **Mitigation**: Small relative to typical string sizes
    - **Future optimization**: Could use tagged pointer for small strings
 
-3. **bytes()/chars() copying**: Returns Array, requires full copy
+3. **bytes()/chars() copying**: Returns List, requires full copy
    - **Mitigation**: Temporary, will be improved with slices/iterators
    - **Workaround**: Provide `byte_at(i)`, `char_at(i)` for single access
 
@@ -186,7 +186,7 @@ This makes the special treatment a general mechanism available to user types.
 ### Future Extensions
 
 1. **Trait-based operator overloading**: Generalize `+=` mechanism
-2. **Slices**: `s.bytes()` returns `&[u8]` instead of `Array<u8>`
+2. **Slices**: `s.bytes()` returns `&[u8]` instead of `List<u8>`
 3. **Iterators**: `s.chars()` returns lazy iterator
 4. **Small String Optimization (SSO)**: Store short strings inline
 5. **String interpolation optimization**: Compile-time capacity estimation

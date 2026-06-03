@@ -138,7 +138,7 @@ compare(d1, d2);  // OK: Duration satisfies Ord bound
 | Newtype `T`   | Base type `U`           | Yes, via `as` |
 | Base type `U` | Newtype `T`             | Yes, via `as` |
 | Newtype `T`   | Newtype `S` (same base) | Yes, via `as` |
-| `Array<T>`    | `Array<U>`              | No            |
+| `List<T>`     | `List<U>`               | No            |
 | `&T`          | `&U`                    | Yes, via `as` |
 | `Fn(T)`       | `Fn(U)`                 | No            |
 
@@ -158,13 +158,13 @@ let i = c as i32;  // OK: direct cast to base
 ### Generic Newtypes
 
 ```wado
-type MyArray<T> = Array<T>;
+type MyArray<T> = List<T>;
 
 let arr: MyArray<i32> = [1, 2, 3];
-arr.len();                        // OK: inherits Array methods
+arr.len();                        // OK: inherits List methods
 arr.push(4);                      // OK
 
-let plain: Array<i32> = arr as Array<i32>;  // ERROR: generic cast not allowed
+let plain: List<i32> = arr as List<i32>;  // ERROR: generic cast not allowed
 ```
 
 ### What Newtypes Do NOT Provide
@@ -220,11 +220,11 @@ impl UserId {
 
 ## TODO
 
-- [ ] Generic newtypes (`type MyArray<T> = Array<T>`)
+- [ ] Generic newtypes (`type MyArray<T> = List<T>`)
 - [ ] Return type substitution for generic containers (`Option<Base>` → `Option<Newtype>` when calling inherited method on newtype)
 - [x] Trait bounds with newtypes (`fn compare<T: Ord>(a: T, b: T)` with newtype) — implemented
 - [x] Methods on primitive newtypes (`impl UserId { ... }` where `type UserId = i32`) — implemented
-- [x] `Array<Newtype>.sort()` via Ord inheritance — implemented
+- [x] `List<Newtype>.sort()` via Ord inheritance — implemented
 
 ## See Also
 

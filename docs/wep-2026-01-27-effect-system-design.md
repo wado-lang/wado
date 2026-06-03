@@ -57,7 +57,7 @@ fn wrapper<effect E>(f: fn() with E) with E {
     f();
 }
 
-fn map<T, U, effect E>(arr: Array<T>, f: fn(T) -> U with E) -> Array<U> with E {
+fn map<T, U, effect E>(arr: List<T>, f: fn(T) -> U with E) -> List<U> with E {
     // ...
 }
 
@@ -287,8 +287,8 @@ with TcpSocket                 (wasi:sockets)
 Effects without resource types in their signatures propagate nothing:
 
 ```
-with Environment  → (nothing)   // get_environment() -> Array<[String, String]>
-with Random       → (nothing)   // get_random_bytes(u64) -> Array<u8>
+with Environment  → (nothing)   // get_environment() -> List<[String, String]>
+with Random       → (nothing)   // get_random_bytes(u64) -> List<u8>
 with Exit         → (nothing)   // exit(Result<(), ()>)
 ```
 
@@ -300,7 +300,7 @@ Only resource types (`resource` keyword) trigger propagation. Structs, enums, va
 
 Resources that appear in a function's own parameter types or return type do not need to be repeated in `with`. They are inferred. This mirrors effect propagation but applies to the function's own signature rather than to an effect's operations.
 
-The rule: if a resource type `R` appears anywhere in a function's parameter types, return type (including the declared return type of an `async fn` that erases to unit through `task return`), or reachable via newtypes, containers (`Option`, `Result`, tuples, `Array<T>`, `&T`, `&mut T`), struct fields, variant case payloads, or function types, then `R` is unioned into the function's declared `with` set before effect checking. Propagation (above) then runs over the union, so transitive resources (`Stream` → `StreamWritable`, etc.) also become available.
+The rule: if a resource type `R` appears anywhere in a function's parameter types, return type (including the declared return type of an `async fn` that erases to unit through `task return`), or reachable via newtypes, containers (`Option`, `Result`, tuples, `List<T>`, `&T`, `&mut T`), struct fields, variant case payloads, or function types, then `R` is unioned into the function's declared `with` set before effect checking. Propagation (above) then runs over the union, so transitive resources (`Stream` → `StreamWritable`, etc.) also become available.
 
 ```wado
 // `s: Stream<u8>` puts Stream (and transitively StreamWritable) in scope.

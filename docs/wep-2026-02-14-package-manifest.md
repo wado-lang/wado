@@ -106,8 +106,8 @@ The `export` keyword defines what is visible at the **Component Model boundary**
 
 ```wado
 // src/lib.wado (in the "markdown" package)
-fn tokenize(input: String) -> Array<Token> { ... }       // private
-pub fn build_ast(tokens: Array<Token>) -> Document { ... } // project-internal
+fn tokenize(input: String) -> List<Token> { ... }       // private
+pub fn build_ast(tokens: List<Token>) -> Document { ... } // project-internal
 export fn parse(input: String) -> Document { ... }         // public API
 ```
 
@@ -464,7 +464,7 @@ Each `[[package]]` entry is uniquely identified by `(id, version)`. The `id` fie
 | `command`      | optional      | Entry point for `wasi:cli/command` (from dependency's `wado.toml`)                               |
 | `service`      | optional      | Entry point for `wasi:http/service` (from dependency's `wado.toml`)                              |
 | `lib`          | optional      | Library entry point (from dependency's `wado.toml`)                                              |
-| `deps`         | all           | Array of `id@version` strings referencing other entries                                          |
+| `deps`         | all           | List of `id@version` strings referencing other entries                                           |
 
 Entry point fields (`command`, `service`, `lib`) are copied from the dependency's `wado.toml` at resolution time. This makes the lock file self-sufficient — the `CompilerHost` can resolve all imports and locate all source files using only the root `wado.toml` and `wado.lock`.
 

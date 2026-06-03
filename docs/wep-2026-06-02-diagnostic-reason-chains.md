@@ -86,25 +86,25 @@ The same defect under both operand orders previously read as two unrelated
 errors. Source:
 
 ```wado
-fn f(a: i32, lst: Array<i32>) -> i32 { return a - lst; }   // and the mirror: lst - a
+fn f(a: i32, lst: List<i32>) -> i32 { return a - lst; }   // and the mirror: lst - a
 ```
 
 Before:
 
 ```
 // a - lst
-error: type mismatch: expected 'i32', found 'Array<i32>'
+error: type mismatch: expected 'i32', found 'List<i32>'
 // lst - a
-error: invalid pattern: operator `-` cannot be applied to type `Array<i32>`: type does not implement `Sub`
+error: invalid pattern: operator `-` cannot be applied to type `List<i32>`: type does not implement `Sub`
 ```
 
 After:
 
 ```
 // a - lst
-error: operator `-` cannot be applied to types `i32` and `Array<i32>`
+error: operator `-` cannot be applied to types `i32` and `List<i32>`
 // lst - a
-error: operator `-` cannot be applied to types `Array<i32>` and `i32`
+error: operator `-` cannot be applied to types `List<i32>` and `i32`
 ```
 
 ### Operator error — same type, missing trait impl

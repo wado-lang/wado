@@ -16,7 +16,7 @@ Introduce `#include_str("path")` and `#include_bytes("path")` as compile-time ex
 let runtime: String = #include_str("./runtime/runtime.wado");
 let template = #include_str("../templates/header.html");
 
-let icon: Array<u8> = #include_bytes("./assets/logo.png");
+let icon: List<u8> = #include_bytes("./assets/logo.png");
 let cert = #include_bytes("./certs/root.der");
 ```
 
@@ -29,7 +29,7 @@ Unlike the argument-free compile-time literals (`#file`, `#line`, `#function`, `
 | Literal                  | Return type | Use case                                            |
 | ------------------------ | ----------- | --------------------------------------------------- |
 | `#include_str("path")`   | `String`    | Text files: source code, HTML, JSON, SQL            |
-| `#include_bytes("path")` | `Array<u8>` | Binary files: images, certificates, compiled assets |
+| `#include_bytes("path")` | `List<u8>`  | Binary files: images, certificates, compiled assets |
 
 Values are constant and inlined at every use site.
 
@@ -55,7 +55,7 @@ The file is read once at compile time. If the file changes after compilation, th
 | ------------------------ | ----------------------------------- | ----------- | ---------------------------------------------------------- |
 | `#data`                  | `__DATA__` section in the same file | `String`    | Inline test fixtures, config, schemas co-located with code |
 | `#include_str("path")`   | External file (text)                | `String`    | Bundle runtime code, templates, external text assets       |
-| `#include_bytes("path")` | External file (binary)              | `Array<u8>` | Bundle images, certificates, binary assets                 |
+| `#include_bytes("path")` | External file (binary)              | `List<u8>`  | Bundle images, certificates, binary assets                 |
 
 ## Consequences
 

@@ -141,7 +141,7 @@ i128, u128
 
 // Composite (provided by prelude)
 String                  // UTF-8 string
-Array<T>                // dynamic array
+List<T>                // dynamic array
 [T, U, V]               // tuple
 Option<T>               // optional value
 Result<T, E>            // result type
@@ -180,7 +180,7 @@ impl Location {
 
 ### Tuples and Arrays
 
-See [WEP: Tuple and Array Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md).
+See [WEP: Tuple and List Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md).
 
 ```wado
 // Tuples
@@ -189,13 +189,13 @@ let x = t.0;                  // dot notation
 let y = t[1];                 // bracket notation (constant index only)
 
 // Arrays (requires explicit type context)
-let a: Array<i32> = [1, 2, 3];           // type annotation
-let b = [1, 2, 3] as Array<i32>;         // explicit cast
-fn takes(arr: Array<i32>) {}
-takes([1, 2, 3]);                        // coercion to Array
+let a: List<i32> = [1, 2, 3];           // type annotation
+let b = [1, 2, 3] as List<i32>;         // explicit cast
+fn takes(arr: List<i32>) {}
+takes([1, 2, 3]);                        // coercion to List
 
-// Array methods
-let mut arr: Array<i32> = [];
+// List methods
+let mut arr: List<i32> = [];
 arr.push(1);                             // add element to end
 let n = arr.len();                       // get length
 let empty = arr.is_empty();              // check if empty
@@ -204,7 +204,7 @@ arr[0] = 100;                            // index assignment (write, requires mu
 // Note: there is no iter_mut(); mutate elements via index access
 
 // Sorting
-let mut nums: Array<i32> = [5, 3, 8, 1];
+let mut nums: List<i32> = [5, 3, 8, 1];
 nums.sort();                             // in-place ascending sort (requires T: Ord)
 let asc = nums.sorted();                 // returns new sorted array
 nums.sort_by(|a: &i32, b: &i32| { ... });  // sort with custom Ordering comparator
@@ -234,7 +234,7 @@ println(`{point:#?}`);                   // pretty-print with indentation (see b
 println(`{point}`);                      // falls back to inspect when no Display impl
 
 // Pretty-print (:#?) — multi-line indented output for composite types
-let arr: Array<i32> = [1, 2, 3];
+let arr: List<i32> = [1, 2, 3];
 println(`{arr:#?}`);
 // [
 //   1,
@@ -723,7 +723,7 @@ impl Container {
 // Turbofish syntax (explicit type arguments)
 let x = identity::<i32>(42);
 let y = container.transform::<i32, i64>(10, 20 as i64);
-let arr = Array::<i32>::with_capacity(10);  // turbofish for generic statics
+let arr = List::<i32>::with_capacity(10);  // turbofish for generic statics
 
 // Variadic type packs: operate on tuples of any arity
 fn variadic_identity<..T>(x: [..T]) -> [..T] {
@@ -848,7 +848,7 @@ trait Eq { fn eq(&self, other: &Self) -> bool; }
 // For <, <=, >, >= operators
 trait Ord { fn cmp(&self, other: &Self) -> Ordering; }
 
-// For default value (auto-implemented for primitives, String, Array<T>,
+// For default value (auto-implemented for primitives, String, List<T>,
 // Option<T>, TreeMap<K, V>; not Result)
 trait Default { fn default() -> Self; }
 
@@ -885,7 +885,7 @@ fn max<T: Ord>(a: T, b: T) -> T {
 }
 
 // Bounded impl blocks — methods only available when bound is satisfied
-impl<T: Ord> Array<T> {
+impl<T: Ord> List<T> {
     pub fn sort(&mut self) { ... }
 }
 
@@ -901,7 +901,7 @@ impl<T: Eq> Eq for Pair<T> {
 
 All primitives implement `Eq` and `Ord`. Structs auto-derive `Eq` and `Ord` when all fields implement the trait.
 
-Variants auto-derive `Eq` and `Ord` as well. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `Array<T: Eq>` implement `Eq`. `Array<T: Ord>` implements `Ord`.
+Variants auto-derive `Eq` and `Ord` as well. `Option<T: Eq>`, `Result<T: Eq, E: Eq>`, `List<T: Eq>` implement `Eq`. `List<T: Ord>` implements `Ord`.
 
 `Inspect` and `InspectAlt` are also auto-derived. The compiler synthesizes `Display` and `DisplayAlt` fallbacks that delegate to `Inspect` and `InspectAlt` respectively.
 
@@ -961,14 +961,14 @@ See [WEP: Iterator Traits Design](./wep-2026-01-24-iterator-traits.md).
 `Iterator` provides `next()`. `IntoIterator` converts a collection into an iterator. Every `Iterator` automatically implements `IntoIterator` via a blanket impl, so all iterators work with `for-of`.
 
 ```wado
-// Array iteration
-let arr: Array<i32> = [1, 2, 3, 4, 5];
+// List iteration
+let arr: List<i32> = [1, 2, 3, 4, 5];
 for let x of arr { println(`{x}`); }
 
 // Explicit iterator
 let mut iter = arr.into_iter();
 iter.next();                              // Option<i32>
-let rest = iter.collect();                // Array<i32>
+let rest = iter.collect();                // List<i32>
 
 // Combinators
 let doubled = arr.into_iter().map(|x: i32| x * 2).collect();       // [2, 4, 6, 8, 10]
@@ -1013,7 +1013,7 @@ fn main() with Stdout, FileSystem { ... }
 fn add(a: i32, b: i32) -> i32 { return a + b; }  // no effects = pure
 
 // Effect in function type position
-fn for_each(items: Array<i32>, f: fn(i32) with Stdout) with Stdout {
+fn for_each(items: List<i32>, f: fn(i32) with Stdout) with Stdout {
     for let item of items { f(item); }
 }
 
@@ -1224,7 +1224,7 @@ let func = #function;       // current function name (String)
 let data = #data;           // __DATA__ section content (String)
 
 let src = #include_str("./runtime.wado");  // include file as String
-let icon = #include_bytes("./icon.png");   // include file as Array<u8>
+let icon = #include_bytes("./icon.png");   // include file as List<u8>
 ```
 
 Paths in `#include_str` and `#include_bytes` are resolved relative to the source file. See [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).

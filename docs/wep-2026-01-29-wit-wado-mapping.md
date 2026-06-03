@@ -307,7 +307,7 @@ This avoids forcing developers to manually list every type dependency.
 
 | WIT                | Wado           | Notes          |
 | ------------------ | -------------- | -------------- |
-| `list<T>`          | `Array<T>`     | Dynamic array  |
+| `list<T>`          | `List<T>`      | Dynamic array  |
 | `option<T>`        | `Option<T>`    | Optional value |
 | `result<T, E>`     | `Result<T, E>` | Result type    |
 | `tuple<T, U, ...>` | `[T, U, ...]`  | Tuple type     |

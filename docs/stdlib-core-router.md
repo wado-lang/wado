@@ -109,7 +109,7 @@ same pattern take precedence; `any` is the fallback.
 Matches `(method, path)`. The path argument must be a URL path
 (no query string, no fragment).
 
-#### `pub fn allowed_methods(&self, path: &String) -> Array<Method>`
+#### `pub fn allowed_methods(&self, path: &String) -> List<Method>`
 
 Returns the specific methods registered for `path`. `any` does not
 contribute. Empty array on a 404 or when only `any` is registered.

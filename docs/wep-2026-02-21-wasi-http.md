@@ -147,13 +147,13 @@ All types are imported from `"wasi:http"`.
 
 ### Type Aliases
 
-| Type         | Base        | Description                            |
-| ------------ | ----------- | -------------------------------------- |
-| `FieldName`  | `String`    | Header/trailer field name              |
-| `FieldValue` | `Array<u8>` | Header/trailer field value (raw bytes) |
-| `Headers`    | `Fields`    | Request or response headers            |
-| `Trailers`   | `Fields`    | HTTP trailers                          |
-| `StatusCode` | `u16`       | HTTP status code                       |
+| Type         | Base       | Description                            |
+| ------------ | ---------- | -------------------------------------- |
+| `FieldName`  | `String`   | Header/trailer field name              |
+| `FieldValue` | `List<u8>` | Header/trailer field value (raw bytes) |
+| `Headers`    | `Fields`   | Request or response headers            |
+| `Trailers`   | `Fields`   | HTTP trailers                          |
+| `StatusCode` | `u16`      | HTTP status code                       |
 
 ### Variants
 
@@ -167,18 +167,18 @@ All types are imported from `"wasi:http"`.
 
 ### `Fields` Methods
 
-| Method                        | Signature                                   | Description                             |
-| ----------------------------- | ------------------------------------------- | --------------------------------------- |
-| `Fields::new()`               | `-> Fields`                                 | Create empty mutable fields             |
-| `Fields::from_list(e)`        | `-> Result<Fields, HeaderError>`            | Create from `[[FieldName, FieldValue]]` |
-| `fields.get(name)`            | `-> Array<FieldValue>`                      | Get all values for a name               |
-| `fields.has(name)`            | `-> bool`                                   | Check if name exists                    |
-| `fields.set(name, vals)`      | `-> Result<(), HeaderError>`                | Replace all values for a name           |
-| `fields.append(name, v)`      | `-> Result<(), HeaderError>`                | Append a value to a name                |
-| `fields.delete(name)`         | `-> Result<(), HeaderError>`                | Remove all values for a name            |
-| `fields.get_and_delete(name)` | `-> Result<Array<FieldValue>, HeaderError>` | Get and remove                          |
-| `fields.copy_all()`           | `-> Array<[FieldName, FieldValue]>`         | Return all entries as a flat list       |
-| `fields.clone()`              | `-> Fields`                                 | Deep copy                               |
+| Method                        | Signature                                  | Description                             |
+| ----------------------------- | ------------------------------------------ | --------------------------------------- |
+| `Fields::new()`               | `-> Fields`                                | Create empty mutable fields             |
+| `Fields::from_list(e)`        | `-> Result<Fields, HeaderError>`           | Create from `[[FieldName, FieldValue]]` |
+| `fields.get(name)`            | `-> List<FieldValue>`                      | Get all values for a name               |
+| `fields.has(name)`            | `-> bool`                                  | Check if name exists                    |
+| `fields.set(name, vals)`      | `-> Result<(), HeaderError>`               | Replace all values for a name           |
+| `fields.append(name, v)`      | `-> Result<(), HeaderError>`               | Append a value to a name                |
+| `fields.delete(name)`         | `-> Result<(), HeaderError>`               | Remove all values for a name            |
+| `fields.get_and_delete(name)` | `-> Result<List<FieldValue>, HeaderError>` | Get and remove                          |
+| `fields.copy_all()`           | `-> List<[FieldName, FieldValue]>`         | Return all entries as a flat list       |
+| `fields.clone()`              | `-> Fields`                                | Deep copy                               |
 
 ### `Request` Methods
 

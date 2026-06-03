@@ -67,7 +67,7 @@ Global variables support all types:
 - Floats: `f32`, `f64`
 - Boolean: `bool`
 - Character: `char`
-- Object types: `String`, `Array<T>`, structs
+- Object types: `String`, `List<T>`, structs
 
 Object type globals use lazy initialization (see below).
 
@@ -93,7 +93,7 @@ For non-constant expressions (function calls, object construction), the compiler
 
 ```wado
 global mut MESSAGE: String = "Hello, World!";
-global mut ITEMS: Array<i32> = [1, 2, 3];
+global mut ITEMS: List<i32> = [1, 2, 3];
 global mut ORIGIN: Point = Point { x: 0, y: 0 };
 ```
 

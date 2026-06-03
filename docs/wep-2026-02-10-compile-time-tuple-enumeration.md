@@ -33,9 +33,9 @@ The compiler generates sequential `add()` calls for each interpolated value.
 - More boilerplate for tag authors (struct + trait impl + 3 methods vs 1 function)
 - Less general (only useful for builder-pattern scenarios)
 
-#### Type-Erased Array
+#### Type-Erased List
 
-Pass all values as `Array<String>` (pre-stringified):
+Pass all values as `List<String>` (pre-stringified):
 
 - Simple, no new features needed
 - Loses original type information (tag function cannot distinguish `{42}` from `{"42"}`)
@@ -154,7 +154,7 @@ impl ToSqlParam for String {
 
 fn sql<Values>(strings: CookedStrings, values: Values) -> SqlQuery {
     let mut query = strings[0];
-    let mut params: Array<SqlParam> = [];
+    let mut params: List<SqlParam> = [];
     for let [i, v] of values.enumerate() {
         params.push(v.to_sql_param());
         query.push_str("?");
@@ -255,7 +255,7 @@ note: tuple type determined here
 ## Related WEPs
 
 - [String Template Desugaring](./wep-2026-01-20-string-template-desugaring.md): Primary motivation; tagged templates use tuple enumeration to process interpolated values
-- [Tuple and Array Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md): Defines tuple literal syntax and semantics
+- [Tuple and List Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md): Defines tuple literal syntax and semantics
 
 ## References
 

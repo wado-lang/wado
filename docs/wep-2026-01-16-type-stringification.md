@@ -83,7 +83,7 @@ builtin::inspect(Box { value: 42 })
 // => "Box { value: 42 }"
 
 // Arrays
-builtin::inspect([1, 2, 3] as Array<i32>)
+builtin::inspect([1, 2, 3] as List<i32>)
 // => "[1, 2, 3]"
 
 // Tuples
@@ -121,7 +121,7 @@ println(`{true}`);      // => "true"
 println(`{"hello"}`);   // => "hello" (not "\"hello\"")
 
 // Arrays use inspect format (no Display by default)
-let arr: Array<i32> = [1, 2, 3];
+let arr: List<i32> = [1, 2, 3];
 println(`{arr}`);       // => "[1, 2, 3]" (fallback to inspect)
 ```
 
