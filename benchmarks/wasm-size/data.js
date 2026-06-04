@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780535117823,
+  "lastUpdate": 1780568116788,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29645,6 +29645,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 457424,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5a1aeaa3157bbd4413a39249892f89af3632c571",
+          "message": "Merge pull request #1287 from wado-lang/claude/builtin-array-redesign-oJr0M\n\nUnified zero-copy Slice/iterators over &Array<T> (builtin-array-redesign Phase 3)",
+          "timestamp": "2026-06-04T19:06:23+09:00",
+          "tree_id": "8ae53969b770dfae5d8318d21dfcc7bbefb1ed20",
+          "url": "https://github.com/wado-lang/wado/commit/5a1aeaa3157bbd4413a39249892f89af3632c571"
+        },
+        "date": 1780568116585,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9659,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17191,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 458339,
             "unit": "bytes"
           }
         ]
