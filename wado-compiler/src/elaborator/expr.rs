@@ -1977,8 +1977,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Condition::Expr(expr) => {
                 let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
-                let mut then_block = self.resolve_block(&if_expr.then_block, ctx, expected_type);
-                let mut else_block = if_expr
+                let then_block = self.resolve_block(&if_expr.then_block, ctx, expected_type);
+                let else_block = if_expr
                     .else_block
                     .as_ref()
                     .map(|b| self.resolve_block(b, ctx, expected_type));
@@ -2034,27 +2034,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 };
 
-                // Patch unresolved `null` tails in either branch using the
-                // determined result type — see `patch_unresolved_null`. When
-                // the type stayed UNKNOWN (both branches a bare `null`), or a
-                // `null` branch cannot fit a non-`Option` result, report it
-                // rather than letting an unresolved type reach codegen.
+                // Report any unresolved `null` tail in either branch against
+                // the determined result type — AST mirror of the old
+                // `patch_unresolved_null` pass (whose TIR mutation was dead).
+                // When the type stayed UNKNOWN (both branches a bare `null`)
+                // `report_uninferable_result` already fired and the null pass
+                // is skipped.
                 if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
-                    let unresolved = {
-                        let tt = self.tysys.type_table.borrow();
-                        let mut unresolved = Vec::new();
-                        patch_unresolved_null_in_block(
-                            &mut then_block,
-                            type_id,
-                            &tt,
-                            &mut unresolved,
-                        );
-                        if let Some(eb) = else_block.as_mut() {
-                            patch_unresolved_null_in_block(eb, type_id, &tt, &mut unresolved);
-                        }
-                        unresolved
-                    };
-                    self.report_unresolved_nulls(&unresolved, type_id);
+                    let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
+                    if let Some(eb) = &if_expr.else_block {
+                        blocks.push(eb);
+                    }
+                    self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
                 }
 
                 // Same rule as `resolve_match_expr`: an if-expression
@@ -2068,12 +2059,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // X) ...)` whose other branch pushes the wrong
                 // type. Skip when `type_id == Unit`: that's
                 // statement-position use, where each branch's value
-                // gets dropped at the WIR stmt level.
+                // gets dropped at the WIR stmt level. Branch types read
+                // from `expression_types` (AST level), not the built block.
                 if expected_type.is_some() && type_id != TypeTable::UNIT {
-                    let then_type = Self::block_result_type(&then_block);
+                    let then_type = self.ast_block_result_type(&if_expr.then_block);
                     self.check_branch_type(then_type, type_id, if_expr.then_block.span);
-                    if let Some(eb) = &else_block {
-                        let else_type = Self::block_result_type(eb);
+                    if let Some(eb) = &if_expr.else_block {
+                        let else_type = self.ast_block_result_type(eb);
                         self.check_branch_type(
                             else_type,
                             type_id,
@@ -2171,6 +2163,58 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Report each unresolved-`null` tail in `blocks` against a resolved
+    /// non-`Option` `result_type` (AST replacement for the
+    /// `patch_unresolved_null_in_block` + `report_unresolved_nulls` pass).
+    /// A `null` tail is an `Option`, so when `result_type` is itself an
+    /// `Option` every tail fits and nothing is reported.
+    fn report_unresolved_null_tails_in_blocks(
+        &mut self,
+        result_type: TypeId,
+        blocks: &[&ast::Block],
+    ) {
+        if self
+            .tysys
+            .type_table
+            .borrow()
+            .as_option(result_type)
+            .is_some()
+        {
+            return;
+        }
+        let mut spans = Vec::new();
+        let ctx = self.ctrl_flow_ctx();
+        for block in blocks {
+            super::control_flow::collect_unresolved_null_tails_in_block(ctx, block, &mut spans);
+        }
+        self.report_unresolved_nulls(&spans, result_type);
+    }
+
+    /// Report each unresolved-`null` arm body of `match_expr` against a
+    /// resolved non-`Option` `result_type` (AST replacement for the
+    /// per-arm `patch_unresolved_null` + `report_unresolved_nulls` pass).
+    fn report_unresolved_null_match_arms(
+        &mut self,
+        result_type: TypeId,
+        match_expr: &ast::MatchExpr,
+    ) {
+        if self
+            .tysys
+            .type_table
+            .borrow()
+            .as_option(result_type)
+            .is_some()
+        {
+            return;
+        }
+        let mut spans = Vec::new();
+        let ctx = self.ctrl_flow_ctx();
+        for arm in &match_expr.arms {
+            super::control_flow::collect_unresolved_null_tails(ctx, &arm.body, &mut spans);
+        }
+        self.report_unresolved_nulls(&spans, result_type);
+    }
+
     /// Resolve a match expression
     pub(super) fn resolve_match_expr(
         &mut self,
@@ -2181,7 +2225,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let scrutinee = self.resolve_expr(&match_expr.expr, ctx, None);
         let scrutinee_type = scrutinee.type_id;
 
-        let mut arms: Vec<TirMatchArm> = match_expr
+        let arms: Vec<TirMatchArm> = match_expr
             .arms
             .iter()
             .map(|arm| self.resolve_match_arm(arm, scrutinee_type, ctx, expected_type))
@@ -2215,22 +2259,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
         });
 
-        // Patch `null`-bodied arms whose `Option<???>` inner could not be
-        // inferred. If the match's overall type is fully resolved we know the
-        // inner type; rewrite the `Null`'s `type_id` so WIR translation can
-        // see it. When the type itself stayed UNKNOWN (every arm a bare
-        // `null`), or a `null` arm cannot fit a non-`Option` result, report
-        // it rather than letting an unresolved type reach codegen.
+        // Report any `null`-bodied arm whose `Option<???>` inner could not be
+        // inferred against a resolved non-`Option` result — AST mirror of the
+        // old `patch_unresolved_null` pass (whose TIR mutation was dead). When
+        // the match type itself stayed UNKNOWN (every arm a bare `null`)
+        // `report_uninferable_result` already fired and the null pass is
+        // skipped.
         if !self.report_uninferable_result(type_id, match_expr.span, "match expression") {
-            let unresolved = {
-                let tt = self.tysys.type_table.borrow();
-                let mut unresolved = Vec::new();
-                for arm in &mut arms {
-                    patch_unresolved_null(&mut arm.body, type_id, &tt, &mut unresolved);
-                }
-                unresolved
-            };
-            self.report_unresolved_nulls(&unresolved, type_id);
+            self.report_unresolved_null_match_arms(type_id, match_expr);
         }
 
         // Reject arms whose body type disagrees with the match's overall

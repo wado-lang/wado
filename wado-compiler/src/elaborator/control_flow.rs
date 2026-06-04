@@ -25,6 +25,7 @@ use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::symbol::SymbolKey;
 use crate::tir::{TypeId, TypeTable};
+use crate::token::Span;
 
 /// Lookup context for AST control-flow walks. Holds the per-AstId
 /// type table and the current module key so `expression_types` reads
@@ -167,6 +168,69 @@ pub(super) fn block_result_type(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> Typ
             _ => None,
         })
         .unwrap_or(TypeTable::UNIT)
+}
+
+/// Spans of unresolved-`null` tail values in `expr` whose recorded type
+/// still contains UNKNOWN. AST mirror of `patch_unresolved_null` (which
+/// mutated the built TIR's `null.type_id`): only the *tail* positions are
+/// walked (block tails, `if`/`match` arms), and a tail `null` that cannot
+/// fit a non-`Option` result type is collected for the caller to report.
+/// The TIR-mutation half was dead (reify rebuilds the `null` from its
+/// `expected_type`), so only the diagnostic survives.
+pub(super) fn collect_unresolved_null_tails(
+    ctx: CtrlFlowCtx<'_>,
+    expr: &ast::Expr,
+    out: &mut Vec<Span>,
+) {
+    match expr {
+        ast::Expr::Literal(lit) if matches!(lit.value, ast::Literal::Null) => {
+            if ctx
+                .type_of_id(lit.id)
+                .is_some_and(|t| ctx.type_table.borrow().contains_unknown(t))
+            {
+                out.push(lit.span);
+            }
+        }
+        ast::Expr::Block(block) => collect_unresolved_null_tails_in_block(ctx, block, out),
+        ast::Expr::If(if_expr) => {
+            collect_unresolved_null_tails_in_block(ctx, &if_expr.then_block, out);
+            if let Some(eb) = &if_expr.else_block {
+                collect_unresolved_null_tails_in_block(ctx, eb, out);
+            }
+        }
+        ast::Expr::Match(m) => {
+            for arm in &m.arms {
+                collect_unresolved_null_tails(ctx, &arm.body, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Tail-position helper for [`collect_unresolved_null_tails`], mirroring
+/// `patch_unresolved_null_in_block`. A trailing `match` lowers to
+/// `TirStmtKind::Expr(match)`, which the TIR walker reached through its
+/// `Expr` arm, so it is descended here too.
+pub(super) fn collect_unresolved_null_tails_in_block(
+    ctx: CtrlFlowCtx<'_>,
+    block: &ast::Block,
+    out: &mut Vec<Span>,
+) {
+    match block.stmts.last() {
+        Some(ast::Stmt::Expr(e)) => collect_unresolved_null_tails(ctx, &e.expr, out),
+        Some(ast::Stmt::Match(m)) => {
+            for arm in &m.arms {
+                collect_unresolved_null_tails(ctx, &arm.body, out);
+            }
+        }
+        Some(ast::Stmt::If(if_stmt)) => {
+            if let Some(eb) = &if_stmt.else_block {
+                collect_unresolved_null_tails_in_block(ctx, &if_stmt.then_block, out);
+                collect_unresolved_null_tails_in_block(ctx, eb, out);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// First return statement's value type discovered while walking
