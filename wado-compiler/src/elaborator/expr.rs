@@ -38,6 +38,17 @@ enum FuncRefInference {
     NotApplicable,
 }
 
+/// Body-walk placeholder for a resolved expression. Stage 7-B: the combined
+/// walk resolves sub-expressions for their side-effect fact recording and
+/// computes the result type, but no longer assembles the expression's TIR —
+/// reify is the sole producer and rebuilds it from the recorded facts
+/// (`expression_types`, `operator_dispatch`, `generic_instantiations`, …).
+/// The returned `TirExpr` only needs the right `type_id` + `span` for the
+/// caller's outer typecheck / `expression_types` recording.
+fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(TirExprKind::Unit, type_id, span)
+}
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve an AST expression to its TIR form. Records the resolved
     /// [`TypeId`] in [`super::sem::TypeAnnotations::expression_types`]
@@ -1340,6 +1351,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check field visibility: non-pub fields cannot be accessed from other modules
         self.check_field_visibility(expr.type_id, &field_access.field, field_access.span);
 
+        // NOTE (Stage 7-B): `resolve_field_access` still builds its
+        // `FieldAccess` TIR. `assign_to_target`'s l-value validation
+        // structurally inspects the resolved target's `kind` to decide
+        // assignability (`self.field = v`), so the resolved `kind` must stay
+        // real until that consumer reads validity from the AST + recorded
+        // facts instead. Converting this to a placeholder broke
+        // `self.field = v` ("expression is not assignable").
         TirExpr::new(
             TirExprKind::FieldAccess {
                 expr: Box::new(expr),
@@ -4053,7 +4071,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TirExpr {
         use crate::ast::RangeKind;
         use crate::module_source::ModuleSource;
-        use crate::tir::{TirExprKind, TirStructField};
 
         // Bidirectional coercion: resolve non-literal first to infer the element type
         let start_is_literal = self.tysys.is_numeric_literal(&range.start);
@@ -4138,7 +4155,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let (struct_name, module_source, fields) = match range.kind {
+        let (struct_name, module_source) = match range.kind {
             RangeKind::Exclusive => {
                 let ms = self
                     .tysys
@@ -4148,19 +4165,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .struct_module(crate::compiler_item::CompilerItem::RangeExclusive)
                     .cloned()
                     .unwrap_or_else(ModuleSource::range);
-                let fields = vec![
-                    TirStructField {
-                        name: "start".to_string(),
-                        value: start,
-                        field_index: 0,
-                    },
-                    TirStructField {
-                        name: "end".to_string(),
-                        value: end,
-                        field_index: 1,
-                    },
-                ];
-                ("RangeExclusive".to_string(), ms, fields)
+                ("RangeExclusive".to_string(), ms)
             }
             RangeKind::Inclusive => {
                 let ms = self
@@ -4171,28 +4176,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .struct_module(crate::compiler_item::CompilerItem::RangeInclusive)
                     .cloned()
                     .unwrap_or_else(ModuleSource::range);
-                let fields = vec![
-                    TirStructField {
-                        name: "start".to_string(),
-                        value: start,
-                        field_index: 0,
-                    },
-                    TirStructField {
-                        name: "end".to_string(),
-                        value: end,
-                        field_index: 1,
-                    },
-                    TirStructField {
-                        name: "exhausted".to_string(),
-                        value: TirExpr::new(
-                            TirExprKind::BoolLiteral(false),
-                            TypeTable::BOOL,
-                            range.span,
-                        ),
-                        field_index: 2,
-                    },
-                ];
-                ("RangeInclusive".to_string(), ms, fields)
+                ("RangeInclusive".to_string(), ms)
             }
         };
 
@@ -4213,18 +4197,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             range.id,
             vec![element_type],
             struct_type,
-            Some(mangled_name.clone()),
+            Some(mangled_name),
         );
 
-        TirExpr::new(
-            TirExprKind::StructLiteral {
-                struct_type,
-                struct_name: mangled_name,
-                fields,
-            },
-            struct_type,
-            range.span,
-        )
+        placeholder(struct_type, range.span)
     }
 }
 
