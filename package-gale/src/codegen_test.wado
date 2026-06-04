@@ -937,6 +937,34 @@ b : 'y' ;
     assert str_contains(&output, &"return parse_a(input);");
 }
 
+test "trace option emits per-rule enter/ok/fail instrumentation" {
+    // `gale gen --trace` / `options: { trace: true }` instruments every
+    // rule-entry wrapper so the recursive-descent path and the bail point
+    // are visible on stderr when a grammar rejects an input.
+    let input = "grammar Test;
+a : 'x' b ;
+b : 'y' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let traced = generate(&mut grammar, &GenerateOptions { highlight: false, trace: true }).source;
+    // The ambient logger import, the trace helpers, the depth field, and the
+    // per-rule calls are all present.
+    assert str_contains(&traced, &"use { log_stderr } from \"core:internal\";");
+    assert str_contains(&traced, &"fn trace_enter(p: &Parser, rule: &String)");
+    assert str_contains(&traced, &"trace_depth: i32,");
+    assert str_contains(&traced, &"trace_enter(p, &\"a\");");
+    assert str_contains(&traced, &"trace_fail(p, &\"a\", &e.message);");
+    assert str_contains(&traced, &"trace_ok(p, &\"b\");");
+
+    // Default generation (trace off) must contain none of it — the feature
+    // is strictly opt-in and adds zero instrumentation otherwise.
+    let mut grammar2 = parse_grammar(input, "test.g4");
+    let plain = generate(&mut grammar2, &GenerateOptions { highlight: false, trace: false }).source;
+    assert !str_contains(&plain, &"trace_enter");
+    assert !str_contains(&plain, &"trace_depth");
+    assert !str_contains(&plain, &"log_stderr");
+}
+
 test "generate emits pub fn parse_<rule>(input) for LR rule with min_prec=0" {
     // LR rules' internal helper takes a `min_prec: i32` parameter
     // (see `lr_util.compute_prefix_self_ref_min_prec`); the public

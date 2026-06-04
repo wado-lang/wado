@@ -13,10 +13,12 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
 
     if arguments.len() >= 2 && arguments[0] == "gen" {
         let mut paths: List<String> = [];
-        let mut options = GenerateOptions { highlight: false };
+        let mut options = GenerateOptions { highlight: false, trace: false };
         for let mut i = 1; i < arguments.len(); i += 1 {
             if arguments[i] == "--highlight" {
                 options.highlight = true;
+            } else if arguments[i] == "--trace" {
+                options.trace = true;
             } else {
                 paths.push(arguments[i]);
             }
@@ -34,7 +36,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
         return;
     }
 
-    eprintln("Usage: gale gen [--highlight] <grammar.g4> [grammar2.g4 ...]");
+    eprintln("Usage: gale gen [--highlight] [--trace] <grammar.g4> [grammar2.g4 ...]");
     eprintln("       gale dump <grammar.g4> [grammar2.g4 ...]");
 }
 

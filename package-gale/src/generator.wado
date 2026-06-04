@@ -32,6 +32,10 @@ use { to_snake_case } from "./gen_util.wado";
 pub struct Options {
     /// Emit the optional `highlight` table in the generated parser.
     pub highlight: bool,
+    /// Emit per-rule enter/ok/fail trace logging (to stderr) in the
+    /// generated parser. Off by default; set `trace: true` in the Kiln
+    /// generator options to debug why a grammar rejects an input.
+    pub trace: bool = false,
 }
 
 impl Deserialize for Options;
@@ -83,7 +87,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         },
     }
 
-    let gen_opts = GenerateOptions { highlight: req.options.highlight };
+    let gen_opts = GenerateOptions { highlight: req.options.highlight, trace: req.options.trace };
     let generated = codegen_generate(&mut grammar, &gen_opts);
     // Surface Gale's prediction-strategy diagnostics through the Kiln host so
     // they appear as normal compile warnings. The Kiln surface is the

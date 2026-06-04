@@ -111,6 +111,44 @@ multiple files are merged the same as `gale gen`.
 wado run package-gale -- dump path/to/Grammar.g4
 ```
 
+## Tracing a parse with the `trace` option
+
+`gale dump` is static (it shows the prediction decisions the emitter
+*would* make). To see what the generated parser *actually does* on a
+specific input — and where the recursive descent bails — turn on the
+`trace` option. It instruments every rule-entry wrapper to log an
+indented `enter` / `ok` / `FAIL` line to stderr (via `log_stderr`), so
+the innermost `FAIL` pinpoints the real culprit instead of the shallow
+"expected `<closer>`" error the caller surfaces.
+
+The instrumentation is strictly opt-in: with `trace` off (the default)
+the generated parser is byte-for-byte unchanged. Enable it in a driver /
+debug harness through the Kiln generator options:
+
+```wado
+use g from "./grammars/Grammar.g4"
+    with { generator: { module: "../src/generator.wado",
+                        options: { highlight: false, trace: true } } };
+```
+
+or from the CLI (`gale gen --trace Grammar.g4`). Example output for a
+malformed `{ let x = ; }` against a `block : '{' item* '}'` grammar:
+
+```
+enter prog @0 '{'
+  enter item @0 '{'
+    enter block @0 '{'
+      enter item @1 'let'
+      FAIL item: expected ID, got ";"   <- the real bail point
+    FAIL block: expected TK_LIT_RBRACE, got "let"
+  FAIL item: expected TK_LIT_RBRACE, got "let"
+FAIL prog: expected Eof, got "{"
+```
+
+Trace is rule-level (one frame per parser-rule call). The scan-side
+longest-match tournament inside a rule is not yet traced; add that when a
+concrete ambiguity needs it.
+
 ## Running Tests
 
 ```sh

@@ -27,6 +27,10 @@ use {
 
 pub struct GenerateOptions {
     pub highlight: bool,
+    /// Emit per-rule enter/ok/fail trace logging (to stderr via
+    /// `log_stderr`) in the generated parser. Off by default; enabled
+    /// by `gale gen --trace` or the `trace: true` Kiln generator option.
+    pub trace: bool = false,
 }
 
 /// Result of a codegen pass: the generated `.wado` source plus the
@@ -60,8 +64,14 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // / scannable caches for the subsequent parser emit.
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
     let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
+    ctx.set_trace(options.trace);
     let lowered = lower_with_ctx(grammar, &lit_tokens, &mut ctx);
     gen_header(&mut w, grammar);
+    if options.trace {
+        // Trace logging writes to stderr via the ambient logger.
+        w.line(&"use { log_stderr } from \"core:internal\";");
+        w.blank();
+    }
     gen_grammar_metadata(&mut w, grammar);
     gen_runtime(&mut w);
     gen_token_kind(&mut w, &grammar.lexer_rules);
