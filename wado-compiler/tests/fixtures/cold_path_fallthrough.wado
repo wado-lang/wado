@@ -1,0 +1,40 @@
+// Fall-through / implicit-else hinting: `cold_path()` placed as the cold
+// fall-through after a guard `if` (whose taken branch diverges) hints the
+// guard's condition likely-true, even though the marker is not inside the
+// `if` body. This is the guard-clause idiom and the case where `unlikely`
+// cannot be written.
+
+// Single guard: `x == 1` is the hot path; the fall-through is cold.
+fn one_guard(x: i32) -> i32 {
+    if x == 1 {
+        return 100;
+    }
+    builtin::cold_path();
+    return -1;
+}
+
+// Chained guards: every guard's taken branch is hinted likely-true.
+fn two_guards(x: i32) -> i32 {
+    if x == 1 {
+        return 10;
+    }
+    if x == 2 {
+        return 20;
+    }
+    builtin::cold_path();
+    return -1;
+}
+
+export fn run() {
+    assert one_guard(1) == 100;
+    assert one_guard(9) == -1;
+    assert two_guards(1) == 10;
+    assert two_guards(2) == 20;
+    assert two_guards(9) == -1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O0": ["builtin::likely(x == 1)", "builtin::likely(x == 2)"]
+}
