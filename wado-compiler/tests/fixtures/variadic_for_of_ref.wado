@@ -1,0 +1,38 @@
+// Variadic for-of over a reference: `for let v of self` where `self: &[..T]`
+// binds each element by reference (`&T_k`), the no-deref counterpart of
+// `for let v of *self`. Expansion happens at monomorphization once the
+// `TypePack` resolves to a concrete tuple.
+use { println, Stdout } from "core:cli";
+
+trait Countable {
+    fn count(&self) -> i32;
+}
+
+impl Countable for i32 {
+    fn count(&self) -> i32 { return 1; }
+}
+
+impl Countable for bool {
+    fn count(&self) -> i32 { return 2; }
+}
+
+impl<..T: Countable> Countable for [..T] {
+    fn count(&self) -> i32 {
+        let mut total: i32 = 0;
+        // `v` is `&T_k`; `count` auto-derefs the reference receiver.
+        for let v of self {
+            total = total + v.count();
+        }
+        return total;
+    }
+}
+
+export fn run() with Stdout {
+    let t = [42, true, 7];
+    // i32(1) + bool(2) + i32(1) = 4
+    assert t.count() == 4;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

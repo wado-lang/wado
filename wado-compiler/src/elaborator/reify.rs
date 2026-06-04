@@ -2988,11 +2988,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         let iterable = self.reify_expr(actual_iterable, ctx, None);
         let tuple_type_id = iterable.type_id;
-        let elems: Vec<TypeId> = self
+        // Look through a `&`/`&mut` wrapper: `for v of &tuple` binds each
+        // element by reference (`&T_k`), mirroring `resolve_tuple_for_of`.
+        let (elems, by_ref): (Vec<TypeId>, bool) = self
             .tysys
             .type_table
             .borrow()
-            .as_tuple(tuple_type_id)
+            .as_tuple_through_ref(tuple_type_id)
             .unwrap_or_default();
 
         let temp_name = format!("__tuple_{unique_id}");
@@ -3061,6 +3063,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 span,
             );
 
+            // By reference (`for v of &tuple`), bind `&T_k` to a fresh copy of
+            // the field, matching `for v of &list` refiter semantics.
+            let (bind_elem_type, bind_value) = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .tuple_element_binding(field_access, elem_type, by_ref, span);
+
             let mut block_stmts = Vec::new();
 
             if is_enumerate {
@@ -3077,10 +3087,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .tysys
                     .type_table
                     .borrow_mut()
-                    .make_tuple(vec![i32_type, elem_type]);
+                    .make_tuple(vec![i32_type, bind_elem_type]);
                 let enum_tuple = TirExpr::new(
                     TirExprKind::TupleLiteral {
-                        elements: vec![index_literal, field_access],
+                        elements: vec![index_literal, bind_value],
                     },
                     enum_tuple_type,
                     span,
@@ -3100,33 +3110,34 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     | ast::Pattern::MutIdent { id, name, span: _ } => {
                         let is_mut = for_of.is_mut
                             || matches!(&for_of.binding, ast::Pattern::MutIdent { .. });
-                        let local_index = ctx.add_local(name.clone(), elem_type, is_mut, Some(*id));
+                        let local_index =
+                            ctx.add_local(name.clone(), bind_elem_type, is_mut, Some(*id));
                         block_stmts.push(TirStmt::new(
                             TirStmtKind::Let {
                                 name: name.clone(),
                                 local_index,
                                 is_mut,
                                 is_reactive: false,
-                                type_id: elem_type,
-                                value: field_access,
+                                type_id: bind_elem_type,
+                                value: bind_value,
                                 skip_value_copy: false,
                             },
                             span,
                         ));
                     }
                     ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => {
-                        let tir_pattern = self.reify_pattern(&for_of.binding, elem_type, ctx);
+                        let tir_pattern = self.reify_pattern(&for_of.binding, bind_elem_type, ctx);
                         block_stmts.push(TirStmt::new(
                             TirStmtKind::LetDestructure {
                                 pattern: tir_pattern,
                                 is_mut: for_of.is_mut,
-                                value: field_access,
+                                value: bind_value,
                             },
                             span,
                         ));
                     }
                     ast::Pattern::Wildcard => {
-                        block_stmts.push(TirStmt::new(TirStmtKind::Expr(field_access), span));
+                        block_stmts.push(TirStmt::new(TirStmtKind::Expr(bind_value), span));
                     }
                     _ => {
                         // Annotate diagnosed; emit nothing.
@@ -3179,22 +3190,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let iterable = self.reify_expr(&for_of.iterable, ctx, None);
         let unique_id = ctx.next_local;
 
-        let binding_type = {
+        // Look through a `&`/`&mut` wrapper: `for v of &[..T]` binds `&T_k`.
+        // `by_ref` and the element type are derived from a single lookup so the
+        // two cannot drift.
+        let (inner, by_ref) = {
             let type_table = self.tysys.type_table.borrow();
-            if let Some(elems) = type_table.as_tuple(iterable.type_id) {
-                if let Some(tp) = elems
-                    .iter()
-                    .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
-                {
-                    *tp
-                } else if let Some(first) = elems.first() {
-                    *first
-                } else {
-                    TypeTable::UNKNOWN
+            match type_table.as_tuple_through_ref(iterable.type_id) {
+                Some((elems, by_ref)) => {
+                    let inner = elems
+                        .iter()
+                        .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
+                        .or_else(|| elems.first())
+                        .copied()
+                        .unwrap_or(TypeTable::UNKNOWN);
+                    (inner, by_ref)
                 }
-            } else {
-                TypeTable::UNKNOWN
+                None => (TypeTable::UNKNOWN, false),
             }
+        };
+        let binding_type = if by_ref {
+            self.tysys.type_table.borrow_mut().make_ref(inner)
+        } else {
+            inner
         };
 
         let (binding_name, binding_id) = match &for_of.binding {
@@ -3275,6 +3292,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 is_mut,
                 body,
                 unique_id,
+                by_ref,
             },
             span,
         )]
@@ -7001,12 +7019,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // annotation-free by design".
         if matches!(method_call.method.as_str(), "len" | "zip") {
             let receiver = self.reify_expr(&method_call.receiver, ctx, None);
-            let base_type = self.tysys.type_table.borrow().get(receiver.type_id).clone();
-            let is_tuple_receiver = matches!(
-                base_type,
-                crate::tir::ResolvedType::GenericInstance { ref name, ref module_source, .. }
-                    if crate::tir::TypeTable::is_tuple_type(name, module_source),
-            );
+            // Auto-deref through `&`/`&mut` so tuple `.len()` / `.zip()` work
+            // on a reference receiver, like any other method (mirrors the
+            // elaborator's `get_base_type`). The `receiver` expr is kept as-is
+            // for field access, which auto-derefs.
+            let base_type_id = self.tysys.type_table.borrow().peel_refs(receiver.type_id);
+            let is_tuple_receiver = self.tysys.type_table.borrow().is_tuple(base_type_id);
             if is_tuple_receiver {
                 return match method_call.method.as_str() {
                     "len" => {
@@ -7014,7 +7032,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             .tysys
                             .type_table
                             .borrow()
-                            .as_tuple(receiver.type_id)
+                            .as_tuple(base_type_id)
                             .map(|elems| elems.len())
                             .unwrap_or(0) as i64;
                         TirExpr::new(
@@ -7034,7 +7052,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         // never reach the monomorphiser, so emitting
                         // `TupleZip` here would hit `lower::translate`'s
                         // `unreachable!`.
-                        let base_type_id = receiver.type_id;
                         if self.type_contains_pack(base_type_id) {
                             TirExpr::new(
                                 TirExprKind::TupleZip {

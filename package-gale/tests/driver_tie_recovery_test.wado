@@ -1,0 +1,24 @@
+// Regression for the error-recovery span tie-break: when a malformed
+// repeated element and the following construct fail at the same position,
+// the reported error must name the malformed element, not the next
+// construct. See tie_recovery.g4 for the construction.
+use tie from "./grammars/tie_recovery.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/tie_recovery",
+        },
+    };
+
+test "tie prefers the malformed element over the next construct" {
+    match tie::parse(&"x") {
+        Ok(_) => {
+            assert false, "expected a parse error";
+        },
+        Err(e) => {
+            assert e.message.contains("ID"),
+                `expected the malformed-element error ('expected ID'), got: {e.message}`;
+        },
+    }
+}

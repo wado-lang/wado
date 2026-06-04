@@ -1,6 +1,8 @@
-// Test: WIR-level verification of bounds check elimination
-// Constant-index access on a known-size literal array should have
-// bounds checks eliminated at O2 (when the array is not aliased).
+// Test: WIR-level verification of bounds check elimination.
+// The constant read-only array is hoisted to an immutable module global
+// (`__const_obj_0`) by body globalization; const-fold then recovers its
+// `used` length through the global (via niri's GlobalFieldEnv), so the
+// constant-index bounds checks are still eliminated at O2.
 
 use { println, Stdout } from "core:cli";
 
@@ -16,14 +18,15 @@ __DATA__
 {
     "stdout": "10, 20, 30\n",
     "wir_expect:O2": [
+        "global global:__const_obj_0",
         "array.new_fixed<i32>(10, 20, 30)",
-        "builtin::array_get<i32>(__b_0.repr, 0)",
-        "builtin::array_get<i32>(__b_0.repr, 1)",
-        "builtin::array_get<i32>(__b_0.repr, 2)"
+        "builtin::array_get<i32>(global:__const_obj_0.repr, 0)",
+        "builtin::array_get<i32>(global:__const_obj_0.repr, 1)",
+        "builtin::array_get<i32>(global:__const_obj_0.repr, 2)"
     ],
     "wir_not_expect:O2": [
-        "if 0 >= __b_0.used",
-        "if 1 >= __b_0.used",
-        "if 2 >= __b_0.used"
+        "if 0 >= global:__const_obj_0.used",
+        "if 1 >= global:__const_obj_0.used",
+        "if 2 >= global:__const_obj_0.used"
     ]
 }

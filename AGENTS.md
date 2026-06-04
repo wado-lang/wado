@@ -94,14 +94,26 @@ See also:
 - `docs/compiler.md` for the compiler internals.
 - `docs/optimizer.md` for the optimization passes.
 
+### Bundled Library
+
+The compiler bundles Wasm modules for language features:
+
+- `wado-bundled-libm/` — deterministic math functions using the `libm` crate.
+
+## The CLI
+
 The CLI is implemented in `wado-cli/` as a subcommand-style CLI. The sections below describe each subcommand.
+
+In the examples below, `wado` is shorthand for `cargo run --bin wado --`.
+
+A Wado program targets a Wasm _world_: the CLI command (`wasi:cli/command`, the default), the HTTP service (`wasi:http/service`, run via `wado serve`), or the test world (`wasi:test`, used by E2E tests). Several defaults — including the allocator — depend on the target world.
 
 ### Compile Command
 
 ```sh
-cargo run --bin wado -- compile -o file.wasm file.wado    # generate Wasm
-cargo run --bin wado -- compile -o file.wat file.wado     # generate WAT
-cargo run --bin wado -- compile --wat-to-stdout file.wado # output WAT to stdout
+wado compile -o file.wasm file.wado    # generate Wasm
+wado compile -o file.wat file.wado     # generate WAT
+wado compile --wat-to-stdout file.wado # output WAT to stdout
 ```
 
 To inspect invalid Wasm when debugging codegen bugs, use `--no-validate`:
@@ -132,7 +144,7 @@ wado compile --allocator debug file.wado     # debug allocator
 ### Run Command
 
 ```sh
-cargo run --bin wado -- run file.wado  # run a CLI program with wasmtime
+wado run file.wado  # run a CLI program with wasmtime
 ```
 
 ### Serve Command
@@ -177,12 +189,6 @@ The compiler emits timestamped diagnostics to stderr. Use `--log-level` to contr
 ```sh
 wado compile --log-level debug file.wado
 ```
-
-### Bundled Library
-
-The compiler bundles Wasm modules for language features:
-
-- `wado-bundled-libm/` — deterministic math functions using the `libm` crate.
 
 ## The Standard Library
 

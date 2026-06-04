@@ -7,7 +7,7 @@
 //!
 //! Also provides utility functions for common NIR queries like `block_has_break_to`.
 
-use crate::nir::{NirBlock, NirExpr, NirExprKind, NirPattern, NirStmt, NirStmtKind};
+use crate::nir::{NirBlock, NirExpr, NirExprKind, NirPattern, NirStmt, NirStmtKind, NirUnaryOp};
 use crate::nir_package::NirPackage;
 
 /// Trait for mutable traversal of NIR trees.
@@ -808,6 +808,57 @@ pub fn expr_has_break_to(label: &str, expr: &NirExpr) -> bool {
         | NirExprKind::Unit
         | NirExprKind::EnumConstruct { .. } => false,
     }
+}
+
+/// Whether `expr` is a bare `Local(idx)` reference.
+pub fn is_local(expr: &NirExpr, idx: u32) -> bool {
+    matches!(&expr.kind, NirExprKind::Local { index, .. } if *index == idx)
+}
+
+/// Strip outer auto-ref / deref wrappers (`&`, `&mut`, `*`) from an
+/// expression, e.g. a method-call receiver, to reach the value underneath.
+pub fn strip_refs(expr: &NirExpr) -> &NirExpr {
+    match &expr.kind {
+        NirExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
+            expr: inner,
+        } => strip_refs(inner),
+        _ => expr,
+    }
+}
+
+/// Visitor that records whether `Local(idx)` appears anywhere it traverses.
+struct MentionsLocal {
+    idx: u32,
+    found: bool,
+}
+
+impl NirRefVisitor for MentionsLocal {
+    fn visit_expr(&mut self, expr: &NirExpr) {
+        if is_local(expr, self.idx) {
+            self.found = true;
+        }
+        if !self.found {
+            self.walk_expr(expr);
+        }
+    }
+}
+
+/// Whether `idx` appears anywhere in `expr`'s subtree. Uses the immutable
+/// visitor so every nested statement (including let-values inside
+/// expression-position blocks) is covered.
+pub fn expr_mentions_local(expr: &NirExpr, idx: u32) -> bool {
+    let mut v = MentionsLocal { idx, found: false };
+    v.visit_expr(expr);
+    v.found
+}
+
+/// Whether `idx` appears anywhere in `stmt`'s subtree. The statement-level
+/// counterpart of [`expr_mentions_local`].
+pub fn stmt_mentions_local(stmt: &NirStmt, idx: u32) -> bool {
+    let mut v = MentionsLocal { idx, found: false };
+    v.visit_stmt(stmt);
+    v.found
 }
 
 /// Apply a visitor to all function bodies in a project.

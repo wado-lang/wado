@@ -30,6 +30,43 @@ use std::fmt;
 
 use crate::module_source::ModuleSource;
 
+/// The two fields of the `List` / `String` sequence containers, which share a
+/// `{ repr: array<T>, used: i32 }` layout: an owned backing array plus the
+/// count of valid elements (`used`, the value `len()` returns).
+///
+/// Passes that construct or match these structs name the fields through
+/// [`SeqField::field_name`] instead of string literals, mirroring how
+/// [`CompilerItem`] insulates the Rust side from stdlib renames — renaming a
+/// container field on the Wado side is then a one-line change here.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum SeqField {
+    /// `repr` — the owned backing `array<T>`. Field index 0.
+    Backing,
+    /// `used` — the count of valid elements (the current length). Field index 1.
+    Len,
+}
+
+impl SeqField {
+    /// The Wado-side field name. The single source of truth for the `List` /
+    /// `String` container field names across the compiler.
+    #[must_use]
+    pub const fn field_name(self) -> &'static str {
+        match self {
+            Self::Backing => "repr",
+            Self::Len => "used",
+        }
+    }
+
+    /// The field's positional index within the container struct.
+    #[must_use]
+    pub const fn index(self) -> u32 {
+        match self {
+            Self::Backing => 0,
+            Self::Len => 1,
+        }
+    }
+}
+
 /// Every compiler-recognized stdlib item.
 ///
 /// Each variant has a canonical `snake_case` name (see

@@ -318,7 +318,7 @@ array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:j
 
 array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(55)
 
-struct core:prelude/slice.wado//ArrayIter<core:json_value/Value> {  // TypeId(56)
+struct core:prelude/slice.wado//ArrayRefIter<core:json_value/Value> {  // TypeId(56)
     mut repr: ref "Array<core:json_value/Value>",
     mut index: i32,
     mut end: i32,
@@ -793,7 +793,7 @@ type "functype//core:json/JsonMapSerializer^SerializeMap::key<core:prelude/strin
 
 type "functype//core:json/JsonSeqSerializer^SerializeSeq::element<core:json_value/Value>" = fn(ref "core:json//JsonSeqSerializer", ref "core:prelude/types.wado//Box<Value>") -> ref null "core:serde//SerializeError";  // TypeId(225)
 
-type "functype//core:prelude/slice.wado/ArrayIter<core:json_value/Value>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:json_value/Value>") -> ref null "core:json_value//Value";  // TypeId(226)
+type "functype//core:prelude/slice.wado/ArrayRefIter<core:json_value/Value>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<core:json_value/Value>") -> ref null "core:prelude/types.wado//Box<Value>";  // TypeId(226)
 
 type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:json_value/Value>::insert_node" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:json_value/Value>", ref "core:prelude/types.wado//Option<i32>", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(227)
 
@@ -5593,7 +5593,7 @@ fn "core:json_value/Value^Serialize::serialize<core:json/JsonSerializer>"(self, 
     let __qm_v_6: ref "core:json//JsonSeqSerializer";
     let __qm_e_7: ref "core:serde//SerializeError";
     let seq: ref "core:json//JsonSeqSerializer";
-    let __iter_9: ref "core:prelude/slice.wado//ArrayIter<core:json_value/Value>";
+    let __iter_9: ref "core:prelude/slice.wado//ArrayRefIter<core:json_value/Value>";
     let item: ref "core:prelude/types.wado//Box<Value>";
     let __qm_e_12: ref "core:serde//SerializeError";
     let map: ref "core:collections//TreeMap<core:prelude/string.wado/String,core:json_value/Value>";
@@ -5605,16 +5605,16 @@ fn "core:json_value/Value^Serialize::serialize<core:json/JsonSerializer>"(self, 
     let val: ref "core:prelude/types.wado//Box<Value>";
     let __qm_e_21: ref "core:serde//SerializeError";
     let __qm_e_23: ref "core:serde//SerializeError";
-    let __local_24: ref null "core:json_value//Value";
+    let __local_24: ref null "core:prelude/types.wado//Box<Value>";
     let __local_25: ref null "core:serde//SerializeError";
     let __local_26: ref null "tuple//[String, Value]";
     let __local_27: ref null "core:serde//SerializeError";
     let __local_28: ref null "core:serde//SerializeError";
-    let repr_35: ref "Array<core:json_value/Value>";
-    let end_37: i32;
-    let self_42: ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:json_value/Value>>";
-    let repr_43: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:json_value/Value>>";
-    let end_45: i32;
+    let repr_36: ref "Array<core:json_value/Value>";
+    let end_38: i32;
+    let self_43: ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:json_value/Value>>";
+    let repr_44: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:json_value/Value>>";
+    let end_46: i32;
     return let __match_scrut_0: ref "core:json_value//Value", __match_scrut_0 = self.value, (if __match_scrut_0.discriminant == 0 -> ref null "core:serde//SerializeError" {
         "core:json/JsonSerializer^Serializer::serialize_null"(s);
     } else if ref.test "core:json_value//Value::Bool"(__match_scrut_0) -> ref null "core:serde//SerializeError" {
@@ -5636,14 +5636,14 @@ fn "core:json_value/Value^Serialize::serialize<core:json/JsonSerializer>"(self, 
             __qm_e_7 = ref.cast "core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError>::Err"(__match_scrut_5).payload_0;
             return __qm_e_7;
         }));
-        repr_35 = arr.repr;
-        end_37 = arr.used;
-        __iter_9 = struct.new "core:prelude/slice.wado//ArrayIter<core:json_value/Value>" { repr: repr_35, index: 0, end: end_37 };
+        repr_36 = arr.repr;
+        end_38 = arr.used;
+        __iter_9 = struct.new "core:prelude/slice.wado//ArrayRefIter<core:json_value/Value>" { repr: repr_36, index: 0, end: end_38 };
         b685: block {
             l686: loop {
-                __local_24 = "core:prelude/slice.wado/ArrayIter<core:json_value/Value>^Iterator::next"(__iter_9);
+                __local_24 = "core:prelude/slice.wado/ArrayRefIter<core:json_value/Value>^Iterator::next"(__iter_9);
                 if ref.is_null(__local_24) == 0 {
-                    item = struct.new "core:prelude/types.wado//Box<Value>" { value: ref.as_non_null(__local_24) };
+                    item = ref.as_non_null(__local_24);
                     __local_25 = "core:json/JsonSeqSerializer^SerializeSeq::element<core:json_value/Value>"(seq, item);
                     if ref.is_null(__local_25) {
                     } else {
@@ -5667,10 +5667,10 @@ fn "core:json_value/Value^Serialize::serialize<core:json/JsonSerializer>"(self, 
             __qm_e_15 = ref.cast "core:prelude/types.wado//Result<core:json/JsonMapSerializer,core:serde/SerializeError>::Err"(__match_scrut_1).payload_0;
             return __qm_e_15;
         }));
-        self_42 = "core:collections/TreeMap<core:prelude/string.wado/String,core:json_value/Value>::entries"(map);
-        repr_43 = self_42.repr;
-        end_45 = self_42.used;
-        __iter_17 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:json_value/Value>>" { repr: repr_43, index: 0, end: end_45 };
+        self_43 = "core:collections/TreeMap<core:prelude/string.wado/String,core:json_value/Value>::entries"(map);
+        repr_44 = self_43.repr;
+        end_46 = self_43.used;
+        __iter_17 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:json_value/Value>>" { repr: repr_44, index: 0, end: end_46 };
         b690: block {
             l691: loop {
                 __local_26 = "core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:json_value/Value>>^Iterator::next"(__iter_17);
@@ -5879,14 +5879,14 @@ fn "core:json/JsonSeqSerializer^SerializeSeq::element<core:json_value/Value>"(se
     return r;
 }
 
-fn "core:prelude/slice.wado/ArrayIter<core:json_value/Value>^Iterator::next"(self) {
-    let item: ref "core:json_value//Value";
+fn "core:prelude/slice.wado/ArrayRefIter<core:json_value/Value>^Iterator::next"(self) {
+    let val: ref "core:prelude/types.wado//Box<Value>";
     if self.index >= self.end {
         return ref.null none;
     }
-    item = builtin::array_get<ref "core:json_value//Value">(self.repr, self.index);
+    val = struct.new "core:prelude/types.wado//Box<Value>" { value: builtin::array_get<ref "core:json_value//Value">(self.repr, self.index) };
     self.index = self.index + 1;
-    return item;
+    return val;
 }
 
 fn "core:collections/TreeMap<core:prelude/string.wado/String,core:json_value/Value>::insert_node"(self, node, key, index) {

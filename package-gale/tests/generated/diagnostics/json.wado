@@ -1177,16 +1177,24 @@ struct Parser {
     tokens: List<Token>,
     pos: i32,
     chars: List<char>,
+    pending: Option<ParseError>,
 }
 
 impl Parser {
     fn new(tokens: List<Token>, chars: List<char>) -> Parser {
-        return Parser { tokens, pos: 0, chars };
+        return Parser { tokens, pos: 0, chars, pending: null };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
         let lc = line_col_at(&self.chars, span.start);
         return ParseError::at(message, span, expected, lc.0, lc.1);
+    }
+
+    fn record_deeper(&mut self, e: ParseError) {
+        let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
+        if take {
+            self.pending = Option::<ParseError>::Some(e);
+        }
     }
 
     fn peek(&self) -> &Token {
@@ -1904,35 +1912,80 @@ pub fn parse_json(input: &String) -> Result<JsonNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_json(&mut parser);
+    let _result = _parse_json(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start >= _e.span.start {
+                return Result::<JsonNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<JsonNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_obj(input: &String) -> Result<ObjNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_obj(&mut parser);
+    let _result = _parse_obj(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start >= _e.span.start {
+                return Result::<ObjNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ObjNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_pair(input: &String) -> Result<PairNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_pair(&mut parser);
+    let _result = _parse_pair(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start >= _e.span.start {
+                return Result::<PairNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<PairNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_arr(input: &String) -> Result<ArrNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_arr(&mut parser);
+    let _result = _parse_arr(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start >= _e.span.start {
+                return Result::<ArrNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ArrNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_value(input: &String) -> Result<ValueNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_value(&mut parser);
+    let _result = _parse_value(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start >= _e.span.start {
+                return Result::<ValueNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ValueNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse(input: &String) -> Result<JsonNode, ParseError> {

@@ -105,6 +105,10 @@ pub struct GenContext {
     /// `LoweredGrammar.diagnostics` by `lower_with_ctx`. See
     /// `Diagnostic` in `gir.wado`.
     diagnostics: List<Diagnostic>,
+    /// When set, parser emit adds trace logging (rule enter/ok/fail plus
+    /// multi-alt scan/pick/try decisions) — the `trace: true` generator
+    /// option. Off by default.
+    trace: bool,
 }
 
 impl GenContext {
@@ -129,7 +133,22 @@ impl GenContext {
             follow_variant_registry: TreeMap::<String, FollowVariantEntry>::new(),
             follow_variant_order: [],
             diagnostics: [],
+            trace: false,
         };
+    }
+
+    /// Enable trace instrumentation in the generated parser (the
+    /// `trace: true` generator option / `gale gen --trace`). Read across
+    /// parser emit — by `gen_parser_struct` / `gen_rule_entry_wrapper`
+    /// for the rule enter/ok/fail frames, and by `gen_multi_alt_body` /
+    /// `gen_prediction_code` for the multi-alt scan/pick/try lines.
+    pub fn set_trace(&mut self, on: bool) {
+        self.trace = on;
+    }
+
+    /// Whether trace instrumentation should be emitted.
+    pub fn is_trace(&self) -> bool {
+        return self.trace;
     }
 
     /// Record a prediction-strategy diagnostic for `rule`, deduped on

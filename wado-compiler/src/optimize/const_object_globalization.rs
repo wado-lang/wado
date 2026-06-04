@@ -65,7 +65,7 @@ use crate::nir::{
     NirUnaryOp,
 };
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::NirMutVisitor;
+use crate::nir_visitor::{NirMutVisitor, expr_mentions_local, is_local, strip_refs};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 type FuncKey = (ModuleSource, String);
@@ -112,8 +112,17 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
 
     // Phase 2 — mutation. Each candidate becomes a fresh global with a `null`
     // placeholder init; the binding becomes an inline `GlobalVarSet` and its
-    // reads become `GlobalVarGet`.
-    let mut counter = 0usize;
+    // reads become `GlobalVarGet`. Number from the count of pre-existing
+    // `__const_obj_*` globals rather than from `0`, so names stay unique even
+    // if the pass is invoked more than once over a program's lifetime: a
+    // per-call `0`-based counter would emit a second `__const_obj_0` with an
+    // unrelated type, colliding two globals under one name (an invalid-Wasm
+    // type mismatch). The pass runs once today, but this keeps it idempotent.
+    let mut counter = project
+        .globals
+        .iter()
+        .filter(|g| g.name.starts_with("__const_obj_"))
+        .count();
     for cand in candidates {
         let name = format!("__const_obj_{counter}");
         counter += 1;
@@ -434,6 +443,23 @@ fn expr_readonly(expr: &NirExpr, idx: u32, gate: &Gate<'_>) -> bool {
             expr: inner,
         } => !expr_mentions_local(inner, idx),
 
+        // Pure scalar reads: `xs[i] + 1`, `k >= xs.used`, `xs[i] as i64`,
+        // `-xs[i]`. The operands flow back through the read arms above; the
+        // operator yields a fresh scalar that neither aliases nor mutates the
+        // binding. Without this, a projection read buried in an expression — a
+        // bounds check, a length comparison — falls to the conservative `_`
+        // arm and blocks hoisting in straight-line bodies. (In a loop, `licm`
+        // hoists such reads into their own `let`, which is why this only
+        // surfaced for non-loop bindings.)
+        NirExprKind::Binary { left, right, .. } => {
+            expr_readonly(left, idx, gate) && expr_readonly(right, idx, gate)
+        }
+        NirExprKind::Cast { expr: inner, .. }
+        | NirExprKind::Unary {
+            op: NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot,
+            expr: inner,
+        } => expr_readonly(inner, idx, gate),
+
         // Reads through projections: `xs.field`, `xs[i]`.
         NirExprKind::Index { expr: base, index } => {
             (is_local(base, idx) || expr_readonly(base, idx, gate))
@@ -600,47 +626,4 @@ fn stmt_blocks_mut(stmt: &mut NirStmt) -> Vec<&mut NirBlock> {
         NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => vec![body],
         _ => Vec::new(),
     }
-}
-
-// ---------------------------------------------------------------------------
-// Shared helpers
-// ---------------------------------------------------------------------------
-
-fn is_local(expr: &NirExpr, idx: u32) -> bool {
-    matches!(&expr.kind, NirExprKind::Local { index, .. } if *index == idx)
-}
-
-/// Strip outer auto-ref / deref wrappers from a method-call receiver.
-fn strip_refs(expr: &NirExpr) -> &NirExpr {
-    match &expr.kind {
-        NirExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
-            expr: inner,
-        } => strip_refs(inner),
-        _ => expr,
-    }
-}
-
-/// Complete check for whether `idx` appears anywhere in `expr`'s subtree,
-/// using the immutable visitor so every nested statement (including let-values
-/// inside expression-position blocks) is covered.
-fn expr_mentions_local(expr: &NirExpr, idx: u32) -> bool {
-    use crate::nir_visitor::NirRefVisitor;
-    struct Mentions {
-        idx: u32,
-        found: bool,
-    }
-    impl NirRefVisitor for Mentions {
-        fn visit_expr(&mut self, expr: &NirExpr) {
-            if is_local(expr, self.idx) {
-                self.found = true;
-            }
-            if !self.found {
-                self.walk_expr(expr);
-            }
-        }
-    }
-    let mut v = Mentions { idx, found: false };
-    v.visit_expr(expr);
-    v.found
 }

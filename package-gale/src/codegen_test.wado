@@ -928,9 +928,88 @@ b : 'y' ;
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"pub fn parse_a(input: &String)");
     assert str_contains(&output, &"pub fn parse_b(input: &String)");
-    assert str_contains(&output, &"return _parse_a(&mut parser);");
-    assert str_contains(&output, &"return _parse_b(&mut parser);");
+    // The entry captures the result so a deeper recovery error (recorded in
+    // `parser.pending` by a scan-gated repetition over a malformed element)
+    // can be preferred over the shallow top-level failure.
+    assert str_contains(&output, &"let _result = _parse_a(&mut parser);");
+    assert str_contains(&output, &"let _result = _parse_b(&mut parser);");
+    assert str_contains(&output, &"if let Some(_d) = parser.pending");
     assert str_contains(&output, &"return parse_a(input);");
+}
+
+test "trace option emits per-rule enter/ok/fail instrumentation" {
+    // `gale gen --trace` / `options: { trace: true }` instruments every
+    // rule-entry wrapper so the recursive-descent path and the bail point
+    // are visible on stderr when a grammar rejects an input.
+    let input = "grammar Test;
+a : 'x' b ;
+b : 'y' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let traced = generate(&mut grammar, &GenerateOptions { highlight: false, trace: true }).source;
+    // The ambient logger import, the trace helpers, the depth field, and the
+    // per-rule calls are all present.
+    assert str_contains(&traced, &"use { log_stderr } from \"core:internal\";");
+    assert str_contains(&traced, &"fn trace_enter(p: &Parser, rule: &String)");
+    assert str_contains(&traced, &"trace_depth: i32,");
+    assert str_contains(&traced, &"trace_enter(p, &\"a\");");
+    assert str_contains(&traced, &"trace_fail(p, &\"a\", &e.message);");
+    assert str_contains(&traced, &"trace_ok(p, &\"b\");");
+
+    // Default generation (trace off) must contain none of it — the feature
+    // is strictly opt-in and adds zero instrumentation otherwise.
+    let mut grammar2 = parse_grammar(input, "test.g4");
+    let plain = generate(&mut grammar2, &GenerateOptions { highlight: false, trace: false }).source;
+    assert !str_contains(&plain, &"trace_enter");
+    assert !str_contains(&plain, &"trace_depth");
+    assert !str_contains(&plain, &"log_stderr");
+}
+
+test "trace option instruments the scan tournament and alt picks" {
+    // A rule whose alts share a prefix (`X a Y?` vs `X`) lowers to the
+    // longest-match scan tournament. Trace must surface the per-alt scan
+    // lengths and the committed winner so a mis-prediction is visible.
+    let input = "grammar T;
+r : a EOF ;
+a : X a Y?
+  | X
+  ;
+X : 'X' ;
+Y : 'Y' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let traced = generate(&mut grammar, &GenerateOptions { highlight: false, trace: true }).source;
+    assert str_contains(&traced, &"trace_scan_alt(p, &\"a\",");
+    assert str_contains(&traced, &"trace_pick(p, &\"a\", _sd_best_i);");
+    assert str_contains(&traced, &"fn trace_scan_alt(p: &Parser, rule: &String, alt: i32, end: i32)");
+
+    // Default generation (trace off) emits none of the decision-point hooks.
+    let mut grammar2 = parse_grammar(input, "test.g4");
+    let plain = generate(&mut grammar2, &GenerateOptions { highlight: false, trace: false }).source;
+    assert !str_contains(&plain, &"trace_scan_alt");
+    assert !str_contains(&plain, &"trace_pick");
+    assert !str_contains(&plain, &"trace_try");
+}
+
+test "trace suppresses the pick line for all-single-token rules" {
+    // `tok` is a pure single-token choice: the committed alt is already
+    // self-evident from the lookahead token on the `enter` line, so its
+    // `pick` would be pure noise and must be suppressed. `sub` chooses
+    // among alts that consume sub-structure (`A x` vs `B`), so its pick
+    // carries real information and stays.
+    let input = "grammar T;
+r : tok sub EOF ;
+tok : A | B | C ;
+sub : A x | B ;
+x : A ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let traced = generate(&mut grammar, &GenerateOptions { highlight: false, trace: true }).source;
+    assert !str_contains(&traced, &"trace_pick(p, &\"tok\",");
+    assert str_contains(&traced, &"trace_pick(p, &\"sub\",");
 }
 
 test "generate emits pub fn parse_<rule>(input) for LR rule with min_prec=0" {
@@ -946,7 +1025,7 @@ WS : [ \\t\\n]+ -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"pub fn parse_expr(input: &String)");
-    assert str_contains(&output, &"return _parse_expr(&mut parser, 0);");
+    assert str_contains(&output, &"let _result = _parse_expr(&mut parser, 0);");
 }
 
 test "token-only group `(K_A | K_B)` gates p.advance() on a kind-check" {

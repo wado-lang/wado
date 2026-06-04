@@ -2196,16 +2196,24 @@ struct Parser {
     tokens: List<Token>,
     pos: i32,
     chars: List<char>,
+    pending: Option<ParseError>,
 }
 
 impl Parser {
     fn new(tokens: List<Token>, chars: List<char>) -> Parser {
-        return Parser { tokens, pos: 0, chars };
+        return Parser { tokens, pos: 0, chars, pending: null };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
         let lc = line_col_at(&self.chars, span.start);
         return ParseError::at(message, span, expected, lc.0, lc.1);
+    }
+
+    fn record_deeper(&mut self, e: ParseError) {
+        let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
+        if take {
+            self.pending = Option::<ParseError>::Some(e);
+        }
     }
 
     fn peek(&self) -> &Token {
@@ -2640,7 +2648,14 @@ fn _parse_html_document__inner(p: &mut Parser) -> Result<HtmlDocumentNode, Parse
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if _gale_kind_set_0(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                if let Err(_rec_e) = _parse_scriptlet_or_sea_ws(p) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+            }
+            break;
+        }
         let scriptlet_or_sea_ws = _parse_scriptlet_or_sea_ws(p)?;
         scriptlet_or_sea_ws_list.push(scriptlet_or_sea_ws);
     }
@@ -2661,7 +2676,14 @@ fn _parse_html_document__inner(p: &mut Parser) -> Result<HtmlDocumentNode, Parse
             if pos <= p.pos { break rep_scan_2; }
             rep_scan_pos_2 = pos;
         }
-        if rep_scan_pos_2 < 0 { break; }
+        if rep_scan_pos_2 < 0 {
+            if _gale_kind_set_0(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                if let Err(_rec_e) = _parse_scriptlet_or_sea_ws(p) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+            }
+            break;
+        }
         let scriptlet_or_sea_ws = _parse_scriptlet_or_sea_ws(p)?;
         scriptlet_or_sea_ws_list_2.push(scriptlet_or_sea_ws);
     }
@@ -2682,7 +2704,14 @@ fn _parse_html_document__inner(p: &mut Parser) -> Result<HtmlDocumentNode, Parse
             if pos <= p.pos { break rep_scan_3; }
             rep_scan_pos_3 = pos;
         }
-        if rep_scan_pos_3 < 0 { break; }
+        if rep_scan_pos_3 < 0 {
+            if _gale_kind_set_0(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                if let Err(_rec_e) = _parse_scriptlet_or_sea_ws(p) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+            }
+            break;
+        }
         let scriptlet_or_sea_ws = _parse_scriptlet_or_sea_ws(p)?;
         scriptlet_or_sea_ws_list_3.push(scriptlet_or_sea_ws);
     }
@@ -2697,7 +2726,14 @@ fn _parse_html_document__inner(p: &mut Parser) -> Result<HtmlDocumentNode, Parse
             if pos <= p.pos { break rep_scan_4; }
             rep_scan_pos_4 = pos;
         }
-        if rep_scan_pos_4 < 0 { break; }
+        if rep_scan_pos_4 < 0 {
+            if _gale_kind_set_1(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                if let Err(_rec_e) = _parse_html_elements__follow_0(p) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+            }
+            break;
+        }
         let html_elements = _parse_html_elements__follow_0(p)?;
         html_elements_list.push(html_elements);
     }
@@ -2767,7 +2803,14 @@ fn _parse_html_elements__inner(p: &mut Parser) -> Result<HtmlElementsNode, Parse
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if _gale_kind_set_2(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                if let Err(_rec_e) = _parse_html_misc(p) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+            }
+            break;
+        }
         let html_misc = _parse_html_misc(p)?;
         html_misc_list.push(html_misc);
     }
@@ -2783,7 +2826,14 @@ fn _parse_html_elements__inner(p: &mut Parser) -> Result<HtmlElementsNode, Parse
             if pos <= p.pos { break rep_scan_2; }
             rep_scan_pos_2 = pos;
         }
-        if rep_scan_pos_2 < 0 { break; }
+        if rep_scan_pos_2 < 0 {
+            if _gale_kind_set_2(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                if let Err(_rec_e) = _parse_html_misc(p) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+            }
+            break;
+        }
         let html_misc = _parse_html_misc(p)?;
         html_misc_list_2.push(html_misc);
     }
@@ -2821,7 +2871,14 @@ fn _parse_html_element__inner(p: &mut Parser) -> Result<HtmlElementNode, ParseEr
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if p.peek_kind() == TK_TAG_NAME {
+                    let _rec_pos = p.pos;
+                    if let Err(_rec_e) = _parse_html_attribute(p) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                }
+                break;
+            }
             let html_attribute = _parse_html_attribute(p)?;
             html_attribute_list.push(html_attribute);
         }
@@ -3480,7 +3537,14 @@ fn _parse_html_element__follow_2__inner(p: &mut Parser) -> Result<HtmlElementNod
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if p.peek_kind() == TK_TAG_NAME {
+                    let _rec_pos = p.pos;
+                    if let Err(_rec_e) = _parse_html_attribute(p) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                }
+                break;
+            }
             let html_attribute = _parse_html_attribute(p)?;
             html_attribute_list.push(html_attribute);
         }
@@ -3581,77 +3645,176 @@ pub fn parse_html_document(input: &String) -> Result<HtmlDocumentNode, ParseErro
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_html_document(&mut parser);
+    let _result = _parse_html_document(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start >= _e.span.start {
+                return Result::<HtmlDocumentNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<HtmlDocumentNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_scriptlet_or_sea_ws(input: &String) -> Result<ScriptletOrSeaWsNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_scriptlet_or_sea_ws(&mut parser);
+    let _result = _parse_scriptlet_or_sea_ws(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start >= _e.span.start {
+                return Result::<ScriptletOrSeaWsNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ScriptletOrSeaWsNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_html_elements(input: &String) -> Result<HtmlElementsNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_html_elements(&mut parser);
+    let _result = _parse_html_elements(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start >= _e.span.start {
+                return Result::<HtmlElementsNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<HtmlElementsNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_html_element(input: &String) -> Result<HtmlElementNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_html_element(&mut parser);
+    let _result = _parse_html_element(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start >= _e.span.start {
+                return Result::<HtmlElementNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<HtmlElementNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_html_content(input: &String) -> Result<HtmlContentNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_html_content(&mut parser);
+    let _result = _parse_html_content(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start >= _e.span.start {
+                return Result::<HtmlContentNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<HtmlContentNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_html_attribute(input: &String) -> Result<HtmlAttributeNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_html_attribute(&mut parser);
+    let _result = _parse_html_attribute(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start >= _e.span.start {
+                return Result::<HtmlAttributeNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<HtmlAttributeNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_html_chardata(input: &String) -> Result<HtmlChardataNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_html_chardata(&mut parser);
+    let _result = _parse_html_chardata(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start >= _e.span.start {
+                return Result::<HtmlChardataNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<HtmlChardataNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_html_misc(input: &String) -> Result<HtmlMiscNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_html_misc(&mut parser);
+    let _result = _parse_html_misc(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start >= _e.span.start {
+                return Result::<HtmlMiscNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<HtmlMiscNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_html_comment(input: &String) -> Result<HtmlCommentNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_html_comment(&mut parser);
+    let _result = _parse_html_comment(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start >= _e.span.start {
+                return Result::<HtmlCommentNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<HtmlCommentNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_script(input: &String) -> Result<ScriptNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_script(&mut parser);
+    let _result = _parse_script(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start >= _e.span.start {
+                return Result::<ScriptNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ScriptNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_style(input: &String) -> Result<StyleNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_style(&mut parser);
+    let _result = _parse_style(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start >= _e.span.start {
+                return Result::<StyleNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<StyleNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse(input: &String) -> Result<HtmlDocumentNode, ParseError> {

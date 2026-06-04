@@ -1,0 +1,59 @@
+// `for let v of &tuple` iterates a tuple reference element-by-reference:
+// each `v` is `&T_k` (a reference to a fresh copy of the element), mirroring
+// the `for v of &list` refiter semantics. Tuple `.len()` also auto-derefs
+// through the reference.
+use { println, Stdout } from "core:cli";
+
+trait Tag {
+    fn tag(&self) -> i32;
+}
+
+impl Tag for i32 {
+    fn tag(&self) -> i32 { return *self; }
+}
+
+impl Tag for bool {
+    fn tag(&self) -> i32 {
+        if *self { return 1; }
+        return 0;
+    }
+}
+
+// Heterogeneous tuple reference: each `v` is `&T_k`, resolved per element.
+fn total(t: &[i32, bool, i32]) -> i32 {
+    assert t.len() == 3;
+    let mut sum = 0;
+    for let v of t {
+        sum += v.tag();
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let t = [10, true, 20];
+    assert total(&t) == 31;
+
+    // Homogeneous tuple: deref the `&T` element directly.
+    let nums = [1, 2, 3];
+    let mut s = 0;
+    for let v of &nums {
+        s += *v;
+    }
+    assert s == 6;
+
+    // A double reference is looked through to the same depth as tuple
+    // `.len()` (both use `peel_refs`), so `&&tuple` iterates and reports its
+    // length consistently.
+    let rr = &nums;
+    assert rr.len() == 3;
+    let mut s2 = 0;
+    for let v of rr {
+        s2 += *v;
+    }
+    assert s2 == 6;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
