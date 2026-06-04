@@ -11,7 +11,6 @@ use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirMatchArm,
     TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
-use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
 
 use super::Elaborator;
@@ -187,27 +186,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     TypeTable::UNIT
                 };
 
-                // Patch `break label: null` values whose `Option<...>` inner
-                // could not be inferred from the break alone. Now that the
-                // result type is known, rewrite the unresolved `Null`'s
-                // `type_id` so WIR translation sees a fully-resolved type.
-                // When the type stayed UNKNOWN (every break a bare `null`),
-                // or a `null` break cannot fit a non-`Option` result, report
-                // it rather than letting an unresolved type reach codegen.
-                let mut tir_block = tir_block;
+                // Report any `break label: null` whose `Option<...>` inner
+                // could not be inferred against a resolved non-`Option`
+                // result — AST mirror of the old `NullBreakPatcher` pass
+                // (whose TIR mutation was dead). When the type stayed UNKNOWN
+                // (every break a bare `null`) `report_uninferable_result`
+                // already fired and the null pass is skipped.
                 if !self.report_uninferable_result(result_type, lb.span, "labeled block") {
-                    let unresolved = {
-                        let tt = self.tysys.type_table.borrow();
-                        let mut patcher = NullBreakPatcher {
-                            label: &lb.label,
-                            target_type: result_type,
-                            type_table: &tt,
-                            unresolved: Vec::new(),
-                        };
-                        patcher.visit_block(&mut tir_block);
-                        patcher.unresolved
-                    };
-                    self.report_unresolved_nulls(&unresolved, result_type);
+                    self.report_unresolved_null_breaks(result_type, &lb.block, &lb.label);
                 }
 
                 // Report any break whose value type disagrees with the
@@ -2212,6 +2198,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for arm in &match_expr.arms {
             super::control_flow::collect_unresolved_null_tails(ctx, &arm.body, &mut spans);
         }
+        self.report_unresolved_nulls(&spans, result_type);
+    }
+
+    /// Report each `break <label>: null` value inside `block` against a
+    /// resolved non-`Option` `result_type` (AST replacement for the
+    /// `NullBreakPatcher` pass).
+    fn report_unresolved_null_breaks(
+        &mut self,
+        result_type: TypeId,
+        block: &ast::Block,
+        label: &str,
+    ) {
+        if self
+            .tysys
+            .type_table
+            .borrow()
+            .as_option(result_type)
+            .is_some()
+        {
+            return;
+        }
+        let spans = {
+            let ctx = self.ctrl_flow_ctx();
+            super::control_flow::collect_unresolved_null_breaks(ctx, block, label)
+        };
         self.report_unresolved_nulls(&spans, result_type);
     }
 
@@ -4233,143 +4244,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         placeholder(struct_type, range.span)
-    }
-}
-
-/// Recursively patch any `Null` literals inside `expr` whose `Option<???>`
-/// inner is still UNKNOWN, rewriting them to use `target_type`.
-///
-/// `Literal::Null` initially resolves to `Option<UNKNOWN>` (see
-/// `resolve_literal`). When a `null` literal sits in a match arm or `if`
-/// branch, its concrete inner type is determined by a sibling arm — but
-/// that information isn't propagated back during arm resolution. Once the
-/// match/if's overall result type is known we walk the arm bodies and
-/// rewrite the unresolved `Null`'s `type_id` so WIR translation sees a
-/// fully-resolved `Option<T>`.
-///
-/// Only the tail/result positions are walked; nested expressions whose
-/// value is discarded (e.g. inside an arbitrary call argument) are not
-/// affected — they would have been forced to a known type by their own
-/// surrounding context anyway.
-///
-/// A `null` whose surrounding type is not an `Option<...>` cannot be
-/// rewritten; its span is pushed onto `unresolved` so the caller can
-/// report a type mismatch instead of letting `Option<UNKNOWN>` reach
-/// codegen.
-fn patch_unresolved_null(
-    expr: &mut TirExpr,
-    target_type: TypeId,
-    type_table: &TypeTable,
-    unresolved: &mut Vec<Span>,
-) {
-    if matches!(expr.kind, TirExprKind::Null) && type_table.contains_unknown(expr.type_id) {
-        // Only rewrite when the surrounding type is genuinely an
-        // `Option<...>`. In ill-typed programs the unified result type may
-        // be a non-Option type alongside a `null` branch; rewriting the
-        // `Null` to that type would produce nonsensical TIR.
-        if type_table.as_option(target_type).is_some() {
-            expr.type_id = target_type;
-        } else {
-            unresolved.push(expr.span);
-        }
-        return;
-    }
-    match &mut expr.kind {
-        TirExprKind::Block(block) => {
-            patch_unresolved_null_in_block(block, target_type, type_table, unresolved);
-        }
-        TirExprKind::If {
-            then_branch,
-            else_branch,
-            ..
-        } => {
-            patch_unresolved_null_in_block(then_branch, target_type, type_table, unresolved);
-            if let Some(eb) = else_branch {
-                patch_unresolved_null_in_block(eb, target_type, type_table, unresolved);
-            }
-        }
-        TirExprKind::Match { arms, .. } => {
-            for arm in arms {
-                patch_unresolved_null(&mut arm.body, target_type, type_table, unresolved);
-            }
-        }
-        _ => {}
-    }
-}
-
-/// Patches `break <label>: null` values inside a labeled block once the
-/// block's result type is known. A bare `null` resolves to `Option<UNKNOWN>`
-/// when nothing constrains its inner type; after unification the result
-/// type pins it, so the unresolved `Null` is rewritten via
-/// [`patch_unresolved_null`]. Built on [`TirMutVisitor`] so every nesting
-/// construct is descended automatically.
-///
-/// A break value that still contains UNKNOWN after the patch — e.g. a
-/// `break label: null` whose block type is not an `Option` — cannot be
-/// reconciled; its span is collected in `unresolved` for the caller to
-/// report, since `check_assignable` treats UNKNOWN leniently and would
-/// otherwise let it slip through to codegen.
-struct NullBreakPatcher<'a> {
-    /// The labeled block whose breaks are being patched.
-    label: &'a str,
-    /// The block's unified result type.
-    target_type: TypeId,
-    type_table: &'a TypeTable,
-    /// Spans of break values left unresolved after the patch attempt.
-    unresolved: Vec<Span>,
-}
-
-impl TirMutVisitor for NullBreakPatcher<'_> {
-    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
-        match &mut stmt.kind {
-            // A `break label: expr` targeting our block — patch its value.
-            TirStmtKind::Break {
-                label: Some(l),
-                value: Some(v),
-            } if l == self.label => {
-                patch_unresolved_null(v, self.target_type, self.type_table, &mut self.unresolved);
-            }
-            // A nested labeled block reusing our label shadows it: its
-            // breaks target the inner block, so do not descend.
-            TirStmtKind::LabeledBlock { label, .. } if label == self.label => {}
-            _ => self.walk_stmt(stmt),
-        }
-    }
-
-    fn visit_expr(&mut self, expr: &mut TirExpr) {
-        match &mut expr.kind {
-            // Closures are separate functions — a `break` inside cannot
-            // target our label.
-            TirExprKind::Closure { .. } => {}
-            // A nested labeled-block expression reusing our label shadows it.
-            TirExprKind::LabeledBlock { label, .. } if label == self.label => {}
-            _ => self.walk_expr(expr),
-        }
-    }
-}
-
-fn patch_unresolved_null_in_block(
-    block: &mut TirBlock,
-    target_type: TypeId,
-    type_table: &TypeTable,
-    unresolved: &mut Vec<Span>,
-) {
-    let Some(last) = block.stmts.last_mut() else {
-        return;
-    };
-    match &mut last.kind {
-        TirStmtKind::Expr(e) => {
-            patch_unresolved_null(e, target_type, type_table, unresolved);
-        }
-        TirStmtKind::If {
-            then_block,
-            else_block: Some(eb),
-            ..
-        } => {
-            patch_unresolved_null_in_block(then_block, target_type, type_table, unresolved);
-            patch_unresolved_null_in_block(eb, target_type, type_table, unresolved);
-        }
-        _ => {}
     }
 }
 

@@ -408,6 +408,63 @@ impl AstTreeProbe for BreakToLabel<'_> {
     }
 }
 
+/// Collects the spans of `break <label>: <null>` values whose recorded
+/// type is still unresolved. AST mirror of `NullBreakPatcher` (whose TIR
+/// mutation was dead — reify rebuilds the `null` from its `expected_type`):
+/// a matching break's value is walked for unresolved `null` tails via
+/// [`collect_unresolved_null_tails`]; an inner labeled block reusing the
+/// same name shadows it (its breaks target the inner block), and closure
+/// bodies have their own control-flow scope (`any_in_expr` does not descend
+/// into them).
+struct NullBreakCollector<'a> {
+    ctx: CtrlFlowCtx<'a>,
+    label: &'a str,
+    spans: Vec<Span>,
+}
+
+impl AstTreeProbe for NullBreakCollector<'_> {
+    fn check_stmt(&mut self, stmt: &ast::Stmt) -> Step {
+        match stmt {
+            ast::Stmt::Break(b)
+                if b.label.as_deref() == Some(self.label) && b.value.is_some() =>
+            {
+                let value = b.value.as_ref().unwrap();
+                collect_unresolved_null_tails(self.ctx, value, &mut self.spans);
+                // The value was walked here; do not descend into it again
+                // (mirrors `NullBreakPatcher::visit_stmt` returning after the
+                // patch).
+                Step::Skip
+            }
+            ast::Stmt::LabeledBlock(lb) if lb.label == self.label => Step::Skip,
+            _ => Step::Descend,
+        }
+    }
+
+    fn check_expr(&mut self, expr: &ast::Expr) -> Step {
+        match expr {
+            ast::Expr::LabeledBlock(lb) if lb.label == self.label => Step::Skip,
+            _ => Step::Descend,
+        }
+    }
+}
+
+/// Spans of `break <label>: null` values inside `block` that cannot fit the
+/// labeled block's resolved non-`Option` result type. AST replacement for
+/// the `NullBreakPatcher` pass.
+pub(super) fn collect_unresolved_null_breaks(
+    ctx: CtrlFlowCtx<'_>,
+    block: &ast::Block,
+    label: &str,
+) -> Vec<Span> {
+    let mut probe = NullBreakCollector {
+        ctx,
+        label,
+        spans: Vec::new(),
+    };
+    any_in_tree(ctx, block, &mut probe);
+    probe.spans
+}
+
 fn loop_body_can_escape(ctx: CtrlFlowCtx<'_>, body: &ast::Block) -> bool {
     let mut probe = LoopEscape::default();
     any_in_tree(ctx, body, &mut probe)
