@@ -139,7 +139,7 @@ struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:fi
     mut __cm_lift: ref struct,
 }
 
-struct core:prelude/slice.wado//Iter<u8> {  // TypeId(19)
+struct core:prelude/slice.wado//ArrayIter<u8> {  // TypeId(19)
     mut repr: ref Array<u8>,
     mut index: i32,
     mut end: i32,
@@ -362,7 +362,7 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(111)
 
-type "functype//core:prelude/slice.wado/Iter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<u8>") -> [i32, u8];  // TypeId(112)
+type "functype//core:prelude/slice.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(112)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-read from "wasi/stream-read";
@@ -408,7 +408,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/read_all"(file) w
     let read_future: i32;
     let __b: ref "core:prelude//List<u8>";
     let chunk: ref "core:prelude//List<u8>";
-    let __iter_6: ref "core:prelude/slice.wado//Iter<u8>";
+    let __iter_6: ref "core:prelude/slice.wado//ArrayIter<u8>";
     let __pattern_temp_0: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
     let repr: ref Array<u8>;
     let end: i32;
@@ -424,12 +424,12 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_set_size.wado/read_all"(file) w
             }
             repr = chunk.repr;
             end = chunk.used;
-            __iter_6 = struct.new "core:prelude/slice.wado//Iter<u8>" { repr: repr, index: 0, end: end };
+            __iter_6 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: repr, index: 0, end: end };
             b3: block {
                 l4: loop {
                     let __sroa___match_9_discriminant: i32;
                     let __sroa___match_9_payload_0: u8;
-                    multivalue_bind [__sroa___match_9_discriminant, __sroa___match_9_payload_0] = "core:prelude/slice.wado/Iter<u8>^Iterator::next"(__iter_6);
+                    multivalue_bind [__sroa___match_9_discriminant, __sroa___match_9_payload_0] = "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(__iter_6);
                     if __sroa___match_9_discriminant == 0 {
                         "core:prelude/list.wado/List<u8>::push"(__b, __sroa___match_9_payload_0);
                     } else {
@@ -1805,7 +1805,7 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesy
     return result;
 }
 
-fn "core:prelude/slice.wado/Iter<u8>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(self) {
     let item: u8;
     if self.index >= self.end {
         return 1, 0;

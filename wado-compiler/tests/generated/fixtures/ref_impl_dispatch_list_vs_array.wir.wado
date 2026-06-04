@@ -26,7 +26,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
 
 array Array<i32> (mut i32);  // TypeId(4)
 
-struct core:prelude/slice.wado//RefIter<i32> {  // TypeId(5)
+struct core:prelude/slice.wado//ArrayRefIter<i32> {  // TypeId(5)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
@@ -91,7 +91,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(33)
 
-type "functype//core:prelude/slice.wado/RefIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//RefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(34)
+type "functype//core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(34)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
 
@@ -116,14 +116,14 @@ fn "wado-compiler/tests/fixtures/ref_impl_dispatch_list_vs_array.wado/run"() wit
     let __b_0: ref "core:prelude//List<i32>";
     let a: ref Array<i32>;
     let asum: i32;
-    let __iter_5: ref "core:prelude/slice.wado//RefIter<i32>";
+    let __iter_5: ref "core:prelude/slice.wado//ArrayRefIter<i32>";
     let x: ref "core:prelude/types.wado//Box<i32>";
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/format.wado//Formatter";
     let __match_11: ref null "core:prelude/types.wado//Box<i32>";
-    let __iter_2: ref "core:prelude/slice.wado//RefIter<i32>";
+    let __iter_2: ref "core:prelude/slice.wado//ArrayRefIter<i32>";
     let item: ref "core:prelude/types.wado//Box<i32>";
     let __match_4: ref null "core:prelude/types.wado//Box<i32>";
     let repr_31: ref Array<i32>;
@@ -136,10 +136,10 @@ fn "wado-compiler/tests/fixtures/ref_impl_dispatch_list_vs_array.wado/run"() wit
     __sroa_c_total = 0;
     repr_31 = __b_0.repr;
     end_33 = 4;
-    __iter_2 = struct.new "core:prelude/slice.wado//RefIter<i32>" { repr: repr_31, index: 0, end: end_33 };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: repr_31, index: 0, end: end_33 };
     b0: block {
         l1: loop {
-            __match_4 = "core:prelude/slice.wado/RefIter<i32>^Iterator::next"(__iter_2);
+            __match_4 = "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(__iter_2);
             if ref.is_null(__match_4) == 0 {
                 item = ref.as_non_null(__match_4);
                 n = item.value;
@@ -157,10 +157,10 @@ fn "wado-compiler/tests/fixtures/ref_impl_dispatch_list_vs_array.wado/run"() wit
     builtin::array_set<i32>(a, 2, 30);
     asum = 0;
     end_58 = builtin::array_len(a);
-    __iter_5 = struct.new "core:prelude/slice.wado//RefIter<i32>" { repr: a, index: 0, end: end_58 };
+    __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: a, index: 0, end: end_58 };
     b3: block {
         l4: loop {
-            __match_11 = "core:prelude/slice.wado/RefIter<i32>^Iterator::next"(__iter_5);
+            __match_11 = "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(__iter_5);
             if ref.is_null(__match_11) == 0 {
                 x = ref.as_non_null(__match_11);
                 asum = asum + x.value;
@@ -485,7 +485,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/slice.wado/RefIter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(self) {
     let val: ref "core:prelude/types.wado//Box<i32>";
     if self.index >= self.end {
         return ref.null none;

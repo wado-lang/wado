@@ -53,7 +53,7 @@ struct wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//
 
 array Array<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node> (mut ref "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado//Node");  // TypeId(10)
 
-struct core:prelude/slice.wado//RefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node> {  // TypeId(11)
+struct core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node> {  // TypeId(11)
     mut repr: ref "Array<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>",
     mut index: i32,
     mut end: i32,
@@ -146,7 +146,7 @@ type "functype//core:prelude/format.wado/List<wado-compiler/tests/fixtures/inlin
 
 type "functype//core:prelude/list.wado/List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>^Eq::eq" = fn(ref "core:prelude//List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>", ref "core:prelude//List<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>") -> bool;  // TypeId(53)
 
-type "functype//core:prelude/slice.wado/RefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>^Iterator::next" = fn(ref "core:prelude/slice.wado//RefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>") -> ref null "core:prelude/types.wado//Box<Node>";  // TypeId(54)
+type "functype//core:prelude/slice.wado/ArrayRefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>") -> ref null "core:prelude/types.wado//Box<Node>";  // TypeId(54)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(55)
 
@@ -223,17 +223,17 @@ fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/walk
 }
 
 fn "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/walk_branch<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Sum>"(v, b) {
-    let __iter_2: ref "core:prelude/slice.wado//RefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>";
+    let __iter_2: ref "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>";
     let c: ref "core:prelude/types.wado//Box<Node>";
     let __match_4: ref null "core:prelude/types.wado//Box<Node>";
     let repr: ref "Array<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>";
     let end: i32;
     repr = b.repr;
     end = b.used;
-    __iter_2 = struct.new "core:prelude/slice.wado//RefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>" { repr: repr, index: 0, end: end };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>" { repr: repr, index: 0, end: end };
     b2: block {
         l3: loop {
-            __match_4 = "core:prelude/slice.wado/RefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>^Iterator::next"(__iter_2);
+            __match_4 = "core:prelude/slice.wado/ArrayRefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>^Iterator::next"(__iter_2);
             if ref.is_null(__match_4) == 0 {
                 c = ref.as_non_null(__match_4);
                 "wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/walk_node<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Sum>"(v, c.value);
@@ -763,7 +763,7 @@ fn "core:prelude/list.wado/List<wado-compiler/tests/fixtures/inline_mutual_recur
     return 1;
 }
 
-fn "core:prelude/slice.wado/RefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayRefIter<wado-compiler/tests/fixtures/inline_mutual_recursive_generic_visit.wado/Node>^Iterator::next"(self) {
     let val: ref "core:prelude/types.wado//Box<Node>";
     if self.index >= self.end {
         return ref.null none;

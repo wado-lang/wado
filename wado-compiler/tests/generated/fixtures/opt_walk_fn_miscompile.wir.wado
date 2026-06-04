@@ -35,7 +35,7 @@ array Array<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField> 
 
 array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(6)
 
-struct core:prelude/slice.wado//RefIter<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField> {  // TypeId(7)
+struct core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField> {  // TypeId(7)
     mut repr: ref "Array<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField>",
     mut index: i32,
     mut end: i32,
@@ -113,7 +113,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(40)
 
-type "functype//core:prelude/slice.wado/RefIter<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField>^Iterator::next" = fn(ref "core:prelude/slice.wado//RefIter<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField>") -> ref null "wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado//WalkField";  // TypeId(41)
+type "functype//core:prelude/slice.wado/ArrayRefIter<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField>") -> ref null "wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado//WalkField";  // TypeId(41)
 
 type "functype//core:prelude/list.wado/List<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField>::push" = fn(ref "core:prelude//List<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField>", ref "wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado//WalkField");  // TypeId(42)
 
@@ -358,7 +358,7 @@ fn "wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/gen_walk_fn"(w, rul
     let case_names: ref "core:prelude//List<core:prelude/string.wado/String>";
     let i_5: i32;
     let fields: ref "core:prelude//List<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField>";
-    let __iter_7: ref "core:prelude/slice.wado//RefIter<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField>";
+    let __iter_7: ref "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField>";
     let f_8: ref "wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado//WalkField";
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:prelude/string.wado//String";
@@ -548,11 +548,11 @@ fn "wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/gen_walk_fn"(w, rul
             fields = "wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/build_walk_fields"(n_fields);
             repr = fields.repr;
             end = fields.used;
-            __iter_7 = struct.new "core:prelude/slice.wado//RefIter<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField>" { repr: repr, index: 0, end: end };
+            __iter_7 = struct.new "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField>" { repr: repr, index: 0, end: end };
             w.fresh_line = __hfs_fresh_line_103;
             b50: block {
                 l51: loop {
-                    __match_15 = "core:prelude/slice.wado/RefIter<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField>^Iterator::next"(__iter_7);
+                    __match_15 = "core:prelude/slice.wado/ArrayRefIter<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField>^Iterator::next"(__iter_7);
                     if ref.is_null(__match_15) == 0 {
                         f_8 = ref.as_non_null(__match_15);
                         "wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/gen_walk_field"(w, f_8, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110), used: 1 });
@@ -1034,7 +1034,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/slice.wado/RefIter<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayRefIter<wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado/WalkField>^Iterator::next"(self) {
     let val: ref "wado-compiler/tests/fixtures/opt_walk_fn_miscompile.wado//WalkField";
     if self.index >= self.end {
         return ref.null none;

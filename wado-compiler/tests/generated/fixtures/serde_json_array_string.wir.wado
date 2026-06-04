@@ -59,13 +59,13 @@ array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado/
 
 array Array<i32> (mut i32);  // TypeId(11)
 
-struct core:prelude/slice.wado//RefIter<i32> {  // TypeId(12)
+struct core:prelude/slice.wado//ArrayRefIter<i32> {  // TypeId(12)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
 }
 
-struct core:prelude/slice.wado//RefIter<core:prelude/string.wado/String> {  // TypeId(13)
+struct core:prelude/slice.wado//ArrayRefIter<core:prelude/string.wado/String> {  // TypeId(13)
     mut repr: ref "Array<core:prelude/string.wado/String>",
     mut index: i32,
     mut end: i32,
@@ -217,11 +217,11 @@ type "functype//core:serde/List<i32>^Serialize::serialize<core:json/JsonSerializ
 
 type "functype//core:json/JsonSeqSerializer^SerializeSeq::element<i32>" = fn(ref "core:json//JsonSeqSerializer", ref "core:prelude/types.wado//Box<i32>") -> ref null "core:serde//SerializeError";  // TypeId(74)
 
-type "functype//core:prelude/slice.wado/RefIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//RefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(75)
+type "functype//core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(75)
 
 type "functype//core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>" = fn(ref "core:json//JsonSeqSerializer", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(76)
 
-type "functype//core:prelude/slice.wado/RefIter<core:prelude/string.wado/String>^Iterator::next" = fn(ref "core:prelude/slice.wado//RefIter<core:prelude/string.wado/String>") -> ref null "core:prelude/string.wado//String";  // TypeId(77)
+type "functype//core:prelude/slice.wado/ArrayRefIter<core:prelude/string.wado/String>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<core:prelude/string.wado/String>") -> ref null "core:prelude/string.wado//String";  // TypeId(77)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(78)
 
@@ -1549,7 +1549,7 @@ fn "core:serde/List<core:prelude/string.wado/String>^Serialize::serialize<core:j
     let __qm_v_2: ref "core:json//JsonSeqSerializer";
     let __qm_e_3: ref "core:serde//SerializeError";
     let seq: ref "core:json//JsonSeqSerializer";
-    let __iter_5: ref "core:prelude/slice.wado//RefIter<core:prelude/string.wado/String>";
+    let __iter_5: ref "core:prelude/slice.wado//ArrayRefIter<core:prelude/string.wado/String>";
     let item: ref "core:prelude/string.wado//String";
     let __qm_e_8: ref "core:serde//SerializeError";
     let __match_9: ref null "core:prelude/string.wado//String";
@@ -1565,10 +1565,10 @@ fn "core:serde/List<core:prelude/string.wado/String>^Serialize::serialize<core:j
     }));
     repr = self.repr;
     end = self.used;
-    __iter_5 = struct.new "core:prelude/slice.wado//RefIter<core:prelude/string.wado/String>" { repr: repr, index: 0, end: end };
+    __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<core:prelude/string.wado/String>" { repr: repr, index: 0, end: end };
     b199: block {
         l200: loop {
-            __match_9 = "core:prelude/slice.wado/RefIter<core:prelude/string.wado/String>^Iterator::next"(__iter_5);
+            __match_9 = "core:prelude/slice.wado/ArrayRefIter<core:prelude/string.wado/String>^Iterator::next"(__iter_5);
             if ref.is_null(__match_9) == 0 {
                 item = ref.as_non_null(__match_9);
                 __local_10 = "core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(seq, item);
@@ -1590,7 +1590,7 @@ fn "core:serde/List<i32>^Serialize::serialize<core:json/JsonSerializer>"(self, s
     let __qm_v_2: ref "core:json//JsonSeqSerializer";
     let __qm_e_3: ref "core:serde//SerializeError";
     let seq: ref "core:json//JsonSeqSerializer";
-    let __iter_5: ref "core:prelude/slice.wado//RefIter<i32>";
+    let __iter_5: ref "core:prelude/slice.wado//ArrayRefIter<i32>";
     let item: ref "core:prelude/types.wado//Box<i32>";
     let __qm_e_8: ref "core:serde//SerializeError";
     let __match_9: ref null "core:prelude/types.wado//Box<i32>";
@@ -1606,10 +1606,10 @@ fn "core:serde/List<i32>^Serialize::serialize<core:json/JsonSerializer>"(self, s
     }));
     repr = self.repr;
     end = self.used;
-    __iter_5 = struct.new "core:prelude/slice.wado//RefIter<i32>" { repr: repr, index: 0, end: end };
+    __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: repr, index: 0, end: end };
     b204: block {
         l205: loop {
-            __match_9 = "core:prelude/slice.wado/RefIter<i32>^Iterator::next"(__iter_5);
+            __match_9 = "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(__iter_5);
             if ref.is_null(__match_9) == 0 {
                 item = ref.as_non_null(__match_9);
                 __local_10 = "core:json/JsonSeqSerializer^SerializeSeq::element<i32>"(seq, item);
@@ -1640,7 +1640,7 @@ fn "core:json/JsonSeqSerializer^SerializeSeq::element<i32>"(self, value) {
     return r;
 }
 
-fn "core:prelude/slice.wado/RefIter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(self) {
     let val: ref "core:prelude/types.wado//Box<i32>";
     if self.index >= self.end {
         return ref.null none;
@@ -1664,7 +1664,7 @@ fn "core:json/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/S
     return r;
 }
 
-fn "core:prelude/slice.wado/RefIter<core:prelude/string.wado/String>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayRefIter<core:prelude/string.wado/String>^Iterator::next"(self) {
     let val: ref "core:prelude/string.wado//String";
     if self.index >= self.end {
         return ref.null none;

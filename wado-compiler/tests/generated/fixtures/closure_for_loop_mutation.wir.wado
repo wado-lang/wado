@@ -43,7 +43,7 @@ struct wado-compiler/tests/fixtures/closure_for_loop_mutation.wado//__Closure_2 
 
 array Array<i32> (mut i32);  // TypeId(8)
 
-struct core:prelude/slice.wado//Iter<i32> {  // TypeId(9)
+struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(9)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
@@ -148,7 +148,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(53)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(54)
 
-type "functype//core:prelude/slice.wado/Iter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<i32>") -> [i32, i32];  // TypeId(55)
+type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(55)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -592,7 +592,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/slice.wado/Iter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self) {
     let item: i32;
     if self.index >= self.end {
         return 1, 0;
@@ -637,19 +637,19 @@ fn "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_3::__c
 }
 
 fn "wado-compiler/tests/fixtures/closure_for_loop_mutation.wado/__Closure_4::__call"(self) {
-    let __iter_0: ref "core:prelude/slice.wado//Iter<i32>";
+    let __iter_0: ref "core:prelude/slice.wado//ArrayIter<i32>";
     let repr: ref Array<i32>;
     let end: i32;
     let _licm___capture_1_8: ref "core:prelude/types.wado//Box<i32>";
     repr = self.__capture_0.repr;
     end = self.__capture_0.used;
-    __iter_0 = struct.new "core:prelude/slice.wado//Iter<i32>" { repr: repr, index: 0, end: end };
+    __iter_0 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: end };
     _licm___capture_1_8 = self.__capture_1;
     b52: block {
         l53: loop {
             let __sroa___match_3_discriminant: i32;
             let __sroa___match_3_payload_0: i32;
-            multivalue_bind [__sroa___match_3_discriminant, __sroa___match_3_payload_0] = "core:prelude/slice.wado/Iter<i32>^Iterator::next"(__iter_0);
+            multivalue_bind [__sroa___match_3_discriminant, __sroa___match_3_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_0);
             if __sroa___match_3_discriminant == 0 {
                 _licm___capture_1_8.value = _licm___capture_1_8.value + __sroa___match_3_payload_0;
             } else {

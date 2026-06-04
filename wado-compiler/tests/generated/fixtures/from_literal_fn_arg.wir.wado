@@ -24,7 +24,7 @@ array Array<i32> (mut i32);  // TypeId(3)
 
 array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(4)
 
-struct core:prelude/slice.wado//Iter<i32> {  // TypeId(5)
+struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(5)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
@@ -123,7 +123,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(46)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(47)
 
-type "functype//core:prelude/slice.wado/Iter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<i32>") -> [i32, i32];  // TypeId(48)
+type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(48)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -141,18 +141,18 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/from_literal_fn_arg.wado/sum_values"(m) {
     let total: i32;
-    let __iter_2: ref "core:prelude/slice.wado//Iter<i32>";
+    let __iter_2: ref "core:prelude/slice.wado//ArrayIter<i32>";
     let repr: ref Array<i32>;
     let end: i32;
     total = 0;
     repr = m.values.repr;
     end = m.values.used;
-    __iter_2 = struct.new "core:prelude/slice.wado//Iter<i32>" { repr: repr, index: 0, end: end };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: end };
     b0: block {
         l1: loop {
             let __sroa___match_4_discriminant: i32;
             let __sroa___match_4_payload_0: i32;
-            multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/slice.wado/Iter<i32>^Iterator::next"(__iter_2);
+            multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_2);
             if __sroa___match_4_discriminant == 0 {
                 total = total + __sroa___match_4_payload_0;
             } else {
@@ -563,7 +563,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/slice.wado/Iter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self) {
     let item: i32;
     if self.index >= self.end {
         return 1, 0;

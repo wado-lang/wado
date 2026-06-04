@@ -83,13 +83,13 @@ array Array<./sub/variant_deref_helper.wado/Elem> (mut ref "./sub/variant_deref_
 
 array Array<./sub/variant_deref_helper.wado/Alt> (mut ref "./sub/variant_deref_helper.wado//Alt");  // TypeId(15)
 
-struct core:prelude/slice.wado//Iter<./sub/variant_deref_helper.wado/Elem> {  // TypeId(16)
+struct core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Elem> {  // TypeId(16)
     mut repr: ref "Array<./sub/variant_deref_helper.wado/Elem>",
     mut index: i32,
     mut end: i32,
 }
 
-struct core:prelude/slice.wado//Iter<./sub/variant_deref_helper.wado/Alt> {  // TypeId(17)
+struct core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Alt> {  // TypeId(17)
     mut repr: ref "Array<./sub/variant_deref_helper.wado/Alt>",
     mut index: i32,
     mut end: i32,
@@ -169,9 +169,9 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(51)
 
-type "functype//core:prelude/slice.wado/Iter<./sub/variant_deref_helper.wado/Elem>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<./sub/variant_deref_helper.wado/Elem>") -> ref null "./sub/variant_deref_helper.wado//Elem";  // TypeId(52)
+type "functype//core:prelude/slice.wado/ArrayIter<./sub/variant_deref_helper.wado/Elem>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Elem>") -> ref null "./sub/variant_deref_helper.wado//Elem";  // TypeId(52)
 
-type "functype//core:prelude/slice.wado/Iter<./sub/variant_deref_helper.wado/Alt>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<./sub/variant_deref_helper.wado/Alt>") -> ref null "./sub/variant_deref_helper.wado//Alt";  // TypeId(53)
+type "functype//core:prelude/slice.wado/ArrayIter<./sub/variant_deref_helper.wado/Alt>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Alt>") -> ref null "./sub/variant_deref_helper.wado//Alt";  // TypeId(53)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(54)
 
@@ -200,7 +200,7 @@ fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(elem, 
     let name_4: ref "core:prelude/string.wado//String";
     let rep: ref "./sub/variant_deref_helper.wado//RepeatElem";
     let alts: ref "core:prelude//List<./sub/variant_deref_helper.wado/Alt>";
-    let __iter_7: ref "core:prelude/slice.wado//Iter<./sub/variant_deref_helper.wado/Alt>";
+    let __iter_7: ref "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Alt>";
     let alt: ref "./sub/variant_deref_helper.wado//Alt";
     let lab: ref "./sub/variant_deref_helper.wado//LabelElem";
     let __local_15: ref null "./sub/variant_deref_helper.wado//Alt";
@@ -234,10 +234,10 @@ fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(elem, 
         alts = ref.cast "./sub/variant_deref_helper.wado//Elem::Group"(elem).payload_0;
         repr = alts.repr;
         end = alts.used;
-        __iter_7 = struct.new "core:prelude/slice.wado//Iter<./sub/variant_deref_helper.wado/Alt>" { repr: repr, index: 0, end: end };
+        __iter_7 = struct.new "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Alt>" { repr: repr, index: 0, end: end };
         b5: block {
             l6: loop {
-                __local_15 = "core:prelude/slice.wado/Iter<./sub/variant_deref_helper.wado/Alt>^Iterator::next"(__iter_7);
+                __local_15 = "core:prelude/slice.wado/ArrayIter<./sub/variant_deref_helper.wado/Alt>^Iterator::next"(__iter_7);
                 if ref.is_null(__local_15) == 0 {
                     alt = ref.as_non_null(__local_15);
                     "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process_all"(alt, out);
@@ -259,16 +259,16 @@ fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(elem, 
 }
 
 fn "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process_all"(alt, out) {
-    let __iter_2: ref "core:prelude/slice.wado//Iter<./sub/variant_deref_helper.wado/Elem>";
+    let __iter_2: ref "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Elem>";
     let __match_4: ref null "./sub/variant_deref_helper.wado//Elem";
     let repr: ref "Array<./sub/variant_deref_helper.wado/Elem>";
     let end: i32;
     repr = alt.elements.repr;
     end = alt.elements.used;
-    __iter_2 = struct.new "core:prelude/slice.wado//Iter<./sub/variant_deref_helper.wado/Elem>" { repr: repr, index: 0, end: end };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Elem>" { repr: repr, index: 0, end: end };
     b9: block {
         l10: loop {
-            __match_4 = "core:prelude/slice.wado/Iter<./sub/variant_deref_helper.wado/Elem>^Iterator::next"(__iter_2);
+            __match_4 = "core:prelude/slice.wado/ArrayIter<./sub/variant_deref_helper.wado/Elem>^Iterator::next"(__iter_2);
             if ref.is_null(__match_4) == 0 {
                 "wado-compiler/tests/fixtures/variant_deref_cross_module.wado/process"(ref.as_non_null(__match_4), out);
             } else {
@@ -744,7 +744,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     }
 }
 
-fn "core:prelude/slice.wado/Iter<./sub/variant_deref_helper.wado/Elem>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<./sub/variant_deref_helper.wado/Elem>^Iterator::next"(self) {
     let item: ref "./sub/variant_deref_helper.wado//Elem";
     if self.index >= self.end {
         return ref.null none;
@@ -754,7 +754,7 @@ fn "core:prelude/slice.wado/Iter<./sub/variant_deref_helper.wado/Elem>^Iterator:
     return item;
 }
 
-fn "core:prelude/slice.wado/Iter<./sub/variant_deref_helper.wado/Alt>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<./sub/variant_deref_helper.wado/Alt>^Iterator::next"(self) {
     let item: ref "./sub/variant_deref_helper.wado//Alt";
     if self.index >= self.end {
         return ref.null none;

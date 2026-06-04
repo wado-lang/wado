@@ -26,13 +26,13 @@ array Array<f64> (mut f64);  // TypeId(4)
 
 array Array<u64> (mut u64);  // TypeId(5)
 
-struct core:prelude/slice.wado//Iter<i32> {  // TypeId(6)
+struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(6)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
 }
 
-struct core:prelude/slice.wado//Iter<f64> {  // TypeId(7)
+struct core:prelude/slice.wado//ArrayIter<f64> {  // TypeId(7)
     mut repr: ref Array<f64>,
     mut index: i32,
     mut end: i32,
@@ -180,9 +180,9 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(71)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(72)
 
-type "functype//core:prelude/slice.wado/Iter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<i32>") -> [i32, i32];  // TypeId(73)
+type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(73)
 
-type "functype//core:prelude/slice.wado/Iter<f64>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<f64>") -> [i32, f64];  // TypeId(74)
+type "functype//core:prelude/slice.wado/ArrayIter<f64>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<f64>") -> [i32, f64];  // TypeId(74)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -214,7 +214,7 @@ fn "wado-compiler/tests/fixtures/array_new.wado/array_new_data_f64"() with Stdou
     let __v0_6: f64;
     let __cond_7: bool;
     let sum: f64;
-    let __iter_9: ref "core:prelude/slice.wado//Iter<f64>";
+    let __iter_9: ref "core:prelude/slice.wado//ArrayIter<f64>";
     let __v0_11: f64;
     let __cond_12: bool;
     let __local_13: ref "core:prelude/string.wado//String";
@@ -278,12 +278,12 @@ condition: a[127] == 128.0
     sum = 0;
     repr = __b.repr;
     end = __b.used;
-    __iter_9 = struct.new "core:prelude/slice.wado//Iter<f64>" { repr: repr, index: 0, end: end };
+    __iter_9 = struct.new "core:prelude/slice.wado//ArrayIter<f64>" { repr: repr, index: 0, end: end };
     b5: block {
         l6: loop {
             let __sroa___match_23_discriminant: i32;
             let __sroa___match_23_payload_0: f64;
-            multivalue_bind [__sroa___match_23_discriminant, __sroa___match_23_payload_0] = "core:prelude/slice.wado/Iter<f64>^Iterator::next"(__iter_9);
+            multivalue_bind [__sroa___match_23_discriminant, __sroa___match_23_payload_0] = "core:prelude/slice.wado/ArrayIter<f64>^Iterator::next"(__iter_9);
             if __sroa___match_23_discriminant == 0 {
                 sum = sum + __sroa___match_23_payload_0;
             } else {
@@ -320,7 +320,7 @@ fn "wado-compiler/tests/fixtures/array_new.wado/array_new_data_i32"() with Stdou
     let __v0_8: i32;
     let __cond_9: bool;
     let sum: i32;
-    let __iter_11: ref "core:prelude/slice.wado//Iter<i32>";
+    let __iter_11: ref "core:prelude/slice.wado//ArrayIter<i32>";
     let __v0_13: i32;
     let __cond_14: bool;
     let __local_15: ref "core:prelude/string.wado//String";
@@ -402,12 +402,12 @@ condition: a[127] == 1280
     sum = 0;
     repr = __b.repr;
     end = __b.used;
-    __iter_11 = struct.new "core:prelude/slice.wado//Iter<i32>" { repr: repr, index: 0, end: end };
+    __iter_11 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: end };
     b18: block {
         l19: loop {
             let __sroa___match_27_discriminant: i32;
             let __sroa___match_27_payload_0: i32;
-            multivalue_bind [__sroa___match_27_discriminant, __sroa___match_27_payload_0] = "core:prelude/slice.wado/Iter<i32>^Iterator::next"(__iter_11);
+            multivalue_bind [__sroa___match_27_discriminant, __sroa___match_27_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_11);
             if __sroa___match_27_discriminant == 0 {
                 sum = sum + __sroa___match_27_payload_0;
             } else {
@@ -2124,7 +2124,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/slice.wado/Iter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self) {
     let item: i32;
     if self.index >= self.end {
         return 1, 0;
@@ -2134,7 +2134,7 @@ fn "core:prelude/slice.wado/Iter<i32>^Iterator::next"(self) {
     return 0, item;
 }
 
-fn "core:prelude/slice.wado/Iter<f64>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<f64>^Iterator::next"(self) {
     let item: f64;
     if self.index >= self.end {
         return 1, 0;

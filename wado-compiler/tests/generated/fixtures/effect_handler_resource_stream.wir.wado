@@ -71,7 +71,7 @@ struct wado-compiler/tests/fixtures/effect_handler_resource_stream.wado//__Closu
     mut __capture_0: ref "wado-compiler/tests/fixtures/effect_handler_resource_stream.wado//MockStream",
 }
 
-struct core:prelude/slice.wado//Iter<u8> {  // TypeId(15)
+struct core:prelude/slice.wado//ArrayIter<u8> {  // TypeId(15)
     mut repr: ref Array<u8>,
     mut index: i32,
     mut end: i32,
@@ -229,7 +229,7 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(81)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(82)
 
-type "functype//core:prelude/slice.wado/Iter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<u8>") -> [i32, u8];  // TypeId(83)
+type "functype//core:prelude/slice.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(83)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-read from "wasi/stream-read";
@@ -748,19 +748,19 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "wado-compiler/tests/fixtures/effect_handler_resource_stream.wado/MockStream^StreamWritable<u8>::write"(self, this, data) {
-    let __iter_3: ref "core:prelude/slice.wado//Iter<u8>";
+    let __iter_3: ref "core:prelude/slice.wado//ArrayIter<u8>";
     let repr: ref Array<u8>;
     let end: i32;
     let _licm_log_10: ref "core:prelude//List<u8>";
     repr = data.repr;
     end = data.used;
-    __iter_3 = struct.new "core:prelude/slice.wado//Iter<u8>" { repr: repr, index: 0, end: end };
+    __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: repr, index: 0, end: end };
     _licm_log_10 = self.log;
     b40: block {
         l41: loop {
             let __sroa___match_5_discriminant: i32;
             let __sroa___match_5_payload_0: u8;
-            multivalue_bind [__sroa___match_5_discriminant, __sroa___match_5_payload_0] = "core:prelude/slice.wado/Iter<u8>^Iterator::next"(__iter_3);
+            multivalue_bind [__sroa___match_5_discriminant, __sroa___match_5_payload_0] = "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(__iter_3);
             if __sroa___match_5_discriminant == 0 {
                 "core:prelude/list.wado/List<u8>::push"(_licm_log_10, __sroa___match_5_payload_0);
             } else {
@@ -869,7 +869,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/slice.wado/Iter<u8>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(self) {
     let item: u8;
     if self.index >= self.end {
         return 1, 0;

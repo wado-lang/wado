@@ -24,12 +24,12 @@ struct wado-compiler/tests/fixtures/iterator_generic_map_cross_module.wado//__Cl
 
 array Array<i32> (mut i32);  // TypeId(4)
 
-struct ./sub/iterator_generic_map_lib.wado//GenericMapIter<core:prelude/slice.wado/Iter<i32>,i32> {  // TypeId(5)
-    mut inner: ref "core:prelude/slice.wado//Iter<i32>",
+struct ./sub/iterator_generic_map_lib.wado//GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32> {  // TypeId(5)
+    mut inner: ref "core:prelude/slice.wado//ArrayIter<i32>",
     mut f: ref struct,
 }
 
-struct core:prelude/slice.wado//Iter<i32> {  // TypeId(6)
+struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(6)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
@@ -111,7 +111,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(38)
 
-type "functype//./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/Iter<i32>,i32>^Iterator::next" = fn(ref "./sub/iterator_generic_map_lib.wado//GenericMapIter<core:prelude/slice.wado/Iter<i32>,i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(39)
+type "functype//./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>^Iterator::next" = fn(ref "./sub/iterator_generic_map_lib.wado//GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(39)
 
 type "functype//wado-compiler/tests/fixtures/iterator_generic_map_cross_module.wado/__Closure_2::__call" = fn(i32) -> i32;  // TypeId(40)
 
@@ -121,7 +121,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
 
-type "functype//core:prelude/slice.wado/Iter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<i32>") -> [i32, i32];  // TypeId(44)
+type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(44)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -138,7 +138,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/iterator_generic_map_cross_module.wado/run"() {
     let __b_0: ref "core:prelude//List<i32>";
-    let iter: ref "./sub/iterator_generic_map_lib.wado//GenericMapIter<core:prelude/slice.wado/Iter<i32>,i32>";
+    let iter: ref "./sub/iterator_generic_map_lib.wado//GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>";
     let a: ref "core:prelude/types.wado//Option<i32>";
     let __cond_4: bool;
     let b: ref "core:prelude/types.wado//Option<i32>";
@@ -161,8 +161,8 @@ fn "wado-compiler/tests/fixtures/iterator_generic_map_cross_module.wado/run"() {
     let repr: ref Array<i32>;
     let end: i32;
     __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    iter = struct.new "./sub/iterator_generic_map_lib.wado//GenericMapIter<core:prelude/slice.wado/Iter<i32>,i32>" { inner: ref.as_non_null(repr = __b_0.repr; end = 3; struct.new "core:prelude/slice.wado//Iter<i32>" { repr: repr, index: 0, end: end }), f: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/iterator_generic_map_cross_module.wado//__Closure_2" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/iterator_generic_map_cross_module.wado/__closure_wrapper_0" } };
-    a = "./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/Iter<i32>,i32>^Iterator::next"(iter);
+    iter = struct.new "./sub/iterator_generic_map_lib.wado//GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>" { inner: ref.as_non_null(repr = __b_0.repr; end = 3; struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: end }), f: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/iterator_generic_map_cross_module.wado//__Closure_2" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/iterator_generic_map_cross_module.wado/__closure_wrapper_0" } };
+    a = "./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>^Iterator::next"(iter);
     __cond_4 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(a) -> bool {
         __local_19 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(a).payload_0;
         if __local_19 == 10 -> bool {
@@ -179,7 +179,7 @@ condition: a matches { Some(10) }
 "), used: 35 }); __local_11);
         unreachable;
     }
-    b = "./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/Iter<i32>,i32>^Iterator::next"(iter);
+    b = "./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>^Iterator::next"(iter);
     __cond_6 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(b) -> bool {
         __local_20 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(b).payload_0;
         if __local_20 == 20 -> bool {
@@ -196,7 +196,7 @@ condition: b matches { Some(20) }
 "), used: 35 }); __local_13);
         unreachable;
     }
-    c = "./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/Iter<i32>,i32>^Iterator::next"(iter);
+    c = "./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>^Iterator::next"(iter);
     __cond_8 = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(c) -> bool {
         __local_21 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(c).payload_0;
         if __local_21 == 30 -> bool {
@@ -213,7 +213,7 @@ condition: c matches { Some(30) }
 "), used: 35 }); __local_15);
         unreachable;
     }
-    d = "./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/Iter<i32>,i32>^Iterator::next"(iter);
+    d = "./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>^Iterator::next"(iter);
     __cond_10 = (if d.discriminant == 1 -> bool {
         1;
     } else {
@@ -540,10 +540,10 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/Iter<i32>,i32>^Iterator::next"(self) {
+fn "./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>^Iterator::next"(self) {
     let __sroa___match_2_discriminant: i32;
     let __sroa___match_2_payload_0: i32;
-    multivalue_bind [__sroa___match_2_discriminant, __sroa___match_2_payload_0] = "core:prelude/slice.wado/Iter<i32>^Iterator::next"(self.inner);
+    multivalue_bind [__sroa___match_2_discriminant, __sroa___match_2_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self.inner);
     if __sroa___match_2_discriminant == 0 {
         return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: block -> i32 {
             let __indirect_call_0: ref "canonical//CanonicalClosure_0";
@@ -555,7 +555,7 @@ fn "./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/I
     return struct.new "core:prelude/types.wado//Option<i32>" { 1 };
 }
 
-fn "core:prelude/slice.wado/Iter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self) {
     let item: i32;
     if self.index >= self.end {
         return 1, 0;

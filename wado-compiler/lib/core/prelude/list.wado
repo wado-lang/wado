@@ -1,7 +1,7 @@
 #![no_prelude]
 #![stdlib("core:prelude/list.wado")]
 // List type for Wado: a growable sequence backed by an `Array<T>`. Its views
-// and iterators (`Slice`, `Iter`, `RefIter`, `WindowsIter`, `ChunksIter`) are
+// and iterators (`ArraySlice`, `ArrayIter`, `ArrayRefIter`, `ArrayWindows`, `ArrayChunks`) are
 // the shared types from `core:prelude/slice.wado`.
 
 
@@ -9,7 +9,7 @@ use { Ordering, Eq, Ord, IndexValue, IndexAssign, IntoIterator, FromIterator, Di
 use { Option } from "core:prelude/types.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
-use { Slice, Iter, RefIter, WindowsIter, ChunksIter } from "core:prelude/slice.wado";
+use { ArraySlice, ArrayIter, ArrayRefIter, ArrayWindows, ArrayChunks } from "core:prelude/slice.wado";
 use { panic, i32_min, i32_max, i32_clamp } from "core:internal";
 
 #[compiler_item("list")]
@@ -308,33 +308,33 @@ impl<T: Ord> Ord for List<T> {
 
 impl List<T> {
     /// Returns a zero-copy view over `[start, end)`, clamped to `[0, len())`.
-    pub fn slice(&self, start: i32, end: i32) -> Slice<T> {
+    pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T> {
         let s = i32_clamp(start, 0, self.used);
         let e = i32_clamp(end, s, self.used);
-        return Slice::internal_new(&self.repr, s, e);
+        return ArraySlice::internal_new(&self.repr, s, e);
     }
 
     /// Returns a view over the whole list.
-    pub fn as_slice(&self) -> Slice<T> {
-        return Slice::internal_new(&self.repr, 0, self.used);
+    pub fn as_slice(&self) -> ArraySlice<T> {
+        return ArraySlice::internal_new(&self.repr, 0, self.used);
     }
 
     /// Returns a by-value iterator over the list's elements.
-    pub fn iter(&self) -> Iter<T> {
-        return Iter::internal_new(&self.repr, 0, self.used);
+    pub fn iter(&self) -> ArrayIter<T> {
+        return ArrayIter::internal_new(&self.repr, 0, self.used);
     }
 
     /// Returns an iterator over overlapping windows of `size` consecutive
     /// elements. Panics if `size` is not positive.
-    pub fn windows(&self, size: i32) -> WindowsIter<T> {
-        return WindowsIter::internal_new(&self.repr, 0, self.used, size);
+    pub fn windows(&self, size: i32) -> ArrayWindows<T> {
+        return ArrayWindows::internal_new(&self.repr, 0, self.used, size);
     }
 
     /// Returns an iterator over non-overlapping chunks of up to `size`
     /// elements. The last chunk may be shorter. Panics if `size` is not
     /// positive.
-    pub fn chunks(&self, size: i32) -> ChunksIter<T> {
-        return ChunksIter::internal_new(&self.repr, 0, self.used, size);
+    pub fn chunks(&self, size: i32) -> ArrayChunks<T> {
+        return ArrayChunks::internal_new(&self.repr, 0, self.used, size);
     }
 
     /// In-place sort with comparator. Stable, O(n log n) worst case.
@@ -390,47 +390,47 @@ impl List<T> {
 }
 
 impl IndexValue<RangeExclusive<i32>> for List<T> {
-    type Output = Slice<T>;
+    type Output = ArraySlice<T>;
 
-    fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> {
+    fn index_value(&self, range: RangeExclusive<i32>) -> ArraySlice<T> {
         return self.slice(range.start, range.end);
     }
 }
 
 impl IndexValue<RangeInclusive<i32>> for List<T> {
-    type Output = Slice<T>;
+    type Output = ArraySlice<T>;
 
-    fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> {
+    fn index_value(&self, range: RangeInclusive<i32>) -> ArraySlice<T> {
         return self.slice(range.start, range.end + 1);
     }
 }
 
 impl<T> IntoIterator for List<T> {
     type Item = T;
-    type Iter = Iter<T>;
+    type Iter = ArrayIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
-        return Iter::internal_new(&self.repr, 0, self.used);
+        return ArrayIter::internal_new(&self.repr, 0, self.used);
     }
 }
 
 impl<T> IntoIterator for &List<T> {
     type Item = &T;
-    type Iter = RefIter<T>;
+    type Iter = ArrayRefIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
         let list = *self;
-        return RefIter::internal_new(&list.repr, 0, list.used);
+        return ArrayRefIter::internal_new(&list.repr, 0, list.used);
     }
 }
 
 impl<T> IntoIterator for &mut List<T> {
     type Item = &T;
-    type Iter = RefIter<T>;
+    type Iter = ArrayRefIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
         let list = *self;
-        return RefIter::internal_new(&list.repr, 0, list.used);
+        return ArrayRefIter::internal_new(&list.repr, 0, list.used);
     }
 }
 
@@ -482,9 +482,9 @@ impl List<u8> {
 }
 
 impl FromIterator<T> for List<T> {
-    type Iter = Iter<T>;
+    type Iter = ArrayIter<T>;
 
-    fn from_iter(iter: Iter<T>) -> List<T> {
+    fn from_iter(iter: ArrayIter<T>) -> List<T> {
         let mut result: List<T> = [];
         for let item of iter {
             result.push(item);

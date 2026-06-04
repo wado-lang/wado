@@ -32,7 +32,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(4)
 
 array Array<i32> (mut i32);  // TypeId(5)
 
-struct core:prelude/slice.wado//RefIter<i32> {  // TypeId(6)
+struct core:prelude/slice.wado//ArrayRefIter<i32> {  // TypeId(6)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
@@ -107,7 +107,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(39)
 
-type "functype//core:prelude/slice.wado/RefIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//RefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(40)
+type "functype//core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(40)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
 
@@ -134,7 +134,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/auto_deref.wado/auto_deref_for_of"() with Stdout {
     let __b: ref "core:prelude//List<i32>";
     let sum: i32;
-    let __iter_4: ref "core:prelude/slice.wado//RefIter<i32>";
+    let __iter_4: ref "core:prelude/slice.wado//ArrayRefIter<i32>";
     let x: ref "core:prelude/types.wado//Box<i32>";
     let __v0_6: i32;
     let __cond_7: bool;
@@ -158,10 +158,10 @@ fn "wado-compiler/tests/fixtures/auto_deref.wado/auto_deref_for_of"() with Stdou
     sum = 0;
     repr = __b.repr;
     end = 3;
-    __iter_4 = struct.new "core:prelude/slice.wado//RefIter<i32>" { repr: repr, index: 0, end: end };
+    __iter_4 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: repr, index: 0, end: end };
     b0: block {
         l1: loop {
-            __match_19 = "core:prelude/slice.wado/RefIter<i32>^Iterator::next"(__iter_4);
+            __match_19 = "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(__iter_4);
             if ref.is_null(__match_19) == 0 {
                 x = ref.as_non_null(__match_19);
                 sum = sum + x.value;
@@ -652,7 +652,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/slice.wado/RefIter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(self) {
     let val: ref "core:prelude/types.wado//Box<i32>";
     if self.index >= self.end {
         return ref.null none;

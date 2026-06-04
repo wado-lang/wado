@@ -57,7 +57,7 @@ struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // Type
     mut right: ref "core:prelude/types.wado//Option<i32>",
 }
 
-struct core:prelude/slice.wado//Iter<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>> {  // TypeId(12)
+struct core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>> {  // TypeId(12)
     mut repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>",
     mut index: i32,
     mut end: i32,
@@ -150,7 +150,7 @@ type "functype//core:collections/TreeMap<core:prelude/string.wado/String,./sub/c
 
 type "functype//core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>::push" = fn(ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>", ref "tuple//[String, Value]");  // TypeId(48)
 
-type "functype//core:prelude/slice.wado/Iter<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>") -> ref null "core:collections//TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>";  // TypeId(49)
+type "functype//core:prelude/slice.wado/ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>") -> ref null "core:collections//TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>";  // TypeId(49)
 
 type "functype//core:collections/TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>::insert" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>", ref "core:prelude/string.wado//String", ref "./sub/cross_module_treemap_variant_helper.wado//Value");  // TypeId(50)
 
@@ -520,7 +520,7 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 
 fn "core:collections/TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>::entries"(self) {
     let __b: ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>";
-    let __iter_3: ref "core:prelude/slice.wado//Iter<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>";
+    let __iter_3: ref "core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>";
     let entry: ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>";
     let __match_5: ref null "core:collections//TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>";
     let repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>";
@@ -528,10 +528,10 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,./sub/cross_module_
     __b = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>" { repr: builtin::array_new<ref "tuple//[String, Value]">(0), used: 0 };
     repr = self.entries.repr;
     end = self.entries.used;
-    __iter_3 = struct.new "core:prelude/slice.wado//Iter<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>" { repr: repr, index: 0, end: end };
+    __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>" { repr: repr, index: 0, end: end };
     b31: block {
         l32: loop {
-            __match_5 = "core:prelude/slice.wado/Iter<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>^Iterator::next"(__iter_3);
+            __match_5 = "core:prelude/slice.wado/ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>^Iterator::next"(__iter_3);
             if ref.is_null(__match_5) == 0 {
                 entry = ref.as_non_null(__match_5);
                 if entry.deleted == 0 {
@@ -556,7 +556,7 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/strin
     self.used = used + 1;
 }
 
-fn "core:prelude/slice.wado/Iter<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>^Iterator::next"(self) {
     let item: ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>";
     if self.index >= self.end {
         return ref.null none;

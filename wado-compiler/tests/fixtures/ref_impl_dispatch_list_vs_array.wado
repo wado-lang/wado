@@ -1,5 +1,5 @@
 // Two distinct `IntoIterator for &Concrete<T>` impls in the prelude — `&List<T>`
-// (list.wado) and `&Array<T>` (array.wado) — both yield `RefIter<T>` and both
+// (list.wado) and `&Array<T>` (array.wado) — both yield `ArrayRefIter<T>` and both
 // register under the collapsed "&" key. Iterating a `&List<T>` from a generic
 // trait impl (so dispatch runs through monomorphization) must resolve to the
 // `&List` impl, not the `&Array` one.
@@ -38,7 +38,7 @@ impl Emit for i32 {
     }
 }
 
-// Generic impl whose body iterates `&List<T>` via `for ... of self` (RefIter).
+// Generic impl whose body iterates `&List<T>` via `for ... of self` (ArrayRefIter).
 impl<T: Emit> Emit for List<T> {
     fn emit<S: Sink>(&self, s: &mut S) {
         for let item of self {

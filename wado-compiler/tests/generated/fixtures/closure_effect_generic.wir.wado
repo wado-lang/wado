@@ -30,7 +30,7 @@ struct wado-compiler/tests/fixtures/closure_effect_generic.wado//__Closure_2 {  
 
 array Array<i32> (mut i32);  // TypeId(5)
 
-struct core:prelude/slice.wado//Iter<i32> {  // TypeId(6)
+struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(6)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
@@ -118,7 +118,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(43)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(44)
 
-type "functype//core:prelude/slice.wado/Iter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<i32>") -> [i32, i32];  // TypeId(45)
+type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(45)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -142,12 +142,12 @@ fn "wado-compiler/tests/fixtures/closure_effect_generic.wado/run"() with Stdout 
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let f_19: ref struct;
-    let __iter_2_20: ref "core:prelude/slice.wado//Iter<i32>";
+    let __iter_2_20: ref "core:prelude/slice.wado//ArrayIter<i32>";
     let repr_24: ref Array<i32>;
     let end_26: i32;
     let f_30: ref "core:prelude/format.wado//Formatter";
     let f_35: ref "core:prelude/format.wado//Formatter";
-    let __iter_2_40: ref "core:prelude/slice.wado//Iter<i32>";
+    let __iter_2_40: ref "core:prelude/slice.wado//ArrayIter<i32>";
     let repr_44: ref Array<i32>;
     let end_46: i32;
     let __local_2: ref "core:prelude/string.wado//String";
@@ -157,12 +157,12 @@ fn "wado-compiler/tests/fixtures/closure_effect_generic.wado/run"() with Stdout 
     f_19 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/closure_effect_generic.wado//__Closure_2" { __capture_0: total }, func: ref.func "closure/wado-compiler/tests/fixtures/closure_effect_generic.wado/__closure_wrapper_0" };
     repr_24 = __b_0.repr;
     end_26 = 3;
-    __iter_2_20 = struct.new "core:prelude/slice.wado//Iter<i32>" { repr: repr_24, index: 0, end: end_26 };
+    __iter_2_20 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_24, index: 0, end: end_26 };
     b0: block {
         l1: loop {
             let __sroa___match_4_22_discriminant: i32;
             let __sroa___match_4_22_payload_0: i32;
-            multivalue_bind [__sroa___match_4_22_discriminant, __sroa___match_4_22_payload_0] = "core:prelude/slice.wado/Iter<i32>^Iterator::next"(__iter_2_20);
+            multivalue_bind [__sroa___match_4_22_discriminant, __sroa___match_4_22_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_2_20);
             if __sroa___match_4_22_discriminant == 0 {
                 let __indirect_call_0: ref "canonical//CanonicalClosure_0";
                 __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(f_19);
@@ -183,12 +183,12 @@ condition: total == 6
     }
     repr_44 = __b_0.repr;
     end_46 = 3;
-    __iter_2_40 = struct.new "core:prelude/slice.wado//Iter<i32>" { repr: repr_44, index: 0, end: end_46 };
+    __iter_2_40 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_44, index: 0, end: end_46 };
     b4: block {
         l5: loop {
             let __sroa___match_4_42_discriminant: i32;
             let __sroa___match_4_42_payload_0: i32;
-            multivalue_bind [__sroa___match_4_42_discriminant, __sroa___match_4_42_payload_0] = "core:prelude/slice.wado/Iter<i32>^Iterator::next"(__iter_2_40);
+            multivalue_bind [__sroa___match_4_42_discriminant, __sroa___match_4_42_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_2_40);
             if __sroa___match_4_42_discriminant == 0 {
                 "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa___match_4_42_payload_0, __local_3); __local_2);
             } else {
@@ -545,7 +545,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/slice.wado/Iter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self) {
     let item: i32;
     if self.index >= self.end {
         return 1, 0;

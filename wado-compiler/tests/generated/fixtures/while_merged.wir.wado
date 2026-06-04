@@ -22,7 +22,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
 
 array Array<i32> (mut i32);  // TypeId(3)
 
-struct core:prelude/slice.wado//Iter<i32> {  // TypeId(4)
+struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(4)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
@@ -105,7 +105,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(41)
 
-type "functype//core:prelude/slice.wado/Iter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<i32>") -> [i32, i32];  // TypeId(42)
+type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(42)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -190,7 +190,7 @@ condition: sum == 1 + 2 + 4 + 5
 
 fn "wado-compiler/tests/fixtures/while_merged.wado/__test_2_while_let_basic"() {
     let __b: ref "core:prelude//List<i32>";
-    let iter: ref "core:prelude/slice.wado//Iter<i32>";
+    let iter: ref "core:prelude/slice.wado//ArrayIter<i32>";
     let sum: i32;
     let __v0: i32;
     let __cond: bool;
@@ -203,13 +203,13 @@ fn "wado-compiler/tests/fixtures/while_merged.wado/__test_2_while_let_basic"() {
     __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     repr = __b.repr;
     end = 3;
-    iter = struct.new "core:prelude/slice.wado//Iter<i32>" { repr: repr, index: 0, end: end };
+    iter = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: end };
     sum = 0;
     b10: block {
         l11: loop {
             let __sroa___match_9_discriminant: i32;
             let __sroa___match_9_payload_0: i32;
-            multivalue_bind [__sroa___match_9_discriminant, __sroa___match_9_payload_0] = "core:prelude/slice.wado/Iter<i32>^Iterator::next"(iter);
+            multivalue_bind [__sroa___match_9_discriminant, __sroa___match_9_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(iter);
             if __sroa___match_9_discriminant == 0 {
                 sum = sum + __sroa___match_9_payload_0;
             } else {
@@ -230,19 +230,19 @@ condition: sum == 6
 
 fn "wado-compiler/tests/fixtures/while_merged.wado/__test_3_while_let_chain"() {
     let __b_0: ref "core:prelude//List<i32>";
-    let iter: ref "core:prelude/slice.wado//Iter<i32>";
+    let iter: ref "core:prelude/slice.wado//ArrayIter<i32>";
     let sum: i32;
     let __v0_5: i32;
     let __cond_6: bool;
     let __b_7: ref "core:prelude//List<i32>";
     let __b_9: ref "core:prelude//List<i32>";
-    let ix: ref "core:prelude/slice.wado//Iter<i32>";
-    let iy: ref "core:prelude/slice.wado//Iter<i32>";
+    let ix: ref "core:prelude/slice.wado//ArrayIter<i32>";
+    let iy: ref "core:prelude/slice.wado//ArrayIter<i32>";
     let total: i32;
     let __v0_16: i32;
     let __cond_17: bool;
     let __b_18: ref "core:prelude//List<i32>";
-    let iter3: ref "core:prelude/slice.wado//Iter<i32>";
+    let iter3: ref "core:prelude/slice.wado//ArrayIter<i32>";
     let count: i32;
     let __v0_25: i32;
     let __cond_26: bool;
@@ -269,13 +269,13 @@ fn "wado-compiler/tests/fixtures/while_merged.wado/__test_3_while_let_chain"() {
     __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 8, 9), used: 5 };
     repr_51 = __b_0.repr;
     end_53 = 5;
-    iter = struct.new "core:prelude/slice.wado//Iter<i32>" { repr: repr_51, index: 0, end: end_53 };
+    iter = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_51, index: 0, end: end_53 };
     sum = 0;
     b14: block {
         l15: loop {
             let __sroa___match_33_discriminant: i32;
             let __sroa___match_33_payload_0: i32;
-            multivalue_bind [__sroa___match_33_discriminant, __sroa___match_33_payload_0] = "core:prelude/slice.wado/Iter<i32>^Iterator::next"(iter);
+            multivalue_bind [__sroa___match_33_discriminant, __sroa___match_33_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(iter);
             if __sroa___match_33_discriminant == 0 {
                 if __sroa___match_33_payload_0 < 5 {
                     sum = sum + __sroa___match_33_payload_0;
@@ -300,20 +300,20 @@ condition: sum == 6
     __b_9 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
     repr_84 = __b_7.repr;
     end_86 = 3;
-    ix = struct.new "core:prelude/slice.wado//Iter<i32>" { repr: repr_84, index: 0, end: end_86 };
+    ix = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_84, index: 0, end: end_86 };
     repr_88 = __b_9.repr;
     end_90 = 3;
-    iy = struct.new "core:prelude/slice.wado//Iter<i32>" { repr: repr_88, index: 0, end: end_90 };
+    iy = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_88, index: 0, end: end_90 };
     total = 0;
     b19: block {
         l20: loop {
             let __sroa___match_34_discriminant: i32;
             let __sroa___match_34_payload_0: i32;
-            multivalue_bind [__sroa___match_34_discriminant, __sroa___match_34_payload_0] = "core:prelude/slice.wado/Iter<i32>^Iterator::next"(ix);
+            multivalue_bind [__sroa___match_34_discriminant, __sroa___match_34_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(ix);
             if __sroa___match_34_discriminant == 0 {
                 let __sroa___local_35_discriminant: i32;
                 let __sroa___local_35_payload_0: i32;
-                multivalue_bind [__sroa___local_35_discriminant, __sroa___local_35_payload_0] = "core:prelude/slice.wado/Iter<i32>^Iterator::next"(iy);
+                multivalue_bind [__sroa___local_35_discriminant, __sroa___local_35_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(iy);
                 if __sroa___local_35_discriminant == 0 {
                     total = total + (__sroa___match_34_payload_0 + __sroa___local_35_payload_0);
                 } else {
@@ -336,13 +336,13 @@ condition: total == 66
     __b_18 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(2, 4, 7, 8), used: 4 };
     repr_114 = __b_18.repr;
     end_116 = 4;
-    iter3 = struct.new "core:prelude/slice.wado//Iter<i32>" { repr: repr_114, index: 0, end: end_116 };
+    iter3 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_114, index: 0, end: end_116 };
     count = 0;
     b24: block {
         l25: loop {
             let __sroa___match_36_discriminant: i32;
             let __sroa___match_36_payload_0: i32;
-            multivalue_bind [__sroa___match_36_discriminant, __sroa___match_36_payload_0] = "core:prelude/slice.wado/Iter<i32>^Iterator::next"(iter3);
+            multivalue_bind [__sroa___match_36_discriminant, __sroa___match_36_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(iter3);
             if __sroa___match_36_discriminant == 0 {
                 if (if __sroa___match_36_payload_0 > 1 -> i32 {
                     __sroa___match_36_payload_0 < 6;
@@ -697,7 +697,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/slice.wado/Iter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self) {
     let item: i32;
     if self.index >= self.end {
         return 1, 0;

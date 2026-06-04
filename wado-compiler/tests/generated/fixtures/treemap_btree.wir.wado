@@ -35,7 +35,7 @@ array Array<bool> (mut bool);  // TypeId(7)
 
 array Array<i32> (mut i32);  // TypeId(8)
 
-struct core:prelude/slice.wado//Iter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>> {  // TypeId(9)
+struct core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>> {  // TypeId(9)
     mut repr: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>",
     mut index: i32,
     mut end: i32,
@@ -163,7 +163,7 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::needs_compaction" = fn(ref "wado-compiler/tests/fixtures/treemap_btree.wado//TreeMap<core:prelude/string.wado/String,i32>") -> bool;  // TypeId(54)
 
-type "functype//core:prelude/slice.wado/Iter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>") -> ref null "tuple//[String, i32]";  // TypeId(55)
+type "functype//core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>") -> ref null "tuple//[String, i32]";  // TypeId(55)
 
 type "functype//wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::iter" = fn(ref "wado-compiler/tests/fixtures/treemap_btree.wado//TreeMap<core:prelude/string.wado/String,i32>") -> ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";  // TypeId(56)
 
@@ -235,12 +235,12 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/run"() with Stdout {
     let val2: i32;
     let val3: i32;
     let entries: ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
-    let __iter_5: ref "core:prelude/slice.wado//Iter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
+    let __iter_5: ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
     let entry_6: ref "tuple//[String, i32]";
     let key_7: ref "core:prelude/string.wado//String";
     let value_8: i32;
     let final_entries: ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
-    let __iter_10: ref "core:prelude/slice.wado//Iter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
+    let __iter_10: ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
     let entry_11: ref "tuple//[String, i32]";
     let key_12: ref "core:prelude/string.wado//String";
     let value_13: i32;
@@ -379,10 +379,10 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/run"() with Stdout {
     entries = "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::iter"(map);
     repr_93 = entries.repr;
     end_95 = entries.used;
-    __iter_5 = struct.new "core:prelude/slice.wado//Iter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>" { repr: repr_93, index: 0, end: end_95 };
+    __iter_5 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>" { repr: repr_93, index: 0, end: end_95 };
     b9: block {
         l10: loop {
-            __match_36 = "core:prelude/slice.wado/Iter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next"(__iter_5);
+            __match_36 = "core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next"(__iter_5);
             if ref.is_null(__match_36) == 0 {
                 entry_6 = ref.as_non_null(__match_36);
                 key_7 = entry_6.0;
@@ -413,10 +413,10 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/run"() with Stdout {
     final_entries = "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::iter"(map);
     repr_119 = final_entries.repr;
     end_121 = final_entries.used;
-    __iter_10 = struct.new "core:prelude/slice.wado//Iter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>" { repr: repr_119, index: 0, end: end_121 };
+    __iter_10 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>" { repr: repr_119, index: 0, end: end_121 };
     b14: block {
         l15: loop {
-            __match_37 = "core:prelude/slice.wado/Iter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next"(__iter_10);
+            __match_37 = "core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next"(__iter_10);
             if ref.is_null(__match_37) == 0 {
                 entry_11 = ref.as_non_null(__match_37);
                 key_12 = entry_11.0;
@@ -852,7 +852,7 @@ fn "wado-compiler/tests/fixtures/treemap_btree.wado/TreeMap<core:prelude/string.
     });
 }
 
-fn "core:prelude/slice.wado/Iter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next"(self) {
     let item: ref "tuple//[String, i32]";
     if self.index >= self.end {
         return ref.null none;

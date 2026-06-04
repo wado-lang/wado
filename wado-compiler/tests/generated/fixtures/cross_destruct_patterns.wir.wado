@@ -37,7 +37,7 @@ struct wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Point {  // Ty
 
 array Array<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged> (mut ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged");  // TypeId(6)
 
-struct core:prelude/slice.wado//Iter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged> {  // TypeId(7)
+struct core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged> {  // TypeId(7)
     mut repr: ref "Array<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>",
     mut index: i32,
     mut end: i32,
@@ -102,7 +102,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(35)
 
-type "functype//core:prelude/slice.wado/Iter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>") -> ref null "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged";  // TypeId(36)
+type "functype//core:prelude/slice.wado/ArrayIter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>") -> ref null "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged";  // TypeId(36)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(37)
 
@@ -125,7 +125,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout {
     let __b_8: ref "core:prelude//List<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>";
-    let __iter_10: ref "core:prelude/slice.wado//Iter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>";
+    let __iter_10: ref "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>";
     let l: ref "core:prelude/string.wado//String";
     let a: i32;
     let b: i32;
@@ -168,10 +168,10 @@ fn "wado-compiler/tests/fixtures/cross_destruct_patterns.wado/run"() with Stdout
     __b_8 = struct.new "core:prelude//List<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged">(struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 }, coords: struct.new "tuple//[i32, i32]" { 0: 3, 1: 4 } }, struct.new "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(81), used: 1 }, coords: struct.new "tuple//[i32, i32]" { 0: 5, 1: 6 } }), used: 2 };
     repr = __b_8.repr;
     end = 2;
-    __iter_10 = struct.new "core:prelude/slice.wado//Iter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>" { repr: repr, index: 0, end: end };
+    __iter_10 = struct.new "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>" { repr: repr, index: 0, end: end };
     b0: block {
         l1: loop {
-            __match_37 = "core:prelude/slice.wado/Iter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>^Iterator::next"(__iter_10);
+            __match_37 = "core:prelude/slice.wado/ArrayIter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>^Iterator::next"(__iter_10);
             if ref.is_null(__match_37) == 0 {
                 let __variant_payload_1: ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged";
                 __variant_payload_1 = ref.as_non_null(__match_37);
@@ -530,7 +530,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/slice.wado/Iter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<wado-compiler/tests/fixtures/cross_destruct_patterns.wado/Tagged>^Iterator::next"(self) {
     let item: ref "wado-compiler/tests/fixtures/cross_destruct_patterns.wado//Tagged";
     if self.index >= self.end {
         return ref.null none;

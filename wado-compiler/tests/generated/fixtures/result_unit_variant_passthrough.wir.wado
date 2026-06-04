@@ -26,7 +26,7 @@ variant wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado//Color
     Blue,
 }
 
-struct core:prelude/slice.wado//Iter<u8> {  // TypeId(4)
+struct core:prelude/slice.wado//ArrayIter<u8> {  // TypeId(4)
     mut repr: ref Array<u8>,
     mut index: i32,
     mut end: i32,
@@ -122,7 +122,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
 
-type "functype//core:prelude/slice.wado/Iter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<u8>") -> [i32, u8];  // TypeId(44)
+type "functype//core:prelude/slice.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(44)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -272,7 +272,7 @@ condition: passthrough(Result<i32, Color>::Err(Color::Blue)) matches { Err(Color
 fn "wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/passthrough_with_ok_work"(c, bytes) {
     let e: ref "wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado//Color";
     let total: i32;
-    let __iter_4: ref "core:prelude/slice.wado//Iter<u8>";
+    let __iter_4: ref "core:prelude/slice.wado//ArrayIter<u8>";
     let repr: ref Array<u8>;
     let end: i32;
     if ref.test "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/Color>::Err"(c) {
@@ -282,12 +282,12 @@ fn "wado-compiler/tests/fixtures/result_unit_variant_passthrough.wado/passthroug
         total = 0;
         repr = bytes.repr;
         end = bytes.used;
-        __iter_4 = struct.new "core:prelude/slice.wado//Iter<u8>" { repr: repr, index: 0, end: end };
+        __iter_4 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: repr, index: 0, end: end };
         b16: block {
             l17: loop {
                 let __sroa___local_6_discriminant: i32;
                 let __sroa___local_6_payload_0: u8;
-                multivalue_bind [__sroa___local_6_discriminant, __sroa___local_6_payload_0] = "core:prelude/slice.wado/Iter<u8>^Iterator::next"(__iter_4);
+                multivalue_bind [__sroa___local_6_discriminant, __sroa___local_6_payload_0] = "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(__iter_4);
                 if __sroa___local_6_discriminant == 0 {
                     total = total + __sroa___local_6_payload_0;
                 } else {
@@ -671,7 +671,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/slice.wado/Iter<u8>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(self) {
     let item: u8;
     if self.index >= self.end {
         return 1, 0;

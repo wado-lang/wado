@@ -37,7 +37,7 @@ array Array<i32> (mut i32);  // TypeId(6)
 
 array Array<wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Token> (mut ref "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Token");  // TypeId(7)
 
-struct core:prelude/slice.wado//Iter<i32> {  // TypeId(8)
+struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(8)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
@@ -134,7 +134,7 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/drive" = fn(ref "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//State") -> [i32, ref null "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Token", ref null "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Err"];  // TypeId(46)
 
-type "functype//core:prelude/slice.wado/Iter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<i32>") -> [i32, i32];  // TypeId(47)
+type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(47)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -456,7 +456,7 @@ fn "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Sta
 
 fn "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/State::match_set"(self, included) {
     let k: i32;
-    let __iter_3: ref "core:prelude/slice.wado//Iter<i32>";
+    let __iter_3: ref "core:prelude/slice.wado//ArrayIter<i32>";
     let index_7: i32;
     let repr: ref Array<i32>;
     let end: i32;
@@ -467,12 +467,12 @@ fn "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Sta
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Token">(self.tokens.repr, index_7).kind;
     repr = included.repr;
     end = included.used;
-    __iter_3 = struct.new "core:prelude/slice.wado//Iter<i32>" { repr: repr, index: 0, end: end };
+    __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: end };
     b28: block {
         l29: loop {
             let __sroa___match_5_discriminant: i32;
             let __sroa___match_5_payload_0: i32;
-            multivalue_bind [__sroa___match_5_discriminant, __sroa___match_5_payload_0] = "core:prelude/slice.wado/Iter<i32>^Iterator::next"(__iter_3);
+            multivalue_bind [__sroa___match_5_discriminant, __sroa___match_5_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_3);
             if __sroa___match_5_discriminant == 0 {
                 if __sroa___match_5_payload_0 == k {
                     if k == 0 {
@@ -589,7 +589,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/slice.wado/Iter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self) {
     let item: i32;
     if self.index >= self.end {
         return 1, 0;
