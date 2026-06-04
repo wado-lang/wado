@@ -1582,6 +1582,11 @@ pub enum WirInstr {
     Unreachable,
     /// No operation (for structure).
     Nop,
+    /// Cold-path marker emitted for `builtin::cold_path()`. Produces no Wasm.
+    /// `apply_cold_path_hints` consumes it during WIR finalization: an `if`
+    /// whose then/else body contains this marker has its condition wrapped in
+    /// `BranchHint` so the enclosing branch is hinted unlikely.
+    ColdPath,
     /// Drop a value.
     Drop(Box<WirInstr>),
     /// Select between two values.
@@ -1769,7 +1774,8 @@ impl WirInstr {
             | Self::BrIf { .. }
             | Self::BrTable { .. }
             | Self::DeclareLocal { .. }
-            | Self::Nop => false,
+            | Self::Nop
+            | Self::ColdPath => false,
             _ => true,
         }
     }
@@ -1851,6 +1857,7 @@ impl WirInstr {
             | Self::GlobalGet { .. }
             | Self::RefNull { .. }
             | Self::Nop
+            | Self::ColdPath
             | Self::Unreachable
             | Self::MemorySize
             | Self::Br { .. }
@@ -2429,6 +2436,7 @@ impl WirInstr {
             | Self::GlobalGet { .. }
             | Self::RefNull { .. }
             | Self::Nop
+            | Self::ColdPath
             | Self::Unreachable
             | Self::MemorySize
             | Self::Br { .. }

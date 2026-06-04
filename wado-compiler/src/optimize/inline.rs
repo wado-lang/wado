@@ -60,6 +60,43 @@ fn cold_branch(condition: &NirExpr) -> Option<ColdBranch> {
     }
 }
 
+/// True when an expression is a `builtin::cold_path()` marker call.
+fn is_cold_path_call(expr: &NirExpr) -> bool {
+    matches!(
+        &expr.kind,
+        NirExprKind::Call { func, .. }
+            if func.builtin_name().as_deref() == Some("builtin::cold_path")
+    )
+}
+
+/// True when a branch block is on a cold path, i.e. it directly contains a
+/// `cold_path()` marker statement. Such a block is excluded from the inline
+/// cost estimate.
+fn block_is_cold(block: &NirBlock) -> bool {
+    block
+        .stmts
+        .iter()
+        .any(|s| matches!(&s.kind, NirStmtKind::Expr(e) if is_cold_path_call(e)))
+}
+
+/// Inline cost of a branch block: zero when the block is cold (see
+/// [`block_is_cold`]), otherwise its expression count.
+fn branch_block_cost(block: &NirBlock) -> usize {
+    if block_is_cold(block) {
+        0
+    } else {
+        count_block_exprs(block)
+    }
+}
+
+/// Inline cost of a `match` arm body: zero when the arm is a cold block.
+fn match_arm_body_cost(arm: &crate::nir::NirMatchArm) -> usize {
+    match &arm.body.kind {
+        NirExprKind::Block(block) if block_is_cold(block) => 0,
+        _ => count_expr(&arm.body),
+    }
+}
+
 /// Count expressions in a NIR expression (recursive)
 fn count_expr(expr: &NirExpr) -> usize {
     1 + match &expr.kind {
@@ -86,19 +123,20 @@ fn count_expr(expr: &NirExpr) -> usize {
             then_branch,
             else_branch,
         } => {
-            // A branch hinted as cold (`builtin::unlikely(..)` ⇒ then,
-            // `builtin::likely(..)` ⇒ else) does not contribute to inline
-            // cost: its body is by construction off the hot path.
+            // A cold branch does not contribute to inline cost: either the
+            // condition is hinted (`builtin::unlikely(..)` ⇒ then,
+            // `builtin::likely(..)` ⇒ else) or the branch body carries a
+            // `cold_path()` marker (handled by `branch_block_cost`).
             let cold = cold_branch(condition);
             let then_cost = if cold == Some(ColdBranch::Then) {
                 0
             } else {
-                count_block_exprs(then_branch)
+                branch_block_cost(then_branch)
             };
             let else_cost = if cold == Some(ColdBranch::Else) {
                 0
             } else {
-                else_branch.as_ref().map_or(0, count_block_exprs)
+                else_branch.as_ref().map_or(0, branch_block_cost)
             };
             count_expr(condition) + then_cost + else_cost
         }
@@ -106,7 +144,7 @@ fn count_expr(expr: &NirExpr) -> usize {
             count_expr(expr)
                 + arms
                     .iter()
-                    .map(|arm| arm.guard.as_ref().map_or(0, count_expr) + count_expr(&arm.body))
+                    .map(|arm| arm.guard.as_ref().map_or(0, count_expr) + match_arm_body_cost(arm))
                     .sum::<usize>()
         }
         NirExprKind::Block(block) => count_block_exprs(block),
@@ -137,8 +175,8 @@ fn count_expr(expr: &NirExpr) -> usize {
             ..
         } => {
             count_expr(scrutinee)
-                + arms.iter().map(count_block_exprs).sum::<usize>()
-                + count_block_exprs(default)
+                + arms.iter().map(branch_block_cost).sum::<usize>()
+                + branch_block_cost(default)
         }
         // Lowered pattern matching nodes - count inner expressions
         NirExprKind::VariantTag { expr }
@@ -164,18 +202,20 @@ fn count_block_exprs(block: &NirBlock) -> usize {
                 else_block,
                 ..
             } => {
-                // Skip the cold arm's body when the condition carries a
-                // `builtin::likely`/`builtin::unlikely` hint (see `cold_branch`).
+                // Skip a cold arm: either the condition carries a
+                // `builtin::likely`/`builtin::unlikely` hint (see `cold_branch`)
+                // or the arm body carries a `cold_path()` marker (handled by
+                // `branch_block_cost`).
                 let cold = cold_branch(condition);
                 let then_cost = if cold == Some(ColdBranch::Then) {
                     0
                 } else {
-                    count_block_exprs(then_block)
+                    branch_block_cost(then_block)
                 };
                 let else_cost = if cold == Some(ColdBranch::Else) {
                     0
                 } else {
-                    else_block.as_ref().map_or(0, count_block_exprs)
+                    else_block.as_ref().map_or(0, branch_block_cost)
                 };
                 count_expr(condition) + then_cost + else_cost
             }

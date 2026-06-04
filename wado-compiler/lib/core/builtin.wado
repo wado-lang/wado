@@ -189,6 +189,21 @@ fn f32_reinterpret_i32(i: i32) -> f32;
 /// Traps unconditionally, marking unreachable code.
 fn unreachable() -> !;
 
+/// Branch prediction hints. `likely(cond)` / `unlikely(cond)` return `cond`
+/// unchanged but annotate the enclosing branch so codegen emits a Wasm
+/// branch hint (`metadata.code.branch_hint`). Use them as the condition of an
+/// `if`: `if unlikely(error) { ... }`.
+fn likely(cond: bool) -> bool;
+fn unlikely(cond: bool) -> bool;
+
+/// Marks the enclosing code path as cold (rarely executed). Unlike
+/// `likely` / `unlikely`, which wrap an `if` condition, `cold_path()` is a
+/// statement placed inside a branch body — so it works where no boolean
+/// condition is available, e.g. an `if let` / `match` arm. The branch that
+/// syntactically contains the call is hinted unlikely, and the path is
+/// excluded from the inliner's cost estimate. Mirrors `std::hint::cold_path`.
+fn cold_path();
+
 // =========================================================================
 // CM canonical intrinsics (raw flat ABI signatures)
 //
