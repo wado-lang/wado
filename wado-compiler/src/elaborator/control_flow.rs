@@ -18,6 +18,8 @@
 //! NEVER detection (TIR walker's `expr.type_id == TypeTable::NEVER`)
 //! becomes an `expression_types[(module, expr.id)] == NEVER` lookup.
 
+use std::cell::RefCell;
+
 use crate::ast;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -26,17 +28,30 @@ use crate::tir::{TypeId, TypeTable};
 
 /// Lookup context for AST control-flow walks. Holds the per-AstId
 /// type table and the current module key so `expression_types` reads
-/// resolve to the right module's facts.
+/// resolve to the right module's facts. `type_table` backs the
+/// `contains_unknown` filter the missing-return walk applies (since
+/// Stage 7-B `expression_types` records UNKNOWN-containing types).
 #[derive(Clone, Copy)]
 pub(super) struct CtrlFlowCtx<'a> {
     pub(super) expression_types: &'a IndexMap<SymbolKey, TypeId>,
     pub(super) module: &'a ModuleSource,
+    pub(super) type_table: &'a RefCell<TypeTable>,
 }
 
 impl CtrlFlowCtx<'_> {
     fn type_of(&self, expr: &ast::Expr) -> Option<TypeId> {
         let key = SymbolKey::new(self.module.clone(), expr.id());
         self.expression_types.get(&key).copied()
+    }
+
+    /// `type_of`, but an UNKNOWN-containing recorded type counts as "no
+    /// definite type" (`None`). The missing-return walk uses this so an
+    /// unresolved-`null` return value does not masquerade as a concrete
+    /// return type — preserving the behaviour from when the recording site
+    /// skipped UNKNOWN types entirely.
+    fn definite_type_of(&self, expr: &ast::Expr) -> Option<TypeId> {
+        self.type_of(expr)
+            .filter(|t| !self.type_table.borrow().contains_unknown(*t))
     }
 
     fn is_never(&self, expr: &ast::Expr) -> bool {
@@ -123,12 +138,12 @@ pub(super) fn find_return_type_in_block(
 fn find_return_type_in_stmt(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt) -> Option<TypeId> {
     match stmt {
         ast::Stmt::Return(r) => match &r.value {
-            // The value's type comes from `expression_types`; if it
-            // isn't recorded (ERROR / UNKNOWN propagation skipped it),
-            // surface `None` so the caller treats this arm as "no return
-            // type found" rather than silently fabricating `Unit` and
+            // The value's type comes from `expression_types`; an ERROR /
+            // UNKNOWN-containing type counts as "not recorded" (via
+            // `definite_type_of`), so the caller treats this arm as "no
+            // return type found" rather than silently fabricating `Unit` and
             // producing a misleading missing-return diagnostic.
-            Some(expr) => ctx.type_of(expr),
+            Some(expr) => ctx.definite_type_of(expr),
             None => Some(TypeTable::UNIT),
         },
         ast::Stmt::If(if_stmt) => {
@@ -191,7 +206,7 @@ pub(super) fn find_return_type_in_expr(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr) -
         // rule as `Stmt::Return` above: yield `None` rather than
         // synthesising `Unit`, to keep ERROR-recovery diagnostics
         // free of bogus missing-return reports.
-        ast::Expr::Resume(r) => ctx.type_of(&r.value),
+        ast::Expr::Resume(r) => ctx.definite_type_of(&r.value),
         _ => None,
     }
 }

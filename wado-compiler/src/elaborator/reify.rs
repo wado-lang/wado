@@ -261,7 +261,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     // the accessor is just the base-map lookup. The macro keeps the 14-map
     // list in one place, mirroring `TypeAnnotations::split_off_overlay`.
     reify_annotation_accessors! {
-        ann_expression_types => expression_types: crate::tir::TypeId,
         ann_local_type => local_types: crate::tir::TypeId,
         ann_let_annotated_type => let_annotated_types: crate::tir::TypeId,
         ann_method_dispatch => method_dispatch: super::sem::types::MethodDispatch,
@@ -277,6 +276,30 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ann_sequence_coercions => sequence_coercions: super::sem::types::SequenceCoercionFacts,
         ann_key_value_coercions => key_value_coercions: super::sem::types::KeyValueCoercionFacts,
         ann_index_assign_dispatch => index_assign_dispatch: super::sem::types::OperatorDispatch,
+    }
+
+    /// Recorded type of an expression, honouring tuple-for-of overlays like
+    /// the macro-generated accessors. Unlike them it filters
+    /// `contains_unknown` recorded types to `None`: since Stage 7-B the
+    /// combined walk records UNKNOWN-containing types (so its AST analyses can
+    /// see unresolved-null branches), but reify must treat such an entry as
+    /// absent and fall back to the node's `expected_type` — exactly as when
+    /// the recording site skipped them. Without this a bare `null` would reify
+    /// with `Option<UNKNOWN>` and trap WIR translation
+    /// ("Null with unresolved Option inner type").
+    fn ann_expression_types(&self, id: crate::ast::AstId) -> Option<crate::tir::TypeId> {
+        let key = crate::symbol::SymbolKey::new(self.current_module_source.clone(), id);
+        let raw = self
+            .tuple_overlay_stack
+            .iter()
+            .rev()
+            .find_map(|overlay| overlay.expression_types.get(&key).copied())
+            .or_else(|| self.sem.types.expression_types.get(&key).copied())?;
+        if self.tysys.type_table.borrow().contains_unknown(raw) {
+            None
+        } else {
+            Some(raw)
+        }
     }
 
     // Decl/signature facts the combined walk records once per decl (the
@@ -5151,6 +5174,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let ctrl_ctx = super::control_flow::CtrlFlowCtx {
                 expression_types: &self.sem.types.expression_types,
                 module: &self.current_module_source,
+                type_table: &self.tysys.type_table,
             };
             super::control_flow::find_return_type_in_block(ctrl_ctx, block).unwrap_or(body.type_id)
         } else {

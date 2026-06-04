@@ -550,6 +550,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         control_flow::CtrlFlowCtx {
             expression_types: &self.sem.types.expression_types,
             module,
+            type_table: &self.tysys.type_table,
         }
     }
 
@@ -617,9 +618,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if type_id == TypeTable::ERROR {
             return;
         }
-        if self.tysys.type_table.borrow().contains_unknown(type_id) {
-            return;
-        }
+        // UNKNOWN-containing types ARE recorded (Stage 7-B): a bare `null` is
+        // `Option<UNKNOWN>`, and the AST-level block-result-type analysis the
+        // combined walk uses (in place of reading the body TIR) needs to see
+        // an unresolved-null branch to type it the same way the TIR walker
+        // did. Readers that want a *definite* type filter `contains_unknown`
+        // explicitly: reify's `ann_expression_types` (so a null still falls
+        // back to its `expected_type`) and the missing-return walk in
+        // `control_flow.rs`.
         self.sem
             .types
             .expression_types
