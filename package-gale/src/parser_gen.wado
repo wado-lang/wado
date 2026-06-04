@@ -90,7 +90,10 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `LoweredGrammar` is threaded through so we can dispatch on
     // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
     // recomputing the classification at every emit site.
-    gen_parser_struct(w);
+    gen_parser_struct(w, ctx.is_trace());
+    if ctx.is_trace() {
+        gen_trace_helpers(w);
+    }
     gen_scan_functions(w, grammar, lowered, ctx);
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         let rule = &grammar.parser_rules[i];
@@ -189,17 +192,28 @@ fn emit_follow_variant_from_gir(w: &mut CodeWriter, variant_rule: &Rule, ctx: &m
     }
     if entry.parse_used {
         gen_parse_fn_named(w, rule, variant_rule, ctx, &parse_inner, &scan_name, /*emit_visibility=*/ false);
-        gen_rule_entry_wrapper(w, &parse_name, &parse_inner, &rule.type_name, &rule.name, rule_takes_min_prec(variant_rule));
+        gen_rule_entry_wrapper(w, &parse_name, &parse_inner, &rule.type_name, &rule.name, rule_takes_min_prec(variant_rule), ctx.is_trace());
     }
 }
 
-fn gen_parser_struct(w: &mut CodeWriter) {
+fn gen_parser_struct(w: &mut CodeWriter, trace: bool) {
     let mut s = StructSpec::new("Parser");
     s.add_field(&"tokens", &"List<Token>");
     s.add_field(&"pos", &"i32");
     // Source characters, kept so error sites can resolve a byte/char offset
     // (`span.start`) into a human-readable `line:col` via `line_col_at`.
     s.add_field(&"chars", &"List<char>");
+    // Deepest speculative failure seen so far. A scan-gated repetition that
+    // exits on a malformed (but plausibly-starting) element re-parses it to
+    // harvest a precise inner error and records it here; the input-entry
+    // reports it instead of the shallower "expected <closer>" error when it
+    // is at least as far into the token stream (ties favour the malformed
+    // element). `null` until such a failure is seen.
+    s.add_field(&"pending", &"Option<ParseError>");
+    // Current recursive-descent depth, used only to indent trace output.
+    if trace {
+        s.add_field(&"trace_depth", &"i32");
+    }
     s.emit(w);
     w.blank();
 
@@ -210,7 +224,11 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     f.add_param(&"chars", &"List<char>");
     f.set_return_type(&"Parser");
     f.emit_begin(w);
-    w.line(&"return Parser { tokens, pos: 0, chars };");
+    if trace {
+        w.line(&"return Parser { tokens, pos: 0, chars, pending: null, trace_depth: 0 };");
+    } else {
+        w.line(&"return Parser { tokens, pos: 0, chars, pending: null };");
+    }
     w.end();
     w.blank();
 
@@ -228,6 +246,21 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     w.line(&"return ParseError::at(message, span, expected, lc.0, lc.1);");
     w.end();
     w.blank();
+
+    // Record a speculative failure as the "deepest" one if it sits further
+    // into the token stream than any previously recorded. Used by the
+    // repetition recovery path (see `emit_rep_break_with_recovery`).
+    let mut frd = FnSpec::new("record_deeper");
+    frd.set_receiver(&"&mut self");
+    frd.add_param(&"e", &"ParseError");
+    frd.emit_begin(w);
+    w.line(&"let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };");
+    w.begin(&"if take");
+    w.line(&"self.pending = Option::<ParseError>::Some(e);");
+    w.end();
+    w.end();
+    w.blank();
+
 
     let mut f2 = FnSpec::new("peek");
     f2.set_receiver(&"&self");
@@ -1656,7 +1689,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
             true,
         ),
     }
-    gen_rule_entry_wrapper(w, &canonical, &inner, &rule.type_name, &rule.name, rule_takes_min_prec(lowered_rule));
+    gen_rule_entry_wrapper(w, &canonical, &inner, &rule.type_name, &rule.name, rule_takes_min_prec(lowered_rule), ctx.is_trace());
 }
 
 /// Emit a thin entry wrapper named `outer_name` that delegates to
@@ -1674,7 +1707,75 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
 /// `takes_min_prec` mirrors the wrapped function's signature. Left-recursive
 /// rule entries carry a defaulted `min_prec` (callers pass it only at
 /// precedence-aware self-ref sites), so the wrapper reproduces that default.
-fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &String, type_name: &String, rule_display: &String, takes_min_prec: bool) {
+/// Emit the trace helpers (the `trace` option is on). The emit sites only
+/// emit simple calls — `trace_enter`/`trace_ok`/`trace_fail` from the rule
+/// wrappers, `trace_pick`/`trace_scan_alt`/`trace_try` from the multi-alt
+/// bodies; these helpers do the indentation, lookahead-token rendering, and
+/// `log_stderr` formatting so the emitter avoids nesting a generated template
+/// inside its own template string.
+fn gen_trace_helpers(w: &mut CodeWriter) {
+    w.line(&"fn trace_pad(depth: i32) -> String {");
+    w.indent();
+    w.line(&"let mut s = String::with_capacity(depth * 2);");
+    w.line(&"for let mut i = 0; i < depth; i += 1 { s.push_str(&\"  \"); }");
+    w.line(&"return s;");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+    w.line(&"fn trace_tok(p: &Parser) -> String {");
+    w.indent();
+    w.line(&"if p.pos >= p.tokens.len() { return String::from(\"<eof>\"); }");
+    w.line(&"let t = &p.tokens[p.pos];");
+    w.line(&"if t.text.is_empty() { return String::from(\"<eof>\"); }");
+    w.line(&"return `'{t.text}'`;");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+    w.line(&"fn trace_enter(p: &Parser, rule: &String) {");
+    w.indent();
+    w.line(&"log_stderr(`{trace_pad(p.trace_depth)}enter {*rule} @{p.pos} {trace_tok(p)}`);");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+    w.line(&"fn trace_ok(p: &Parser, rule: &String) {");
+    w.indent();
+    w.line(&"log_stderr(`{trace_pad(p.trace_depth)}ok {*rule}`);");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+    w.line(&"fn trace_fail(p: &Parser, rule: &String, msg: &String) {");
+    w.indent();
+    w.line(&"log_stderr(`{trace_pad(p.trace_depth)}FAIL {*rule}: {*msg}`);");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+    // Decision-point helpers: which alternative a multi-alt / tournament
+    // rule committed to, the per-alt scan lengths a longest-match
+    // tournament weighed, and the outcome of each speculative try.
+    w.line(&"fn trace_pick(p: &Parser, rule: &String, alt: i32) {");
+    w.indent();
+    w.line(&"if alt < 0 { log_stderr(`{trace_pad(p.trace_depth)}  pick {*rule}: no alt matched`); }");
+    w.line(&"else { log_stderr(`{trace_pad(p.trace_depth)}  pick {*rule} alt#{alt}`); }");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+    w.line(&"fn trace_scan_alt(p: &Parser, rule: &String, alt: i32, end: i32) {");
+    w.indent();
+    w.line(&"let r = if end < 0 { String::from(\"fail\") } else { `-> @{end}` };");
+    w.line(&"log_stderr(`{trace_pad(p.trace_depth)}  scan {*rule} alt#{alt}: {r}`);");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+    w.line(&"fn trace_try(p: &Parser, rule: &String, alt: i32, ok: bool) {");
+    w.indent();
+    w.line(&"let r = if ok { String::from(\"ok\") } else { String::from(\"rewind\") };");
+    w.line(&"log_stderr(`{trace_pad(p.trace_depth)}  try {*rule} alt#{alt}: {r}`);");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+}
+
+fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &String, type_name: &String, rule_display: &String, takes_min_prec: bool, trace: bool) {
     let mut f = FnSpec::new(outer_name);
     f.add_param(&"p", &"&mut Parser");
     if takes_min_prec {
@@ -1686,16 +1787,29 @@ fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &
     }
     f.set_return_type(&`Result<{type_name}, ParseError>`);
     f.emit_begin(w);
+    let lit = escape_string(rule_display);
+    if trace {
+        w.line(&`trace_enter(p, &{lit});`);
+        w.line(&"p.trace_depth += 1;");
+    }
     if takes_min_prec {
         w.line(&`let r = {*inner_name}(p, min_prec);`);
     } else {
         w.line(&`let r = {*inner_name}(p);`);
     }
+    if trace {
+        w.line(&"p.trace_depth -= 1;");
+    }
     w.begin(&"if let Err(mut e) = r");
-    let lit = escape_string(rule_display);
     w.line(&`e.rule_stack.push({lit});`);
+    if trace {
+        w.line(&`trace_fail(p, &{lit}, &e.message);`);
+    }
     w.line(&`return Result::<{type_name}, ParseError>::Err(e);`);
     w.end();
+    if trace {
+        w.line(&`trace_ok(p, &{lit});`);
+    }
     w.line(&"return r;");
     w.end();
     w.blank();
@@ -2053,6 +2167,14 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         }
 
         let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
+        // Suppress the pick line for all-single-token rules: the chosen alt
+        // is self-evident from the lookahead token already printed on the
+        // `enter` line (e.g. `enter literal_value @9 '1'` makes
+        // `pick literal_value alt#0` pure noise). Tournament / speculative
+        // picks, and picks among alts that consume sub-structure, stay.
+        if ctx.is_trace() && !all_alts_are_single_token(&rule.alternatives) {
+            w.line(&`trace_pick(p, &{escape_string(&rule.name)}, {alt_idx});`);
+        }
         gen_alt_body(
             w,
             type_name,
@@ -3663,6 +3785,64 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
 /// iteration uses a `_plus_first` flag or, for the non-scannable case,
 /// folds the mandatory iteration into the while condition via
 /// `while plus_first || …`.
+/// When a scan-gated repetition over a single RuleRef exits because the scan
+/// failed, the next token may still legitimately start the inner rule but be
+/// malformed deeper in. Returns the call expression (`_parse_R(p)` /
+/// `_parse_R(p, mp)`) used to re-parse it for a precise error, or `null` when
+/// the repeated element is not a single RuleRef (no standalone parse fn).
+fn rep_recovery_call(rep_op: &RepeatOp) -> Option<String> {
+    if let LeafRuleCall = rep_op.body_shape {
+        if let RuleCall(r) = &rep_op.body {
+            let fn_name = if let Some(id) = r.variant_id {
+                `_parse_{r.target_snake}__follow_{id}`;
+            } else {
+                `_parse_{r.target_snake}`;
+            };
+            let call = if let Some(min_prec) = r.min_prec_arg {
+                `{fn_name}(p, {min_prec})`;
+            } else {
+                `{fn_name}(p)`;
+            };
+            return Option::<String>::Some(call);
+        }
+    }
+    return null;
+}
+
+/// Emit the `if {scan_pos} < 0 { break; }` loop-exit, augmented with
+/// error-path recovery for RuleRef inners: when the lookahead is in the
+/// inner's FIRST set (so an element plausibly starts here) but the scan
+/// failed, speculatively re-parse the inner to capture its precise deep error
+/// in `p.pending`, then restore the cursor and exit. Pure diagnostic — the
+/// parse decision (exit the loop) is unchanged, and the speculative parse runs
+/// only on this already-doomed branch.
+fn emit_rep_break_with_recovery(w: &mut CodeWriter, scan_pos: &String, rep_op: &RepeatOp, ctx: &mut GenContext, loop_first: &List<String>) {
+    let recovery = rep_recovery_call(rep_op);
+    if let Some(call) = recovery {
+        if loop_first.is_empty() {
+            // No FIRST tokens to gate the speculative re-parse on. An empty
+            // set makes `first_check_str` emit the constant `true`, so the
+            // recovery would fire on *any* lookahead and could record a
+            // spurious deeper error that hijacks the reported position. Fall
+            // back to the plain break. (Not reachable today: recovery is only
+            // emitted for a `body_scannable` `LeafRuleCall`, and a scannable
+            // RuleRef has a non-empty FIRST — this guards the invariant.)
+            w.line(&`if {scan_pos} < 0 \{ break; \}`);
+            return;
+        }
+        w.begin(&`if {scan_pos} < 0`);
+        w.begin(&`if {ctx.first_check_str(loop_first)}`);
+        w.line(&"let _rec_pos = p.pos;");
+        w.line(&`if let Err(_rec_e) = {call} \{ p.record_deeper(_rec_e); \}`);
+        w.line(&"p.pos = _rec_pos;");
+        w.end();
+        w.line(&"break;");
+        w.end();
+    } else {
+        w.line(&`if {scan_pos} < 0 \{ break; \}`);
+    }
+}
+
 fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, follow: &List<String>) {
     let inner = &rep.element;
     let inner_first = rep_op.body_first_set;
@@ -3689,7 +3869,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             // (non-variant body or no K-prefix at this position).
             emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-            w.line(&`if {scan_pos} < 0 \{ break; \}`);
+            emit_rep_break_with_recovery(w, &scan_pos, rep_op, ctx, &loop_first);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
             w.line(&`{list_field}.push({inner_field});`);
@@ -3719,7 +3899,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             // caller without a K-prefix at this position).
             emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-            w.line(&`if {scan_pos} < 0 \{ break; \}`);
+            emit_rep_break_with_recovery(w, &scan_pos, rep_op, ctx, &loop_first);
             w.end();
             w.line(&`{plus_flag} = false;`);
             let mut nc: List<[String, i32]> = [];
@@ -4984,12 +5164,12 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
     w.end();  // loop
 }
 
-fn gen_prediction_code(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &List<Alternative>, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext) {
+fn gen_prediction_code(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &List<Alternative>, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, rule_display: &String) {
     let mut nc: List<[String, i32]> = [];
-    gen_prediction_code_inner(w, node, fn_name, alts, lowered_rule, type_name, ctx, 0, &mut nc);
+    gen_prediction_code_inner(w, node, fn_name, alts, lowered_rule, type_name, ctx, 0, &mut nc, rule_display);
 }
 
-fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &List<Alternative>, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, skip: i32, name_counts: &mut List<[String, i32]>) {
+fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &List<Alternative>, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, skip: i32, name_counts: &mut List<[String, i32]>, rule_display: &String) {
     if let Leaf(idx) = node {
         if skip == 0 {
             w.line(&`return {*fn_name}_bt_{idx}(p);`);
@@ -5019,11 +5199,11 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
         let elem_matches = elements_match(&c.element, &alts[0].elements[skip]);
         if elem_matches {
             gen_element(w, &c.element, ctx, name_counts);
-            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, skip + 1, name_counts);
+            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, skip + 1, name_counts, rule_display);
         } else {
             // Element mismatch — prediction consumed a later element.
             // Don't emit the consume or increment skip; treat as skip=0 at the Leaf.
-            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, 0, name_counts);
+            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, 0, name_counts, rule_display);
         }
         return;
     }
@@ -5071,6 +5251,13 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                         let idx = sorted_indices[i];
                         w.line(&`let _sd_p_{idx} = {*fn_name}_scan_{idx}(_sd_tokens, _sd_pos);`);
                     }
+                    if ctx.is_trace() {
+                        let rlit = escape_string(rule_display);
+                        for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                            let idx = sorted_indices[i];
+                            w.line(&`trace_scan_alt(p, &{rlit}, {idx}, _sd_p_{idx});`);
+                        }
+                    }
                     w.line(&"let mut _sd_best_i: i32 = -1;");
                     w.line(&"let mut _sd_best_p: i32 = -1;");
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
@@ -5079,6 +5266,9 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                         w.line(&`_sd_best_p = _sd_p_{idx};`);
                         w.line(&`_sd_best_i = {idx};`);
                         w.end();
+                    }
+                    if ctx.is_trace() {
+                        w.line(&`trace_pick(p, &{escape_string(rule_display)}, _sd_best_i);`);
                     }
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
                         let idx = sorted_indices[i];
@@ -5099,6 +5289,9 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                         let idx = sorted_indices[i];
                         let is_last = i == sorted_indices.len() - 1;
                         if is_last {
+                            if ctx.is_trace() {
+                                w.line(&`trace_pick(p, &{escape_string(rule_display)}, {idx});`);
+                            }
                             w.line(&`return {*fn_name}_bt_{idx}(p);`);
                         } else {
                             let has_scan = alt_has_scan(&alts[idx].elements, ctx);
@@ -5106,6 +5299,9 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                             if is_full {
                                 // Full scan: success guarantees parse success.
                                 w.begin(&`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
+                                if ctx.is_trace() {
+                                    w.line(&`trace_pick(p, &{escape_string(rule_display)}, {idx});`);
+                                }
                                 w.line(&`return {*fn_name}_bt_{idx}(p);`);
                                 w.end();
                             } else if has_scan {
@@ -5113,8 +5309,14 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                                 w.begin(&`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
                                 w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
                                 w.begin(&`if let Err(_) = r_{idx}`);
+                                if ctx.is_trace() {
+                                    w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, false);`);
+                                }
                                 w.line(&"p.pos = saved;");
                                 w.else_begin(&"else");
+                                if ctx.is_trace() {
+                                    w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, true);`);
+                                }
                                 w.line(&`return r_{idx};`);
                                 w.end();
                                 w.end();
@@ -5122,8 +5324,14 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                                 // No scan: save-and-rewind speculative parse.
                                 w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
                                 w.begin(&`if let Err(_) = r_{idx}`);
+                                if ctx.is_trace() {
+                                    w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, false);`);
+                                }
                                 w.line(&"p.pos = saved;");
                                 w.else_begin(&"else");
+                                if ctx.is_trace() {
+                                    w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, true);`);
+                                }
                                 w.line(&`return r_{idx};`);
                                 w.end();
                             }
@@ -5137,12 +5345,21 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                     let idx = sorted_indices[i];
                     let is_last = i == sorted_indices.len() - 1;
                     if is_last {
+                        if ctx.is_trace() {
+                            w.line(&`trace_pick(p, &{escape_string(rule_display)}, {idx});`);
+                        }
                         w.line(&`return {*fn_name}_bt_{idx}(p);`);
                     } else {
                         w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
                         w.begin(&`if let Err(_) = r_{idx}`);
+                        if ctx.is_trace() {
+                            w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, false);`);
+                        }
                         w.line(&"p.pos = saved;");
                         w.else_begin(&"else");
+                        if ctx.is_trace() {
+                            w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, true);`);
+                        }
                         w.line(&`return r_{idx};`);
                         w.end();
                     }
@@ -5175,6 +5392,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                 ctx,
                 skip,
                 name_counts,
+                rule_display,
             );
         }
         w.end();
@@ -5225,6 +5443,12 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
             let alt_idx = non_lr_indices[group[0]];
             let alt = &rule.alternatives[alt_idx];
             let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
+            // Match the direct-dispatch path: suppress the pick line for
+            // all-single-token rules (the chosen alt is obvious from the
+            // lookahead token on the `enter` line).
+            if ctx.is_trace() && !all_alts_are_single_token(&rule.alternatives) {
+                w.line(&`trace_pick(p, &{escape_string(&rule.name)}, {alt_idx});`);
+            }
             gen_alt_body(
                 w,
                 type_name,
@@ -5247,7 +5471,7 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
                 pred_elements.push(rule.alternatives[real_idx].elements);
             }
             let tree = build_prediction(&pred_indices, &pred_elements, 5, ctx);
-            gen_prediction_code(w, &tree, fn_name, &rule.alternatives, lowered_rule, type_name, ctx);
+            gen_prediction_code(w, &tree, fn_name, &rule.alternatives, lowered_rule, type_name, ctx, &rule.name);
         }
 
         w.end();
@@ -5299,10 +5523,27 @@ fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule) {
     w.line(&"let chars: List<char> = input.chars().collect();");
     w.line(&"let mut parser = Parser::new(tokens, chars);");
     if rule_takes_min_prec(rule) {
-        w.line(&`return _parse_{header.snake_name}(&mut parser, 0);`);
+        w.line(&`let _result = _parse_{header.snake_name}(&mut parser, 0);`);
     } else {
-        w.line(&`return _parse_{header.snake_name}(&mut parser);`);
+        w.line(&`let _result = _parse_{header.snake_name}(&mut parser);`);
     }
+    // Prefer a deeper recovery error (a malformed element inside a scan-gated
+    // repetition) over the shallower "expected <closer>" error the top-level
+    // failure carries — see `emit_rep_break_with_recovery`. The comparison is
+    // `>=`, not `>`: on a span tie the recovery error names the malformed
+    // element while the top-level error names the *next* construct (e.g. a
+    // repeated `item` and a following `trailer` that share a first token both
+    // fail at the same position), and the malformed element is the more useful
+    // diagnostic. Regression fixture: tests/grammars/tie_recovery.g4.
+    w.begin(&"if let Err(_e) = _result");
+    w.begin(&"if let Some(_d) = parser.pending");
+    w.begin(&"if _d.span.start >= _e.span.start");
+    w.line(&`return Result::<{header.type_name}, ParseError>::Err(_d);`);
+    w.end();
+    w.end();
+    w.line(&`return Result::<{header.type_name}, ParseError>::Err(_e);`);
+    w.end();
+    w.line(&"return _result;");
     w.end();
     w.blank();
 }

@@ -31,6 +31,11 @@ gale gen grammar.g4
 # Write to file
 gale gen grammar.g4 --output grammar_parser.wado
 
+# Emit a parser that traces its recursive descent to stderr (debugging:
+# shows where a parse bails). Also available as `options: { trace: true }`
+# in the Kiln generator config.
+gale gen --trace grammar.g4
+
 # Run via wado (development)
 wado run package-gale/src/main.wado gen grammar.g4
 ```

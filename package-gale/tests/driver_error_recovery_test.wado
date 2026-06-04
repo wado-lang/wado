@@ -1,0 +1,47 @@
+// Regression: a malformed element inside a scan-gated repetition must report
+// the error at the malformed token, not at the following required token of
+// the enclosing construct (the "off-by-one statement" symptom).
+
+use errrec from "./grammars/error_recovery.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/error_recovery",
+        },
+    };
+
+// `item* EOF`: the malformed `let x = ;` (missing the second ID) sits at the
+// top level. The error must point at the `;` (col 8), not at EOF / the start.
+test "error position: malformed item under `item* EOF`" {
+    match errrec::parse(&"let x = ;") {
+        Ok(_) => { assert false, "expected a parse error"; }
+        Err(e) => {
+            assert e.col == 8, `expected error at col 8 (the ';'), got col {e.col}: {e.message}`;
+        }
+    }
+}
+
+// `item* '}'`: same malformed `let x = ;`, now nested in a block. The error
+// must point at the inner `;` (col 10), not at the block's `}`.
+test "error position: malformed item under `item* '}'`" {
+    match errrec::parse(&"{ let x = ; }") {
+        Ok(_) => { assert false, "expected a parse error"; }
+        Err(e) => {
+            assert e.col == 10, `expected error at col 10 (the ';'), got col {e.col}: {e.message}`;
+        }
+    }
+}
+
+// A genuinely-not-an-item token (not in FIRST(item)) should still report at
+// that token — recovery must not fire when the lookahead can't start an item.
+test "error position: non-item token stays put" {
+    match errrec::parse(&"let x = y ; +") {
+        Ok(_) => { assert false, "expected a parse error"; }
+        Err(e) => {
+            // After the valid item, `+` is not in FIRST(item); the error is the
+            // EOF expectation at `+` (col 12).
+            assert e.col == 12, `expected error at col 12 (the '+'), got col {e.col}: {e.message}`;
+        }
+    }
+}

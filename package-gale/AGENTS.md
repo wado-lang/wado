@@ -111,6 +111,63 @@ multiple files are merged the same as `gale gen`.
 wado run package-gale -- dump path/to/Grammar.g4
 ```
 
+## Tracing a parse with the `trace` option
+
+`gale dump` is static (it shows the prediction decisions the emitter
+_would_ make). To see what the generated parser _actually does_ on a
+specific input — where the recursive descent bails, and which
+alternative each multi-alt decision committed to — turn on the `trace`
+option. It logs an indented event stream to stderr (via `log_stderr`):
+
+- **`enter` / `ok` / `FAIL <rule>`** — one frame per parser-rule call.
+  The innermost `FAIL` pinpoints the real culprit instead of the shallow
+  "expected `<closer>`" error the caller surfaces.
+- **`scan <rule> alt#N: -> @end` / `fail`** — per-alternative scan length
+  the longest-match tournament weighed at a decision point.
+- **`pick <rule> alt#N`** — the alternative the tournament / direct
+  lookahead dispatch committed to (`no alt matched` when none scanned).
+  Rules whose alts are all single tokens (e.g. `literal_value`,
+  `keyword`) are not pick-traced — the choice is already obvious from the
+  lookahead token on the `enter` line.
+- **`try <rule> alt#N: ok` / `rewind`** — outcome of a speculative
+  save-and-rewind attempt (the hybrid / fallback dispatch paths).
+
+The instrumentation is strictly opt-in: with `trace` off (the default)
+the generated parser is byte-for-byte unchanged. Enable it in a driver /
+debug harness through the Kiln generator options:
+
+```wado
+use g from "./grammars/Grammar.g4"
+    with { generator: { module: "../src/generator.wado",
+                        options: { highlight: false, trace: true } } };
+```
+
+or from the CLI (`gale gen --trace Grammar.g4`). Example output for
+`X X Y` against `a : X a Y? | X` (a shared-prefix tournament):
+
+```
+enter r @0 'X'
+  enter a @0 'X'
+      scan a alt#0: -> @2    <- 'X a Y?' scans furthest, so it wins
+      scan a alt#1: -> @1
+      pick a alt#0
+    enter a @1 'X'
+        scan a alt#0: fail
+        scan a alt#1: -> @2
+        pick a alt#1
+    ok a
+  ok a
+  enter b @2 'Y'
+  ok b
+ok r
+```
+
+The `alt#N` indices match the per-rule alternative numbering shown by
+`gale dump`, so a wrong `pick` cross-references straight back to the
+prediction report. Group-internal `(a | b)` dispatch nested inside a
+single alternative is not separately traced; promote the group to its
+own rule if you need that granularity.
+
 ## Running Tests
 
 ```sh
