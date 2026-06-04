@@ -24,6 +24,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
@@ -169,7 +170,7 @@ fn body_is_list_wrapper_copy(body: &NirBlock) -> bool {
             && let NirExprKind::StructLiteral { fields, .. } = &v.kind
         {
             return fields.iter().any(|fld| {
-                fld.name == "repr"
+                fld.name == SeqField::Backing.field_name()
                     && matches!(&fld.value.kind,
                         NirExprKind::Call { func, .. }
                             if builtin_gname(func).as_deref() == Some("builtin::array_clone"))

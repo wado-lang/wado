@@ -4,6 +4,7 @@
 //! These methods are part of `FunctionTranslator`; see `translate.rs` for
 //! the struct definition and the primary translation dispatch.
 
+use crate::compiler_item::SeqField;
 use crate::module_source::ModuleSource;
 use crate::nir::{NirBinaryOp, NirExpr, NirExprKind, NirUnaryOp};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
@@ -643,10 +644,11 @@ impl FunctionTranslator<'_, '_> {
         };
 
         // StructGet field "repr" (field 0) to get raw array
-        let repr_result_ty = self.struct_field_wir_type(&list_struct_type, "repr");
+        let repr_result_ty =
+            self.struct_field_wir_type(&list_struct_type, SeqField::Backing.field_name());
         let raw_arr = WirInstr::StructGet {
             type_id: list_struct_type,
-            field_name: "repr".to_string(),
+            field_name: SeqField::Backing.field_name().to_string(),
             expr: Box::new(arr),
             result_ty: repr_result_ty,
         };
@@ -740,10 +742,11 @@ impl FunctionTranslator<'_, '_> {
                 return WirInstr::Drop(Box::new(val));
             };
 
-            let repr_result_ty = self.struct_field_wir_type(&list_struct_type, "repr");
+            let repr_result_ty =
+                self.struct_field_wir_type(&list_struct_type, SeqField::Backing.field_name());
             let raw_arr = WirInstr::StructGet {
                 type_id: list_struct_type,
-                field_name: "repr".to_string(),
+                field_name: SeqField::Backing.field_name().to_string(),
                 expr: Box::new(arr),
                 result_ty: repr_result_ty,
             };

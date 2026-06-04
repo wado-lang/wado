@@ -35,7 +35,7 @@
 //! `const_fold`, bounds-check elimination, and constant globalization act on
 //! them; `wir_build` lowers `ArrayLiteral` to `array.new_fixed`.
 
-use crate::compiler_item::CompilerItem;
+use crate::compiler_item::{CompilerItem, SeqField};
 use crate::hashmap::IndexSet;
 use crate::nir::{NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind};
 use crate::nir_package::NirPackage;
@@ -47,8 +47,8 @@ use crate::nir_visitor::{
 const ARRAY_NEW: &str = "array_new";
 
 /// The `List<T>` struct's backing-array field and length-counter field.
-const REPR_FIELD: &str = "repr";
-const USED_FIELD: &str = "used";
+const REPR_FIELD: &str = SeqField::Backing.field_name();
+const USED_FIELD: &str = SeqField::Len.field_name();
 
 pub fn collapse_array_literals(project: &mut NirPackage) -> bool {
     let push_names = resolve_array_push_names(project);

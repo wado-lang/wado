@@ -34,6 +34,7 @@
 //! the result must be bound to a Let variable that is only used as a method
 //! receiver (`self`), never passed as a regular function argument.
 
+use crate::compiler_item::SeqField;
 use crate::hashmap::IndexSet;
 use crate::nir::{
     NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind, NirUnaryOp,
@@ -736,10 +737,14 @@ fn extract_tmpl_candidate(block: &NirBlock) -> Option<TmplCandidate> {
             {
                 if struct_name == "String" {
                     // Verify the repr field contains an array_new call
-                    let repr_field = fields.iter().find(|f| f.name == "repr")?;
+                    let repr_field = fields
+                        .iter()
+                        .find(|f| f.name == SeqField::Backing.field_name())?;
                     extract_array_new_capacity(&repr_field.value)?;
                     // Verify used field is 0
-                    let used_field = fields.iter().find(|f| f.name == "used")?;
+                    let used_field = fields
+                        .iter()
+                        .find(|f| f.name == SeqField::Len.field_name())?;
                     if !matches!(
                         &used_field.value.kind,
                         NirExprKind::IntLiteral { value: 0, .. }
@@ -1169,7 +1174,7 @@ fn transform_tmpl_block(
                             span,
                         )),
                         field_index: 1,
-                        field_name: "used".to_string(),
+                        field_name: SeqField::Len.field_name().to_string(),
                     },
                     TypeTable::I32,
                     span,
