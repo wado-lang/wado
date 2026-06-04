@@ -126,15 +126,17 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(42)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
+type "functype//core:prelude/list.wado/List<wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Token>^IndexValue<i32>::index_value" = fn(ref "core:prelude//List<wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Token>", i32) -> ref "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Token";  // TypeId(43)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(44)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(44)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(45)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
 
-type "functype//wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/drive" = fn(ref "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//State") -> [i32, ref null "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Token", ref null "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Err"];  // TypeId(46)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(46)
 
-type "functype//core:prelude/slice.wado/Iter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<i32>") -> [i32, i32];  // TypeId(47)
+type "functype//wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/drive" = fn(ref "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//State") -> [i32, ref null "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Token", ref null "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Err"];  // TypeId(47)
+
+type "functype//core:prelude/slice.wado/Iter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<i32>") -> [i32, i32];  // TypeId(48)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -443,13 +445,7 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 
 fn "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/State::advance"(self) {
     let tok: ref "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Token";
-    let index: i32;
-    index = self.pos;
-    if builtin::unlikely(index >= self.tokens.used) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-        unreachable;
-    }
-    tok = builtin::array_get<ref "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Token">(self.tokens.repr, index);
+    tok = "core:prelude/list.wado/List<wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Token>^IndexValue<i32>::index_value"(self.tokens, self.pos);
     self.pos = self.pos + 1;
     return tok;
 }
@@ -457,36 +453,28 @@ fn "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Sta
 fn "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/State::match_set"(self, included) {
     let k: i32;
     let __iter_3: ref "core:prelude/slice.wado//Iter<i32>";
-    let index_7: i32;
     let repr: ref Array<i32>;
     let end: i32;
-    let index_13: i32;
-    k = index_7 = self.pos; if builtin::unlikely(index_7 >= self.tokens.used) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-        unreachable;
-    }; builtin::array_get<ref "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Token">(self.tokens.repr, index_7).kind;
+    k = "core:prelude/list.wado/List<wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Token>^IndexValue<i32>::index_value"(self.tokens, self.pos).kind;
     repr = included.repr;
     end = included.used;
     __iter_3 = struct.new "core:prelude/slice.wado//Iter<i32>" { repr: repr, index: 0, end: end };
-    b28: block {
-        l29: loop {
+    b26: block {
+        l27: loop {
             let __sroa___match_5_discriminant: i32;
             let __sroa___match_5_payload_0: i32;
             multivalue_bind [__sroa___match_5_discriminant, __sroa___match_5_payload_0] = "core:prelude/slice.wado/Iter<i32>^Iterator::next"(__iter_3);
             if __sroa___match_5_discriminant == 0 {
                 if __sroa___match_5_payload_0 == k {
                     if k == 0 {
-                        return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Token,wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Err>::Ok" { discriminant: 0, payload_0: ref.as_non_null(index_13 = self.pos; if builtin::unlikely(index_13 >= self.tokens.used) {
-                            "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-                            unreachable;
-                        }; builtin::array_get<ref "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Token">(self.tokens.repr, index_13)) };
+                        return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Token,wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Err>::Ok" { discriminant: 0, payload_0: ref.as_non_null("core:prelude/list.wado/List<wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Token>^IndexValue<i32>::index_value"(self.tokens, self.pos)) };
                     }
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Token,wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Err>::Ok" { discriminant: 0, payload_0: ref.as_non_null("wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/State::advance"(self)) };
                 }
             } else {
-                break b28;
+                break b26;
             }
-            continue l29;
+            continue l27;
         };
     };
     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Token,wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Err>::Err" { discriminant: 1, payload_0: struct.new "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Err" { msg: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no match"), used: 8 } } };
@@ -497,14 +485,14 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b34: block {
-        l35: loop {
+    b31: block {
+        l32: loop {
             if i >= n {
-                break b34;
+                break b31;
             }
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l35;
+            continue l32;
         };
     };
 }
@@ -597,6 +585,25 @@ fn "core:prelude/slice.wado/Iter<i32>^Iterator::next"(self) {
     item = builtin::array_get<i32>(self.repr, self.index);
     self.index = self.index + 1;
     return 0, item;
+}
+
+fn "core:prelude/list.wado/List<wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Token>^IndexValue<i32>::index_value"(self, index) {
+    let __v1: i32;
+    let __cond: bool;
+    let __local_5: ref "core:prelude/string.wado//String";
+    let __local_6: ref "core:prelude/format.wado//Formatter";
+    let f_10: ref "core:prelude/format.wado//Formatter";
+    let f_15: ref "core:prelude/format.wado//Formatter";
+    let f_20: ref "core:prelude/format.wado//Formatter";
+    __v1 = self.used;
+    __cond = index < __v1;
+    if __cond == 0 {
+        "core:internal/panic"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(173), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("List::index_value"), used: 17 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/list.wado"), used: 22 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_10 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(254, f_10); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+condition: index < self.used
+"), used: 30 }); "core:prelude/string.wado/String::push"(__local_5, 105); "core:prelude/string.wado/String::push"(__local_5, 110); "core:prelude/string.wado/String::push"(__local_5, 100); "core:prelude/string.wado/String::push"(__local_5, 101); "core:prelude/string.wado/String::push"(__local_5, 120); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_15 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(index, f_15); "core:prelude/string.wado/String::push"(__local_5, 10); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self.used: "), used: 11 }); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_20 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(__v1, f_20); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
+        unreachable;
+    }
+    return builtin::array_get<ref "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado//Token">(self.repr, index);
 }
 
 export fn "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/__cm_export__run" as "run"

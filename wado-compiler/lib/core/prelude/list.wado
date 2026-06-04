@@ -10,7 +10,7 @@ use { Option } from "core:prelude/types.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { Slice, Iter, RefIter, WindowsIter, ChunksIter } from "core:prelude/slice.wado";
-use { panic, i32_min, i32_max, i32_clamp } from "core:internal";
+use { i32_min, i32_max, i32_clamp } from "core:internal";
 
 #[compiler_item("list")]
 pub struct List<T> {
@@ -251,9 +251,7 @@ impl IndexValue<i32> for List<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
-        if builtin::unlikely(index >= self.used) {
-            panic("index out of bounds");
-        }
+        assert index < self.used, "index out of bounds";
         return builtin::array_get(&self.repr, index);
     }
 }
@@ -262,9 +260,7 @@ impl IndexAssign<i32> for List<T> {
     type Input = T;
 
     fn index_assign(&mut self, index: i32, value: Self::Input) with stores[value] {
-        if builtin::unlikely(index >= self.used) {
-            panic("index out of bounds");
-        }
+        assert index < self.used, "index out of bounds";
         builtin::array_set(&mut self.repr, index, value);
     }
 }
