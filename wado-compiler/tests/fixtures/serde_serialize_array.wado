@@ -89,8 +89,8 @@ impl<T: Serialize> Serialize for List<T> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         let mut seq = s.begin_seq(self.len());
         if let Ok(mut seq) = seq {
-            for let item of *self {
-                seq.element::<T>(&item);
+            for let item of self {
+                seq.element::<T>(item);
             }
             return seq.end();
         }
