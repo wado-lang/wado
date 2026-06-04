@@ -1,0 +1,105 @@
+//! Deterministic UUID v7 via effect handlers.
+//!
+//! `Uuid::v7()` draws from two effects: `Random` for the entropy bytes and
+//! `SystemClock` for the 48-bit millisecond timestamp. In production both come
+//! from the host, so every call yields a fresh value. By installing our own
+//! handlers with `with Effect => handler do { ... }`, we pin both sources and
+//! get fully reproducible output — useful for tests, golden files, and demos.
+//!
+//!     wado run example/uuid_v7.wado
+
+use { println, Stdout } from "core:cli";
+use { Uuid } from "core:uuid";
+use { Random } from "wasi:random";
+use { SystemClock, Instant } from "wasi:clocks";
+
+// A `Random` handler that replays a fixed byte stream. `resume` hands the bytes
+// back to the suspended call (`Uuid::v7`'s `get_random_bytes`), just as a
+// normal `return` would. The trailing `..` defaults any remaining operations
+// of the effect that this handler does not override.
+struct SeededRandom {
+    data: List<u8>,
+    pos: i32,
+}
+
+impl Random for SeededRandom {
+    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> {
+        let mut out: List<u8> = [];
+        let mut n = max_len as i32;
+        while n > 0 {
+            // Cycle through the seed so any request length is satisfied.
+            out.push(self.data[self.pos % self.data.len()]);
+            self.pos += 1;
+            n -= 1;
+        }
+        resume out;
+    }
+
+    ..
+}
+
+// A `SystemClock` handler pinned to a fixed instant.
+struct FixedClock {
+    instant: Instant,
+}
+
+impl SystemClock for FixedClock {
+    fn now(&self) -> Instant {
+        resume self.instant;
+    }
+
+    ..
+}
+
+fn repeat(value: u8, count: i32) -> List<u8> {
+    let mut d: List<u8> = [];
+    for let mut i = 0; i < count; i += 1 {
+        d.push(value);
+    }
+    return d;
+}
+
+// Generate a v7 UUID deterministically: a fixed clock plus a fixed entropy
+// seed. Same inputs always produce the same UUID. `with ... do { ... }` is an
+// expression, so its block value flows straight out of the function.
+fn gen_v7(seconds: i64, nanoseconds: u32, entropy: List<u8>) -> Uuid {
+    let mut rng = SeededRandom { data: entropy, pos: 0 };
+    let clock = FixedClock { instant: Instant { seconds, nanoseconds } };
+    return with Random => &mut rng, SystemClock => &clock do {
+        Uuid::v7()
+    };
+}
+
+export fn run() with Stdout {
+    let a = gen_v7(1, 0, repeat(0xAB, 16));
+    let b = gen_v7(2, 0, repeat(0xAB, 16));
+
+    println(`v7 @ 1000ms: {a}`);
+    println(`v7 @ 2000ms: {b}`);
+
+    // The timestamp lives in the most significant bytes, so a later instant
+    // always sorts after an earlier one — the defining property of v7.
+    assert a < b, "v7 values must sort by timestamp";
+    assert a.version() == 7;
+
+    // Determinism: the same handlers reproduce the same UUID byte for byte.
+    assert gen_v7(1, 0, repeat(0xAB, 16)) == a;
+    println("deterministic: re-running yields the same UUID");
+}
+
+test "v7 is fully determined by the installed handlers" {
+    // seconds = 1, nanoseconds = 0 -> 1000 ms = 0x0000_0000_03E8.
+    // Entropy is all 0xFF, so byte 6 -> 0x7F (version) and byte 8 -> 0xBF.
+    let id = gen_v7(1, 0, repeat(0xFF, 16));
+    assert id.to_string() == "00000000-03e8-7fff-bfff-ffffffffffff";
+    assert id.version() == 7;
+}
+
+test "v7 values sort by their timestamp" {
+    let early = gen_v7(1, 0, repeat(0x00, 16));
+    let late = gen_v7(2, 0, repeat(0x00, 16));
+    assert early < late;
+    assert late > early;
+    // Re-running the earlier instant reproduces the same value exactly.
+    assert gen_v7(1, 0, repeat(0x00, 16)) == early;
+}

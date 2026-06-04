@@ -1,9 +1,11 @@
 // Partial ANTLR4 grammar for Wado, consumed by Gale. Covers the syntax used
 // by every example under `example/*.wado` (declarations, statements,
 // expressions, patterns, generics, attributes, traits/impls, globals, type
-// aliases, `if let` / `while let` let-chains, `task return`, map literals, and
-// turbofish associated calls). Effects/handlers and world / interface /
-// resource / flags declarations are not yet modeled.
+// aliases, `if let` / `while let` let-chains, `task return`, map literals,
+// turbofish associated calls, and effect-handler installation via
+// `with E => h do { ... }` / `resume`). Effect *declarations* (`effect E {
+// ... }`) and world / interface / resource / flags declarations are not yet
+// modeled.
 
 grammar Wado;
 
@@ -156,6 +158,7 @@ implMember
     : 'type' IDENTIFIER '=' typeRef ';'
     | 'pub'? 'const' IDENTIFIER ':' typeRef '=' expression ';'
     | 'pub'? functionDecl
+    | '..'
     ;
 
 genericParams
@@ -208,6 +211,7 @@ statement
     : letStatement
     | returnStatement
     | taskReturnStatement
+    | resumeStatement
     | ifStatement
     | forStatement
     | whileStatement
@@ -234,6 +238,11 @@ returnStatement
 // `task return` yields from a Wasm async function.
 taskReturnStatement
     : 'task' 'return' expression? ';'
+    ;
+
+// `resume` yields a value from an effect handler back to the suspended call.
+resumeStatement
+    : 'resume' expression? ';'
     ;
 
 ifStatement
@@ -334,7 +343,20 @@ primary
     | closure
     | ifExpr
     | matchExpr
+    | withExpr
     | '(' expression ')'
+    ;
+
+// Effect-handler installation: `with Effect => handler do { ... }` (one or
+// more bindings). The `do` block is the handled scope, and the whole form is
+// an expression whose value is the block's value.
+withExpr
+    : 'with' withBinding (',' withBinding)* 'do' block
+    ;
+
+withBinding
+    : typeRef '=>' expression
+    | expression
     ;
 
 // Key-value (map) literal: `{}` or `{ key: value, ... }`. Inferred to
