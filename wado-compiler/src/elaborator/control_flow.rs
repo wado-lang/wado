@@ -425,9 +425,7 @@ struct NullBreakCollector<'a> {
 impl AstTreeProbe for NullBreakCollector<'_> {
     fn check_stmt(&mut self, stmt: &ast::Stmt) -> Step {
         match stmt {
-            ast::Stmt::Break(b)
-                if b.label.as_deref() == Some(self.label) && b.value.is_some() =>
-            {
+            ast::Stmt::Break(b) if b.label.as_deref() == Some(self.label) && b.value.is_some() => {
                 let value = b.value.as_ref().unwrap();
                 collect_unresolved_null_tails(self.ctx, value, &mut self.spans);
                 // The value was walked here; do not descend into it again
