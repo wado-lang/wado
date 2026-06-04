@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780577362783,
+  "lastUpdate": 1780601307013,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29713,6 +29713,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/33783ac00c7dc48d278391ee92ee97aa5310d12f"
         },
         "date": 1780577362264,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9659,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17191,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460509,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "08b79a7b27885ae4f951f277d9d79268500bb880",
+          "message": "Merge pull request #1289 from wado-lang/claude/body-globalization-gate-refactor-yF8mj\n\nrefactor(optimizer): unify NIR traversals behind NirRefVisitor; harden const-globalization",
+          "timestamp": "2026-06-05T04:14:53+09:00",
+          "tree_id": "6cd40a8d4b98358580959256e2554c6f418225ee",
+          "url": "https://github.com/wado-lang/wado/commit/08b79a7b27885ae4f951f277d9d79268500bb880"
+        },
+        "date": 1780601306746,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
