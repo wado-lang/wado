@@ -875,7 +875,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None
         };
         let expr = self.resolve_expr(&unary.expr, ctx, inner_expected);
-        let op = util::convert_unary_op(unary.op);
 
         // Track address-taken locals for &x and &mut x
         if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef)
@@ -984,63 +983,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Constant folding: fold -literal into a negative literal
-        if unary.op == UnaryOp::Neg {
-            match &expr.kind {
-                TirExprKind::IntLiteral { value, repr } => {
-                    // Fold -N into a negative literal
-                    // Use wrapping negation to handle edge cases like -i64::MIN
-                    // Store as u64 (two's complement representation)
-                    let neg_value = (*value as i64).wrapping_neg().cast_unsigned();
-                    return TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: neg_value,
-                            repr: format!("-{repr}"),
-                        },
-                        expr.type_id,
-                        unary.span,
-                    );
-                }
-                TirExprKind::FloatLiteral { value, repr } => {
-                    // Fold -N.M into a negative float literal
-                    return TirExpr::new(
-                        TirExprKind::FloatLiteral {
-                            value: -value,
-                            repr: format!("-{repr}"),
-                        },
-                        expr.type_id,
-                        unary.span,
-                    );
-                }
-                // Handle -(N as T) -> (-N) as T for integer casts
-                TirExprKind::Cast {
-                    expr: inner,
-                    target_type,
-                } => {
-                    if let TirExprKind::IntLiteral { value, repr } = &inner.kind {
-                        let neg_value = (*value as i64).wrapping_neg().cast_unsigned();
-                        let neg_literal = TirExpr::new(
-                            TirExprKind::IntLiteral {
-                                value: neg_value,
-                                repr: format!("-{repr}"),
-                            },
-                            inner.type_id,
-                            unary.span,
-                        );
-                        return TirExpr::new(
-                            TirExprKind::Cast {
-                                expr: Box::new(neg_literal),
-                                target_type: *target_type,
-                            },
-                            *target_type,
-                            unary.span,
-                        );
-                    }
-                }
-                _ => {}
-            }
-        }
-
         let type_id = match unary.op {
             UnaryOp::Not => TypeTable::BOOL,
             UnaryOp::Ref => self.tysys.type_table.borrow_mut().make_ref(expr.type_id),
@@ -1076,20 +1018,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => expr.type_id,
         };
 
-        // NOTE (Stage 7-B): `resolve_unary` still builds its `Unary` TIR.
-        // The `*ptr` / `&x` / `&mut x` shapes are structurally inspected by
-        // `assign_to_target`'s l-value validation and by receiver
-        // adjustment, so the resolved `kind` must stay real until those
-        // consumers read the validity from the AST instead. Converting this
-        // to a placeholder broke `*x = v` ("expression is not assignable").
-        TirExpr::new(
-            TirExprKind::Unary {
-                op,
-                expr: Box::new(expr),
-            },
-            type_id,
-            unary.span,
-        )
+        // Stage 7-B: reify rebuilds the `Unary` (`*ptr` / `&x` / `&mut x` /
+        // `!b`) and folds `-literal` from the AST; the `&mut`-field
+        // diagnostic and the deref/ref type computation above are the
+        // record-only work. `assign_to_target`'s deref l-value check now
+        // reads the operand type from `expression_types` instead of this
+        // resolved `kind`.
+        placeholder(type_id, unary.span)
     }
 
     /// Resolve an assignment expression.
@@ -1155,6 +1090,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::GenericInstance { name, module_source, .. }
                 if TypeTable::is_tuple_type(name, module_source)
         )
+    }
+
+    /// Whether `*operand = v` is a valid l-value: it is, unless `operand`
+    /// is an immutable reference (`&T`), in which case the write is through
+    /// an immutable reference and is diagnosed here. AST + recorded-fact
+    /// replacement for reading the resolved `Unary { Deref, expr }` kind
+    /// (Stage 7-B made `resolve_unary` a placeholder): `operand`'s type
+    /// rides on `expression_types`. Mirrors the old check, which inspected
+    /// the *operand* type, so `*5 = v` (operand `5: i32`, already diagnosed
+    /// by `resolve_unary`) is not re-flagged here.
+    fn deref_target_assignable(&mut self, unary: &ast::UnaryExpr, span: Span) -> bool {
+        let Some(operand_type) = self
+            .sem
+            .types
+            .expression_types
+            .get(&self.ann_key(unary.expr.id()))
+            .copied()
+        else {
+            // ERROR-typed operand (not recorded): lenient, like the old
+            // `get(ERROR)` arm that did not match `Ref`.
+            return true;
+        };
+        let is_immutable_ref = matches!(
+            self.tysys.type_table.borrow().get(operand_type),
+            ResolvedType::Ref(_)
+        );
+        if is_immutable_ref {
+            let _ = self.logger.error(TypeError::CannotAssign {
+                message: "cannot assign through immutable reference".to_string(),
+                span,
+            });
+            false
+        } else {
+            true
+        }
     }
 
     /// Build an assignment TIR for `target = value`, where the value may
@@ -1358,11 +1328,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `IndexValue` trait access (not a place), or an unindexable
             // receiver (already diagnosed by `resolve_index`).
             ast::Expr::Index(index_expr) => self.index_target_assignable(index_expr),
+            // `*x = v`: valid only through a mutable reference. The operand's
+            // type rides on `expression_types` now that `resolve_unary`
+            // returns a placeholder.
+            ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => {
+                self.deref_target_assignable(u, target_ast.span())
+            }
+            // `Local` (from `resolve_ident`) and a `&mut`-captured ident
+            // (which `resolve_ident` lowers to a real `Unary { Deref,
+            // Capture }`) still build real TIR, so classify them from the
+            // resolved `target.kind`.
             _ => match &target.kind {
                 TirExprKind::Local { .. } => true,
                 TirExprKind::FieldAccess { .. } => true,
                 TirExprKind::Index { .. } => true,
-                // Dereference is a valid l-value only through mutable reference
                 TirExprKind::Unary {
                     op: TirUnaryOp::Deref,
                     expr,
