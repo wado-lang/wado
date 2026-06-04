@@ -1,0 +1,16 @@
+// A user-local generic container, defined in a *separate* module from the
+// fixtures that write `impl Holder<u8>` etc. Concrete-instantiation inherent
+// impls are allowed only within the type's own package, so these tests put the
+// type here and the concrete impl in the importing fixture — exercising
+// cross-module concrete instantiation without reaching for a foreign (stdlib)
+// type like `List<u8>`.
+
+pub struct Holder<T> {
+    pub value: T,
+}
+
+impl Holder<T> {
+    pub fn new(value: T) -> Holder<T> {
+        return Holder { value };
+    }
+}
