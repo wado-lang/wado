@@ -901,7 +901,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // creates a disconnected Box — mutations don't propagate back to the struct.
         // For GC reference types (struct, String, List, etc.), struct.get returns
         // the shared reference, so &mut field works correctly.
-        if unary.op == UnaryOp::MutRef && matches!(&expr.kind, TirExprKind::FieldAccess { .. }) {
+        // Detect the field-access shape from the AST (Stage 7-B:
+        // `resolve_field_access` returns a placeholder, so its resolved
+        // `kind` is no longer `FieldAccess`); the operand's `type_id` still
+        // carries the field type via the placeholder.
+        if unary.op == UnaryOp::MutRef && matches!(&unary.expr, ast::Expr::FieldAccess(_)) {
             let field_type = self.tysys.type_table.borrow().get(expr.type_id).clone();
             let base_type = self
                 .tysys
@@ -1102,6 +1106,57 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
+    /// Whether an `Index` assignment target reaching `assign_to_target`'s
+    /// general path is an assignable place. The IndexAssign path above
+    /// already returned for index-assignable receivers, so AST + recorded
+    /// facts replace reading the resolved `target.kind`:
+    ///   - a read-only `Index` trait access (recorded `operator_dispatch`
+    ///     with `needs_deref`) lowers to `*recv.index(i)` over `&Output`, so
+    ///     a write would go through an immutable reference (diagnosed here,
+    ///     mirroring the old `Unary { Deref, expr: Ref(_) }` arm);
+    ///   - an `IndexValue` access is a by-value method call — not a place;
+    ///   - with no recorded read dispatch the only assignable shape is a
+    ///     tuple index (`t[0]`, lowered to a `FieldAccess`); an unindexable
+    ///     receiver was already diagnosed by `resolve_index`.
+    fn index_target_assignable(&mut self, index_expr: &ast::IndexExpr) -> bool {
+        let needs_deref = self
+            .sem
+            .types
+            .operator_dispatch
+            .get(&self.ann_key(index_expr.id))
+            .map(|d| d.needs_deref);
+        if let Some(needs_deref) = needs_deref {
+            if needs_deref {
+                let _ = self.logger.error(TypeError::CannotAssign {
+                    message: "cannot assign through immutable reference".to_string(),
+                    span: index_expr.span,
+                });
+            }
+            return false;
+        }
+        let Some(recv_type) = self
+            .sem
+            .types
+            .expression_types
+            .get(&self.ann_key(index_expr.expr.id()))
+            .copied()
+        else {
+            return false;
+        };
+        let table = self.tysys.type_table.borrow();
+        // Mirror `resolve_index`'s one-level reference peel before the tuple
+        // check.
+        let base = match table.get(recv_type) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => recv_type,
+        };
+        matches!(
+            table.get(base),
+            ResolvedType::GenericInstance { name, module_source, .. }
+                if TypeTable::is_tuple_type(name, module_source)
+        )
+    }
+
     /// Build an assignment TIR for `target = value`, where the value may
     /// be a user-AST expression or an already-resolved [`TirExpr`].
     ///
@@ -1287,29 +1342,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Validate that the target is a valid l-value
-        let is_valid_lvalue = match &target.kind {
-            TirExprKind::Local { .. } => true,
-            TirExprKind::FieldAccess { .. } => true,
-            TirExprKind::Index { .. } => true,
-            // Dereference is a valid l-value only through mutable reference
-            TirExprKind::Unary {
-                op: TirUnaryOp::Deref,
-                expr,
-                ..
-            } => {
-                let inner_type = self.tysys.type_table.borrow().get(expr.type_id).clone();
-                if matches!(inner_type, ResolvedType::Ref(_)) {
-                    let _ = self.logger.error(TypeError::CannotAssign {
-                        message: "cannot assign through immutable reference".to_string(),
-                        span: target_ast.span(),
-                    });
-                    false
-                } else {
-                    true
+        // Validate that the target is a valid l-value. `FieldAccess` and
+        // `Index` targets are classified from the AST + recorded facts
+        // (Stage 7-B made `resolve_field_access` / `resolve_index` return
+        // placeholders); `Local` (from `resolve_ident`) and `Unary { Deref }`
+        // (from `resolve_unary`) still build real TIR, so they are read from
+        // the resolved `target.kind`.
+        let is_valid_lvalue = match target_ast {
+            // A field access is always a place (the resolved kind was
+            // `FieldAccess`, accepted unconditionally below).
+            ast::Expr::FieldAccess(_) => true,
+            // The IndexAssign path at the top of `assign_to_target` already
+            // returned for index-assignable receivers, so an `Index` target
+            // here is a tuple index (a place), a read-only `Index` /
+            // `IndexValue` trait access (not a place), or an unindexable
+            // receiver (already diagnosed by `resolve_index`).
+            ast::Expr::Index(index_expr) => self.index_target_assignable(index_expr),
+            _ => match &target.kind {
+                TirExprKind::Local { .. } => true,
+                TirExprKind::FieldAccess { .. } => true,
+                TirExprKind::Index { .. } => true,
+                // Dereference is a valid l-value only through mutable reference
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Deref,
+                    expr,
+                    ..
+                } => {
+                    let inner_type = self.tysys.type_table.borrow().get(expr.type_id).clone();
+                    if matches!(inner_type, ResolvedType::Ref(_)) {
+                        let _ = self.logger.error(TypeError::CannotAssign {
+                            message: "cannot assign through immutable reference".to_string(),
+                            span: target_ast.span(),
+                        });
+                        false
+                    } else {
+                        true
+                    }
                 }
-            }
-            _ => false,
+                _ => false,
+            },
         };
 
         if !is_valid_lvalue {

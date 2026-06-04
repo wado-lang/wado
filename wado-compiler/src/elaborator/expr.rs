@@ -1325,29 +1325,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // definition's AstId in the struct declaration.
         self.record_field_reference(expr.type_id, &field_access.field, field_access.field_id);
 
-        // Look up field type from struct type
-        let (field_index, field_type) =
+        // Look up field type from struct type (also emits the field-not-found
+        // / tuple-index-out-of-bounds diagnostics). Reify re-derives the
+        // `field_index` from the receiver type, so only the result type is
+        // needed here.
+        let (_field_index, field_type) =
             self.lookup_field_type(expr.type_id, &field_access.field, field_access.span);
 
         // Check field visibility: non-pub fields cannot be accessed from other modules
         self.check_field_visibility(expr.type_id, &field_access.field, field_access.span);
 
-        // NOTE (Stage 7-B): `resolve_field_access` still builds its
-        // `FieldAccess` TIR. `assign_to_target`'s l-value validation
-        // structurally inspects the resolved target's `kind` to decide
-        // assignability (`self.field = v`), so the resolved `kind` must stay
-        // real until that consumer reads validity from the AST + recorded
-        // facts instead. Converting this to a placeholder broke
-        // `self.field = v` ("expression is not assignable").
-        TirExpr::new(
-            TirExprKind::FieldAccess {
-                expr: Box::new(expr),
-                field_index,
-                field_name: field_access.field.clone(),
-            },
-            field_type,
-            field_access.span,
-        )
+        placeholder(field_type, field_access.span)
     }
 
     /// Record a use→def reference for a struct field access.
@@ -1636,15 +1624,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 if idx < elements.len() {
                     let field_type = elements[idx];
-                    return TirExpr::new(
-                        TirExprKind::FieldAccess {
-                            expr: Box::new(expr),
-                            field_index: idx as u32,
-                            field_name: idx.to_string(),
-                        },
-                        field_type,
-                        index.span,
-                    );
+                    return placeholder(field_type, index.span);
                 } else {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
                         message: format!(
@@ -1654,8 +1634,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ),
                         span: index.span,
                     });
-                    // Return a placeholder expression with unknown type
-                    return TirExpr::new(TirExprKind::Unit, TypeTable::UNKNOWN, index.span);
+                    return placeholder(TypeTable::UNKNOWN, index.span);
                 }
             }
             // Non-constant index on tuple
@@ -1663,7 +1642,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 message: "tuple index must be a constant integer".to_string(),
                 span: index.span,
             });
-            return TirExpr::new(TirExprKind::Unit, TypeTable::UNKNOWN, index.span);
+            return placeholder(TypeTable::UNKNOWN, index.span);
         }
 
         // For List and custom types, look for Index or IndexValue trait implementation
@@ -1701,14 +1680,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .or_else(|| self.find_index_trait_impl(&lookup_name, lookup_type_id, index_type));
             if let Some(trait_info) = index_trait_info {
                 // Generate: *expr.index(index_expr)
-                // First, create the method call to .index(index_expr)
-                let receiver = self.adjust_receiver_for_self_kind(
-                    expr,
-                    trait_info.self_kind,
-                    false,
-                    index.span,
-                );
-
                 let mangled_method_name =
                     MethodName::format_local(&lookup_name, Some(&trait_info.trait_name), "index");
 
@@ -1739,7 +1710,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.record_operator_dispatch(
                     index.id,
                     super::sem::types::OperatorDispatch {
-                        function_ref: func.clone(),
+                        function_ref: func,
                         self_kind: trait_info.self_kind,
                         arg_ref_wraps: vec![false],
                         return_type: ref_output_type,
@@ -1747,24 +1718,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     },
                 );
 
-                let method_call = Self::build_tir_method_call(
-                    receiver,
-                    func,
-                    vec![],
-                    vec![CallArg::new(index_expr, false)],
-                    ref_output_type,
-                    index.span,
-                );
-
-                // Dereference the result: *expr.index(...)
-                return TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Deref,
-                        expr: Box::new(method_call),
-                    },
-                    trait_info.output_type,
-                    index.span,
-                );
+                return placeholder(trait_info.output_type, index.span);
             }
 
             // Fallback: try IndexValue trait (returns value by copy)
@@ -1775,13 +1729,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
             if let Some(trait_info) = index_value_info {
                 // Generate: expr.index_value(index_expr)
-                let receiver = self.adjust_receiver_for_self_kind(
-                    expr,
-                    trait_info.self_kind,
-                    false,
-                    index.span,
-                );
-
                 let mangled_method_name = MethodName::format_local(
                     &lookup_name,
                     Some(&trait_info.trait_name),
@@ -1809,7 +1756,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.record_operator_dispatch(
                     index.id,
                     super::sem::types::OperatorDispatch {
-                        function_ref: func.clone(),
+                        function_ref: func,
                         self_kind: trait_info.self_kind,
                         arg_ref_wraps: vec![false],
                         return_type: trait_info.output_type,
@@ -1817,14 +1764,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     },
                 );
 
-                return Self::build_tir_method_call(
-                    receiver,
-                    func,
-                    vec![],
-                    vec![CallArg::new(index_expr, false)],
-                    trait_info.output_type,
-                    index.span,
-                );
+                return placeholder(trait_info.output_type, index.span);
             }
         }
 
@@ -1835,7 +1775,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             trait_name: "Index or IndexValue".to_string(),
             span: index.span,
         });
-        TirExpr::new(TirExprKind::Unit, TypeTable::UNKNOWN, index.span)
+        placeholder(TypeTable::UNKNOWN, index.span)
     }
 
     /// Extract the result type from a block (the type of its last
