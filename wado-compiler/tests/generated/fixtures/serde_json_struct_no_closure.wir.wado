@@ -940,7 +940,8 @@ fn "core:json/core/json/from_string<wado-compiler/tests/fixtures/serde_json_stru
         return 1, ref.null none, __qm_e;
     });
     "core:json/JsonDeserializer::skip_whitespace"(de);
-    if de.pos < de.input.used {
+    if builtin::unlikely(de.pos < de.input.used) {
+        cold_path;
         return 1, ref.null none, ref.as_non_null(offset = builtin::i64_extend_i32_s(de.pos); struct.new "core:serde//DeserializeError" { kind: 7, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("trailing data after value"), used: 25 }, offset: offset });
     }
     return 0, v, ref.null none;
@@ -1301,11 +1302,13 @@ fn "core:json/JsonDeserializer::expect_char"(self, c) {
     let offset_13: i64;
     "core:json/JsonDeserializer::skip_whitespace"(self);
     if builtin::unlikely(self.pos >= self.input.used) {
+        cold_path;
         return ref.as_non_null(offset_6 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_6 });
     }
     index = self.pos;
     b = builtin::array_get_u8(self.input.repr, index);
     if builtin::unlikely(b != c) {
+        cold_path;
         return ref.as_non_null(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(53), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected '"), used: 10 }); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/char^Display::fmt"(struct.new "core:prelude/types.wado//Box<char>" { value: c & 255 }, __local_4); "core:prelude/string.wado/String::push_str"(__local_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("', found '"), used: 10 }); __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; "core:prelude/primitive.wado/char^Display::fmt"(struct.new "core:prelude/types.wado//Box<char>" { value: b & 255 }, __local_4); "core:prelude/string.wado/String::push"(__local_3, 39); offset_13 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 6, message: __local_3, offset: offset_13 });
     }
     self.pos = self.pos + 1;
@@ -1351,9 +1354,11 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
     "core:json/JsonDeserializer::skip_whitespace"(self);
     input_len = self.input.used;
     if builtin::unlikely(self.pos >= input_len) {
+        cold_path;
         return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(offset_18 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_18 }) };
     }
     if builtin::unlikely(index_20 = self.pos; builtin::array_get_u8(self.input.repr, index_20) != 34) {
+        cold_path;
         return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(msg_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected string"), used: 15 }; offset_22 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 0, message: msg_21, offset: offset_22 }) };
     }
     self.pos = self.pos + 1;
@@ -1425,7 +1430,8 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
             if chunk_len > 0 {
                 "core:prelude/string.wado/String::push_str_range_unchecked"(result_7, self.input, chunk_start, __hfs_pos_50);
             }
-            if __hfs_pos_50 >= self.input.used {
+            if builtin::unlikely(__hfs_pos_50 >= self.input.used) {
+                cold_path;
                 __hfs_call_51 = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(offset_33 = builtin::i64_extend_i32_s(__hfs_pos_50); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_33 }) };
                 self.pos = __hfs_pos_50;
                 return __hfs_call_51;
@@ -1439,7 +1445,8 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
                 return __hfs_call_51;
             }
             __hfs_pos_50 = __hfs_pos_50 + 1;
-            if __hfs_pos_50 >= self.input.used {
+            if builtin::unlikely(__hfs_pos_50 >= self.input.used) {
+                cold_path;
                 __hfs_call_51 = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(offset_37 = builtin::i64_extend_i32_s(__hfs_pos_50); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_37 }) };
                 self.pos = __hfs_pos_50;
                 return __hfs_call_51;
@@ -1461,7 +1468,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
                 "core:prelude/string.wado/String::push"(result_7, 8);
             } else if esc == 102 {
                 "core:prelude/string.wado/String::push"(result_7, 12);
-            } else if esc == 117 {
+            } else if builtin::likely(esc == 117) {
                 self.pos = __hfs_pos_50;
                 "core:prelude/string.wado/String::push"(result_7, let __match_scrut_1: ref "core:prelude/types.wado//Result<char,core:serde/DeserializeError>"; __match_scrut_1 = "core:json/JsonDeserializer::read_unicode_escape"(self); (if ref.test "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Ok"(__match_scrut_1) -> char {
                     __qm_v = ref.cast "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Ok"(__match_scrut_1).payload_0;
@@ -1472,6 +1479,7 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
                 }));
                 __hfs_pos_50 = self.pos;
             } else {
+                cold_path;
                 __hfs_call_51 = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__local_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid escape '\\"), used: 17 }); __local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_15 }; "core:prelude/primitive.wado/char^Display::fmt"(struct.new "core:prelude/types.wado//Box<char>" { value: esc }, __local_16); "core:prelude/string.wado/String::push"(__local_15, 39); offset_43 = builtin::i64_extend_i32_s(__hfs_pos_50); struct.new "core:serde//DeserializeError" { kind: 6, message: __local_15, offset: offset_43 }) };
                 self.pos = __hfs_pos_50;
                 return __hfs_call_51;
@@ -1499,7 +1507,8 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {
     let _licm_repr_16: ref Array<u8>;
     self.pos = self.pos + 1;
     start = self.pos;
-    if (self.pos + 4) > self.input.used {
+    if builtin::unlikely((self.pos + 4) > self.input.used) {
+        cold_path;
         return struct.new "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(offset_7 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_7 }) };
     }
     code = 0;
@@ -1513,7 +1522,8 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {
                 break b182;
             }
             c_4 = index = _licm_pos_14 + i; builtin::array_get_u8(_licm_repr_16, index) & 255;
-            if "core:prelude/primitive.wado/char::is_hexdigit"(c_4) == 0 {
+            if builtin::unlikely("core:prelude/primitive.wado/char::is_hexdigit"(c_4) == 0) {
+                cold_path;
                 return struct.new "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(msg_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid unicode escape"), used: 22 }; offset_11 = builtin::i64_extend_i32_s(start); struct.new "core:serde//DeserializeError" { kind: 6, message: msg_10, offset: offset_11 }) };
             }
             code = (code * 16) + "core:prelude/primitive.wado/char::hex_digit_value"(c_4);
@@ -1522,9 +1532,10 @@ fn "core:json/JsonDeserializer::read_unicode_escape"(self) {
         };
     };
     self.pos = self.pos + 3;
-    return let __sroa___match_scrut_0_discriminant: i32, let __sroa___match_scrut_0_payload_0: char, multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_payload_0] = "core:prelude/primitive.wado/char::from_u32"(code), (if __sroa___match_scrut_0_discriminant == 0 -> ref "core:prelude/types.wado//Result<char,core:serde/DeserializeError>" {
+    return let __sroa___match_scrut_0_discriminant: i32, let __sroa___match_scrut_0_payload_0: char, multivalue_bind [__sroa___match_scrut_0_discriminant, __sroa___match_scrut_0_payload_0] = "core:prelude/primitive.wado/char::from_u32"(code), (if builtin::likely(__sroa___match_scrut_0_discriminant == 0) -> ref "core:prelude/types.wado//Result<char,core:serde/DeserializeError>" {
         struct.new "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: __sroa___match_scrut_0_payload_0 };
     } else {
+        cold_path;
         struct.new "core:prelude/types.wado//Result<char,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(msg_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid unicode codepoint"), used: 25 }; offset_13 = builtin::i64_extend_i32_s(start); struct.new "core:serde//DeserializeError" { kind: 6, message: msg_12, offset: offset_13 }) };
     });
 }
@@ -1701,6 +1712,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
     "core:json/JsonDeserializer::skip_whitespace"(self);
     start = builtin::i64_extend_i32_s(self.pos);
     if builtin::unlikely(self.pos >= self.input.used) {
+        cold_path;
         return 1, 0, struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: start };
     }
     neg = 0;
@@ -1709,6 +1721,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
         self.pos = self.pos + 1;
     }
     if builtin::unlikely(self.pos >= self.input.used) {
+        cold_path;
         return 1, 0, ref.as_non_null(offset_24 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_24 });
     }
     index_26 = self.pos;
@@ -1718,6 +1731,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
     } else {
         first > 57;
     })) {
+        cold_path;
         return 1, 0, ref.as_non_null(msg_27 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected number"), used: 15 }; offset_28 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 0, message: msg_27, offset: offset_28 });
     }
     result = first - 48;
@@ -1832,15 +1846,17 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
                 }
                 v = "core:prelude/fpfmt.wado/parse"(d, exp - frac);
                 v_signed = select f64(neg, builtin::f64_neg(v), v);
-                if v_signed != builtin::f64_floor(v_signed) {
+                if builtin::unlikely(v_signed != builtin::f64_floor(v_signed)) {
+                    cold_path;
                     self.pos = __hfs_pos_54;
                     return 1, 0, ref.as_non_null(msg_45 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer, got float"), used: 27 }; struct.new "core:serde//DeserializeError" { kind: 0, message: msg_45, offset: start });
                 }
-                if (if v_signed < -2147483648 -> i32 {
+                if builtin::unlikely((if v_signed < -2147483648 -> i32 {
                     1;
                 } else {
                     v_signed > 2147483647;
-                }) {
+                })) {
+                    cold_path;
                     self.pos = __hfs_pos_54;
                     return 1, 0, ref.as_non_null(msg_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i32"), used: 26 }; struct.new "core:serde//DeserializeError" { kind: 5, message: msg_47, offset: start });
                 }
@@ -1889,7 +1905,8 @@ fn "core:json/JsonDeserializer::skip_string"(self) {
             }
             if b == 92 {
                 __hfs_pos_14 = __hfs_pos_14 + 1;
-                if __hfs_pos_14 >= _licm_used_12 {
+                if builtin::unlikely(__hfs_pos_14 >= _licm_used_12) {
+                    cold_path;
                     self.pos = __hfs_pos_14;
                     return ref.as_non_null(offset_7 = builtin::i64_extend_i32_s(__hfs_pos_14); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_7 });
                 }
@@ -2019,6 +2036,7 @@ fn "core:json/JsonDeserializer::skip_value"(self) {
     let offset_45: i64;
     "core:json/JsonDeserializer::skip_whitespace"(self);
     if builtin::unlikely(self.pos >= self.input.used) {
+        cold_path;
         return ref.as_non_null(offset_18 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_18 });
     }
     b = index_20 = self.pos; builtin::array_get_u8(self.input.repr, index_20) & 255;
@@ -2050,7 +2068,8 @@ fn "core:json/JsonDeserializer::skip_value"(self) {
                     return __qm_e_3;
                 }
                 "core:json/JsonDeserializer::skip_whitespace"(self);
-                if self.pos >= self.input.used {
+                if builtin::unlikely(self.pos >= self.input.used) {
+                    cold_path;
                     return ref.as_non_null(offset_25 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_25 });
                 }
                 index_27 = self.pos;
@@ -2059,9 +2078,10 @@ fn "core:json/JsonDeserializer::skip_value"(self) {
                     self.pos = self.pos + 1;
                     return ref.null none;
                 }
-                if c_4 == 44 {
+                if builtin::likely(c_4 == 44) {
                     self.pos = self.pos + 1;
                 } else {
+                    cold_path;
                     return ref.as_non_null(msg_28 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected ',' or ']'"), used: 19 }; offset_29 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 6, message: msg_28, offset: offset_29 });
                 }
                 continue l275;
@@ -2081,11 +2101,12 @@ fn "core:json/JsonDeserializer::skip_value"(self) {
         block {
             l284: loop {
                 "core:json/JsonDeserializer::skip_whitespace"(self);
-                if (if self.pos >= self.input.used -> i32 {
+                if builtin::unlikely((if self.pos >= self.input.used -> i32 {
                     1;
                 } else {
                     index_35 = self.pos; builtin::array_get_u8(self.input.repr, index_35) != 34;
-                }) {
+                })) {
+                    cold_path;
                     return ref.as_non_null(msg_36 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected string key"), used: 19 }; offset_37 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 6, message: msg_36, offset: offset_37 });
                 }
                 __local_14 = "core:json/JsonDeserializer::skip_string"(self);
@@ -2107,7 +2128,8 @@ fn "core:json/JsonDeserializer::skip_value"(self) {
                     return __qm_e_10;
                 }
                 "core:json/JsonDeserializer::skip_whitespace"(self);
-                if self.pos >= self.input.used {
+                if builtin::unlikely(self.pos >= self.input.used) {
+                    cold_path;
                     return ref.as_non_null(offset_39 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_39 });
                 }
                 index_41 = self.pos;
@@ -2116,9 +2138,10 @@ fn "core:json/JsonDeserializer::skip_value"(self) {
                     self.pos = self.pos + 1;
                     return ref.null none;
                 }
-                if c_11 == 44 {
+                if builtin::likely(c_11 == 44) {
                     self.pos = self.pos + 1;
                 } else {
+                    cold_path;
                     return ref.as_non_null(msg_42 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected ',' or '}'"), used: 19 }; offset_43 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 6, message: msg_42, offset: offset_43 });
                 }
                 continue l284;
@@ -2127,14 +2150,15 @@ fn "core:json/JsonDeserializer::skip_value"(self) {
     } else if b == 45 {
         "core:json/JsonDeserializer::skip_number"(self);
         return ref.null none;
-    } else if (if b >=u 48 -> i32 {
+    } else if builtin::likely((if b >=u 48 -> i32 {
         b <=u 57;
     } else {
         0;
-    }) {
+    })) {
         "core:json/JsonDeserializer::skip_number"(self);
         return ref.null none;
     } else {
+        cold_path;
         return ref.as_non_null(msg_44 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected character in JSON value"), used: 34 }; offset_45 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 6, message: msg_44, offset: offset_45 });
     }
 }
@@ -2461,6 +2485,7 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field<wado-compiler/tests
     let __hfs_pos_41: i32;
     "core:json/JsonDeserializer::skip_whitespace"(self.de);
     if builtin::unlikely(self.de.pos >= self.de.input.used) {
+        cold_path;
         return 1, ref.null none, ref.as_non_null(offset_20 = builtin::i64_extend_i32_s(self.de.pos); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_20 });
     }
     index_22 = self.de.pos;
@@ -2470,6 +2495,7 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field<wado-compiler/tests
     }
     if self.first == 0 {
         if builtin::unlikely(b_1 != 44) {
+            cold_path;
             return 1, ref.null none, ref.as_non_null(msg_23 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected ',' or '}'"), used: 19 }; offset_24 = builtin::i64_extend_i32_s(self.de.pos); struct.new "core:serde//DeserializeError" { kind: 6, message: msg_23, offset: offset_24 });
         }
         self.de.pos = self.de.pos + 1;
@@ -2481,6 +2507,7 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field<wado-compiler/tests
     } else {
         index_27 = self.de.pos; builtin::array_get_u8(self.de.input.repr, index_27) != 34;
     })) {
+        cold_path;
         return 1, ref.null none, ref.as_non_null(msg_28 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected string key"), used: 19 }; offset_29 = builtin::i64_extend_i32_s(self.de.pos); struct.new "core:serde//DeserializeError" { kind: 0, message: msg_28, offset: offset_29 });
     }
     self.de.pos = self.de.pos + 1;

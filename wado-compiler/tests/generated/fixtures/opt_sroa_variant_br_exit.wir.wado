@@ -1245,7 +1245,8 @@ fn "core:json/core/json/from_string<f32>"(input) {
         return 1, 0_f32, __qm_e_3;
     });
     "core:json/JsonDeserializer::skip_whitespace"(de);
-    if de.pos < de.input.used {
+    if builtin::unlikely(de.pos < de.input.used) {
+        cold_path;
         return 1, 0_f32, ref.as_non_null(offset = builtin::i64_extend_i32_s(de.pos); struct.new "core:serde//DeserializeError" { kind: 7, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("trailing data after value"), used: 25 }, offset: offset });
     }
     return 0, v_4, ref.null none;
@@ -1556,6 +1557,7 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {
     "core:json/JsonDeserializer::skip_whitespace"(self);
     start = builtin::i64_extend_i32_s(self.pos);
     if builtin::unlikely(self.pos >= self.input.used) {
+        cold_path;
         return struct.new "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: start } };
     }
     neg = 0;
@@ -1564,6 +1566,7 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {
         self.pos = self.pos + 1;
     }
     if builtin::unlikely(self.pos >= self.input.used) {
+        cold_path;
         return struct.new "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(offset_28 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_28 }) };
     }
     index_30 = self.pos;
@@ -1573,6 +1576,7 @@ fn "core:json/JsonDeserializer::parse_f64_direct"(self) {
     } else {
         first > 57;
     })) {
+        cold_path;
         return struct.new "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(msg = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected number"), used: 15 }; offset_32 = builtin::i64_extend_i32_s(self.pos); struct.new "core:serde//DeserializeError" { kind: 0, message: msg, offset: offset_32 }) };
     }
     d = builtin::i64_extend_i32_s(first - 48);
