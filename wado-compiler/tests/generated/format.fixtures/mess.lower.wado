@@ -359,6 +359,10 @@ pub struct "Box<Fn<1,bool>>" {
     value: fn mut(I::Item) -> bool,
 }
 
+pub struct "Box<Fn<2,Ordering>>" {
+    value: fn mut(&T, &T) -> Ordering,
+}
+
 pub struct "Box<Fn<1,()>>" {
     value: fn mut(&T) -> (),
 }
@@ -367,12 +371,8 @@ pub struct "Box<Fn<2,T>>" {
     value: fn mut(&T, &T) -> &T,
 }
 
-pub struct "Box<Fn<2,Ordering>>" {
-    value: fn mut(&T, &T) -> Ordering,
-}
-
-pub struct "Box<Fn<2,ListSlice<T>>>" {
-    value: fn mut(ListSlice<T>, ListSlice<T>) -> ListSlice<T>,
+pub struct "Box<Fn<2,Slice<T>>>" {
+    value: fn mut(Slice<T>, Slice<T>) -> Slice<T>,
 }
 
 pub struct "Box<Fn<2,u8>>" {
@@ -699,13 +699,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -739,13 +739,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -781,6 +781,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -789,12 +793,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -849,6 +849,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -857,12 +861,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -1579,13 +1579,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -1619,13 +1619,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -1661,6 +1661,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -1669,12 +1673,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -1729,6 +1729,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -1737,12 +1741,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -1893,13 +1893,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -1933,13 +1933,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -1975,6 +1975,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -1983,12 +1987,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -2043,6 +2043,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -2051,12 +2055,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -2093,6 +2093,47 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
     self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn i32_min(a: i32, b: i32) -> i32 {
+    return "core::builtin::core/builtin/select<i32>"((a < b), a, b);
+}
+
+pub fn i32_max(a: i32, b: i32) -> i32 {
+    return "core::builtin::core/builtin/select<i32>"((a > b), a, b);
+}
+
+pub fn i32_clamp(value: i32, lo: i32, hi: i32) -> i32 {
+    __assert_0: {
+        let __v0: i32 = lo;
+        let __v1: i32 = hi;
+        let __cond: bool = (__v0 <= __v1);
+        if !__cond {
+            core::internal::panic(__tmpl: {
+                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(154);
+                __r.String::push_str(&"Assertion failed in ");
+                __r.String::push_str(&"i32_clamp");
+                __r.String::push_str(&" at ");
+                __r.String::push_str(&"core:internal");
+                __r.String::push_str(&":");
+                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: 24 }."i32^Display::fmt"(&mut __f);
+                __r.String::push_str(&": ");
+                __r.String::push_str(&"i32_clamp: lo must be <= hi");
+                __r.String::push_str(&"\ncondition: lo <= hi\n");
+                __r.String::push_str(&"lo: ");
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: __v0 }."i32^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&"\n");
+                __r.String::push_str(&"hi: ");
+                __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                Box<i32> { value: __v1 }."i32^Inspect::inspect"(&mut __f);
+                __r.String::push_str(&"\n");
+                break __tmpl: __r;
+            });
+        }
+    }
+    return core::internal::i32_min(core::internal::i32_max(value, lo), hi);
 }
 
 pub fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
@@ -2360,13 +2401,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -2400,13 +2441,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -2442,6 +2483,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -2450,12 +2495,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -2510,6 +2551,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -2518,12 +2563,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -2672,13 +2713,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -2712,13 +2753,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -2754,6 +2795,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -2762,12 +2807,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -2822,6 +2863,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -2830,12 +2875,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -2888,13 +2929,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -2928,13 +2969,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -2970,6 +3011,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -2978,12 +3023,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -3038,6 +3079,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -3046,12 +3091,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -3104,13 +3145,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -3144,13 +3185,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -3186,6 +3227,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -3194,12 +3239,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -3254,6 +3295,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -3262,12 +3307,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -4334,13 +4375,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -4417,13 +4458,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -4475,6 +4516,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -4483,12 +4528,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -4559,6 +4600,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -4567,12 +4612,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -5077,7 +5118,7 @@ pub fn i128::from_str_radix(s: &String, radix: u32) -> Result<i128, ParseIntErro
 
 pub fn i128::from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) -> Result<i128, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = "$value_copy$T160"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let __pattern_temp_0: [bool, i32] = "$value_copy$T167"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
@@ -5597,13 +5638,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -5637,13 +5678,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -5679,6 +5720,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -5687,12 +5732,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -5755,6 +5796,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -5763,12 +5808,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -5951,7 +5992,7 @@ pub fn parse_unsigned_prefix(s: &String) -> Result<i32, IntErrorKind> {
 
 pub fn parse_i64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = "$value_copy$T160"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let __pattern_temp_0: [bool, i32] = "$value_copy$T167"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
@@ -6136,13 +6177,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -6202,13 +6243,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -6260,6 +6301,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -6268,12 +6313,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -6344,6 +6385,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -6352,12 +6397,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -6396,14 +6437,6 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I
     self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
 }
 
-fn i32_min(a: i32, b: i32) -> i32 {
-    return "core::builtin::core/builtin/select<i32>"((a < b), a, b);
-}
-
-fn i32_max(a: i32, b: i32) -> i32 {
-    return "core::builtin::core/builtin/select<i32>"((a > b), a, b);
-}
-
 pub fn "List<u8>::to_hex"(self: &List<u8>) -> String {
     let mut s: String = "core::prelude/string.wado::String::with_capacity"((self.used * 2));
     let mut i: i32 = 0;
@@ -6439,13 +6472,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -6479,13 +6512,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -6521,6 +6554,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -6529,12 +6566,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -6589,6 +6622,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -6597,12 +6634,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -9406,13 +9439,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -9446,13 +9479,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -9488,6 +9521,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -9496,12 +9533,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -9556,6 +9589,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -9564,12 +9601,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -9683,13 +9716,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -9723,13 +9756,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -9765,6 +9798,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -9773,12 +9810,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -9833,6 +9866,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -9841,12 +9878,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -9885,12 +9918,220 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I
     self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
 }
 
-fn i32_min(a: i32, b: i32) -> i32 {
-    return "core::builtin::core/builtin/select<i32>"((a < b), a, b);
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str(&"StreamWritable<u8>");
 }
 
-fn i32_max(a: i32, b: i32) -> i32 {
-    return "core::builtin::core/builtin/select<i32>"((a > b), a, b);
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str(&"Stream<u8>");
+}
+
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
+pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
+
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+
+pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
+
+pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
+
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+
+pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
+
+pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
+
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+
+pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
+
+pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
+
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+
+pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+
+pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
+
+pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
+    self."Fn<2,u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,char>^Display::fmt"(self: Box<Fn<2,char>>, f: &mut Formatter) {
+    self."Fn<2,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^Display::fmt"(self: Box<Fn<1,char>>, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
+    self."Fn<2,String>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter) {
+    self."Fn<2,I::Item>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
+    self."Fn<2,u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,char>^DisplayAlt::fmt_alt"(self: Box<Fn<2,char>>, f: &mut Formatter) {
+    self."Fn<2,char>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: Box<Fn<1,char>>, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
+    self."Fn<2,String>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
+    self."Fn<1,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter) {
+    self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
 }
 
 fn byte_to_ascii_lowercase(b: u8) -> u8 {
@@ -9934,7 +10175,7 @@ pub fn String::grow(self: &mut String, min_capacity: i32) {
     if (min_capacity <= capacity) {
         return;
     }
-    let new_capacity: i32 = "core::prelude/string.wado::i32_max"("core::prelude/string.wado::i32_max"((capacity * 2), min_capacity), 8);
+    let new_capacity: i32 = core::internal::i32_max(core::internal::i32_max((capacity * 2), min_capacity), 8);
     let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(new_capacity);
     "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
@@ -10056,7 +10297,7 @@ fn "String^Eq::eq_bytes"(a: &Array<u8>, b: &Array<u8>, len: i32) -> bool {
 pub fn "String^Ord::cmp"(self: &String, other: &String) -> Ordering {
     let len_a: i32 = self.String::len();
     let len_b: i32 = other.String::len();
-    let min_len: i32 = "core::prelude/string.wado::i32_min"(len_a, len_b);
+    let min_len: i32 = core::internal::i32_min(len_a, len_b);
     let a_repr: Array<u8> = self.String::internal_raw_bytes();
     let b_repr: Array<u8> = other.String::internal_raw_bytes();
     let mut i: i32 = 0;
@@ -10612,7 +10853,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 459 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 454 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"negative length");
                 __r.String::push_str(&"\ncondition: byte_len >= 0\n");
@@ -10636,7 +10877,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 460 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 455 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"not on a UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_len)\n");
@@ -10918,7 +11159,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 703 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 698 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"byte range out of bounds");
                 __r.String::push_str(&"\ncondition: 0 <= start && start <= end && end <= self.used\n");
@@ -10975,7 +11216,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 704 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 699 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"byte range not on UTF-8 character boundaries");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(start) && self.is_char_boundary(end)\n");
@@ -11184,7 +11425,7 @@ pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 840 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 835 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"insert index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -11242,7 +11483,7 @@ pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 881 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 876 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"insert_str index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -11288,7 +11529,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 909 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 904 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"index out of bounds");
                 __r.String::push_str(&"\ncondition: byte_index >= 0 && byte_index < self.used\n");
@@ -11328,7 +11569,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 910 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 905 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"remove index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -12484,7 +12725,7 @@ pub fn "StrCharIndicesIter^Iterator::for_each"(self: &mut StrCharIndicesIter, f:
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                f("$value_copy$T304"(item));
+                f("$value_copy$T305"(item));
             },
             _ => {
                 break;
@@ -12498,7 +12739,7 @@ pub fn "StrCharIndicesIter^Iterator::find"(self: &mut StrCharIndicesIter, pred: 
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T304"(item)) {
+                if pred("$value_copy$T305"(item)) {
                     return Option<[i32, char]>::Some(item);
                 }
             },
@@ -12515,7 +12756,7 @@ pub fn "StrCharIndicesIter^Iterator::any"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T304"(item)) {
+                if pred("$value_copy$T305"(item)) {
                     return true;
                 }
             },
@@ -12532,7 +12773,7 @@ pub fn "StrCharIndicesIter^Iterator::all"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if !pred("$value_copy$T304"(item)) {
+                if !pred("$value_copy$T305"(item)) {
                     return false;
                 }
             },
@@ -12585,7 +12826,7 @@ pub fn "StrCharIndicesIter^Iterator::position"(self: &mut StrCharIndicesIter, pr
         let __match_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                if pred("$value_copy$T304"(item)) {
+                if pred("$value_copy$T305"(item)) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
@@ -12602,12 +12843,12 @@ pub fn "StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: f
     let __match_5: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
     match __match_5 {
         Some(first) => {
-            let mut acc: [i32, char] = "$value_copy$T304"(first);
+            let mut acc: [i32, char] = "$value_copy$T305"(first);
             loop {
                 let __match_6: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = f("$value_copy$T304"(acc), "$value_copy$T304"(item));
+                        acc = f("$value_copy$T305"(acc), "$value_copy$T305"(item));
                     },
                     _ => {
                         break;
@@ -12938,13 +13179,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -13107,13 +13348,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -13177,6 +13418,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -13185,12 +13430,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -13273,6 +13514,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -13281,12 +13526,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -13339,13 +13580,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -13379,13 +13620,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -13421,6 +13662,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -13429,12 +13674,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -13489,6 +13730,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -13497,12 +13742,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -13593,13 +13834,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -13654,13 +13895,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -13704,6 +13945,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -13712,12 +13957,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -13780,6 +14021,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -13788,12 +14033,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -13846,13 +14087,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -13886,13 +14127,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -13928,6 +14169,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -13936,12 +14181,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -13996,6 +14237,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -14004,12 +14249,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -14062,13 +14303,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -14102,13 +14343,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -14144,6 +14385,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -14152,12 +14397,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -14212,6 +14453,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -14220,12 +14465,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -14278,13 +14519,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -14318,13 +14559,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -14360,6 +14601,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -14368,12 +14613,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -14428,6 +14669,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -14436,12 +14681,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -14494,13 +14735,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -14534,13 +14775,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -14576,6 +14817,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -14584,12 +14829,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -14644,6 +14885,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -14652,12 +14897,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -14710,13 +14951,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -14750,13 +14991,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -14792,6 +15033,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -14800,12 +15045,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -14860,6 +15101,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -14868,12 +15113,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -14926,13 +15167,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -14966,13 +15207,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -15008,6 +15249,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -15016,12 +15261,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -15076,6 +15317,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -15084,12 +15329,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -15142,13 +15383,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -15182,13 +15423,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -15224,6 +15465,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -15232,12 +15477,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -15292,6 +15533,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -15300,12 +15545,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -15358,13 +15599,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -15398,13 +15639,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -15440,6 +15681,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -15448,12 +15693,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -15508,6 +15749,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -15516,12 +15761,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -15574,13 +15815,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -15614,13 +15855,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -15656,6 +15897,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -15664,12 +15909,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -15724,6 +15965,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -15732,12 +15977,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -15790,13 +16031,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -15830,13 +16071,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -15872,6 +16113,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -15880,12 +16125,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -15940,6 +16181,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -15948,12 +16193,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -16006,13 +16247,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -16046,13 +16287,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -16088,6 +16329,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -16096,12 +16341,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -16156,6 +16397,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -16164,12 +16409,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -16222,13 +16463,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -16262,13 +16503,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -16304,6 +16545,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -16312,12 +16557,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -16372,6 +16613,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -16380,12 +16625,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -16468,13 +16709,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -16512,13 +16753,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -16558,6 +16799,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -16566,12 +16811,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -16630,6 +16871,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -16638,12 +16883,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -17038,13 +17279,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -17153,13 +17394,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -17223,6 +17464,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -17231,12 +17476,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -17319,6 +17560,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -17327,12 +17572,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -17522,13 +17763,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -17575,13 +17816,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -17625,6 +17866,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -17633,12 +17878,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -17701,6 +17942,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -17709,12 +17954,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -18159,13 +18400,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self:
 
 pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^Inspect::inspect"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -18203,13 +18444,13 @@ pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt
 
 pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
 
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
 pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -18249,6 +18490,10 @@ pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
     self."Fn<1,bool>^Inspect::inspect"(f);
 }
 
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
 pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^Inspect::inspect"(f);
 }
@@ -18257,12 +18502,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^Display::fmt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -18321,6 +18562,10 @@ pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter
     self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
     self."Fn<1,()>^InspectAlt::inspect_alt"(f);
 }
@@ -18329,12 +18574,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ListSlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ListSlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ListSlice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
+    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -18591,8 +18832,6 @@ fn "List<u8>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<u8> {
 
 fn "core/builtin/array_get<u8>"(arr: &Array<u8>, idx: i32) -> u8;
 
-fn "core/builtin/select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
-
 pub fn "Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"(self: Box<Result<i32,core:prelude/intparse.wado/IntErrorKind>>) -> i32 {
     let __match_2: Result<i32, IntErrorKind> = self.value;
     match __match_2 {
@@ -18631,6 +18870,8 @@ pub fn "List<u8>::internal_raw_data"(self: &List<u8>) -> Array<u8> {
     return self.repr;
 }
 
+fn "core/builtin/select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
+
 fn "List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>^IndexValue<i32>::index_value"(self: &List<[String, String]>, index: i32) -> [String, String] {
     if core::builtin::unlikely((index >= self.used)) {
         core::internal::panic("index out of bounds");
@@ -18648,7 +18889,7 @@ fn "core/builtin/array_new<u8>"(len: i32) -> Array<u8>;
 
 pub fn "List<u8>::grow"(self: &mut List<u8>) {
     let capacity: i32 = core::builtin::array_len(&self.repr);
-    let new_capacity: i32 = "core::prelude/list.wado::i32_max"((capacity * 2), 4);
+    let new_capacity: i32 = core::internal::i32_max((capacity * 2), 4);
     let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(new_capacity);
     "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
@@ -18660,7 +18901,7 @@ pub fn "List<char>::with_capacity"(capacity: i32) -> List<char> {
 
 pub fn "List<char>::grow"(self: &mut List<char>) {
     let capacity: i32 = core::builtin::array_len(&self.repr);
-    let new_capacity: i32 = "core::prelude/list.wado::i32_max"((capacity * 2), 4);
+    let new_capacity: i32 = core::internal::i32_max((capacity * 2), 4);
     let mut new_repr: Array<char> = core::builtin::array_new::<char>(new_capacity);
     core::builtin::array_copy::<char>(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
@@ -18683,7 +18924,7 @@ fn "IterMap<core:prelude/string.wado/StrCharIter,char>^IntoIterator::into_iter"(
 
 pub fn "List<core:prelude/string.wado/String>::grow"(self: &mut List<String>) {
     let capacity: i32 = core::builtin::array_len(&self.repr);
-    let new_capacity: i32 = "core::prelude/list.wado::i32_max"((capacity * 2), 4);
+    let new_capacity: i32 = core::internal::i32_max((capacity * 2), 4);
     let mut new_repr: Array<String> = core::builtin::array_new::<String>(new_capacity);
     core::builtin::array_copy::<String>(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
@@ -18695,7 +18936,7 @@ pub fn "List<core:prelude/types.wado/Tuple<i32,char>>::with_capacity"(capacity: 
 
 pub fn "List<core:prelude/types.wado/Tuple<i32,char>>::grow"(self: &mut List<[i32, char]>) {
     let capacity: i32 = core::builtin::array_len(&self.repr);
-    let new_capacity: i32 = "core::prelude/list.wado::i32_max"((capacity * 2), 4);
+    let new_capacity: i32 = core::internal::i32_max((capacity * 2), 4);
     let mut new_repr: Array<[i32, char]> = core::builtin::array_new::<[i32, char]>(new_capacity);
     core::builtin::array_copy::<[i32, char]>(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
@@ -18703,7 +18944,7 @@ pub fn "List<core:prelude/types.wado/Tuple<i32,char>>::grow"(self: &mut List<[i3
 
 pub fn "List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow"(self: &mut List<[String, String]>) {
     let capacity: i32 = core::builtin::array_len(&self.repr);
-    let new_capacity: i32 = "core::prelude/list.wado::i32_max"((capacity * 2), 4);
+    let new_capacity: i32 = core::internal::i32_max((capacity * 2), 4);
     let mut new_repr: Array<[String, String]> = core::builtin::array_new::<[String, String]>(new_capacity);
     core::builtin::array_copy::<[String, String]>(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
@@ -18724,7 +18965,7 @@ pub fn "List<u64>::push"(self: &mut List<u64>, value: u64) with stores[value] {
 
 pub fn "List<u64>::grow"(self: &mut List<u64>) {
     let capacity: i32 = core::builtin::array_len(&self.repr);
-    let new_capacity: i32 = "core::prelude/list.wado::i32_max"((capacity * 2), 4);
+    let new_capacity: i32 = core::internal::i32_max((capacity * 2), 4);
     let mut new_repr: Array<u64> = core::builtin::array_new::<u64>(new_capacity);
     core::builtin::array_copy::<u64>(&mut new_repr, 0, &self.repr, 0, self.used);
     self.repr = new_repr;
@@ -18817,7 +19058,7 @@ fn "$value_copy$T20"(v: [f64, f64]) -> [f64, f64] {
     return Tuple<f64,f64> { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T304"(v: [i32, char]) -> [i32, char] {
+fn "$value_copy$T305"(v: [i32, char]) -> [i32, char] {
     return Tuple<i32,char> { 0: v.0, 1: v.1 };
 }
 
@@ -18825,7 +19066,7 @@ fn "$value_copy$T22"(v: String) -> String {
     return String { repr: core::builtin::array_clone::<u8>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$T160"(v: [bool, i32]) -> [bool, i32] {
+fn "$value_copy$T167"(v: [bool, i32]) -> [bool, i32] {
     return Tuple<bool,i32> { 0: v.0, 1: v.1 };
 }
 

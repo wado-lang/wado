@@ -3005,6 +3005,135 @@ Error returned by float parsing.
 
 Returns the kind of this error.
 
+### `pub struct Slice<T>`
+
+A contiguous view into a backing `Array<T>` over the half-open range
+`[start, end)`. Holds a reference to the whole array, so creating a slice
+never copies elements.
+
+_Fields are private._
+
+#### `pub fn internal_new(repr: &Array<T>, start: i32, end: i32) -> Slice<T>`
+
+Internal: build a slice from a backing array reference and bounds.
+
+#### `pub fn len(&self) -> i32`
+
+Returns the number of elements in the slice.
+
+#### `pub fn is_empty(&self) -> bool`
+
+Returns true if the slice has no elements.
+
+#### `pub fn get(&self, index: i32) -> Option<T>`
+
+Returns a copy of the element at `index`, or None if out of bounds.
+
+#### `pub fn slice(&self, start: i32, end: i32) -> Slice<T>`
+
+Returns a sub-slice over `[start, end)` relative to this slice, clamped
+to its bounds.
+
+#### `pub fn iter(&self) -> Iter<T>`
+
+Returns a by-value iterator over the slice.
+
+#### `pub fn to_array(&self) -> Array<T>`
+
+Copies the slice's elements into a new `Array<T>`.
+
+#### `impl IndexValue<i32> for Slice<T>`
+
+##### `fn index_value(&self, index: i32) -> Self::Output`
+
+#### `impl IntoIterator for Slice<T>`
+
+##### `fn into_iter(&self) -> Self::Iter`
+
+### `pub struct Iter<T>`
+
+A by-value forward iterator over a backing `Array<T>` range `[index, end)`.
+
+_Fields are private._
+
+#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32) -> Iter<T>`
+
+Internal: build an iterator over `[index, end)` of a backing array.
+
+#### `pub fn collect(&mut self) -> List<T>`
+
+Collects the remaining elements into a new `List<T>` with a single bulk
+copy of the underlying range.
+
+#### `pub fn sum(&mut self) -> Option<T>`
+
+#### `pub fn min(&mut self) -> Option<T>`
+
+#### `pub fn max(&mut self) -> Option<T>`
+
+#### `impl Iterator for Iter<T>`
+
+##### `fn next(&mut self) -> Option<Self::Item>`
+
+#### `impl IntoIterator for Iter<T>`
+
+##### `fn into_iter(&self) -> Iter<T>`
+
+### `pub struct RefIter<T>`
+
+A by-reference forward iterator over a backing `Array<T>` range, yielding
+`&T`. The yielded reference points to a fresh copy of each element (Wasm GC
+has no interior references), so it is a read-only view and cannot mutate the
+backing array. Backs `for x of &list`.
+
+_Fields are private._
+
+#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32) -> RefIter<T>`
+
+Internal: build a by-reference iterator over `[index, end)`.
+
+#### `impl Iterator for RefIter<T>`
+
+##### `fn next(&mut self) -> Option<Self::Item>`
+
+### `pub struct WindowsIter<T>`
+
+An iterator over overlapping windows of `size` consecutive elements. Each
+item is a `Slice<T>` viewing the backing array.
+
+_Fields are private._
+
+#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> WindowsIter<T>`
+
+Internal: build a windows iterator over `[index, end)` with window `size`.
+
+#### `impl Iterator for WindowsIter<T>`
+
+##### `fn next(&mut self) -> Option<Self::Item>`
+
+#### `impl IntoIterator for WindowsIter<T>`
+
+##### `fn into_iter(&self) -> WindowsIter<T>`
+
+### `pub struct ChunksIter<T>`
+
+An iterator over non-overlapping chunks of up to `size` elements. The last
+chunk may be shorter. Each item is a `Slice<T>` viewing the backing array.
+
+_Fields are private._
+
+#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ChunksIter<T>`
+
+Internal: build a chunks iterator over `[index, end)` with chunk `size`.
+
+#### `impl Iterator for ChunksIter<T>`
+
+##### `fn next(&mut self) -> Option<Self::Item>`
+
+#### `impl IntoIterator for ChunksIter<T>`
+
+##### `fn into_iter(&self) -> ChunksIter<T>`
+
 ### `pub struct String`
 
 UTF-8 encoded string type with O(1) amortized push_str
@@ -3545,7 +3674,7 @@ _Fields are private._
 
 #### `pub fn capacity(&self) -> i32`
 
-Returns the total number of elements the array can hold without reallocating.
+Returns the total number of elements the list can hold without reallocating.
 
 #### `pub fn internal_raw_data(&self) -> Array<T>`
 
@@ -3596,7 +3725,7 @@ Shrinks the capacity to match the current length.
 
 #### `pub fn extend(&mut self, other: &List<T>)`
 
-Extends this array with elements from another array.
+Extends this list with elements from another list.
 
 #### `pub fn reverse(&mut self)`
 
@@ -3604,7 +3733,7 @@ Reverses the elements in place.
 
 #### `pub fn repeat(&self, n: i32) -> List<T>`
 
-Returns a new array containing this array's elements repeated `n` times.
+Returns a new list containing this list's elements repeated `n` times.
 
 #### `pub fn copy_within_append(&mut self, src_start: i32, count: i32)`
 
@@ -3614,27 +3743,36 @@ run-length expansion (where src < dst). Forward order is correct in both cases.
 
 #### `pub fn contains(&self, value: &T) -> bool`
 
-Returns true if the array contains the given value.
+Returns true if the list contains the given value.
 
-#### `pub fn slice(&self, start: i32, end: i32) -> ListSlice<T>`
+#### `pub fn slice(&self, start: i32, end: i32) -> Slice<T>`
 
-#### `pub fn iter(&self) -> ListIter<T>`
+Returns a zero-copy view over `[start, end)`, clamped to `[0, len())`.
+
+#### `pub fn as_slice(&self) -> Slice<T>`
+
+Returns a view over the whole list.
+
+#### `pub fn iter(&self) -> Iter<T>`
+
+Returns a by-value iterator over the list's elements.
+
+#### `pub fn windows(&self, size: i32) -> WindowsIter<T>`
+
+Returns an iterator over overlapping windows of `size` consecutive
+elements. Panics if `size` is not positive.
+
+#### `pub fn chunks(&self, size: i32) -> ChunksIter<T>`
+
+Returns an iterator over non-overlapping chunks of up to `size`
+elements. The last chunk may be shorter. Panics if `size` is not
+positive.
 
 #### `pub fn sort_by(&mut self, cmp: fn mut(&T, &T) -> Ordering)`
 
 In-place sort with comparator. Stable, O(n log n) worst case.
 
 #### `pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering) -> List<T>`
-
-#### `pub fn windows(&self, size: i32) -> WindowsIter<T>`
-
-Returns an iterator of overlapping windows of size `size`.
-Panics if `size` is 0.
-
-#### `pub fn chunks(&self, size: i32) -> ChunksIter<T>`
-
-Returns an iterator of non-overlapping chunks of size `size`.
-The last chunk may be shorter. Panics if `size` is 0.
 
 #### `pub fn sort(&mut self)`
 
@@ -3667,11 +3805,11 @@ byte (e.g. `[0x0f, 0xa0]` -> `"0fa0"`).
 
 #### `impl IndexValue<RangeExclusive<i32>> for List<T>`
 
-##### `fn index_value(&self, range: RangeExclusive<i32>) -> ListSlice<T>`
+##### `fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T>`
 
 #### `impl IndexValue<RangeInclusive<i32>> for List<T>`
 
-##### `fn index_value(&self, range: RangeInclusive<i32>) -> ListSlice<T>`
+##### `fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T>`
 
 #### `impl IntoIterator for List<T>`
 
@@ -3679,7 +3817,7 @@ byte (e.g. `[0x0f, 0xa0]` -> `"0fa0"`).
 
 #### `impl FromIterator<T> for List<T>`
 
-##### `fn from_iter(iter: ListIter<T>) -> List<T>`
+##### `fn from_iter(iter: Iter<T>) -> List<T>`
 
 #### `impl SequenceLiteralBuilder for List<T>`
 
@@ -3692,26 +3830,6 @@ byte (e.g. `[0x0f, 0xa0]` -> `"0fa0"`).
 #### `impl Default for List<T>`
 
 ##### `pub fn default() -> List<T>`
-
-### `pub struct ListIter<T>`
-
-_Fields are private._
-
-#### `pub fn collect(&mut self) -> List<T>`
-
-#### `pub fn sum(&mut self) -> Option<T>`
-
-#### `pub fn min(&mut self) -> Option<T>`
-
-#### `pub fn max(&mut self) -> Option<T>`
-
-#### `impl Iterator for ListIter<T>`
-
-##### `fn next(&mut self) -> Option<Self::Item>`
-
-#### `impl IntoIterator for ListIter<T>`
-
-##### `fn into_iter(&self) -> ListIter<T>`
 
 ### `pub struct RangeExclusive<T: Ord>`
 
