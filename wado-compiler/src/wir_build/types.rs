@@ -5,6 +5,7 @@
 //!
 //! Also contains type-ordering utilities (topological sort) used during registration.
 
+use crate::compiler_item::SeqField;
 use crate::module_source::ModuleSource;
 use crate::name::StructName;
 use crate::nir::{NirStruct, NirVariantDecl};
@@ -1255,7 +1256,7 @@ fn register_list_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
             name: WirName { fq },
             fields: vec![
                 WirField {
-                    name: "repr".to_string(),
+                    name: SeqField::Backing.field_name().to_string(),
                     ty: crate::wir::WirType::Ref {
                         type_id: raw_type,
                         nullable: false,
@@ -1263,7 +1264,7 @@ fn register_list_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
                     mutable: true,
                 },
                 WirField {
-                    name: "used".to_string(),
+                    name: SeqField::Len.field_name().to_string(),
                     ty: crate::wir::WirType::I32,
                     mutable: true,
                 },

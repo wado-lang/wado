@@ -338,6 +338,14 @@ pub type GlobalKey = (ModuleSource, String);
 /// rule as un-bound locals).
 pub type GlobalEnv = IndexMap<GlobalKey, Lattice>;
 
+/// Known constant field values of module-scope globals, keyed by global then
+/// field name. The global analogue of [`Interpreter::field_env`]: it lets
+/// `FieldAccess(GlobalVarGet(X), f)` fold to a constant when `X` is an
+/// immutable global whose `f` field is statically known — e.g. the
+/// [`SeqField::Len`](crate::compiler_item::SeqField) length of an immutable
+/// sequence global hoisted by body globalization.
+pub type GlobalFieldEnv = IndexMap<GlobalKey, IndexMap<String, Value>>;
+
 /// Default per-pass CTFE step budget. Mirrors rustc's CTFE step counter
 /// shape: a hard ceiling on the number of productive call entries
 /// before the engine starts bailing. Borrow-blocked re-entries (the
@@ -709,6 +717,12 @@ pub struct Interpreter<'a> {
     ///
     /// [`with_globals`]: Self::with_globals
     globals: Option<&'a GlobalEnv>,
+    /// Pre-built constant field values of module-scope globals. When `None`,
+    /// `FieldAccess(GlobalVarGet(_), _)` stays [`Lattice::Unevaluated`]. The
+    /// visitor populates this once per pass via [`with_global_fields`].
+    ///
+    /// [`with_global_fields`]: Self::with_global_fields
+    global_fields: Option<&'a GlobalFieldEnv>,
     /// Hard ceiling on the number of productive CTFE call entries
     /// before bailing. Decremented once per successful body evaluation;
     /// on zero, further attempts return `Unevaluated`.
@@ -733,6 +747,7 @@ impl<'a> Interpreter<'a> {
             alias_info: AliasInfo::default(),
             callees: None,
             globals: None,
+            global_fields: None,
             step_budget: DEFAULT_STEP_BUDGET,
             call_stack: Vec::new(),
         }
@@ -761,6 +776,14 @@ impl<'a> Interpreter<'a> {
     /// [`with_callees`]: Self::with_callees
     pub fn with_globals(&mut self, globals: &'a GlobalEnv) -> &mut Self {
         self.globals = Some(globals);
+        self
+    }
+
+    /// Install the [`GlobalFieldEnv`]. Without this,
+    /// `FieldAccess(GlobalVarGet(_), _)` stays [`Lattice::Unevaluated`].
+    /// Mirrors [`with_globals`](Self::with_globals).
+    pub fn with_global_fields(&mut self, global_fields: &'a GlobalFieldEnv) -> &mut Self {
+        self.global_fields = Some(global_fields);
         self
     }
 
@@ -1507,6 +1530,18 @@ impl<'a> Interpreter<'a> {
                 NirExprKind::Local { index, .. } => self
                     .field_env
                     .get(index)
+                    .and_then(|m| m.get(field_name.as_str()))
+                    .copied()
+                    .map_or(Lattice::Unevaluated, Lattice::Const),
+                // `global:X.f` for an immutable global with a known constant
+                // `f` field — the global analogue of the local field-env path
+                // above, indexed by [`GlobalFieldEnv`].
+                NirExprKind::GlobalVarGet {
+                    module_source,
+                    name,
+                } => self
+                    .global_fields
+                    .and_then(|m| m.get(&(module_source.clone(), name.clone())))
                     .and_then(|m| m.get(field_name.as_str()))
                     .copied()
                     .map_or(Lattice::Unevaluated, Lattice::Const),

@@ -249,8 +249,13 @@ run = "cargo clippy --all --all-features --all-targets -- -D warnings"
 description = "Run clippy auto-fix"
 run = "cargo clippy --all --all-features --all-targets --fix --allow-dirty --allow-staged"
 
+[tasks.build-golden-tools]
+description = "Build the debug binaries the golden-fixture tasks run"
+run = "cargo build --bin wado --bin wado-dev-tools"
+
 [tasks.update-golden-fixtures]
 description = "Regenerate WIR golden fixtures"
+depends = ["build-golden-tools"]
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
@@ -267,6 +272,7 @@ mkdir -p wado-compiler/tests/generated/fixtures
 
 [tasks.update-golden-format-fixtures]
 description = "Regenerate format fixture golden files (clean, NIR, lower, optimize, WIR, WAT)"
+depends = ["build-golden-tools"]
 file = "scripts/update-golden-format-fixtures.sh"
 
 [tasks.doc-stdlib]

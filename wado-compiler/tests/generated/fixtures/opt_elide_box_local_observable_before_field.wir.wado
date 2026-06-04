@@ -112,6 +112,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:idx: i32 = 1;
+global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30)), used: 3 };
 
 fn "wado-compiler/tests/fixtures/opt_elide_box_local_observable_before_field.wado/step"() {
     global:idx = global:idx + 1;
@@ -119,7 +120,6 @@ fn "wado-compiler/tests/fixtures/opt_elide_box_local_observable_before_field.wad
 }
 
 fn "wado-compiler/tests/fixtures/opt_elide_box_local_observable_before_field.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//List<i32>";
     let n: i32;
     let __cond: bool;
     let __local_6: ref "core:prelude/string.wado//String";
@@ -128,12 +128,11 @@ fn "wado-compiler/tests/fixtures/opt_elide_box_local_observable_before_field.wad
     let f_23: ref "core:prelude/format.wado//Formatter";
     let f_28: ref "core:prelude/format.wado//Formatter";
     let __sroa_boxed_v: i32;
-    __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
     __sroa_boxed_v = "wado-compiler/tests/fixtures/opt_elide_box_local_observable_before_field.wado/step"();
-    n = index = global:idx; if builtin::unlikely(index >= 3) {
+    n = index = global:idx; if builtin::unlikely(index >= global:__const_obj_0.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<i32>(__b_0.repr, index) + __sroa_boxed_v;
+    }; builtin::array_get<i32>(global:__const_obj_0.repr, index) + __sroa_boxed_v;
     __cond = n == 72;
     if __cond == 0 {
         "core:internal/panic"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(113), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 117); "core:prelude/string.wado/String::push"(__local_6, 110); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_elide_box_local_observable_before_field.wado"), used: 77 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_23 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(46, f_23); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("

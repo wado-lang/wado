@@ -34,11 +34,13 @@
 //! the result must be bound to a Let variable that is only used as a method
 //! receiver (`self`), never passed as a regular function argument.
 
+use crate::compiler_item::SeqField;
 use crate::hashmap::IndexSet;
 use crate::nir::{
     NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind, NirUnaryOp,
 };
 use crate::nir_package::NirPackage;
+use crate::nir_visitor::is_local;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
@@ -735,10 +737,14 @@ fn extract_tmpl_candidate(block: &NirBlock) -> Option<TmplCandidate> {
             {
                 if struct_name == "String" {
                     // Verify the repr field contains an array_new call
-                    let repr_field = fields.iter().find(|f| f.name == "repr")?;
+                    let repr_field = fields
+                        .iter()
+                        .find(|f| f.name == SeqField::Backing.field_name())?;
                     extract_array_new_capacity(&repr_field.value)?;
                     // Verify used field is 0
-                    let used_field = fields.iter().find(|f| f.name == "used")?;
+                    let used_field = fields
+                        .iter()
+                        .find(|f| f.name == SeqField::Len.field_name())?;
                     if !matches!(
                         &used_field.value.kind,
                         NirExprKind::IntLiteral { value: 0, .. }
@@ -1046,7 +1052,14 @@ fn extract_local_from_ref(expr: &NirExpr) -> Option<u32> {
     }
 }
 
-/// Check if an expression references a specific local (possibly through &mut).
+/// Check if an expression *aliases* a specific local (the local itself or a
+/// `&mut` chain to it).
+///
+/// Intentionally narrow: matching a non-alias *mention* (e.g. `foo(buf)`) would
+/// make the caller force-rewrite a Formatter's `buf` to the wrong buffer — a
+/// miscompile — so this must not be widened to a "mentions anywhere" walk such
+/// as `expr_mentions_local`. Pinned by the `references_local_matches_only_aliases_not_mentions`
+/// unit test below.
 fn references_local(expr: &NirExpr, local_index: u32) -> bool {
     match &expr.kind {
         NirExprKind::Local { index, .. } => *index == local_index,
@@ -1066,12 +1079,12 @@ fn buf_field_references_local(expr: &NirExpr, local_index: u32) -> bool {
         NirExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
-        } => matches!(&inner.kind, NirExprKind::Local { index, .. } if *index == local_index),
+        } => is_local(inner, local_index),
         // ref.as_non_null(__tmpl_buf) (WIR level / after lowering)
         NirExprKind::Call { func, args, .. } => {
             func.name.contains("ref.as_non_null")
                 && args.len() == 1
-                && matches!(&args[0].expr.kind, NirExprKind::Local { index, .. } if *index == local_index)
+                && is_local(&args[0].expr, local_index)
         }
         _ => false,
     }
@@ -1161,7 +1174,7 @@ fn transform_tmpl_block(
                             span,
                         )),
                         field_index: 1,
-                        field_name: "used".to_string(),
+                        field_name: SeqField::Len.field_name().to_string(),
                     },
                     TypeTable::I32,
                     span,
@@ -1450,5 +1463,99 @@ fn rename_local_in_expr(expr: &mut NirExpr, old_index: u32, new_index: u32, new_
             rename_local_in_block(block, old_index, new_index, new_name);
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::module_source::ModuleSource;
+    use crate::nir::{CallArg, FunctionRef};
+    use crate::tir::TypeId;
+
+    fn local(idx: u32) -> NirExpr {
+        NirExpr::new(
+            NirExprKind::Local {
+                index: idx,
+                name: format!("__l{idx}"),
+            },
+            TypeId(0),
+            Span::default(),
+        )
+    }
+
+    fn unary(op: NirUnaryOp, inner: NirExpr) -> NirExpr {
+        NirExpr::new(
+            NirExprKind::Unary {
+                op,
+                expr: Box::new(inner),
+            },
+            TypeId(0),
+            Span::default(),
+        )
+    }
+
+    /// `foo(arg)` — a free-function call carrying `arg`. The result is an
+    /// independent value, so the call only *mentions* `arg`, it is not an
+    /// alias of it.
+    fn call_with(arg: NirExpr) -> NirExpr {
+        NirExpr::new(
+            NirExprKind::Call {
+                func: FunctionRef {
+                    module_source: ModuleSource::entry_point_synthetic(),
+                    name: "foo".to_string(),
+                    monomorph_info: None,
+                    method_info: None,
+                },
+                type_args: vec![],
+                args: vec![CallArg {
+                    expr: arg,
+                    is_mut: false,
+                }],
+            },
+            TypeId(0),
+            Span::default(),
+        )
+    }
+
+    /// `references_local` decides whether an intermediate `let buf_inner = <e>`
+    /// binding makes `buf_inner` an *alias* of the hoisted template buffer.
+    /// When it answers yes, `extract_fmt_candidates` force-rewrites the matched
+    /// Formatter's `buf` field to `&mut <hoisted buffer>` — so a false positive
+    /// redirects the Formatter to the wrong buffer (a miscompile).
+    ///
+    /// It must therefore match only genuine alias shapes — a bare `Local` or a
+    /// `&mut` chain down to it — and reject any expression that merely *mentions*
+    /// the local (a call argument, an operand, …). Broadening it to a full
+    /// "mentions anywhere" walk (e.g. `expr_mentions_local`) reintroduces that
+    /// miscompile; these assertions exist to fail the moment someone does.
+    #[test]
+    fn references_local_matches_only_aliases_not_mentions() {
+        const IDX: u32 = 7;
+
+        // Genuine aliases — must match.
+        assert!(references_local(&local(IDX), IDX));
+        assert!(references_local(
+            &unary(NirUnaryOp::MutRef, local(IDX)),
+            IDX
+        ));
+        assert!(references_local(
+            &unary(NirUnaryOp::MutRef, unary(NirUnaryOp::MutRef, local(IDX))),
+            IDX
+        ));
+
+        // A different local is unrelated.
+        assert!(!references_local(&local(IDX + 1), IDX));
+
+        // Non-alias *mentions* — must NOT match (this is the guard against
+        // `expr_mentions_local`, which would return true for all of these and
+        // miscompile the Formatter buffer rewrite).
+        assert!(!references_local(&call_with(local(IDX)), IDX));
+        assert!(!references_local(
+            &unary(NirUnaryOp::MutRef, call_with(local(IDX))),
+            IDX
+        ));
+        // `&buf` (shared ref) is not the `&mut` alias shape the hoist normalizes.
+        assert!(!references_local(&unary(NirUnaryOp::Ref, local(IDX)), IDX));
     }
 }

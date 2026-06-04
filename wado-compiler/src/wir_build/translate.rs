@@ -3,6 +3,7 @@
 //! This is the core of the `tir_to_wir` phase, translating each TIR function body
 //! into a sequence of WIR instructions.
 
+use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{
@@ -1051,7 +1052,7 @@ impl FunctionTranslator<'_, '_> {
         let WirType::Ref {
             type_id: raw_array_type_id,
             ..
-        } = self.struct_field_wir_type(&type_id, "repr")
+        } = self.struct_field_wir_type(&type_id, SeqField::Backing.field_name())
         else {
             panic!("[WIR] ArrayLiteral: List<T> struct {type_id:?} has no `repr` array field");
         };

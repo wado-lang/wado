@@ -20,6 +20,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::compiler_item::SeqField;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -550,7 +551,7 @@ fn build_list_wrapper_copy(
 ) -> TirExpr {
     let raw_array_ty = type_table.borrow_mut().make_builtin_array(elem_type);
     let repr_field = TirField {
-        name: "repr".to_string(),
+        name: SeqField::Backing.field_name().to_string(),
         is_pub: false,
         type_id: raw_array_ty,
         index: 0,
@@ -561,7 +562,7 @@ fn build_list_wrapper_copy(
         default_expr: None,
     };
     let used_field = TirField {
-        name: "used".to_string(),
+        name: SeqField::Len.field_name().to_string(),
         is_pub: false,
         type_id: TypeTable::I32,
         index: 1,
@@ -573,12 +574,12 @@ fn build_list_wrapper_copy(
     };
     let fields = vec![
         TirStructField {
-            name: "repr".to_string(),
+            name: SeqField::Backing.field_name().to_string(),
             value: make_field_copy(v_local.clone(), &repr_field, type_table, span),
             field_index: 0,
         },
         TirStructField {
-            name: "used".to_string(),
+            name: SeqField::Len.field_name().to_string(),
             value: make_field_copy(v_local.clone(), &used_field, type_table, span),
             field_index: 1,
         },

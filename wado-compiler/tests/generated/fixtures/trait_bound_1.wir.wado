@@ -124,6 +124,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "wado-compiler/tests/fixtures/trait_bound_1.wado//Pair<i32>" = struct.new "wado-compiler/tests/fixtures/trait_bound_1.wado//Pair<i32>" { first: 1, second: 3 };
+
 fn "wado-compiler/tests/fixtures/trait_bound_1.wado/trait_bound_array_of_ref"() with Stdout {
     let a: ref "core:prelude/types.wado//Box<i32>";
     let b: ref "core:prelude/types.wado//Box<i32>";
@@ -148,9 +150,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_1.wado/trait_bound_array_of_ref"() 
 }
 
 fn "wado-compiler/tests/fixtures/trait_bound_1.wado/trait_bound_bounded_impl_for_trait"() with Stdout {
-    let b: ref "wado-compiler/tests/fixtures/trait_bound_1.wado//Pair<i32>";
-    b = struct.new "wado-compiler/tests/fixtures/trait_bound_1.wado//Pair<i32>" { first: 1, second: 3 };
-    if "wado-compiler/tests/fixtures/trait_bound_1.wado/Pair<i32>^Ord::cmp"(struct.new "wado-compiler/tests/fixtures/trait_bound_1.wado//Pair<i32>" { first: 1, second: 2 }, b) == 0 {
+    if "wado-compiler/tests/fixtures/trait_bound_1.wado/Pair<i32>^Ord::cmp"(struct.new "wado-compiler/tests/fixtures/trait_bound_1.wado//Pair<i32>" { first: 1, second: 2 }, global:__const_obj_0) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a < b"), used: 5 });
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a == a"), used: 6 });
