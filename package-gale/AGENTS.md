@@ -126,6 +126,9 @@ option. It logs an indented event stream to stderr (via `log_stderr`):
   the longest-match tournament weighed at a decision point.
 - **`pick <rule> alt#N`** — the alternative the tournament / direct
   lookahead dispatch committed to (`no alt matched` when none scanned).
+  Rules whose alts are all single tokens (e.g. `literal_value`,
+  `keyword`) are not pick-traced — the choice is already obvious from the
+  lookahead token on the `enter` line.
 - **`try <rule> alt#N: ok` / `rewind`** — outcome of a speculative
   save-and-rewind attempt (the hybrid / fallback dispatch paths).
 

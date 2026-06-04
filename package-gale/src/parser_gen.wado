@@ -2165,7 +2165,12 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         }
 
         let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
-        if ctx.is_trace() {
+        // Suppress the pick line for all-single-token rules: the chosen alt
+        // is self-evident from the lookahead token already printed on the
+        // `enter` line (e.g. `enter literal_value @9 '1'` makes
+        // `pick literal_value alt#0` pure noise). Tournament / speculative
+        // picks, and picks among alts that consume sub-structure, stay.
+        if ctx.is_trace() && !all_alts_are_single_token(&rule.alternatives) {
             w.line(&`trace_pick(p, &{escape_string(&rule.name)}, {alt_idx});`);
         }
         gen_alt_body(
@@ -3812,6 +3817,17 @@ fn rep_recovery_call(rep_op: &RepeatOp) -> Option<String> {
 fn emit_rep_break_with_recovery(w: &mut CodeWriter, scan_pos: &String, rep_op: &RepeatOp, ctx: &mut GenContext, loop_first: &List<String>) {
     let recovery = rep_recovery_call(rep_op);
     if let Some(call) = recovery {
+        if loop_first.is_empty() {
+            // No FIRST tokens to gate the speculative re-parse on. An empty
+            // set makes `first_check_str` emit the constant `true`, so the
+            // recovery would fire on *any* lookahead and could record a
+            // spurious deeper error that hijacks the reported position. Fall
+            // back to the plain break. (Not reachable today: recovery is only
+            // emitted for a `body_scannable` `LeafRuleCall`, and a scannable
+            // RuleRef has a non-empty FIRST — this guards the invariant.)
+            w.line(&`if {scan_pos} < 0 \{ break; \}`);
+            return;
+        }
         w.begin(&`if {scan_pos} < 0`);
         w.begin(&`if {ctx.first_check_str(loop_first)}`);
         w.line(&"let _rec_pos = p.pos;");
@@ -5425,7 +5441,10 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
             let alt_idx = non_lr_indices[group[0]];
             let alt = &rule.alternatives[alt_idx];
             let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
-            if ctx.is_trace() {
+            // Match the direct-dispatch path: suppress the pick line for
+            // all-single-token rules (the chosen alt is obvious from the
+            // lookahead token on the `enter` line).
+            if ctx.is_trace() && !all_alts_are_single_token(&rule.alternatives) {
                 w.line(&`trace_pick(p, &{escape_string(&rule.name)}, {alt_idx});`);
             }
             gen_alt_body(

@@ -1,0 +1,26 @@
+// E2E safety net for the `trace` generator option: the other trace tests
+// (codegen_test.wado) only assert on the emitted source via `str_contains`,
+// so type-invalid emitted Wado would still pass. This test generates a
+// parser with `trace: true` and actually parses input, forcing the compiler
+// to type-check and run the full trace-instrumented output (helpers, the
+// `core:internal` import, rule-entry enter/ok/fail, and the scan-tournament
+// scan/pick lines). The trace itself goes to stderr; we only assert the
+// parse result so a regression that breaks the emitted code fails the build.
+use g from "./grammars/ll_multi_alt_overlap.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, trace: true },
+            output_dir: "tests/generated/trace",
+        },
+    };
+
+test "traced parser compiles and parses a shared-prefix tournament" {
+    // `r : (a b | a) EOF ; a : X a Y? | X ; b : Y ;` — exercises the
+    // longest-match scan tournament that the scan/pick trace instruments.
+    let ok = g::parse(&"X X Y");
+    assert ok matches { Ok(_) };
+
+    let bad = g::parse(&"Y");
+    assert bad matches { Err(_) };
+}

@@ -991,6 +991,27 @@ Y : 'Y' ;
     assert !str_contains(&plain, &"trace_try");
 }
 
+test "trace suppresses the pick line for all-single-token rules" {
+    // `tok` is a pure single-token choice: the committed alt is already
+    // self-evident from the lookahead token on the `enter` line, so its
+    // `pick` would be pure noise and must be suppressed. `sub` chooses
+    // among alts that consume sub-structure (`A x` vs `B`), so its pick
+    // carries real information and stays.
+    let input = "grammar T;
+r : tok sub EOF ;
+tok : A | B | C ;
+sub : A x | B ;
+x : A ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let traced = generate(&mut grammar, &GenerateOptions { highlight: false, trace: true }).source;
+    assert !str_contains(&traced, &"trace_pick(p, &\"tok\",");
+    assert str_contains(&traced, &"trace_pick(p, &\"sub\",");
+}
+
 test "generate emits pub fn parse_<rule>(input) for LR rule with min_prec=0" {
     // LR rules' internal helper takes a `min_prec: i32` parameter
     // (see `lr_util.compute_prefix_self_ref_min_prec`); the public
