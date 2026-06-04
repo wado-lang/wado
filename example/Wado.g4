@@ -1,6 +1,9 @@
-// Partial ANTLR4 grammar for Wado, consumed by Gale. Covers the syntax in
-// the CLI examples (hello, fizzbuzz, romu, tree). Effects/handlers, world /
-// interface / resource / flags, and let-chains are not yet modeled.
+// Partial ANTLR4 grammar for Wado, consumed by Gale. Covers the syntax used
+// by every example under `example/*.wado` (declarations, statements,
+// expressions, patterns, generics, attributes, traits/impls, globals, type
+// aliases, `if let` / `while let` let-chains, `task return`, map literals, and
+// turbofish associated calls). Effects/handlers and world / interface /
+// resource / flags declarations are not yet modeled.
 
 grammar Wado;
 
@@ -20,7 +23,17 @@ itemKind
     | variantDecl
     | traitDecl
     | implBlock
+    | globalDecl
+    | typeAliasDecl
     | testDecl
+    ;
+
+globalDecl
+    : 'pub'? 'global' IDENTIFIER ':' typeRef '=' expression ';'
+    ;
+
+typeAliasDecl
+    : 'pub'? 'type' IDENTIFIER genericParams? '=' typeRef ';'
     ;
 
 // `test` is a contextual keyword; modeled as a literal here for simplicity.
@@ -136,7 +149,7 @@ traitMember
     ;
 
 implBlock
-    : 'impl' genericParams? typeRef ('for' typeRef)? '{' implMember* '}'
+    : 'impl' genericParams? typeRef ('for' typeRef)? ('{' implMember* '}' | ';')
     ;
 
 implMember
@@ -160,8 +173,7 @@ traitBounds
 typeRef
     : '&' 'mut'? typeRef
     | '!'
-    | '(' ')'
-    | '(' typeRef ')'
+    | '(' (typeRef (',' typeRef)*)? ')'
     | '[' (typeRef (',' typeRef)*)? ']'
     | 'fn' 'mut'? '(' (typeRef (',' typeRef)*)? ')' returnType? withClause?
     | path typeArgs?
@@ -195,6 +207,7 @@ block
 statement
     : letStatement
     | returnStatement
+    | taskReturnStatement
     | ifStatement
     | forStatement
     | whileStatement
@@ -218,12 +231,25 @@ returnStatement
     : 'return' expression? ';'
     ;
 
+// `task return` yields from a Wasm async function.
+taskReturnStatement
+    : 'task' 'return' expression? ';'
+    ;
+
 ifStatement
-    : 'if' exprNoStruct block ('else' (ifStatement | block))?
+    : 'if' condition block ('else' (ifStatement | block))?
+    ;
+
+// `if`/`while` headers admit an optional `let` binding (and let-chains via
+// `&&`, folded into the trailing expression). `exprNoStruct` keeps a bare `{`
+// reserved for the body.
+condition
+    : 'let' pattern '=' exprNoStruct
+    | exprNoStruct
     ;
 
 forStatement
-    : 'for' 'let' 'mut'? IDENTIFIER forTail block
+    : 'for' 'let' pattern forTail block
     ;
 
 forTail
@@ -232,7 +258,7 @@ forTail
     ;
 
 whileStatement
-    : 'while' exprNoStruct block
+    : 'while' condition block
     ;
 
 loopStatement
@@ -266,7 +292,7 @@ expression
     | expression '&' expression
     | expression ('==' | '!=') expression
     | expression ('<' | '<=' | '>' | '>=') expression
-    | expression ('<<' | '>>') expression
+    | expression ('<' '<' | '>' '>') expression
     | expression ('+' | '-') expression
     | expression 'as' typeRef
     | expression ('*' | '/' | '%') expression
@@ -300,13 +326,37 @@ argumentList
 primary
     : literal
     | 'self'
+    | compileTimeExpr
     | structLiteral
-    | path ('::' typeArgs)?
+    | mapLiteral
+    | exprPath
     | tupleOrArrayLiteral
     | closure
     | ifExpr
     | matchExpr
     | '(' expression ')'
+    ;
+
+// Key-value (map) literal: `{}` or `{ key: value, ... }`. Inferred to
+// `TreeMap<String, V>` by context. Excluded from `primaryNoStruct` because a
+// `{` after an `if`/`while`/`for` header opens the body.
+mapLiteral
+    : '{' (mapEntry (',' mapEntry)* ','?)? '}'
+    ;
+
+mapEntry
+    : (IDENTIFIER | STRING_LITERAL) ':' expression
+    ;
+
+// Expression-position path, supporting interspersed turbofish segments:
+// `Stream::<u8>::new`, `Future::<Result<(), E>>::new`, `JsonValue::Bool`.
+exprPath
+    : IDENTIFIER ('::' IDENTIFIER | '::' typeArgs)*
+    ;
+
+// Compile-time literals and macros: `#file`, `#include_str("...")`.
+compileTimeExpr
+    : '#' IDENTIFIER ('(' argumentList? ')')?
     ;
 
 // `expression` minus struct literals, for `if` / `while` / `for` headers
@@ -321,7 +371,7 @@ exprNoStruct
     | exprNoStruct '&' exprNoStruct
     | exprNoStruct ('==' | '!=') exprNoStruct
     | exprNoStruct ('<' | '<=' | '>' | '>=') exprNoStruct
-    | exprNoStruct ('<<' | '>>') exprNoStruct
+    | exprNoStruct ('<' '<' | '>' '>') exprNoStruct
     | exprNoStruct ('+' | '-') exprNoStruct
     | exprNoStruct 'as' typeRef
     | exprNoStruct ('*' | '/' | '%') exprNoStruct
@@ -340,7 +390,8 @@ postfixNoStruct
 primaryNoStruct
     : literal
     | 'self'
-    | path ('::' typeArgs)?
+    | compileTimeExpr
+    | exprPath
     | tupleOrArrayLiteral
     | closure
     | ifExpr
@@ -384,7 +435,7 @@ closureParam
     ;
 
 ifExpr
-    : 'if' exprNoStruct block 'else' (ifExpr | block)
+    : 'if' condition block 'else' (ifExpr | block)
     ;
 
 matchExpr
@@ -395,7 +446,12 @@ matchArm
     : pattern ('&&' expression)? '=>' (block | expression)
     ;
 
+// Or-patterns: `A | B | C`, as used in `match` arms and `matches { ... }`.
 pattern
+    : patternPrimary ('|' patternPrimary)*
+    ;
+
+patternPrimary
     : '_'
     | 'mut'? IDENTIFIER
     | literal
@@ -462,6 +518,12 @@ IDENTIFIER
 // Shebang line; the negated `[` keeps `#![...]` inner attributes separate.
 SHEBANG
     : '#!' ~[[\r\n] ~[\r\n]* -> channel(HIDDEN)
+    ;
+
+// The `__DATA__` marker ends the source; everything after it is an inline
+// data/test section consumed by the compiler, not Wado code.
+DATA_SECTION
+    : '__DATA__' .*? EOF -> skip
     ;
 
 LINE_COMMENT
