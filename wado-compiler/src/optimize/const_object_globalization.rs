@@ -112,8 +112,17 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
 
     // Phase 2 — mutation. Each candidate becomes a fresh global with a `null`
     // placeholder init; the binding becomes an inline `GlobalVarSet` and its
-    // reads become `GlobalVarGet`.
-    let mut counter = 0usize;
+    // reads become `GlobalVarGet`. Number from the count of pre-existing
+    // `__const_obj_*` globals rather than from `0`, so names stay unique even
+    // if the pass is invoked more than once over a program's lifetime: a
+    // per-call `0`-based counter would emit a second `__const_obj_0` with an
+    // unrelated type, colliding two globals under one name (an invalid-Wasm
+    // type mismatch). The pass runs once today, but this keeps it idempotent.
+    let mut counter = project
+        .globals
+        .iter()
+        .filter(|g| g.name.starts_with("__const_obj_"))
+        .count();
     for cand in candidates {
         let name = format!("__const_obj_{counter}");
         counter += 1;
