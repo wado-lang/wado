@@ -190,6 +190,12 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
 
     // === Informational logging (fire-and-forget, filtered by level) ===
 
+    /// Whether a diagnostic of `severity` would be emitted at the current level.
+    /// Lets callers skip building a diagnostic that would be filtered out.
+    pub fn would_log(&self, severity: Severity) -> bool {
+        self.should_log(severity)
+    }
+
     /// Check if the given severity should be logged at the current level
     fn should_log(&self, severity: Severity) -> bool {
         match self.level {
@@ -239,10 +245,11 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Emit an optimizer remark at info level, carrying a source span.
     ///
     /// Remarks report residual costs that survived optimization (see WEP
-    /// `wep-2026-06-03-optimizer-remarks.md`). They are gated like `info` —
-    /// shown at the default `Info` level, silenced by `--log-level warn` — but
-    /// carry a span so the source location is rendered. The `remark:` prefix is
-    /// added here so call sites pass only the bare message.
+    /// `wep-2026-06-03-optimizer-remarks.md`). They are gated at `Info`
+    /// severity; since the CLI is quiet by default (`warn`), seeing them takes
+    /// `--log-level info`. The span lets the source location be rendered, and
+    /// the `remark:` prefix is added here so call sites pass only the bare
+    /// message.
     pub fn remark(&self, message: impl Into<String>, span: DiagnosticSpan) {
         if self.should_log(Severity::Info) {
             let diag = self.apply_file_context(Diagnostic {

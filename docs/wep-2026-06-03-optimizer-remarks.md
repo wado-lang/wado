@@ -96,8 +96,8 @@ optimization appears in the final NIR as one of: a remaining `$value_copy$T(...)
 call, or an `array_clone` / `array_clone_shallow` / `copy_value` call. The remark
 collects all of these in entry-module functions. (`array_copy` is excluded — it
 is bulk buffer movement inside stdlib helpers like `String::push`, not a
-value-semantic copy.) Actual shipped output, where `b` is a `List<i32>` copied
-then mutated:
+value-semantic copy.) Example output (`--log-level info`), where `b` is a
+`List<i32>` copied then mutated:
 
 ```
 src.wado:5:5: info: remark: a copy of `List<i32>` survives optimization
@@ -109,13 +109,18 @@ carries no per-instruction span (only function-level `WirMeta` does), so a
 WIR-sourced remark could not point at the source. The optimized NIR is the last
 IR with per-expression spans, and `wir_build` lowers these copies one-to-one, so
 NIR is both span-accurate and faithful. Even so the synthesized copy nodes
-(`array_clone`, demoted spine copies) carry no user span themselves, so the
-remark is anchored to the enclosing statement — the `let mut b = a;` that performs
-the copy. The reference escape hatch (`&T` / `&mut T`) is the only construct that
-shares rather than copies (spec.md); naming it as a suggestion is deferred to the
+(`array_clone`, demoted spine copies) carry placeholder spans, as do the inner
+statements of the blocks that SROA reconstruction wraps them in, so the remark
+anchors to the enclosing _real_ statement — the `let mut b = a;` that performs the
+copy — rather than descending into those synthesized inner statements. The
+reference escape hatch (`&T` / `&mut T`) is the only construct that shares rather
+than copies (spec.md); naming it as a suggestion is deferred to the
 read-only-vs-required classification below.
 
 ### Surviving aggregate allocations (failed SROA)
+
+_Not yet implemented — design for the next remark kind; see the Consequences
+checklist._
 
 Scalar Replacement of Aggregates (`sroa`, `container_sroa`, `field_scalarize`,
 `sroa_param`) dissolves a struct or tuple into individual scalar locals, removing

@@ -94,3 +94,39 @@ export fn run() with Stdout {
         "expected no remark (copy scalarized away), got {remarks:?}"
     );
 }
+
+#[test]
+fn struct_field_copy_remark_points_at_copy_statement() {
+    // `Bag` is SROA-decomposed and its `items` copy is reconstructed inside a
+    // synthesized block whose inner statements carry placeholder spans. The
+    // remark must anchor to the enclosing real statement `let mut b = a;`
+    // (line 8), not to the placeholder span of the inner synthesized statement.
+    let remarks = remarks_for(
+        r#"
+use { println } from "core:cli";
+
+struct Bag { items: List<i32> }
+
+export fn run() with Stdout {
+    let a = Bag { items: [1, 2, 3] };
+    let mut b = a;
+    b.items.push(4);
+    println(`{a.items.len()} {b.items.len()}`);
+}
+"#,
+    );
+
+    assert_eq!(
+        remarks.len(),
+        1,
+        "expected exactly one remark, got {remarks:?}"
+    );
+    assert!(
+        remarks[0].contains("a copy of") && remarks[0].contains("List<i32>"),
+        "unexpected remark text: {remarks:?}"
+    );
+    assert!(
+        remarks[0].starts_with("8:"),
+        "remark should point at the copy statement on line 8, not a placeholder span: {remarks:?}"
+    );
+}

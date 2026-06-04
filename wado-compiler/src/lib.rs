@@ -641,12 +641,16 @@ fn compile_after_load<H: CompilerHost>(
 
     // Emit optimizer remarks for residual value-semantic copies that survived
     // the NIR pipeline. NIR is the last IR with per-expression spans; see
-    // `remarks` and WEP `wep-2026-06-03-optimizer-remarks.md`.
-    for remark in remarks::collect_value_copy_remarks(&nir) {
-        logger.remark(
-            remark.message,
-            compiler_host::DiagnosticSpan::from_span(&remark.span, Some(&entry_filename)),
-        );
+    // `remarks` and WEP `wep-2026-06-03-optimizer-remarks.md`. Gated on the log
+    // level so the NIR walk is skipped entirely when remarks would be filtered
+    // out (the default CLI level is `warn`).
+    if logger.would_log(compiler_host::Severity::Info) {
+        for remark in remarks::collect_value_copy_remarks(&nir) {
+            logger.remark(
+                remark.message,
+                compiler_host::DiagnosticSpan::from_span(&remark.span, Some(&entry_filename)),
+            );
+        }
     }
 
     // === Phase 12: Build WIR (NirPackage → WirPackage) ===
