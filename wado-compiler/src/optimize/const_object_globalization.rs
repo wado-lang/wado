@@ -434,6 +434,23 @@ fn expr_readonly(expr: &NirExpr, idx: u32, gate: &Gate<'_>) -> bool {
             expr: inner,
         } => !expr_mentions_local(inner, idx),
 
+        // Pure scalar reads: `xs[i] + 1`, `k >= xs.used`, `xs[i] as i64`,
+        // `-xs[i]`. The operands flow back through the read arms above; the
+        // operator yields a fresh scalar that neither aliases nor mutates the
+        // binding. Without this, a projection read buried in an expression — a
+        // bounds check, a length comparison — falls to the conservative `_`
+        // arm and blocks hoisting in straight-line bodies. (In a loop, `licm`
+        // hoists such reads into their own `let`, which is why this only
+        // surfaced for non-loop bindings.)
+        NirExprKind::Binary { left, right, .. } => {
+            expr_readonly(left, idx, gate) && expr_readonly(right, idx, gate)
+        }
+        NirExprKind::Cast { expr: inner, .. }
+        | NirExprKind::Unary {
+            op: NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot,
+            expr: inner,
+        } => expr_readonly(inner, idx, gate),
+
         // Reads through projections: `xs.field`, `xs[i]`.
         NirExprKind::Index { expr: base, index } => {
             (is_local(base, idx) || expr_readonly(base, idx, gate))

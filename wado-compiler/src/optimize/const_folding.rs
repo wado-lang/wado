@@ -23,6 +23,7 @@
 //! [`super::alias::build_value_copy_helpers`] for the per-function
 //! alias / helper computations the visitor consumes.
 
+use crate::compiler_item::SeqField;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
@@ -33,9 +34,10 @@ use crate::nir_visitor::{
     opt_walk_expr, opt_walk_stmt, stmt_has_break_to,
 };
 use crate::niri::{
-    Arm, CalleeMap, FieldSnapshot, GlobalEnv, Interpreter, Lattice, Value, is_ctfe_eligible,
+    Arm, CalleeMap, FieldSnapshot, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter, Lattice,
+    Value, is_ctfe_eligible,
 };
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 use super::alias::{build_alias_info, build_value_copy_helpers, recognize_value_copy};
 
@@ -53,6 +55,11 @@ pub fn fold_constants(project: &mut NirPackage) -> bool {
     // initializer reduces to a `Const(_)` becomes a `GlobalVarGet`
     // rewrite target; mutable globals are recorded as `NonConst`.
     let globals = build_global_env(project, &type_table, &callees);
+    // Known constant fields of immutable globals — currently the `SeqField::Len`
+    // length of sequence globals hoisted by body globalization, so a
+    // `global:X.used` read folds and the bounds-check / branch passes can drop
+    // the checks they eliminate on the pre-hoist local form.
+    let global_fields = build_global_field_env(project);
     // Build the `$value_copy$T<id>` helpers map once per pass; the
     // visitor uses it to recognize calls that transfer field
     // knowledge across the synthesized one-level shallow copies
@@ -65,6 +72,7 @@ pub fn fold_constants(project: &mut NirPackage) -> bool {
     };
     visitor.interpreter.with_callees(&callees);
     visitor.interpreter.with_globals(&globals);
+    visitor.interpreter.with_global_fields(&global_fields);
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         let address_taken = func.address_taken_locals.clone();
@@ -144,6 +152,114 @@ fn build_global_env(
         }
     }
     env
+}
+
+/// The statically-known [`SeqField::Len`] length of a constant `List` /
+/// `String` value: the element count of its backing array literal (directly or
+/// through the `{ let __b = <array>; *__b }` builder block an array literal
+/// leaves) or the explicit `used` field of a `{ repr, used: N }` struct literal.
+fn const_seq_len(value: &NirExpr) -> Option<i32> {
+    match &value.kind {
+        NirExprKind::ArrayLiteral { elements } => i32::try_from(elements.len()).ok(),
+        NirExprKind::Block(b) | NirExprKind::LabeledBlock { block: b, .. } => {
+            b.stmts.iter().rev().find_map(|s| match &s.kind {
+                NirStmtKind::Let { value, .. } => const_seq_len(value),
+                NirStmtKind::Expr(e) => const_seq_len(e),
+                _ => None,
+            })
+        }
+        NirExprKind::StructLiteral { fields, .. } => fields.iter().find_map(|f| {
+            if f.name == SeqField::Len.field_name()
+                && let NirExprKind::IntLiteral { value, .. } = &f.value.kind
+            {
+                return i32::try_from(*value).ok();
+            }
+            None
+        }),
+        NirExprKind::Unary { expr: inner, .. } | NirExprKind::Cast { expr: inner, .. } => {
+            const_seq_len(inner)
+        }
+        _ => None,
+    }
+}
+
+/// Pre-build the [`GlobalFieldEnv`]: the statically-known [`SeqField::Len`]
+/// length of every Wado-immutable sequence global. Body globalization hoists
+/// constant read-only `List` / `String` bindings into such globals (leaving a
+/// `null` placeholder initializer and an inline `GlobalVarSet` with the real
+/// value), so folding `global:X.used` to a constant lets the bounds-check /
+/// branch passes recover the elimination they perform on the pre-hoist local.
+fn build_global_field_env(project: &NirPackage) -> GlobalFieldEnv {
+    let immutable: IndexSet<GlobalKey> = project
+        .globals
+        .iter()
+        .filter(|g| !g.wado_mutable)
+        .map(|g| (g.module_source.clone(), g.name.clone()))
+        .collect();
+    let mut env = GlobalFieldEnv::default();
+    if immutable.is_empty() {
+        return env;
+    }
+    // A non-placeholder const initializer (a user const sequence global) is a
+    // direct source.
+    for global in &project.globals {
+        if !global.wado_mutable
+            && let Some(n) = const_seq_len(&global.initializer)
+        {
+            record_seq_len(
+                &mut env,
+                (global.module_source.clone(), global.name.clone()),
+                n,
+            );
+        }
+    }
+    // The inline `GlobalVarSet(X, <const>)` body globalization emits.
+    let mut collector = SeqLenCollector {
+        immutable: &immutable,
+        env: &mut env,
+    };
+    for func_rc in &project.functions {
+        if let Some(body) = &func_rc.borrow().body {
+            collector.visit_block(body);
+        }
+    }
+    env
+}
+
+fn record_seq_len(env: &mut GlobalFieldEnv, key: GlobalKey, n: i32) {
+    env.entry(key).or_default().insert(
+        SeqField::Len.field_name().to_string(),
+        Value::Int {
+            value: i64::from(n) as u64,
+            prim: PrimitiveType::I32,
+        },
+    );
+}
+
+/// Records the [`SeqField::Len`] of each immutable global assigned an inline
+/// constant sequence via `GlobalVarSet`.
+struct SeqLenCollector<'a> {
+    immutable: &'a IndexSet<GlobalKey>,
+    env: &'a mut GlobalFieldEnv,
+}
+
+impl NirRefVisitor for SeqLenCollector<'_> {
+    fn visit_expr(&mut self, expr: &NirExpr) {
+        if let NirExprKind::GlobalVarSet {
+            module_source,
+            name,
+            value,
+        } = &expr.kind
+        {
+            let key = (module_source.clone(), name.clone());
+            if self.immutable.contains(&key)
+                && let Some(n) = const_seq_len(value)
+            {
+                record_seq_len(self.env, key, n);
+            }
+        }
+        self.walk_expr(expr);
+    }
 }
 
 struct ConstFoldVisitor<'a> {

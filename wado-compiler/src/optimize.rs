@@ -646,4 +646,18 @@ fn run_optimization_passes(
     run_pass("nir/const_object_globalization", project, profiler, |p| {
         globalize_const_objects(p)
     });
+    // Clean up after globalization: fold the `global:X.used` length reads it
+    // exposes (recovered via `const_folding`'s `GlobalFieldEnv`) and prune the
+    // now-constant bounds-check branches, so a hoisted constant-index array
+    // keeps the bounds-check elimination it had as a local. Only `const_fold` /
+    // `branch_prune` run here — re-entering the full loop is unsafe, since the
+    // nullable `GlobalVarGet`s globalization emits are not meant to flow back
+    // through `value_copy` / `sroa` (which is why globalization runs last).
+    run_pass("nir/const_fold_post_global", project, profiler, |p| {
+        let mut changed = false;
+        while fold_constants(p) | prune_constant_branches(p) {
+            changed = true;
+        }
+        changed
+    });
 }

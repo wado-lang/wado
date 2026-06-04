@@ -1,0 +1,29 @@
+// A constant aggregate read only through scalar-producing expressions (here a
+// bounds-checked `c[k]`, whose `k >= c.used` check is a `Binary`) must still be
+// recognized as read-only and hoisted to a module global. `pick` is called
+// repeatedly from the loop, so rebuilding `c` per call is the exact waste body
+// globalization targets — independent of `c` itself being in a loop.
+use { println, Stdout } from "core:cli";
+
+fn pick(k: i32) -> i32 {
+    let c: List<i32> = [10, 20, 30, 40];
+    return c[k];
+}
+
+export fn run() with Stdout {
+    let mut total = 0;
+    let mut j = 0;
+    while j < 4 {
+        total = total + pick(j);
+        j = j + 1;
+    }
+    println(`{total}`);
+}
+
+__DATA__
+{
+    "stdout": "100\n",
+    "wir_expect:O2": [
+        "global global:__const_obj_0"
+    ]
+}
