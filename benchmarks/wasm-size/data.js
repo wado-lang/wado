@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780601307013,
+  "lastUpdate": 1780607652165,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29757,6 +29757,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/08b79a7b27885ae4f951f277d9d79268500bb880"
         },
         "date": 1780601306746,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9659,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17191,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460509,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "310e55aeb00cae2106d122720655e3ad077b8bb4",
+          "message": "Merge pull request #1291 from wado-lang/claude/wado-item-deref-PNDdk\n\nfeat: iterate references by reference in for-of, including tuples",
+          "timestamp": "2026-06-05T06:05:20+09:00",
+          "tree_id": "16fecb939573cbb918964b50b979545390074114",
+          "url": "https://github.com/wado-lang/wado/commit/310e55aeb00cae2106d122720655e3ad077b8bb4"
+        },
+        "date": 1780607651631,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
