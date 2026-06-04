@@ -892,16 +892,24 @@ struct Parser {
     tokens: List<Token>,
     pos: i32,
     chars: List<char>,
+    pending: Option<ParseError>,
 }
 
 impl Parser {
     fn new(tokens: List<Token>, chars: List<char>) -> Parser {
-        return Parser { tokens, pos: 0, chars };
+        return Parser { tokens, pos: 0, chars, pending: null };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
         let lc = line_col_at(&self.chars, span.start);
         return ParseError::at(message, span, expected, lc.0, lc.1);
+    }
+
+    fn record_deeper(&mut self, e: ParseError) {
+        let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
+        if take {
+            self.pending = Option::<ParseError>::Some(e);
+        }
     }
 
     fn peek(&self) -> &Token {
@@ -1088,7 +1096,14 @@ fn _parse_start__inner(p: &mut Parser) -> Result<StartNode, ParseError> {
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if _gale_kind_set_0(p.peek_kind()) {
+                    let _rec_pos = p.pos;
+                    if let Err(_rec_e) = _parse_statement(p) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                }
+                break;
+            }
         }
         _plus_first = false;
         let statement = _parse_statement(p)?;
@@ -1180,21 +1195,48 @@ pub fn parse_start(input: &String) -> Result<StartNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_start(&mut parser);
+    let _result = _parse_start(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<StartNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<StartNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_statement(input: &String) -> Result<StatementNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_statement(&mut parser);
+    let _result = _parse_statement(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<StatementNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<StatementNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_if_statement(input: &String) -> Result<IfStatementNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_if_statement(&mut parser);
+    let _result = _parse_if_statement(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<IfStatementNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<IfStatementNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse(input: &String) -> Result<StartNode, ParseError> {

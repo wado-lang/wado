@@ -928,8 +928,12 @@ b : 'y' ;
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"pub fn parse_a(input: &String)");
     assert str_contains(&output, &"pub fn parse_b(input: &String)");
-    assert str_contains(&output, &"return _parse_a(&mut parser);");
-    assert str_contains(&output, &"return _parse_b(&mut parser);");
+    // The entry captures the result so a deeper recovery error (recorded in
+    // `parser.pending` by a scan-gated repetition over a malformed element)
+    // can be preferred over the shallow top-level failure.
+    assert str_contains(&output, &"let _result = _parse_a(&mut parser);");
+    assert str_contains(&output, &"let _result = _parse_b(&mut parser);");
+    assert str_contains(&output, &"if let Some(_d) = parser.pending");
     assert str_contains(&output, &"return parse_a(input);");
 }
 
@@ -946,7 +950,7 @@ WS : [ \\t\\n]+ -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"pub fn parse_expr(input: &String)");
-    assert str_contains(&output, &"return _parse_expr(&mut parser, 0);");
+    assert str_contains(&output, &"let _result = _parse_expr(&mut parser, 0);");
 }
 
 test "token-only group `(K_A | K_B)` gates p.advance() on a kind-check" {

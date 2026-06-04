@@ -3941,16 +3941,24 @@ struct Parser {
     tokens: List<Token>,
     pos: i32,
     chars: List<char>,
+    pending: Option<ParseError>,
 }
 
 impl Parser {
     fn new(tokens: List<Token>, chars: List<char>) -> Parser {
-        return Parser { tokens, pos: 0, chars };
+        return Parser { tokens, pos: 0, chars, pending: null };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
         let lc = line_col_at(&self.chars, span.start);
         return ParseError::at(message, span, expected, lc.0, lc.1);
+    }
+
+    fn record_deeper(&mut self, e: ParseError) {
+        let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
+        if take {
+            self.pending = Option::<ParseError>::Some(e);
+        }
     }
 
     fn peek(&self) -> &Token {
@@ -5889,7 +5897,14 @@ fn _parse_grammar_spec__inner(p: &mut Parser) -> Result<GrammarSpecNode, ParseEr
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if _gale_kind_set_0(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                if let Err(_rec_e) = _parse_prequel_construct(p) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+            }
+            break;
+        }
         let prequel_construct = _parse_prequel_construct(p)?;
         prequel_construct_list.push(prequel_construct);
     }
@@ -5905,7 +5920,14 @@ fn _parse_grammar_spec__inner(p: &mut Parser) -> Result<GrammarSpecNode, ParseEr
             if pos <= p.pos { break rep_scan_2; }
             rep_scan_pos_2 = pos;
         }
-        if rep_scan_pos_2 < 0 { break; }
+        if rep_scan_pos_2 < 0 {
+            if p.peek_kind() == TK_MODE {
+                let _rec_pos = p.pos;
+                if let Err(_rec_e) = _parse_mode_spec(p) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+            }
+            break;
+        }
         let mode_spec = _parse_mode_spec(p)?;
         mode_spec_list.push(mode_spec);
     }
@@ -6583,7 +6605,14 @@ fn _parse_mode_spec__inner(p: &mut Parser) -> Result<ModeSpecNode, ParseError> {
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if _gale_kind_set_3(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                if let Err(_rec_e) = _parse_lexer_rule_spec(p) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+            }
+            break;
+        }
         let lexer_rule_spec = _parse_lexer_rule_spec(p)?;
         lexer_rule_spec_list.push(lexer_rule_spec);
     }
@@ -6618,7 +6647,14 @@ fn _parse_rules__inner(p: &mut Parser) -> Result<RulesNode, ParseError> {
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if _gale_kind_set_4(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                if let Err(_rec_e) = _parse_rule_spec(p) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+            }
+            break;
+        }
         let rule_spec = _parse_rule_spec(p)?;
         rule_spec_list.push(rule_spec);
     }
@@ -6745,7 +6781,14 @@ fn _parse_parser_rule_spec__inner(p: &mut Parser) -> Result<ParserRuleSpecNode, 
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if _gale_kind_set_6(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                if let Err(_rec_e) = _parse_rule_prequel(p) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+            }
+            break;
+        }
         let rule_prequel = _parse_rule_prequel(p)?;
         rule_prequel_list.push(rule_prequel);
     }
@@ -6791,7 +6834,14 @@ fn _parse_exception_group__inner(p: &mut Parser) -> Result<ExceptionGroupNode, P
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_CATCH {
+                let _rec_pos = p.pos;
+                if let Err(_rec_e) = _parse_exception_handler(p) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+            }
+            break;
+        }
         let exception_handler = _parse_exception_handler(p)?;
         exception_handler_list.push(exception_handler);
     }
@@ -7018,7 +7068,14 @@ fn _parse_rule_modifiers__inner(p: &mut Parser) -> Result<RuleModifiersNode, Par
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if _gale_kind_set_5(p.peek_kind()) {
+                    let _rec_pos = p.pos;
+                    if let Err(_rec_e) = _parse_rule_modifier(p) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                }
+                break;
+            }
         }
         _plus_first = false;
         let rule_modifier = _parse_rule_modifier(p)?;
@@ -7339,7 +7396,14 @@ fn _parse_lexer_elements__inner(p: &mut Parser) -> Result<LexerElementsNode, Par
                     if pos <= p.pos { break rep_scan; }
                     rep_scan_pos = pos;
                 }
-                if rep_scan_pos < 0 { break; }
+                if rep_scan_pos < 0 {
+                    if _gale_kind_set_7(p.peek_kind()) {
+                        let _rec_pos = p.pos;
+                        if let Err(_rec_e) = _parse_lexer_element(p) { p.record_deeper(_rec_e); }
+                        p.pos = _rec_pos;
+                    }
+                    break;
+                }
             }
             _plus_first = false;
             let lexer_element = _parse_lexer_element(p)?;
@@ -7727,7 +7791,14 @@ fn _parse_alternative__inner(p: &mut Parser) -> Result<AlternativeNode, ParseErr
                     if pos <= p.pos { break rep_scan; }
                     rep_scan_pos = pos;
                 }
-                if rep_scan_pos < 0 { break; }
+                if rep_scan_pos < 0 {
+                    if _gale_kind_set_11(p.peek_kind()) {
+                        let _rec_pos = p.pos;
+                        if let Err(_rec_e) = _parse_element(p) { p.record_deeper(_rec_e); }
+                        p.pos = _rec_pos;
+                    }
+                    break;
+                }
             }
             _plus_first = false;
             let element = _parse_element(p)?;
@@ -8669,7 +8740,14 @@ fn _parse_block__inner(p: &mut Parser) -> Result<BlockNode, ParseError> {
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if p.peek_kind() == TK_AT {
+                    let _rec_pos = p.pos;
+                    if let Err(_rec_e) = _parse_rule_action(p) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                }
+                break;
+            }
             let rule_action = _parse_rule_action(p)?;
             rule_action_list.push(rule_action);
         }
@@ -9082,7 +9160,14 @@ fn _parse_rule_modifiers__follow_0__inner(p: &mut Parser) -> Result<RuleModifier
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if _gale_kind_set_5(p.peek_kind()) {
+                    let _rec_pos = p.pos;
+                    if let Err(_rec_e) = _parse_rule_modifier(p) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                }
+                break;
+            }
         }
         _plus_first = false;
         let rule_modifier = _parse_rule_modifier(p)?;
@@ -9214,469 +9299,1072 @@ pub fn parse_grammar_spec(input: &String) -> Result<GrammarSpecNode, ParseError>
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_grammar_spec(&mut parser);
+    let _result = _parse_grammar_spec(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<GrammarSpecNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<GrammarSpecNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_grammar_decl(input: &String) -> Result<GrammarDeclNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_grammar_decl(&mut parser);
+    let _result = _parse_grammar_decl(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<GrammarDeclNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<GrammarDeclNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_grammar_type(input: &String) -> Result<GrammarTypeNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_grammar_type(&mut parser);
+    let _result = _parse_grammar_type(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<GrammarTypeNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<GrammarTypeNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_prequel_construct(input: &String) -> Result<PrequelConstructNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_prequel_construct(&mut parser);
+    let _result = _parse_prequel_construct(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<PrequelConstructNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<PrequelConstructNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_options_spec(input: &String) -> Result<OptionsSpecNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_options_spec(&mut parser);
+    let _result = _parse_options_spec(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<OptionsSpecNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<OptionsSpecNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_option(input: &String) -> Result<OptionNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_option(&mut parser);
+    let _result = _parse_option(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<OptionNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<OptionNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_option_value(input: &String) -> Result<OptionValueNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_option_value(&mut parser);
+    let _result = _parse_option_value(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<OptionValueNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<OptionValueNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_delegate_grammars(input: &String) -> Result<DelegateGrammarsNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_delegate_grammars(&mut parser);
+    let _result = _parse_delegate_grammars(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<DelegateGrammarsNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<DelegateGrammarsNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_delegate_grammar(input: &String) -> Result<DelegateGrammarNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_delegate_grammar(&mut parser);
+    let _result = _parse_delegate_grammar(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<DelegateGrammarNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<DelegateGrammarNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_tokens_spec(input: &String) -> Result<TokensSpecNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_tokens_spec(&mut parser);
+    let _result = _parse_tokens_spec(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<TokensSpecNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<TokensSpecNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_channels_spec(input: &String) -> Result<ChannelsSpecNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_channels_spec(&mut parser);
+    let _result = _parse_channels_spec(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<ChannelsSpecNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ChannelsSpecNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_id_list(input: &String) -> Result<IdListNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_id_list(&mut parser);
+    let _result = _parse_id_list(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<IdListNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<IdListNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_action_(input: &String) -> Result<ActionNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_action_(&mut parser);
+    let _result = _parse_action_(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<ActionNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ActionNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_action_scope_name(input: &String) -> Result<ActionScopeNameNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_action_scope_name(&mut parser);
+    let _result = _parse_action_scope_name(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<ActionScopeNameNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ActionScopeNameNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_action_block(input: &String) -> Result<ActionBlockNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_action_block(&mut parser);
+    let _result = _parse_action_block(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<ActionBlockNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ActionBlockNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_arg_action_block(input: &String) -> Result<ArgActionBlockNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_arg_action_block(&mut parser);
+    let _result = _parse_arg_action_block(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<ArgActionBlockNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ArgActionBlockNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_mode_spec(input: &String) -> Result<ModeSpecNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_mode_spec(&mut parser);
+    let _result = _parse_mode_spec(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<ModeSpecNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ModeSpecNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_rules(input: &String) -> Result<RulesNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_rules(&mut parser);
+    let _result = _parse_rules(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<RulesNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<RulesNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_rule_spec(input: &String) -> Result<RuleSpecNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_rule_spec(&mut parser);
+    let _result = _parse_rule_spec(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<RuleSpecNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<RuleSpecNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_parser_rule_spec(input: &String) -> Result<ParserRuleSpecNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_parser_rule_spec(&mut parser);
+    let _result = _parse_parser_rule_spec(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<ParserRuleSpecNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ParserRuleSpecNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_exception_group(input: &String) -> Result<ExceptionGroupNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_exception_group(&mut parser);
+    let _result = _parse_exception_group(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<ExceptionGroupNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ExceptionGroupNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_exception_handler(input: &String) -> Result<ExceptionHandlerNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_exception_handler(&mut parser);
+    let _result = _parse_exception_handler(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<ExceptionHandlerNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ExceptionHandlerNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_finally_clause(input: &String) -> Result<FinallyClauseNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_finally_clause(&mut parser);
+    let _result = _parse_finally_clause(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<FinallyClauseNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<FinallyClauseNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_rule_prequel(input: &String) -> Result<RulePrequelNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_rule_prequel(&mut parser);
+    let _result = _parse_rule_prequel(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<RulePrequelNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<RulePrequelNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_rule_returns(input: &String) -> Result<RuleReturnsNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_rule_returns(&mut parser);
+    let _result = _parse_rule_returns(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<RuleReturnsNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<RuleReturnsNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_throws_spec(input: &String) -> Result<ThrowsSpecNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_throws_spec(&mut parser);
+    let _result = _parse_throws_spec(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<ThrowsSpecNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ThrowsSpecNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_locals_spec(input: &String) -> Result<LocalsSpecNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_locals_spec(&mut parser);
+    let _result = _parse_locals_spec(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<LocalsSpecNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<LocalsSpecNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_rule_action(input: &String) -> Result<RuleActionNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_rule_action(&mut parser);
+    let _result = _parse_rule_action(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<RuleActionNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<RuleActionNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_rule_modifiers(input: &String) -> Result<RuleModifiersNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_rule_modifiers(&mut parser);
+    let _result = _parse_rule_modifiers(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<RuleModifiersNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<RuleModifiersNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_rule_modifier(input: &String) -> Result<RuleModifierNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_rule_modifier(&mut parser);
+    let _result = _parse_rule_modifier(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<RuleModifierNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<RuleModifierNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_rule_block(input: &String) -> Result<RuleBlockNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_rule_block(&mut parser);
+    let _result = _parse_rule_block(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<RuleBlockNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<RuleBlockNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_rule_alt_list(input: &String) -> Result<RuleAltListNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_rule_alt_list(&mut parser);
+    let _result = _parse_rule_alt_list(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<RuleAltListNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<RuleAltListNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_labeled_alt(input: &String) -> Result<LabeledAltNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_labeled_alt(&mut parser);
+    let _result = _parse_labeled_alt(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<LabeledAltNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<LabeledAltNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_lexer_rule_spec(input: &String) -> Result<LexerRuleSpecNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_lexer_rule_spec(&mut parser);
+    let _result = _parse_lexer_rule_spec(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<LexerRuleSpecNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<LexerRuleSpecNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_lexer_rule_block(input: &String) -> Result<LexerRuleBlockNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_lexer_rule_block(&mut parser);
+    let _result = _parse_lexer_rule_block(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<LexerRuleBlockNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<LexerRuleBlockNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_lexer_alt_list(input: &String) -> Result<LexerAltListNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_lexer_alt_list(&mut parser);
+    let _result = _parse_lexer_alt_list(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<LexerAltListNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<LexerAltListNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_lexer_alt(input: &String) -> Result<LexerAltNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_lexer_alt(&mut parser);
+    let _result = _parse_lexer_alt(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<LexerAltNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<LexerAltNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_lexer_elements(input: &String) -> Result<LexerElementsNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_lexer_elements(&mut parser);
+    let _result = _parse_lexer_elements(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<LexerElementsNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<LexerElementsNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_lexer_element(input: &String) -> Result<LexerElementNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_lexer_element(&mut parser);
+    let _result = _parse_lexer_element(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<LexerElementNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<LexerElementNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_lexer_block(input: &String) -> Result<LexerBlockNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_lexer_block(&mut parser);
+    let _result = _parse_lexer_block(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<LexerBlockNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<LexerBlockNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_lexer_commands(input: &String) -> Result<LexerCommandsNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_lexer_commands(&mut parser);
+    let _result = _parse_lexer_commands(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<LexerCommandsNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<LexerCommandsNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_lexer_command(input: &String) -> Result<LexerCommandNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_lexer_command(&mut parser);
+    let _result = _parse_lexer_command(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<LexerCommandNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<LexerCommandNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_lexer_command_name(input: &String) -> Result<LexerCommandNameNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_lexer_command_name(&mut parser);
+    let _result = _parse_lexer_command_name(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<LexerCommandNameNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<LexerCommandNameNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_lexer_command_expr(input: &String) -> Result<LexerCommandExprNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_lexer_command_expr(&mut parser);
+    let _result = _parse_lexer_command_expr(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<LexerCommandExprNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<LexerCommandExprNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_alt_list(input: &String) -> Result<AltListNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_alt_list(&mut parser);
+    let _result = _parse_alt_list(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<AltListNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<AltListNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_alternative(input: &String) -> Result<AlternativeNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_alternative(&mut parser);
+    let _result = _parse_alternative(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<AlternativeNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<AlternativeNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_element(input: &String) -> Result<ElementNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_element(&mut parser);
+    let _result = _parse_element(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<ElementNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ElementNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_predicate_options(input: &String) -> Result<PredicateOptionsNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_predicate_options(&mut parser);
+    let _result = _parse_predicate_options(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<PredicateOptionsNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<PredicateOptionsNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_predicate_option(input: &String) -> Result<PredicateOptionNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_predicate_option(&mut parser);
+    let _result = _parse_predicate_option(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<PredicateOptionNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<PredicateOptionNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_labeled_element(input: &String) -> Result<LabeledElementNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_labeled_element(&mut parser);
+    let _result = _parse_labeled_element(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<LabeledElementNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<LabeledElementNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_ebnf(input: &String) -> Result<EbnfNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_ebnf(&mut parser);
+    let _result = _parse_ebnf(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<EbnfNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<EbnfNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_block_suffix(input: &String) -> Result<BlockSuffixNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_block_suffix(&mut parser);
+    let _result = _parse_block_suffix(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<BlockSuffixNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<BlockSuffixNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_ebnf_suffix(input: &String) -> Result<EbnfSuffixNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_ebnf_suffix(&mut parser);
+    let _result = _parse_ebnf_suffix(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<EbnfSuffixNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<EbnfSuffixNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_lexer_atom(input: &String) -> Result<LexerAtomNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_lexer_atom(&mut parser);
+    let _result = _parse_lexer_atom(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<LexerAtomNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<LexerAtomNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_atom(input: &String) -> Result<AtomNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_atom(&mut parser);
+    let _result = _parse_atom(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<AtomNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<AtomNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_wildcard(input: &String) -> Result<WildcardNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_wildcard(&mut parser);
+    let _result = _parse_wildcard(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<WildcardNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<WildcardNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_not_set(input: &String) -> Result<NotSetNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_not_set(&mut parser);
+    let _result = _parse_not_set(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<NotSetNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<NotSetNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_block_set(input: &String) -> Result<BlockSetNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_block_set(&mut parser);
+    let _result = _parse_block_set(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<BlockSetNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<BlockSetNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_set_element(input: &String) -> Result<SetElementNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_set_element(&mut parser);
+    let _result = _parse_set_element(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<SetElementNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<SetElementNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_block(input: &String) -> Result<BlockNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_block(&mut parser);
+    let _result = _parse_block(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<BlockNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<BlockNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_ruleref(input: &String) -> Result<RulerefNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_ruleref(&mut parser);
+    let _result = _parse_ruleref(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<RulerefNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<RulerefNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_character_range(input: &String) -> Result<CharacterRangeNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_character_range(&mut parser);
+    let _result = _parse_character_range(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<CharacterRangeNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<CharacterRangeNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_terminal_def(input: &String) -> Result<TerminalDefNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_terminal_def(&mut parser);
+    let _result = _parse_terminal_def(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<TerminalDefNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<TerminalDefNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_element_options(input: &String) -> Result<ElementOptionsNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_element_options(&mut parser);
+    let _result = _parse_element_options(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<ElementOptionsNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ElementOptionsNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_element_option(input: &String) -> Result<ElementOptionNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_element_option(&mut parser);
+    let _result = _parse_element_option(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<ElementOptionNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ElementOptionNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_identifier(input: &String) -> Result<IdentifierNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_identifier(&mut parser);
+    let _result = _parse_identifier(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<IdentifierNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<IdentifierNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_qualified_identifier(input: &String) -> Result<QualifiedIdentifierNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_qualified_identifier(&mut parser);
+    let _result = _parse_qualified_identifier(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<QualifiedIdentifierNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<QualifiedIdentifierNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse(input: &String) -> Result<GrammarSpecNode, ParseError> {

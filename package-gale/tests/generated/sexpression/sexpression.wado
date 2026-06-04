@@ -1243,16 +1243,24 @@ struct Parser {
     tokens: List<Token>,
     pos: i32,
     chars: List<char>,
+    pending: Option<ParseError>,
 }
 
 impl Parser {
     fn new(tokens: List<Token>, chars: List<char>) -> Parser {
-        return Parser { tokens, pos: 0, chars };
+        return Parser { tokens, pos: 0, chars, pending: null };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
         let lc = line_col_at(&self.chars, span.start);
         return ParseError::at(message, span, expected, lc.0, lc.1);
+    }
+
+    fn record_deeper(&mut self, e: ParseError) {
+        let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
+        if take {
+            self.pending = Option::<ParseError>::Some(e);
+        }
     }
 
     fn peek(&self) -> &Token {
@@ -1450,7 +1458,14 @@ fn _parse_sexpr__inner(p: &mut Parser) -> Result<SexprNode, ParseError> {
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if _gale_kind_set_0(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                if let Err(_rec_e) = _parse_item(p) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+            }
+            break;
+        }
         let item = _parse_item(p)?;
         item_list.push(item);
     }
@@ -1584,7 +1599,14 @@ fn _parse_list___inner(p: &mut Parser) -> Result<ListNode, ParseError> {
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if _gale_kind_set_0(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                if let Err(_rec_e) = _parse_item(p) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+            }
+            break;
+        }
         let item = _parse_item(p)?;
         item_list.push(item);
     }
@@ -1657,28 +1679,64 @@ pub fn parse_sexpr(input: &String) -> Result<SexprNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_sexpr(&mut parser);
+    let _result = _parse_sexpr(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<SexprNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<SexprNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_item(input: &String) -> Result<ItemNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_item(&mut parser);
+    let _result = _parse_item(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<ItemNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ItemNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_list_(input: &String) -> Result<ListNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_list_(&mut parser);
+    let _result = _parse_list_(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<ListNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<ListNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse_atom(input: &String) -> Result<AtomNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    return _parse_atom(&mut parser);
+    let _result = _parse_atom(&mut parser);
+    if let Err(_e) = _result {
+        if let Some(_d) = parser.pending {
+            if _d.span.start > _e.span.start {
+                return Result::<AtomNode, ParseError>::Err(_d);
+            }
+        }
+        return Result::<AtomNode, ParseError>::Err(_e);
+    }
+    return _result;
 }
 
 pub fn parse(input: &String) -> Result<SexprNode, ParseError> {

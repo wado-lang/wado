@@ -200,6 +200,12 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     // Source characters, kept so error sites can resolve a byte/char offset
     // (`span.start`) into a human-readable `line:col` via `line_col_at`.
     s.add_field(&"chars", &"List<char>");
+    // Deepest speculative failure seen so far. A scan-gated repetition that
+    // exits on a malformed (but plausibly-starting) element re-parses it to
+    // harvest a precise inner error and records it here; the input-entry
+    // reports it instead of the shallower "expected <closer>" error when it
+    // is further into the token stream. `null` until a deeper failure is seen.
+    s.add_field(&"pending", &"Option<ParseError>");
     s.emit(w);
     w.blank();
 
@@ -210,7 +216,7 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     f.add_param(&"chars", &"List<char>");
     f.set_return_type(&"Parser");
     f.emit_begin(w);
-    w.line(&"return Parser { tokens, pos: 0, chars };");
+    w.line(&"return Parser { tokens, pos: 0, chars, pending: null };");
     w.end();
     w.blank();
 
@@ -228,6 +234,21 @@ fn gen_parser_struct(w: &mut CodeWriter) {
     w.line(&"return ParseError::at(message, span, expected, lc.0, lc.1);");
     w.end();
     w.blank();
+
+    // Record a speculative failure as the "deepest" one if it sits further
+    // into the token stream than any previously recorded. Used by the
+    // repetition recovery path (see `emit_rep_break_with_recovery`).
+    let mut frd = FnSpec::new("record_deeper");
+    frd.set_receiver(&"&mut self");
+    frd.add_param(&"e", &"ParseError");
+    frd.emit_begin(w);
+    w.line(&"let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };");
+    w.begin(&"if take");
+    w.line(&"self.pending = Option::<ParseError>::Some(e);");
+    w.end();
+    w.end();
+    w.blank();
+
 
     let mut f2 = FnSpec::new("peek");
     f2.set_receiver(&"&self");
@@ -3663,6 +3684,53 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
 /// iteration uses a `_plus_first` flag or, for the non-scannable case,
 /// folds the mandatory iteration into the while condition via
 /// `while plus_first || …`.
+/// When a scan-gated repetition over a single RuleRef exits because the scan
+/// failed, the next token may still legitimately start the inner rule but be
+/// malformed deeper in. Returns the call expression (`_parse_R(p)` /
+/// `_parse_R(p, mp)`) used to re-parse it for a precise error, or `null` when
+/// the repeated element is not a single RuleRef (no standalone parse fn).
+fn rep_recovery_call(rep_op: &RepeatOp) -> Option<String> {
+    if let LeafRuleCall = rep_op.body_shape {
+        if let RuleCall(r) = &rep_op.body {
+            let fn_name = if let Some(id) = r.variant_id {
+                `_parse_{r.target_snake}__follow_{id}`;
+            } else {
+                `_parse_{r.target_snake}`;
+            };
+            let call = if let Some(min_prec) = r.min_prec_arg {
+                `{fn_name}(p, {min_prec})`;
+            } else {
+                `{fn_name}(p)`;
+            };
+            return Option::<String>::Some(call);
+        }
+    }
+    return null;
+}
+
+/// Emit the `if {scan_pos} < 0 { break; }` loop-exit, augmented with
+/// error-path recovery for RuleRef inners: when the lookahead is in the
+/// inner's FIRST set (so an element plausibly starts here) but the scan
+/// failed, speculatively re-parse the inner to capture its precise deep error
+/// in `p.pending`, then restore the cursor and exit. Pure diagnostic — the
+/// parse decision (exit the loop) is unchanged, and the speculative parse runs
+/// only on this already-doomed branch.
+fn emit_rep_break_with_recovery(w: &mut CodeWriter, scan_pos: &String, rep_op: &RepeatOp, ctx: &mut GenContext, loop_first: &List<String>) {
+    let recovery = rep_recovery_call(rep_op);
+    if let Some(call) = recovery {
+        w.begin(&`if {scan_pos} < 0`);
+        w.begin(&`if {ctx.first_check_str(loop_first)}`);
+        w.line(&"let _rec_pos = p.pos;");
+        w.line(&`if let Err(_rec_e) = {call} \{ p.record_deeper(_rec_e); \}`);
+        w.line(&"p.pos = _rec_pos;");
+        w.end();
+        w.line(&"break;");
+        w.end();
+    } else {
+        w.line(&`if {scan_pos} < 0 \{ break; \}`);
+    }
+}
+
 fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, follow: &List<String>) {
     let inner = &rep.element;
     let inner_first = rep_op.body_first_set;
@@ -3689,7 +3757,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             // (non-variant body or no K-prefix at this position).
             emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-            w.line(&`if {scan_pos} < 0 \{ break; \}`);
+            emit_rep_break_with_recovery(w, &scan_pos, rep_op, ctx, &loop_first);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
             w.line(&`{list_field}.push({inner_field});`);
@@ -3719,7 +3787,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             // caller without a K-prefix at this position).
             emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-            w.line(&`if {scan_pos} < 0 \{ break; \}`);
+            emit_rep_break_with_recovery(w, &scan_pos, rep_op, ctx, &loop_first);
             w.end();
             w.line(&`{plus_flag} = false;`);
             let mut nc: List<[String, i32]> = [];
@@ -5299,10 +5367,22 @@ fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule) {
     w.line(&"let chars: List<char> = input.chars().collect();");
     w.line(&"let mut parser = Parser::new(tokens, chars);");
     if rule_takes_min_prec(rule) {
-        w.line(&`return _parse_{header.snake_name}(&mut parser, 0);`);
+        w.line(&`let _result = _parse_{header.snake_name}(&mut parser, 0);`);
     } else {
-        w.line(&`return _parse_{header.snake_name}(&mut parser);`);
+        w.line(&`let _result = _parse_{header.snake_name}(&mut parser);`);
     }
+    // Prefer a deeper recovery error (a malformed element inside a scan-gated
+    // repetition) over the shallower "expected <closer>" error the top-level
+    // failure carries — see `emit_rep_break_with_recovery`.
+    w.begin(&"if let Err(_e) = _result");
+    w.begin(&"if let Some(_d) = parser.pending");
+    w.begin(&"if _d.span.start > _e.span.start");
+    w.line(&`return Result::<{header.type_name}, ParseError>::Err(_d);`);
+    w.end();
+    w.end();
+    w.line(&`return Result::<{header.type_name}, ParseError>::Err(_e);`);
+    w.end();
+    w.line(&"return _result;");
     w.end();
     w.blank();
 }
