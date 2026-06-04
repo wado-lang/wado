@@ -637,251 +637,20 @@ impl Analyzer<'_> {
             Some(body) => {
                 let mut tainted: IndexSet<u32> = IndexSet::default();
                 tainted.insert(0); // local 0 == self
-                self.verify_block(&body, &mut tainted, visiting)
+                let mut v = ElementImmutable {
+                    analyzer: self,
+                    tainted,
+                    visiting,
+                    clean: true,
+                };
+                v.visit_block(&body);
+                v.clean
             }
             None => false,
         };
         visiting.swap_remove(key);
         self.eimm_memo.insert(key.clone(), result);
         result
-    }
-
-    fn verify_block(
-        &mut self,
-        block: &NirBlock,
-        tainted: &mut IndexSet<u32>,
-        visiting: &mut IndexSet<FuncKey>,
-    ) -> bool {
-        for stmt in &block.stmts {
-            if !self.verify_stmt(stmt, tainted, visiting) {
-                return false;
-            }
-        }
-        true
-    }
-
-    fn verify_stmt(
-        &mut self,
-        stmt: &NirStmt,
-        tainted: &mut IndexSet<u32>,
-        visiting: &mut IndexSet<FuncKey>,
-    ) -> bool {
-        match &stmt.kind {
-            NirStmtKind::Let {
-                local_index, value, ..
-            } => {
-                if !self.verify_expr(value, tainted, visiting) {
-                    return false;
-                }
-                if is_self_derived(value, tainted, self.type_table) {
-                    tainted.insert(*local_index);
-                }
-                true
-            }
-            NirStmtKind::Expr(e) => {
-                if !self.verify_expr(e, tainted, visiting) {
-                    return false;
-                }
-                // Assign-form taint: `x = <self-derived>` makes `x` alias
-                // self's storage thereafter, just like a `let` binding.
-                if let NirExprKind::Assign { target, value } = &e.kind
-                    && let NirExprKind::Local { index, .. } = target.kind
-                    && is_self_derived(value, tainted, self.type_table)
-                {
-                    tainted.insert(index);
-                }
-                true
-            }
-            NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => value
-                .as_ref()
-                .map(|v| self.verify_expr(v, tainted, visiting))
-                .unwrap_or(true),
-            NirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                self.verify_expr(condition, tainted, visiting)
-                    && self.verify_block(then_block, tainted, visiting)
-                    && else_block
-                        .as_ref()
-                        .map(|eb| self.verify_block(eb, tainted, visiting))
-                        .unwrap_or(true)
-            }
-            NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-                self.verify_block(body, tainted, visiting)
-            }
-            NirStmtKind::LetDestructure { value, .. } => self.verify_expr(value, tainted, visiting),
-            NirStmtKind::Continue => true,
-        }
-    }
-
-    fn verify_expr(
-        &mut self,
-        expr: &NirExpr,
-        tainted: &IndexSet<u32>,
-        visiting: &mut IndexSet<FuncKey>,
-    ) -> bool {
-        match &expr.kind {
-            // `&mut <self-derived>` would expose mutable element access.
-            NirExprKind::Unary {
-                op: NirUnaryOp::MutRef,
-                expr: inner,
-            } => {
-                if is_self_derived(inner, tainted, self.type_table) {
-                    crate::compiler_trace!("demote", "verify reject: &mut of self-derived");
-                    return false;
-                }
-            }
-            // Field write to a self-derived base other than `self` itself
-            // (writing `self.repr`/`self.used` is a spine op; writing
-            // `array_get(...).field` is an element mutation).
-            NirExprKind::Assign { target, value } => {
-                let bad = match &target.kind {
-                    NirExprKind::FieldAccess { expr: base, .. } => {
-                        is_self_derived(base, tainted, self.type_table)
-                            && !matches!(base.kind, NirExprKind::Local { index: 0, .. })
-                    }
-                    NirExprKind::Index { expr: base, .. } => {
-                        is_self_derived(base, tainted, self.type_table)
-                    }
-                    _ => false,
-                };
-                if bad {
-                    crate::compiler_trace!("demote", "verify reject: element field/index write");
-                    return false;
-                }
-                return self.verify_expr(target, tainted, visiting)
-                    && self.verify_expr(value, tainted, visiting);
-            }
-            NirExprKind::MethodCall {
-                receiver,
-                func,
-                args,
-                ..
-            } => {
-                let key = (func.module_source.clone(), func.name.clone());
-                // A call whose receiver is self-derived may mutate an
-                // element unless the callee is known `&self` (cannot
-                // mutate) or a verified element-immutable `&mut self`
-                // method. An unresolvable callee is conservatively unsafe.
-                if is_self_derived(receiver, tainted, self.type_table) {
-                    let ok = match self.callee_mutates_self(&key) {
-                        Some(false) => true,
-                        Some(true) => self.verify(&key, visiting),
-                        None => false,
-                    };
-                    if !ok {
-                        crate::compiler_trace!(
-                            "demote",
-                            "verify reject: unsafe call on self-derived recv {}",
-                            key.1
-                        );
-                        return false;
-                    }
-                }
-                if !self.verify_expr(receiver, tainted, visiting) {
-                    return false;
-                }
-                for a in args {
-                    if !self.verify_call_arg(&a.expr, tainted, visiting) {
-                        crate::compiler_trace!(
-                            "demote",
-                            "verify reject: bad arg to method {}",
-                            key.1
-                        );
-                        return false;
-                    }
-                }
-                return true;
-            }
-            NirExprKind::Call { func, args, .. } => {
-                // No builtin intrinsic mutates an element's pointee
-                // (`array_set` rewrites a spine slot; `array_get` / `select`
-                // only forward values), so a self-derived arg to a builtin
-                // is harmless. Opaque (non-builtin) calls still gate.
-                let is_builtin = builtin_gname(func).is_some();
-                for a in args {
-                    if is_builtin {
-                        // The `array_*` intrinsics now take `&` / `&mut`
-                        // first parameters (WEP-2026-06-02 Phase 1). A
-                        // `&mut self.repr` arg to a spine builtin is a
-                        // spine handoff, not an element-mutating escape, so
-                        // peel the reference wrapper before recursing.
-                        let inner = match &a.expr.kind {
-                            NirExprKind::Unary {
-                                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-                                expr,
-                            } => expr.as_ref(),
-                            _ => &a.expr,
-                        };
-                        if !self.verify_expr(inner, tainted, visiting) {
-                            return false;
-                        }
-                    } else if !self.verify_call_arg(&a.expr, tainted, visiting) {
-                        crate::compiler_trace!(
-                            "demote",
-                            "verify reject: self-derived arg to call {}",
-                            func.name
-                        );
-                        return false;
-                    }
-                }
-                return true;
-            }
-            NirExprKind::IndirectCall { callee, args } => {
-                // Invoking a closure that captured a self-derived value runs
-                // its (unverified) body with access to `self`'s elements.
-                if is_self_derived(callee, tainted, self.type_table) {
-                    crate::compiler_trace!(
-                        "demote",
-                        "verify reject: indirect call of self-capturing closure"
-                    );
-                    return false;
-                }
-                if !self.verify_expr(callee, tainted, visiting) {
-                    return false;
-                }
-                for a in args {
-                    if !self.verify_call_arg(a, tainted, visiting) {
-                        crate::compiler_trace!(
-                            "demote",
-                            "verify reject: self-derived arg to indirect call"
-                        );
-                        return false;
-                    }
-                }
-                return true;
-            }
-            _ => {}
-        }
-        for child in expr_children(expr) {
-            if !self.verify_expr(child, tainted, visiting) {
-                return false;
-            }
-        }
-        true
-    }
-
-    /// A self-derived value handed to an opaque (non-spine-builtin) call may
-    /// only flow through an immutable `&` borrow.
-    fn verify_call_arg(
-        &mut self,
-        arg: &NirExpr,
-        tainted: &IndexSet<u32>,
-        visiting: &mut IndexSet<FuncKey>,
-    ) -> bool {
-        if let NirExprKind::Unary {
-            op: NirUnaryOp::Ref,
-            ..
-        } = &arg.kind
-        {
-            return self.verify_expr(arg, tainted, visiting);
-        }
-        if is_self_derived(arg, tainted, self.type_table) {
-            return false;
-        }
-        self.verify_expr(arg, tainted, visiting)
     }
 
     /// True when every use of local `idx` in `fn_body` keeps the array's
@@ -1068,6 +837,242 @@ impl ElementClean<'_, '_> {
             }
             _ => self.visit_expr(arg),
         }
+    }
+}
+
+/// Element-immutability proof for a `&mut self` method: whether calling it can
+/// mutate any element of `self`. Drives the canonical [`NirRefVisitor`] while
+/// threading the analysis state as fields:
+///
+/// - `tainted` — locals that alias `self`'s storage (local 0 is `self`). The
+///   set grows in statement order: a `let x = <self-derived>` (or assignment)
+///   taints `x` for every *later* statement, so the order-sensitive update
+///   lives in the `visit_stmt` override, after the value is visited.
+/// - `visiting` — the recursion guard shared with [`Analyzer::verify`], so a
+///   self-derived `&mut self` call recurses into the callee's own proof.
+/// - `clean` — the running verdict; once falsified every visit short-circuits.
+///
+/// Only the storage-escaping shapes (`&mut` of self-derived, element
+/// field/index writes, unsafe calls on self-derived receivers/args, indirect
+/// calls of self-capturing closures) are special-cased; everything else falls
+/// through to `walk_expr`. Unlike the former hand-rolled `expr_children`
+/// enumeration, the canonical walk descends into match-arm and destructure
+/// patterns *and* threads taint through expression-position blocks (a `let`
+/// inside a block rvalue now taints correctly), closing two traversal gaps.
+struct ElementImmutable<'a, 'b, 'c> {
+    analyzer: &'b mut Analyzer<'a>,
+    tainted: IndexSet<u32>,
+    visiting: &'c mut IndexSet<FuncKey>,
+    clean: bool,
+}
+
+impl NirRefVisitor for ElementImmutable<'_, '_, '_> {
+    fn visit_stmt(&mut self, stmt: &NirStmt) {
+        if !self.clean {
+            return;
+        }
+        match &stmt.kind {
+            // `let x = <self-derived>` makes `x` alias self's storage for
+            // every later statement. Verify the value first, then taint —
+            // this order-sensitivity is why the statement visit is overridden.
+            NirStmtKind::Let {
+                local_index, value, ..
+            } => {
+                self.visit_expr(value);
+                if self.clean && is_self_derived(value, &self.tainted, self.analyzer.type_table) {
+                    self.tainted.insert(*local_index);
+                }
+            }
+            NirStmtKind::Expr(e) => {
+                self.visit_expr(e);
+                // Assign-form taint: `x = <self-derived>` aliases `x` to
+                // self's storage thereafter, just like a `let` binding.
+                if self.clean
+                    && let NirExprKind::Assign { target, value } = &e.kind
+                    && let NirExprKind::Local { index, .. } = target.kind
+                    && is_self_derived(value, &self.tainted, self.analyzer.type_table)
+                {
+                    self.tainted.insert(index);
+                }
+            }
+            // If / Loop / LabeledBlock / Return / Break / LetDestructure /
+            // Continue carry no taint update of their own; the canonical walk
+            // recurses through the shared `tainted` field. (Visiting a
+            // destructure pattern is extra coverage relative to the old path
+            // and strictly conservative.)
+            _ => self.walk_stmt(stmt),
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &NirExpr) {
+        if !self.clean {
+            return;
+        }
+        let tt = self.analyzer.type_table;
+        match &expr.kind {
+            // `&mut <self-derived>` would expose mutable element access.
+            NirExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: inner,
+            } => {
+                if is_self_derived(inner, &self.tainted, tt) {
+                    crate::compiler_trace!("demote", "verify reject: &mut of self-derived");
+                    self.clean = false;
+                    return;
+                }
+                self.walk_expr(expr);
+            }
+            // Field/index write to a self-derived base other than `self`
+            // itself (writing `self.repr`/`self.used` is a spine op; writing
+            // `array_get(...).field` is an element mutation).
+            NirExprKind::Assign { target, value } => {
+                let bad = match &target.kind {
+                    NirExprKind::FieldAccess { expr: base, .. } => {
+                        is_self_derived(base, &self.tainted, tt)
+                            && !matches!(base.kind, NirExprKind::Local { index: 0, .. })
+                    }
+                    NirExprKind::Index { expr: base, .. } => {
+                        is_self_derived(base, &self.tainted, tt)
+                    }
+                    _ => false,
+                };
+                if bad {
+                    crate::compiler_trace!("demote", "verify reject: element field/index write");
+                    self.clean = false;
+                    return;
+                }
+                self.visit_expr(target);
+                self.visit_expr(value);
+            }
+            NirExprKind::MethodCall {
+                receiver,
+                func,
+                args,
+                ..
+            } => {
+                let key = (func.module_source.clone(), func.name.clone());
+                // A call whose receiver is self-derived may mutate an element
+                // unless the callee is known `&self` (cannot mutate) or a
+                // verified element-immutable `&mut self` method. An
+                // unresolvable callee is conservatively unsafe.
+                if is_self_derived(receiver, &self.tainted, tt) {
+                    let ok = match self.analyzer.callee_mutates_self(&key) {
+                        Some(false) => true,
+                        Some(true) => self.analyzer.verify(&key, self.visiting),
+                        None => false,
+                    };
+                    if !ok {
+                        crate::compiler_trace!(
+                            "demote",
+                            "verify reject: unsafe call on self-derived recv {}",
+                            key.1
+                        );
+                        self.clean = false;
+                        return;
+                    }
+                }
+                self.visit_expr(receiver);
+                if !self.clean {
+                    return;
+                }
+                for a in args {
+                    self.visit_call_arg(&a.expr);
+                    if !self.clean {
+                        crate::compiler_trace!(
+                            "demote",
+                            "verify reject: bad arg to method {}",
+                            key.1
+                        );
+                        return;
+                    }
+                }
+            }
+            NirExprKind::Call { func, args, .. } => {
+                // No builtin intrinsic mutates an element's pointee
+                // (`array_set` rewrites a spine slot; `array_get` / `select`
+                // only forward values), so a self-derived arg to a builtin is
+                // harmless. Opaque (non-builtin) calls still gate.
+                let is_builtin = builtin_gname(func).is_some();
+                for a in args {
+                    if is_builtin {
+                        // The `array_*` intrinsics take `&` / `&mut` first
+                        // parameters (WEP-2026-06-02 Phase 1). A `&mut
+                        // self.repr` arg to a spine builtin is a spine
+                        // handoff, not an element-mutating escape, so peel the
+                        // reference wrapper before recursing.
+                        let inner = match &a.expr.kind {
+                            NirExprKind::Unary {
+                                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                                expr,
+                            } => expr.as_ref(),
+                            _ => &a.expr,
+                        };
+                        self.visit_expr(inner);
+                    } else {
+                        self.visit_call_arg(&a.expr);
+                    }
+                    if !self.clean {
+                        crate::compiler_trace!(
+                            "demote",
+                            "verify reject: self-derived arg to call {}",
+                            func.name
+                        );
+                        return;
+                    }
+                }
+            }
+            NirExprKind::IndirectCall { callee, args } => {
+                // Invoking a closure that captured a self-derived value runs
+                // its (unverified) body with access to `self`'s elements.
+                if is_self_derived(callee, &self.tainted, tt) {
+                    crate::compiler_trace!(
+                        "demote",
+                        "verify reject: indirect call of self-capturing closure"
+                    );
+                    self.clean = false;
+                    return;
+                }
+                self.visit_expr(callee);
+                if !self.clean {
+                    return;
+                }
+                for a in args {
+                    self.visit_call_arg(a);
+                    if !self.clean {
+                        crate::compiler_trace!(
+                            "demote",
+                            "verify reject: self-derived arg to indirect call"
+                        );
+                        return;
+                    }
+                }
+            }
+            // Every other shape — operators, casts, aggregates, control flow,
+            // and the patterns reached through it — recurses via the canonical
+            // walk, which descends into match-arm / destructure-pattern
+            // `ConstantValue` sub-expressions that `expr_children` skipped.
+            _ => self.walk_expr(expr),
+        }
+    }
+}
+
+impl ElementImmutable<'_, '_, '_> {
+    /// A self-derived value handed to an opaque (non-spine-builtin) call may
+    /// only flow through an immutable `&` borrow.
+    fn visit_call_arg(&mut self, arg: &NirExpr) {
+        if let NirExprKind::Unary {
+            op: NirUnaryOp::Ref,
+            ..
+        } = &arg.kind
+        {
+            self.visit_expr(arg);
+            return;
+        }
+        if is_self_derived(arg, &self.tainted, self.analyzer.type_table) {
+            self.clean = false;
+            return;
+        }
+        self.visit_expr(arg);
     }
 }
 
