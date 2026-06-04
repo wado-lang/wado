@@ -24,15 +24,7 @@ use crate::nir_visitor::{NirOptVisitor, NirRefVisitor, opt_walk_expr, opt_walk_s
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 pub fn elide_synthesized_value_copies(project: &mut NirPackage) {
-    let value_copy_set: IndexMap<(ModuleSource, String), TypeId> = project
-        .functions
-        .iter()
-        .filter_map(|f| {
-            let f = f.borrow();
-            f.value_copy_type()
-                .map(|t| ((f.module_source.clone(), f.name.clone()), t))
-        })
-        .collect();
+    let value_copy_set = project.value_copy_helper_types();
     if value_copy_set.is_empty() {
         return;
     }

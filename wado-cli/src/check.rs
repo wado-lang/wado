@@ -82,7 +82,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CheckOptions, CliExit> {
     let usage = format_usage();
     let mut input: Option<String> = None;
     let mut warn_only = false;
-    let mut log_level = LogLevel::default();
+    let mut log_level = args::DEFAULT_LOG_LEVEL;
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {

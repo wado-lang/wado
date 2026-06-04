@@ -126,6 +126,21 @@ impl NirPackage {
         self.target_world == world_registry::TEST_WORLD
     }
 
+    /// Build the lookup of synthesized value-copy helpers, keyed by
+    /// `(module_source, name)` → the type each helper deep-copies. Shared by the
+    /// `value_copy_elide` optimizer pass and the `remarks` collector so the two
+    /// stay in lock-step with the helper-identification convention.
+    pub fn value_copy_helper_types(&self) -> IndexMap<(ModuleSource, String), TypeId> {
+        self.functions
+            .iter()
+            .filter_map(|f| {
+                let f = f.borrow();
+                f.value_copy_type()
+                    .map(|t| ((f.module_source.clone(), f.name.clone()), t))
+            })
+            .collect()
+    }
+
     /// Check whether the active world declares an
     /// `import {interface_name} { ... }` block.
     ///

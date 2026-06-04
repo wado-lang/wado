@@ -135,11 +135,17 @@ pub const OPT_ITERATIONS_SPEC: OptSpec = OptSpec {
     desc: "Override number of fixed-point optimization iterations",
 };
 
+/// Default log level for CLI subcommands. The CLI is quiet by default:
+/// warnings and errors show, but info-level output — including optimizer
+/// `remark:`s (WEP `wep-2026-06-03-optimizer-remarks.md`) — needs an explicit
+/// `--log-level info`.
+pub const DEFAULT_LOG_LEVEL: LogLevel = LogLevel::Warn;
+
 pub const LOG_LEVEL_SPEC: OptSpec = OptSpec {
     long: Some("log-level"),
     short: None,
     value: Some("<level>"),
-    desc: "Log level: debug, info, warn, error, off (default: info)",
+    desc: "Log level: debug, info, warn, error, off (default: warn)",
 };
 
 pub const WORLD_SPEC: OptSpec = OptSpec {
