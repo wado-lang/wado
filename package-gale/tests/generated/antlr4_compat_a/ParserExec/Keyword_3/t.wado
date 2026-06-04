@@ -1058,7 +1058,7 @@ pub fn parse_program(input: &String) -> Result<ProgramNode, ParseError> {
     let _result = _parse_program(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ProgramNode, ParseError>::Err(_d);
             }
         }
@@ -1074,7 +1074,7 @@ pub fn parse_action(input: &String) -> Result<ActionNode, ParseError> {
     let _result = _parse_action(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ActionNode, ParseError>::Err(_d);
             }
         }

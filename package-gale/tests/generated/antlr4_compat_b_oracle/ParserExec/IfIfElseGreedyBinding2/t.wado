@@ -1214,7 +1214,7 @@ pub fn parse_start(input: &String) -> Result<StartNode, ParseError> {
     let _result = _parse_start(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<StartNode, ParseError>::Err(_d);
             }
         }
@@ -1230,7 +1230,7 @@ pub fn parse_statement(input: &String) -> Result<StatementNode, ParseError> {
     let _result = _parse_statement(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<StatementNode, ParseError>::Err(_d);
             }
         }
@@ -1246,7 +1246,7 @@ pub fn parse_if_statement(input: &String) -> Result<IfStatementNode, ParseError>
     let _result = _parse_if_statement(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<IfStatementNode, ParseError>::Err(_d);
             }
         }

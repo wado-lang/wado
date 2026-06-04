@@ -1220,7 +1220,7 @@ pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
     let _result = _parse_s(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<SNode, ParseError>::Err(_d);
             }
         }
@@ -1236,7 +1236,7 @@ pub fn parse_b(input: &String) -> Result<BNode, ParseError> {
     let _result = _parse_b(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<BNode, ParseError>::Err(_d);
             }
         }
@@ -1252,7 +1252,7 @@ pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
     let _result = _parse_a(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ANode, ParseError>::Err(_d);
             }
         }

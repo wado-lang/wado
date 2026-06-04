@@ -1082,7 +1082,7 @@ pub fn parse_cpp_compilation_unit(input: &String) -> Result<CppCompilationUnitNo
     let _result = _parse_cpp_compilation_unit(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<CppCompilationUnitNode, ParseError>::Err(_d);
             }
         }
@@ -1098,7 +1098,7 @@ pub fn parse_content(input: &String) -> Result<ContentNode, ParseError> {
     let _result = _parse_content(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ContentNode, ParseError>::Err(_d);
             }
         }
@@ -1114,7 +1114,7 @@ pub fn parse_anything(input: &String) -> Result<AnythingNode, ParseError> {
     let _result = _parse_anything(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<AnythingNode, ParseError>::Err(_d);
             }
         }

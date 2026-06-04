@@ -1166,7 +1166,7 @@ pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
     let _result = _parse_s(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<SNode, ParseError>::Err(_d);
             }
         }
@@ -1182,7 +1182,7 @@ pub fn parse_stmt(input: &String) -> Result<StmtNode, ParseError> {
     let _result = _parse_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<StmtNode, ParseError>::Err(_d);
             }
         }
@@ -1198,7 +1198,7 @@ pub fn parse_if_stmt(input: &String) -> Result<IfStmtNode, ParseError> {
     let _result = _parse_if_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<IfStmtNode, ParseError>::Err(_d);
             }
         }

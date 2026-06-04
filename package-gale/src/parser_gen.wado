@@ -5527,10 +5527,15 @@ fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule) {
     }
     // Prefer a deeper recovery error (a malformed element inside a scan-gated
     // repetition) over the shallower "expected <closer>" error the top-level
-    // failure carries — see `emit_rep_break_with_recovery`.
+    // failure carries — see `emit_rep_break_with_recovery`. The comparison is
+    // `>=`, not `>`: on a span tie the recovery error names the malformed
+    // element while the top-level error names the *next* construct (e.g. a
+    // repeated `item` and a following `trailer` that share a first token both
+    // fail at the same position), and the malformed element is the more useful
+    // diagnostic. Regression fixture: tests/grammars/tie_recovery.g4.
     w.begin(&"if let Err(_e) = _result");
     w.begin(&"if let Some(_d) = parser.pending");
-    w.begin(&"if _d.span.start > _e.span.start");
+    w.begin(&"if _d.span.start >= _e.span.start");
     w.line(&`return Result::<{header.type_name}, ParseError>::Err(_d);`);
     w.end();
     w.end();

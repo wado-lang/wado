@@ -990,7 +990,7 @@ pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
     let _result = _parse_prog(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ProgNode, ParseError>::Err(_d);
             }
         }

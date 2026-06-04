@@ -1250,7 +1250,7 @@ pub fn parse_file_(input: &String) -> Result<FileNode, ParseError> {
     let _result = _parse_file_(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<FileNode, ParseError>::Err(_d);
             }
         }
@@ -1266,7 +1266,7 @@ pub fn parse_para(input: &String) -> Result<ParaNode, ParseError> {
     let _result = _parse_para(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ParaNode, ParseError>::Err(_d);
             }
         }
@@ -1282,7 +1282,7 @@ pub fn parse_para_content(input: &String) -> Result<ParaContentNode, ParseError>
     let _result = _parse_para_content(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ParaContentNode, ParseError>::Err(_d);
             }
         }
@@ -1298,7 +1298,7 @@ pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
     let _result = _parse_s(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<SNode, ParseError>::Err(_d);
             }
         }

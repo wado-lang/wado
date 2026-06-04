@@ -918,7 +918,7 @@ pub fn parse_u(input: &String) -> Result<UNode, ParseError> {
     let _result = _parse_u(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<UNode, ParseError>::Err(_d);
             }
         }

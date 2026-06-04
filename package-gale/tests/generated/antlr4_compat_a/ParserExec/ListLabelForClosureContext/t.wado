@@ -1323,7 +1323,7 @@ pub fn parse_if_statement(input: &String) -> Result<IfStatementNode, ParseError>
     let _result = _parse_if_statement(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<IfStatementNode, ParseError>::Err(_d);
             }
         }
@@ -1339,7 +1339,7 @@ pub fn parse_else_if_statement(input: &String) -> Result<ElseIfStatementNode, Pa
     let _result = _parse_else_if_statement(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ElseIfStatementNode, ParseError>::Err(_d);
             }
         }
@@ -1355,7 +1355,7 @@ pub fn parse_expression(input: &String) -> Result<ExpressionNode, ParseError> {
     let _result = _parse_expression(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ExpressionNode, ParseError>::Err(_d);
             }
         }
@@ -1371,7 +1371,7 @@ pub fn parse_executable_statement(input: &String) -> Result<ExecutableStatementN
     let _result = _parse_executable_statement(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ExecutableStatementNode, ParseError>::Err(_d);
             }
         }
@@ -1387,7 +1387,7 @@ pub fn parse_else_statement(input: &String) -> Result<ElseStatementNode, ParseEr
     let _result = _parse_else_statement(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ElseStatementNode, ParseError>::Err(_d);
             }
         }

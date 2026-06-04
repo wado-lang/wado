@@ -1452,7 +1452,7 @@ pub fn parse_program(input: &String) -> Result<ProgramNode, ParseError> {
     let _result = _parse_program(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ProgramNode, ParseError>::Err(_d);
             }
         }
@@ -1468,7 +1468,7 @@ pub fn parse_stmt(input: &String) -> Result<StmtNode, ParseError> {
     let _result = _parse_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<StmtNode, ParseError>::Err(_d);
             }
         }
@@ -1484,7 +1484,7 @@ pub fn parse_list_stmt(input: &String) -> Result<ListStmtNode, ParseError> {
     let _result = _parse_list_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ListStmtNode, ParseError>::Err(_d);
             }
         }
@@ -1500,7 +1500,7 @@ pub fn parse_not_stmt(input: &String) -> Result<NotStmtNode, ParseError> {
     let _result = _parse_not_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<NotStmtNode, ParseError>::Err(_d);
             }
         }
@@ -1516,7 +1516,7 @@ pub fn parse_any_stmt(input: &String) -> Result<AnyStmtNode, ParseError> {
     let _result = _parse_any_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<AnyStmtNode, ParseError>::Err(_d);
             }
         }

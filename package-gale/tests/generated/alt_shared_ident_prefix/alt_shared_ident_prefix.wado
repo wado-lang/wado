@@ -1829,7 +1829,7 @@ pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
     let _result = _parse_prog(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ProgNode, ParseError>::Err(_d);
             }
         }
@@ -1845,7 +1845,7 @@ pub fn parse_match_expr(input: &String) -> Result<MatchExprNode, ParseError> {
     let _result = _parse_match_expr(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<MatchExprNode, ParseError>::Err(_d);
             }
         }
@@ -1861,7 +1861,7 @@ pub fn parse_arm(input: &String) -> Result<ArmNode, ParseError> {
     let _result = _parse_arm(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ArmNode, ParseError>::Err(_d);
             }
         }
@@ -1877,7 +1877,7 @@ pub fn parse_pattern(input: &String) -> Result<PatternNode, ParseError> {
     let _result = _parse_pattern(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<PatternNode, ParseError>::Err(_d);
             }
         }
@@ -1893,7 +1893,7 @@ pub fn parse_path(input: &String) -> Result<PathNode, ParseError> {
     let _result = _parse_path(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<PathNode, ParseError>::Err(_d);
             }
         }

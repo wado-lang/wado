@@ -1106,7 +1106,7 @@ pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
     let _result = _parse_s(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<SNode, ParseError>::Err(_d);
             }
         }
@@ -1122,7 +1122,7 @@ pub fn parse_expr(input: &String) -> Result<ExprNode, ParseError> {
     let _result = _parse_expr(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ExprNode, ParseError>::Err(_d);
             }
         }

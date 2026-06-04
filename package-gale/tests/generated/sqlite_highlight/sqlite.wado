@@ -21622,7 +21622,7 @@ pub fn parse_parse(input: &String) -> Result<ParseNode, ParseError> {
     let _result = _parse_parse(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ParseNode, ParseError>::Err(_d);
             }
         }
@@ -21638,7 +21638,7 @@ pub fn parse_error(input: &String) -> Result<ErrorNode, ParseError> {
     let _result = _parse_error(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ErrorNode, ParseError>::Err(_d);
             }
         }
@@ -21654,7 +21654,7 @@ pub fn parse_sql_stmt_list(input: &String) -> Result<SqlStmtListNode, ParseError
     let _result = _parse_sql_stmt_list(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<SqlStmtListNode, ParseError>::Err(_d);
             }
         }
@@ -21670,7 +21670,7 @@ pub fn parse_sql_stmt(input: &String) -> Result<SqlStmtNode, ParseError> {
     let _result = _parse_sql_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<SqlStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21686,7 +21686,7 @@ pub fn parse_alter_table_stmt(input: &String) -> Result<AlterTableStmtNode, Pars
     let _result = _parse_alter_table_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<AlterTableStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21702,7 +21702,7 @@ pub fn parse_analyze_stmt(input: &String) -> Result<AnalyzeStmtNode, ParseError>
     let _result = _parse_analyze_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<AnalyzeStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21718,7 +21718,7 @@ pub fn parse_attach_stmt(input: &String) -> Result<AttachStmtNode, ParseError> {
     let _result = _parse_attach_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<AttachStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21734,7 +21734,7 @@ pub fn parse_begin_stmt(input: &String) -> Result<BeginStmtNode, ParseError> {
     let _result = _parse_begin_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<BeginStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21750,7 +21750,7 @@ pub fn parse_commit_stmt(input: &String) -> Result<CommitStmtNode, ParseError> {
     let _result = _parse_commit_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<CommitStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21766,7 +21766,7 @@ pub fn parse_compound_select_stmt(input: &String) -> Result<CompoundSelectStmtNo
     let _result = _parse_compound_select_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<CompoundSelectStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21782,7 +21782,7 @@ pub fn parse_create_index_stmt(input: &String) -> Result<CreateIndexStmtNode, Pa
     let _result = _parse_create_index_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<CreateIndexStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21798,7 +21798,7 @@ pub fn parse_create_table_stmt(input: &String) -> Result<CreateTableStmtNode, Pa
     let _result = _parse_create_table_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<CreateTableStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21814,7 +21814,7 @@ pub fn parse_create_trigger_stmt(input: &String) -> Result<CreateTriggerStmtNode
     let _result = _parse_create_trigger_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<CreateTriggerStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21830,7 +21830,7 @@ pub fn parse_create_view_stmt(input: &String) -> Result<CreateViewStmtNode, Pars
     let _result = _parse_create_view_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<CreateViewStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21846,7 +21846,7 @@ pub fn parse_create_virtual_table_stmt(input: &String) -> Result<CreateVirtualTa
     let _result = _parse_create_virtual_table_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<CreateVirtualTableStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21862,7 +21862,7 @@ pub fn parse_delete_stmt(input: &String) -> Result<DeleteStmtNode, ParseError> {
     let _result = _parse_delete_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<DeleteStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21878,7 +21878,7 @@ pub fn parse_delete_stmt_limited(input: &String) -> Result<DeleteStmtLimitedNode
     let _result = _parse_delete_stmt_limited(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<DeleteStmtLimitedNode, ParseError>::Err(_d);
             }
         }
@@ -21894,7 +21894,7 @@ pub fn parse_detach_stmt(input: &String) -> Result<DetachStmtNode, ParseError> {
     let _result = _parse_detach_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<DetachStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21910,7 +21910,7 @@ pub fn parse_drop_index_stmt(input: &String) -> Result<DropIndexStmtNode, ParseE
     let _result = _parse_drop_index_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<DropIndexStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21926,7 +21926,7 @@ pub fn parse_drop_table_stmt(input: &String) -> Result<DropTableStmtNode, ParseE
     let _result = _parse_drop_table_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<DropTableStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21942,7 +21942,7 @@ pub fn parse_drop_trigger_stmt(input: &String) -> Result<DropTriggerStmtNode, Pa
     let _result = _parse_drop_trigger_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<DropTriggerStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21958,7 +21958,7 @@ pub fn parse_drop_view_stmt(input: &String) -> Result<DropViewStmtNode, ParseErr
     let _result = _parse_drop_view_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<DropViewStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21974,7 +21974,7 @@ pub fn parse_factored_select_stmt(input: &String) -> Result<FactoredSelectStmtNo
     let _result = _parse_factored_select_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<FactoredSelectStmtNode, ParseError>::Err(_d);
             }
         }
@@ -21990,7 +21990,7 @@ pub fn parse_insert_stmt(input: &String) -> Result<InsertStmtNode, ParseError> {
     let _result = _parse_insert_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<InsertStmtNode, ParseError>::Err(_d);
             }
         }
@@ -22006,7 +22006,7 @@ pub fn parse_pragma_stmt(input: &String) -> Result<PragmaStmtNode, ParseError> {
     let _result = _parse_pragma_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<PragmaStmtNode, ParseError>::Err(_d);
             }
         }
@@ -22022,7 +22022,7 @@ pub fn parse_reindex_stmt(input: &String) -> Result<ReindexStmtNode, ParseError>
     let _result = _parse_reindex_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ReindexStmtNode, ParseError>::Err(_d);
             }
         }
@@ -22038,7 +22038,7 @@ pub fn parse_release_stmt(input: &String) -> Result<ReleaseStmtNode, ParseError>
     let _result = _parse_release_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ReleaseStmtNode, ParseError>::Err(_d);
             }
         }
@@ -22054,7 +22054,7 @@ pub fn parse_rollback_stmt(input: &String) -> Result<RollbackStmtNode, ParseErro
     let _result = _parse_rollback_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<RollbackStmtNode, ParseError>::Err(_d);
             }
         }
@@ -22070,7 +22070,7 @@ pub fn parse_savepoint_stmt(input: &String) -> Result<SavepointStmtNode, ParseEr
     let _result = _parse_savepoint_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<SavepointStmtNode, ParseError>::Err(_d);
             }
         }
@@ -22086,7 +22086,7 @@ pub fn parse_simple_select_stmt(input: &String) -> Result<SimpleSelectStmtNode, 
     let _result = _parse_simple_select_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<SimpleSelectStmtNode, ParseError>::Err(_d);
             }
         }
@@ -22102,7 +22102,7 @@ pub fn parse_select_stmt(input: &String) -> Result<SelectStmtNode, ParseError> {
     let _result = _parse_select_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<SelectStmtNode, ParseError>::Err(_d);
             }
         }
@@ -22118,7 +22118,7 @@ pub fn parse_select_or_values(input: &String) -> Result<SelectOrValuesNode, Pars
     let _result = _parse_select_or_values(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<SelectOrValuesNode, ParseError>::Err(_d);
             }
         }
@@ -22134,7 +22134,7 @@ pub fn parse_update_stmt(input: &String) -> Result<UpdateStmtNode, ParseError> {
     let _result = _parse_update_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<UpdateStmtNode, ParseError>::Err(_d);
             }
         }
@@ -22150,7 +22150,7 @@ pub fn parse_update_stmt_limited(input: &String) -> Result<UpdateStmtLimitedNode
     let _result = _parse_update_stmt_limited(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<UpdateStmtLimitedNode, ParseError>::Err(_d);
             }
         }
@@ -22166,7 +22166,7 @@ pub fn parse_vacuum_stmt(input: &String) -> Result<VacuumStmtNode, ParseError> {
     let _result = _parse_vacuum_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<VacuumStmtNode, ParseError>::Err(_d);
             }
         }
@@ -22182,7 +22182,7 @@ pub fn parse_column_def(input: &String) -> Result<ColumnDefNode, ParseError> {
     let _result = _parse_column_def(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ColumnDefNode, ParseError>::Err(_d);
             }
         }
@@ -22198,7 +22198,7 @@ pub fn parse_type_name(input: &String) -> Result<TypeNameNode, ParseError> {
     let _result = _parse_type_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<TypeNameNode, ParseError>::Err(_d);
             }
         }
@@ -22214,7 +22214,7 @@ pub fn parse_column_constraint(input: &String) -> Result<ColumnConstraintNode, P
     let _result = _parse_column_constraint(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ColumnConstraintNode, ParseError>::Err(_d);
             }
         }
@@ -22230,7 +22230,7 @@ pub fn parse_conflict_clause(input: &String) -> Result<ConflictClauseNode, Parse
     let _result = _parse_conflict_clause(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ConflictClauseNode, ParseError>::Err(_d);
             }
         }
@@ -22246,7 +22246,7 @@ pub fn parse_expr(input: &String) -> Result<ExprNode, ParseError> {
     let _result = _parse_expr(&mut parser, 0);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ExprNode, ParseError>::Err(_d);
             }
         }
@@ -22262,7 +22262,7 @@ pub fn parse_foreign_key_clause(input: &String) -> Result<ForeignKeyClauseNode, 
     let _result = _parse_foreign_key_clause(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ForeignKeyClauseNode, ParseError>::Err(_d);
             }
         }
@@ -22278,7 +22278,7 @@ pub fn parse_raise_function(input: &String) -> Result<RaiseFunctionNode, ParseEr
     let _result = _parse_raise_function(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<RaiseFunctionNode, ParseError>::Err(_d);
             }
         }
@@ -22294,7 +22294,7 @@ pub fn parse_indexed_column(input: &String) -> Result<IndexedColumnNode, ParseEr
     let _result = _parse_indexed_column(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<IndexedColumnNode, ParseError>::Err(_d);
             }
         }
@@ -22310,7 +22310,7 @@ pub fn parse_table_constraint(input: &String) -> Result<TableConstraintNode, Par
     let _result = _parse_table_constraint(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<TableConstraintNode, ParseError>::Err(_d);
             }
         }
@@ -22326,7 +22326,7 @@ pub fn parse_with_clause(input: &String) -> Result<WithClauseNode, ParseError> {
     let _result = _parse_with_clause(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<WithClauseNode, ParseError>::Err(_d);
             }
         }
@@ -22342,7 +22342,7 @@ pub fn parse_qualified_table_name(input: &String) -> Result<QualifiedTableNameNo
     let _result = _parse_qualified_table_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<QualifiedTableNameNode, ParseError>::Err(_d);
             }
         }
@@ -22358,7 +22358,7 @@ pub fn parse_ordering_term(input: &String) -> Result<OrderingTermNode, ParseErro
     let _result = _parse_ordering_term(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<OrderingTermNode, ParseError>::Err(_d);
             }
         }
@@ -22374,7 +22374,7 @@ pub fn parse_pragma_value(input: &String) -> Result<PragmaValueNode, ParseError>
     let _result = _parse_pragma_value(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<PragmaValueNode, ParseError>::Err(_d);
             }
         }
@@ -22390,7 +22390,7 @@ pub fn parse_common_table_expression(input: &String) -> Result<CommonTableExpres
     let _result = _parse_common_table_expression(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<CommonTableExpressionNode, ParseError>::Err(_d);
             }
         }
@@ -22406,7 +22406,7 @@ pub fn parse_result_column(input: &String) -> Result<ResultColumnNode, ParseErro
     let _result = _parse_result_column(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ResultColumnNode, ParseError>::Err(_d);
             }
         }
@@ -22422,7 +22422,7 @@ pub fn parse_table_or_subquery(input: &String) -> Result<TableOrSubqueryNode, Pa
     let _result = _parse_table_or_subquery(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<TableOrSubqueryNode, ParseError>::Err(_d);
             }
         }
@@ -22438,7 +22438,7 @@ pub fn parse_join_clause(input: &String) -> Result<JoinClauseNode, ParseError> {
     let _result = _parse_join_clause(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<JoinClauseNode, ParseError>::Err(_d);
             }
         }
@@ -22454,7 +22454,7 @@ pub fn parse_join_operator(input: &String) -> Result<JoinOperatorNode, ParseErro
     let _result = _parse_join_operator(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<JoinOperatorNode, ParseError>::Err(_d);
             }
         }
@@ -22470,7 +22470,7 @@ pub fn parse_join_constraint(input: &String) -> Result<JoinConstraintNode, Parse
     let _result = _parse_join_constraint(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<JoinConstraintNode, ParseError>::Err(_d);
             }
         }
@@ -22486,7 +22486,7 @@ pub fn parse_select_core(input: &String) -> Result<SelectCoreNode, ParseError> {
     let _result = _parse_select_core(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<SelectCoreNode, ParseError>::Err(_d);
             }
         }
@@ -22502,7 +22502,7 @@ pub fn parse_compound_operator(input: &String) -> Result<CompoundOperatorNode, P
     let _result = _parse_compound_operator(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<CompoundOperatorNode, ParseError>::Err(_d);
             }
         }
@@ -22518,7 +22518,7 @@ pub fn parse_signed_number(input: &String) -> Result<SignedNumberNode, ParseErro
     let _result = _parse_signed_number(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<SignedNumberNode, ParseError>::Err(_d);
             }
         }
@@ -22534,7 +22534,7 @@ pub fn parse_literal_value(input: &String) -> Result<LiteralValueNode, ParseErro
     let _result = _parse_literal_value(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<LiteralValueNode, ParseError>::Err(_d);
             }
         }
@@ -22550,7 +22550,7 @@ pub fn parse_unary_operator(input: &String) -> Result<UnaryOperatorNode, ParseEr
     let _result = _parse_unary_operator(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<UnaryOperatorNode, ParseError>::Err(_d);
             }
         }
@@ -22566,7 +22566,7 @@ pub fn parse_error_message(input: &String) -> Result<ErrorMessageNode, ParseErro
     let _result = _parse_error_message(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ErrorMessageNode, ParseError>::Err(_d);
             }
         }
@@ -22582,7 +22582,7 @@ pub fn parse_module_argument(input: &String) -> Result<ModuleArgumentNode, Parse
     let _result = _parse_module_argument(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ModuleArgumentNode, ParseError>::Err(_d);
             }
         }
@@ -22598,7 +22598,7 @@ pub fn parse_column_alias(input: &String) -> Result<ColumnAliasNode, ParseError>
     let _result = _parse_column_alias(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ColumnAliasNode, ParseError>::Err(_d);
             }
         }
@@ -22614,7 +22614,7 @@ pub fn parse_keyword(input: &String) -> Result<KeywordNode, ParseError> {
     let _result = _parse_keyword(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<KeywordNode, ParseError>::Err(_d);
             }
         }
@@ -22630,7 +22630,7 @@ pub fn parse_name(input: &String) -> Result<NameNode, ParseError> {
     let _result = _parse_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<NameNode, ParseError>::Err(_d);
             }
         }
@@ -22646,7 +22646,7 @@ pub fn parse_function_name(input: &String) -> Result<FunctionNameNode, ParseErro
     let _result = _parse_function_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<FunctionNameNode, ParseError>::Err(_d);
             }
         }
@@ -22662,7 +22662,7 @@ pub fn parse_database_name(input: &String) -> Result<DatabaseNameNode, ParseErro
     let _result = _parse_database_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<DatabaseNameNode, ParseError>::Err(_d);
             }
         }
@@ -22678,7 +22678,7 @@ pub fn parse_schema_name(input: &String) -> Result<SchemaNameNode, ParseError> {
     let _result = _parse_schema_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<SchemaNameNode, ParseError>::Err(_d);
             }
         }
@@ -22694,7 +22694,7 @@ pub fn parse_table_function_name(input: &String) -> Result<TableFunctionNameNode
     let _result = _parse_table_function_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<TableFunctionNameNode, ParseError>::Err(_d);
             }
         }
@@ -22710,7 +22710,7 @@ pub fn parse_table_name(input: &String) -> Result<TableNameNode, ParseError> {
     let _result = _parse_table_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<TableNameNode, ParseError>::Err(_d);
             }
         }
@@ -22726,7 +22726,7 @@ pub fn parse_table_or_index_name(input: &String) -> Result<TableOrIndexNameNode,
     let _result = _parse_table_or_index_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<TableOrIndexNameNode, ParseError>::Err(_d);
             }
         }
@@ -22742,7 +22742,7 @@ pub fn parse_new_table_name(input: &String) -> Result<NewTableNameNode, ParseErr
     let _result = _parse_new_table_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<NewTableNameNode, ParseError>::Err(_d);
             }
         }
@@ -22758,7 +22758,7 @@ pub fn parse_column_name(input: &String) -> Result<ColumnNameNode, ParseError> {
     let _result = _parse_column_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ColumnNameNode, ParseError>::Err(_d);
             }
         }
@@ -22774,7 +22774,7 @@ pub fn parse_collation_name(input: &String) -> Result<CollationNameNode, ParseEr
     let _result = _parse_collation_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<CollationNameNode, ParseError>::Err(_d);
             }
         }
@@ -22790,7 +22790,7 @@ pub fn parse_foreign_table(input: &String) -> Result<ForeignTableNode, ParseErro
     let _result = _parse_foreign_table(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ForeignTableNode, ParseError>::Err(_d);
             }
         }
@@ -22806,7 +22806,7 @@ pub fn parse_index_name(input: &String) -> Result<IndexNameNode, ParseError> {
     let _result = _parse_index_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<IndexNameNode, ParseError>::Err(_d);
             }
         }
@@ -22822,7 +22822,7 @@ pub fn parse_trigger_name(input: &String) -> Result<TriggerNameNode, ParseError>
     let _result = _parse_trigger_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<TriggerNameNode, ParseError>::Err(_d);
             }
         }
@@ -22838,7 +22838,7 @@ pub fn parse_view_name(input: &String) -> Result<ViewNameNode, ParseError> {
     let _result = _parse_view_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ViewNameNode, ParseError>::Err(_d);
             }
         }
@@ -22854,7 +22854,7 @@ pub fn parse_module_name(input: &String) -> Result<ModuleNameNode, ParseError> {
     let _result = _parse_module_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ModuleNameNode, ParseError>::Err(_d);
             }
         }
@@ -22870,7 +22870,7 @@ pub fn parse_pragma_name(input: &String) -> Result<PragmaNameNode, ParseError> {
     let _result = _parse_pragma_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<PragmaNameNode, ParseError>::Err(_d);
             }
         }
@@ -22886,7 +22886,7 @@ pub fn parse_savepoint_name(input: &String) -> Result<SavepointNameNode, ParseEr
     let _result = _parse_savepoint_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<SavepointNameNode, ParseError>::Err(_d);
             }
         }
@@ -22902,7 +22902,7 @@ pub fn parse_table_alias(input: &String) -> Result<TableAliasNode, ParseError> {
     let _result = _parse_table_alias(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<TableAliasNode, ParseError>::Err(_d);
             }
         }
@@ -22918,7 +22918,7 @@ pub fn parse_transaction_name(input: &String) -> Result<TransactionNameNode, Par
     let _result = _parse_transaction_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<TransactionNameNode, ParseError>::Err(_d);
             }
         }
@@ -22934,7 +22934,7 @@ pub fn parse_any_name(input: &String) -> Result<AnyNameNode, ParseError> {
     let _result = _parse_any_name(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<AnyNameNode, ParseError>::Err(_d);
             }
         }

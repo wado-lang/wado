@@ -997,7 +997,7 @@ pub fn parse_stmt(input: &String) -> Result<StmtNode, ParseError> {
     let _result = _parse_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<StmtNode, ParseError>::Err(_d);
             }
         }

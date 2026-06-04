@@ -1428,7 +1428,7 @@ pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
     let _result = _parse_prog(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ProgNode, ParseError>::Err(_d);
             }
         }
@@ -1444,7 +1444,7 @@ pub fn parse_list(input: &String) -> Result<ListNode, ParseError> {
     let _result = _parse_list(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ListNode, ParseError>::Err(_d);
             }
         }
@@ -1460,7 +1460,7 @@ pub fn parse_stmt(input: &String) -> Result<StmtNode, ParseError> {
     let _result = _parse_stmt(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<StmtNode, ParseError>::Err(_d);
             }
         }
@@ -1476,7 +1476,7 @@ pub fn parse_wrapped(input: &String) -> Result<WrappedNode, ParseError> {
     let _result = _parse_wrapped(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<WrappedNode, ParseError>::Err(_d);
             }
         }
@@ -1492,7 +1492,7 @@ pub fn parse_braced(input: &String) -> Result<BracedNode, ParseError> {
     let _result = _parse_braced(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<BracedNode, ParseError>::Err(_d);
             }
         }
@@ -1508,7 +1508,7 @@ pub fn parse_arm(input: &String) -> Result<ArmNode, ParseError> {
     let _result = _parse_arm(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ArmNode, ParseError>::Err(_d);
             }
         }

@@ -976,7 +976,7 @@ pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
     let _result = _parse_a(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ANode, ParseError>::Err(_d);
             }
         }

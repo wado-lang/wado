@@ -1915,7 +1915,7 @@ pub fn parse_json(input: &String) -> Result<JsonNode, ParseError> {
     let _result = _parse_json(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<JsonNode, ParseError>::Err(_d);
             }
         }
@@ -1931,7 +1931,7 @@ pub fn parse_obj(input: &String) -> Result<ObjNode, ParseError> {
     let _result = _parse_obj(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ObjNode, ParseError>::Err(_d);
             }
         }
@@ -1947,7 +1947,7 @@ pub fn parse_pair(input: &String) -> Result<PairNode, ParseError> {
     let _result = _parse_pair(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<PairNode, ParseError>::Err(_d);
             }
         }
@@ -1963,7 +1963,7 @@ pub fn parse_arr(input: &String) -> Result<ArrNode, ParseError> {
     let _result = _parse_arr(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ArrNode, ParseError>::Err(_d);
             }
         }
@@ -1979,7 +1979,7 @@ pub fn parse_value(input: &String) -> Result<ValueNode, ParseError> {
     let _result = _parse_value(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ValueNode, ParseError>::Err(_d);
             }
         }

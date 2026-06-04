@@ -1208,7 +1208,7 @@ pub fn parse_file(input: &String) -> Result<FileNode, ParseError> {
     let _result = _parse_file(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<FileNode, ParseError>::Err(_d);
             }
         }
@@ -1224,7 +1224,7 @@ pub fn parse_constant(input: &String) -> Result<ConstantNode, ParseError> {
     let _result = _parse_constant(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ConstantNode, ParseError>::Err(_d);
             }
         }

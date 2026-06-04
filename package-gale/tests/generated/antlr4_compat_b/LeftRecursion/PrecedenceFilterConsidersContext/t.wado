@@ -1099,7 +1099,7 @@ pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
     let _result = _parse_prog(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ProgNode, ParseError>::Err(_d);
             }
         }
@@ -1115,7 +1115,7 @@ pub fn parse_statement(input: &String) -> Result<StatementNode, ParseError> {
     let _result = _parse_statement(&mut parser, 0);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<StatementNode, ParseError>::Err(_d);
             }
         }
@@ -1131,7 +1131,7 @@ pub fn parse_letter_a(input: &String) -> Result<LetterANode, ParseError> {
     let _result = _parse_letter_a(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<LetterANode, ParseError>::Err(_d);
             }
         }

@@ -1562,7 +1562,7 @@ pub fn parse_root(input: &String) -> Result<RootNode, ParseError> {
     let _result = _parse_root(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<RootNode, ParseError>::Err(_d);
             }
         }
@@ -1578,7 +1578,7 @@ pub fn parse_continue(input: &String) -> Result<ContinueNode, ParseError> {
     let _result = _parse_continue(&mut parser, 0);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ContinueNode, ParseError>::Err(_d);
             }
         }
@@ -1594,7 +1594,7 @@ pub fn parse_args(input: &String) -> Result<ArgsNode, ParseError> {
     let _result = _parse_args(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ArgsNode, ParseError>::Err(_d);
             }
         }
@@ -1610,7 +1610,7 @@ pub fn parse_for(input: &String) -> Result<ForNode, ParseError> {
     let _result = _parse_for(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ForNode, ParseError>::Err(_d);
             }
         }

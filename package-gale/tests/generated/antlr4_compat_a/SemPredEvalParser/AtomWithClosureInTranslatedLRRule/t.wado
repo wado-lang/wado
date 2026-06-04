@@ -1090,7 +1090,7 @@ pub fn parse_start(input: &String) -> Result<StartNode, ParseError> {
     let _result = _parse_start(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<StartNode, ParseError>::Err(_d);
             }
         }
@@ -1106,7 +1106,7 @@ pub fn parse_e(input: &String) -> Result<ENode, ParseError> {
     let _result = _parse_e(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ENode, ParseError>::Err(_d);
             }
         }

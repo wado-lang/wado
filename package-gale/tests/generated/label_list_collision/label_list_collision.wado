@@ -980,7 +980,7 @@ pub fn parse_stream(input: &String) -> Result<StreamNode, ParseError> {
     let _result = _parse_stream(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<StreamNode, ParseError>::Err(_d);
             }
         }

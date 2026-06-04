@@ -1181,7 +1181,7 @@ pub fn parse_start(input: &String) -> Result<StartNode, ParseError> {
     let _result = _parse_start(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<StartNode, ParseError>::Err(_d);
             }
         }
@@ -1197,7 +1197,7 @@ pub fn parse_animal(input: &String) -> Result<AnimalNode, ParseError> {
     let _result = _parse_animal(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<AnimalNode, ParseError>::Err(_d);
             }
         }
@@ -1213,7 +1213,7 @@ pub fn parse_service(input: &String) -> Result<ServiceNode, ParseError> {
     let _result = _parse_service(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ServiceNode, ParseError>::Err(_d);
             }
         }
@@ -1229,7 +1229,7 @@ pub fn parse_ac_class(input: &String) -> Result<AcClassNode, ParseError> {
     let _result = _parse_ac_class(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<AcClassNode, ParseError>::Err(_d);
             }
         }

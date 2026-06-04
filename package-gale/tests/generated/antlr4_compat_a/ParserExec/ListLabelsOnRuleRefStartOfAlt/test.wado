@@ -1296,7 +1296,7 @@ pub fn parse_expression(input: &String) -> Result<ExpressionNode, ParseError> {
     let _result = _parse_expression(&mut parser, 0);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ExpressionNode, ParseError>::Err(_d);
             }
         }

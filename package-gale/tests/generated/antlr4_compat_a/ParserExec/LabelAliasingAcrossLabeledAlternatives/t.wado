@@ -1092,7 +1092,7 @@ pub fn parse_start(input: &String) -> Result<StartNode, ParseError> {
     let _result = _parse_start(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<StartNode, ParseError>::Err(_d);
             }
         }
@@ -1108,7 +1108,7 @@ pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
     let _result = _parse_a(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ANode, ParseError>::Err(_d);
             }
         }
@@ -1124,7 +1124,7 @@ pub fn parse_subrule(input: &String) -> Result<SubruleNode, ParseError> {
     let _result = _parse_subrule(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<SubruleNode, ParseError>::Err(_d);
             }
         }

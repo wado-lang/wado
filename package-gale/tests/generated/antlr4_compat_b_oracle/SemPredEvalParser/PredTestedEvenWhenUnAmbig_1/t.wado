@@ -1005,7 +1005,7 @@ pub fn parse_primary(input: &String) -> Result<PrimaryNode, ParseError> {
     let _result = _parse_primary(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<PrimaryNode, ParseError>::Err(_d);
             }
         }

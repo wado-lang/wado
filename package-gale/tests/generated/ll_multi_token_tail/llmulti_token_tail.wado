@@ -1213,7 +1213,7 @@ pub fn parse_r(input: &String) -> Result<RNode, ParseError> {
     let _result = _parse_r(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<RNode, ParseError>::Err(_d);
             }
         }
@@ -1229,7 +1229,7 @@ pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
     let _result = _parse_a(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<ANode, ParseError>::Err(_d);
             }
         }
@@ -1245,7 +1245,7 @@ pub fn parse_c(input: &String) -> Result<CNode, ParseError> {
     let _result = _parse_c(&mut parser);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
-            if _d.span.start > _e.span.start {
+            if _d.span.start >= _e.span.start {
                 return Result::<CNode, ParseError>::Err(_d);
             }
         }
