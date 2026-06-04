@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780568116788,
+  "lastUpdate": 1780577362783,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29689,6 +29689,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 458339,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "33783ac00c7dc48d278391ee92ee97aa5310d12f",
+          "message": "Merge pull request #1290 from wado-lang/claude/wado-g4-development-hN8py\n\nGale: parser trace instrumentation + sharper parse errors",
+          "timestamp": "2026-06-04T21:40:46+09:00",
+          "tree_id": "ec3f4ee1aa5e6a25d66b4d6c5d28fff57af2bbcf",
+          "url": "https://github.com/wado-lang/wado/commit/33783ac00c7dc48d278391ee92ee97aa5310d12f"
+        },
+        "date": 1780577362264,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9659,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17191,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460509,
             "unit": "bytes"
           }
         ]
