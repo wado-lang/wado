@@ -144,13 +144,13 @@ pub struct "AsyncCall<core:prelude/types.wado/Result<(),()>>" {
     __cm_lift: fn(i32) -> Result<(), ()>,
 }
 
-pub struct "Iter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>" {
+pub struct "ArrayIter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>" {
     repr: &Array<Point>,
     index: i32,
     end: i32,
 }
 
-pub struct "Slice<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>" {
+pub struct "ArraySlice<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>" {
     repr: &Array<Point>,
     start: i32,
     end: i32,
@@ -392,8 +392,8 @@ pub struct "Box<Fn<2,T>>" {
     value: fn mut(&T, &T) -> &T,
 }
 
-pub struct "Box<Fn<2,Slice<T>>>" {
-    value: fn mut(Slice<T>, Slice<T>) -> Slice<T>,
+pub struct "Box<Fn<2,ArraySlice<T>>>" {
+    value: fn mut(ArraySlice<T>, ArraySlice<T>) -> ArraySlice<T>,
 }
 
 pub struct "Box<Fn<2,u8>>" {
@@ -762,7 +762,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -808,7 +808,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -864,8 +864,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -944,8 +944,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -1678,7 +1678,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -1724,7 +1724,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -1780,8 +1780,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -1860,8 +1860,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -2028,7 +2028,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -2074,7 +2074,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -2130,8 +2130,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -2210,8 +2210,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -2572,7 +2572,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -2618,7 +2618,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -2674,8 +2674,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -2754,8 +2754,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -2920,7 +2920,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -2966,7 +2966,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -3022,8 +3022,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -3102,8 +3102,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -3172,7 +3172,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -3218,7 +3218,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -3274,8 +3274,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -3354,8 +3354,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -3424,7 +3424,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -3470,7 +3470,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -3526,8 +3526,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -3606,8 +3606,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -4690,7 +4690,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -4779,7 +4779,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -4851,8 +4851,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -4947,8 +4947,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -5989,7 +5989,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -6035,7 +6035,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -6091,8 +6091,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -6179,8 +6179,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -6564,7 +6564,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -6636,7 +6636,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -6708,8 +6708,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -6804,8 +6804,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -6895,7 +6895,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -6941,7 +6941,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -6997,8 +6997,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -7077,8 +7077,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -9898,7 +9898,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -9944,7 +9944,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -10000,8 +10000,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -10080,8 +10080,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -10211,7 +10211,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -10257,7 +10257,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -10313,8 +10313,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -10393,8 +10393,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -10463,7 +10463,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -10509,7 +10509,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -10565,8 +10565,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -10645,8 +10645,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -13746,7 +13746,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -13921,7 +13921,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -14005,8 +14005,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -14113,8 +14113,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -14183,7 +14183,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -14229,7 +14229,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -14285,8 +14285,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -14365,8 +14365,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -14473,7 +14473,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -14540,7 +14540,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -14604,8 +14604,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -14692,8 +14692,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -15174,9 +15174,9 @@ fn destructuring_examples() {
         break __seq_lit: __b."List<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>^SequenceLiteralBuilder::build"();
     };
     __for_of_17: {
-        let mut __iter_17: Iter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point> = points."List<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>^IntoIterator::into_iter"();
+        let mut __iter_17: ArrayIter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point> = points."List<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>^IntoIterator::into_iter"();
         loop {
-            let __match_28: Option<Point> = __iter_17."Iter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>^Iterator::next"();
+            let __match_28: Option<Point> = __iter_17."ArrayIter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>^Iterator::next"();
             match __match_28 {
                 Some({ x, y }) => {
                     (x + y);
@@ -15464,7 +15464,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -15597,7 +15597,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -15689,8 +15689,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -15805,8 +15805,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -15959,7 +15959,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -16005,7 +16005,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -16061,8 +16061,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -16141,8 +16141,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -16211,7 +16211,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -16257,7 +16257,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -16313,8 +16313,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -16393,8 +16393,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -16463,7 +16463,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -16509,7 +16509,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -16565,8 +16565,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -16645,8 +16645,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -16715,7 +16715,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -16761,7 +16761,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -16817,8 +16817,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -16897,8 +16897,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -16967,7 +16967,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -17013,7 +17013,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -17069,8 +17069,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -17149,8 +17149,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -17219,7 +17219,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -17265,7 +17265,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -17321,8 +17321,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -17401,8 +17401,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -17471,7 +17471,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -17517,7 +17517,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -17573,8 +17573,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -17653,8 +17653,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -17723,7 +17723,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -17769,7 +17769,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -17825,8 +17825,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -17905,8 +17905,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -17975,7 +17975,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -18021,7 +18021,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -18077,8 +18077,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -18157,8 +18157,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -18227,7 +18227,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -18273,7 +18273,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -18329,8 +18329,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -18409,8 +18409,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -18479,7 +18479,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -18525,7 +18525,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -18581,8 +18581,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -18661,8 +18661,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -18731,7 +18731,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -18777,7 +18777,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -18833,8 +18833,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -18913,8 +18913,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -19013,7 +19013,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -19063,7 +19063,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -19123,8 +19123,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -19207,8 +19207,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -19330,7 +19330,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -19389,7 +19389,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -19453,8 +19453,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -19541,8 +19541,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -20003,7 +20003,7 @@ pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
 
 pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^Inspect::inspect"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -20053,7 +20053,7 @@ pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter
 
 pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
 
-pub fn "Fn<2,Slice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter);
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
 
 pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
 
@@ -20113,8 +20113,8 @@ pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^Display::fmt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^Inspect::inspect"(f);
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -20197,8 +20197,8 @@ pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
     self."Fn<2,T>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Slice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Slice<T>>>, f: &mut Formatter) {
-    self."Fn<2,Slice<T>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
@@ -20369,7 +20369,7 @@ fn "List<i32>^IndexValue<i32>::index_value"(self: &List<i32>, index: i32) -> i32
     return core::builtin::array_get::<i32>(&self.repr, index);
 }
 
-fn "Iter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>^Iterator::next"(self: &mut Iter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>) -> Option<Point> {
+fn "ArrayIter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>^Iterator::next"(self: &mut ArrayIter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>) -> Option<Point> {
     if (self.index >= self.end) {
         return null;
     }
@@ -20378,8 +20378,8 @@ fn "Iter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>^Iterator::nex
     return Option<Point>::Some(item);
 }
 
-fn "List<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>^IntoIterator::into_iter"(self: &List<Point>) -> Iter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point> {
-    return "core::prelude/slice.wado::Iter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>::internal_new"(&self.repr, 0, self.used);
+fn "List<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>^IntoIterator::into_iter"(self: &List<Point>) -> ArrayIter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point> {
+    return "core::prelude/slice.wado::ArrayIter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>::internal_new"(&self.repr, 0, self.used);
 }
 
 fn "List<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>^SequenceLiteralBuilder::build"(self: &List<Point>) -> List<Point> {
@@ -20667,8 +20667,8 @@ pub fn "List<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>::with_cap
     return List<wado-compiler/tests/format.fixtures/all-dirty.wado/Point> { repr: core::builtin::array_new::<Point>(capacity), used: 0 };
 }
 
-pub fn "Iter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>::internal_new"(repr: &Array<Point>, index: i32, end: i32) -> Iter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point> with stores[repr] {
-    return Iter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point> { repr: repr, index: index, end: end };
+pub fn "ArrayIter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point>::internal_new"(repr: &Array<Point>, index: i32, end: i32) -> ArrayIter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point> with stores[repr] {
+    return ArrayIter<wado-compiler/tests/format.fixtures/all-dirty.wado/Point> { repr: repr, index: index, end: end };
 }
 
 pub fn "List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow"(self: &mut List<[String, String]>) {

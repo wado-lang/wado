@@ -3005,7 +3005,7 @@ Error returned by float parsing.
 
 Returns the kind of this error.
 
-### `pub struct Slice<T>`
+### `pub struct ArraySlice<T>`
 
 A contiguous view into a backing `Array<T>` over the half-open range
 `[start, end)`. Holds a reference to the whole array, so creating a slice
@@ -3013,7 +3013,7 @@ never copies elements.
 
 _Fields are private._
 
-#### `pub fn internal_new(repr: &Array<T>, start: i32, end: i32) -> Slice<T>`
+#### `pub fn internal_new(repr: &Array<T>, start: i32, end: i32) -> ArraySlice<T>`
 
 Internal: build a slice from a backing array reference and bounds.
 
@@ -3029,12 +3029,12 @@ Returns true if the slice has no elements.
 
 Returns a copy of the element at `index`, or None if out of bounds.
 
-#### `pub fn slice(&self, start: i32, end: i32) -> Slice<T>`
+#### `pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T>`
 
 Returns a sub-slice over `[start, end)` relative to this slice, clamped
 to its bounds.
 
-#### `pub fn iter(&self) -> Iter<T>`
+#### `pub fn iter(&self) -> ArrayIter<T>`
 
 Returns a by-value iterator over the slice.
 
@@ -3042,21 +3042,21 @@ Returns a by-value iterator over the slice.
 
 Copies the slice's elements into a new `Array<T>`.
 
-#### `impl IndexValue<i32> for Slice<T>`
+#### `impl IndexValue<i32> for ArraySlice<T>`
 
 ##### `fn index_value(&self, index: i32) -> Self::Output`
 
-#### `impl IntoIterator for Slice<T>`
+#### `impl IntoIterator for ArraySlice<T>`
 
 ##### `fn into_iter(&self) -> Self::Iter`
 
-### `pub struct Iter<T>`
+### `pub struct ArrayIter<T>`
 
 A by-value forward iterator over a backing `Array<T>` range `[index, end)`.
 
 _Fields are private._
 
-#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32) -> Iter<T>`
+#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32) -> ArrayIter<T>`
 
 Internal: build an iterator over `[index, end)` of a backing array.
 
@@ -3071,15 +3071,15 @@ copy of the underlying range.
 
 #### `pub fn max(&mut self) -> Option<T>`
 
-#### `impl Iterator for Iter<T>`
+#### `impl Iterator for ArrayIter<T>`
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
-#### `impl IntoIterator for Iter<T>`
+#### `impl IntoIterator for ArrayIter<T>`
 
-##### `fn into_iter(&self) -> Iter<T>`
+##### `fn into_iter(&self) -> ArrayIter<T>`
 
-### `pub struct RefIter<T>`
+### `pub struct ArrayRefIter<T>`
 
 A by-reference forward iterator over a backing `Array<T>` range, yielding
 `&T`. The yielded reference points to a fresh copy of each element (Wasm GC
@@ -3088,51 +3088,51 @@ backing array. Backs `for x of &list`.
 
 _Fields are private._
 
-#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32) -> RefIter<T>`
+#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32) -> ArrayRefIter<T>`
 
 Internal: build a by-reference iterator over `[index, end)`.
 
-#### `impl Iterator for RefIter<T>`
+#### `impl Iterator for ArrayRefIter<T>`
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
-### `pub struct WindowsIter<T>`
+### `pub struct ArrayWindows<T>`
 
 An iterator over overlapping windows of `size` consecutive elements. Each
-item is a `Slice<T>` viewing the backing array.
+item is a `ArraySlice<T>` viewing the backing array.
 
 _Fields are private._
 
-#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> WindowsIter<T>`
+#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ArrayWindows<T>`
 
 Internal: build a windows iterator over `[index, end)` with window `size`.
 
-#### `impl Iterator for WindowsIter<T>`
+#### `impl Iterator for ArrayWindows<T>`
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
-#### `impl IntoIterator for WindowsIter<T>`
+#### `impl IntoIterator for ArrayWindows<T>`
 
-##### `fn into_iter(&self) -> WindowsIter<T>`
+##### `fn into_iter(&self) -> ArrayWindows<T>`
 
-### `pub struct ChunksIter<T>`
+### `pub struct ArrayChunks<T>`
 
 An iterator over non-overlapping chunks of up to `size` elements. The last
-chunk may be shorter. Each item is a `Slice<T>` viewing the backing array.
+chunk may be shorter. Each item is a `ArraySlice<T>` viewing the backing array.
 
 _Fields are private._
 
-#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ChunksIter<T>`
+#### `pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ArrayChunks<T>`
 
 Internal: build a chunks iterator over `[index, end)` with chunk `size`.
 
-#### `impl Iterator for ChunksIter<T>`
+#### `impl Iterator for ArrayChunks<T>`
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
-#### `impl IntoIterator for ChunksIter<T>`
+#### `impl IntoIterator for ArrayChunks<T>`
 
-##### `fn into_iter(&self) -> ChunksIter<T>`
+##### `fn into_iter(&self) -> ArrayChunks<T>`
 
 ### `pub struct String`
 
@@ -3745,24 +3745,24 @@ run-length expansion (where src < dst). Forward order is correct in both cases.
 
 Returns true if the list contains the given value.
 
-#### `pub fn slice(&self, start: i32, end: i32) -> Slice<T>`
+#### `pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T>`
 
 Returns a zero-copy view over `[start, end)`, clamped to `[0, len())`.
 
-#### `pub fn as_slice(&self) -> Slice<T>`
+#### `pub fn as_slice(&self) -> ArraySlice<T>`
 
 Returns a view over the whole list.
 
-#### `pub fn iter(&self) -> Iter<T>`
+#### `pub fn iter(&self) -> ArrayIter<T>`
 
 Returns a by-value iterator over the list's elements.
 
-#### `pub fn windows(&self, size: i32) -> WindowsIter<T>`
+#### `pub fn windows(&self, size: i32) -> ArrayWindows<T>`
 
 Returns an iterator over overlapping windows of `size` consecutive
 elements. Panics if `size` is not positive.
 
-#### `pub fn chunks(&self, size: i32) -> ChunksIter<T>`
+#### `pub fn chunks(&self, size: i32) -> ArrayChunks<T>`
 
 Returns an iterator over non-overlapping chunks of up to `size`
 elements. The last chunk may be shorter. Panics if `size` is not
@@ -3805,11 +3805,11 @@ byte (e.g. `[0x0f, 0xa0]` -> `"0fa0"`).
 
 #### `impl IndexValue<RangeExclusive<i32>> for List<T>`
 
-##### `fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T>`
+##### `fn index_value(&self, range: RangeExclusive<i32>) -> ArraySlice<T>`
 
 #### `impl IndexValue<RangeInclusive<i32>> for List<T>`
 
-##### `fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T>`
+##### `fn index_value(&self, range: RangeInclusive<i32>) -> ArraySlice<T>`
 
 #### `impl IntoIterator for List<T>`
 
@@ -3817,7 +3817,7 @@ byte (e.g. `[0x0f, 0xa0]` -> `"0fa0"`).
 
 #### `impl FromIterator<T> for List<T>`
 
-##### `fn from_iter(iter: Iter<T>) -> List<T>`
+##### `fn from_iter(iter: ArrayIter<T>) -> List<T>`
 
 #### `impl SequenceLiteralBuilder for List<T>`
 
