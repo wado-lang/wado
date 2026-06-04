@@ -7,10 +7,10 @@ struct wasi:clocks/system_clock.wado//Instant {  // TypeId(0)
     mut nanoseconds: u32,
 }
 
-array builtin::array<u8> (mut u8);  // TypeId(1)
+array Array<u8> (mut u8);  // TypeId(1)
 
 struct core:prelude/string.wado//String {  // TypeId(2)
-    mut repr: ref builtin::array<u8>,
+    mut repr: ref Array<u8>,
     mut used: i32,
 }
 
@@ -126,7 +126,7 @@ type "functype//wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_export__
 
 type "functype//wado-compiler/tests/fixtures/wasi_clocks_full.wado/__cm_export____test_8_system_clock__two_reads_are_consistent" = fn();  // TypeId(49)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref builtin::array<u8>, i32, i32);  // TypeId(50)
+type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(50)
 
 type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(51)
 
@@ -134,17 +134,17 @@ type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//St
 
 type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(53)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref builtin::array<u8>, i32) -> i64;  // TypeId(54)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(54)
 
 type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(55)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref builtin::array<u8>, i32);  // TypeId(56)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(56)
 
 type "functype//core:internal/cm_waitable_set_wait" = fn(i32) -> [i32, i32, u32];  // TypeId(57)
 
 type "functype//core:prelude/primitive.wado/count_digits_i64" = fn(i64) -> i32;  // TypeId(58)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref builtin::array<u8>, i32, i64, i32);  // TypeId(59)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(59)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(60)
 
@@ -513,9 +513,9 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
 }
 
 fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
-    let bytes: ref builtin::array<u8>;
+    let bytes: ref Array<u8>;
     let len: i32;
-    let new_repr: ref builtin::array<u8>;
+    let new_repr: ref Array<u8>;
     bytes = message.repr;
     len = message.used;
     if add_newline {
@@ -667,7 +667,7 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
     let remaining_digits: i32;
     let digit_count_6: i32;
     let offset_7: i32;
-    let repr: ref builtin::array<u8>;
+    let repr: ref Array<u8>;
     let abs_val: i64;
     let digit_count_10: i32;
     let offset_11: i32;
@@ -699,7 +699,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
     let signed_quot_9: i64;
     let carry_10: i64;
     let offset_11: i32;
-    let repr: ref builtin::array<u8>;
+    let repr: ref Array<u8>;
     let pos: i32;
     let digit: i32;
     let signed_rem_15: i64;
@@ -775,7 +775,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
 fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
-    let new_repr: ref builtin::array<u8>;
+    let new_repr: ref Array<u8>;
     let a_5: i32;
     let a_7: i32;
     capacity = builtin::array_len(self.repr);

@@ -132,6 +132,8 @@ pub enum Code {
     // General logging
     /// Generic log message (info, debug, etc.)
     Log,
+    /// Optimizer remark (residual cost that survived optimization).
+    Remark,
 
     // Kiln errors
     /// A generator's `Options` struct uses a shape not supported by Kiln.
@@ -189,6 +191,7 @@ impl std::fmt::Display for Code {
             Code::SpanStart => "SPAN_START",
             Code::SpanEnd => "SPAN_END",
             Code::Log => "LOG",
+            Code::Remark => "REMARK",
             Code::GeneratorOptionsUnsupported => "GENERATOR_OPTIONS_UNSUPPORTED",
             Code::GeneratorOptionsInvalid => "GENERATOR_OPTIONS_INVALID",
             Code::KilnStaleCache => "KILN_STALE_CACHE",

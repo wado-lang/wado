@@ -1182,9 +1182,11 @@ For full API reference, see:
   - [`core:json_nsd`](./stdlib-core-json_nsd.md) - non-self-describing JSON and its serde integration
   - [`core:json_value`](./stdlib-core-json_value.md) - dynamic JSON value and its serde integration
   - [`core:base64`](./stdlib-core-base64.md) - base64 encoding and decoding
+  - [`core:digest`](./stdlib-core-digest.md) - cryptographic hash functions (SHA-256)
   - [`core:zlib`](./stdlib-core-zlib.md) - zlib/gzip compression and decompression
   - [`core:simd`](./stdlib-core-simd.md) - Wasm 128-bit SIMD
   - [`core:url`](./stdlib-core-url.md) - WHATWG URL parsing
+  - [`core:uuid`](./stdlib-core-uuid.md) - UUID v4 / v7 generation and parsing
   - [`core:kiln`](./stdlib-core-kiln.md) - Kiln IDL host bindings
 - [WASI Standard Library Reference](./stdlib-wasi.md)
   - `wasi:cli`

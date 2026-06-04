@@ -682,7 +682,7 @@ impl TraitEnv {
 }
 
 /// Returns `true` if the module source is a user-local module (part of the current package).
-fn is_user_local(ms: &ModuleSource) -> bool {
+pub(super) fn is_user_local(ms: &ModuleSource) -> bool {
     matches!(
         ms,
         ModuleSource::Local { .. }
@@ -850,7 +850,30 @@ fn check_all_orphan_rules(
                 continue;
             };
             let Some(trait_type) = &impl_block.trait_type else {
-                continue; // inherent impl, no orphan rule
+                // Inherent impl. The orphan rule (foreign-trait/foreign-type)
+                // does not apply, but coherence does: a user package may only
+                // define inherent methods on types it owns. Extending a foreign
+                // type (a primitive, `Array<T>`, `String`, or any other stdlib
+                // type) inherently would let two packages add colliding methods
+                // to the same type, so it is forbidden — use a trait instead.
+                // `classify_position` looks through references and treats a
+                // `LocalType` head as owned; only a genuinely foreign head is a
+                // violation. (Stdlib modules are skipped above, so their own
+                // `impl Array<T>` / `impl i32` are unaffected.)
+                let type_params: Vec<String> = impl_block
+                    .type_params
+                    .iter()
+                    .map(|p| p.name.clone())
+                    .collect();
+                if let PositionKind::ForeignType =
+                    classify_position(&impl_block.ty, &type_params, &local_type_names)
+                {
+                    violations.push(TypeError::InherentImplOnForeignType {
+                        self_type_name: get_type_name_static(&impl_block.ty),
+                        span: impl_block.span,
+                    });
+                }
+                continue;
             };
 
             let trait_name = get_type_name_static(trait_type);

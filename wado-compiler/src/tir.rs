@@ -568,6 +568,13 @@ impl TypeTable {
     /// the source-level syntax `()` so error messages and mangled names line up.
     pub const UNIT_TYPE_NAME: &'static str = "()";
 
+    /// Canonical user-facing name of the raw GC array (`ResolvedType::BuiltinArray`).
+    /// Single source of truth for both the resolver arms that recognise the
+    /// `Array<T>` spelling and the dispatch arms that report it as the
+    /// method-owner base name (`impl Array<T>` in `core:prelude/array.wado`),
+    /// so those scattered sites cannot drift out of agreement.
+    pub const ARRAY_TYPE_NAME: &'static str = "Array";
+
     /// Check if a name and `module_source` identify a built-in tuple type.
     pub fn is_tuple_type(name: &str, module_source: &ModuleSource) -> bool {
         name == Self::TUPLE_TYPE_NAME && module_source.is_core()
@@ -1840,7 +1847,7 @@ impl TypeTable {
             ResolvedType::Unknown => "unknown".to_string(),
             ResolvedType::Error => "error".to_string(),
             ResolvedType::BuiltinArray(elem) => {
-                format!("builtin::array<{}>", self.type_name(*elem))
+                format!("Array<{}>", self.type_name(*elem))
             }
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::Enum { name, .. } => name.clone(),

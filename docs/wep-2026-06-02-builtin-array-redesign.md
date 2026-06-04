@@ -267,8 +267,7 @@ and the VS Code grammar.
 - [x] Rename the growable `Array<T>` → `List<T>` everywhere — type, `compiler_item`
       key `"array"` → `"list"`, `CompilerItem::Array` → `List`, stdlib, fixtures,
       grammar, docs — regenerate the WIR snapshots, and gate on green across `-O`
-      levels. Done: `mise run test` and `mise run test-wado` both green; the raw
-      `builtin::array` intrinsic and its WIR ops are untouched, awaiting Phase 1.
+      levels.
 
 ### Phase 1 — Reference-typed `builtin::array` operations (unblocking fix)
 
@@ -279,17 +278,7 @@ work** the hazard was holding up (e.g. const-global globalization).
 
 - [x] Give the `builtin::array_*` mutators `&mut` / readers `&` first parameters,
       fix their call sites in `List` / `String`, and confirm the optimizer now sees
-      the mutation. Done: 9 intrinsic signatures take `&` / `&mut` in
-      `lib/core/builtin.wado`; every call site in `lib/core/**` and the
-      hand-written test fixtures / benchmarks passes `&` / `&mut` explicitly (no
-      auto-ref); `BuiltinRegistry::resolve_type` learns the reference types so
-      monomorphization still pins `T`; the `$value_copy$T` synthesizer wraps the
-      array-clone arg in `Ref` to match the new signature. Downstream consumers
-      that pattern-matched on the by-value shape were updated: WIR-level
-      `array_element_copy_func` peels `Ref` / `MutRef` before discovering the
-      per-element copy helper, and `value_copy_demote` peels the same wrapper for
-      spine-builtin args so a `&mut self.repr` handoff is not misread as element
-      escape. `mise run test` and `mise run test-wado` both green.
+      the mutation.
 
 ### Phase 2 — Expose the raw GC array as a public `Array<T>`
 
@@ -298,10 +287,10 @@ operations stay as intrinsics, re-typed against `&Array<T>` / `&mut Array<T>`. A
 the type and a Wado wrapper `impl` — interface tidying, not a re-implementation of
 the lowering.
 
-- [ ] Declare the definition-less `Array<T>` (`compiler_item("array")`), generalize
+- [x] Declare the definition-less `Array<T>` (`compiler_item("array")`), generalize
       the parser for named definition-less types, re-type the `builtin::array_*`
-      intrinsics, give `Array<T>` standalone value semantics, add the wrapper `impl`,
-      and point `List`'s `repr` at it.
+      intrinsics, give `Array<T>` standalone value semantics, add the wrapper `impl`
+      + indexing traits, and point `List`'s `repr` at it.
 
 ### Phase 3 — Reference views
 

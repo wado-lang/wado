@@ -349,7 +349,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut cli_excludes: Vec<String> = Vec::new();
     let mut jobs: Option<usize> = None;
     let mut opt_level = OptLevel::default();
-    let mut log_level = LogLevel::default();
+    let mut log_level = args::DEFAULT_LOG_LEVEL;
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
     let mut allocator: Option<String> = None;

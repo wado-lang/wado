@@ -1,0 +1,27 @@
+// A nested-generic concrete impl must NOT match a different nested
+// instantiation: `impl Holder<Box<u8>>::tag` is not callable on
+// `Holder<Box<i32>>`. (Regression: the arg matcher must recurse into nested
+// generics, not silently accept and then ICE in WIR build.)
+//
+// `Holder<T>` is a user-local type from a sibling module — the concrete impl is
+// allowed (same package); only the wrong-instantiation *call* must be rejected.
+
+use { Holder } from "./sub/concrete_impl_holder.wado";
+
+struct Box<T> {
+    v: T,
+}
+
+impl Holder<Box<u8>> {
+    pub fn tag(&self) -> i32 {
+        return 7;
+    }
+}
+
+export fn run() {
+    let xs: Holder<Box<i32>> = Holder::new(Box { v: 0 });
+    let _ = xs.tag();
+}
+
+__DATA__
+{"compile_error": "no method 'tag' found on type 'Holder<Box<i32>>'"}

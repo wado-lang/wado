@@ -3,20 +3,20 @@
 
 use crate::ast::{
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
-    AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr,
-    ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport, ComparisonChainExpr,
-    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt, EnumCase,
-    EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt,
-    FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt,
-    ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, InterfaceMethod, Item,
-    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
-    MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
-    RangeExpr, RangeKind, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt,
-    StoresEntry, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
-    StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr,
-    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
-    VariantDecl, WhileStmt, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface,
-    WorldImport,
+    AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr,
+    CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
+    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
+    ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
+    ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
+    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl,
+    InterfaceMethod, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
+    MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
+    Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, ReturnStmt, SelfKind,
+    StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
+    StructLiteralField, StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr,
+    TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
+    VariantCase, VariantDecl, WhileStmt, WorldDecl, WorldExport, WorldExportFn,
+    WorldExportInterface, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -5052,8 +5052,9 @@ impl Parser {
         })
     }
 
-    /// Parse a `type` declaration: either a newtype (`type Name = T;`) or
-    /// a tuple type family declaration (`type [..T];`).
+    /// Parse a `type` declaration: a newtype (`type Name = T;`), a tuple
+    /// type family declaration (`type [..T];`), or a named definition-less
+    /// builtin type (`type Array<T>;`).
     fn parse_type_decl(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<Item> {
         let start_span = self.peek().span;
         // peek past `type` to see if next token is `[` (tuple type decl)
@@ -5070,20 +5071,29 @@ impl Parser {
                 span: start_span.merge(&end_span),
             }));
         }
-        self.parse_newtype(is_pub, attrs).map(Item::Newtype)
-    }
-
-    fn parse_newtype(&mut self, is_pub: bool, attrs: Vec<Attribute>) -> ParseResult<Newtype> {
+        // `type Name<...>` is shared by the newtype form (`= T;`) and the
+        // named definition-less builtin form (`;`); parse the head, then
+        // branch on whether an `=` follows.
         let id = self.alloc_ast_id();
-        let start_span = self.peek().span;
         self.expect(&TokenKind::Type)?;
         let (name, name_span) = self.consume_ident_with_span()?;
         let type_params = self.parse_generic_params()?;
+        if self.check(&TokenKind::Semicolon) {
+            let end_span = self.advance().span;
+            return Ok(Item::BuiltinTypeDecl(BuiltinTypeDecl {
+                id,
+                name,
+                name_span,
+                is_pub,
+                type_params,
+                attrs,
+                span: start_span.merge(&end_span),
+            }));
+        }
         self.expect(&TokenKind::Eq)?;
         let ty = self.parse_type()?;
         self.expect(&TokenKind::Semicolon)?;
-
-        Ok(Newtype {
+        Ok(Item::Newtype(Newtype {
             id,
             name,
             name_span,
@@ -5092,7 +5102,7 @@ impl Parser {
             ty,
             attrs,
             span: start_span,
-        })
+        }))
     }
 
     fn parse_impl_block(&mut self) -> ParseResult<ImplBlock> {

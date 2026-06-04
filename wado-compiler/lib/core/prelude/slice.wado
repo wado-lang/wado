@@ -1,0 +1,309 @@
+#![no_prelude]
+#![stdlib("core:prelude/slice.wado")]
+// Zero-copy views over a backing `Array<T>`: the `ArraySlice<T>` view and the
+// iterators `ArrayIter<T>`, `ArrayRefIter<T>`, `ArrayWindows<T>`, and `ArrayChunks<T>`.
+//
+// Each view holds a reference to the whole backing array (`&Array<T>`) plus
+// integer offsets, so constructing one never copies elements. `&Array<T>`
+// lowers to the same Wasm reference as `Array<T>`, so the reference is
+// zero-cost. The backing array is shared: writing to the source through
+// another path is observable through the view, until the source replaces its
+// buffer (e.g. a `List` reallocates on growth), after which the view keeps
+// referring to the buffer it was created from.
+//
+// Element access is always a value copy (`s[i]` yields `T`, never `&T`),
+// because Wasm GC has no interior references.
+
+use { IndexValue, Iterator, IntoIterator, Add, Ord, Ordering } from "core:prelude/traits.wado";
+use { Option } from "core:prelude/types.wado";
+use { panic, i32_min, i32_max, i32_clamp } from "core:internal";
+
+/// A contiguous view into a backing `Array<T>` over the half-open range
+/// `[start, end)`. Holds a reference to the whole array, so creating a slice
+/// never copies elements.
+pub struct ArraySlice<T> {
+    repr: &Array<T>,
+    start: i32,
+    end: i32,
+}
+
+impl ArraySlice<T> {
+    /// Internal: build a slice from a backing array reference and bounds.
+    pub fn internal_new(repr: &Array<T>, start: i32, end: i32) -> ArraySlice<T> with stores[repr] {
+        return ArraySlice { repr, start, end };
+    }
+
+    /// Returns the number of elements in the slice.
+    pub fn len(&self) -> i32 {
+        return self.end - self.start;
+    }
+
+    /// Returns true if the slice has no elements.
+    pub fn is_empty(&self) -> bool {
+        return self.start >= self.end;
+    }
+
+    /// Returns a copy of the element at `index`, or None if out of bounds.
+    pub fn get(&self, index: i32) -> Option<T> {
+        if index < 0 || index >= self.end - self.start {
+            return null;
+        }
+        return Option::Some(builtin::array_get(self.repr, self.start + index));
+    }
+
+    /// Returns a sub-slice over `[start, end)` relative to this slice, clamped
+    /// to its bounds.
+    pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T> {
+        let len = self.end - self.start;
+        let s = i32_clamp(start, 0, len);
+        let e = i32_clamp(end, s, len);
+        return ArraySlice {
+            repr: self.repr,
+            start: self.start + s,
+            end: self.start + e,
+        };
+    }
+
+    /// Returns a by-value iterator over the slice.
+    pub fn iter(&self) -> ArrayIter<T> {
+        return ArrayIter {
+            repr: self.repr,
+            index: self.start,
+            end: self.end,
+        };
+    }
+
+    /// Copies the slice's elements into a new `Array<T>`.
+    pub fn to_array(&self) -> Array<T> {
+        let len = self.end - self.start;
+        let mut out: Array<T> = builtin::array_new(i32_max(len, 0));
+        if len > 0 {
+            builtin::array_copy(&mut out, 0, self.repr, self.start, len);
+        }
+        return out;
+    }
+}
+
+impl IndexValue<i32> for ArraySlice<T> {
+    type Output = T;
+
+    fn index_value(&self, index: i32) -> Self::Output {
+        if builtin::unlikely(index < 0 || index >= self.end - self.start) {
+            panic("index out of bounds");
+        }
+        return builtin::array_get(self.repr, self.start + index);
+    }
+}
+
+impl<T> IntoIterator for ArraySlice<T> {
+    type Item = T;
+    type Iter = ArrayIter<T>;
+
+    fn into_iter(&self) -> Self::Iter {
+        return self.iter();
+    }
+}
+
+/// A by-value forward iterator over a backing `Array<T>` range `[index, end)`.
+pub struct ArrayIter<T> {
+    repr: &Array<T>,
+    index: i32,
+    end: i32,
+}
+
+impl ArrayIter<T> {
+    /// Internal: build an iterator over `[index, end)` of a backing array.
+    pub fn internal_new(repr: &Array<T>, index: i32, end: i32) -> ArrayIter<T> with stores[repr] {
+        return ArrayIter { repr, index, end };
+    }
+}
+
+impl<T> Iterator for ArrayIter<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.end {
+            return null;
+        }
+        let item = builtin::array_get(self.repr, self.index);
+        self.index += 1;
+        return Option::Some(item);
+    }
+}
+
+impl<T> IntoIterator for ArrayIter<T> {
+    type Item = T;
+    type Iter = ArrayIter<T>;
+
+    fn into_iter(&self) -> ArrayIter<T> {
+        return *self;
+    }
+}
+
+impl ArrayIter<T> {
+    /// Collects the remaining elements into a new `List<T>` with a single bulk
+    /// copy of the underlying range.
+    pub fn collect(&mut self) -> List<T> {
+        let remaining = i32_max(self.end - self.index, 0);
+        let mut repr: Array<T> = builtin::array_new(remaining);
+        if remaining > 0 {
+            builtin::array_copy(&mut repr, 0, self.repr, self.index, remaining);
+        }
+        self.index = self.end;
+        return List::internal_from_raw(repr, remaining);
+    }
+}
+
+impl<T: Add> ArrayIter<T> {
+    pub fn sum(&mut self) -> Option<T> {
+        return self.reduce(|a: T, b: T| a + b);
+    }
+}
+
+impl<T: Ord> ArrayIter<T> {
+    pub fn min(&mut self) -> Option<T> {
+        if let Some(first) = self.next() {
+            let mut result = first;
+            for let item of *self {
+                if let Less = item.cmp(&result) {
+                    result = item;
+                }
+            }
+            return Option::Some(result);
+        } else {
+            return null;
+        }
+    }
+
+    pub fn max(&mut self) -> Option<T> {
+        if let Some(first) = self.next() {
+            let mut result = first;
+            for let item of *self {
+                if let Greater = item.cmp(&result) {
+                    result = item;
+                }
+            }
+            return Option::Some(result);
+        } else {
+            return null;
+        }
+    }
+}
+
+/// A by-reference forward iterator over a backing `Array<T>` range, yielding
+/// `&T`. The yielded reference points to a fresh copy of each element (Wasm GC
+/// has no interior references), so it is a read-only view and cannot mutate the
+/// backing array. Backs `for x of &list`.
+pub struct ArrayRefIter<T> {
+    repr: &Array<T>,
+    index: i32,
+    end: i32,
+}
+
+impl ArrayRefIter<T> {
+    /// Internal: build a by-reference iterator over `[index, end)`.
+    pub fn internal_new(repr: &Array<T>, index: i32, end: i32) -> ArrayRefIter<T> with stores[repr] {
+        return ArrayRefIter { repr, index, end };
+    }
+}
+
+impl<T> Iterator for ArrayRefIter<T> {
+    type Item = &T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.end {
+            return null;
+        }
+        let val = builtin::array_get(self.repr, self.index);
+        let ref_val = &val;
+        self.index += 1;
+        return Option::Some(ref_val);
+    }
+}
+
+/// An iterator over overlapping windows of `size` consecutive elements. Each
+/// item is a `ArraySlice<T>` viewing the backing array.
+pub struct ArrayWindows<T> {
+    repr: &Array<T>,
+    index: i32,
+    end: i32,
+    size: i32,
+}
+
+impl ArrayWindows<T> {
+    /// Internal: build a windows iterator over `[index, end)` with window `size`.
+    pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ArrayWindows<T> with stores[repr] {
+        assert size > 0, "window size must be positive";
+        return ArrayWindows { repr, index, end, size };
+    }
+}
+
+impl<T> Iterator for ArrayWindows<T> {
+    type Item = ArraySlice<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index + self.size > self.end {
+            return null;
+        }
+        let slice = ArraySlice {
+            repr: self.repr,
+            start: self.index,
+            end: self.index + self.size,
+        };
+        self.index += 1;
+        return Option::Some(slice);
+    }
+}
+
+impl<T> IntoIterator for ArrayWindows<T> {
+    type Item = ArraySlice<T>;
+    type Iter = ArrayWindows<T>;
+
+    fn into_iter(&self) -> ArrayWindows<T> {
+        return *self;
+    }
+}
+
+/// An iterator over non-overlapping chunks of up to `size` elements. The last
+/// chunk may be shorter. Each item is a `ArraySlice<T>` viewing the backing array.
+pub struct ArrayChunks<T> {
+    repr: &Array<T>,
+    index: i32,
+    end: i32,
+    size: i32,
+}
+
+impl ArrayChunks<T> {
+    /// Internal: build a chunks iterator over `[index, end)` with chunk `size`.
+    pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ArrayChunks<T> with stores[repr] {
+        assert size > 0, "chunk size must be positive";
+        return ArrayChunks { repr, index, end, size };
+    }
+}
+
+impl<T> Iterator for ArrayChunks<T> {
+    type Item = ArraySlice<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.end {
+            return null;
+        }
+        let stop = i32_min(self.index + self.size, self.end);
+        let slice = ArraySlice {
+            repr: self.repr,
+            start: self.index,
+            end: stop,
+        };
+        self.index = stop;
+        return Option::Some(slice);
+    }
+}
+
+impl<T> IntoIterator for ArrayChunks<T> {
+    type Item = ArraySlice<T>;
+    type Iter = ArrayChunks<T>;
+
+    fn into_iter(&self) -> ArrayChunks<T> {
+        return *self;
+    }
+}

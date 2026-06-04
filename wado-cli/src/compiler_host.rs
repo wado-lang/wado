@@ -39,7 +39,7 @@ impl FilesystemCompilerHost {
         Self {
             inner: Arc::new(wado_lsp::FilesystemCompilerHost::new(base_path)),
             print_diagnostics: true,
-            log_level: LogLevel::Info,
+            log_level: crate::args::DEFAULT_LOG_LEVEL,
             start_time: Instant::now(),
             kiln_engine: OnceLock::new(),
             kiln_components: Mutex::new(Vec::new()),

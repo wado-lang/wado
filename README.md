@@ -224,11 +224,9 @@ The result: a language where common agentic coding pitfalls are eliminated by de
 
 ## Development
 
-Wado is developed entirely through agentic coding — AI agents write all the code while the human handles language design and project management.
-
 ### Development Process
 
-This approach requires active management:
+Developing entirely through agentic coding requires active management:
 
 - **Refactoring guidance**: Left unchecked, agents generate case-specific code that only works for immediate tests. Regular intervention steers toward generalizable solutions.
 - **Code minimization**: Agents tend to over-generate logic. Compilers need minimal, general-purpose code — the opposite of what agents naturally produce.

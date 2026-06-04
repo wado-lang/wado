@@ -166,6 +166,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name,
                 module_source,
             } => (name.clone(), module_source.clone()),
+            // Raw GC array `Array<T>`: inherent methods live in
+            // `impl Array<T>` (core:prelude/array.wado), keyed by "Array".
+            ResolvedType::BuiltinArray(_) => (
+                TypeTable::ARRAY_TYPE_NAME.to_string(),
+                ModuleSource::array(),
+            ),
             _ => (
                 self.tysys
                     .type_table
@@ -181,6 +187,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
                     Some(type_args)
                 }
+                // The raw GC array `Array<T>` carries its element as a single
+                // type arg, so a trait method's associated types (e.g.
+                // `IntoIterator::Iter` / `Item` for `impl IntoIterator for
+                // Array<T>`) resolve against `[elem]` just like a generic
+                // container's.
+                ResolvedType::BuiltinArray(elem) => Some(vec![elem]),
                 _ => None,
             };
 
@@ -323,6 +335,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             cm_name,
             is_ref_impl,
             method_type_param_ids: _,
+            impl_module: inherent_impl_module,
+            from_concrete_impl,
             param_defaults,
             param_names,
         } = if let Some(info) = method_info {
@@ -345,6 +359,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 cm_name: None,
                 is_ref_impl: false,
                 method_type_param_ids: vec![],
+                impl_module: None,
+                from_concrete_impl: false,
                 param_defaults: vec![],
                 param_names: vec![],
             }
@@ -551,12 +567,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut subst_ctx = SubstitutionContext::new();
         let mut impl_offset = 0u32;
 
-        // First, add impl-level type args from receiver's generic type (use base type)
-        // IMPORTANT: Skip this for trait methods because find_trait_method_for_type already
-        // resolved the return type using associated type bindings. Adding impl_args here would
-        // incorrectly substitute TypeParams from the OUTER context (e.g., TreeMap's K, V) that
-        // happen to have the same indices as this impl's type params (e.g., List's T).
-        if trait_name.is_none() {
+        // A concrete-instantiation impl (`impl List<u8>`) registers no impl type
+        // params and resolves its `self`/param types to the concrete
+        // instantiation, so the receiver's type args are NOT substitution
+        // params. Method-level type params therefore start at index 0; mapping
+        // the receiver args here would clash with them (e.g. bind a method `T`
+        // at index 0 to the receiver's `u8`).
+        if from_concrete_impl {
+            // impl_offset stays 0; method type params occupy 0.. .
+        } else if trait_name.is_none() {
+            // First, add impl-level type args from receiver's generic type (use base type)
+            // IMPORTANT: Skip this for trait methods because find_trait_method_for_type already
+            // resolved the return type using associated type bindings. Adding impl_args here would
+            // incorrectly substitute TypeParams from the OUTER context (e.g., TreeMap's K, V) that
+            // happen to have the same indices as this impl's type params (e.g., List's T).
             match self.tysys.type_table.borrow().get(base_type_id).clone() {
                 ResolvedType::GenericInstance {
                     type_args: receiver_type_args,
@@ -569,6 +593,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_offset = receiver_type_args.len() as u32;
                     subst_ctx = subst_ctx.with_impl_args(&receiver_type_args);
                 }
+                // The raw GC array `Array<T>` carries a single impl-level type
+                // arg (its element type), exactly like `Container<T>`. Without
+                // this, an inherent `impl Array<T>` method's return type keeps
+                // its `T` unsubstituted (e.g. `fn first(&self) -> T` or
+                // `fn slice(&self) -> Slice<T>`), so the caller sees a bare
+                // `T`. Stdlib impls dodge this only because they resolve via the
+                // loaded-module path in `lookup_method_info`, which substitutes
+                // during type resolution; a user-defined `impl Array<T>` is
+                // registered locally and needs the substitution here.
+                ResolvedType::BuiltinArray(elem) => {
+                    impl_offset = 1;
+                    subst_ctx = subst_ctx.with_impl_args(&[elem]);
+                }
                 _ => {}
             }
         } else {
@@ -579,6 +616,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if !type_args.is_empty() =>
                 {
                     impl_offset = type_args.len() as u32;
+                }
+                ResolvedType::BuiltinArray(_) => {
+                    impl_offset = 1;
                 }
                 _ => {}
             }
@@ -664,6 +704,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mangled = format!("{}<{}>", name, type_arg_names.join(","));
                 (mangled, name, type_arg_names, Some(type_args))
             }
+            // The raw GC array splits like a generic instance: the receiver
+            // name is the full `Array<T>` spelling, but the method-owner base
+            // name is "Array" (matching `impl Array<T>`'s registration).
+            ResolvedType::BuiltinArray(elem) => {
+                let arg_name = self.tysys.type_table.borrow().mangle_type_name(elem);
+                let mangled = crate::name::mangle_builtin_array_type(&arg_name);
+                (
+                    mangled,
+                    TypeTable::ARRAY_TYPE_NAME.to_string(),
+                    vec![arg_name],
+                    Some(vec![elem]),
+                )
+            }
             _ => {
                 let name = self
                     .tysys
@@ -686,7 +739,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             MethodName::format_local(&receiver_struct_name, trait_name.as_deref(), method_name);
 
         // Build monomorph_info for method calls on generic types or with method type args
-        let monomorph_info = if let Some(ref blanket_param) = blanket_type_param {
+        let monomorph_info = if from_concrete_impl {
+            // A method from a concrete instantiation impl (`impl List<u8>`) is a
+            // per-instantiation concrete function (`List<u8>::method`), not an
+            // impl-level template. If the method has NO type params of its own,
+            // it is fully concrete — call it directly (no monomorph_info) so
+            // cross-module inclusion / DCE / WIR resolution handle it and
+            // distinct instantiations stay distinct. If it DOES have method-level
+            // type params (`impl List<u8> { fn f<T>() }`), it still needs
+            // monomorphization over those — keyed by the per-instantiation
+            // template name with NO impl type args (the receiver is concrete).
+            if method_type_args.is_empty() {
+                None
+            } else {
+                let generic_name = MethodName::format_local(
+                    &receiver_struct_name,
+                    trait_name.as_deref(),
+                    method_name,
+                );
+                Some(MonomorphInfo {
+                    generic_name,
+                    impl_type_args: vec![],
+                    method_type_args: method_type_args.clone(),
+                    is_blanket: false,
+                })
+            }
+        } else if let Some(ref blanket_param) = blanket_type_param {
             // For blanket impls, the template function uses the type param name (e.g., "I").
             // The call site uses the concrete receiver (e.g., "ListIter<i32>").
             // monomorph_info maps from the concrete name back to the template.
@@ -745,6 +823,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         //   3. In the receiver type's module otherwise — inherent methods
         //      live alongside the type they're declared on.
         let method_module_source = trait_impl_module_source
+            // Inherent methods: the body lives in the module that declares the
+            // `impl` block, which may differ from the receiver type's module
+            // (a user-written `impl List<u8>` on the prelude `List`). Prefer
+            // that so cross-module inherent impls resolve.
+            .or_else(|| inherent_impl_module.clone())
             .or_else(|| {
                 inherited_from_base.and_then(|base_id| {
                     match self.tysys.type_table.borrow().get(base_id) {
@@ -760,7 +843,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ResolvedType::Primitive(_) | ResolvedType::Unit => {
                             Some(ModuleSource::primitive())
                         }
-                        ResolvedType::BuiltinArray(_) => Some(ModuleSource::list()),
+                        ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
                         _ => None,
                     }
                 })

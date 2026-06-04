@@ -118,6 +118,17 @@ pub(crate) struct TypeSystem {
     /// `is_known_type_name` lookups in the body walk.
     pub(crate) known_type_names_cache: Rc<IndexSet<String>>,
 
+    /// Per-module *visible* type names: the type names each module can
+    /// actually resolve — its own declarations, the auto-imported prelude,
+    /// the primitives, and the types it explicitly `use`s. Always a subset
+    /// of [`Self::known_type_names_cache`]; unlike that global union it is
+    /// **not** polluted by type names from unrelated modules. This is what
+    /// distinguishes a free impl type parameter (`E` in the prelude's
+    /// `impl Result<T, E>`, which `core:prelude/types` cannot resolve) from
+    /// a concrete instantiation argument (`u8` in `impl List<u8>`), even
+    /// when a *user* module declares a type that happens to be named `E`.
+    pub(crate) module_visible_types: Rc<IndexMap<ModuleSource, IndexSet<String>>>,
+
     /// Per-module index from function name → position in `module.items`
     /// for O(1) lookup. Built globally during annotate; read-only
     /// afterwards.
@@ -130,6 +141,26 @@ impl TypeSystem {
     /// lookup instead of scanning all module maps.
     pub(crate) fn is_known_type_name(&self, name: &str) -> bool {
         self.known_type_names_cache.contains(name)
+    }
+
+    /// Whether `name` resolves to a declared type *from the perspective of
+    /// `module`* — i.e. a type that module can actually see (its own
+    /// declarations, the auto-imported prelude, a primitive, or a type it
+    /// explicitly imports). Unlike [`Self::is_known_type_name`], which is a
+    /// global union, this is immune to pollution by unrelated modules: a
+    /// user module declaring a type named `E` does not make `E` "known" in
+    /// `core:prelude/types`, so the prelude's `impl Result<T, E>` keeps
+    /// treating `E` as a free type parameter rather than a concrete
+    /// instantiation argument.
+    ///
+    /// Falls back to the global cache when `module` is unknown (e.g. a
+    /// synthetic source not present in the per-module map), which preserves
+    /// the prior behaviour for those edge cases.
+    pub(crate) fn is_known_type_name_in(&self, module: &ModuleSource, name: &str) -> bool {
+        match self.module_visible_types.get(module) {
+            Some(visible) => visible.contains(name),
+            None => self.is_known_type_name(name),
+        }
     }
 
     /// Check if an expression is a numeric literal (possibly negated).

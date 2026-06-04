@@ -1,0 +1,30 @@
+// Trait impls on concrete generic instantiations (`impl Kind for Box<i32>`).
+// Each instantiation dispatches to its own impl.
+
+struct Box<T> {
+    v: T,
+}
+
+trait Kind {
+    fn kind(&self) -> i32;
+}
+
+impl Kind for Box<i32> {
+    fn kind(&self) -> i32 {
+        return 10;
+    }
+}
+
+impl Kind for Box<bool> {
+    fn kind(&self) -> i32 {
+        return 20;
+    }
+}
+
+test {
+    assert Box { v: 1 }.kind() == 10;
+    assert Box { v: true }.kind() == 20;
+}
+
+__DATA__
+{"test": {}}

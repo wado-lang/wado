@@ -424,6 +424,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Struct { name, .. }
             | ResolvedType::Enum { name, .. }
             | ResolvedType::Variant { name, .. } => (name.clone(), None),
+            // The raw GC array `Array<T>` carries its element as a single type
+            // arg, so trait impls (`impl IntoIterator for Array<T>`) resolve
+            // under the canonical name "Array".
+            ResolvedType::BuiltinArray(elem) => {
+                (TypeTable::ARRAY_TYPE_NAME.to_string(), Some(vec![*elem]))
+            }
             ResolvedType::GenericInstance {
                 name,
                 module_source,
@@ -521,6 +527,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     let impl_trait_name = self.get_type_name(trait_type);
                     if impl_trait_name == trait_name
+                        && self.inherent_impl_type_args_match(
+                            &impl_block.ty,
+                            &impl_block.type_params,
+                            type_args,
+                            module_src,
+                        )
                         && self.check_impl_block_bounds(impl_block, type_args)
                     {
                         return true;
@@ -537,6 +549,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 let impl_trait_name = self.get_type_name(trait_type);
                 if impl_trait_name == trait_name
+                    && self.inherent_impl_type_args_match(
+                        &impl_block.ty,
+                        &impl_block.type_params,
+                        type_args,
+                        &self.current_module_source,
+                    )
                     && self.check_impl_block_bounds(impl_block, type_args)
                 {
                     return true;
@@ -829,6 +847,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         cm_name: None,
                         is_ref_impl: false,
                         method_type_param_ids,
+                        impl_module: None,
+                        from_concrete_impl: false,
                         param_defaults,
                         param_names,
                     },
@@ -1465,6 +1485,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             cm_name: None,
             is_ref_impl: false,
             method_type_param_ids: vec![],
+            impl_module: None,
+            from_concrete_impl: false,
         };
         let impl_module_source = self.find_struct_module_source(struct_name);
         Some(TraitMethodMatch {

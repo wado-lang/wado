@@ -1,0 +1,31 @@
+// Coherence: a user package may NOT define an inherent `impl` on a foreign
+// type — a primitive (`i32`), the raw GC array (`Array<T>`), `String`, or any
+// other stdlib type. Two packages could otherwise add colliding methods to the
+// same type. Cross-package extension must go through a trait instead.
+//
+// (The stdlib's own `impl Array<T>` / `impl i32` live inside the `core`
+// package and are unaffected — coherence is checked only for user-local
+// modules.)
+
+impl Array<T> {
+    fn first(&self) -> T {
+        return builtin::array_get(self, 0);
+    }
+}
+
+impl i32 {
+    fn doubled(&self) -> i32 {
+        return *self * 2;
+    }
+}
+
+impl String {
+    fn shout_len(&self) -> i32 {
+        return self.len();
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "coherence violation"}

@@ -366,6 +366,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             logger,
                         );
                     }
+                    Item::BuiltinTypeDecl(decl) => {
+                        super::item::register_builtin_type_compiler_item(
+                            &type_table,
+                            &decl.attrs,
+                            &decl.name,
+                            module_source,
+                            decl.span,
+                            logger,
+                        );
+                    }
                     _ => {}
                 }
             }
@@ -845,6 +855,81 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             cache
         };
 
+        // Per-module *visible* type names: each module's own declared types,
+        // plus the auto-imported prelude, the primitives, and any types the
+        // module explicitly `use`s. Unlike `known_type_names_cache` (a global
+        // union of every module's types), this is not polluted by type names
+        // from unrelated modules, so it correctly tells a free impl type
+        // parameter (`E` in the prelude's `impl Result<T, E>`) apart from a
+        // concrete instantiation argument (`u8` in `impl List<u8>`) even when
+        // a *user* module declares a type named `E`. It is always a subset of
+        // the global cache, so it can only remove false positives.
+        let module_visible_types: IndexMap<ModuleSource, IndexSet<String>> = {
+            // Own-declared type names per module.
+            fn collect<V>(
+                src: &IndexMap<ModuleSource, IndexMap<String, V>>,
+                out: &mut IndexMap<ModuleSource, IndexSet<String>>,
+            ) {
+                for (ms, inner) in src {
+                    let entry = out.entry(ms.clone()).or_default();
+                    for name in inner.keys() {
+                        entry.insert(name.clone());
+                    }
+                }
+            }
+            let mut local: IndexMap<ModuleSource, IndexSet<String>> = IndexMap::default();
+            collect(&all_struct_fields, &mut local);
+            collect(&all_variant_cases, &mut local);
+            collect(&all_enum_cases, &mut local);
+            collect(&all_flags_cases, &mut local);
+            collect(&all_newtypes, &mut local);
+            collect(&all_generic_newtypes, &mut local);
+
+            // The prelude is auto-imported into every module, so its types are
+            // visible everywhere.
+            let is_auto_visible = |ms: &ModuleSource| {
+                matches!(ms, ModuleSource::Core { name }
+                    if name.as_str() == "prelude"
+                        || name.as_str().starts_with("prelude/")
+                        || name.as_str() == "internal"
+                        || name.as_str() == "builtin")
+            };
+            let mut prelude_types: IndexSet<String> = IndexSet::default();
+            for (ms, names) in &local {
+                if is_auto_visible(ms) {
+                    prelude_types.extend(names.iter().cloned());
+                }
+            }
+
+            let mut visible: IndexMap<ModuleSource, IndexSet<String>> = IndexMap::default();
+            for (ms, module) in modules {
+                let mut set: IndexSet<String> = IndexSet::default();
+                for prim in crate::tir::PrimitiveType::all_primitive_names() {
+                    set.insert(prim.to_string());
+                }
+                if let Some(own) = local.get(ms) {
+                    set.extend(own.iter().cloned());
+                }
+                set.extend(prelude_types.iter().cloned());
+                // Types brought in by this module's `use` declarations.
+                let (imports, originals) = Self::build_imported_type_sources(
+                    &mut interner.borrow_mut(),
+                    module,
+                    ms,
+                    Some(entry_module_source),
+                    &invocations,
+                );
+                for (local_name, src) in &imports {
+                    let original = originals.get(local_name).unwrap_or(local_name);
+                    if local.get(src).is_some_and(|s| s.contains(original)) {
+                        set.insert(local_name.clone());
+                    }
+                }
+                visible.insert(ms.clone(), set);
+            }
+            visible
+        };
+
         // Validate type names in struct fields, variant payloads, and newtype definitions.
         // At this point all type names from all modules are known, so any unrecognized
         // Named type is truly undefined. This catches undefined types that would silently
@@ -989,6 +1074,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             builtin_registry: Rc::new(builtin_registry),
             included_files,
             known_type_names_cache: Rc::new(known_type_names_cache),
+            module_visible_types: Rc::new(module_visible_types),
             loaded_module_func_indices: Rc::new(loaded_module_func_indices),
         };
         Ok(AnnotateState {
@@ -2641,6 +2727,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         type_params,
                     );
                     type_table.make_option(inner)
+                }
+                // `Array<T>` is the user-facing spelling of the raw GC array
+                // builtin (`ResolvedType::BuiltinArray`); mirror the elaborator's
+                // `resolve_generic_type` "Array" arm so struct field types
+                // resolved through this static pre-pass match.
+                _ if generic.name == TypeTable::ARRAY_TYPE_NAME && !generic.args.is_empty() => {
+                    let elem = Self::resolve_type_static_with_params(
+                        &generic.args[0],
+                        type_table,
+                        lookup,
+                        type_params,
+                    );
+                    type_table.make_builtin_array(elem)
                 }
                 _ => {
                     let type_args: Vec<TypeId> = generic

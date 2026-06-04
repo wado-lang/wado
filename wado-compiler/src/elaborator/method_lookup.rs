@@ -239,6 +239,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::GenericInstance { name, .. } => return name,
                 ResolvedType::Newtype { base_type, .. } => current = base_type,
                 ResolvedType::Flags { .. } => return "u32".to_string(),
+                // The raw GC array's base method-owner name is "Array"
+                // (its type args are carried separately), not the full
+                // `type_name` spelling `Array<T>`.
+                ResolvedType::BuiltinArray(_) => return TypeTable::ARRAY_TYPE_NAME.to_string(),
                 _ => return self.tysys.type_table.borrow().type_name(current),
             }
         }
@@ -306,6 +310,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Item::Enum(e) if e.name == struct_name => {
                     return self.current_module_source.clone();
                 }
+                Item::BuiltinTypeDecl(d) if d.name == struct_name => {
+                    return self.current_module_source.clone();
+                }
                 _ => {}
             }
         }
@@ -324,6 +331,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return module_source.clone();
                     }
                     Item::Enum(e) if e.name == struct_name => {
+                        return module_source.clone();
+                    }
+                    Item::BuiltinTypeDecl(d) if d.name == struct_name => {
                         return module_source.clone();
                     }
                     _ => {}
@@ -429,6 +439,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             cm_name: None,
                             is_ref_impl: false,
                             method_type_param_ids: vec![],
+                            impl_module: None,
+                            from_concrete_impl: false,
                             param_defaults: vec![],
                             param_names: vec![],
                         });
@@ -466,6 +478,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             cm_name: None,
                             is_ref_impl: false,
                             method_type_param_ids: vec![],
+                            impl_module: None,
+                            from_concrete_impl: false,
                             param_defaults: vec![],
                             param_names: vec![],
                         });
@@ -518,6 +532,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Use None to trigger "search all loaded modules" logic
                 (prim.as_str().to_string(), None, None, None)
             }
+            // Raw GC array `Array<T>` — methods live in `impl Array<T>`
+            // (core:prelude/array.wado), keyed by the base name "Array".
+            // `None` module triggers "search all loaded modules".
+            ResolvedType::BuiltinArray(elem) => (
+                TypeTable::ARRAY_TYPE_NAME.to_string(),
+                None,
+                Some(vec![*elem]),
+                None,
+            ),
             // Unit type () - search for impl blocks in loaded modules
             ResolvedType::Unit => (TypeTable::UNIT_TYPE_NAME.to_string(), None, None, None),
             // Enum types - search for impl blocks by enum name
@@ -543,13 +566,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => return None,
         };
 
+        // A receiver type is "foreign" when it cannot be a user-local struct:
+        // a module-less builtin (primitive / unit / `Array<T>`) or a type owned
+        // by a non-user (stdlib / builtin) module such as `String`. Inherent
+        // impls on these found in the current module must record this module as
+        // their template's home (see the `impl_module` note in Path A below).
+        let receiver_is_foreign = match &struct_module_source {
+            None => true,
+            Some(ms) => !super::trait_env::is_user_local(ms),
+        };
+
         let mangled_name = MethodName::format_local(&struct_name, None, method_name);
         if let Some(&return_type) = self.sem.decls.function_return_types.get(&mangled_name) {
             // For locally registered methods, find self_kind and param_types from the AST
             // Also checks that bounded impl block constraints are satisfied
-            if let Some((self_kind, param_types, param_is_mut, param_defaults, param_names)) = self
-                .find_local_method_info(&struct_name, method_name, receiver_type_args.as_deref())
-            {
+            if let Some((
+                self_kind,
+                param_types,
+                param_is_mut,
+                param_defaults,
+                param_names,
+                from_concrete_impl,
+            )) = self.find_local_method_info(
+                &struct_name,
+                method_name,
+                receiver_type_args.as_deref(),
+            ) {
                 return Some(MethodInfo {
                     return_type,
                     self_kind,
@@ -559,6 +601,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     cm_name: None,
                     is_ref_impl: false,
                     method_type_param_ids: vec![],
+                    // Where the monomorphizer should look for this method's
+                    // template. `find_local_method_info` only matches impls in
+                    // the *current* module, so the template always lives here —
+                    // but we usually leave `impl_module` unset so that for a
+                    // user struct (two modules can declare `Widget`) the call
+                    // falls back to the receiver type's own module, preserving
+                    // correct cross-module dispatch.
+                    //
+                    // That fallback is wrong for an inherent impl on a *foreign*
+                    // type — a primitive / `Array<T>` (module-less) or a stdlib
+                    // type like `String` — whose canonical module is the prelude,
+                    // not this one. There the template is genuinely local, so we
+                    // must record the current module; otherwise monomorphization
+                    // looks in the prelude, fails to find the instantiation, and
+                    // the call ICEs as an unresolved method. A foreign receiver
+                    // type cannot collide with a user struct, so this is safe.
+                    impl_module: if from_concrete_impl || receiver_is_foreign {
+                        Some(self.current_module_source.clone())
+                    } else {
+                        None
+                    },
+                    from_concrete_impl,
                     param_defaults,
                     param_names,
                 });
@@ -595,6 +659,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                         let impl_struct_name = self.get_type_name(&impl_block.ty);
                         if impl_struct_name == struct_name
+                            && self.inherent_impl_type_args_match(
+                                &impl_block.ty,
+                                &impl_block.type_params,
+                                receiver_type_args.as_deref(),
+                                module_source,
+                            )
                             && self
                                 .check_impl_block_bounds(impl_block, receiver_type_args.as_deref())
                         {
@@ -695,6 +765,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     );
                                     drop(scope);
 
+                                    let from_concrete_impl = self
+                                        .impl_is_concrete_instantiation(impl_block, module_source);
                                     return Some(MethodInfo {
                                         return_type,
                                         self_kind,
@@ -704,6 +776,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                         cm_name: None,
                                         is_ref_impl: false,
                                         method_type_param_ids: vec![],
+                                        impl_module: Some(module_source.clone()),
+                                        from_concrete_impl,
                                         param_defaults,
                                         param_names,
                                     });
@@ -718,7 +792,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Search all loaded modules if no specific module (for prelude types)
         // Only check inherent impls (not trait impls) - trait impls are handled separately
         if struct_module_source.is_none() {
-            for module in self.loaded_modules.values() {
+            for (search_module_source, module) in self.loaded_modules {
                 for item in &module.items {
                     if let Item::Impl(impl_block) = item {
                         // Skip trait impls - only look at inherent impls
@@ -727,6 +801,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                         let impl_struct_name = self.get_type_name(&impl_block.ty);
                         if impl_struct_name == struct_name
+                            && self.inherent_impl_type_args_match(
+                                &impl_block.ty,
+                                &impl_block.type_params,
+                                receiver_type_args.as_deref(),
+                                search_module_source,
+                            )
                             && self
                                 .check_impl_block_bounds(impl_block, receiver_type_args.as_deref())
                         {
@@ -802,6 +882,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                                     drop(scope);
 
+                                    let from_concrete_impl = self.impl_is_concrete_instantiation(
+                                        impl_block,
+                                        search_module_source,
+                                    );
                                     return Some(MethodInfo {
                                         return_type,
                                         self_kind,
@@ -811,6 +895,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                         cm_name: None,
                                         is_ref_impl: false,
                                         method_type_param_ids: vec![],
+                                        impl_module: Some(search_module_source.clone()),
+                                        from_concrete_impl,
                                         param_defaults,
                                         param_names,
                                     });
@@ -956,11 +1042,89 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 cm_name,
                 is_ref_impl: false,
                 method_type_param_ids: vec![],
+                impl_module: None,
+                from_concrete_impl: false,
                 param_defaults,
                 param_names,
             });
         }
         None
+    }
+
+    /// For an inherent `impl` on a possibly-generic type, check that any
+    /// concrete type arguments written in the impl header (e.g. the `u8` in
+    /// `impl List<u8>`) match the receiver's actual type arguments. Type
+    /// parameters (e.g. `T` in `impl List<T>`) match any argument. This is
+    /// what keeps `impl List<u8>` from applying to a `List<i32>` receiver.
+    ///
+    /// Non-generic impls (e.g. `impl i32`) impose no constraint here; the
+    /// struct-name match already pinned the receiver type.
+    pub(super) fn inherent_impl_type_args_match(
+        &self,
+        impl_ty: &Type,
+        impl_params: &[ast::GenericParam],
+        receiver_type_args: Option<&[TypeId]>,
+        impl_module: &ModuleSource,
+    ) -> bool {
+        let inner = match impl_ty {
+            Type::Reference(i) | Type::MutReference(i) => i.as_ref(),
+            other => other,
+        };
+        let Type::Generic(generic) = inner else {
+            return true;
+        };
+        // No receiver type args supplied (an existence/bounds check that did not
+        // thread them) — nothing to constrain against, so don't reject.
+        let Some(args) = receiver_type_args else {
+            return true;
+        };
+        for (i, arg) in generic.args.iter().enumerate() {
+            // A concrete arg (recursing into nested generics, excluding declared
+            // impl params) must equal the receiver's arg; a free type param
+            // matches anything.
+            if let Some(expected) = self.concrete_arg_mangled(arg, impl_params, impl_module) {
+                let Some(&recv) = args.get(i) else {
+                    return false;
+                };
+                if self.tysys.type_table.borrow().mangle_type_name(recv) != expected {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    /// The mangled type name a concrete impl argument must equal in the
+    /// receiver (`u8` → `"u8"`, `Box<u8>` → `"Box<u8>"`), or `None` when the
+    /// argument is a free type parameter (declared `impl<T>` or an unknown
+    /// name) that should match any receiver argument. Recurses so nested
+    /// generic args (`List<Box<u8>>`) are constrained, not silently accepted.
+    fn concrete_arg_mangled(
+        &self,
+        arg: &Type,
+        impl_params: &[ast::GenericParam],
+        impl_module: &ModuleSource,
+    ) -> Option<String> {
+        match arg {
+            Type::Named(named) => {
+                if self.tysys.is_known_type_name_in(impl_module, &named.name)
+                    && !impl_params.iter().any(|p| p.name == named.name)
+                {
+                    Some(named.name.clone())
+                } else {
+                    None
+                }
+            }
+            Type::Generic(g) => {
+                let parts: Vec<String> = g
+                    .args
+                    .iter()
+                    .map(|a| self.concrete_arg_mangled(a, impl_params, impl_module))
+                    .collect::<Option<Vec<String>>>()?;
+                Some(format!("{}<{}>", g.name, parts.join(",")))
+            }
+            _ => None,
+        }
     }
 
     /// Find the method info (`self_kind` and `param_types`) for a method in current module items
@@ -975,6 +1139,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Vec<bool>,
         Vec<Option<ast::Expr>>,
         Vec<String>,
+        // True when the matched impl is a concrete generic instantiation
+        // (`impl List<u8>`), so the method is a per-instantiation concrete fn.
+        bool,
     )> {
         // First collect method info without resolving types. We also capture the
         // impl block's type AST and the method's type params so that param-type
@@ -989,6 +1156,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Vec<String>,
             ast::Type,
             Vec<ast::GenericParam>,
+            // Whether the matched impl is a concrete generic instantiation.
+            bool,
         )> = None;
 
         for item in self.current_module_items {
@@ -999,6 +1168,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let impl_struct_name = self.get_type_name(&impl_block.ty);
                 if impl_struct_name == struct_name
+                    && self.inherent_impl_type_args_match(
+                        &impl_block.ty,
+                        &impl_block.type_params,
+                        receiver_type_args,
+                        &self.current_module_source,
+                    )
                     && self.check_impl_block_bounds(impl_block, receiver_type_args)
                 {
                     for method in &impl_block.methods {
@@ -1019,6 +1194,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 non_self.iter().map(|p| p.default.clone()).collect();
                             let param_names: Vec<String> =
                                 non_self.iter().map(|p| p.name.clone()).collect();
+                            let is_concrete_impl = self.impl_is_concrete_instantiation(
+                                impl_block,
+                                &self.current_module_source,
+                            );
                             found_method = Some((
                                 self_kind,
                                 param_types,
@@ -1027,6 +1206,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 param_names,
                                 impl_block.ty.clone(),
                                 method.type_params.clone(),
+                                is_concrete_impl,
                             ));
                             break;
                         }
@@ -1050,14 +1230,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_names,
                 impl_ty,
                 method_type_params,
+                is_concrete_impl,
             )| {
                 // Inherited scope; only `type_params` is replaced.
                 let mut scope = self.enter_inherited_type_param_scope();
                 scope.trait_ctx.type_params.clear();
 
-                // Impl-level type params (e.g. `impl Box<T>` -> register T at index 0)
+                // Impl-level type params (e.g. `impl Box<T>` -> register T at index 0).
+                // A fully concrete impl (`impl Box<i32>`) has no free params, so
+                // its args resolve to concrete types (matching `resolve_method`).
                 let mut impl_offset = 0u32;
-                if let ast::Type::Generic(generic) = &impl_ty {
+                if let ast::Type::Generic(generic) = &impl_ty
+                    && !is_concrete_impl
+                {
                     for (i, arg) in generic.args.iter().enumerate() {
                         if let ast::Type::Named(named) = arg
                             && !scope.trait_ctx.type_params.contains_key(&named.name)
@@ -1157,6 +1342,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param_is_mut,
                     param_defaults,
                     param_names,
+                    is_concrete_impl,
                 )
             },
         )
@@ -1869,6 +2055,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         | ResolvedType::Flags { name, .. }
                         | ResolvedType::Variant { name, .. } => name.clone(),
                         ResolvedType::Primitive(p) => p.as_str().to_string(),
+                        // The raw GC array's outer constructor is "Array", so a
+                        // `&Array<T>` ref impl (`impl Trait for &Array<T>`)
+                        // matches a `&Array<_>` receiver.
+                        ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
                         _ => String::new(),
                     };
                     if impl_inner != receiver_outer {
@@ -1922,17 +2112,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // intentionally widely-applicable: blanket impls
                     // (type-param receivers), ref-shape impls (already
                     // filtered by the inner-name check above), and
-                    // generic impls (`impl X for Bag<V>`) — those
-                    // dispatch through the monomorphizer's substitution
-                    // path, where the impl's `ty` resolves to a
-                    // `TypeParam`-bearing form that can't be compared
-                    // directly against a concrete receiver's `TypeId`.
+                    // *parametric* generic impls (`impl<V> X for Bag<V>`)
+                    // — those dispatch through the monomorphizer's
+                    // substitution path, where the impl's `ty` resolves
+                    // to a `TypeParam`-bearing form that can't be
+                    // compared directly against a concrete receiver's
+                    // `TypeId`.
+                    //
+                    // A generic impl whose arguments are all concrete
+                    // (`impl X for List<u8>`) resolves to a concrete
+                    // `TypeId`, so it must go through the equality check
+                    // below — otherwise `impl X for List<u8>` would also
+                    // match a `List<i32>` receiver.
+                    // Only a *parametric* generic impl is widely-applicable and
+                    // must skip the concrete `TypeId` equality check below; a
+                    // fully concrete generic impl (`impl X for List<u8>`)
+                    // resolves to a concrete `TypeId` and must be checked, or it
+                    // would match a `List<i32>` receiver too.
+                    let generic_is_parametric = matches!(&impl_block.ty, Type::Generic(g)
+                        if g.args.iter().any(|a| matches!(a,
+                            Type::Named(n)
+                                if !self.tysys.is_known_type_name(&n.name)
+                                    || impl_block.type_params.iter().any(|p| p.name == n.name))));
                     let skip = !impl_block.type_params.is_empty()
                         || is_blanket_tp
-                        || matches!(
-                            &impl_block.ty,
-                            Type::Reference(_) | Type::MutReference(_) | Type::Generic(_)
-                        );
+                        || matches!(&impl_block.ty, Type::Reference(_) | Type::MutReference(_))
+                        || generic_is_parametric;
                     (skip, impl_block.ty.clone())
                 };
                 if !skip_filter {
@@ -2062,6 +2267,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|b| (b.name.clone(), b.ty.clone()))
                 .collect();
             let impl_module_source = self.impl_block_module_source(impl_ref);
+            // A concrete generic instantiation trait impl (`impl Tag for
+            // List<u8>`) yields a per-instantiation concrete method, called
+            // directly (no monomorphization), living in the impl's module.
+            let impl_is_concrete =
+                self.impl_is_concrete_instantiation(impl_block, &impl_module_source);
 
             // Save trait context for this impl block scope. We use an inherited
             // scope (saves the full ctx via clone) and then selectively clear
@@ -2284,6 +2494,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         cm_name: None,
                         is_ref_impl: false,
                         method_type_param_ids: vec![],
+                        impl_module: Some(impl_module_source.clone()),
+                        from_concrete_impl: impl_is_concrete,
                         param_defaults,
                         param_names,
                     },
@@ -2391,6 +2603,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     cm_name: None,
                                     is_ref_impl: false,
                                     method_type_param_ids: vec![],
+                                    impl_module: Some(impl_module_source.clone()),
+                                    from_concrete_impl: impl_is_concrete,
                                     param_defaults,
                                     param_names,
                                 },
@@ -2987,7 +3201,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             ResolvedType::BuiltinArray(elem) => {
-                format!("builtin::array<{}>", self.type_id_to_string(elem))
+                format!("Array<{}>", self.type_id_to_string(elem))
             }
             ResolvedType::Ref(inner) => format!("&{}", self.type_id_to_string(inner)),
             ResolvedType::MutRef(inner) => format!("&mut {}", self.type_id_to_string(inner)),
@@ -3032,14 +3246,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return cached.clone();
         }
 
-        // Get concrete type arguments from the base type (for generic instances like Triple<i32>)
+        // Get concrete type arguments from the base type (for generic instances like Triple<i32>).
+        // The raw GC array `Array<T>` carries its element type as the single
+        // type arg, mirroring a generic instance, so `impl IndexValue for Array<T>`
+        // binds `T` to the element type.
         let concrete_type_args: Vec<TypeId> =
-            if let ResolvedType::GenericInstance { type_args, .. } =
-                self.tysys.type_table.borrow().get(base_type_id).clone()
-            {
-                type_args
-            } else {
-                Vec::new()
+            match self.tysys.type_table.borrow().get(base_type_id).clone() {
+                ResolvedType::GenericInstance { type_args, .. } => type_args,
+                ResolvedType::BuiltinArray(elem) => vec![elem],
+                _ => Vec::new(),
             };
 
         let impl_refs = self.collect_trait_impl_refs(struct_name);
@@ -3404,6 +3619,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             cm_name: _,
             is_ref_impl: method_is_ref_impl,
             method_type_param_ids: _,
+            impl_module: _,
+            from_concrete_impl: _,
             param_defaults: method_param_defaults,
             param_names: method_param_names,
         } = method_info?;

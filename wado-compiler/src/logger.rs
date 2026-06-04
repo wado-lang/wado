@@ -25,7 +25,9 @@
 
 use std::cell::{Cell, RefCell};
 
-use crate::compiler_host::{Code, CompilerHost, Diagnostic, LogLevel, Severity, SpanEmitter};
+use crate::compiler_host::{
+    Code, CompilerHost, Diagnostic, DiagnosticSpan, LogLevel, Severity, SpanEmitter,
+};
 
 /// Maximum number of errors before compilation is aborted
 pub const MAX_ERRORS: usize = 100;
@@ -188,6 +190,12 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
 
     // === Informational logging (fire-and-forget, filtered by level) ===
 
+    /// Whether a diagnostic of `severity` would be emitted at the current level.
+    /// Lets callers skip building a diagnostic that would be filtered out.
+    pub fn would_log(&self, severity: Severity) -> bool {
+        self.should_log(severity)
+    }
+
     /// Check if the given severity should be logged at the current level
     fn should_log(&self, severity: Severity) -> bool {
         match self.level {
@@ -231,6 +239,26 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
                 message: message.into(),
                 span: None,
             });
+        }
+    }
+
+    /// Emit an optimizer remark at info level, carrying a source span.
+    ///
+    /// Remarks report residual costs that survived optimization (see WEP
+    /// `wep-2026-06-03-optimizer-remarks.md`). They are gated at `Info`
+    /// severity; since the CLI is quiet by default (`warn`), seeing them takes
+    /// `--log-level info`. The span lets the source location be rendered, and
+    /// the `remark:` prefix is added here so call sites pass only the bare
+    /// message.
+    pub fn remark(&self, message: impl Into<String>, span: DiagnosticSpan) {
+        if self.should_log(Severity::Info) {
+            let diag = self.apply_file_context(Diagnostic {
+                severity: Severity::Info,
+                code: Code::Remark,
+                message: format!("remark: {}", message.into()),
+                span: Some(span),
+            });
+            self.host.emit_diagnostic(diag);
         }
     }
 

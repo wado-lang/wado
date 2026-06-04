@@ -1,0 +1,48 @@
+use { Sha256, Digest, sha256 } from "core:digest";
+
+fn bytes_of(s: &String) -> List<u8> {
+    let mut v: List<u8> = [];
+    for let b of s.bytes() {
+        v.push(b);
+    }
+    return v;
+}
+
+test "sha256 empty input" {
+    let digest = sha256(&([] as List<u8>));
+    assert digest.to_hex() == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+}
+
+test "sha256 abc" {
+    let digest = sha256(&bytes_of(&"abc"));
+    assert digest.to_hex() == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+}
+
+test "sha256 two-block message" {
+    // The 56-byte FIPS 180-4 example; padding crosses into a second block.
+    let msg = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+    let digest = sha256(&bytes_of(&msg));
+    assert digest.to_hex() == "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1";
+}
+
+test "sha256 pangram" {
+    let digest = sha256(&bytes_of(&"The quick brown fox jumps over the lazy dog"));
+    assert digest.to_hex() == "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592";
+}
+
+test "incremental update matches one-shot" {
+    // Splitting the message across update() calls (and across a block
+    // boundary) must yield the same digest as hashing it all at once.
+    let mut hasher = Sha256::new();
+    hasher.update(&bytes_of(&"The quick brown fox "));
+    hasher.update(&bytes_of(&"jumps over the lazy dog"));
+    let incremental = hasher.finalize().to_hex();
+
+    let oneshot = sha256(&bytes_of(&"The quick brown fox jumps over the lazy dog")).to_hex();
+    assert incremental == oneshot;
+}
+
+test "to_hex zero-pads each byte" {
+    let bytes: List<u8> = [0x00, 0x0f, 0xa0, 0xff] as List<u8>;
+    assert bytes.to_hex() == "000fa0ff";
+}

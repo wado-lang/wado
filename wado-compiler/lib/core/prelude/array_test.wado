@@ -1,0 +1,131 @@
+// Tests for the raw GC array `Array<T>` (WEP-2026-06-02 Phase 2).
+
+test "new initialises to default" {
+    let a: Array<i32> = Array::new(3);
+    assert a.len() == 3;
+    assert a[0] == 0;
+    assert a[1] == 0;
+    assert a[2] == 0;
+}
+
+test "filled sets every element" {
+    let a = Array::filled(4, 7);
+    assert a.len() == 4;
+    assert a[0] == 7;
+    assert a[3] == 7;
+}
+
+test "get and set" {
+    let mut a: Array<i32> = Array::new(3);
+    a.set(0, 10);
+    a.set(1, 20);
+    a.set(2, 30);
+    assert a.get(0) == 10;
+    assert a.get(1) == 20;
+    assert a.get(2) == 30;
+}
+
+test "index operators" {
+    let mut a: Array<i32> = Array::new(2);
+    a[0] = 100;
+    a[1] = 200;
+    assert a[0] == 100;
+    assert a[1] == 200;
+}
+
+test "fill overwrites all elements" {
+    let mut a: Array<i32> = Array::new(3);
+    a[0] = 1;
+    a.fill(9);
+    assert a[0] == 9;
+    assert a[1] == 9;
+    assert a[2] == 9;
+}
+
+test "copy_from copies a range" {
+    let mut src: Array<i32> = Array::new(4);
+    src[0] = 1;
+    src[1] = 2;
+    src[2] = 3;
+    src[3] = 4;
+    let mut dst: Array<i32> = Array::new(4);
+    dst.copy_from(1, &src, 0, 3);
+    assert dst[0] == 0;
+    assert dst[1] == 1;
+    assert dst[2] == 2;
+    assert dst[3] == 3;
+}
+
+test "value semantics: assignment deep-copies" {
+    let mut a: Array<i32> = Array::new(2);
+    a[0] = 1;
+    let mut b = a;
+    b[0] = 99;
+    assert a[0] == 1;
+    assert b[0] == 99;
+}
+
+test "value semantics: pass by value deep-copies" {
+    let mut a: Array<i32> = Array::new(1);
+    a[0] = 5;
+    mutate(a);
+    assert a[0] == 5;
+}
+
+fn mutate(mut a: Array<i32>) {
+    a[0] = 42;
+}
+
+test "array of strings deep-copies elements" {
+    let mut a: Array<String> = Array::new(2);
+    a[0] = "hello";
+    a[1] = "world";
+    let mut b = a;
+    b[0] = "changed";
+    assert a[0] == "hello";
+    assert b[0] == "changed";
+    assert a[1] == "world";
+}
+
+test "iterate array by value" {
+    let mut a: Array<i32> = Array::new(3);
+    a[0] = 10;
+    a[1] = 20;
+    a[2] = 30;
+    let mut sum = 0;
+    for let x of a {
+        sum += x;
+    }
+    assert sum == 60;
+}
+
+test "iterate array by reference" {
+    let mut a: Array<i32> = Array::new(3);
+    a[0] = 1;
+    a[1] = 2;
+    a[2] = 3;
+    let mut sum = 0;
+    for let x of &a {
+        sum += *x;
+    }
+    assert sum == 6;
+}
+
+test "array slice and windows and chunks" {
+    let mut a: Array<i32> = Array::new(5);
+    for let mut i = 0; i < 5; i += 1 {
+        a[i] = i + 1;
+    }
+    let s = a.slice(1, 4);
+    assert s.len() == 3;
+    assert s[0] == 2;
+    assert s[2] == 4;
+
+    let mut wins = a.windows(2);
+    let w0 = wins.next();
+    assert w0 matches { Some(w) && w[0] == 1 && w[1] == 2 };
+
+    let mut chs = a.chunks(2);
+    let c0 = chs.next();
+    assert c0 matches { Some(c) && c.len() == 2 && c[0] == 1 };
+}

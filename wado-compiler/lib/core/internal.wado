@@ -8,9 +8,26 @@
 // making the codegen simpler and the compiler more maintainable.
 
 
+/// Returns the smaller of two i32 values (branchless).
+pub fn i32_min(a: i32, b: i32) -> i32 {
+    return builtin::select(a < b, a, b);
+}
+
+/// Returns the larger of two i32 values (branchless).
+pub fn i32_max(a: i32, b: i32) -> i32 {
+    return builtin::select(a > b, a, b);
+}
+
+/// Clamps `value` into the inclusive range `[lo, hi]`.
+/// Panics if `lo > hi` — the range must be well-formed.
+pub fn i32_clamp(value: i32, lo: i32, hi: i32) -> i32 {
+    assert lo <= hi, "i32_clamp: lo must be <= hi";
+    return i32_min(i32_max(value, lo), hi);
+}
+
 /// Copies bytes from linear memory to a new GC array.
-pub fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
-    let mut arr: builtin::array<u8> = builtin::array_new(len);
+pub fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
+    let mut arr: Array<u8> = builtin::array_new(len);
     for let mut i = 0; i < len; i += 1 {
         builtin::array_set_u8(&mut arr, i, builtin::i32_load8_u(ptr + i) as u8);
     }
@@ -24,7 +41,7 @@ pub fn memory_to_gc_string(ptr: i32, len: i32) -> String {
 }
 
 /// Copies bytes from a GC array to linear memory.
-pub fn gc_array_to_memory(arr: &builtin::array<u8>, ptr: i32, len: i32) {
+pub fn gc_array_to_memory(arr: &Array<u8>, ptr: i32, len: i32) {
     for let mut i = 0; i < len; i += 1 {
         builtin::i32_store8(ptr + i, builtin::array_get_u8(arr, i));
     }
@@ -39,7 +56,7 @@ pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newli
     let bytes = message.internal_raw_bytes();
     let len = message.len();
     if add_newline {
-        let mut new_repr: builtin::array<u8> = builtin::array_new(len + 1);
+        let mut new_repr: Array<u8> = builtin::array_new(len + 1);
         builtin::array_copy(&mut new_repr, 0, &bytes, 0, len);
         builtin::array_set_u8(&mut new_repr, len, 10);
         tx.write_raw(new_repr, len + 1);
@@ -131,7 +148,7 @@ pub fn cm_lower_string(s: String) -> i64 {
 /// Lowers a GC List<u8> to CM linear memory representation.
 /// Returns (ptr | (len << 32)) as i64.
 /// The caller must free the allocated memory after the CM call.
-pub fn cm_lower_list_u8(data: builtin::array<u8>, len: i32) -> i64 {
+pub fn cm_lower_list_u8(data: Array<u8>, len: i32) -> i64 {
     let ptr = builtin::realloc(0, 0, 1, len);
     gc_array_to_memory(&data, ptr, len);
     return ptr as i64 | len as i64 << 32;
@@ -238,7 +255,7 @@ pub fn cm_stream_write_u8(handle: i32, data: List<u8>) {
 
 /// CM adapter for stream.write_raw(data, len) on Stream<u8>.
 /// Lowers raw GC array to linear memory, calls stream-write, handles BLOCKED.
-pub fn cm_stream_write_raw_u8(handle: i32, data: builtin::array<u8>, len: i32) {
+pub fn cm_stream_write_raw_u8(handle: i32, data: Array<u8>, len: i32) {
     let packed = cm_lower_list_u8(data, len);
     let ptr = packed as i32;
     let raw_len = (packed >> 32) as i32;

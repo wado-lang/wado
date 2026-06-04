@@ -117,3 +117,4 @@ It may include TODOs on WIP.
 - [`NirExprKind::ArrayLiteral` — a NIR-Materialized List Node](./wep-2026-05-31-nir-array-literal.md)
 - [Diagnostic Reason Chains for Type and Trait Errors](./wep-2026-06-02-diagnostic-reason-chains.md)
 - [Redesign `builtin::array` into a First-Class `List<T>`](./wep-2026-06-02-builtin-array-redesign.md)
+- [Optimizer Remarks for Missed Optimizations](./wep-2026-06-03-optimizer-remarks.md)

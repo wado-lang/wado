@@ -252,6 +252,12 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// Coherence violation: an inherent `impl Type { ... }` on a foreign type
+    /// (one defined outside this package — a primitive, `Array<T>`, `String`,
+    /// or any other stdlib type). Inherent impls may only extend types owned by
+    /// the current package; use a trait for cross-package extension.
+    InherentImplOnForeignType { self_type_name: String, span: Span },
+
     /// Invalid stores declaration
     InvalidStores { message: String, span: Span },
 
@@ -610,6 +616,16 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, trait_name, self_type_name
                 )
             }
+            TypeError::InherentImplOnForeignType {
+                self_type_name,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: coherence violation: cannot define an inherent `impl` on foreign type `{}` (defined in another package); use a trait to extend it",
+                    span.line, span.column, self_type_name
+                )
+            }
             TypeError::InvalidStores { message, span } => {
                 write!(f, "{}:{}: {}", span.line, span.column, message)
             }
@@ -957,6 +973,16 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 ),
                 *span,
             ),
+            TypeError::InherentImplOnForeignType {
+                self_type_name,
+                span,
+            } => (
+                Code::OrphanRule,
+                format!(
+                    "coherence violation: cannot define an inherent `impl` on foreign type `{self_type_name}` (defined in another package); use a trait to extend it"
+                ),
+                *span,
+            ),
             TypeError::InvalidStores { message, span } => {
                 (Code::InvalidSyntax, message.clone(), *span)
             }
@@ -1197,6 +1223,18 @@ pub(super) struct MethodInfo {
     /// perform (either the method is non-generic, or its type args come from a
     /// separate method-AST lookup such as [`Elaborator::infer_method_type_args`]).
     pub(super) method_type_param_ids: Vec<TypeId>,
+    /// The module the matched `impl` block lives in. For inherent methods this
+    /// is where the method body is registered, which is NOT always the receiver
+    /// type's defining module (e.g. a user-written `impl List<u8>` on the
+    /// prelude `List`). The call site uses this for the body's `module_source`
+    /// so cross-module inherent impls resolve. `None` when the producer did not
+    /// determine it (callers fall back to the receiver type's module).
+    pub(super) impl_module: Option<ModuleSource>,
+    /// True when the matched impl is on a concrete generic instantiation
+    /// (`impl List<u8>` / `impl Tag for List<u8>`). Such a method is a concrete
+    /// function named per-instantiation (`List<u8>::method`) and called
+    /// directly, so the call site emits no `monomorph_info` for it.
+    pub(super) from_concrete_impl: bool,
 }
 
 /// Labeled block expression target for tracking break types

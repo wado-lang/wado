@@ -226,7 +226,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx),
             Expr::Range(range) => self.resolve_range(range, ctx),
-            Expr::WithHandler(w) => self.resolve_with_handler(w, ctx),
+            Expr::WithHandler(w) => self.resolve_with_handler(w, ctx, expected_type),
             Expr::Resume(r) => self.resolve_resume(r, ctx),
             // Parser error-recovery placeholder: the syntax error was already
             // reported, so resolve to the error type to suppress cascades.
@@ -1673,6 +1673,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::GenericInstance { name, .. } => name.clone(),
             ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => name.clone(),
+            // The raw GC array dispatches `[]` through `impl IndexValue /
+            // IndexAssign for Array<T>`, keyed by the base name "Array".
+            ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
             _ => String::new(),
         };
 

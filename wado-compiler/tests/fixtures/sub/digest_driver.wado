@@ -1,0 +1,32 @@
+// SHA-256 cross-validation driver.
+//
+// Reads the entire message from stdin as binary bytes, computes its SHA-256
+// digest with core:digest, and writes the lowercase hex digest to stdout
+// (no trailing newline). The Rust harness compares this against the `sha2`
+// crate across many input lengths to exercise every padding boundary.
+
+use { print, Stdout } from "core:cli";
+use { Stdin } from "wasi:cli";
+use { sha256 } from "core:digest";
+
+fn read_all_stdin() -> List<u8> with Stdin {
+    let [stdin_stream, _done] = Stdin::read_via_stream();
+    let mut buf: List<u8> = [];
+    loop {
+        let chunk = stdin_stream.read(65536);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let mut i = 0; i < chunk.len(); i += 1 {
+            buf.push(chunk[i]);
+        }
+    }
+    stdin_stream.drop();
+    return buf;
+}
+
+export fn run() with Stdout, Stdin {
+    let input = read_all_stdin();
+    let digest = sha256(&input);
+    print(digest.to_hex());
+}

@@ -219,7 +219,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut input: Option<String> = None;
     let mut opt_level = OptLevel::default();
     let mut wat_to_stdout = false;
-    let mut log_level = LogLevel::default();
+    let mut log_level = args::DEFAULT_LOG_LEVEL;
     let mut target_world: Option<String> = None;
     let mut skip_validation = false;
     let mut inline_threshold: Option<usize> = None;

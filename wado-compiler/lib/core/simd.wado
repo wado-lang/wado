@@ -2238,3 +2238,28 @@ impl SequenceLiteral for f64x2 {
     type Element = f64;
     type Builder = F64x2Builder;
 }
+
+/// Debug representation for the raw 128-bit SIMD register.
+///
+/// All lane-typed aliases (`u8x16`, `i32x4`, `f32x4`, …) are the same `v128`
+/// type, so there is no canonical lane interpretation to print. The bytes are
+/// rendered most-significant-lane first as a fixed 32-digit hex string:
+/// `v128(0x000102030405060708090a0b0c0d0e0f)`. This also lets any struct with a
+/// `v128` field auto-derive `Inspect`.
+impl Inspect for v128 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        let bytes = *self as u8x16;
+        f.write_str(&"v128(0x");
+        for let mut i = 0; i < 16; i += 1 {
+            let byte = bytes.extract_lane(i);
+            f.write_str(&`{byte:02x}`);
+        }
+        f.write_char(')');
+    }
+}
+
+impl InspectAlt for v128 {
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
+}
