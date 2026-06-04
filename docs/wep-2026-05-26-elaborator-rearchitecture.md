@@ -386,6 +386,82 @@ Each stage keeps `mise run test`, the WIR golden fixtures, and the LSP
 query tests green. Performance is not tracked during migration; see
 Trade-offs.
 
+### Stage 7-B execution plan
+
+7-B is not a single mechanical edit. The combined walk's TIR is already
+dead (reify is the sole producer since Stage 5/7a), so an arm's only
+reason to still build a real `TirExpr` is that some _analysis or
+diagnostic inside the combined walk_ reads the structure (`.kind`) of
+the resolved value. Those readers must move to the AST + recorded facts
+before the arm that feeds them can return a placeholder. Hence two
+phases:
+
+Phase 1 — port each structural reader off combined-walk TIR. Each is a
+behaviour-preserving refactor (the recorded values are unchanged, so
+reify's output is byte-identical) verified green on its own. Precedent:
+`control_flow.rs` (Stage 5 moved missing-return off the body TIR).
+
+Phase 2 — once no analysis reads resolved TIR structure, convert every
+`resolve_*` arm to a placeholder, then change signatures
+(`resolve_expr -> TypeId`, `resolve_stmt` records only) file by file,
+make `build_tir_from_state` TIR-free, and run LSP through `annotate`
+alone. Reify is the only TIR.
+
+The Phase 1 readers, grouped by the analysis to port (the arm each
+unblocks in parentheses):
+
+- [ ] **assign l-value + ref validity** — `assign_to_target`'s l-value
+      / global-mutability match on `target.kind`
+      (`Local`/`FieldAccess`/`Index`/`Unary{Deref}`/`GlobalVarGet`) and
+      `resolve_unary`'s `&mut`-on-primitive-field check. Port to the AST
+      target shape + recorded dispatch facts
+      (`index_assign_dispatch` / `operator_dispatch` /
+      `expression_types`). (unblocks `resolve_field_access`,
+      `resolve_index`, the assign side of `resolve_unary`)
+- [ ] **null / unknown inference** — `patch_unresolved_null` +
+      `NullBreakPatcher` mutate the built block to resolve a
+      `break/branch: null` against the inferred result type, and the
+      diagnostics (`report_unresolved_nulls`) read that walk. Port to an
+      AST walk; reify already coerces nulls via `expected_type`
+      propagation, so only the _diagnostic_ needs to stay in `annotate`.
+      (foundational — see the `expression_types` note below)
+- [ ] **block result type** — `crate::tir::block_result_type` callers in
+      the `Block` / `If` / `LabeledBlock` arms, `with … do`, `loop`,
+      for-of, and the let-chain lowerings. Port to an AST walk over
+      `expression_types`. (unblocks the structural arms)
+- [ ] **unary constant folding** — `resolve_unary` folds `-literal` /
+      `-(literal as T)` by matching the operand's
+      `IntLiteral`/`FloatLiteral`/`Cast` kind. Port to the AST operand
+      shape (or let reify own the fold). (unblocks `resolve_unary`)
+- [ ] **tuple spread** — `resolve_tuple_literal` matches the spread
+      operand's `Local` kind to decide on a temporary, and allocates
+      `ctx` locals. Record the spread shape; reify owns the temporaries.
+      (unblocks `resolve_tuple_literal`)
+- [ ] **struct-literal deferred coercion** — reads a field value's
+      `TupleLiteral` kind. Port to the AST field value + coercion facts.
+      (unblocks `resolve_struct_literal`)
+- [ ] **pattern variant const literals** — `resolve_pattern_variant`
+      reads a const expression's literal kind for switch lowering. Read
+      the const value from `associated_constants` / the AST.
+- [ ] **for-of `TupleZip`** — `resolve_for_of` detects the variadic form
+      by the iterator's `TupleZip` kind. Record the form.
+
+`adjust_receiver_for_self_kind` (method-call receiver wrapping) reads
+`ResolvedType`, not a TIR `kind`, and reify does its own adjustment, so
+it needs no port.
+
+Foundational note (discovered porting "block result type"):
+`record_expression_type` deliberately drops `ERROR` and
+UNKNOWN-containing types, but the combined walk's TIR carries them in
+`expr.type_id` (a bare `null` is `Option<UNKNOWN>`). An AST analysis
+reading `expression_types` therefore cannot see an unresolved-null
+branch and mistypes the block as `Unit`. So the null/unknown handling is
+a prerequisite for the block-result-type port: either `expression_types`
+must faithfully carry the combined walk's types (including UNKNOWN), or
+the null inference must be recorded as an explicit fact. This reorders
+Phase 1 so the null/unknown reader is handled before (or with) the
+block-result-type reader.
+
 ## Status
 
 - [x] **Stages 1–4** — God Object decomposed; `TypeAnnotations` is the
