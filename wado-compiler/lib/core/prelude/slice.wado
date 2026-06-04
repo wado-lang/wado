@@ -16,7 +16,7 @@
 
 use { IndexValue, Iterator, IntoIterator, Add, Ord, Ordering } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
-use { i32_min, i32_max, i32_clamp } from "core:internal";
+use { panic, i32_min, i32_max, i32_clamp } from "core:internal";
 
 /// A contiguous view into a backing `Array<T>` over the half-open range
 /// `[start, end)`. Holds a reference to the whole array, so creating a slice
@@ -88,7 +88,9 @@ impl IndexValue<i32> for Slice<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
-        assert index >= 0 && index < self.end - self.start, "index out of bounds";
+        if builtin::unlikely(index < 0 || index >= self.end - self.start) {
+            panic("index out of bounds");
+        }
         return builtin::array_get(self.repr, self.start + index);
     }
 }
