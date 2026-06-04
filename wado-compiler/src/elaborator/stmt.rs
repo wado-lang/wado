@@ -27,36 +27,6 @@ enum RefBinding {
     MutRef,
 }
 
-/// Build the `(binding_type, value)` for one unrolled tuple-for-of element.
-///
-/// By value (`by_ref == false`), the element is the field access itself,
-/// typed `T_k`. By reference (`for v of &tuple`), the field access is wrapped
-/// in `&` so the binding is `&T_k` — a reference to a fresh copy of the
-/// element, the same semantics as `for v of &list` (refiter). Shared by the
-/// annotate (`resolve_tuple_for_of`) and reify (`reify_tuple_for_of`) paths.
-pub(super) fn tuple_element_binding(
-    type_table: &std::cell::RefCell<TypeTable>,
-    field_access: TirExpr,
-    elem_type: TypeId,
-    by_ref: bool,
-    span: Span,
-) -> (TypeId, TirExpr) {
-    if by_ref {
-        let ref_type = type_table.borrow_mut().make_ref(elem_type);
-        let value = TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Ref,
-                expr: Box::new(field_access),
-            },
-            ref_type,
-            span,
-        );
-        (ref_type, value)
-    } else {
-        (elem_type, field_access)
-    }
-}
-
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_block(
         &mut self,
@@ -2482,13 +2452,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // When iterating through a reference, bind each element by
             // reference (`&T_k`) — a reference to a fresh copy of the field,
             // matching `for v of &list` refiter semantics.
-            let (bind_elem_type, bind_value) = tuple_element_binding(
-                &self.tysys.type_table,
-                field_access,
-                elem_type,
-                by_ref,
-                span,
-            );
+            let (bind_elem_type, bind_value) = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .tuple_element_binding(field_access, elem_type, by_ref, span);
 
             let mut block_stmts = Vec::new();
 

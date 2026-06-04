@@ -3042,13 +3042,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
             // By reference (`for v of &tuple`), bind `&T_k` to a fresh copy of
             // the field, matching `for v of &list` refiter semantics.
-            let (bind_elem_type, bind_value) = super::stmt::tuple_element_binding(
-                &self.tysys.type_table,
-                field_access,
-                elem_type,
-                by_ref,
-                span,
-            );
+            let (bind_elem_type, bind_value) = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .tuple_element_binding(field_access, elem_type, by_ref, span);
 
             let mut block_stmts = Vec::new();
 
@@ -3170,36 +3168,27 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let unique_id = ctx.next_local;
 
         // Look through a `&`/`&mut` wrapper: `for v of &[..T]` binds `&T_k`.
-        let by_ref = {
+        // `by_ref` and the element type are derived from a single lookup so the
+        // two cannot drift.
+        let (inner, by_ref) = {
             let type_table = self.tysys.type_table.borrow();
-            type_table
-                .as_tuple_through_ref(iterable.type_id)
-                .map(|(_, by_ref)| by_ref)
-                .unwrap_or(false)
-        };
-        let binding_type = {
-            let inner = {
-                let type_table = self.tysys.type_table.borrow();
-                if let Some((elems, _)) = type_table.as_tuple_through_ref(iterable.type_id) {
-                    if let Some(tp) = elems
+            match type_table.as_tuple_through_ref(iterable.type_id) {
+                Some((elems, by_ref)) => {
+                    let inner = elems
                         .iter()
                         .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
-                    {
-                        *tp
-                    } else if let Some(first) = elems.first() {
-                        *first
-                    } else {
-                        TypeTable::UNKNOWN
-                    }
-                } else {
-                    TypeTable::UNKNOWN
+                        .or_else(|| elems.first())
+                        .copied()
+                        .unwrap_or(TypeTable::UNKNOWN);
+                    (inner, by_ref)
                 }
-            };
-            if by_ref {
-                self.tysys.type_table.borrow_mut().make_ref(inner)
-            } else {
-                inner
+                None => (TypeTable::UNKNOWN, false),
             }
+        };
+        let binding_type = if by_ref {
+            self.tysys.type_table.borrow_mut().make_ref(inner)
+        } else {
+            inner
         };
 
         let (binding_name, binding_id) = match &for_of.binding {

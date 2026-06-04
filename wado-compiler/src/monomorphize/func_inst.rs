@@ -2590,22 +2590,9 @@ impl Monomorphizer {
         for (i, &elem_type) in elements.iter().enumerate() {
             let mut iter_stmts = Vec::new();
 
-            // By reference (`for v of &[..T]`), the binding is `&T_k`: a
-            // reference to a fresh copy of the field. Otherwise it is `T_k`.
-            let bind_type = if by_ref {
-                type_table.make_ref(elem_type)
-            } else {
-                elem_type
-            };
-
             // Allocate a unique binding local per iteration (each element has a different type)
             let iter_binding = *local_count;
             *local_count += 1;
-            locals.push(TirLocal {
-                name: b_name.clone(),
-                type_id: bind_type,
-                is_mut: b_mut,
-            });
 
             let tuple_ref = TirExpr::new(
                 TirExprKind::Local {
@@ -2624,18 +2611,15 @@ impl Monomorphizer {
                 elem_type,
                 span,
             );
-            let bind_value = if by_ref {
-                TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Ref,
-                        expr: Box::new(field),
-                    },
-                    bind_type,
-                    span,
-                )
-            } else {
-                field
-            };
+            // By reference (`for v of &[..T]`), the binding is `&T_k`: a
+            // reference to a fresh copy of the field. Otherwise it is `T_k`.
+            let (bind_type, bind_value) =
+                type_table.tuple_element_binding(field, elem_type, by_ref, span);
+            locals.push(TirLocal {
+                name: b_name.clone(),
+                type_id: bind_type,
+                is_mut: b_mut,
+            });
 
             iter_stmts.push(TirStmt::new(
                 TirStmtKind::Let {
@@ -2672,6 +2656,16 @@ impl Monomorphizer {
                     .count();
 
                 if destruct_count > 0 {
+                    // Destructured zip patterns only arise from `for [a, b] of
+                    // x.zip(y)`, whose iterable is a tuple *value*, never a
+                    // reference — so `by_ref` and this branch are mutually
+                    // exclusive. The branch rebuilds the destructure with
+                    // non-reference field types, which would be wrong for a
+                    // `&T_k` binding; assert the combination never reaches here.
+                    assert!(
+                        !by_ref,
+                        "by-reference variadic for-of with a destructured zip binding is unsupported"
+                    );
                     // For destructured zip patterns, substitute_type's Tuple splicing
                     // corrupts the pair type Tuple([TypePack, TypePack]) → Tuple([T0,T1,...,T0,T1,...]).
                     // Instead, generate fresh destructured Let stmts with correct field types
@@ -2777,7 +2771,17 @@ impl Monomorphizer {
                     );
                 }
             } else {
-                // Fallback: substitute with original and rewrite manually
+                // Fallback: no TypePack index in the substitution. A
+                // `VariadicForOf` is only built for a tuple that contains a
+                // TypePack, so `pack_index` is `Some` whenever this node
+                // exists; this arm is defensive. It rewrites the binding to
+                // the bare `elem_type`, so a `&T_k` (by_ref) binding could not
+                // be reconstructed here — assert the combination is unreachable.
+                assert!(
+                    !by_ref,
+                    "by-reference variadic for-of reached the no-TypePack fallback"
+                );
+                // Substitute with original and rewrite manually
                 self.substitute_types_in_block(
                     &mut elem_body,
                     substitution,

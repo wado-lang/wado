@@ -41,6 +41,17 @@ export fn run() with Stdout {
     }
     assert s == 6;
 
+    // A double reference is looked through to the same depth as tuple
+    // `.len()` (both use `peel_refs`), so `&&tuple` iterates and reports its
+    // length consistently.
+    let rr = &nums;
+    assert rr.len() == 3;
+    let mut s2 = 0;
+    for let v of rr {
+        s2 += *v;
+    }
+    assert s2 == 6;
+
     println("ok");
 }
 

@@ -4234,6 +4234,7 @@ impl<'a> TirUnparser<'a> {
                 binding_name,
                 is_mut,
                 body,
+                by_ref,
                 ..
             } => {
                 self.write_indent();
@@ -4242,7 +4243,13 @@ impl<'a> TirUnparser<'a> {
                     self.output.push_str("mut ");
                 }
                 self.output.push_str(binding_name);
-                self.output.push_str(" of <variadic> ");
+                // `<variadic>` marks the compile-time-unrolled tuple loop;
+                // `&` distinguishes by-reference (`&T_k`) from by-value binding.
+                if *by_ref {
+                    self.output.push_str(" of <variadic> &");
+                } else {
+                    self.output.push_str(" of <variadic> ");
+                }
                 self.unparse_expr(iterable);
                 self.output.push_str(" {\n");
                 self.indent_level += 1;
