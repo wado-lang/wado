@@ -1067,10 +1067,10 @@ impl TypeTable {
             return Some((elems, false));
         }
         let peeled = self.peel_refs(id);
-        if peeled != id {
-            if let Some(elems) = self.as_tuple(peeled) {
-                return Some((elems, true));
-            }
+        if peeled != id
+            && let Some(elems) = self.as_tuple(peeled)
+        {
+            return Some((elems, true));
         }
         None
     }
