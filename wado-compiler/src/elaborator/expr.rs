@@ -235,7 +235,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         lit: &ast::LiteralExpr,
         ctx: &FunctionContext,
     ) -> TirExpr {
-        let (kind, type_id) = match &lit.value {
+        // Stage 7-B: reify rebuilds every literal node from the AST; the
+        // combined walk only needs the literal's type and its parse / unescape
+        // diagnostics. The `kind` is computed for those diagnostics' sake and
+        // discarded — the returned value is a placeholder.
+        let (_kind, type_id) = match &lit.value {
             Literal::Number(repr) => {
                 // Default type: i32 if integer-compatible, f64 if float-only
                 if util::is_float_only_literal(repr) {
@@ -404,7 +408,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
         };
-        TirExpr::new(kind, type_id, lit.span)
+        placeholder(type_id, lit.span)
     }
 
     /// Resolve an identifier expression
