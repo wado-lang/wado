@@ -207,7 +207,8 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool) {
     // exits on a malformed (but plausibly-starting) element re-parses it to
     // harvest a precise inner error and records it here; the input-entry
     // reports it instead of the shallower "expected <closer>" error when it
-    // is further into the token stream. `null` until a deeper failure is seen.
+    // is at least as far into the token stream (ties favour the malformed
+    // element). `null` until such a failure is seen.
     s.add_field(&"pending", &"Option<ParseError>");
     // Current recursive-descent depth, used only to indent trace output.
     if trace {
@@ -1706,11 +1707,12 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
 /// `takes_min_prec` mirrors the wrapped function's signature. Left-recursive
 /// rule entries carry a defaulted `min_prec` (callers pass it only at
 /// precedence-aware self-ref sites), so the wrapper reproduces that default.
-/// Emit the trace helpers used by `gen_rule_entry_wrapper` when the
-/// `trace` option is on. The per-rule wrappers only emit simple calls
-/// (`trace_enter(p, "rule")`); these helpers do the indentation,
-/// lookahead-token rendering, and `log_stderr` formatting so the emitter
-/// avoids nesting a generated template inside its own template string.
+/// Emit the trace helpers (the `trace` option is on). The emit sites only
+/// emit simple calls — `trace_enter`/`trace_ok`/`trace_fail` from the rule
+/// wrappers, `trace_pick`/`trace_scan_alt`/`trace_try` from the multi-alt
+/// bodies; these helpers do the indentation, lookahead-token rendering, and
+/// `log_stderr` formatting so the emitter avoids nesting a generated template
+/// inside its own template string.
 fn gen_trace_helpers(w: &mut CodeWriter) {
     w.line(&"fn trace_pad(depth: i32) -> String {");
     w.indent();
