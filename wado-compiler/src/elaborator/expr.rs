@@ -2949,9 +2949,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Track tuple literals whose coercion was deferred because the field
                 // type had unresolved type parameters. After type inference, we'll
-                // re-coerce with the concrete type.
-                if needs_deferred_coercion && matches!(value.kind, TirExprKind::TupleLiteral { .. })
-                {
+                // re-coerce with the concrete type (the second pass below records
+                // the coercion via `try_coerce_tuple_to_sequence`; reify replays
+                // it). Stage 7-B: `resolve_tuple_literal` is now a placeholder, so
+                // the old `value.kind == TupleLiteral` test is read from the AST —
+                // a spread tuple used to resolve to a block (never deferred), so
+                // only spread-free tuple literals are deferred here.
+                let tuple_is_spread_free = matches!(
+                    &field.value,
+                    ast::Expr::TupleLiteral(t)
+                        if !t.elements.iter().any(|e| matches!(e, Expr::Spread(..)))
+                );
+                if needs_deferred_coercion && tuple_is_spread_free {
                     deferred_coercions.push((provided_idx, provided_idx));
                 }
 
@@ -3414,145 +3423,58 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(elems)
         });
 
-        // Resolve each element expression, handling spread elements
-        let mut elements: Vec<TirExpr> = Vec::new();
+        // Resolve each element for its side effects and collect the element
+        // types so the tuple `TypeId` matches what reify builds. Stage 7-B:
+        // reify's `reify_tuple_literal` owns the element / spread-expansion /
+        // single-evaluation-temporary construction (with its own `ctx`), so
+        // this records only the types + the spread diagnostic.
         let mut elem_types: Vec<TypeId> = Vec::new();
-        // Bindings for non-trivial spread expressions: (local_idx, name, expr, span)
-        let mut spread_bindings: Vec<(u32, String, TirExpr, crate::token::Span)> = Vec::new();
         for (elem_idx, elem) in tuple_lit.elements.iter().enumerate() {
             if let Expr::Spread(inner, _span) = elem {
                 let spread_expr = self.resolve_expr(inner, ctx, None);
-                let contains_pack = self.type_contains_pack(spread_expr.type_id);
-                let spread_type = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .get(spread_expr.type_id)
-                    .clone();
-                if contains_pack {
-                    // Check if the expression's type IS a TypePack directly.
-                    // If so, this is a type pack expansion (e.g., [..T::method()])
-                    // where the expression template is instantiated per element.
-                    // If the type is a Tuple containing TypePack, this is a value
-                    // spread (e.g., [..rest] where rest: [..T]).
-                    let is_direct_pack = matches!(
-                        self.tysys.type_table.borrow().get(spread_expr.type_id),
-                        ResolvedType::TypePack { .. }
-                    );
-                    if is_direct_pack {
-                        let pack_type_id = spread_expr.type_id;
-                        elem_types.push(spread_expr.type_id);
-                        elements.push(TirExpr::new(
-                            TirExprKind::TypePackExpansion {
-                                call_expr: Box::new(spread_expr),
-                                pack_type_id,
-                            },
-                            *elem_types.last().unwrap(),
-                            elem.span(),
-                        ));
-                    } else {
-                        // Keep as TupleSpread for monomorphization to expand later
-                        elem_types.push(spread_expr.type_id);
-                        elements.push(TirExpr::new(
-                            TirExprKind::TupleSpread {
-                                expr: Box::new(spread_expr),
-                            },
-                            *elem_types.last().unwrap(),
-                            elem.span(),
-                        ));
-                    }
-                } else if let ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args: inner_elems,
-                } = spread_type
-                    && TypeTable::is_tuple_type(&name, &module_source)
-                {
-                    // For concrete tuples, expand inline via FieldAccess.
-                    // If the expression is non-trivial (not a local), bind it to a
-                    // temporary to ensure single evaluation.
-                    let spread_ref = if matches!(spread_expr.kind, TirExprKind::Local { .. }) {
-                        spread_expr
-                    } else {
-                        let spread_type_id = spread_expr.type_id;
-                        let tmp_name = format!("__spread_{}", ctx.next_local);
-                        let tmp_idx = ctx.add_local(tmp_name.clone(), spread_type_id, false, None);
-                        spread_bindings.push((tmp_idx, tmp_name.clone(), spread_expr, elem.span()));
-                        TirExpr::new(
-                            TirExprKind::Local {
-                                index: tmp_idx,
-                                name: tmp_name,
-                            },
-                            spread_type_id,
-                            elem.span(),
-                        )
-                    };
-                    for (i, &et) in inner_elems.iter().enumerate() {
-                        elements.push(TirExpr::new(
-                            TirExprKind::FieldAccess {
-                                expr: Box::new(spread_ref.clone()),
-                                field_index: i as u32,
-                                field_name: i.to_string(),
-                            },
-                            et,
-                            elem.span(),
-                        ));
-                        elem_types.push(et);
-                    }
+                if self.type_contains_pack(spread_expr.type_id) {
+                    // A direct `TypePack` (`[..T::method()]`) or a tuple
+                    // containing one (`[..rest]` where `rest: [..T]`): the
+                    // spread element keeps the spread's own type; monomorphize
+                    // expands it later.
+                    elem_types.push(spread_expr.type_id);
                 } else {
-                    let _ =
-                        self.logger
-                            .error(crate::elaborator::types::TypeError::InvalidLiteral {
+                    let spread_type = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .get(spread_expr.type_id)
+                        .clone();
+                    if let ResolvedType::GenericInstance {
+                        name,
+                        module_source,
+                        type_args: inner_elems,
+                    } = spread_type
+                        && TypeTable::is_tuple_type(&name, &module_source)
+                    {
+                        // A concrete tuple spread expands inline to one element
+                        // per field.
+                        elem_types.extend(inner_elems);
+                    } else {
+                        let _ = self.logger.error(
+                            crate::elaborator::types::TypeError::InvalidLiteral {
                                 message: "spread operator `..` can only be used with tuple types"
                                     .to_string(),
                                 span: elem.span(),
-                            });
-                    elem_types.push(spread_expr.type_id);
-                    elements.push(spread_expr);
+                            },
+                        );
+                        elem_types.push(spread_expr.type_id);
+                    }
                 }
             } else {
                 let elem_expected = expected_elem_types.as_ref().map(|v| v[elem_idx]);
                 let resolved = self.resolve_expr(elem, ctx, elem_expected);
                 elem_types.push(resolved.type_id);
-                elements.push(resolved);
             }
         }
 
         let tuple_type = self.tysys.type_table.borrow_mut().make_tuple(elem_types);
-
-        let tuple_expr = TirExpr::new(
-            TirExprKind::TupleLiteral { elements },
-            tuple_type,
-            tuple_lit.span,
-        );
-
-        if spread_bindings.is_empty() {
-            tuple_expr
-        } else {
-            // Wrap in a block: { let __spread_N = expr; ...; [fields...] }
-            let mut stmts: Vec<TirStmt> = spread_bindings
-                .into_iter()
-                .map(|(idx, name, value, span)| {
-                    let type_id = value.type_id;
-                    TirStmt::new(
-                        TirStmtKind::Let {
-                            name,
-                            local_index: idx,
-                            value,
-                            is_mut: false,
-                            is_reactive: false,
-                            type_id,
-                            skip_value_copy: false,
-                        },
-                        span,
-                    )
-                })
-                .collect();
-            // The tuple literal is the block's return expression
-            stmts.push(TirStmt::new(TirStmtKind::Expr(tuple_expr), tuple_lit.span));
-            let block = TirBlock::new(stmts, tuple_lit.span);
-            TirExpr::new(TirExprKind::Block(block), tuple_type, tuple_lit.span)
-        }
+        placeholder(tuple_type, tuple_lit.span)
     }
 
     /// Resolve the postfix `?` operator.
