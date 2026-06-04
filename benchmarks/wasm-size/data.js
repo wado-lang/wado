@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780527604795,
+  "lastUpdate": 1780535117823,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29581,6 +29581,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d8e39c3f381369373bd53de52303bab0736c02e6"
         },
         "date": 1780527604272,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9659,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17177,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 457424,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "47fde7d305731c7e65528e3a924551c34ce8359e",
+          "message": "Merge pull request #1286 from wado-lang/claude/arxiv-agentic-coding-papers-FLUvz\n\nOptimizer remarks: surface residual value-semantic copies for coding agents",
+          "timestamp": "2026-06-04T09:56:44+09:00",
+          "tree_id": "818758bbaaddb4ef683d83cdacb4248fc5cf1624",
+          "url": "https://github.com/wado-lang/wado/commit/47fde7d305731c7e65528e3a924551c34ce8359e"
+        },
+        "date": 1780535117499,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
