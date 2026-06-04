@@ -114,7 +114,7 @@ wado run package-gale -- dump path/to/Grammar.g4
 ## Tracing a parse with the `trace` option
 
 `gale dump` is static (it shows the prediction decisions the emitter
-*would* make). To see what the generated parser *actually does* on a
+_would_ make). To see what the generated parser _actually does_ on a
 specific input — where the recursive descent bails, and which
 alternative each multi-alt decision committed to — turn on the `trace`
 option. It logs an indented event stream to stderr (via `log_stderr`):
