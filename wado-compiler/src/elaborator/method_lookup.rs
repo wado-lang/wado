@@ -2055,6 +2055,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         | ResolvedType::Flags { name, .. }
                         | ResolvedType::Variant { name, .. } => name.clone(),
                         ResolvedType::Primitive(p) => p.as_str().to_string(),
+                        // The raw GC array's outer constructor is "Array", so a
+                        // `&Array<T>` ref impl (`impl Trait for &Array<T>`)
+                        // matches a `&Array<_>` receiver.
+                        ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
                         _ => String::new(),
                     };
                     if impl_inner != receiver_outer {

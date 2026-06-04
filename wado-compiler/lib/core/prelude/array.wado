@@ -13,7 +13,7 @@
 // lowers directly to the matching `array.*` instruction.
 
 use { IndexValue, IndexAssign, IntoIterator } from "core:prelude/traits.wado";
-use { Slice, Iter, WindowsIter, ChunksIter } from "core:prelude/slice.wado";
+use { Slice, Iter, RefIter, WindowsIter, ChunksIter } from "core:prelude/slice.wado";
 
 fn i32_min(a: i32, b: i32) -> i32 {
     return builtin::select(a < b, a, b);
@@ -105,6 +105,16 @@ impl<T> IntoIterator for Array<T> {
 
     fn into_iter(&self) -> Self::Iter with stores[self] {
         return Iter::internal_new(self, 0, builtin::array_len(self));
+    }
+}
+
+impl<T> IntoIterator for &Array<T> {
+    type Item = &T;
+    type Iter = RefIter<T>;
+
+    fn into_iter(&self) -> Self::Iter {
+        let arr = *self;
+        return RefIter::internal_new(arr, 0, builtin::array_len(arr));
     }
 }
 

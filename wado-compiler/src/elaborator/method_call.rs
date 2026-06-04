@@ -187,6 +187,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
                     Some(type_args)
                 }
+                // The raw GC array `Array<T>` carries its element as a single
+                // type arg, so a trait method's associated types (e.g.
+                // `IntoIterator::Iter` / `Item` for `impl IntoIterator for
+                // Array<T>`) resolve against `[elem]` just like a generic
+                // container's.
+                ResolvedType::BuiltinArray(elem) => Some(vec![elem]),
                 _ => None,
             };
 

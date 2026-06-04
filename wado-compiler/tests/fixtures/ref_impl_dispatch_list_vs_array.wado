@@ -1,0 +1,69 @@
+// Two distinct `IntoIterator for &Concrete<T>` impls in the prelude — `&List<T>`
+// (list.wado) and `&Array<T>` (array.wado) — both yield `RefIter<T>` and both
+// register under the collapsed "&" key. Iterating a `&List<T>` from a generic
+// trait impl (so dispatch runs through monomorphization) must resolve to the
+// `&List` impl, not the `&Array` one.
+//
+// Regression for a monomorphizer bug: `resolve_method_call_substitution`
+// resolved the post-substitution body module with no receiver hint, so the
+// shared "&" key returned whichever ref-impl module was registered first
+// (`&Array`'s array.wado). The `&List<i32>` call then instantiated `&Array`'s
+// `into_iter` body and the WIR pipeline produced invalid Wasm
+// (`expected arrayref, found struct ref`). The receiver's own module now
+// disambiguates the two.
+
+use { println, Stdout } from "core:cli";
+
+trait Sink {
+    fn take(&mut self, n: i32);
+}
+
+struct Counter {
+    total: i32,
+}
+
+impl Sink for Counter {
+    fn take(&mut self, n: i32) {
+        self.total += n;
+    }
+}
+
+trait Emit {
+    fn emit<S: Sink>(&self, s: &mut S);
+}
+
+impl Emit for i32 {
+    fn emit<S: Sink>(&self, s: &mut S) {
+        s.take(*self);
+    }
+}
+
+// Generic impl whose body iterates `&List<T>` via `for ... of self` (RefIter).
+impl<T: Emit> Emit for List<T> {
+    fn emit<S: Sink>(&self, s: &mut S) {
+        for let item of self {
+            item.emit(s);
+        }
+    }
+}
+
+export fn run() with Stdout {
+    let xs: List<i32> = [1, 2, 3, 4];
+    let mut c = Counter { total: 0 };
+    xs.emit(&mut c);
+    println(`{c.total}`);
+
+    // Array ref-iteration must keep working alongside the List path.
+    let mut a: Array<i32> = Array::new(3);
+    a[0] = 10;
+    a[1] = 20;
+    a[2] = 30;
+    let mut asum = 0;
+    for let x of &a {
+        asum += *x;
+    }
+    println(`{asum}`);
+}
+
+__DATA__
+{"stdout": "10\n60\n"}
