@@ -8,6 +8,20 @@ This is the wado-compiler crate.
 - Use utilities in `name.rs` to handle name mangling and monomorphization. Other components must not know the details of name formats.
 - If applicable, use visitor utilities instead of walking IR nodes by hand.
 
+## Development Cycle
+
+Escalate the test scope as the work matures, so the fast feedback stays fast:
+
+- **`cargo check`** — lightest. Just confirms the crate still compiles. Run it
+  constantly while iterating.
+- **`mise run test`** — the compiler dev-cycle test. Run it during development
+  to verify the Rust crates (including the E2E fixtures) still pass.
+- **`mise run test-wado`** — broader: exercises the Wado standard library and
+  other `.wado` modules. Run it when wrapping up a dev cycle.
+- **`mise run on-task-done`** (via the `on-task-done` skill) — the full finish
+  pass (format, clippy-fix, golden fixtures, stdlib docs, the test suites). It
+  takes a long time, so run it only when explicitly instructed to finish a task.
+
 ## Standard Libraries
 
 Standard libraries (stdlib) are implemented in `lib`, with `lib/wasi/` for WASI interface and `lib/core/` for the core library.
