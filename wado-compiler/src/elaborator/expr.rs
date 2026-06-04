@@ -120,20 +120,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Index(index) => self.resolve_index(index, ctx),
             Expr::Block(block) => {
                 let tir_block = self.resolve_block(block, ctx, expected_type);
-                // Reuse `block_result_type` so the block expression's
-                // overall type matches the inference rule applied
-                // everywhere else (function body trailing expressions,
-                // `if` / `match` arm bodies, etc.). The previous local
-                // copy of the rule only handled `TirStmtKind::Expr` /
-                // `Return` / `Break` / `Continue` as trailing forms
-                // and fell back to `Unit` for trailing `if` / `if let`
-                // — which mis-typed `{ if cond { a } else { b } }` as
-                // `Unit` and silently miscompiled when such a block
-                // was used as a match-arm body. Routing through the
-                // shared `block_result_type` makes a trailing
-                // `TirStmtKind::If` / `IfLet` with both branches
-                // present propagate its branch-agreed type through.
-                let type_id = Self::block_result_type(&tir_block);
+                // Reuse the shared block-result rule so the block
+                // expression's overall type matches the inference rule
+                // applied everywhere else (function body trailing
+                // expressions, `if` / `match` arm bodies, etc.): a
+                // trailing `if cond { a } else { b }` propagates its
+                // branch-agreed type, not `Unit`. Read from
+                // `expression_types` (AST level) rather than the built
+                // block so this does not depend on the body TIR.
+                let type_id = self.ast_block_result_type(block);
                 TirExpr::new(TirExprKind::Block(tir_block), type_id, block.span)
             }
             Expr::If(if_expr) => self.resolve_if_expr(if_expr, ctx, expected_type),
@@ -1991,10 +1986,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
-                    let then_type = Self::block_result_type(&then_block);
-                    let else_type = else_block
+                    let then_type = self.ast_block_result_type(&if_expr.then_block);
+                    let else_type = if_expr
+                        .else_block
                         .as_ref()
-                        .map_or(TypeTable::UNIT, Self::block_result_type);
+                        .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
 
                     // `never` is the bottom type: a branch returning `never` is compatible
                     // with any type, so the result type comes from the non-never branch.

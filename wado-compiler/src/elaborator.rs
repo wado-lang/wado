@@ -565,6 +565,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         control_flow::block_always_exits(self.ctrl_flow_ctx(), block)
     }
 
+    /// Result type of an AST block, read from `expression_types` rather
+    /// than a built `TirBlock`. AST-level replacement for
+    /// `Self::block_result_type(&TirBlock)` (Stage 7-B): lets the combined
+    /// walk type `{ … }`, `if`/`match` arms, loop and handler bodies
+    /// without inspecting the body TIR it produces.
+    pub(super) fn ast_block_result_type(&self, block: &crate::ast::Block) -> TypeId {
+        control_flow::block_result_type(self.ctrl_flow_ctx(), block)
+    }
+
     /// Emit a `MissingReturn` diagnostic when a declared non-Unit
     /// return type cannot be satisfied by the body. Skipped for
     /// `Unit`/`Never` declarations, for missing bodies (declared-only

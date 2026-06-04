@@ -40,7 +40,11 @@ pub(super) struct CtrlFlowCtx<'a> {
 
 impl CtrlFlowCtx<'_> {
     fn type_of(&self, expr: &ast::Expr) -> Option<TypeId> {
-        let key = SymbolKey::new(self.module.clone(), expr.id());
+        self.type_of_id(expr.id())
+    }
+
+    fn type_of_id(&self, id: crate::ast::AstId) -> Option<TypeId> {
+        let key = SymbolKey::new(self.module.clone(), id);
         self.expression_types.get(&key).copied()
     }
 
@@ -119,6 +123,50 @@ pub(super) fn expr_always_exits(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr) -> bool 
         ast::Expr::WithHandler(wh) => block_always_exits(ctx, &wh.body),
         _ => false,
     }
+}
+
+/// Result type of `block` — the type of its trailing expression, or
+/// `Unit`. AST mirror of [`crate::tir::block_result_type`] (which reads
+/// the built `TirBlock`); this reads `expression_types[(module, id)]`
+/// instead so the combined walk can compute a block's value type without
+/// inspecting the body TIR it builds.
+///
+/// Unlike the missing-return walk this does NOT filter `contains_unknown`:
+/// an unresolved-`null` tail is `Option<UNKNOWN>` here exactly as the TIR
+/// walker saw `null_tir.type_id`, so the if/match result-type inference
+/// (which special-cases `contains_unknown` branches) behaves identically.
+///
+/// The arm-to-arm correspondence with the TIR walker:
+/// - trailing `Stmt::Expr(e)` ↔ `TirStmtKind::Expr` — the recorded type of
+///   `e` (an `if`/`match`/block tail keeps its already-recorded result
+///   type here).
+/// - trailing `Stmt::If` with an `else` ↔ `TirStmtKind::If` — the branches
+///   agree via [`crate::tir::agree_branch_types`].
+/// - trailing `Return`/`Break`/`Continue` ↔ the diverging arms — `Never`.
+/// - anything else ↔ the TIR walker's `_ => None` — `Unit`.
+pub(super) fn block_result_type(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> TypeId {
+    block
+        .stmts
+        .last()
+        .and_then(|s| match s {
+            ast::Stmt::Expr(e) => ctx.type_of(&e.expr),
+            // A trailing `match` lowers to `TirStmtKind::Expr(match)`, so its
+            // recorded type is the block's value (the combined walk records
+            // `match.id` for both stmt-position and trailing-with-expected
+            // matches). The TIR walker reached it through the `Expr` arm.
+            ast::Stmt::Match(m) => ctx.type_of_id(m.id),
+            ast::Stmt::If(if_stmt) => if_stmt.else_block.as_ref().and_then(|else_block| {
+                crate::tir::agree_branch_types(
+                    block_result_type(ctx, &if_stmt.then_block),
+                    block_result_type(ctx, else_block),
+                )
+            }),
+            ast::Stmt::Return(_) | ast::Stmt::Break(_) | ast::Stmt::Continue(_) => {
+                Some(TypeTable::NEVER)
+            }
+            _ => None,
+        })
+        .unwrap_or(TypeTable::UNIT)
 }
 
 /// First return statement's value type discovered while walking

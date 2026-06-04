@@ -51,6 +51,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 if let Stmt::Match(match_expr) = s {
                     let tir = self.resolve_match_expr(match_expr, ctx, expected_type);
+                    // `resolve_match_expr` does not go through the
+                    // `resolve_expr` wrapper; record the type explicitly (as
+                    // the stmt-position arm does) so `ast_block_result_type`
+                    // can read a trailing match's value type.
+                    self.record_expression_type(match_expr.id, tir.type_id);
                     stmts.push(TirStmt::new(TirStmtKind::Expr(tir), match_expr.span));
                     continue;
                 }
@@ -2804,7 +2809,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             payload_type: item_type,
         };
 
-        let body_type = Self::block_result_type(&body_block);
+        let body_type = self.ast_block_result_type(&for_of.body);
         let some_body = TirExpr::new(TirExprKind::Block(body_block), body_type, span);
 
         // `_ => break;` — Wildcard arm body is a block holding a single
