@@ -39,16 +39,28 @@ fn handle(c: Cmd) -> i32 {
     }
 }
 
+// `if`-then arm: the marker is in the taken branch, so the condition is hinted
+// unlikely-true (`builtin::unlikely`). Exercises the opposite hint direction.
+fn guard_then(x: i32) -> i32 {
+    if x < 0 {
+        builtin::cold_path();
+        return -1;
+    }
+    return x;
+}
+
 export fn run() {
     assert from_opt(Option::Some(7)) == 8;
     assert from_opt(Option::None) == -1;
     assert handle(Cmd::Go) == 1;
     assert handle(Cmd::Stop) == 2;
     assert handle(Cmd::Crash) == -1;
+    assert guard_then(5) == 5;
+    assert guard_then(-1) == -1;
 }
 
 __DATA__
 {
     "stdout": "",
-    "wir_expect:O0": ["cold_path", "builtin::likely(ref.test"]
+    "wir_expect:O0": ["cold_path", "builtin::likely(ref.test", "builtin::unlikely(x < 0)"]
 }
