@@ -12,7 +12,15 @@
 // Every method is a thin wrapper over a `builtin::array_*` intrinsic, which
 // lowers directly to the matching `array.*` instruction.
 
-use { IndexValue, IndexAssign } from "core:prelude/traits.wado";
+use { IndexValue, IndexAssign, IntoIterator } from "core:prelude/traits.wado";
+use { Slice, Iter, WindowsIter, ChunksIter } from "core:prelude/slice.wado";
+
+fn i32_min(a: i32, b: i32) -> i32 {
+    return builtin::select(a < b, a, b);
+}
+fn i32_max(a: i32, b: i32) -> i32 {
+    return builtin::select(a > b, a, b);
+}
 
 /// Fixed-length GC array — the builtin storage primitive. Declared
 /// definition-less; its storage and instructions live in the compiler.
@@ -59,6 +67,44 @@ impl Array<T> {
     /// starting at `dst` (`array.copy`).
     pub fn copy_from(&mut self, dst: i32, src: &Array<T>, src_off: i32, len: i32) {
         builtin::array_copy(self, dst, src, src_off, len);
+    }
+
+    /// Returns a zero-copy view over `[start, end)`, clamped to the array's
+    /// bounds.
+    pub fn slice(&self, start: i32, end: i32) -> Slice<T> with stores[self] {
+        let len = builtin::array_len(self);
+        let s = i32_min(i32_max(start, 0), len);
+        let e = i32_min(i32_max(end, s), len);
+        return Slice::internal_new(self, s, e);
+    }
+
+    /// Returns a by-value iterator over the array's elements.
+    pub fn iter(&self) -> Iter<T> with stores[self] {
+        return Iter::internal_new(self, 0, builtin::array_len(self));
+    }
+
+    /// Returns an iterator over overlapping windows of `size` consecutive
+    /// elements. Panics if `size` is not positive.
+    pub fn windows(&self, size: i32) -> WindowsIter<T> with stores[self] {
+        assert size > 0, "window size must be positive";
+        return WindowsIter::internal_new(self, 0, builtin::array_len(self), size);
+    }
+
+    /// Returns an iterator over non-overlapping chunks of up to `size`
+    /// elements. The last chunk may be shorter. Panics if `size` is not
+    /// positive.
+    pub fn chunks(&self, size: i32) -> ChunksIter<T> with stores[self] {
+        assert size > 0, "chunk size must be positive";
+        return ChunksIter::internal_new(self, 0, builtin::array_len(self), size);
+    }
+}
+
+impl<T> IntoIterator for Array<T> {
+    type Item = T;
+    type Iter = Iter<T>;
+
+    fn into_iter(&self) -> Self::Iter with stores[self] {
+        return Iter::internal_new(self, 0, builtin::array_len(self));
     }
 }
 
