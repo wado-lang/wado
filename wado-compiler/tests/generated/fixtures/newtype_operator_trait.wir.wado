@@ -166,6 +166,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 global global:core::prelude/fpfmt.wado::POW10: ref null "core:prelude//List<u64>" = struct.new "core:prelude//List<u64>" { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
 global mut global:__modules_initialized: bool = 0;
+global global:__const_obj_0: ref null "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" = struct.new "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2" { x: 1, y: 1 };
 
 fn "wado-compiler/tests/fixtures/newtype_operator_trait.wado/run"() with Stdout {
     let p1: ref "wado-compiler/tests/fixtures/newtype_operator_trait.wado//Vec2";
@@ -337,8 +338,8 @@ condition: !p1 == p2
         unreachable;
     }
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("eq: true"), used: 8 });
-    __sroa_v3_x = 5 + 1;
-    __sroa_v3_y = 6 + 1;
+    __sroa_v3_x = 5 + global:__const_obj_0.x;
+    __sroa_v3_y = 6 + global:__const_obj_0.y;
     __cond_29 = __sroa_v3_x == 6;
     if __cond_29 == 0 {
         "core:internal/panic"(__local_52 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(120), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_52, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_52, 114); "core:prelude/string.wado/String::push"(__local_52, 117); "core:prelude/string.wado/String::push"(__local_52, 110); "core:prelude/string.wado/String::push"(__local_52, 32); "core:prelude/string.wado/String::push"(__local_52, 97); "core:prelude/string.wado/String::push"(__local_52, 116); "core:prelude/string.wado/String::push"(__local_52, 32); "core:prelude/string.wado/String::push_str"(__local_52, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/newtype_operator_trait.wado"), used: 56 }); "core:prelude/string.wado/String::push"(__local_52, 58); __local_53 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_52 }; f_185 = __local_53; "core:prelude/primitive.wado/i32::fmt_decimal"(74, f_185); "core:prelude/string.wado/String::push_str"(__local_52, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("

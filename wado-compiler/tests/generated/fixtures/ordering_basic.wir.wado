@@ -81,13 +81,13 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(1, 2, 3)), used: 3 };
+global global:__const_obj_1: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(1, 2, 4)), used: 3 };
+
 fn "wado-compiler/tests/fixtures/ordering_basic.wado/run"() with Stdout {
     let less: "core:prelude/traits.wado//enum:Ordering";
     let equal: "core:prelude/traits.wado//enum:Ordering";
     let greater: "core:prelude/traits.wado//enum:Ordering";
-    let __b_3: ref "core:prelude//List<i32>";
-    let __b_5: ref "core:prelude//List<i32>";
-    let __b_7: ref "core:prelude//List<i32>";
     let s1: ref "core:prelude/string.wado//String";
     let s2: ref "core:prelude/string.wado//String";
     let s3: ref "core:prelude/string.wado//String";
@@ -103,22 +103,19 @@ fn "wado-compiler/tests/fixtures/ordering_basic.wado/run"() with Stdout {
     if greater == 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Greater matches Greater"), used: 23 });
     }
-    __b_3 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    __b_5 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 4), used: 3 };
-    __b_7 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    if "core:prelude/list.wado/List<i32>^Ord::cmp"(__b_3, __b_5) == 0 {
+    if "core:prelude/list.wado/List<i32>^Ord::cmp"(global:__const_obj_0, global:__const_obj_1) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 < arr2"), used: 11 });
     }
-    if "core:prelude/list.wado/List<i32>^Ord::cmp"(__b_3, __b_7) != 2 {
+    if "core:prelude/list.wado/List<i32>^Ord::cmp"(global:__const_obj_0, global:__const_obj_0) != 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 <= arr3"), used: 12 });
     }
-    if "core:prelude/list.wado/List<i32>^Ord::cmp"(__b_5, __b_3) == 2 {
+    if "core:prelude/list.wado/List<i32>^Ord::cmp"(global:__const_obj_1, global:__const_obj_0) == 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr2 > arr1"), used: 11 });
     }
-    if "core:prelude/list.wado/List<i32>^Ord::cmp"(__b_7, __b_3) != 0 {
+    if "core:prelude/list.wado/List<i32>^Ord::cmp"(global:__const_obj_0, global:__const_obj_0) != 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr3 >= arr1"), used: 12 });
     }
-    if "core:prelude/list.wado/List<i32>^Eq::eq"(__b_3, __b_7) {
+    if "core:prelude/list.wado/List<i32>^Eq::eq"(global:__const_obj_0, global:__const_obj_0) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 == arr3"), used: 12 });
     }
     s1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };

@@ -78,14 +78,12 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30)), used: 3 };
+
 fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_preserved_wir.wado/run"() with Stdout {
-    let __b_0: ref "core:prelude//List<i32>";
-    __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
-    if builtin::unlikely(1) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
-        unreachable;
-    }
-    drop(builtin::array_get<i32>(__b_0.repr, 3));
+    "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
+    unreachable;
+    drop(builtin::array_get<i32>(global:__const_obj_0.repr, 3));
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("should not reach here"), used: 21 });
 }
 
@@ -130,14 +128,14 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b2: block {
-        l3: loop {
+    b1: block {
+        l2: loop {
             if i >= len {
-                break b2;
+                break b1;
             }
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l3;
+            continue l2;
         };
     };
 }
