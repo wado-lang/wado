@@ -86,8 +86,8 @@ impl Serialize for Value {
             String(str_val) => s.serialize_string(str_val),
             List(arr) => {
                 let seq = s.begin_seq(arr.len())?;
-                for let item of *arr {
-                    seq.element(&item)?;
+                for let item of arr {
+                    seq.element(item)?;
                 }
                 seq.end();
             },

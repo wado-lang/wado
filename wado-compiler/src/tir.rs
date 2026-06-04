@@ -1055,6 +1055,26 @@ impl TypeTable {
         )
     }
 
+    /// Like [`Self::as_tuple`], but also looks through `&`/`&mut` wrappers
+    /// (any nesting depth, via [`Self::peel_refs`]). Returns the element types
+    /// together with a `by_ref` flag that is `true` when the tuple was reached
+    /// through at least one reference. Used by for-of to iterate `&[..T]`
+    /// element-by-reference (`&T_k`), mirroring the `for v of &list` refiter
+    /// semantics. Peels to the same depth as tuple `.len()` / `.zip()`
+    /// (`peel_refs`) so a `&&tuple` is recognised consistently across both.
+    pub fn as_tuple_through_ref(&self, id: TypeId) -> Option<(Vec<TypeId>, bool)> {
+        if let Some(elems) = self.as_tuple(id) {
+            return Some((elems, false));
+        }
+        let peeled = self.peel_refs(id);
+        if peeled != id
+            && let Some(elems) = self.as_tuple(peeled)
+        {
+            return Some((elems, true));
+        }
+        None
+    }
+
     /// If the type is a built-in tuple, return its element types.
     pub fn as_tuple(&self, id: TypeId) -> Option<Vec<TypeId>> {
         if let ResolvedType::GenericInstance {
@@ -1355,6 +1375,37 @@ impl TypeTable {
 
     pub fn make_mut_ref(&mut self, inner: TypeId) -> TypeId {
         self.intern(ResolvedType::MutRef(inner))
+    }
+
+    /// Build the `(binding_type, value)` for one unrolled tuple-for-of element.
+    ///
+    /// By value (`by_ref == false`), the element is the field access itself,
+    /// typed `T_k`. By reference (`for v of &tuple`), the field access is
+    /// wrapped in `&` so the binding is `&T_k` — a reference to a fresh copy of
+    /// the element, the same semantics as `for v of &list` (refiter). Shared by
+    /// the annotate (`resolve_tuple_for_of`), reify (`reify_tuple_for_of`), and
+    /// monomorphize (`expand_variadic_for_of`) paths so the three stay in step.
+    pub fn tuple_element_binding(
+        &mut self,
+        field_access: TirExpr,
+        elem_type: TypeId,
+        by_ref: bool,
+        span: Span,
+    ) -> (TypeId, TirExpr) {
+        if by_ref {
+            let ref_type = self.make_ref(elem_type);
+            let value = TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Ref,
+                    expr: Box::new(field_access),
+                },
+                ref_type,
+                span,
+            );
+            (ref_type, value)
+        } else {
+            (elem_type, field_access)
+        }
     }
 
     /// Create a type parameter (e.g., `T` in `struct Box<T>`)
@@ -3117,6 +3168,11 @@ pub enum TirStmtKind {
         body: TirBlock,
         /// Unique ID for generating labels
         unique_id: u32,
+        /// When the iterable is `&[..T]` (a reference to a variadic tuple),
+        /// each element is bound by reference (`&T_k`), matching the
+        /// `for v of &list` refiter semantics. The binding is resolved with
+        /// type `&TypePack`; expansion wraps each element field in `&`.
+        by_ref: bool,
     },
 }
 
