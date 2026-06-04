@@ -10,14 +10,7 @@ use { Option } from "core:prelude/types.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { Slice, Iter, RefIter, WindowsIter, ChunksIter } from "core:prelude/slice.wado";
-use { panic } from "core:internal";
-
-fn i32_min(a: i32, b: i32) -> i32 {
-    return builtin::select(a < b, a, b);
-}
-fn i32_max(a: i32, b: i32) -> i32 {
-    return builtin::select(a > b, a, b);
-}
+use { panic, i32_min, i32_max, i32_clamp } from "core:internal";
 
 #[compiler_item("list")]
 pub struct List<T> {
@@ -316,8 +309,8 @@ impl<T: Ord> Ord for List<T> {
 impl List<T> {
     /// Returns a zero-copy view over `[start, end)`, clamped to `[0, len())`.
     pub fn slice(&self, start: i32, end: i32) -> Slice<T> {
-        let s = i32_min(i32_max(start, 0), self.used);
-        let e = i32_min(i32_max(end, s), self.used);
+        let s = i32_clamp(start, 0, self.used);
+        let e = i32_clamp(end, s, self.used);
         return Slice::internal_new(&self.repr, s, e);
     }
 
@@ -334,7 +327,6 @@ impl List<T> {
     /// Returns an iterator over overlapping windows of `size` consecutive
     /// elements. Panics if `size` is not positive.
     pub fn windows(&self, size: i32) -> WindowsIter<T> {
-        assert size > 0, "window size must be positive";
         return WindowsIter::internal_new(&self.repr, 0, self.used, size);
     }
 
@@ -342,7 +334,6 @@ impl List<T> {
     /// elements. The last chunk may be shorter. Panics if `size` is not
     /// positive.
     pub fn chunks(&self, size: i32) -> ChunksIter<T> {
-        assert size > 0, "chunk size must be positive";
         return ChunksIter::internal_new(&self.repr, 0, self.used, size);
     }
 

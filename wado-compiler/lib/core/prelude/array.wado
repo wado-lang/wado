@@ -14,13 +14,7 @@
 
 use { IndexValue, IndexAssign, IntoIterator } from "core:prelude/traits.wado";
 use { Slice, Iter, RefIter, WindowsIter, ChunksIter } from "core:prelude/slice.wado";
-
-fn i32_min(a: i32, b: i32) -> i32 {
-    return builtin::select(a < b, a, b);
-}
-fn i32_max(a: i32, b: i32) -> i32 {
-    return builtin::select(a > b, a, b);
-}
+use { i32_clamp } from "core:internal";
 
 /// Fixed-length GC array — the builtin storage primitive. Declared
 /// definition-less; its storage and instructions live in the compiler.
@@ -73,8 +67,8 @@ impl Array<T> {
     /// bounds.
     pub fn slice(&self, start: i32, end: i32) -> Slice<T> with stores[self] {
         let len = builtin::array_len(self);
-        let s = i32_min(i32_max(start, 0), len);
-        let e = i32_min(i32_max(end, s), len);
+        let s = i32_clamp(start, 0, len);
+        let e = i32_clamp(end, s, len);
         return Slice::internal_new(self, s, e);
     }
 
@@ -86,7 +80,6 @@ impl Array<T> {
     /// Returns an iterator over overlapping windows of `size` consecutive
     /// elements. Panics if `size` is not positive.
     pub fn windows(&self, size: i32) -> WindowsIter<T> with stores[self] {
-        assert size > 0, "window size must be positive";
         return WindowsIter::internal_new(self, 0, builtin::array_len(self), size);
     }
 
@@ -94,7 +87,6 @@ impl Array<T> {
     /// elements. The last chunk may be shorter. Panics if `size` is not
     /// positive.
     pub fn chunks(&self, size: i32) -> ChunksIter<T> with stores[self] {
-        assert size > 0, "chunk size must be positive";
         return ChunksIter::internal_new(self, 0, builtin::array_len(self), size);
     }
 }

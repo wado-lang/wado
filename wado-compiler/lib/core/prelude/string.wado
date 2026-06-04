@@ -7,13 +7,8 @@
 
 use { Eq, Ord, Iterator, IntoIterator } from "core:prelude/traits.wado";
 use { Option, Result } from "core:prelude/types.wado";
+use { i32_min, i32_max } from "core:internal";
 
-fn i32_min(a: i32, b: i32) -> i32 {
-    return builtin::select(a < b, a, b);
-}
-fn i32_max(a: i32, b: i32) -> i32 {
-    return builtin::select(a > b, a, b);
-}
 fn byte_to_ascii_lowercase(b: u8) -> u8 {
     return b | (b >= 'A' as u8 && b <= 'Z' as u8) as u8 * ('A' as u8 ^ 'a' as u8);
 }
@@ -945,7 +940,13 @@ impl String {
             (b0 & 0x07) << 18 | (b1 & 0x3F) << 12 | (b2 & 0x3F) << 6 | b3 & 0x3F;
         };
         // Shift bytes left
-        builtin::array_copy(&mut self.repr, byte_index, &self.repr, byte_index + char_len, self.used - byte_index - char_len);
+        builtin::array_copy(
+            &mut self.repr,
+            byte_index,
+            &self.repr,
+            byte_index + char_len,
+            self.used - byte_index - char_len,
+        );
         self.used -= char_len;
         return char::from_u32_unchecked(code);
     }

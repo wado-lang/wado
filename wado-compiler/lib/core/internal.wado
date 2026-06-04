@@ -8,6 +8,23 @@
 // making the codegen simpler and the compiler more maintainable.
 
 
+/// Returns the smaller of two i32 values (branchless).
+pub fn i32_min(a: i32, b: i32) -> i32 {
+    return builtin::select(a < b, a, b);
+}
+
+/// Returns the larger of two i32 values (branchless).
+pub fn i32_max(a: i32, b: i32) -> i32 {
+    return builtin::select(a > b, a, b);
+}
+
+/// Clamps `value` into the inclusive range `[lo, hi]`.
+/// Panics if `lo > hi` — the range must be well-formed.
+pub fn i32_clamp(value: i32, lo: i32, hi: i32) -> i32 {
+    assert lo <= hi, "i32_clamp: lo must be <= hi";
+    return i32_min(i32_max(value, lo), hi);
+}
+
 /// Copies bytes from linear memory to a new GC array.
 pub fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
     let mut arr: Array<u8> = builtin::array_new(len);

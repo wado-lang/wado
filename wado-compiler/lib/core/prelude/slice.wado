@@ -16,14 +16,7 @@
 
 use { IndexValue, Iterator, IntoIterator, Add, Ord, Ordering } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
-use { panic } from "core:internal";
-
-fn i32_min(a: i32, b: i32) -> i32 {
-    return builtin::select(a < b, a, b);
-}
-fn i32_max(a: i32, b: i32) -> i32 {
-    return builtin::select(a > b, a, b);
-}
+use { panic, i32_min, i32_max, i32_clamp } from "core:internal";
 
 /// A contiguous view into a backing `Array<T>` over the half-open range
 /// `[start, end)`. Holds a reference to the whole array, so creating a slice
@@ -62,8 +55,8 @@ impl Slice<T> {
     /// to its bounds.
     pub fn slice(&self, start: i32, end: i32) -> Slice<T> {
         let len = self.end - self.start;
-        let s = i32_min(i32_max(start, 0), len);
-        let e = i32_min(i32_max(end, s), len);
+        let s = i32_clamp(start, 0, len);
+        let e = i32_clamp(end, s, len);
         return Slice {
             repr: self.repr,
             start: self.start + s,
@@ -240,6 +233,7 @@ pub struct WindowsIter<T> {
 impl WindowsIter<T> {
     /// Internal: build a windows iterator over `[index, end)` with window `size`.
     pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> WindowsIter<T> with stores[repr] {
+        assert size > 0, "window size must be positive";
         return WindowsIter { repr, index, end, size };
     }
 }
@@ -282,6 +276,7 @@ pub struct ChunksIter<T> {
 impl ChunksIter<T> {
     /// Internal: build a chunks iterator over `[index, end)` with chunk `size`.
     pub fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ChunksIter<T> with stores[repr] {
+        assert size > 0, "chunk size must be positive";
         return ChunksIter { repr, index, end, size };
     }
 }
