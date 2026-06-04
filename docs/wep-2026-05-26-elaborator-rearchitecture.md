@@ -410,41 +410,49 @@ alone. Reify is the only TIR.
 The Phase 1 readers, grouped by the analysis to port (the arm each
 unblocks in parentheses):
 
-- [ ] **assign l-value + ref validity** — `assign_to_target`'s l-value
-      / global-mutability match on `target.kind`
-      (`Local`/`FieldAccess`/`Index`/`Unary{Deref}`/`GlobalVarGet`) and
-      `resolve_unary`'s `&mut`-on-primitive-field check. Port to the AST
-      target shape + recorded dispatch facts
-      (`index_assign_dispatch` / `operator_dispatch` /
-      `expression_types`). (unblocks `resolve_field_access`,
-      `resolve_index`, the assign side of `resolve_unary`)
-- [ ] **null / unknown inference** — `patch_unresolved_null` +
-      `NullBreakPatcher` mutate the built block to resolve a
-      `break/branch: null` against the inferred result type, and the
-      diagnostics (`report_unresolved_nulls`) read that walk. Port to an
-      AST walk; reify already coerces nulls via `expected_type`
-      propagation, so only the _diagnostic_ needs to stay in `annotate`.
-      (foundational — see the `expression_types` note below)
-- [ ] **block result type** — `crate::tir::block_result_type` callers in
-      the `Block` / `If` / `LabeledBlock` arms, `with … do`, `loop`,
-      for-of, and the let-chain lowerings. Port to an AST walk over
-      `expression_types`. (unblocks the structural arms)
-- [ ] **unary constant folding** — `resolve_unary` folds `-literal` /
-      `-(literal as T)` by matching the operand's
-      `IntLiteral`/`FloatLiteral`/`Cast` kind. Port to the AST operand
-      shape (or let reify own the fold). (unblocks `resolve_unary`)
+- [x] **assign l-value + ref validity** — `assign_to_target`'s l-value
+      match on `target.kind` and `resolve_unary`'s `&mut`-on-primitive-field
+      check ported to the AST target shape + recorded dispatch facts
+      (`operator_dispatch` / `expression_types`); `Local` and the
+      `&mut`-captured-ident deref still read `target.kind` (their resolvers
+      are not placeholders yet). (`resolve_field_access`, `resolve_index`,
+      and the assign side of `resolve_unary` are now placeholders)
+- [x] **null / unknown inference** — `patch_unresolved_null` /
+      `NullBreakPatcher` replaced by AST walks
+      (`control_flow::collect_unresolved_null_tails` /
+      `collect_unresolved_null_breaks`); the TIR-mutating machinery is
+      deleted. Required the `expression_types` UNKNOWN-faithfulness change
+      (see the note below) so the AST walk sees an unresolved-null branch.
+- [x] **block result type** — `crate::tir::block_result_type` callers in the
+      `Block` / `If` (no-expected-type inference and post-null checks) arms,
+      `with … do`, for-of, and the trailing-match path ported to
+      `control_flow::block_result_type` over `expression_types`. The
+      if-let-chain / let-chain lowerings still call the TIR version on their
+      _synthetic_ blocks (no 1:1 AST block); those readers remain.
+- [x] **unary constant folding** — the `-literal` fold and native `Unary`
+      construction are deleted; reify owns the fold (it reads
+      `expression_types[unary.id]` + the AST). (`resolve_unary` is a
+      placeholder)
 - [ ] **tuple spread** — `resolve_tuple_literal` matches the spread
-      operand's `Local` kind to decide on a temporary, and allocates
-      `ctx` locals. Record the spread shape; reify owns the temporaries.
-      (unblocks `resolve_tuple_literal`)
+      operand's `Local` kind to decide on a temporary, and allocates `ctx`
+      locals. reify's `reify_tuple_literal` already owns the temporaries, so
+      the combined-walk construction is dead: resolve the elements, compute
+      the tuple type, and return a placeholder. (unblocks
+      `resolve_tuple_literal`; coupled with struct-literal deferred coercion)
 - [ ] **struct-literal deferred coercion** — reads a field value's
-      `TupleLiteral` kind. Port to the AST field value + coercion facts.
-      (unblocks `resolve_struct_literal`)
-- [ ] **pattern variant const literals** — `resolve_pattern_variant`
-      reads a const expression's literal kind for switch lowering. Read
-      the const value from `associated_constants` / the AST.
-- [ ] **for-of `TupleZip`** — `resolve_for_of` detects the variadic form
-      by the iterator's `TupleZip` kind. Record the form.
+      `TupleLiteral` kind. The `is_tuple_literal` AST check already exists
+      alongside it; port the resolved-kind check off the TIR. (coupled with
+      tuple spread)
+- [ ] **pattern variant const literals** — `resolve_pattern_variant` reads a
+      const expression's literal kind to emit a switch-optimised `Literal`
+      pattern. Read the const value from the AST const body. (coupled with
+      `resolve_literal` / `resolve_cast`)
+- [ ] **for-of `TupleZip`** — `resolve_for_of` detects the variadic form by
+      the iterator's `TupleZip` kind. Record the form. (coupled with the
+      `TupleZip` producer)
+- [ ] **if-let-chain / let-chain result type** — the remaining
+      `block_result_type(TIR)` readers, over synthetic chain blocks. Needs
+      the chain's result-type rule expressed on the AST.
 
 `adjust_receiver_for_self_kind` (method-call receiver wrapping) reads
 `ResolvedType`, not a TIR `kind`, and reify does its own adjustment, so
