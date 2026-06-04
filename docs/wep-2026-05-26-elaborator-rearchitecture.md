@@ -433,26 +433,38 @@ unblocks in parentheses):
       construction are deleted; reify owns the fold (it reads
       `expression_types[unary.id]` + the AST). (`resolve_unary` is a
       placeholder)
-- [ ] **tuple spread** — `resolve_tuple_literal` matches the spread
-      operand's `Local` kind to decide on a temporary, and allocates `ctx`
-      locals. reify's `reify_tuple_literal` already owns the temporaries, so
-      the combined-walk construction is dead: resolve the elements, compute
-      the tuple type, and return a placeholder. (unblocks
-      `resolve_tuple_literal`; coupled with struct-literal deferred coercion)
-- [ ] **struct-literal deferred coercion** — reads a field value's
-      `TupleLiteral` kind. The `is_tuple_literal` AST check already exists
-      alongside it; port the resolved-kind check off the TIR. (coupled with
-      tuple spread)
-- [ ] **pattern variant const literals** — `resolve_pattern_variant` reads a
-      const expression's literal kind to emit a switch-optimised `Literal`
-      pattern. Read the const value from the AST const body. (coupled with
-      `resolve_literal` / `resolve_cast`)
+- [x] **tuple spread** — `resolve_tuple_literal` resolves the elements,
+      collects their types (incl. the concrete-tuple-spread inline
+      expansion), keeps the spread diagnostic, and returns a placeholder;
+      reify's `reify_tuple_literal` owns the actual node / temporary
+      construction.
+- [x] **struct-literal deferred coercion** — the `value.kind == TupleLiteral`
+      gate is read from the AST (a spread-free tuple-literal field), so the
+      deferred second pass still records the coercion via
+      `try_coerce_tuple_to_sequence`.
+- [x] **pattern variant const literals** — the const body AST is classified
+      directly (`Number`/`Bool`/`Char` → `Literal` pattern, else
+      `ConstantValue`), unblocking `resolve_literal` and `resolve_cast`
+      placeholders.
 - [ ] **for-of `TupleZip`** — `resolve_for_of` detects the variadic form by
       the iterator's `TupleZip` kind. Record the form. (coupled with the
       `TupleZip` producer)
 - [ ] **if-let-chain / let-chain result type** — the remaining
       `block_result_type(TIR)` readers, over synthetic chain blocks. Needs
       the chain's result-type rule expressed on the AST.
+- [ ] **assign target ident classification** — `assign_to_target` still
+      reads `target.kind` to classify an `Ident` / `&mut`-captured-ident
+      target (`Local` / `GlobalVarGet` / deref-capture `Unary { Deref }`).
+      Porting it (name-resolution replication or a recorded place-kind fact)
+      unblocks `resolve_ident`.
+
+Arms now returning placeholders: range, field-access, index, unary, cast,
+tuple-literal, literal (joining binary / call / method-call / operators /
+coercion / assert / matches / template / item / module / handlers from
+earlier stages). Still building TIR: `resolve_ident`,
+`resolve_struct_literal`, the structural `Block` / `If` / `Match` /
+`LabeledBlock` arms, and `resolve_block` / `resolve_stmt` (the Phase 2
+signature sweep).
 
 `adjust_receiver_for_self_kind` (method-call receiver wrapping) reads
 `ResolvedType`, not a TIR `kind`, and reify does its own adjustment, so
