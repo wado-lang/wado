@@ -44,10 +44,10 @@ array Array<i32> (mut i32);  // TypeId(7)
 
 array Array<u64> (mut u64);  // TypeId(8)
 
-struct core:prelude/list.wado//ListIter<i32> {  // TypeId(9)
+struct core:prelude/slice.wado//Iter<i32> {  // TypeId(9)
     mut repr: ref Array<i32>,
-    mut used: i32,
     mut index: i32,
+    mut end: i32,
 }
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(10)
@@ -199,7 +199,7 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//wado-compiler/tests/fixtures/opt_copy_prop_nested_variant.wado/parse_shape" = fn(i32) -> [i32, ref null "wado-compiler/tests/fixtures/opt_copy_prop_nested_variant.wado//Shape", ref null "core:prelude/string.wado//String"];  // TypeId(73)
 
-type "functype//core:prelude/list.wado/ListIter<i32>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<i32>") -> [i32, i32];  // TypeId(74)
+type "functype//core:prelude/slice.wado/Iter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<i32>") -> [i32, i32];  // TypeId(74)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -229,17 +229,21 @@ fn "wado-compiler/tests/fixtures/opt_copy_prop_nested_variant.wado/find_item"(ke
 
 fn "wado-compiler/tests/fixtures/opt_copy_prop_nested_variant.wado/sum_until_none"(keys) {
     let sum: i32;
-    let __iter_2: ref "core:prelude/list.wado//ListIter<i32>";
+    let __iter_2: ref "core:prelude/slice.wado//Iter<i32>";
     let result: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>";
     let opt: ref "core:prelude/types.wado//Option<i32>";
     let v: i32;
+    let repr: ref Array<i32>;
+    let end: i32;
     sum = 0;
-    __iter_2 = struct.new "core:prelude/list.wado//ListIter<i32>" { repr: keys.repr, used: keys.used, index: 0 };
+    repr = keys.repr;
+    end = keys.used;
+    __iter_2 = struct.new "core:prelude/slice.wado//Iter<i32>" { repr: repr, index: 0, end: end };
     b2: block {
         l3: loop {
             let __sroa___match_7_discriminant: i32;
             let __sroa___match_7_payload_0: i32;
-            multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/list.wado/ListIter<i32>^Iterator::next"(__iter_2);
+            multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/slice.wado/Iter<i32>^Iterator::next"(__iter_2);
             if __sroa___match_7_discriminant == 0 {
                 result = "wado-compiler/tests/fixtures/opt_copy_prop_nested_variant.wado/find_item"(__sroa___match_7_payload_0);
                 if ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:prelude/string.wado/String>::Ok"(result) {
@@ -1945,9 +1949,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/list.wado/ListIter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/Iter<i32>^Iterator::next"(self) {
     let item: i32;
-    if self.index >= self.used {
+    if self.index >= self.end {
         return 1, 0;
     }
     item = builtin::array_get<i32>(self.repr, self.index);

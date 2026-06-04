@@ -49,10 +49,10 @@ struct wado-compiler/tests/fixtures/cross_module_type_identity.wado//Shape::Rect
 
 array Array<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape> (mut ref "wado-compiler/tests/fixtures/cross_module_type_identity.wado//Shape");  // TypeId(9)
 
-struct core:prelude/list.wado//ListRefIter<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape> {  // TypeId(10)
+struct core:prelude/slice.wado//RefIter<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape> {  // TypeId(10)
     mut repr: ref "Array<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>",
-    mut used: i32,
     mut index: i32,
+    mut end: i32,
 }
 
 struct core:prelude//List<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape> {  // TypeId(11)
@@ -116,7 +116,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(39)
 
-type "functype//core:prelude/list.wado/ListRefIter<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>^Iterator::next" = fn(ref "core:prelude/list.wado//ListRefIter<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>") -> ref null "core:prelude/types.wado//Box<Shape>";  // TypeId(40)
+type "functype//core:prelude/slice.wado/RefIter<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>^Iterator::next" = fn(ref "core:prelude/slice.wado//RefIter<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>") -> ref null "core:prelude/types.wado//Box<Shape>";  // TypeId(40)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
 
@@ -163,16 +163,20 @@ fn "wado-compiler/tests/fixtures/cross_module_type_identity.wado/__cm_export__ru
 
 fn "./sub/cross_module_type_identity_util.wado/sum_shapes"(shapes) {
     let total: i32;
-    let __iter_2: ref "core:prelude/list.wado//ListRefIter<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>";
+    let __iter_2: ref "core:prelude/slice.wado//RefIter<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>";
     let shape: ref "core:prelude/types.wado//Box<Shape>";
     let c: ref "wado-compiler/tests/fixtures/cross_module_type_identity.wado//CircleData";
     let r: ref "wado-compiler/tests/fixtures/cross_module_type_identity.wado//RectData";
     let __match_6: ref null "core:prelude/types.wado//Box<Shape>";
+    let repr: ref "Array<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>";
+    let end: i32;
     total = 0;
-    __iter_2 = struct.new "core:prelude/list.wado//ListRefIter<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>" { repr: shapes.repr, used: shapes.used, index: 0 };
+    repr = shapes.repr;
+    end = shapes.used;
+    __iter_2 = struct.new "core:prelude/slice.wado//RefIter<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>" { repr: repr, index: 0, end: end };
     b1: block {
         l2: loop {
-            __match_6 = "core:prelude/list.wado/ListRefIter<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>^Iterator::next"(__iter_2);
+            __match_6 = "core:prelude/slice.wado/RefIter<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>^Iterator::next"(__iter_2);
             if ref.is_null(__match_6) == 0 {
                 shape = ref.as_non_null(__match_6);
                 let __match_scrut_1: ref "wado-compiler/tests/fixtures/cross_module_type_identity.wado//Shape";
@@ -501,9 +505,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/list.wado/ListRefIter<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/RefIter<wado-compiler/tests/fixtures/cross_module_type_identity.wado/Shape>^Iterator::next"(self) {
     let val: ref "core:prelude/types.wado//Box<Shape>";
-    if self.index >= self.used {
+    if self.index >= self.end {
         return ref.null none;
     }
     val = struct.new "core:prelude/types.wado//Box<Shape>" { value: builtin::array_get<ref "wado-compiler/tests/fixtures/cross_module_type_identity.wado//Shape">(self.repr, self.index) };

@@ -24,15 +24,15 @@ struct wado-compiler/tests/fixtures/iterator_assoc_type_chain.wado//__Closure_2 
 
 array Array<i32> (mut i32);  // TypeId(4)
 
-struct core:prelude/traits.wado//IterFilter<core:prelude/list.wado/ListIter<i32>> {  // TypeId(5)
-    mut inner: ref "core:prelude/list.wado//ListIter<i32>",
+struct core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/Iter<i32>> {  // TypeId(5)
+    mut inner: ref "core:prelude/slice.wado//Iter<i32>",
     mut pred: ref struct,
 }
 
-struct core:prelude/list.wado//ListIter<i32> {  // TypeId(6)
+struct core:prelude/slice.wado//Iter<i32> {  // TypeId(6)
     mut repr: ref Array<i32>,
-    mut used: i32,
     mut index: i32,
+    mut end: i32,
 }
 
 struct core:prelude//List<i32> {  // TypeId(7)
@@ -101,7 +101,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
 
-type "functype//core:prelude/traits.wado/IterFilter<core:prelude/list.wado/ListIter<i32>>^Iterator::collect" = fn(ref "core:prelude/traits.wado//IterFilter<core:prelude/list.wado/ListIter<i32>>") -> ref "core:prelude//List<i32>";  // TypeId(37)
+type "functype//core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/Iter<i32>>^Iterator::collect" = fn(ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/Iter<i32>>") -> ref "core:prelude//List<i32>";  // TypeId(37)
 
 type "functype//core:prelude/list.wado/List<i32>::push" = fn(ref "core:prelude//List<i32>", i32);  // TypeId(38)
 
@@ -115,9 +115,9 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
 
-type "functype//core:prelude/traits.wado/IterFilter<core:prelude/list.wado/ListIter<i32>>^Iterator::next" = fn(ref "core:prelude/traits.wado//IterFilter<core:prelude/list.wado/ListIter<i32>>") -> [i32, i32];  // TypeId(44)
+type "functype//core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/Iter<i32>>^Iterator::next" = fn(ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/Iter<i32>>") -> [i32, i32];  // TypeId(44)
 
-type "functype//core:prelude/list.wado/ListIter<i32>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<i32>") -> [i32, i32];  // TypeId(45)
+type "functype//core:prelude/slice.wado/Iter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<i32>") -> [i32, i32];  // TypeId(45)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -147,6 +147,7 @@ fn "wado-compiler/tests/fixtures/iterator_assoc_type_chain.wado/run"() {
     let __local_12: ref "core:prelude/format.wado//Formatter";
     let __local_13: ref "core:prelude/string.wado//String";
     let __local_14: ref "core:prelude/format.wado//Formatter";
+    let self_30: ref "core:prelude/slice.wado//Iter<i32>";
     let pred: ref struct;
     let f_36: ref "core:prelude/format.wado//Formatter";
     let f_41: ref "core:prelude/format.wado//Formatter";
@@ -154,8 +155,10 @@ fn "wado-compiler/tests/fixtures/iterator_assoc_type_chain.wado/run"() {
     let f_54: ref "core:prelude/format.wado//Formatter";
     let f_62: ref "core:prelude/format.wado//Formatter";
     let f_67: ref "core:prelude/format.wado//Formatter";
+    let repr: ref Array<i32>;
+    let end: i32;
     __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
-    evens = "core:prelude/traits.wado/IterFilter<core:prelude/list.wado/ListIter<i32>>^Iterator::collect"(pred = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/iterator_assoc_type_chain.wado//__Closure_2" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/iterator_assoc_type_chain.wado/__closure_wrapper_0" }; struct.new "core:prelude/traits.wado//IterFilter<core:prelude/list.wado/ListIter<i32>>" { inner: struct.new "core:prelude/list.wado//ListIter<i32>" { repr: __b_0.repr, used: __b_0.used, index: 0 }, pred: pred });
+    evens = "core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/Iter<i32>>^Iterator::collect"(repr = __b_0.repr; end = __b_0.used; self_30 = struct.new "core:prelude/slice.wado//Iter<i32>" { repr: repr, index: 0, end: end }; pred = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/iterator_assoc_type_chain.wado//__Closure_2" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/iterator_assoc_type_chain.wado/__closure_wrapper_0" }; struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/Iter<i32>>" { inner: self_30, pred: pred });
     __v0_3 = evens.used;
     __cond_4 = __v0_3 == 2;
     if __cond_4 == 0 {
@@ -503,14 +506,14 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/traits.wado/IterFilter<core:prelude/list.wado/ListIter<i32>>^Iterator::collect"(self) {
+fn "core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/Iter<i32>>^Iterator::collect"(self) {
     let __b: ref "core:prelude//List<i32>";
     __b = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     b46: block {
         l47: loop {
             let __sroa___match_4_discriminant: i32;
             let __sroa___match_4_payload_0: i32;
-            multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/traits.wado/IterFilter<core:prelude/list.wado/ListIter<i32>>^Iterator::next"(self);
+            multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/Iter<i32>>^Iterator::next"(self);
             if __sroa___match_4_discriminant == 0 {
                 "core:prelude/list.wado/List<i32>::push"(__b, __sroa___match_4_payload_0);
             } else {
@@ -532,8 +535,8 @@ fn "core:prelude/list.wado/List<i32>::push"(self, value) {
     self.used = used + 1;
 }
 
-fn "core:prelude/traits.wado/IterFilter<core:prelude/list.wado/ListIter<i32>>^Iterator::next"(self) {
-    let _licm_inner_3: ref "core:prelude/list.wado//ListIter<i32>";
+fn "core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/Iter<i32>>^Iterator::next"(self) {
+    let _licm_inner_3: ref "core:prelude/slice.wado//Iter<i32>";
     let _licm_pred_4: ref struct;
     _licm_inner_3 = self.inner;
     _licm_pred_4 = self.pred;
@@ -541,7 +544,7 @@ fn "core:prelude/traits.wado/IterFilter<core:prelude/list.wado/ListIter<i32>>^It
         l51: loop {
             let __sroa___match_2_discriminant: i32;
             let __sroa___match_2_payload_0: i32;
-            multivalue_bind [__sroa___match_2_discriminant, __sroa___match_2_payload_0] = "core:prelude/list.wado/ListIter<i32>^Iterator::next"(_licm_inner_3);
+            multivalue_bind [__sroa___match_2_discriminant, __sroa___match_2_payload_0] = "core:prelude/slice.wado/Iter<i32>^Iterator::next"(_licm_inner_3);
             if __sroa___match_2_discriminant == 0 {
                 if block -> bool {
                     let __indirect_call_0: ref "canonical//CanonicalClosure_0";
@@ -558,9 +561,9 @@ fn "core:prelude/traits.wado/IterFilter<core:prelude/list.wado/ListIter<i32>>^It
     };
 }
 
-fn "core:prelude/list.wado/ListIter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/Iter<i32>^Iterator::next"(self) {
     let item: i32;
-    if self.index >= self.used {
+    if self.index >= self.end {
         return 1, 0;
     }
     item = builtin::array_get<i32>(self.repr, self.index);

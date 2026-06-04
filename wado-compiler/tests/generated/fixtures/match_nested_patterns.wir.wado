@@ -83,16 +83,16 @@ array Array<core:prelude/types.wado/Tuple<i32,i32>> (mut ref "tuple//[i32, i32]"
 
 array Array<u64> (mut u64);  // TypeId(16)
 
-struct core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>> {  // TypeId(17)
+struct core:prelude/slice.wado//Iter<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>> {  // TypeId(17)
     mut repr: ref "Array<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>",
-    mut used: i32,
     mut index: i32,
+    mut end: i32,
 }
 
-struct core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<i32,i32>> {  // TypeId(18)
+struct core:prelude/slice.wado//Iter<core:prelude/types.wado/Tuple<i32,i32>> {  // TypeId(18)
     mut repr: ref "Array<core:prelude/types.wado/Tuple<i32,i32>>",
-    mut used: i32,
     mut index: i32,
+    mut end: i32,
 }
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(19)
@@ -256,9 +256,9 @@ type "functype//core:prelude/format.wado/Formatter::apply_padding" = fn(ref "cor
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(91)
 
-type "functype//core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>") -> ref null "tuple//[Color, i32]";  // TypeId(92)
+type "functype//core:prelude/slice.wado/Iter<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>") -> ref null "tuple//[Color, i32]";  // TypeId(92)
 
-type "functype//core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<i32,i32>>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<i32,i32>>") -> ref null "tuple//[i32, i32]";  // TypeId(93)
+type "functype//core:prelude/slice.wado/Iter<core:prelude/types.wado/Tuple<i32,i32>>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<core:prelude/types.wado/Tuple<i32,i32>>") -> ref null "tuple//[i32, i32]";  // TypeId(93)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(94)
 
@@ -895,19 +895,23 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/if_let_nested"() wit
 
 fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/while_let_nested"() with Stdout {
     let __b: ref "core:prelude//List<core:prelude/types.wado/Tuple<i32,i32>>";
-    let iter: ref "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<i32,i32>>";
+    let iter: ref "core:prelude/slice.wado//Iter<core:prelude/types.wado/Tuple<i32,i32>>";
     let sum: i32;
     let a: i32;
     let b: i32;
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __match_8: ref null "tuple//[i32, i32]";
+    let repr: ref "Array<core:prelude/types.wado/Tuple<i32,i32>>";
+    let end: i32;
     __b = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<i32,i32>>" { repr: array.new_fixed<ref "tuple//[i32, i32]">(struct.new "tuple//[i32, i32]" { 0: 1, 1: 2 }, struct.new "tuple//[i32, i32]" { 0: 3, 1: 4 }), used: 2 };
-    iter = struct.new "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<i32,i32>>" { repr: __b.repr, used: 2, index: 0 };
+    repr = __b.repr;
+    end = 2;
+    iter = struct.new "core:prelude/slice.wado//Iter<core:prelude/types.wado/Tuple<i32,i32>>" { repr: repr, index: 0, end: end };
     sum = 0;
     b52: block {
         l53: loop {
-            __match_8 = "core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<i32,i32>>^Iterator::next"(iter);
+            __match_8 = "core:prelude/slice.wado/Iter<core:prelude/types.wado/Tuple<i32,i32>>^Iterator::next"(iter);
             if ref.is_null(__match_8) == 0 {
                 let __variant_payload_1: ref "tuple//[i32, i32]";
                 __variant_payload_1 = ref.as_non_null(__match_8);
@@ -978,7 +982,7 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/matches_nested"() wi
 
 fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/for_of_with_nested_match"() with Stdout {
     let __b: ref "core:prelude//List<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>";
-    let __iter_2: ref "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>";
+    let __iter_2: ref "core:prelude/slice.wado//Iter<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>";
     let color: "wado-compiler/tests/fixtures/match_nested_patterns.wado//enum:Color";
     let n: i32;
     let desc: ref "core:prelude/string.wado//String";
@@ -989,11 +993,15 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/for_of_with_nested_m
     let __local_10: ref "core:prelude/string.wado//String";
     let __local_11: ref "core:prelude/format.wado//Formatter";
     let __match_12: ref null "tuple//[Color, i32]";
+    let repr: ref "Array<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>";
+    let end: i32;
     __b = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>" { repr: array.new_fixed<ref "tuple//[Color, i32]">(struct.new "tuple//[Color, i32]" { 0: 0, 1: 1 }, struct.new "tuple//[Color, i32]" { 0: 1, 1: 2 }, struct.new "tuple//[Color, i32]" { 0: 2, 1: 3 }), used: 3 };
-    __iter_2 = struct.new "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>" { repr: __b.repr, used: 3, index: 0 };
+    repr = __b.repr;
+    end = 3;
+    __iter_2 = struct.new "core:prelude/slice.wado//Iter<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>" { repr: repr, index: 0, end: end };
     b61: block {
         l62: loop {
-            __match_12 = "core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>^Iterator::next"(__iter_2);
+            __match_12 = "core:prelude/slice.wado/Iter<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>^Iterator::next"(__iter_2);
             if ref.is_null(__match_12) == 0 {
                 let __variant_payload_1: ref "tuple//[Color, i32]";
                 __variant_payload_1 = ref.as_non_null(__match_12);
@@ -2603,9 +2611,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/Iter<core:prelude/types.wado/Tuple<wado-compiler/tests/fixtures/match_nested_patterns.wado/Color,i32>>^Iterator::next"(self) {
     let item: ref "tuple//[Color, i32]";
-    if self.index >= self.used {
+    if self.index >= self.end {
         return ref.null none;
     }
     item = builtin::array_get<ref "tuple//[Color, i32]">(self.repr, self.index);
@@ -2613,9 +2621,9 @@ fn "core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<wado-compiler/
     return item;
 }
 
-fn "core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<i32,i32>>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/Iter<core:prelude/types.wado/Tuple<i32,i32>>^Iterator::next"(self) {
     let item: ref "tuple//[i32, i32]";
-    if self.index >= self.used {
+    if self.index >= self.end {
         return ref.null none;
     }
     item = builtin::array_get<ref "tuple//[i32, i32]">(self.repr, self.index);

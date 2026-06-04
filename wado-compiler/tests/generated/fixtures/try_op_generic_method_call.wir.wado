@@ -30,10 +30,10 @@ struct wado-compiler/tests/fixtures/try_op_generic_method_call.wado//StringSink 
 
 array Array<i32> (mut i32);  // TypeId(5)
 
-struct core:prelude/list.wado//ListIter<i32> {  // TypeId(6)
+struct core:prelude/slice.wado//Iter<i32> {  // TypeId(6)
     mut repr: ref Array<i32>,
-    mut used: i32,
     mut index: i32,
+    mut end: i32,
 }
 
 struct core:prelude//List<i32> {  // TypeId(7)
@@ -105,7 +105,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(38)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(39)
 
-type "functype//core:prelude/list.wado/ListIter<i32>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<i32>") -> [i32, i32];  // TypeId(40)
+type "functype//core:prelude/slice.wado/Iter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<i32>") -> [i32, i32];  // TypeId(40)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -121,16 +121,20 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/try_op_generic_method_call.wado/write_values"(s, values) {
-    let __iter_2: ref "core:prelude/list.wado//ListIter<i32>";
+    let __iter_2: ref "core:prelude/slice.wado//Iter<i32>";
     let v: ref "core:prelude/types.wado//Box<i32>";
     let __qm_e: ref "core:prelude/string.wado//String";
     let __local_7: ref null "core:prelude/string.wado//String";
-    __iter_2 = struct.new "core:prelude/list.wado//ListIter<i32>" { repr: values.repr, used: values.used, index: 0 };
+    let repr: ref Array<i32>;
+    let end: i32;
+    repr = values.repr;
+    end = values.used;
+    __iter_2 = struct.new "core:prelude/slice.wado//Iter<i32>" { repr: repr, index: 0, end: end };
     b0: block {
         l1: loop {
             let __sroa___match_6_discriminant: i32;
             let __sroa___match_6_payload_0: i32;
-            multivalue_bind [__sroa___match_6_discriminant, __sroa___match_6_payload_0] = "core:prelude/list.wado/ListIter<i32>^Iterator::next"(__iter_2);
+            multivalue_bind [__sroa___match_6_discriminant, __sroa___match_6_payload_0] = "core:prelude/slice.wado/Iter<i32>^Iterator::next"(__iter_2);
             if __sroa___match_6_discriminant == 0 {
                 v = struct.new "core:prelude/types.wado//Box<i32>" { value: __sroa___match_6_payload_0 };
                 __local_7 = "wado-compiler/tests/fixtures/try_op_generic_method_call.wado/StringSink^Sink::put<i32>"(s, v);
@@ -480,9 +484,9 @@ fn "wado-compiler/tests/fixtures/try_op_generic_method_call.wado/StringSink^Sink
     return ref.null none;
 }
 
-fn "core:prelude/list.wado/ListIter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/Iter<i32>^Iterator::next"(self) {
     let item: i32;
-    if self.index >= self.used {
+    if self.index >= self.end {
         return 1, 0;
     }
     item = builtin::array_get<i32>(self.repr, self.index);

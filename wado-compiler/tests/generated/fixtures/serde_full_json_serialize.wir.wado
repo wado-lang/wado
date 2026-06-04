@@ -75,10 +75,10 @@ array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado/
 
 array Array<u64> (mut u64);  // TypeId(15)
 
-struct core:prelude/list.wado//ListIter<core:prelude/string.wado/String> {  // TypeId(16)
+struct core:prelude/slice.wado//Iter<core:prelude/string.wado/String> {  // TypeId(16)
     mut repr: ref "Array<core:prelude/string.wado/String>",
-    mut used: i32,
     mut index: i32,
+    mut end: i32,
 }
 
 struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(17)
@@ -223,7 +223,7 @@ type "functype//wado-compiler/tests/fixtures/serde_full_json_serialize.wado/List
 
 type "functype//wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>" = fn(ref "wado-compiler/tests/fixtures/serde_full_json_serialize.wado//JsonSeqSerializer", ref "core:prelude/string.wado//String") -> ref null "wado-compiler/tests/fixtures/serde_full_json_serialize.wado//SerializeError";  // TypeId(84)
 
-type "functype//core:prelude/list.wado/ListIter<core:prelude/string.wado/String>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<core:prelude/string.wado/String>") -> ref null "core:prelude/string.wado//String";  // TypeId(85)
+type "functype//core:prelude/slice.wado/Iter<core:prelude/string.wado/String>^Iterator::next" = fn(ref "core:prelude/slice.wado//Iter<core:prelude/string.wado/String>") -> ref null "core:prelude/string.wado//String";  // TypeId(85)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(86)
 
@@ -1851,13 +1851,15 @@ fn "wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonStructSerial
 
 fn "wado-compiler/tests/fixtures/serde_full_json_serialize.wado/List<core:prelude/string.wado/String>^Serialize::serialize<wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonSerializer>"(self, s) {
     let seq_3: ref "wado-compiler/tests/fixtures/serde_full_json_serialize.wado//JsonSeqSerializer";
-    let __iter_4: ref "core:prelude/list.wado//ListIter<core:prelude/string.wado/String>";
+    let __iter_4: ref "core:prelude/slice.wado//Iter<core:prelude/string.wado/String>";
     let item: ref "core:prelude/string.wado//String";
     let __match_7: ref null "core:prelude/string.wado//String";
     let self_11: ref "core:prelude/string.wado//String";
     let s_12: ref "core:prelude/string.wado//String";
-    let self_16: ref "core:prelude/string.wado//String";
-    let s_17: ref "core:prelude/string.wado//String";
+    let repr: ref "Array<core:prelude/string.wado/String>";
+    let end: i32;
+    let self_19: ref "core:prelude/string.wado//String";
+    let s_20: ref "core:prelude/string.wado//String";
     let __sroa___fused_payload_6_w: ref "wado-compiler/tests/fixtures/serde_full_json_serialize.wado//JsonWriter";
     drop(self.used);
     self_11 = s.w.buf;
@@ -1865,10 +1867,12 @@ fn "wado-compiler/tests/fixtures/serde_full_json_serialize.wado/List<core:prelud
     "core:prelude/string.wado/String::push_str"(self_11, s_12);
     __sroa___fused_payload_6_w = s.w;
     seq_3 = struct.new "wado-compiler/tests/fixtures/serde_full_json_serialize.wado//JsonSeqSerializer" { w: __sroa___fused_payload_6_w, count: 0 };
-    __iter_4 = struct.new "core:prelude/list.wado//ListIter<core:prelude/string.wado/String>" { repr: self.repr, used: self.used, index: 0 };
+    repr = self.repr;
+    end = self.used;
+    __iter_4 = struct.new "core:prelude/slice.wado//Iter<core:prelude/string.wado/String>" { repr: repr, index: 0, end: end };
     b190: block {
         l191: loop {
-            __match_7 = "core:prelude/list.wado/ListIter<core:prelude/string.wado/String>^Iterator::next"(__iter_4);
+            __match_7 = "core:prelude/slice.wado/Iter<core:prelude/string.wado/String>^Iterator::next"(__iter_4);
             if ref.is_null(__match_7) == 0 {
                 item = ref.as_non_null(__match_7);
                 drop("wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(seq_3, item));
@@ -1878,7 +1882,7 @@ fn "wado-compiler/tests/fixtures/serde_full_json_serialize.wado/List<core:prelud
             continue l191;
         };
     };
-    return self_16 = seq_3.w.buf, s_17 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(93), used: 1 }, "core:prelude/string.wado/String::push_str"(self_16, s_17), ref.null none;
+    return self_19 = seq_3.w.buf, s_20 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(93), used: 1 }, "core:prelude/string.wado/String::push_str"(self_19, s_20), ref.null none;
 }
 
 fn "wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonSeqSerializer^SerializeSeq::element<core:prelude/string.wado/String>"(self, value) {
@@ -1896,9 +1900,9 @@ fn "wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonSeqSerialize
     return ref.null none;
 }
 
-fn "core:prelude/list.wado/ListIter<core:prelude/string.wado/String>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/Iter<core:prelude/string.wado/String>^Iterator::next"(self) {
     let item: ref "core:prelude/string.wado//String";
-    if self.index >= self.used {
+    if self.index >= self.end {
         return ref.null none;
     }
     item = builtin::array_get<ref "core:prelude/string.wado//String">(self.repr, self.index);
