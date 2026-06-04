@@ -45,10 +45,10 @@ array Array<&mut wado-compiler/tests/fixtures/treemap_btree2.wado/BTreeNode<core
 
 array Array<bool> (mut bool);  // TypeId(10)
 
-struct core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>> {  // TypeId(11)
+struct core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>> {  // TypeId(11)
     mut repr: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>",
-    mut used: i32,
     mut index: i32,
+    mut end: i32,
 }
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(12)
@@ -175,7 +175,7 @@ type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core
 
 type "functype//wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::needs_compaction" = fn(ref "wado-compiler/tests/fixtures/treemap_btree2.wado//TreeMap<core:prelude/string.wado/String,i32>") -> bool;  // TypeId(57)
 
-type "functype//core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>") -> ref null "tuple//[String, i32]";  // TypeId(58)
+type "functype//core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>") -> ref null "tuple//[String, i32]";  // TypeId(58)
 
 type "functype//wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::iter" = fn(ref "wado-compiler/tests/fixtures/treemap_btree2.wado//TreeMap<core:prelude/string.wado/String,i32>") -> ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";  // TypeId(59)
 
@@ -248,12 +248,12 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/treemap_btree2.wado/run"() with Stdout {
     let map: ref "wado-compiler/tests/fixtures/treemap_btree2.wado//TreeMap<core:prelude/string.wado/String,i32>";
     let entries: ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
-    let __iter_2: ref "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
+    let __iter_2: ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
     let entry_3: ref "tuple//[String, i32]";
     let key_4: ref "core:prelude/string.wado//String";
     let value_5: i32;
     let final_entries: ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
-    let __iter_7: ref "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
+    let __iter_7: ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
     let entry_8: ref "tuple//[String, i32]";
     let key_9: ref "core:prelude/string.wado//String";
     let value_10: i32;
@@ -286,15 +286,19 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/run"() with Stdout {
     let key_77: ref "core:prelude/string.wado//String";
     let root_78: ref "wado-compiler/tests/fixtures/treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>";
     let __local_3: ref null "wado-compiler/tests/fixtures/treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>";
-    let root_95: ref "wado-compiler/tests/fixtures/treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>";
+    let repr_88: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
+    let end_90: i32;
+    let root_98: ref "wado-compiler/tests/fixtures/treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>";
     let __match_2: ref null "wado-compiler/tests/fixtures/treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>";
-    let __sroa_self_value_117: i32;
-    let __sroa_self_value_118: i32;
-    let __sroa_self_value_119: i32;
-    let __sroa_self_value_120: i32;
-    let __sroa_self_value_121: i32;
+    let repr_114: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
+    let end_116: i32;
     let __sroa_self_value_123: i32;
     let __sroa_self_value_124: i32;
+    let __sroa_self_value_125: i32;
+    let __sroa_self_value_126: i32;
+    let __sroa_self_value_127: i32;
+    let __sroa_self_value_129: i32;
+    let __sroa_self_value_130: i32;
     map = struct.new "wado-compiler/tests/fixtures/treemap_btree2.wado//TreeMap<core:prelude/string.wado/String,i32>" { root: ref.null none, t: 3, size: 0, deleted_count: 0 };
     key_34 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
     "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::insert"(map, key_34, 1);
@@ -307,12 +311,12 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/run"() with Stdout {
     key_46 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("elderberry"), used: 10 };
     "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::insert"(map, key_46, 5);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("=== After insertion ==="), used: 23 });
-    "core:cli/println"(__local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }; "core:prelude/string.wado/String::push"(__local_11, 83); "core:prelude/string.wado/String::push"(__local_11, 105); "core:prelude/string.wado/String::push"(__local_11, 122); "core:prelude/string.wado/String::push"(__local_11, 101); "core:prelude/string.wado/String::push"(__local_11, 58); "core:prelude/string.wado/String::push"(__local_11, 32); __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_11 }; __sroa_self_value_117 = map.size; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_117, __local_12); __local_11);
-    "core:cli/println"(__local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana = "), used: 9 }); __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_13 }; __sroa_self_value_118 = "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>^Index<K>::index"(map, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 }).value; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_118, __local_14); __local_13);
-    "core:cli/println"(__local_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }; "core:prelude/string.wado/String::push"(__local_15, 100); "core:prelude/string.wado/String::push"(__local_15, 97); "core:prelude/string.wado/String::push"(__local_15, 116); "core:prelude/string.wado/String::push"(__local_15, 101); "core:prelude/string.wado/String::push"(__local_15, 32); "core:prelude/string.wado/String::push"(__local_15, 61); "core:prelude/string.wado/String::push"(__local_15, 32); __local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_15 }; __sroa_self_value_119 = "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>^Index<K>::index"(map, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 97, 116, 101), used: 4 }).value; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_119, __local_16); __local_15);
+    "core:cli/println"(__local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }; "core:prelude/string.wado/String::push"(__local_11, 83); "core:prelude/string.wado/String::push"(__local_11, 105); "core:prelude/string.wado/String::push"(__local_11, 122); "core:prelude/string.wado/String::push"(__local_11, 101); "core:prelude/string.wado/String::push"(__local_11, 58); "core:prelude/string.wado/String::push"(__local_11, 32); __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_11 }; __sroa_self_value_123 = map.size; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_123, __local_12); __local_11);
+    "core:cli/println"(__local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana = "), used: 9 }); __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_13 }; __sroa_self_value_124 = "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>^Index<K>::index"(map, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 }).value; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_124, __local_14); __local_13);
+    "core:cli/println"(__local_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }; "core:prelude/string.wado/String::push"(__local_15, 100); "core:prelude/string.wado/String::push"(__local_15, 97); "core:prelude/string.wado/String::push"(__local_15, 116); "core:prelude/string.wado/String::push"(__local_15, 101); "core:prelude/string.wado/String::push"(__local_15, 32); "core:prelude/string.wado/String::push"(__local_15, 61); "core:prelude/string.wado/String::push"(__local_15, 32); __local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_15 }; __sroa_self_value_125 = "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>^Index<K>::index"(map, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 97, 116, 101), used: 4 }).value; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_125, __local_16); __local_15);
     key_68 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 };
     "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::insert"(map, key_68, 20);
-    "core:cli/println"(__local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana (updated) = "), used: 19 }); __local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_17 }; __sroa_self_value_120 = "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>^Index<K>::index"(map, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 }).value; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_120, __local_18); __local_17);
+    "core:cli/println"(__local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana (updated) = "), used: 19 }); __local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_17 }; __sroa_self_value_126 = "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>^Index<K>::index"(map, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 }).value; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_126, __local_18); __local_17);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 === After deleting cherry ==="), used: 30 });
     drop(__inline_TreeMap_core_prelude_string_wado_String_i32___delete_27: block -> bool {
@@ -325,14 +329,16 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/run"() with Stdout {
         }
         break __inline_TreeMap_core_prelude_string_wado_String_i32___delete_27: 0;
     });
-    "core:cli/println"(__local_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }; "core:prelude/string.wado/String::push"(__local_19, 83); "core:prelude/string.wado/String::push"(__local_19, 105); "core:prelude/string.wado/String::push"(__local_19, 122); "core:prelude/string.wado/String::push"(__local_19, 101); "core:prelude/string.wado/String::push"(__local_19, 58); "core:prelude/string.wado/String::push"(__local_19, 32); __local_20 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_19 }; __sroa_self_value_121 = map.size; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_121, __local_20); __local_19);
+    "core:cli/println"(__local_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }; "core:prelude/string.wado/String::push"(__local_19, 83); "core:prelude/string.wado/String::push"(__local_19, 105); "core:prelude/string.wado/String::push"(__local_19, 122); "core:prelude/string.wado/String::push"(__local_19, 101); "core:prelude/string.wado/String::push"(__local_19, 58); "core:prelude/string.wado/String::push"(__local_19, 32); __local_20 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_19 }; __sroa_self_value_127 = map.size; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_127, __local_20); __local_19);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 === Iteration (sorted) ==="), used: 27 });
     entries = "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::iter"(map);
-    __iter_2 = struct.new "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>" { repr: entries.repr, used: entries.used, index: 0 };
+    repr_88 = entries.repr;
+    end_90 = entries.used;
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>" { repr: repr_88, index: 0, end: end_90 };
     b1: block {
         l2: loop {
-            __match_29 = "core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next"(__iter_2);
+            __match_29 = "core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next"(__iter_2);
             if ref.is_null(__match_29) == 0 {
                 entry_3 = ref.as_non_null(__match_29);
                 key_4 = entry_3.0;
@@ -350,21 +356,23 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/run"() with Stdout {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Compaction needed, running..."), used: 29 });
         __match_2 = map.root;
         if ref.is_null(__match_2) == 0 {
-            root_95 = ref.as_non_null(__match_2);
-            "wado-compiler/tests/fixtures/treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>::compact"(root_95);
+            root_98 = ref.as_non_null(__match_2);
+            "wado-compiler/tests/fixtures/treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>::compact"(root_98);
             map.deleted_count = 0;
         } else {
         }
     }
-    "core:cli/println"(__local_23 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }; "core:prelude/string.wado/String::push"(__local_23, 83); "core:prelude/string.wado/String::push"(__local_23, 105); "core:prelude/string.wado/String::push"(__local_23, 122); "core:prelude/string.wado/String::push"(__local_23, 101); "core:prelude/string.wado/String::push"(__local_23, 58); "core:prelude/string.wado/String::push"(__local_23, 32); __local_24 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_23 }; __sroa_self_value_123 = map.size; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_123, __local_24); __local_23);
-    "core:cli/println"(__local_25 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Deleted count: "), used: 15 }); __local_26 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_25 }; __sroa_self_value_124 = map.deleted_count; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_124, __local_26); __local_25);
+    "core:cli/println"(__local_23 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 }; "core:prelude/string.wado/String::push"(__local_23, 83); "core:prelude/string.wado/String::push"(__local_23, 105); "core:prelude/string.wado/String::push"(__local_23, 122); "core:prelude/string.wado/String::push"(__local_23, 101); "core:prelude/string.wado/String::push"(__local_23, 58); "core:prelude/string.wado/String::push"(__local_23, 32); __local_24 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_23 }; __sroa_self_value_129 = map.size; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_129, __local_24); __local_23);
+    "core:cli/println"(__local_25 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Deleted count: "), used: 15 }); __local_26 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_25 }; __sroa_self_value_130 = map.deleted_count; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_130, __local_26); __local_25);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 === Final iteration ==="), used: 24 });
     final_entries = "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::iter"(map);
-    __iter_7 = struct.new "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>" { repr: final_entries.repr, used: final_entries.used, index: 0 };
+    repr_114 = final_entries.repr;
+    end_116 = final_entries.used;
+    __iter_7 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>" { repr: repr_114, index: 0, end: end_116 };
     b6: block {
         l7: loop {
-            __match_30 = "core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next"(__iter_7);
+            __match_30 = "core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next"(__iter_7);
             if ref.is_null(__match_30) == 0 {
                 entry_8 = ref.as_non_null(__match_30);
                 key_9 = entry_8.0;
@@ -903,9 +911,9 @@ fn "wado-compiler/tests/fixtures/treemap_btree2.wado/TreeMap<core:prelude/string
     });
 }
 
-fn "core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next"(self) {
     let item: ref "tuple//[String, i32]";
-    if self.index >= self.used {
+    if self.index >= self.end {
         return ref.null none;
     }
     item = builtin::array_get<ref "tuple//[String, i32]">(self.repr, self.index);

@@ -86,10 +86,10 @@ struct wado-compiler/tests/fixtures/serde_json_option_array_fields.wado//User { 
 
 array Array<i32> (mut i32);  // TypeId(16)
 
-struct core:prelude/list.wado//ListRefIter<i32> {  // TypeId(17)
+struct core:prelude/slice.wado//ArrayRefIter<i32> {  // TypeId(17)
     mut repr: ref Array<i32>,
-    mut used: i32,
     mut index: i32,
+    mut end: i32,
 }
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(18)
@@ -402,7 +402,7 @@ type "functype//core:json/JsonSeqAccess^DeserializeSeq::next_element<i32>" = fn(
 
 type "functype//core:json/JsonSeqSerializer^SerializeSeq::element<i32>" = fn(ref "core:json//JsonSeqSerializer", ref "core:prelude/types.wado//Box<i32>") -> ref null "core:serde//SerializeError";  // TypeId(127)
 
-type "functype//core:prelude/list.wado/ListRefIter<i32>^Iterator::next" = fn(ref "core:prelude/list.wado//ListRefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(128)
+type "functype//core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<i32>") -> ref null "core:prelude/types.wado//Box<i32>";  // TypeId(128)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(129)
 
@@ -3064,11 +3064,13 @@ fn "core:serde/List<i32>^Serialize::serialize<core:json/JsonSerializer>"(self, s
     let __qm_v_2: ref "core:json//JsonSeqSerializer";
     let __qm_e_3: ref "core:serde//SerializeError";
     let seq: ref "core:json//JsonSeqSerializer";
-    let __iter_5: ref "core:prelude/list.wado//ListRefIter<i32>";
+    let __iter_5: ref "core:prelude/slice.wado//ArrayRefIter<i32>";
     let item: ref "core:prelude/types.wado//Box<i32>";
     let __qm_e_8: ref "core:serde//SerializeError";
     let __match_9: ref null "core:prelude/types.wado//Box<i32>";
     let __local_10: ref null "core:serde//SerializeError";
+    let repr: ref Array<i32>;
+    let end: i32;
     seq = "wado-compiler/tests/fixtures/serde_json_option_array_fields.wado/$value_copy$T54"(let __match_scrut_0: ref "core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError>"; drop(self.used); "core:prelude/string.wado/String::push"(s.buf, 91); __match_scrut_0 = struct.new "core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:json//JsonSeqSerializer" { buf: s.buf, count: 0 } }; (if ref.test "core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError>::Ok"(__match_scrut_0) -> ref "core:json//JsonSeqSerializer" {
         __qm_v_2 = ref.cast "core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError>::Ok"(__match_scrut_0).payload_0;
         __qm_v_2;
@@ -3076,10 +3078,12 @@ fn "core:serde/List<i32>^Serialize::serialize<core:json/JsonSerializer>"(self, s
         __qm_e_3 = ref.cast "core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError>::Err"(__match_scrut_0).payload_0;
         return __qm_e_3;
     }));
-    __iter_5 = struct.new "core:prelude/list.wado//ListRefIter<i32>" { repr: self.repr, used: self.used, index: 0 };
+    repr = self.repr;
+    end = self.used;
+    __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: repr, index: 0, end: end };
     b402: block {
         l403: loop {
-            __match_9 = "core:prelude/list.wado/ListRefIter<i32>^Iterator::next"(__iter_5);
+            __match_9 = "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(__iter_5);
             if ref.is_null(__match_9) == 0 {
                 item = ref.as_non_null(__match_9);
                 __local_10 = "core:json/JsonSeqSerializer^SerializeSeq::element<i32>"(seq, item);
@@ -3257,9 +3261,9 @@ fn "core:json/JsonSeqSerializer^SerializeSeq::element<i32>"(self, value) {
     return r;
 }
 
-fn "core:prelude/list.wado/ListRefIter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(self) {
     let val: ref "core:prelude/types.wado//Box<i32>";
-    if self.index >= self.used {
+    if self.index >= self.end {
         return ref.null none;
     }
     val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(self.repr, self.index) };

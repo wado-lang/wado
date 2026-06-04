@@ -20,10 +20,10 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/list.wado//ListIter<u8> {  // TypeId(3)
+struct core:prelude/slice.wado//ArrayIter<u8> {  // TypeId(3)
     mut repr: ref Array<u8>,
-    mut used: i32,
     mut index: i32,
+    mut end: i32,
 }
 
 struct core:prelude//List<u8> {  // TypeId(4)
@@ -93,7 +93,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(34)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(35)
 
-type "functype//core:prelude/list.wado/ListIter<u8>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<u8>") -> [i32, u8];  // TypeId(36)
+type "functype//core:prelude/slice.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(36)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -129,14 +129,18 @@ fn "wado-compiler/tests/fixtures/into_iterator_item_bound.wado/__cm_export__run"
 
 fn "wado-compiler/tests/fixtures/into_iterator_item_bound.wado/sum_bytes<core:prelude/list.wado/List<u8>>"(items) {
     let total: i32;
-    let iter: ref "core:prelude/list.wado//ListIter<u8>";
+    let iter: ref "core:prelude/slice.wado//ArrayIter<u8>";
+    let repr: ref Array<u8>;
+    let end: i32;
     total = 0;
-    iter = struct.new "core:prelude/list.wado//ListIter<u8>" { repr: items.repr, used: items.used, index: 0 };
+    repr = items.repr;
+    end = items.used;
+    iter = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: repr, index: 0, end: end };
     b0: block {
         l1: loop {
             let __sroa___match_4_discriminant: i32;
             let __sroa___match_4_payload_0: u8;
-            multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/list.wado/ListIter<u8>^Iterator::next"(iter);
+            multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(iter);
             if __sroa___match_4_discriminant == 0 {
                 total = total + __sroa___match_4_payload_0;
             } else {
@@ -451,9 +455,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/list.wado/ListIter<u8>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(self) {
     let item: u8;
-    if self.index >= self.used {
+    if self.index >= self.end {
         return 1, 0;
     }
     item = builtin::array_get<u8>(self.repr, self.index);

@@ -16,10 +16,10 @@ struct tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:tls/typ
 
 struct wado-compiler/tests/fixtures/wasi_tls_mock_recv.wado//__Closure_2 {  // TypeId(3)}
 
-struct core:prelude/list.wado//ListIter<u8> {  // TypeId(4)
+struct core:prelude/slice.wado//ArrayIter<u8> {  // TypeId(4)
     mut repr: ref Array<u8>,
-    mut used: i32,
     mut index: i32,
+    mut end: i32,
 }
 
 struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>> {  // TypeId(5)
@@ -152,7 +152,7 @@ type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(59)
 
 type "functype//core:prelude/string.wado/String::from_utf8<core:prelude/list.wado/List<u8>>" = fn(ref "core:prelude//List<u8>") -> [i32, ref null "core:prelude/string.wado//String"];  // TypeId(60)
 
-type "functype//core:prelude/list.wado/ListIter<u8>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<u8>") -> [i32, u8];  // TypeId(61)
+type "functype//core:prelude/slice.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(61)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-read from "wasi/stream-read";
@@ -541,15 +541,19 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 
 fn "core:prelude/string.wado/String::from_utf8<core:prelude/list.wado/List<u8>>"(bytes) {
     let builder: ref "core:prelude/string.wado//String";
-    let iter: ref "core:prelude/list.wado//ListIter<u8>";
+    let iter: ref "core:prelude/slice.wado//ArrayIter<u8>";
     let code: u32;
+    let repr: ref Array<u8>;
+    let end: i32;
     builder = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 };
-    iter = struct.new "core:prelude/list.wado//ListIter<u8>" { repr: bytes.repr, used: bytes.used, index: 0 };
+    repr = bytes.repr;
+    end = bytes.used;
+    iter = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: repr, index: 0, end: end };
     b23: block {
         l24: loop {
             let __sroa___match_11_discriminant: i32;
             let __sroa___match_11_payload_0: u8;
-            multivalue_bind [__sroa___match_11_discriminant, __sroa___match_11_payload_0] = "core:prelude/list.wado/ListIter<u8>^Iterator::next"(iter);
+            multivalue_bind [__sroa___match_11_discriminant, __sroa___match_11_payload_0] = "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(iter);
             if __sroa___match_11_discriminant == 0 {
                 code = 0;
                 if __sroa___match_11_payload_0 <u 128 {
@@ -559,7 +563,7 @@ fn "core:prelude/string.wado/String::from_utf8<core:prelude/list.wado/List<u8>>"
                 } else if __sroa___match_11_payload_0 <u 224 {
                     let __sroa___local_12_discriminant: i32;
                     let __sroa___local_12_payload_0: u8;
-                    multivalue_bind [__sroa___local_12_discriminant, __sroa___local_12_payload_0] = "core:prelude/list.wado/ListIter<u8>^Iterator::next"(iter);
+                    multivalue_bind [__sroa___local_12_discriminant, __sroa___local_12_payload_0] = "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(iter);
                     if __sroa___local_12_discriminant == 0 {
                         if (if __sroa___local_12_payload_0 <u 128 -> i32 {
                             1;
@@ -575,11 +579,11 @@ fn "core:prelude/string.wado/String::from_utf8<core:prelude/list.wado/List<u8>>"
                 } else if __sroa___match_11_payload_0 <u 240 {
                     let __sroa___local_13_discriminant: i32;
                     let __sroa___local_13_payload_0: u8;
-                    multivalue_bind [__sroa___local_13_discriminant, __sroa___local_13_payload_0] = "core:prelude/list.wado/ListIter<u8>^Iterator::next"(iter);
+                    multivalue_bind [__sroa___local_13_discriminant, __sroa___local_13_payload_0] = "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(iter);
                     if __sroa___local_13_discriminant == 0 {
                         let __sroa___local_14_discriminant: i32;
                         let __sroa___local_14_payload_0: u8;
-                        multivalue_bind [__sroa___local_14_discriminant, __sroa___local_14_payload_0] = "core:prelude/list.wado/ListIter<u8>^Iterator::next"(iter);
+                        multivalue_bind [__sroa___local_14_discriminant, __sroa___local_14_payload_0] = "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(iter);
                         if __sroa___local_14_discriminant == 0 {
                             if (if __sroa___match_11_payload_0 == 224 -> i32 {
                                 __sroa___local_13_payload_0 <u 160;
@@ -619,15 +623,15 @@ fn "core:prelude/string.wado/String::from_utf8<core:prelude/list.wado/List<u8>>"
                 } else if __sroa___match_11_payload_0 <u 245 {
                     let __sroa___local_15_discriminant: i32;
                     let __sroa___local_15_payload_0: u8;
-                    multivalue_bind [__sroa___local_15_discriminant, __sroa___local_15_payload_0] = "core:prelude/list.wado/ListIter<u8>^Iterator::next"(iter);
+                    multivalue_bind [__sroa___local_15_discriminant, __sroa___local_15_payload_0] = "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(iter);
                     if __sroa___local_15_discriminant == 0 {
                         let __sroa___local_16_discriminant: i32;
                         let __sroa___local_16_payload_0: u8;
-                        multivalue_bind [__sroa___local_16_discriminant, __sroa___local_16_payload_0] = "core:prelude/list.wado/ListIter<u8>^Iterator::next"(iter);
+                        multivalue_bind [__sroa___local_16_discriminant, __sroa___local_16_payload_0] = "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(iter);
                         if __sroa___local_16_discriminant == 0 {
                             let __sroa___local_17_discriminant: i32;
                             let __sroa___local_17_payload_0: u8;
-                            multivalue_bind [__sroa___local_17_discriminant, __sroa___local_17_payload_0] = "core:prelude/list.wado/ListIter<u8>^Iterator::next"(iter);
+                            multivalue_bind [__sroa___local_17_discriminant, __sroa___local_17_payload_0] = "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(iter);
                             if __sroa___local_17_discriminant == 0 {
                                 if (if __sroa___match_11_payload_0 == 240 -> i32 {
                                     __sroa___local_15_payload_0 <u 144;
@@ -752,9 +756,9 @@ fn "core:prelude/list.wado/List<u8>::grow_to"(self, min_capacity) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/list.wado/ListIter<u8>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(self) {
     let item: u8;
-    if self.index >= self.used {
+    if self.index >= self.end {
         return 1, 0;
     }
     item = builtin::array_get<u8>(self.repr, self.index);

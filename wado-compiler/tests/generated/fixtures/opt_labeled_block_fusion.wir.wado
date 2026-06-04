@@ -22,10 +22,10 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
 
 array Array<i32> (mut i32);  // TypeId(3)
 
-struct core:prelude/list.wado//ListIter<i32> {  // TypeId(4)
+struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(4)
     mut repr: ref Array<i32>,
-    mut used: i32,
     mut index: i32,
+    mut end: i32,
 }
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(5)
@@ -113,7 +113,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(41)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(42)
 
-type "functype//core:prelude/list.wado/ListIter<i32>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<i32>") -> [i32, i32];  // TypeId(43)
+type "functype//core:prelude/slice.wado/ArrayIter<i32>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(43)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -130,13 +130,17 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/opt_labeled_block_fusion.wado/first_positive"(arr) {
-    let __iter_1: ref "core:prelude/list.wado//ListIter<i32>";
-    __iter_1 = struct.new "core:prelude/list.wado//ListIter<i32>" { repr: arr.repr, used: arr.used, index: 0 };
+    let __iter_1: ref "core:prelude/slice.wado//ArrayIter<i32>";
+    let repr: ref Array<i32>;
+    let end: i32;
+    repr = arr.repr;
+    end = arr.used;
+    __iter_1 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: end };
     b0: block {
         l1: loop {
             let __sroa___match_3_discriminant: i32;
             let __sroa___match_3_payload_0: i32;
-            multivalue_bind [__sroa___match_3_discriminant, __sroa___match_3_payload_0] = "core:prelude/list.wado/ListIter<i32>^Iterator::next"(__iter_1);
+            multivalue_bind [__sroa___match_3_discriminant, __sroa___match_3_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_1);
             if __sroa___match_3_discriminant == 0 {
                 if __sroa___match_3_payload_0 > 0 {
                     return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: __sroa___match_3_payload_0 };
@@ -551,9 +555,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/list.wado/ListIter<i32>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self) {
     let item: i32;
-    if self.index >= self.used {
+    if self.index >= self.end {
         return 1, 0;
     }
     item = builtin::array_get<i32>(self.repr, self.index);

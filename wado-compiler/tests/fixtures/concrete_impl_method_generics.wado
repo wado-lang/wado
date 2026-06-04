@@ -1,16 +1,22 @@
 // A method with its own type parameters on a concrete-instantiation impl
-// (`impl List<u8> { fn pick<T>(...) }`). The method-level `T` must stay a free
+// (`impl Holder<u8> { fn pick<T>(...) }`). The method-level `T` must stay a free
 // parameter (monomorphized per call), not collide with the receiver's
 // concrete `u8`.
+//
+// `Holder<T>` is defined in a sibling module, so this also exercises a
+// cross-module concrete-instantiation impl — allowed because the type is
+// user-local (same package), unlike an inherent impl on a foreign type.
 
-impl List<u8> {
+use { Holder } from "./sub/concrete_impl_holder.wado";
+
+impl Holder<u8> {
     pub fn pick<T>(&self, x: T) -> T {
         return x;
     }
 }
 
 test {
-    let xs: List<u8> = [1, 2, 3] as List<u8>;
+    let xs: Holder<u8> = Holder::new(1);
     assert xs.pick::<i32>(42) == 42;
     assert xs.pick::<bool>(true) == true;
     // Inference (no turbofish) must also work.

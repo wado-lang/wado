@@ -187,6 +187,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
                     Some(type_args)
                 }
+                // The raw GC array `Array<T>` carries its element as a single
+                // type arg, so a trait method's associated types (e.g.
+                // `IntoIterator::Iter` / `Item` for `impl IntoIterator for
+                // Array<T>`) resolve against `[elem]` just like a generic
+                // container's.
+                ResolvedType::BuiltinArray(elem) => Some(vec![elem]),
                 _ => None,
             };
 
@@ -587,6 +593,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_offset = receiver_type_args.len() as u32;
                     subst_ctx = subst_ctx.with_impl_args(&receiver_type_args);
                 }
+                // The raw GC array `Array<T>` carries a single impl-level type
+                // arg (its element type), exactly like `Container<T>`. Without
+                // this, an inherent `impl Array<T>` method's return type keeps
+                // its `T` unsubstituted (e.g. `fn first(&self) -> T` or
+                // `fn slice(&self) -> Slice<T>`), so the caller sees a bare
+                // `T`. Stdlib impls dodge this only because they resolve via the
+                // loaded-module path in `lookup_method_info`, which substitutes
+                // during type resolution; a user-defined `impl Array<T>` is
+                // registered locally and needs the substitution here.
+                ResolvedType::BuiltinArray(elem) => {
+                    impl_offset = 1;
+                    subst_ctx = subst_ctx.with_impl_args(&[elem]);
+                }
                 _ => {}
             }
         } else {
@@ -597,6 +616,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if !type_args.is_empty() =>
                 {
                     impl_offset = type_args.len() as u32;
+                }
+                ResolvedType::BuiltinArray(_) => {
+                    impl_offset = 1;
                 }
                 _ => {}
             }

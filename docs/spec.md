@@ -2529,6 +2529,29 @@ The orphan rule prevents two packages from independently providing `impl Trait f
 
 The sequence rule (RFC 2451 style) allows `impl From<LocalError> for String` — even though `String` is foreign — because `LocalError` appears in the trait's type argument at position A1 with no uncovered type parameter before it. This makes it unnecessary to define a mirror `Into` trait just to work around stricter rules.
 
+#### Inherent Impls
+
+An **inherent impl** (`impl Type { … }`, with no trait) is subject to a simpler
+coherence rule: it may only be written in the **package that owns the type**.
+The self type's head constructor must be **local**.
+
+| Implementation           | Verdict       | Reason                                              |
+| ------------------------ | ------------- | --------------------------------------------------- |
+| `impl MyStruct { … }`    | **Allowed**   | `MyStruct` is local                                 |
+| `impl<T> MyBox<T> { … }` | **Allowed**   | `MyBox` (head) is local                             |
+| `impl i32 { … }`         | **Forbidden** | `i32` is foreign                                    |
+| `impl String { … }`      | **Forbidden** | `String` is foreign                                 |
+| `impl<T> Array<T> { … }` | **Forbidden** | `Array` is foreign                                  |
+| `impl List<u8> { … }`    | **Forbidden** | `List` (head) is foreign — even when fully concrete |
+
+This mirrors the trait-impl rationale: if two packages could each add inherent
+methods to the same foreign type, their methods would collide. To extend a
+foreign type from another package, define a **local trait** and implement it for
+that type (`impl MyExt for String`) — the orphan rule above permits this because
+the trait is local. The owning package itself (e.g. `core` for `String` /
+`Array<T>` / `List<T>`) is of course free to spread inherent impls across its own
+modules.
+
 ### Iterator Traits
 
 The prelude defines iterator traits for generic iteration over collections.

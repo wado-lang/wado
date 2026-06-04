@@ -424,6 +424,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Struct { name, .. }
             | ResolvedType::Enum { name, .. }
             | ResolvedType::Variant { name, .. } => (name.clone(), None),
+            // The raw GC array `Array<T>` carries its element as a single type
+            // arg, so trait impls (`impl IntoIterator for Array<T>`) resolve
+            // under the canonical name "Array".
+            ResolvedType::BuiltinArray(elem) => {
+                (TypeTable::ARRAY_TYPE_NAME.to_string(), Some(vec![*elem]))
+            }
             ResolvedType::GenericInstance {
                 name,
                 module_source,

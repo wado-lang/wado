@@ -58,10 +58,10 @@ struct wado-compiler/tests/fixtures/struct_2.wado//SDLine {  // TypeId(9)
 
 array Array<wado-compiler/tests/fixtures/struct_2.wado/SDPoint> (mut ref "wado-compiler/tests/fixtures/struct_2.wado//SDPoint");  // TypeId(10)
 
-struct core:prelude/list.wado//ListIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint> {  // TypeId(11)
+struct core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint> {  // TypeId(11)
     mut repr: ref "Array<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>",
-    mut used: i32,
     mut index: i32,
+    mut end: i32,
 }
 
 struct core:prelude//List<wado-compiler/tests/fixtures/struct_2.wado/SDPoint> {  // TypeId(12)
@@ -143,7 +143,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(49)
 
-type "functype//core:prelude/list.wado/ListIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>") -> ref null "wado-compiler/tests/fixtures/struct_2.wado//SDPoint";  // TypeId(50)
+type "functype//core:prelude/slice.wado/ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>") -> ref null "wado-compiler/tests/fixtures/struct_2.wado//SDPoint";  // TypeId(50)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(51)
 
@@ -199,10 +199,10 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_basic"() with Stdout {
 
 fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_for_of"() with Stdout {
     let __b: ref "core:prelude//List<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>";
-    let __iter_2: ref "core:prelude/list.wado//ListIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>";
+    let __iter_2: ref "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>";
     let x: i32;
     let y: i32;
-    let __iter_5: ref "core:prelude/list.wado//ListIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>";
+    let __iter_5: ref "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>";
     let a: i32;
     let b: i32;
     let __local_8: ref "core:prelude/string.wado//String";
@@ -211,35 +211,43 @@ fn "wado-compiler/tests/fixtures/struct_2.wado/destruct_for_of"() with Stdout {
     let __local_11: ref "core:prelude/format.wado//Formatter";
     let __match_12: ref null "wado-compiler/tests/fixtures/struct_2.wado//SDPoint";
     let __match_13: ref null "wado-compiler/tests/fixtures/struct_2.wado//SDPoint";
-    let __sroa_self_value_37: i32;
-    let __sroa_self_value_38: i32;
+    let repr_24: ref "Array<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>";
+    let end_26: i32;
+    let repr_34: ref "Array<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>";
+    let end_36: i32;
+    let __sroa_self_value_43: i32;
+    let __sroa_self_value_44: i32;
     __b = struct.new "core:prelude//List<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/struct_2.wado//SDPoint">(struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPoint" { x: 1, y: 2 }, struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPoint" { x: 3, y: 4 }, struct.new "wado-compiler/tests/fixtures/struct_2.wado//SDPoint" { x: 5, y: 6 }), used: 3 };
-    __iter_2 = struct.new "core:prelude/list.wado//ListIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>" { repr: __b.repr, used: 3, index: 0 };
+    repr_24 = __b.repr;
+    end_26 = 3;
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>" { repr: repr_24, index: 0, end: end_26 };
     b0: block {
         l1: loop {
-            __match_12 = "core:prelude/list.wado/ListIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>^Iterator::next"(__iter_2);
+            __match_12 = "core:prelude/slice.wado/ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>^Iterator::next"(__iter_2);
             if ref.is_null(__match_12) == 0 {
                 let __variant_payload_1: ref "wado-compiler/tests/fixtures/struct_2.wado//SDPoint";
                 __variant_payload_1 = ref.as_non_null(__match_12);
                 x = __variant_payload_1.x;
                 y = __variant_payload_1.y;
-                "core:cli/println"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; __sroa_self_value_37 = x + y; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_37, __local_9); __local_8);
+                "core:cli/println"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; __sroa_self_value_43 = x + y; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_43, __local_9); __local_8);
             } else {
                 break b0;
             }
             continue l1;
         };
     };
-    __iter_5 = struct.new "core:prelude/list.wado//ListIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>" { repr: __b.repr, used: 3, index: 0 };
+    repr_34 = __b.repr;
+    end_36 = 3;
+    __iter_5 = struct.new "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>" { repr: repr_34, index: 0, end: end_36 };
     b3: block {
         l4: loop {
-            __match_13 = "core:prelude/list.wado/ListIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>^Iterator::next"(__iter_5);
+            __match_13 = "core:prelude/slice.wado/ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>^Iterator::next"(__iter_5);
             if ref.is_null(__match_13) == 0 {
                 let __variant_payload_2: ref "wado-compiler/tests/fixtures/struct_2.wado//SDPoint";
                 __variant_payload_2 = ref.as_non_null(__match_13);
                 a = __variant_payload_2.x;
                 b = __variant_payload_2.y;
-                "core:cli/println"(__local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; __sroa_self_value_38 = a * b; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_38, __local_11); __local_10);
+                "core:cli/println"(__local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; __sroa_self_value_44 = a * b; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_44, __local_11); __local_10);
             } else {
                 break b3;
             }
@@ -909,9 +917,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/list.wado/ListIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<wado-compiler/tests/fixtures/struct_2.wado/SDPoint>^Iterator::next"(self) {
     let item: ref "wado-compiler/tests/fixtures/struct_2.wado//SDPoint";
-    if self.index >= self.used {
+    if self.index >= self.end {
         return ref.null none;
     }
     item = builtin::array_get<ref "wado-compiler/tests/fixtures/struct_2.wado//SDPoint">(self.repr, self.index);

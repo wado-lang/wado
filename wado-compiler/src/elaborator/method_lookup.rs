@@ -566,6 +566,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => return None,
         };
 
+        // A receiver type is "foreign" when it cannot be a user-local struct:
+        // a module-less builtin (primitive / unit / `Array<T>`) or a type owned
+        // by a non-user (stdlib / builtin) module such as `String`. Inherent
+        // impls on these found in the current module must record this module as
+        // their template's home (see the `impl_module` note in Path A below).
+        let receiver_is_foreign = match &struct_module_source {
+            None => true,
+            Some(ms) => !super::trait_env::is_user_local(ms),
+        };
+
         let mangled_name = MethodName::format_local(&struct_name, None, method_name);
         if let Some(&return_type) = self.sem.decls.function_return_types.get(&mangled_name) {
             // For locally registered methods, find self_kind and param_types from the AST
@@ -591,14 +601,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     cm_name: None,
                     is_ref_impl: false,
                     method_type_param_ids: vec![],
-                    // Only a concrete-instantiation method binds its module
-                    // here. For an ordinary method, `find_local_method_info`
-                    // matches by struct *name* in the current module, which may
-                    // be a different type than the receiver's (two modules can
-                    // declare `Widget`); leaving `impl_module` unset lets the
-                    // call fall back to the receiver type's module, preserving
+                    // Where the monomorphizer should look for this method's
+                    // template. `find_local_method_info` only matches impls in
+                    // the *current* module, so the template always lives here —
+                    // but we usually leave `impl_module` unset so that for a
+                    // user struct (two modules can declare `Widget`) the call
+                    // falls back to the receiver type's own module, preserving
                     // correct cross-module dispatch.
-                    impl_module: from_concrete_impl.then(|| self.current_module_source.clone()),
+                    //
+                    // That fallback is wrong for an inherent impl on a *foreign*
+                    // type — a primitive / `Array<T>` (module-less) or a stdlib
+                    // type like `String` — whose canonical module is the prelude,
+                    // not this one. There the template is genuinely local, so we
+                    // must record the current module; otherwise monomorphization
+                    // looks in the prelude, fails to find the instantiation, and
+                    // the call ICEs as an unresolved method. A foreign receiver
+                    // type cannot collide with a user struct, so this is safe.
+                    impl_module: if from_concrete_impl || receiver_is_foreign {
+                        Some(self.current_module_source.clone())
+                    } else {
+                        None
+                    },
                     from_concrete_impl,
                     param_defaults,
                     param_names,
@@ -2032,6 +2055,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         | ResolvedType::Flags { name, .. }
                         | ResolvedType::Variant { name, .. } => name.clone(),
                         ResolvedType::Primitive(p) => p.as_str().to_string(),
+                        // The raw GC array's outer constructor is "Array", so a
+                        // `&Array<T>` ref impl (`impl Trait for &Array<T>`)
+                        // matches a `&Array<_>` receiver.
+                        ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
                         _ => String::new(),
                     };
                     if impl_inner != receiver_outer {

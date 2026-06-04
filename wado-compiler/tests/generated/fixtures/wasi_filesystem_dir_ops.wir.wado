@@ -106,10 +106,10 @@ array Array<wasi:filesystem/types.wado/DirectoryEntry> (mut ref "wasi:filesystem
 
 array Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>> (mut ref "tuple//[Descriptor, String]");  // TypeId(14)
 
-struct core:prelude/list.wado//ListIter<wasi:filesystem/types.wado/DirectoryEntry> {  // TypeId(15)
+struct core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry> {  // TypeId(15)
     mut repr: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>",
-    mut used: i32,
     mut index: i32,
+    mut end: i32,
 }
 
 struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>> {  // TypeId(16)
@@ -275,7 +275,7 @@ type "functype//core:prelude/list.wado/List<wasi:filesystem/types.wado/Directory
 
 type "functype//core:prelude/list.wado/List<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>::push" = fn(ref "core:prelude//List<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>", ref "tuple//[Descriptor, String]");  // TypeId(80)
 
-type "functype//core:prelude/list.wado/ListIter<wasi:filesystem/types.wado/DirectoryEntry>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<wasi:filesystem/types.wado/DirectoryEntry>") -> ref null "wasi:filesystem/types.wado//DirectoryEntry";  // TypeId(81)
+type "functype//core:prelude/slice.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>") -> ref null "wasi:filesystem/types.wado//DirectoryEntry";  // TypeId(81)
 
 type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>") -> ref null "wasi:filesystem/types.wado//ErrorCode";  // TypeId(82)
 
@@ -346,7 +346,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     let found_newdir: bool;
     let entry_count: i32;
     let entries: ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>";
-    let __iter_14: ref "core:prelude/list.wado//ListIter<wasi:filesystem/types.wado/DirectoryEntry>";
+    let __iter_14: ref "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>";
     let entry: ref "wasi:filesystem/types.wado//DirectoryEntry";
     let rmdir_result: ref null "wasi:filesystem/types.wado//ErrorCode";
     let rmdir_again: ref null "wasi:filesystem/types.wado//ErrorCode";
@@ -358,6 +358,8 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     let __drop_v_26: i32;
     let __pattern_temp_0: ref "tuple//[Stream<wasi:filesystem/types.wado/DirectoryEntry>, Future<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>]";
     let __match_29: ref null "wasi:filesystem/types.wado//DirectoryEntry";
+    let repr: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>";
+    let end: i32;
     dirs = "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_binding__Preopens_get_directories"();
     if dirs.used == 0 {
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
@@ -426,10 +428,12 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/run"() with Stdout
     found_newdir = 0;
     entry_count = 0;
     entries = "wado-compiler/tests/fixtures/wasi_filesystem_dir_ops.wado/__cm_stream_read_DirectoryEntry"(dir_stream, 100);
-    __iter_14 = struct.new "core:prelude/list.wado//ListIter<wasi:filesystem/types.wado/DirectoryEntry>" { repr: entries.repr, used: entries.used, index: 0 };
+    repr = entries.repr;
+    end = entries.used;
+    __iter_14 = struct.new "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>" { repr: repr, index: 0, end: end };
     b10: block {
         l11: loop {
-            __match_29 = "core:prelude/list.wado/ListIter<wasi:filesystem/types.wado/DirectoryEntry>^Iterator::next"(__iter_14);
+            __match_29 = "core:prelude/slice.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>^Iterator::next"(__iter_14);
             if ref.is_null(__match_29) == 0 {
                 entry = ref.as_non_null(__match_29);
                 entry_count = entry_count + 1;
@@ -1433,9 +1437,9 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<wasi:filesystem/ty
     self.used = used + 1;
 }
 
-fn "core:prelude/list.wado/ListIter<wasi:filesystem/types.wado/DirectoryEntry>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>^Iterator::next"(self) {
     let item: ref "wasi:filesystem/types.wado//DirectoryEntry";
-    if self.index >= self.used {
+    if self.index >= self.end {
         return ref.null none;
     }
     item = builtin::array_get<ref "wasi:filesystem/types.wado//DirectoryEntry">(self.repr, self.index);

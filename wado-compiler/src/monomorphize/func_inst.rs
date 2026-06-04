@@ -2466,9 +2466,27 @@ impl Monomorphizer {
             // the producer in `synthesis::traits::resolve_impl_module_via_env`
             // uses the same query, so the post-substitution `module_source`
             // matches what a freshly-produced FunctionRef would have.
+            // Hint the impl-module query with the receiver's own inner-type
+            // module. Without a hint, a post-substitution struct name that
+            // falls back to a shared key — notably ref impls, which all key
+            // under "&" / "&mut" — would resolve to the *first* registered
+            // module. That picks the wrong container when several types share
+            // the key (`impl IntoIterator for &List<T>` in list.wado and
+            // `impl IntoIterator for &Array<T>` in array.wado both register
+            // under "&"), routing a `&List<i32>` call to `&Array`'s template.
+            // The receiver's module disambiguates them.
+            let receiver_hint = {
+                let mut inner = receiver_type_id;
+                while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
+                    type_table.get(inner).clone()
+                {
+                    inner = t;
+                }
+                super::module_source_for_trait_impl(type_table, inner)
+            };
             let resolved_module = self
                 .functions
-                .generic_or_concrete_impl_module(&new_info, None)
+                .generic_or_concrete_impl_module(&new_info, receiver_hint.as_ref())
                 .unwrap_or(module_source);
             *method_func = FunctionRef {
                 module_source: resolved_module,

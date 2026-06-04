@@ -31,10 +31,10 @@ array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>> 
 
 array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(6)
 
-struct core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>> {  // TypeId(7)
+struct core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>> {  // TypeId(7)
     mut repr: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>",
-    mut used: i32,
     mut index: i32,
+    mut end: i32,
 }
 
 struct core:collections//TreeMap<core:prelude/string.wado/String,i32> {  // TypeId(8)
@@ -59,10 +59,10 @@ struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // Type
     mut right: ref "core:prelude/types.wado//Option<i32>",
 }
 
-struct core:prelude/list.wado//ListIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>> {  // TypeId(11)
+struct core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>> {  // TypeId(11)
     mut repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>",
-    mut used: i32,
     mut index: i32,
+    mut end: i32,
 }
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(12)
@@ -162,13 +162,13 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(52)
 
-type "functype//core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>") -> ref null "tuple//[String, i32]";  // TypeId(53)
+type "functype//core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>") -> ref null "tuple//[String, i32]";  // TypeId(53)
 
 type "functype//core:collections/TreeMap<core:prelude/string.wado/String,i32>::entries" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>") -> ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";  // TypeId(54)
 
 type "functype//core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::push" = fn(ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>", ref "tuple//[String, i32]");  // TypeId(55)
 
-type "functype//core:prelude/list.wado/ListIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>^Iterator::next" = fn(ref "core:prelude/list.wado//ListIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>") -> ref null "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>";  // TypeId(56)
+type "functype//core:prelude/slice.wado/ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>") -> ref null "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>";  // TypeId(56)
 
 type "functype//core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>", ref "core:prelude/string.wado//String", i32);  // TypeId(57)
 
@@ -212,16 +212,20 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/treemap_literal_fn_arg.wado/sum_values"(m) {
     let total: i32;
-    let __iter_2: ref "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
+    let __iter_2: ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
     let entry: ref "tuple//[String, i32]";
     let __match_4: ref null "tuple//[String, i32]";
     let self: ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
+    let repr: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
+    let end: i32;
     total = 0;
     self = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::entries"(m);
-    __iter_2 = struct.new "core:prelude/list.wado//ListIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>" { repr: self.repr, used: self.used, index: 0 };
+    repr = self.repr;
+    end = self.used;
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>" { repr: repr, index: 0, end: end };
     b0: block {
         l1: loop {
-            __match_4 = "core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next"(__iter_2);
+            __match_4 = "core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next"(__iter_2);
             if ref.is_null(__match_4) == 0 {
                 entry = ref.as_non_null(__match_4);
                 total = total + entry.1;
@@ -672,9 +676,9 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
     }
 }
 
-fn "core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next"(self) {
     let item: ref "tuple//[String, i32]";
-    if self.index >= self.used {
+    if self.index >= self.end {
         return ref.null none;
     }
     item = builtin::array_get<ref "tuple//[String, i32]">(self.repr, self.index);
@@ -684,14 +688,18 @@ fn "core:prelude/list.wado/ListIter<core:prelude/types.wado/Tuple<core:prelude/s
 
 fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>::entries"(self) {
     let __b: ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
-    let __iter_3: ref "core:prelude/list.wado//ListIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>";
+    let __iter_3: ref "core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>";
     let entry: ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>";
     let __match_5: ref null "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>";
+    let repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>";
+    let end: i32;
     __b = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>" { repr: builtin::array_new<ref "tuple//[String, i32]">(0), used: 0 };
-    __iter_3 = struct.new "core:prelude/list.wado//ListIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>" { repr: self.entries.repr, used: self.entries.used, index: 0 };
+    repr = self.entries.repr;
+    end = self.entries.used;
+    __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>" { repr: repr, index: 0, end: end };
     b59: block {
         l60: loop {
-            __match_5 = "core:prelude/list.wado/ListIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>^Iterator::next"(__iter_3);
+            __match_5 = "core:prelude/slice.wado/ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>^Iterator::next"(__iter_3);
             if ref.is_null(__match_5) == 0 {
                 entry = ref.as_non_null(__match_5);
                 if entry.deleted == 0 {
@@ -716,9 +724,9 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/strin
     self.used = used + 1;
 }
 
-fn "core:prelude/list.wado/ListIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>^Iterator::next"(self) {
+fn "core:prelude/slice.wado/ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>^Iterator::next"(self) {
     let item: ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>";
-    if self.index >= self.used {
+    if self.index >= self.end {
         return ref.null none;
     }
     item = builtin::array_get<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>">(self.repr, self.index);

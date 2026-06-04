@@ -252,6 +252,12 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// Coherence violation: an inherent `impl Type { ... }` on a foreign type
+    /// (one defined outside this package — a primitive, `Array<T>`, `String`,
+    /// or any other stdlib type). Inherent impls may only extend types owned by
+    /// the current package; use a trait for cross-package extension.
+    InherentImplOnForeignType { self_type_name: String, span: Span },
+
     /// Invalid stores declaration
     InvalidStores { message: String, span: Span },
 
@@ -610,6 +616,16 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, trait_name, self_type_name
                 )
             }
+            TypeError::InherentImplOnForeignType {
+                self_type_name,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: coherence violation: cannot define an inherent `impl` on foreign type `{}` (defined in another package); use a trait to extend it",
+                    span.line, span.column, self_type_name
+                )
+            }
             TypeError::InvalidStores { message, span } => {
                 write!(f, "{}:{}: {}", span.line, span.column, message)
             }
@@ -954,6 +970,16 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 Code::OrphanRule,
                 format!(
                     "orphan rule violation: cannot implement foreign trait `{trait_name}` for foreign type `{self_type_name}`"
+                ),
+                *span,
+            ),
+            TypeError::InherentImplOnForeignType {
+                self_type_name,
+                span,
+            } => (
+                Code::OrphanRule,
+                format!(
+                    "coherence violation: cannot define an inherent `impl` on foreign type `{self_type_name}` (defined in another package); use a trait to extend it"
                 ),
                 *span,
             ),

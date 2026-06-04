@@ -1,18 +1,22 @@
 // A concrete impl whose instantiation argument is itself generic
-// (`impl List<Box<u8>>`). Dispatch must match the exact nested instantiation.
+// (`impl Holder<Box<u8>>`). Dispatch must match the exact nested instantiation.
+// `Holder<T>` is a user-local type from a sibling module, so the concrete impl
+// is allowed (same package) and exercises cross-module dispatch.
+
+use { Holder } from "./sub/concrete_impl_holder.wado";
 
 struct Box<T> {
     v: T,
 }
 
-impl List<Box<u8>> {
+impl Holder<Box<u8>> {
     pub fn tag(&self) -> i32 {
         return 7;
     }
 }
 
 test {
-    let xs: List<Box<u8>> = [];
+    let xs: Holder<Box<u8>> = Holder::new(Box { v: 0 as u8 });
     assert xs.tag() == 7;
 }
 
