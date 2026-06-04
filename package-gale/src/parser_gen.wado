@@ -1747,6 +1747,30 @@ fn gen_trace_helpers(w: &mut CodeWriter) {
     w.dedent();
     w.line(&"}");
     w.blank();
+    // Decision-point helpers: which alternative a multi-alt / tournament
+    // rule committed to, the per-alt scan lengths a longest-match
+    // tournament weighed, and the outcome of each speculative try.
+    w.line(&"fn trace_pick(p: &Parser, rule: &String, alt: i32) {");
+    w.indent();
+    w.line(&"if alt < 0 { log_stderr(`{trace_pad(p.trace_depth)}  pick {*rule}: no alt matched`); }");
+    w.line(&"else { log_stderr(`{trace_pad(p.trace_depth)}  pick {*rule} alt#{alt}`); }");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+    w.line(&"fn trace_scan_alt(p: &Parser, rule: &String, alt: i32, end: i32) {");
+    w.indent();
+    w.line(&"let r = if end < 0 { String::from(\"fail\") } else { `-> @{end}` };");
+    w.line(&"log_stderr(`{trace_pad(p.trace_depth)}  scan {*rule} alt#{alt}: {r}`);");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+    w.line(&"fn trace_try(p: &Parser, rule: &String, alt: i32, ok: bool) {");
+    w.indent();
+    w.line(&"let r = if ok { String::from(\"ok\") } else { String::from(\"rewind\") };");
+    w.line(&"log_stderr(`{trace_pad(p.trace_depth)}  try {*rule} alt#{alt}: {r}`);");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
 }
 
 fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &String, type_name: &String, rule_display: &String, takes_min_prec: bool, trace: bool) {
@@ -2141,6 +2165,9 @@ fn gen_multi_alt_body(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         }
 
         let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
+        if ctx.is_trace() {
+            w.line(&`trace_pick(p, &{escape_string(&rule.name)}, {alt_idx});`);
+        }
         gen_alt_body(
             w,
             type_name,
@@ -5119,12 +5146,12 @@ fn gen_lr_suffix_dispatch(w: &mut CodeWriter, rule: &ParserRule, type_name: &Str
     w.end();  // loop
 }
 
-fn gen_prediction_code(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &List<Alternative>, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext) {
+fn gen_prediction_code(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &List<Alternative>, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, rule_display: &String) {
     let mut nc: List<[String, i32]> = [];
-    gen_prediction_code_inner(w, node, fn_name, alts, lowered_rule, type_name, ctx, 0, &mut nc);
+    gen_prediction_code_inner(w, node, fn_name, alts, lowered_rule, type_name, ctx, 0, &mut nc, rule_display);
 }
 
-fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &List<Alternative>, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, skip: i32, name_counts: &mut List<[String, i32]>) {
+fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &List<Alternative>, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, skip: i32, name_counts: &mut List<[String, i32]>, rule_display: &String) {
     if let Leaf(idx) = node {
         if skip == 0 {
             w.line(&`return {*fn_name}_bt_{idx}(p);`);
@@ -5154,11 +5181,11 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
         let elem_matches = elements_match(&c.element, &alts[0].elements[skip]);
         if elem_matches {
             gen_element(w, &c.element, ctx, name_counts);
-            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, skip + 1, name_counts);
+            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, skip + 1, name_counts, rule_display);
         } else {
             // Element mismatch — prediction consumed a later element.
             // Don't emit the consume or increment skip; treat as skip=0 at the Leaf.
-            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, 0, name_counts);
+            gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, 0, name_counts, rule_display);
         }
         return;
     }
@@ -5206,6 +5233,13 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                         let idx = sorted_indices[i];
                         w.line(&`let _sd_p_{idx} = {*fn_name}_scan_{idx}(_sd_tokens, _sd_pos);`);
                     }
+                    if ctx.is_trace() {
+                        let rlit = escape_string(rule_display);
+                        for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                            let idx = sorted_indices[i];
+                            w.line(&`trace_scan_alt(p, &{rlit}, {idx}, _sd_p_{idx});`);
+                        }
+                    }
                     w.line(&"let mut _sd_best_i: i32 = -1;");
                     w.line(&"let mut _sd_best_p: i32 = -1;");
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
@@ -5214,6 +5248,9 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                         w.line(&`_sd_best_p = _sd_p_{idx};`);
                         w.line(&`_sd_best_i = {idx};`);
                         w.end();
+                    }
+                    if ctx.is_trace() {
+                        w.line(&`trace_pick(p, &{escape_string(rule_display)}, _sd_best_i);`);
                     }
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
                         let idx = sorted_indices[i];
@@ -5234,6 +5271,9 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                         let idx = sorted_indices[i];
                         let is_last = i == sorted_indices.len() - 1;
                         if is_last {
+                            if ctx.is_trace() {
+                                w.line(&`trace_pick(p, &{escape_string(rule_display)}, {idx});`);
+                            }
                             w.line(&`return {*fn_name}_bt_{idx}(p);`);
                         } else {
                             let has_scan = alt_has_scan(&alts[idx].elements, ctx);
@@ -5241,6 +5281,9 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                             if is_full {
                                 // Full scan: success guarantees parse success.
                                 w.begin(&`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
+                                if ctx.is_trace() {
+                                    w.line(&`trace_pick(p, &{escape_string(rule_display)}, {idx});`);
+                                }
                                 w.line(&`return {*fn_name}_bt_{idx}(p);`);
                                 w.end();
                             } else if has_scan {
@@ -5248,8 +5291,14 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                                 w.begin(&`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
                                 w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
                                 w.begin(&`if let Err(_) = r_{idx}`);
+                                if ctx.is_trace() {
+                                    w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, false);`);
+                                }
                                 w.line(&"p.pos = saved;");
                                 w.else_begin(&"else");
+                                if ctx.is_trace() {
+                                    w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, true);`);
+                                }
                                 w.line(&`return r_{idx};`);
                                 w.end();
                                 w.end();
@@ -5257,8 +5306,14 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                                 // No scan: save-and-rewind speculative parse.
                                 w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
                                 w.begin(&`if let Err(_) = r_{idx}`);
+                                if ctx.is_trace() {
+                                    w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, false);`);
+                                }
                                 w.line(&"p.pos = saved;");
                                 w.else_begin(&"else");
+                                if ctx.is_trace() {
+                                    w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, true);`);
+                                }
                                 w.line(&`return r_{idx};`);
                                 w.end();
                             }
@@ -5272,12 +5327,21 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                     let idx = sorted_indices[i];
                     let is_last = i == sorted_indices.len() - 1;
                     if is_last {
+                        if ctx.is_trace() {
+                            w.line(&`trace_pick(p, &{escape_string(rule_display)}, {idx});`);
+                        }
                         w.line(&`return {*fn_name}_bt_{idx}(p);`);
                     } else {
                         w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
                         w.begin(&`if let Err(_) = r_{idx}`);
+                        if ctx.is_trace() {
+                            w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, false);`);
+                        }
                         w.line(&"p.pos = saved;");
                         w.else_begin(&"else");
+                        if ctx.is_trace() {
+                            w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, true);`);
+                        }
                         w.line(&`return r_{idx};`);
                         w.end();
                     }
@@ -5310,6 +5374,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                 ctx,
                 skip,
                 name_counts,
+                rule_display,
             );
         }
         w.end();
@@ -5360,6 +5425,9 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
             let alt_idx = non_lr_indices[group[0]];
             let alt = &rule.alternatives[alt_idx];
             let body = rule_alt_body(lowered_rule, alt_idx).unwrap();
+            if ctx.is_trace() {
+                w.line(&`trace_pick(p, &{escape_string(&rule.name)}, {alt_idx});`);
+            }
             gen_alt_body(
                 w,
                 type_name,
@@ -5382,7 +5450,7 @@ fn gen_multi_alt_body_bt(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &R
                 pred_elements.push(rule.alternatives[real_idx].elements);
             }
             let tree = build_prediction(&pred_indices, &pred_elements, 5, ctx);
-            gen_prediction_code(w, &tree, fn_name, &rule.alternatives, lowered_rule, type_name, ctx);
+            gen_prediction_code(w, &tree, fn_name, &rule.alternatives, lowered_rule, type_name, ctx, &rule.name);
         }
 
         w.end();

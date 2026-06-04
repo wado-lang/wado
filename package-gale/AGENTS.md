@@ -115,11 +115,19 @@ wado run package-gale -- dump path/to/Grammar.g4
 
 `gale dump` is static (it shows the prediction decisions the emitter
 *would* make). To see what the generated parser *actually does* on a
-specific input — and where the recursive descent bails — turn on the
-`trace` option. It instruments every rule-entry wrapper to log an
-indented `enter` / `ok` / `FAIL` line to stderr (via `log_stderr`), so
-the innermost `FAIL` pinpoints the real culprit instead of the shallow
-"expected `<closer>`" error the caller surfaces.
+specific input — where the recursive descent bails, and which
+alternative each multi-alt decision committed to — turn on the `trace`
+option. It logs an indented event stream to stderr (via `log_stderr`):
+
+- **`enter` / `ok` / `FAIL <rule>`** — one frame per parser-rule call.
+  The innermost `FAIL` pinpoints the real culprit instead of the shallow
+  "expected `<closer>`" error the caller surfaces.
+- **`scan <rule> alt#N: -> @end` / `fail`** — per-alternative scan length
+  the longest-match tournament weighed at a decision point.
+- **`pick <rule> alt#N`** — the alternative the tournament / direct
+  lookahead dispatch committed to (`no alt matched` when none scanned).
+- **`try <rule> alt#N: ok` / `rewind`** — outcome of a speculative
+  save-and-rewind attempt (the hybrid / fallback dispatch paths).
 
 The instrumentation is strictly opt-in: with `trace` off (the default)
 the generated parser is byte-for-byte unchanged. Enable it in a driver /
@@ -131,23 +139,31 @@ use g from "./grammars/Grammar.g4"
                         options: { highlight: false, trace: true } } };
 ```
 
-or from the CLI (`gale gen --trace Grammar.g4`). Example output for a
-malformed `{ let x = ; }` against a `block : '{' item* '}'` grammar:
+or from the CLI (`gale gen --trace Grammar.g4`). Example output for
+`X X Y` against `a : X a Y? | X` (a shared-prefix tournament):
 
 ```
-enter prog @0 '{'
-  enter item @0 '{'
-    enter block @0 '{'
-      enter item @1 'let'
-      FAIL item: expected ID, got ";"   <- the real bail point
-    FAIL block: expected TK_LIT_RBRACE, got "let"
-  FAIL item: expected TK_LIT_RBRACE, got "let"
-FAIL prog: expected Eof, got "{"
+enter r @0 'X'
+  enter a @0 'X'
+      scan a alt#0: -> @2    <- 'X a Y?' scans furthest, so it wins
+      scan a alt#1: -> @1
+      pick a alt#0
+    enter a @1 'X'
+        scan a alt#0: fail
+        scan a alt#1: -> @2
+        pick a alt#1
+    ok a
+  ok a
+  enter b @2 'Y'
+  ok b
+ok r
 ```
 
-Trace is rule-level (one frame per parser-rule call). The scan-side
-longest-match tournament inside a rule is not yet traced; add that when a
-concrete ambiguity needs it.
+The `alt#N` indices match the per-rule alternative numbering shown by
+`gale dump`, so a wrong `pick` cross-references straight back to the
+prediction report. Group-internal `(a | b)` dispatch nested inside a
+single alternative is not separately traced; promote the group to its
+own rule if you need that granularity.
 
 ## Running Tests
 
