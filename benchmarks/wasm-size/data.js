@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780607652165,
+  "lastUpdate": 1780613349877,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29801,6 +29801,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/310e55aeb00cae2106d122720655e3ad077b8bb4"
         },
         "date": 1780607651631,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9659,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17191,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460509,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f493160e2f99a0dd4f51b9bd9801912779be7ed1",
+          "message": "Merge pull request #1292 from wado-lang/claude/agents-md-review-VsBsD\n\ndocs: clarify the development test cycle and tidy AGENTS.md",
+          "timestamp": "2026-06-05T07:40:34+09:00",
+          "tree_id": "24fe1989f3ac2a2cde76d838e3630cfaefa5c2ab",
+          "url": "https://github.com/wado-lang/wado/commit/f493160e2f99a0dd4f51b9bd9801912779be7ed1"
+        },
+        "date": 1780613349357,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
