@@ -2773,14 +2773,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        TirExpr::new(
-            TirExprKind::Cast {
-                expr: Box::new(expr),
-                target_type,
-            },
-            target_type,
-            cast.span,
-        )
+        // Stage 7-B: reify rebuilds the `Cast` from `cast.expr` + the target
+        // type recorded in `expression_types[cast.id]`; the char-cast
+        // diagnostics above are the record-only work.
+        placeholder(target_type, cast.span)
     }
 
     /// Resolve a struct literal
