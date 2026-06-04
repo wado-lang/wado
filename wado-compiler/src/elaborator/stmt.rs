@@ -27,6 +27,36 @@ enum RefBinding {
     MutRef,
 }
 
+/// Build the `(binding_type, value)` for one unrolled tuple-for-of element.
+///
+/// By value (`by_ref == false`), the element is the field access itself,
+/// typed `T_k`. By reference (`for v of &tuple`), the field access is wrapped
+/// in `&` so the binding is `&T_k` — a reference to a fresh copy of the
+/// element, the same semantics as `for v of &list` (refiter). Shared by the
+/// annotate (`resolve_tuple_for_of`) and reify (`reify_tuple_for_of`) paths.
+pub(super) fn tuple_element_binding(
+    type_table: &std::cell::RefCell<TypeTable>,
+    field_access: TirExpr,
+    elem_type: TypeId,
+    by_ref: bool,
+    span: Span,
+) -> (TypeId, TirExpr) {
+    if by_ref {
+        let ref_type = type_table.borrow_mut().make_ref(elem_type);
+        let value = TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref,
+                expr: Box::new(field_access),
+            },
+            ref_type,
+            span,
+        );
+        (ref_type, value)
+    } else {
+        (elem_type, field_access)
+    }
+}
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_block(
         &mut self,
@@ -2139,34 +2169,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let iterable = self.resolve_expr(actual_iterable, ctx, None);
         let iterable_type_id = iterable.type_id;
 
-        // Check if it's a tuple type
+        // Check if it's a tuple type — looking through a single `&`/`&mut`
+        // wrapper. A reference iterable (`&[..T]`) iterates element-by-ref
+        // (`&T_k`), mirroring `for v of &list`.
         let tuple_info = {
             let type_table = self.tysys.type_table.borrow();
-            if let Some(elems) = type_table.as_tuple(iterable_type_id) {
-                let has_type_pack = elems
-                    .iter()
-                    .any(|e| matches!(type_table.get(*e), ResolvedType::TypePack { .. }));
-                Some((elems, has_type_pack))
-            } else {
-                None
-            }
+            type_table
+                .as_tuple_through_ref(iterable_type_id)
+                .map(|(elems, by_ref)| {
+                    let has_type_pack = elems
+                        .iter()
+                        .any(|e| matches!(type_table.get(*e), ResolvedType::TypePack { .. }));
+                    (elems, has_type_pack, by_ref)
+                })
         };
         // TupleZip with nested TypePacks: treat as variadic so expansion
         // is deferred to monomorphization when concrete types are known.
         let is_zip_variadic = matches!(&iterable.kind, TirExprKind::TupleZip { .. })
             && self.type_contains_pack(iterable_type_id);
 
-        let result = if let Some((elems, has_type_pack)) = tuple_info {
+        let result = if let Some((elems, has_type_pack, by_ref)) = tuple_info {
             if has_type_pack || is_zip_variadic {
                 assert!(
                     !is_enumerate,
                     "variadic for-of with .enumerate() is not yet supported"
                 );
                 self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfVariadic);
-                self.resolve_variadic_for_of(for_of, iterable, ctx)
+                self.resolve_variadic_for_of(for_of, iterable, by_ref, ctx)
             } else {
                 self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfTuple);
-                self.resolve_tuple_for_of(for_of, iterable, &elems, is_enumerate, ctx)
+                self.resolve_tuple_for_of(for_of, iterable, &elems, is_enumerate, by_ref, ctx)
             }
         } else {
             // Check that the iterable type implements IntoIterator
@@ -2225,6 +2257,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         for_of: &ForOfStmt,
         iterable: TirExpr,
+        by_ref: bool,
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
         let span = for_of.span;
@@ -2246,8 +2279,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // For direct TypePack: iterable is Tuple([TypePack{T}]), binding type is TypePack.
         // For TupleZip: iterable is Tuple([Tuple([TypePack, TypePack])]), binding type is the inner tuple.
         let binding_type = {
-            let type_table = self.tysys.type_table.borrow();
-            if let Some(elems) = type_table.as_tuple(iterable.type_id) {
+            let inner = {
+                let type_table = self.tysys.type_table.borrow();
+                let (elems, _) = type_table
+                    .as_tuple_through_ref(iterable.type_id)
+                    .unwrap_or_else(|| panic!("variadic for-of requires tuple iterable"));
                 // Prefer a direct TypePack element
                 if let Some(tp) = elems
                     .iter()
@@ -2258,8 +2294,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // For TupleZip: use the first element type (all elements have the same shape)
                     elems[0]
                 }
+            };
+            // By reference (`for v of &[..T]`), the loop variable is `&T_k`,
+            // resolved here as `&TypePack`; expansion wraps each element in `&`.
+            if by_ref {
+                self.tysys.type_table.borrow_mut().make_ref(inner)
             } else {
-                panic!("variadic for-of requires tuple iterable")
+                inner
             }
         };
 
@@ -2354,6 +2395,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 is_mut,
                 body,
                 unique_id,
+                by_ref,
             },
             span,
         )]
@@ -2365,6 +2407,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         iterable: TirExpr,
         elems: &[TypeId],
         is_enumerate: bool,
+        by_ref: bool,
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
         let span = for_of.span;
@@ -2436,6 +2479,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             );
 
+            // When iterating through a reference, bind each element by
+            // reference (`&T_k`) — a reference to a fresh copy of the field,
+            // matching `for v of &list` refiter semantics.
+            let (bind_elem_type, bind_value) = tuple_element_binding(
+                &self.tysys.type_table,
+                field_access,
+                elem_type,
+                by_ref,
+                span,
+            );
+
             let mut block_stmts = Vec::new();
 
             if is_enumerate {
@@ -2454,10 +2508,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .type_table
                     .borrow_mut()
-                    .make_tuple(vec![i32_type, elem_type]);
+                    .make_tuple(vec![i32_type, bind_elem_type]);
                 let enum_tuple = TirExpr::new(
                     TirExprKind::TupleLiteral {
-                        elements: vec![index_literal, field_access],
+                        elements: vec![index_literal, bind_value],
                     },
                     enum_tuple_type,
                     span,
@@ -2494,16 +2548,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } => {
                         let is_mut =
                             for_of.is_mut || matches!(&for_of.binding, Pattern::MutIdent { .. });
-                        let local_index = ctx.add_local(name.clone(), elem_type, is_mut, Some(*id));
-                        self.record_local_symbol(*id, name, *name_span, is_mut, elem_type);
+                        let local_index =
+                            ctx.add_local(name.clone(), bind_elem_type, is_mut, Some(*id));
+                        self.record_local_symbol(*id, name, *name_span, is_mut, bind_elem_type);
                         block_stmts.push(TirStmt::new(
                             TirStmtKind::Let {
                                 name: name.clone(),
                                 local_index,
                                 is_mut,
                                 is_reactive: false,
-                                type_id: elem_type,
-                                value: field_access,
+                                type_id: bind_elem_type,
+                                value: bind_value,
                                 skip_value_copy: false,
                             },
                             span,
@@ -2512,7 +2567,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Pattern::Tuple(_, _) | Pattern::Struct { .. } => {
                         let tir_pattern = self.resolve_let_pattern(
                             &for_of.binding,
-                            elem_type,
+                            bind_elem_type,
                             for_of.is_mut,
                             span,
                             ctx,
@@ -2521,14 +2576,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             TirStmtKind::LetDestructure {
                                 pattern: tir_pattern,
                                 is_mut: for_of.is_mut,
-                                value: field_access,
+                                value: bind_value,
                             },
                             span,
                         ));
                     }
                     Pattern::Wildcard => {
                         // Discard the element
-                        block_stmts.push(TirStmt::new(TirStmtKind::Expr(field_access), span));
+                        block_stmts.push(TirStmt::new(TirStmtKind::Expr(bind_value), span));
                     }
                     _ => {
                         let _ = self.logger.error(TypeError::InvalidPattern {

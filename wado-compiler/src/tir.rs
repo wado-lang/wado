@@ -1055,6 +1055,23 @@ impl TypeTable {
         )
     }
 
+    /// Like [`Self::as_tuple`], but also looks through a single `&`/`&mut`
+    /// wrapper. Returns the element types together with a `by_ref` flag that
+    /// is `true` when the tuple was reached through a reference. Used by
+    /// for-of to iterate `&[..T]` element-by-reference (`&T_k`), mirroring
+    /// the `for v of &list` refiter semantics.
+    pub fn as_tuple_through_ref(&self, id: TypeId) -> Option<(Vec<TypeId>, bool)> {
+        if let Some(elems) = self.as_tuple(id) {
+            return Some((elems, false));
+        }
+        match self.get(id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                self.as_tuple(*inner).map(|elems| (elems, true))
+            }
+            _ => None,
+        }
+    }
+
     /// If the type is a built-in tuple, return its element types.
     pub fn as_tuple(&self, id: TypeId) -> Option<Vec<TypeId>> {
         if let ResolvedType::GenericInstance {
@@ -3117,6 +3134,11 @@ pub enum TirStmtKind {
         body: TirBlock,
         /// Unique ID for generating labels
         unique_id: u32,
+        /// When the iterable is `&[..T]` (a reference to a variadic tuple),
+        /// each element is bound by reference (`&T_k`), matching the
+        /// `for v of &list` refiter semantics. The binding is resolved with
+        /// type `&TypePack`; expansion wraps each element field in `&`.
+        by_ref: bool,
     },
 }
 

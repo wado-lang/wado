@@ -2517,22 +2517,27 @@ impl Monomorphizer {
             is_mut,
             body,
             unique_id,
+            by_ref,
         } = &mut stmt.kind
         else {
             unreachable!()
         };
+        let by_ref = *by_ref;
 
         // Substitute types in the iterable to get the concrete tuple type
         self.substitute_types_in_expr(iterable, substitution, type_table, local_count, locals);
 
-        // Get the concrete tuple elements
+        // Get the concrete tuple elements. When iterating by reference the
+        // iterable type is `&[concrete...]`; look through the wrapper.
         let iterable_type = iterable.type_id;
-        let elements = type_table.as_tuple(iterable_type).unwrap_or_else(|| {
-            panic!(
-                "VariadicForOf: expected concrete Tuple after substitution, got {:?}",
-                type_table.get(iterable_type)
-            );
-        });
+        let (elements, _) = type_table
+            .as_tuple_through_ref(iterable_type)
+            .unwrap_or_else(|| {
+                panic!(
+                    "VariadicForOf: expected concrete Tuple after substitution, got {:?}",
+                    type_table.get(iterable_type)
+                );
+            });
 
         // Find the TypePack index in the substitution map so we can override it per element
         let pack_index = {
@@ -2585,12 +2590,20 @@ impl Monomorphizer {
         for (i, &elem_type) in elements.iter().enumerate() {
             let mut iter_stmts = Vec::new();
 
+            // By reference (`for v of &[..T]`), the binding is `&T_k`: a
+            // reference to a fresh copy of the field. Otherwise it is `T_k`.
+            let bind_type = if by_ref {
+                type_table.make_ref(elem_type)
+            } else {
+                elem_type
+            };
+
             // Allocate a unique binding local per iteration (each element has a different type)
             let iter_binding = *local_count;
             *local_count += 1;
             locals.push(TirLocal {
                 name: b_name.clone(),
-                type_id: elem_type,
+                type_id: bind_type,
                 is_mut: b_mut,
             });
 
@@ -2611,6 +2624,18 @@ impl Monomorphizer {
                 elem_type,
                 span,
             );
+            let bind_value = if by_ref {
+                TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Ref,
+                        expr: Box::new(field),
+                    },
+                    bind_type,
+                    span,
+                )
+            } else {
+                field
+            };
 
             iter_stmts.push(TirStmt::new(
                 TirStmtKind::Let {
@@ -2618,8 +2643,8 @@ impl Monomorphizer {
                     local_index: iter_binding,
                     is_mut: b_mut,
                     is_reactive: false,
-                    type_id: elem_type,
-                    value: field,
+                    type_id: bind_type,
+                    value: bind_value,
                     skip_value_copy: false,
                 },
                 span,
