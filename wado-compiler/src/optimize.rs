@@ -192,6 +192,19 @@ fn string_inline_max_bytes(opt_level: OptLevel) -> usize {
     }
 }
 
+/// Round-trip every function body through the NIR skeleton arena and back.
+/// Used only as the Phase 1 converter oracle (see `optimize`); a faithful
+/// converter leaves codegen unchanged.
+fn roundtrip_bodies_through_arena(project: &NirPackage) {
+    for func_rc in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        if let Some(body) = func.body.as_ref() {
+            let rebuilt = crate::nir_arena::Body::from_block(body).to_block();
+            func.body = Some(rebuilt);
+        }
+    }
+}
+
 pub fn optimize(
     mut project: NirPackage,
     opt_level: OptLevel,
@@ -204,6 +217,14 @@ pub fn optimize(
     // pick a constant `array.new_fixed<u8>` repr for strings at or below it —
     // which lets a constant string global promote to an eager Wasm constant.
     project.string_inline_max_bytes = string_inline_max_bytes(opt_level);
+    // Phase 1 oracle for the NIR skeleton arena (WEP 2026-06-05): with
+    // `WADO_TRACE=arena_roundtrip`, replace every function body with a
+    // tree -> arena -> tree round-trip before optimization. Codegen must stay
+    // bit-identical, so any e2e or golden fixture that diverges flags a
+    // converter bug. Off by default; carries no cost in normal builds.
+    if crate::trace::filter().enabled("arena_roundtrip") {
+        roundtrip_bodies_through_arena(&project);
+    }
     match opt_level {
         OptLevel::O0 => {
             // No optimizations, but still run DCE to reduce codegen work
