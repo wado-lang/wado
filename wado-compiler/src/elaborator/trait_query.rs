@@ -77,6 +77,20 @@ pub(crate) fn find_trait_decl_methods_with_module_with(
     trait_env: &super::trait_env::TraitEnv,
     loaded_modules: &IndexMap<ModuleSource, ast::Module>,
 ) -> Option<(Vec<ast::Function>, ModuleSource)> {
+    // A trait defined in the current module shadows any imported or global
+    // trait of the same name, so resolve against the local module first. The
+    // canonical key below falls back to a global `symbols.lookup(name)`, which
+    // would otherwise pick up an unrelated `pub` trait of the same name in
+    // another module (e.g. `core:serde::Visitor` when this module defines its
+    // own parse-tree `Visitor`) and synthesise that trait's default methods
+    // into the local trait's impls. See issue #1298.
+    for item in current_module_items {
+        if let Item::Trait(trait_decl) = item
+            && trait_decl.name == trait_name
+        {
+            return Some((trait_decl.methods.clone(), current_module_source.clone()));
+        }
+    }
     let canonical_key = canonical_decl_key_with(
         trait_name,
         current_module_source,
@@ -89,13 +103,6 @@ pub(crate) fn find_trait_decl_methods_with_module_with(
         && let Some(Item::Trait(trait_decl)) = module.items.get(*item_idx)
     {
         return Some((trait_decl.methods.clone(), module_src.clone()));
-    }
-    for item in current_module_items {
-        if let Item::Trait(trait_decl) = item
-            && trait_decl.name == trait_name
-        {
-            return Some((trait_decl.methods.clone(), current_module_source.clone()));
-        }
     }
     None
 }

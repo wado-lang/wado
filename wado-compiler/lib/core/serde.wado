@@ -255,23 +255,41 @@ pub trait DeserializeVariant {
 }
 
 
-// NOTE: integer/bytes/unknown visit methods (`visit_i64`/`visit_u64`/
-// `visit_i128`/`visit_u128`/`visit_bytes`/`visit_unknown`) are intentionally
-// NOT added here yet. Giving this trait default-bodied methods currently leaks
-// those bodies into unrelated user traits that happen to be named `Visitor`
-// (e.g. `package-gale`'s parse-tree `Visitor`), because default-method
-// synthesis resolves the trait by global name rather than identity. They will
-// be added together with the compiler fix when `core:value`/`core:cbor` need
-// them (see the tracking issue).
 pub trait Visitor {
     type Value;
 
     fn visit_null(&mut self) -> Result<Self::Value, DeserializeError>;
     fn visit_bool(&mut self, v: bool) -> Result<Self::Value, DeserializeError>;
     fn visit_f64(&mut self, v: f64) -> Result<Self::Value, DeserializeError>;
+    /// Integer visits. Self-describing binary formats (CBOR) call these to
+    /// preserve full integer precision; the defaults widen to `f64` so a
+    /// visitor that only cares about JSON-style numbers keeps working.
+    fn visit_i64(&mut self, v: i64) -> Result<Self::Value, DeserializeError> {
+        return self.visit_f64(v as f64);
+    }
+    fn visit_u64(&mut self, v: u64) -> Result<Self::Value, DeserializeError> {
+        return self.visit_f64(v as f64);
+    }
+    fn visit_i128(&mut self, v: i128) -> Result<Self::Value, DeserializeError> {
+        return self.visit_f64(v as f64);
+    }
+    fn visit_u128(&mut self, v: u128) -> Result<Self::Value, DeserializeError> {
+        return self.visit_f64(v as f64);
+    }
     fn visit_string(&mut self, v: String) -> Result<Self::Value, DeserializeError>;
+    /// Byte-string visit (CBOR major type 2; JSON base64). Defaults to an
+    /// `UnexpectedType` error so text-only visitors are unaffected.
+    fn visit_bytes(&mut self, _v: ByteList) -> Result<Self::Value, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("unexpected byte string", -1));
+    }
     fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<Self::Value, DeserializeError>;
     fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<Self::Value, DeserializeError>;
+    /// Opaque passthrough for a format item the value model cannot represent
+    /// (e.g. an unassigned CBOR simple value or an uninterpreted tag). Only
+    /// self-describing binary formats call this; defaults to an error.
+    fn visit_unknown(&mut self, _raw: ByteList) -> Result<Self::Value, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("unexpected opaque value", -1));
+    }
 }
 
 #[compiler_item("deserializer")]
