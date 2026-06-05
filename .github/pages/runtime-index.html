@@ -218,7 +218,11 @@
           new Chart(canvas, {
             type: 'line',
             data: {
-              labels: commitIds.map(id => id.slice(0, 7)),
+              labels: commitIds.map(id => {
+                const meta = commitMeta.get(id);
+                const ymd = new Date(meta.commit.timestamp).toISOString().slice(0, 10);
+                return ymd + ' ' + id.slice(0, 7);
+              }),
               datasets,
             },
             options: {
