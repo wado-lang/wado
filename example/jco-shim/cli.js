@@ -20,10 +20,14 @@ export const types = {
   OutputStream: class OutputStream {},
 };
 
+// `write-via-stream` is an async WASI function, so jco lowers its result as a
+// future and expects the host to return a Promise/Thenable. The actual bytes
+// are delivered out-of-band through `_jcoStreamWriteHook`, so the returned
+// promise only needs to resolve to the operation result.
 export const stdout = {
   writeViaStream(_stream) {
     _defaultTarget = process.stdout;
-    return { tag: "ok" };
+    return Promise.resolve({ tag: "ok" });
   },
 };
 stdout.writeViaStream._isHostProvided = true;
@@ -31,7 +35,7 @@ stdout.writeViaStream._isHostProvided = true;
 export const stderr = {
   writeViaStream(_stream) {
     _defaultTarget = process.stderr;
-    return { tag: "ok" };
+    return Promise.resolve({ tag: "ok" });
   },
 };
 stderr.writeViaStream._isHostProvided = true;
