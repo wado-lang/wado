@@ -313,7 +313,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // First check local imports, then fall back to prelude module
                 let found_as_variant = self
                     .symbols
-                    .lookup("Option")
+                    .lookup(&self.current_module_source, "Option")
                     .or_else(|| self.symbols.lookup_in_module(&prelude_source, "Option"))
                     .is_some_and(|s| matches!(s.kind, SymbolKind::Variant(_)));
 
