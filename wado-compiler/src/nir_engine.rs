@@ -618,8 +618,11 @@ impl<'a> Engine<'a> {
     /// tries the rules in priority order; the first that reports a change
     /// re-processes the node (its kind may now match a different rule). Edits
     /// re-enqueue the affected neighbourhood, so a node is revisited only when
-    /// something near it changed.
-    pub fn run(&mut self, rules: &[&dyn Rule]) {
+    /// something near it changed. Returns `true` if any rule fired, so a
+    /// caller threading the legacy global fixed-point's "changed" flag stays
+    /// accurate.
+    pub fn run(&mut self, rules: &[&dyn Rule]) -> bool {
+        let mut any = false;
         while let Some(node) = self.pop() {
             let NodeRef::Expr(id) = node else { continue };
             loop {
@@ -627,6 +630,7 @@ impl<'a> Engine<'a> {
                 for rule in rules {
                     if rule.apply_expr(self, id) {
                         changed = true;
+                        any = true;
                         break;
                     }
                 }
@@ -635,6 +639,7 @@ impl<'a> Engine<'a> {
                 }
             }
         }
+        any
     }
 }
 
