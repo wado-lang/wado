@@ -675,6 +675,16 @@ syntax which is not yet supported.
 
 #### `fn from_iter(iter: Self::Iter) -> Self`
 
+### `pub trait AsByteSlice`
+
+Zero-copy conversion to a `ByteSlice`.
+
+Implemented by `ByteArray`, `ByteList`, and `ByteSlice`, so byte-reading
+APIs (e.g. `core:cbor` / `core:json` `from_bytes`) accept any of them
+without copying.
+
+#### `fn as_byte_slice(&self) -> ByteSlice`
+
 ### `pub trait Step`
 
 Types that can be incremented by one step (for range iteration).
@@ -869,6 +879,18 @@ Obtained from `Subtask::join`. Compared by handle identity (`==`).
 A newtype over the raw `i32` handle: copyable, with `Eq` inherited from
 `i32`. It is an identity token with no lifecycle of its own — the joined
 `Subtask` / `AsyncCall` owns the actual handle lifecycle.
+
+### `pub type ByteArray = Array<u8>`
+
+An owned, fixed-length byte buffer.
+
+### `pub type ByteList = List<u8>`
+
+An owned, growable byte buffer.
+
+### `pub type ByteSlice = ArraySlice<u8>`
+
+A borrowed, zero-copy view over a byte buffer.
 
 ## Primitive Types
 

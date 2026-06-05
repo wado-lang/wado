@@ -605,9 +605,9 @@ type "functype//wado-compiler/tests/fixtures/httpbin_anything.wado/__cm_binding_
 
 type "functype//wado-compiler/tests/fixtures/httpbin_anything.wado/__cm_export__handle" = fn(i32);  // TypeId(131)
 
-type "functype//wado-compiler/tests/fixtures/httpbin_anything.wado/$value_copy$T95" = fn(ref "core:json//JsonMapSerializer") -> ref "core:json//JsonMapSerializer";  // TypeId(132)
+type "functype//wado-compiler/tests/fixtures/httpbin_anything.wado/$value_copy$T99" = fn(ref "core:json//JsonMapSerializer") -> ref "core:json//JsonMapSerializer";  // TypeId(132)
 
-type "functype//wado-compiler/tests/fixtures/httpbin_anything.wado/$value_copy$T94" = fn(ref "core:json//JsonSeqSerializer") -> ref "core:json//JsonSeqSerializer";  // TypeId(133)
+type "functype//wado-compiler/tests/fixtures/httpbin_anything.wado/$value_copy$T98" = fn(ref "core:json//JsonSeqSerializer") -> ref "core:json//JsonSeqSerializer";  // TypeId(133)
 
 type "functype//./sub/httpbin_handler.wado/split_path_query" = fn(ref "core:prelude/string.wado//String") -> [ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String"];  // TypeId(134)
 
@@ -1707,11 +1707,11 @@ fn "wado-compiler/tests/fixtures/httpbin_anything.wado/__cm_export__handle"(requ
     "wado-compiler/tests/fixtures/httpbin_anything.wado/handle"(request);
 }
 
-fn "wado-compiler/tests/fixtures/httpbin_anything.wado/$value_copy$T95"(v) {
+fn "wado-compiler/tests/fixtures/httpbin_anything.wado/$value_copy$T99"(v) {
     return struct.new "core:json//JsonMapSerializer" { buf: v.buf, count: v.count, need_value: v.need_value };
 }
 
-fn "wado-compiler/tests/fixtures/httpbin_anything.wado/$value_copy$T94"(v) {
+fn "wado-compiler/tests/fixtures/httpbin_anything.wado/$value_copy$T98"(v) {
     return struct.new "core:json//JsonSeqSerializer" { buf: v.buf, count: v.count };
 }
 
@@ -5629,7 +5629,7 @@ fn "core:json_value/Value^Serialize::serialize<core:json/JsonSerializer>"(self, 
         ref.null none;
     } else if ref.test "core:json_value//Value::List"(__match_scrut_0) -> ref null "core:serde//SerializeError" {
         arr = ref.cast "core:json_value//Value::List"(__match_scrut_0).payload_0;
-        seq = "wado-compiler/tests/fixtures/httpbin_anything.wado/$value_copy$T94"(let __match_scrut_5: ref "core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError>"; drop(arr.used); "core:prelude/string.wado/String::push"(s.buf, 91); __match_scrut_5 = struct.new "core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:json//JsonSeqSerializer" { buf: s.buf, count: 0 } }; (if ref.test "core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError>::Ok"(__match_scrut_5) -> ref "core:json//JsonSeqSerializer" {
+        seq = "wado-compiler/tests/fixtures/httpbin_anything.wado/$value_copy$T98"(let __match_scrut_5: ref "core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError>"; drop(arr.used); "core:prelude/string.wado/String::push"(s.buf, 91); __match_scrut_5 = struct.new "core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:json//JsonSeqSerializer" { buf: s.buf, count: 0 } }; (if ref.test "core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError>::Ok"(__match_scrut_5) -> ref "core:json//JsonSeqSerializer" {
             __qm_v_6 = ref.cast "core:prelude/types.wado//Result<core:json/JsonSeqSerializer,core:serde/SerializeError>::Ok"(__match_scrut_5).payload_0;
             __qm_v_6;
         } else {
@@ -5660,7 +5660,7 @@ fn "core:json_value/Value^Serialize::serialize<core:json/JsonSerializer>"(self, 
         ref.null none;
     } else {
         map = ref.cast "core:json_value//Value::Object"(__match_scrut_0).payload_0;
-        m = "wado-compiler/tests/fixtures/httpbin_anything.wado/$value_copy$T95"(let __match_scrut_1: ref "core:prelude/types.wado//Result<core:json/JsonMapSerializer,core:serde/SerializeError>"; drop(map.size); "core:prelude/string.wado/String::push"(s.buf, 123); __match_scrut_1 = struct.new "core:prelude/types.wado//Result<core:json/JsonMapSerializer,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:json//JsonMapSerializer" { buf: s.buf, count: 0, need_value: 0 } }; (if ref.test "core:prelude/types.wado//Result<core:json/JsonMapSerializer,core:serde/SerializeError>::Ok"(__match_scrut_1) -> ref "core:json//JsonMapSerializer" {
+        m = "wado-compiler/tests/fixtures/httpbin_anything.wado/$value_copy$T99"(let __match_scrut_1: ref "core:prelude/types.wado//Result<core:json/JsonMapSerializer,core:serde/SerializeError>"; drop(map.size); "core:prelude/string.wado/String::push"(s.buf, 123); __match_scrut_1 = struct.new "core:prelude/types.wado//Result<core:json/JsonMapSerializer,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:json//JsonMapSerializer" { buf: s.buf, count: 0, need_value: 0 } }; (if ref.test "core:prelude/types.wado//Result<core:json/JsonMapSerializer,core:serde/SerializeError>::Ok"(__match_scrut_1) -> ref "core:json//JsonMapSerializer" {
             __qm_v_14 = ref.cast "core:prelude/types.wado//Result<core:json/JsonMapSerializer,core:serde/SerializeError>::Ok"(__match_scrut_1).payload_0;
             __qm_v_14;
         } else {

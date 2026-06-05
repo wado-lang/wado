@@ -57,7 +57,7 @@ type "functype//wado-compiler/tests/fixtures/template_string_precision.wado/__cm
 
 type "functype//wado-compiler/tests/fixtures/template_string_precision.wado/__cm_export__run" = fn();  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/template_string_precision.wado/$value_copy$T26$shallow" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(18)
+type "functype//wado-compiler/tests/fixtures/template_string_precision.wado/$value_copy$T32$shallow" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(18)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(19)
 
@@ -167,7 +167,7 @@ fn "wado-compiler/tests/fixtures/template_string_precision.wado/__cm_export__run
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/template_string_precision.wado/$value_copy$T26$shallow"(v) {
+fn "wado-compiler/tests/fixtures/template_string_precision.wado/$value_copy$T32$shallow"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
 }
 
@@ -641,7 +641,7 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "core:prelude/format.wado/String^Display::fmt"(self, f) {
     let capped: ref "core:prelude/string.wado//String";
     if f.precision >= 0 {
-        capped = "wado-compiler/tests/fixtures/template_string_precision.wado/$value_copy$T26$shallow"(self);
+        capped = "wado-compiler/tests/fixtures/template_string_precision.wado/$value_copy$T32$shallow"(self);
         "core:prelude/string.wado/String::truncate_chars"(capped, f.precision);
         "core:prelude/format.wado/Formatter::pad"(f, capped);
     } else {

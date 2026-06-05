@@ -122,6 +122,13 @@ impl Deserialize for Config;
 
 #### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
 
+#### `fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError>`
+
+Serialize a byte string. Self-describing binary formats (CBOR) emit a
+native byte string; JSON emits base64. The default falls back to a
+sequence of `u8` (the historical `List<u8>` behaviour), so a format
+with no distinct byte-string form keeps working unchanged.
+
 #### `fn serialize_null(&mut self) -> Result<(), SerializeError>`
 
 #### `fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError>`
@@ -226,6 +233,11 @@ direct and inlinable — no closure value, no per-decode allocation.
 #### `fn deserialize_char(&mut self) -> Result<char, DeserializeError>`
 
 #### `fn deserialize_string(&mut self) -> Result<String, DeserializeError>`
+
+#### `fn deserialize_bytes(&mut self) -> Result<ByteList, DeserializeError>`
+
+Deserialize a byte string. Self-describing binary formats read a native
+byte string; JSON reads base64. The default reads a sequence of `u8`.
 
 #### `fn is_null(&mut self) -> Result<bool, DeserializeError>`
 

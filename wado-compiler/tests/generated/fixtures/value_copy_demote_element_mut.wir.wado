@@ -42,7 +42,7 @@ type "functype//wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/
 
 type "functype//wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/__cm_export__run" = fn();  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/$value_copy$T26" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(17)
+type "functype//wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/$value_copy$T32" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(17)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(18)
 
@@ -90,7 +90,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/shout_first"(words) {
     let x: ref "core:prelude//List<core:prelude/string.wado/String>";
-    x = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T26*/ words.repr)), used: words.used };
+    x = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T32*/ words.repr)), used: words.used };
     "core:prelude/string.wado/String::push"(if builtin::unlikely(0 >= x.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -122,7 +122,7 @@ fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/__cm_export_
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/$value_copy$T26"(v) {
+fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/$value_copy$T32"(v) {
     return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(builtin::array_clone<u8>(v.repr)), used: v.used };
 }
 

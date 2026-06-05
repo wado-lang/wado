@@ -71,6 +71,8 @@ _Fields are private._
 
 ##### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
 
+##### `fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError>`
+
 ##### `fn serialize_null(&mut self) -> Result<(), SerializeError>`
 
 ##### `fn begin_seq(&mut self, len: i32) -> Result<JsonSeqSerializer, SerializeError>`
@@ -114,6 +116,8 @@ _Fields are private._
 ##### `fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>`
 
 ##### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
+
+##### `fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError>`
 
 ##### `fn serialize_null(&mut self) -> Result<(), SerializeError>`
 
@@ -208,6 +212,8 @@ Skips the next JSON value without allocating.
 ##### `fn deserialize_char(&mut self) -> Result<char, DeserializeError>`
 
 ##### `fn deserialize_string(&mut self) -> Result<String, DeserializeError>`
+
+##### `fn deserialize_bytes(&mut self) -> Result<ByteList, DeserializeError>`
 
 ##### `fn is_null(&mut self) -> Result<bool, DeserializeError>`
 
