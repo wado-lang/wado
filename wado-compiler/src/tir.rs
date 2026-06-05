@@ -565,6 +565,38 @@ impl<V> TypeMap<V> {
     }
 }
 
+/// A dense set of [`TypeId`], backed by a bitset indexed by `TypeId.0`.
+///
+/// Membership and insertion are O(1) and hash-free — one bit per type, so
+/// even a transient "visited" set over the type graph costs a single small
+/// `Vec<u64>` instead of a hashed [`IndexSet`] that allocates and rehashes
+/// as it grows. This is the set-shaped companion to [`TypeMap`]; reach for
+/// it wherever a `IndexSet<TypeId>` is used purely for membership.
+///
+/// Iteration yields ascending `TypeId` order, **not** insertion order, so
+/// callers that depend on insertion order must keep an ordered set.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct TypeSet {
+    words: Vec<u64>,
+}
+
+impl TypeSet {
+    fn slot(id: TypeId) -> (usize, u64) {
+        ((id.0 / 64) as usize, 1u64 << (id.0 % 64))
+    }
+
+    /// Insert `id`, returning `true` if it was not already present.
+    pub(crate) fn insert(&mut self, id: TypeId) -> bool {
+        let (word, mask) = Self::slot(id);
+        if word >= self.words.len() {
+            self.words.resize(word + 1, 0);
+        }
+        let newly = self.words[word] & mask == 0;
+        self.words[word] |= mask;
+        newly
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TypeTable {
     /// `TypeId` → `ResolvedType`. See [`TypeMap`]; `get` reads this on
@@ -603,7 +635,9 @@ pub struct TypeTable {
     /// post-boxing IR (DCE inspect scanning, dispatch synthesis, etc.) use
     /// [`Self::peel_refs_and_box`] to look through both the reference
     /// layer and any boxing wrapper in a single step.
-    box_payload_types: IndexMap<TypeId, TypeId>,
+    ///
+    /// A sparse [`TypeMap`] keyed by the wrapper `TypeId`.
+    box_payload_types: TypeMap<TypeId>,
     /// Index from (struct name, module source) to `TypeId` for O(1) lookup.
     /// Populated incrementally when Struct types are interned.
     struct_name_index: IndexMap<(String, ModuleSource), TypeId>,
@@ -624,7 +658,9 @@ pub struct TypeTable {
     /// Inverse of `type_by_symbol` plus monomorphization tracking: every
     /// decl-backed `TypeId` — including monomorphized instances —
     /// maps to the [`SymbolKey`] of its declaring AST node.
-    symbol_by_type: IndexMap<TypeId, crate::symbol::SymbolKey>,
+    ///
+    /// A sparse [`TypeMap`] keyed by the decl-backed `TypeId`.
+    symbol_by_type: TypeMap<crate::symbol::SymbolKey>,
 }
 
 impl Default for TypeTable {
@@ -685,10 +721,10 @@ impl TypeTable {
             generic_assoc_type_defs: IndexMap::default(),
             redirects: TypeMap::default(),
             newtype_to_base_name: IndexMap::default(),
-            box_payload_types: IndexMap::default(),
+            box_payload_types: TypeMap::default(),
             struct_name_index: IndexMap::default(),
             type_by_symbol: IndexMap::default(),
-            symbol_by_type: IndexMap::default(),
+            symbol_by_type: TypeMap::default(),
         };
 
         // Pre-populate primitive types matching the constants above
@@ -820,7 +856,7 @@ impl TypeTable {
     /// `symbol_by_type[type_id] = key`.
     pub fn register_decl_type(&mut self, key: crate::symbol::SymbolKey, type_id: TypeId) {
         self.type_by_symbol.insert(key.clone(), type_id);
-        self.symbol_by_type.insert(type_id, key);
+        self.symbol_by_type.set_growing(type_id, key);
     }
 
     /// Register a monomorphized `TypeId` as pointing at its generic base symbol.
@@ -831,7 +867,7 @@ impl TypeTable {
     /// the declaring AST node. The forward `type_by_symbol` index is NOT
     /// updated: that keeps the base generic's `TypeId` as the canonical entry.
     pub fn register_mono_type(&mut self, base_key: crate::symbol::SymbolKey, type_id: TypeId) {
-        self.symbol_by_type.insert(type_id, base_key);
+        self.symbol_by_type.set_growing(type_id, base_key);
     }
 
     /// Canonical `TypeId` for a declared-type [`SymbolKey`].
@@ -845,7 +881,7 @@ impl TypeTable {
     /// Walk a decl-backed `TypeId` (including monomorphizations) back to the
     /// declaring [`SymbolKey`].
     pub fn symbol_of_type(&self, type_id: TypeId) -> Option<&crate::symbol::SymbolKey> {
-        self.symbol_by_type.get(&type_id)
+        self.symbol_by_type.get(type_id)
     }
 
     /// Find the `TypeId` of a user-declared type (struct, enum, variant, flags,
@@ -947,7 +983,7 @@ impl TypeTable {
         });
         // Retain SymbolKey indices to surviving TypeIds only.
         self.symbol_by_type
-            .retain(|id, _| effective_keep.contains(id));
+            .retain(|id, _| effective_keep.contains(&id));
         self.type_by_symbol
             .retain(|_, id| effective_keep.contains(id));
         // Rebuild intern map from the surviving entries.
@@ -1449,7 +1485,7 @@ impl TypeTable {
     pub fn peel_refs_and_box(&self, type_id: TypeId) -> TypeId {
         let peeled = self.peel_refs(type_id);
         self.box_payload_types
-            .get(&peeled)
+            .get(peeled)
             .copied()
             .unwrap_or(peeled)
     }
@@ -1458,13 +1494,13 @@ impl TypeTable {
     /// mapping. Called by the boxing pass for every wrapper it creates;
     /// downstream phases consume the mapping via [`Self::peel_refs_and_box`].
     pub fn register_box_payload(&mut self, wrapper: TypeId, payload: TypeId) {
-        self.box_payload_types.insert(wrapper, payload);
+        self.box_payload_types.set_growing(wrapper, payload);
     }
 
     /// Direct lookup for the payload of a single `Box<T>` wrapper, or
     /// `None` if the given `TypeId` is not a registered wrapper.
     pub fn box_payload_of(&self, wrapper: TypeId) -> Option<TypeId> {
-        self.box_payload_types.get(&wrapper).copied()
+        self.box_payload_types.get(wrapper).copied()
     }
 
     pub fn make_ref(&mut self, inner: TypeId) -> TypeId {
