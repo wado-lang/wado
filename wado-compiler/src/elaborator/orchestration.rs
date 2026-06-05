@@ -1289,7 +1289,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 trait_ctx: super::trait_env::TraitContext::default(),
                 indexing_trait_cache: IndexMap::default(),
                 trait_check_stack: RefCell::new(Vec::new()),
-                method_info_cache: IndexMap::default(),
                 default_scope_module: None,
                 ann_module_override: None,
                 invocations: Rc::clone(&state.invocations),

@@ -381,16 +381,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<MethodInfo> {
         // First, get the base (non-reference) type for method lookup
         let base_type_id = self.get_base_type(receiver_type);
-
-        // Check cache
-        let cache_key = (base_type_id, method_name.to_string());
-        if let Some(cached) = self.method_info_cache.get(&cache_key) {
-            return cached.clone();
-        }
-
-        let result = self.lookup_method_info_uncached(base_type_id, method_name);
-        self.method_info_cache.insert(cache_key, result.clone());
-        result
+        self.lookup_method_info_uncached(base_type_id, method_name)
     }
 
     fn lookup_method_info_uncached(

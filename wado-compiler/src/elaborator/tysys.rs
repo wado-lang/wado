@@ -23,19 +23,24 @@
 //!
 //! # Deferred fields
 //!
-//! Two [`super::Elaborator`] fields are marked
-//! `MIGRATION: → TypeSystem` but **stay on `Elaborator` through Stage 2**:
-//! `indexing_trait_cache` and `method_info_cache`. They are genuine
-//! type-system caches (lookup `(TypeId, name) → MethodInfo` or
-//! `(struct_name, base_type, trait, method, assoc_type) → impl info`)
-//! whose keys live entirely in the shared type domain, so they belong on
-//! `TypeSystem` in spirit. But they carry per-Elaborator mutable state
-//! today (constructed fresh per module, populated by the body walk), and
-//! moving them to a shared `TypeSystem` requires either making them
-//! pipeline-wide caches (a behaviour change) or interior-mutability
-//! plumbing. The migration markers on those fields point at this future
-//! home; the move itself is deferred to a later stage where the cache
-//! lifetime story is settled.
+//! One [`super::Elaborator`] field is marked `MIGRATION: → TypeSystem`
+//! but **stays on `Elaborator` through Stage 2**: `indexing_trait_cache`.
+//! It is a genuine type-system cache (lookup `(struct_name, base_type,
+//! trait, method, assoc_type) → impl info`) whose key lives entirely in
+//! the shared type domain, so it belongs on `TypeSystem` in spirit. But
+//! it carries per-Elaborator mutable state today (constructed fresh per
+//! module, populated by the body walk), and moving it to a shared
+//! `TypeSystem` requires either making it a pipeline-wide cache (a
+//! behaviour change) or interior-mutability plumbing. The migration
+//! marker on that field points at this future home; the move itself is
+//! deferred to a later stage where the cache lifetime story is settled.
+//!
+//! `lookup_method_info` previously carried a sibling `method_info_cache`,
+//! but it only masked an `O(modules × items)` inherent-impl scan. Once
+//! that lookup became index-driven (`TraitEnv::inherent_impl_index`) the
+//! cache was pure overhead — and its `(TypeId, name)` key, blind to
+//! module visibility, was a latent staleness hazard — so it was removed
+//! rather than migrated.
 //!
 //! [`super::Elaborator::trait_check_stack`] looks superficially similar
 //! — `RefCell<Vec<…>>` mutable state on `Elaborator` — but is **not** a

@@ -161,11 +161,6 @@ pub struct Elaborator<'a, H: CompilerHost> {
     //   `TypeSystem`. See `tysys.rs` module docs ("Deferred fields") for
     //   the full rationale.
     trait_check_stack: RefCell<Vec<(TypeId, String)>>,
-    /// Cache for `lookup_method_info` results.
-    /// Key: (`base_type_id`, `method_name`) → cached `MethodInfo`
-    // MIGRATION: → TypeSystem (type-system cache); deferred — needs the
-    //   pipeline-wide cache lifetime story.
-    method_info_cache: IndexMap<(TypeId, String), Option<types::MethodInfo>>,
     /// When resolving a default-expression AST at a call site, fall back to
     /// looking up unresolved identifiers in this module's global scope. This
     /// preserves the callee's lexical scope for defaults that reference
