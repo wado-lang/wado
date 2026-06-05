@@ -64,6 +64,8 @@ pub struct FlatPackage {
     pub used_wasi_functions: IndexSet<String>,
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
+    /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
+    pub codegen_flags: crate::codegen_flags::CodegenFlags,
     /// When true, skip Wasm validation after code generation.
     pub skip_validation: bool,
     /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")

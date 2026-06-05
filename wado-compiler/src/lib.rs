@@ -5,6 +5,7 @@ pub mod bind;
 pub mod builtin_registry;
 pub mod cm_abi;
 pub mod codegen;
+pub mod codegen_flags;
 pub mod comment;
 pub mod compiler_host;
 pub mod compiler_item;
@@ -56,6 +57,7 @@ pub mod world_registry;
 pub use analyze::Analyzer;
 pub use ast::{AstId, AstNodeKind, AstPtr};
 pub use bind::{BindError, Binder};
+pub use codegen_flags::CodegenFlags;
 pub use compiler_host::{
     Code, CompilerHost, Diagnostic, DiagnosticSpan, GeneratorDiagnostic, GeneratorDiagnosticLevel,
     GeneratorError, GeneratorInputFile, GeneratorOutputFile, GeneratorReadRecord, GeneratorRequest,
@@ -196,6 +198,10 @@ pub struct CompilerOptions {
     /// filtered-out tests are never compiled into the output. Empty means
     /// "run every test". Ignored outside the test world.
     pub test_name_filters: Vec<String>,
+    /// Raw codegen feature flags forwarded from the CLI's generic `-f <flag>`
+    /// option (e.g. `["array-copy"]`). Parsed into [`CodegenFlags`] during
+    /// compilation; an unrecognized flag is a hard error. Empty by default.
+    pub codegen_flags: Vec<String>,
 }
 
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
@@ -450,6 +456,18 @@ fn compile_after_load<H: CompilerHost>(
     package.skip_validation = options.skip_validation;
     package.test_name_filters = options.test_name_filters;
     package.wasm_assets = wasm_assets;
+    package.codegen_flags = match codegen_flags::CodegenFlags::parse(&options.codegen_flags) {
+        Ok(flags) => flags,
+        Err(flag) => {
+            let _ = logger.error(compiler_host::Diagnostic {
+                severity: compiler_host::Severity::Error,
+                code: compiler_host::Code::UnsupportedFeature,
+                message: format!("unknown codegen flag: `-f {flag}` (supported: `array-copy`)"),
+                span: None,
+            });
+            return Err(Bail);
+        }
+    };
 
     // Select allocator: find the function tagged with #[allocator("...")] matching the
     // chosen mode, set its export_name to "realloc", and clear export_name from all others.

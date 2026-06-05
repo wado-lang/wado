@@ -29,6 +29,7 @@ pub struct RunOptions {
     pub allocator: Option<String>,
     pub collector: wasmtime::Collector,
     pub no_cache: bool,
+    pub codegen_flags: Vec<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -42,6 +43,7 @@ enum Opt {
     LogLevel,
     Allocator,
     Collector,
+    Feature,
     Profile,
     Help,
 }
@@ -57,6 +59,7 @@ impl Opt {
         Self::LogLevel,
         Self::Allocator,
         Self::Collector,
+        Self::Feature,
         Self::Profile,
         Self::Help,
     ];
@@ -79,6 +82,7 @@ impl Opt {
             Self::LogLevel => args::LOG_LEVEL_SPEC,
             Self::Allocator => args::ALLOCATOR_SPEC,
             Self::Collector => args::COLLECTOR_SPEC,
+            Self::Feature => args::FEATURE_SPEC,
             Self::Profile => args::OptSpec {
                 long: Some("profile"),
                 short: None,
@@ -188,6 +192,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let mut allocator: Option<String> = None;
     let mut collector = runtime::DEFAULT_COLLECTOR;
     let mut no_cache = false;
+    let mut codegen_flags: Vec<String> = Vec::new();
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -217,6 +222,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
                     let spec = args::require_string(&mut parser)?;
                     collector = runtime::parse_collector(&spec).map_err(CliExit::error)?;
                 }
+                Opt::Feature => codegen_flags.push(args::require_string(&mut parser)?),
                 Opt::Profile => {
                     let spec = args::require_string(&mut parser)?;
                     profile = parse_profile(&spec)?;
@@ -254,6 +260,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
         allocator,
         collector,
         no_cache,
+        codegen_flags,
     })
 }
 
@@ -340,6 +347,7 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
         allocator: opts.allocator,
         no_cache: opts.no_cache,
         test_name_filters: Vec::new(),
+        codegen_flags: opts.codegen_flags,
     };
     let cranelift_opt = opts.opt_level.to_wasmtime();
     let wasm = compile::compile(&opts.input, &flags).await?;

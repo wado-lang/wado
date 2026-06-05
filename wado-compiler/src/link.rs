@@ -119,6 +119,7 @@ pub fn link(package: Package) -> FlatPackage {
         world_registry: package.world_registry,
         used_wasi_functions: package.used_wasi_functions,
         strip_names: package.strip_names,
+        codegen_flags: package.codegen_flags,
         skip_validation: package.skip_validation,
         target_world: package.target_world,
         has_http_handler_export,
