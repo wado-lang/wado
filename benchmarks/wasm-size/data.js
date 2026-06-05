@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780669738244,
+  "lastUpdate": 1780670430350,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30129,6 +30129,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 460509,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "86cc513cf9ef667cb243264f897340366905a31b",
+          "message": "Merge pull request #1302 from wado-lang/claude/wado-array-copy-option-o143c\n\nfeat(codegen): lower array.copy to the native Wasm instruction, add generic -f flag",
+          "timestamp": "2026-06-05T23:24:21+09:00",
+          "tree_id": "8dc2f7ae6b5093e6b4ad5f54a5e300229798c520",
+          "url": "https://github.com/wado-lang/wado/commit/86cc513cf9ef667cb243264f897340366905a31b"
+        },
+        "date": 1780670429896,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1767,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8808,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16711,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 456413,
             "unit": "bytes"
           }
         ]
