@@ -43,7 +43,7 @@ fn surviving_list_copy_is_remarked() {
     // backing array cannot be elided and survives to the final IR.
     let remarks = remarks_for(
         r#"
-use { println } from "core:cli";
+use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
     let a: List<i32> = [1, 2, 3];
@@ -76,7 +76,7 @@ fn scalarized_struct_copy_is_not_remarked() {
     // no heap copy executes, so there is nothing to remark on.
     let remarks = remarks_for(
         r#"
-use { println } from "core:cli";
+use { println, Stdout } from "core:cli";
 
 struct Point { x: i32, y: i32 }
 
@@ -103,7 +103,7 @@ fn struct_field_copy_remark_points_at_copy_statement() {
     // (line 8), not to the placeholder span of the inner synthesized statement.
     let remarks = remarks_for(
         r#"
-use { println } from "core:cli";
+use { println, Stdout } from "core:cli";
 
 struct Bag { items: List<i32> }
 
