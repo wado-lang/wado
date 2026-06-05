@@ -1,6 +1,6 @@
 # Reference Specifications
 
-Verbatim copies of the IETF RFCs that define the formats implemented by the
+Verbatim copies of the IETF RFCs that define the formats handled by the
 `lib/core/` modules. They are vendored so the implementation comments can cite
 exact sections offline.
 
@@ -10,7 +10,8 @@ Implemented by `lib/core/zlib.wado`:
 - `rfc1951.txt` — DEFLATE Compressed Data Format Specification
 - `rfc1952.txt` — GZIP File Format Specification
 
-Implemented by `lib/core/cbor.wado`:
+Vendored for the planned `core:cbor` module (see
+`docs/wep-2026-06-05-core-cbor.md`):
 
 - `rfc8949.txt` — Concise Binary Object Representation (CBOR), STD 94
   (obsoletes RFC 7049)

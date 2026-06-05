@@ -141,17 +141,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         trait_name: &str,
     ) -> Option<Vec<ast::GenericParam>> {
-        let canonical_key = self.canonical_decl_key(trait_name);
-        if let Some((module_src, item_idx)) = self.tysys.trait_env.decl_index.get(&canonical_key) {
-            let module = &self.loaded_modules[module_src];
-            if let Item::Trait(trait_decl) = &module.items[*item_idx] {
-                return Some(trait_decl.type_params.clone());
-            }
-        }
+        // Local-first, mirroring `find_trait_decl_methods_with_module_with`: the
+        // type-param list and the default-method bodies must resolve to the same
+        // trait, so a local trait shadows an imported/global same-named one here
+        // too (see issue #1298).
         for item in self.current_module_items {
             if let Item::Trait(trait_decl) = item
                 && trait_decl.name == trait_name
             {
+                return Some(trait_decl.type_params.clone());
+            }
+        }
+        let canonical_key = self.canonical_decl_key(trait_name);
+        if let Some((module_src, item_idx)) = self.tysys.trait_env.decl_index.get(&canonical_key) {
+            let module = &self.loaded_modules[module_src];
+            if let Item::Trait(trait_decl) = &module.items[*item_idx] {
                 return Some(trait_decl.type_params.clone());
             }
         }

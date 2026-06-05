@@ -339,13 +339,10 @@ impl Monomorphizer {
                 .method_info
                 .clone()
                 .and_then(|info| info.trait_name);
-            // A newtype with its OWN impl of this trait is tried before its
-            // base, so the rewrite lands on the newtype's own queued
-            // instantiation (`ByteList^Serialize::serialize<...>`) rather than
-            // the inherited base (`List<u8>^Serialize::serialize<...>`). This
-            // mirrors the collect path in `func_inst.rs`. Newtypes without
-            // their own impl yield `None` here and resolve through the base
-            // exactly as before.
+            // Try a newtype's OWN impl before its base, so the rewrite lands on
+            // the newtype's own queued instantiation (`ByteList^…`) rather than
+            // the inherited base (`List<u8>^…`). Mirrors the collect path in
+            // `func_inst.rs`; returns `None` for newtypes without their own impl.
             let own_name = self.newtype_own_struct_name_with_impl(
                 receiver.type_id,
                 type_table,

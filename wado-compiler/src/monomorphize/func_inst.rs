@@ -374,12 +374,10 @@ impl Monomorphizer {
                             .method_info
                             .clone()
                             .and_then(|info| info.trait_name);
-                        // A newtype with its OWN impl of this trait is tried
-                        // before its base, so the queued instantiation matches
-                        // the call the rewrite emitted (e.g. `ByteList^serialize`)
-                        // rather than the inherited base (`List^serialize`).
-                        // Newtypes without their own impl yield `None` here and
-                        // dispatch through the base exactly as before.
+                        // Try a newtype's OWN impl before its base, so the
+                        // queued instantiation matches the call the rewrite
+                        // emitted (`ByteList^serialize`, not `List^serialize`).
+                        // Returns `None` for newtypes without their own impl.
                         let own_name = self.newtype_own_struct_name_with_impl(
                             receiver.type_id,
                             type_table,
@@ -653,14 +651,13 @@ impl Monomorphizer {
                             } else {
                                 impl_type_args.clone()
                             };
-                            // Newtype-override match: the receiver's struct info
-                            // peels the newtype to its generic base
-                            // (`ByteList` → base `List` with args `[u8]`), but
-                            // the matched template is the newtype's OWN impl
-                            // (its `struct_name` is not `base_struct`). A newtype
-                            // has no type params, so applying the base's args
-                            // would mint an invalid `ByteList<u8>^…` name that no
-                            // call references. Drop them so this queues the
+                            // Newtype-override match: the struct info peeled the
+                            // newtype to its generic base (`ByteList` → `List`
+                            // with args `[u8]`), but the matched template is the
+                            // newtype's OWN impl (`struct_name != base_struct`).
+                            // A newtype has no type params, so applying the
+                            // base's args would mint an invalid `ByteList<u8>^…`
+                            // name no call references. Drop them to queue the
                             // newtype's own `ByteList^…` (deduped against the
                             // newtype-first collect block above).
                             let effective_impl_type_args = if generic_func
@@ -2289,19 +2286,17 @@ impl Monomorphizer {
                     }
             )
         };
-        // Newtype-override guard: when the method already names a newtype that
-        // has its OWN impl of this trait (e.g. `ByteList^Serialize::serialize`,
-        // `ByteList^AsByteSlice::as_byte_slice`) and the receiver actually IS
-        // that newtype, keep the name as-is. The `receiver_is_generic` path
-        // below would otherwise peel the newtype to its erased base (`List<u8>`)
-        // and retarget the call at the inherited base impl.
+        // Newtype-override guard: when the method already names a newtype with
+        // its OWN impl of this trait (e.g. `ByteList^Serialize::serialize`) and
+        // the receiver IS that newtype, keep the name as-is. The
+        // `receiver_is_generic` path below would otherwise peel the newtype to
+        // its erased base (`List<u8>`) and retarget at the inherited base impl.
         //
-        // `newtype_own_struct_name_with_impl` returns `Some` only when the
-        // receiver is a genuine newtype with its own non-blanket impl, so this
-        // never fires for blanket impls keyed by a type-param name (e.g.
-        // `impl<I: Iterator> IntoIterator for I`, where `info.struct_name` is
-        // the type param `"I"`), nor for inherited dispatch (the method names
-        // the base, so `own != info.struct_name`).
+        // `newtype_own_struct_name_with_impl` returns `Some` only for a genuine
+        // newtype with its own non-blanket impl, so this never fires for blanket
+        // impls keyed by a type-param name (e.g. `impl<I: Iterator> IntoIterator
+        // for I`, where `info.struct_name` is the type param `"I"`), nor for
+        // inherited dispatch (the method names the base, so `own != struct_name`).
         if let Some(trait_name) = info.trait_name.as_deref()
             && let Some(own) = self.newtype_own_struct_name_with_impl(
                 receiver_type_id,

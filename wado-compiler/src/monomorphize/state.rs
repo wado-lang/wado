@@ -362,13 +362,13 @@ impl Monomorphizer {
     /// (e.g. `"ByteList"`); otherwise `None`.
     ///
     /// Unlike [`Self::get_struct_name_from_type`], which makes newtypes
-    /// transparent by peeling to the base, this preserves the newtype's
-    /// identity — but only when the newtype actually overrides the trait. The
-    /// collect path tries this name first so the queued instantiation
-    /// (`ByteList^Trait::method`) matches the call the rewrite emits, instead of
-    /// the inherited base instantiation (`List^Trait::method`). Newtypes without
-    /// their own impl (e.g. `Meters`, simd `v128` lanes) return `None` and keep
-    /// peeling to the base, so their dispatch is unchanged.
+    /// transparent by peeling to the base, this preserves the newtype's identity
+    /// — but only when the newtype actually overrides the trait. The collect path
+    /// tries this name first so the queued instantiation (`ByteList^Trait::method`)
+    /// matches the call the rewrite emits, not the inherited base
+    /// (`List^Trait::method`). Newtypes without their own impl (e.g. `Meters`,
+    /// simd `v128` lanes) return `None` and keep peeling to the base, so their
+    /// dispatch is unchanged.
     pub fn newtype_own_struct_name_with_impl(
         &self,
         type_id: TypeId,
@@ -380,13 +380,20 @@ impl Monomorphizer {
         loop {
             match type_table.get(tid) {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => tid = *inner,
-                ResolvedType::Newtype { .. } => {
+                ResolvedType::Newtype { base_type, .. } => {
+                    let base = *base_type;
                     let own = type_table.mangle_type_name(tid);
-                    return self
+                    if self
                         .functions
                         .trait_env
                         .impl_module_for(&own, trait_name, None)
-                        .map(|_| own);
+                        .is_some()
+                    {
+                        return Some(own);
+                    }
+                    // This newtype has no own impl, but an inner newtype in a
+                    // `type B = A` chain still might, so keep peeling.
+                    tid = base;
                 }
                 _ => return None,
             }

@@ -110,9 +110,10 @@ Convention, applied to both `core:cbor` and `core:json`:
 - `to_*` always return an owned `ByteList`.
 
 `Serialize` is implemented for all three (each encodes as a byte string).
-`Deserialize` is implemented for `ByteList` (primary) and `ByteArray` (with a
-length check); `ByteSlice` is a borrowed view and so has no owned deserialize,
-exactly like Rust's `&[u8]: !DeserializeOwned`.
+`Deserialize` is implemented for `ByteList` (primary) and `ByteArray` (sized to
+the decoded byte count — a fixed-length array's length is a runtime value, so
+there is nothing to check at compile time); `ByteSlice` is a borrowed view and so
+has no owned deserialize, exactly like Rust's `&[u8]: !DeserializeOwned`.
 
 ### serde framework changes (groundwork)
 

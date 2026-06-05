@@ -15,10 +15,6 @@ fn ser(b: &ByteList) -> String {
     };
 }
 
-// The explicit `impl Serialize/Deserialize for ByteList` overrides the impl
-// `ByteList` would otherwise inherit from its base `List<u8>`, so a `ByteList`
-// serializes as a byte string (base64 in JSON), not an int array.
-
 test "ByteList serializes as a base64url string, not an int array" {
     let b: ByteList = [1, 2, 3];
     // base64url(no-pad) of [0x01,0x02,0x03] is "AQID"; as a JSON string: "AQID".
