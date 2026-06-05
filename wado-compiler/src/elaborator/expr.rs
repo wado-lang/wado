@@ -3174,28 +3174,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let default_ast = struct_field_defaults.get(idx).and_then(Option::clone);
                 if let Some(default_expr) = default_ast {
                     // The default expression is *foreign* AST owned by the
-                    // struct's declaring module. Two facts must follow that
-                    // module rather than the construction site:
+                    // struct's declaring module, so its resolution must follow
+                    // that module, not the construction site:
                     //
-                    // 1. Its nodes carry the struct module's dense `AstId`s, so
-                    //    recording their per-`AstId` facts under the current
-                    //    module would collide with this module's same-numbered
-                    //    nodes and overwrite an unrelated local's type. Key the
-                    //    facts under the struct's module via
-                    //    `ann_module_override`; reify reads them back under the
-                    //    same key after `with_const_module_perspective` swaps to
-                    //    that module.
-                    // 2. Its free identifiers (e.g. a private global or helper
-                    //    `fn` of the struct module) resolve in that module's
-                    //    lexical scope, not the consumer's. `default_scope_module`
-                    //    provides the same callee-scope fallback the function
-                    //    default-argument path uses (see `pad_args_with_defaults`),
-                    //    so an omitted field defaulted to `BASE + helper()` is
-                    //    legal cross-module.
+                    // - Its nodes carry the struct module's dense `AstId`s; keyed
+                    //   under the current module they would collide with
+                    //   same-numbered local nodes and overwrite their recorded
+                    //   types. `ann_module_override` keys the facts under the
+                    //   struct's module — the key reify reads back after
+                    //   `with_const_module_perspective`.
+                    // - Its free identifiers (e.g. a private `global` of the
+                    //   struct module) resolve in that module's scope via
+                    //   `default_scope_module`, the callee-scope fallback
+                    //   `pad_args_with_defaults` also uses for function default
+                    //   arguments.
                     //
-                    // Both overrides change only how the default is *resolved*;
-                    // the explicit `expected_type_id` still drives literal and
-                    // `null → None` coercion.
+                    // Only resolution is redirected; `expected_type_id` still
+                    // drives literal and `null → None` coercion.
                     let resolved = if struct_module_source == self.current_module_source {
                         self.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
                     } else {

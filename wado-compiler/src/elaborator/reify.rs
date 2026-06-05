@@ -4198,11 +4198,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let lookup = self.type_lookup();
         // Decl field shape: (name, index, raw_type, default_expr).
         // Cloned out of the lookup so the borrow ends before reifying.
-        // `struct_module` is the struct's declaring module: when it differs
-        // from the construction site, omitted-field defaults must be reified
-        // under that module's perspective so their foreign `AstId` facts are
-        // read under the key the combined walk recorded them under (see the
-        // omitted-default loop below; mirrors the associated-constant path).
+        // `struct_module` is the struct's declaring module, consulted by the
+        // omitted-default loop below.
         let info = lookup.struct_fields(&struct_name);
         let struct_module = info
             .map(|info| info.module_source.clone())
