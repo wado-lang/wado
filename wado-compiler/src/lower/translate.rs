@@ -278,7 +278,7 @@ impl Translator<'_> {
         // rewrites (currently only the wide-int `Match` scrutinee
         // hoist) are visible when we materialize `locals` /
         // `local_count` below.
-        let body = func.body.as_ref().map(|b| fctx.convert_block(b));
+        let body = func.body.as_ref().map(|b| crate::nir_arena::Body::from_block(&fctx.convert_block(b)));
         let params = func.params.iter().map(|p| fctx.convert_param(p)).collect();
         let extra_locals = fctx.take_extra_locals();
         let local_count = func.local_count + u32::try_from(extra_locals.len()).unwrap();

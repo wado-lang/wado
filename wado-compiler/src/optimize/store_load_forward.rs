@@ -643,22 +643,24 @@ pub fn forward_stores_to_loads(project: &mut NirPackage) -> bool {
 }
 
 fn forward_in_function(func: &mut NirFunction, type_table: &TypeTable) -> bool {
-    let Some(body) = &func.body_block() else {
+    let Some(mut owned) = func.body_block() else {
         return false;
     };
 
     // Phase 1: Collect unsafe locals (address taken, captured, etc.)
-    let unsafe_locals = collect_unsafe_locals(body);
+    let unsafe_locals = collect_unsafe_locals(&owned);
 
     // Phase 2: Precompute modified locals for all blocks in a single O(n) pass.
     // This replaces the previous O(n²) approach where collect_modified_locals
     // was called inline at every control-flow node during forwarding.
-    let cache = precompute_all_modified_locals(body);
+    let cache = precompute_all_modified_locals(&owned);
 
     // Phase 3: Forward known values using cached modified-locals lookups
-    let body = func.body.as_mut().unwrap();
+    let body = &mut owned;
     let mut known = KnownValues::default();
-    forward_in_block(body, &mut known, &unsafe_locals, type_table, &cache)
+    let r = forward_in_block(body, &mut known, &unsafe_locals, type_table, &cache);
+    func.set_body_block(owned);
+    r
 }
 
 /// Look up precomputed modified locals for a block. Falls back to empty set

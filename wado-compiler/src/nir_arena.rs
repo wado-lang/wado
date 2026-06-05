@@ -15,7 +15,7 @@ use cranelift_entity::{PrimaryMap, entity_impl};
 
 use crate::hashmap::IndexSet;
 use crate::nir::{
-    CallArg, FunctionRef, NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal,
+    CallArg, FunctionRef, NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirLocal,
     NirMatchArm, NirPattern, NirStmt, NirStmtKind, NirStructField, NirStructPatternField,
     NirUnaryOp,
 };

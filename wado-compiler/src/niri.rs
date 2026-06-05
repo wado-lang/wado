@@ -2060,7 +2060,7 @@ impl<'a> Interpreter<'a> {
         // projection alone returns Unevaluated for those kinds — only
         // `try_fold` walks them). `reduce_to_lattice` clones internally,
         // so the body inside the still-held `Ref` is not mutated.
-        let result = self.reduce_to_lattice(tail);
+        let result = self.reduce_to_lattice(&tail);
 
         // Restore. The `Ref` (and its dynamic borrow on the callee
         // RefCell) drops when this scope ends.
@@ -2086,13 +2086,13 @@ impl<'a> Interpreter<'a> {
 /// Anything else (zero or multiple stmts, intermediate Let / If / Loop /
 /// Break / Return without value, …) reports `None`. The caller treats
 /// `None` as "do not fold this call", preserving the runtime call.
-fn single_tail_expression(func: &NirFunction) -> Option<&NirExpr> {
-    let bb = func.body_block(); let body = bb.as_ref()?;
+fn single_tail_expression(func: &NirFunction) -> Option<NirExpr> {
+    let body = func.body_block()?;
     let [single] = body.stmts.as_slice() else {
         return None;
     };
     match &single.kind {
-        NirStmtKind::Return { value: Some(e) } | NirStmtKind::Expr(e) => Some(e),
+        NirStmtKind::Return { value: Some(e) } | NirStmtKind::Expr(e) => Some(e.clone()),
         _ => None,
     }
 }

@@ -130,7 +130,8 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         let name = format!("__const_obj_{n}");
 
         let mut func = project.functions[cand.func_idx].borrow_mut();
-        let body = func.body.as_mut().expect("candidate function has a body");
+        let mut owned = func.body_block().expect("candidate function has a body");
+        let body = &mut owned;
         // Rewrite reads first (the let's own value is const and references no
         // local index, so it is untouched), then replace the binding.
         let mut rw = ReadRewrite {
@@ -141,6 +142,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         };
         rw.visit_block(body);
         replace_let_with_set(body, cand.local_index, &cand.module_source, &name);
+        func.set_body_block(owned);
         drop(func);
 
         project.globals.push(NirGlobal {
@@ -362,8 +364,8 @@ impl Gate<'_> {
 /// binding's own `let` value is constant (no `idx` reference), so scanning the
 /// whole body is safe.
 fn is_readonly(func: std::cell::Ref<'_, NirFunction>, idx: u32, gate: &Gate<'_>) -> bool {
-    match &func.body {
-        Some(body) => body_readonly(body, idx, gate),
+    match func.body_block() {
+        Some(body) => body_readonly(&body, idx, gate),
         None => true,
     }
 }

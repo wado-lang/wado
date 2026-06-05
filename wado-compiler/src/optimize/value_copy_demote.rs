@@ -134,8 +134,9 @@ pub fn demote_value_copies(project: &mut NirPackage) {
         shallow.kind = FunctionKind::Regular;
         shallow.is_pub = false;
         shallow.is_export = false;
-        if let Some(body) = &mut shallow.body {
-            rewrite_array_clone_to_shallow(body);
+        if let Some(mut owned) = shallow.body_block() {
+            rewrite_array_clone_to_shallow(&mut owned);
+            shallow.set_body_block(owned);
         }
         shallow_name.insert(deep_key.clone(), new_name);
         new_funcs.push(Rc::new(RefCell::new(shallow)));
@@ -152,8 +153,9 @@ pub fn demote_value_copies(project: &mut NirPackage) {
     }
     for fi in touched {
         let mut f = project.functions[fi].borrow_mut();
-        if let Some(body) = &mut f.body {
-            retarget_block(body, fi, &site_elig, &list_wrapper_copies, &shallow_name);
+        if let Some(mut owned) = f.body_block() {
+            retarget_block(&mut owned, fi, &site_elig, &list_wrapper_copies, &shallow_name);
+            f.set_body_block(owned);
         }
     }
     project.functions.extend(new_funcs);
@@ -632,7 +634,7 @@ impl Analyzer<'_> {
             return false;
         };
         visiting.insert(key.clone());
-        let body_opt = self.funcs[idx].borrow().body.clone();
+        let body_opt = self.funcs[idx].borrow().body_block();
         let result = match body_opt {
             Some(body) => {
                 let mut tainted: IndexSet<u32> = IndexSet::default();

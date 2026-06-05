@@ -750,9 +750,10 @@ fn scalarize_function(
     type_table: &TypeTable,
     cache: &FieldUsageCache,
 ) -> bool {
-    let Some(ref mut body) = func.body else {
+    let Some(mut owned) = func.body_block() else {
         return false;
     };
+    let body = &mut owned;
     // Function-wide alias scan. Loop-local alias detection in
     // `count_field_accesses_in_expr` only sees the loop body, but
     // `tmpl_hoist`-style passes hoist a local's `&mut` capture out of
@@ -779,6 +780,7 @@ fn scalarize_function(
     );
     func.local_count = local_count;
     func.locals = locals;
+    func.set_body_block(owned);
     changed
 }
 

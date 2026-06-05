@@ -784,7 +784,8 @@ pub fn inline_functions(project: &mut NirPackage, inline_threshold: usize) -> bo
         let mut func = func_rc.borrow_mut();
         let caller_module_source = func.module_source.clone();
         let func_name = func.name.clone();
-        if let Some(mut body) = func.body.take() {
+        if let Some(taken) = func.body.take() {
+            let mut body = taken.to_block();
             // Track which functions were inlined into this function
             let mut inlined_funcs: Vec<(ModuleSource, String)> = Vec::new();
             // Take ownership of local_count and locals to avoid borrow conflicts
@@ -804,7 +805,7 @@ pub fn inline_functions(project: &mut NirPackage, inline_threshold: usize) -> bo
             );
             func.local_count = local_count;
             func.locals = locals;
-            func.body = Some(body);
+            func.set_body_block(body);
 
             if !inlined_funcs.is_empty() {
                 changed = true;

@@ -78,7 +78,8 @@ pub fn fold_constants(project: &mut NirPackage) -> bool {
         let address_taken = func.address_taken_locals.clone();
         let stores_aliased = func.stores_aliased_locals.clone();
         let locals = func.locals.clone();
-        if let Some(ref mut body) = func.body {
+        if let Some(mut owned) = func.body_block() {
+            let body = &mut owned;
             // Local indices are unique per function, not project-wide,
             // so reset the interpreter's env at every function boundary.
             visitor.interpreter.enter_function();
@@ -92,6 +93,7 @@ pub fn fold_constants(project: &mut NirPackage) -> bool {
                 build_alias_info(body, &locals, &address_taken, &stores_aliased, &type_table);
             visitor.interpreter.set_alias_info(alias_info);
             changed |= visitor.visit_block(body);
+            func.set_body_block(owned);
         }
     }
     changed
@@ -219,7 +221,7 @@ fn build_global_field_env(project: &NirPackage) -> GlobalFieldEnv {
         env: &mut env,
     };
     for func_rc in &project.functions {
-        if let Some(body) = &func_rc.borrow().body {
+        if let Some(body) = &func_rc.borrow().body_block() {
             collector.visit_block(body);
         }
     }
