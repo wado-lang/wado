@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780671695838,
+  "lastUpdate": 1780673364733,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30197,6 +30197,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/788d2f0ad38c06cac159466ea89f4750930327b2"
         },
         "date": 1780671695558,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1767,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8808,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16711,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 456413,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b3ed65540004a77bd260b4b9689bc9c354a40179",
+          "message": "Merge pull request #1303 from wado-lang/claude/benchmark-workflow-html-Yf8ip\n\nImprove benchmark dashboard HTML and workflow",
+          "timestamp": "2026-06-06T00:20:48+09:00",
+          "tree_id": "74a9b60c6f326ed7bd50d6901194351632b95619",
+          "url": "https://github.com/wado-lang/wado/commit/b3ed65540004a77bd260b4b9689bc9c354a40179"
+        },
+        "date": 1780673364193,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
