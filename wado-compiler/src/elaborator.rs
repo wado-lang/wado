@@ -47,10 +47,7 @@ use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, MethodName};
 use crate::symbol::{Symbol, SymbolKey, SymbolTable};
-use crate::tir::{
-    self as tir, TirEnum, TirEnumCase, TirFlags, TirFlagsMember, TirModule, TirNewtype, TypeId,
-    TypeTable,
-};
+use crate::tir::{self as tir, TypeId, TypeTable};
 
 /// Build a function-name → item-index map for a module's items. Used
 /// once per loaded module during annotate
@@ -1194,11 +1191,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Resolve a module, converting AST to TIR
+    /// Walk a module for its fact-recording side effects (Stage 7-B:
+    /// records-only / `annotate_bodies`). reify (`reify_module`) is the sole
+    /// producer of the `TirModule`; this walk resolves every item body
+    /// (recording types / dispatch / signatures / desugar facts and emitting
+    /// diagnostics) so reify and the LSP can read them. Returns `Bail` on a
+    /// fatal logger error, matching the previous TIR-building contract.
     pub fn resolve_module(
         &mut self,
         module: &'a Module,
         module_source: ModuleSource,
-    ) -> Result<TirModule, Bail> {
+    ) -> Result<(), Bail> {
         // Set current module source for struct type creation
         self.current_module_source = module_source.clone();
         // Store current module items as a reference (no clone)
@@ -1348,7 +1351,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // Third pass: resolve functions
         let _resolve_funcs_span = self.logger.span("elaborate/resolve_funcs");
-        let mut tir_module = TirModule::new(module_source);
+        let _ = module_source;
 
         // Pre-populate the generic-function inference caches for every
         // generic function in the current module. This allows same-module
@@ -1362,16 +1365,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
+        let mut test_count = 0usize;
         for item in &module.items {
             match item {
                 Item::Function(func) => {
-                    if let Some(tir_func) = self.resolve_function(func) {
-                        tir_module.add_function(tir_func);
-                    }
+                    self.resolve_function(func);
                 }
                 Item::Struct(struct_decl) => {
-                    let tir_struct = self.resolve_struct(struct_decl);
-                    tir_module.add_struct(tir_struct);
+                    self.resolve_struct(struct_decl);
                 }
                 Item::Impl(impl_block) => {
                     // Resolve impl block methods with mangled names
@@ -1482,7 +1483,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 type_params,
                                 span: impl_block.span,
                             };
-                            tir_module.synthesis_requests.push(req.clone());
+                            // reify_module reads `pending_synthesis_requests`.
                             self.record_pending_synthesis_request(req);
                         }
                         self.trait_ctx = saved_trait_ctx;
@@ -1639,21 +1640,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     let impl_is_concrete = self
                         .impl_is_concrete_instantiation(impl_block, &self.current_module_source);
                     for method in &impl_block.methods {
-                        if let Some(mut tir_func) = self.resolve_method(
+                        // Records-only: reify emits the method `TirFunction`
+                        // from the recorded signature facts + the AST.
+                        self.resolve_method(
                             method,
                             &struct_name,
                             &impl_block.ty,
                             trait_name.as_deref(),
                             impl_block.trait_type.as_ref(),
                             impl_is_concrete,
-                        ) {
-                            tir_func.name = MethodName::format_local(
-                                &struct_name,
-                                trait_name.as_deref(),
-                                &method.name,
-                            );
-                            tir_module.add_function(tir_func);
-                        }
+                        );
                     }
 
                     // For trait impls, synthesize TIR functions for default methods
@@ -1773,85 +1769,34 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // No TIR output needed for trait declarations themselves
                 }
                 Item::Variant(variant_decl) => {
-                    let tir_variant = self.resolve_variant_decl(variant_decl);
-                    tir_module.variants.push(tir_variant);
+                    self.resolve_variant_decl(variant_decl);
                 }
                 Item::Test(test_decl) => {
-                    let test_index = tir_module.tests.len();
+                    // `test_index` only named the discarded combined-walk test
+                    // function; reify re-indexes its own tests. Pass the running
+                    // count for parity and resolve the body for its facts.
+                    let test_index = test_count;
                     let module_is_todo = module.has_todo();
-                    if let Some((tir_func, tir_test)) =
-                        self.resolve_test_decl(test_decl, test_index, module_is_todo)
+                    if self
+                        .resolve_test_decl(test_decl, test_index, module_is_todo)
+                        .is_some()
                     {
-                        tir_module.add_function(tir_func);
-                        tir_module.tests.push(tir_test);
+                        test_count += 1;
                     }
                 }
                 Item::Global(global_decl) => {
-                    if let Some(tir_global) = self.resolve_global(global_decl) {
-                        tir_module.globals.push(tir_global);
-                    }
+                    self.resolve_global(global_decl);
                 }
-                Item::Enum(enum_decl) => {
-                    let tir_enum = TirEnum {
-                        name: enum_decl.name.clone(),
-                        module_source: self.current_module_source.clone(),
-                        is_pub: enum_decl.is_pub,
-                        type_params: Vec::new(),
-                        monomorph_info: None,
-                        cases: enum_decl
-                            .cases
-                            .iter()
-                            .enumerate()
-                            .map(|(i, case)| TirEnumCase {
-                                name: case.name.clone(),
-                                index: i as u32,
-                                span: case.span,
-                            })
-                            .collect(),
-                        span: enum_decl.span,
-                    };
-                    tir_module.add_enum(tir_enum);
-                }
-                Item::Flags(flags_decl) => {
-                    if let Some(flags_info) = self.lookup_flags_case(&flags_decl.name) {
-                        let tir_flags = TirFlags {
-                            name: flags_decl.name.clone(),
-                            module_source: self.current_module_source.clone(),
-                            is_pub: flags_decl.is_pub,
-                            type_id: flags_info.type_id,
-                            members: flags_decl
-                                .flags
-                                .iter()
-                                .enumerate()
-                                .map(|(i, m)| TirFlagsMember {
-                                    name: m.name.clone(),
-                                    bitmask: 1u32 << i,
-                                    span: m.span,
-                                })
-                                .collect(),
-                            span: flags_decl.span,
-                        };
-                        tir_module.add_flags(tir_flags);
-                    }
-                }
-                Item::Newtype(newtype_decl) => {
-                    if let Some(type_id) = self.lookup_newtype(&newtype_decl.name) {
-                        tir_module.add_newtype(TirNewtype {
-                            name: newtype_decl.name.clone(),
-                            module_source: self.current_module_source.clone(),
-                            is_pub: newtype_decl.is_pub,
-                            type_id,
-                            span: newtype_decl.span,
-                        });
-                    }
-                }
+                // Enum / Flags / Newtype emit no body-level facts — reify
+                // rebuilds their `TirEnum` / `TirFlags` / `TirNewtype` from the
+                // AST + decl tables, so the combined walk does nothing for them.
+                Item::Enum(_) | Item::Flags(_) | Item::Newtype(_) => {}
                 Item::Interface(effect_decl) => {
-                    let tir_effect = self.resolve_effect_decl(effect_decl);
-                    tir_module.add_effect(tir_effect);
+                    // Records `effect_ops`; reify reads them.
+                    self.resolve_effect_decl(effect_decl);
                 }
                 Item::Resource(resource_decl) => {
-                    let tir_resource = self.resolve_resource_decl(resource_decl);
-                    tir_module.add_resource(tir_resource);
+                    self.resolve_resource_decl(resource_decl);
                 }
                 // Other items will be added as needed
                 _ => {}
@@ -1859,24 +1804,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         drop(_resolve_funcs_span);
-        // Share the type table via Rc::clone
-        tir_module.type_table = Rc::clone(&self.tysys.type_table);
-
-        // Preserve data section
-        if let Some(data) = module.data_section() {
-            tir_module = tir_module.with_data_section(Some(data.to_string()));
-        }
-
-        // Anonymous structs created during expression resolution.
-        // Clone (not drain) so reify still sees them on its pass.
-        for anon_struct in &self.sem.decls.pending_anonymous_structs {
-            tir_module.add_struct(anon_struct.clone());
-        }
-
-        // Preserve wasm_module attribute
-        tir_module.wasm_module = module.wasm_module().map(String::from);
-
-        self.logger.ok_or_bail(tir_module)
+        let _ = module;
+        self.logger.ok_or_bail(())
     }
 
     /// Get the type table (after resolution)
