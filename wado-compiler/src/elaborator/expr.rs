@@ -94,7 +94,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Main expression dispatch
         match expr {
-            Expr::Literal(lit) => self.resolve_literal(lit, ctx),
+            Expr::Literal(lit) => self.resolve_literal(lit),
             Expr::Ident(ident) => self.resolve_ident(ident, ctx, expected_type),
             Expr::Binary(binary) => self.resolve_binary(binary, ctx, expected_type),
             Expr::Unary(unary) => self.resolve_unary(unary, ctx, expected_type),
@@ -212,129 +212,71 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// This is used for lookups where we need immutable access. It only handles
     /// primitive types and newtypes. For generic types, use `resolve_type` instead.
     /// Resolve a method call
-    pub(super) fn resolve_literal(
-        &mut self,
-        lit: &ast::LiteralExpr,
-        ctx: &FunctionContext,
-    ) -> TypeId {
+    pub(super) fn resolve_literal(&mut self, lit: &ast::LiteralExpr) -> TypeId {
         // Stage 7-B: reify rebuilds every literal node from the AST; the
         // combined walk only needs the literal's type and its parse / unescape
-        // diagnostics. The `kind` is computed for those diagnostics' sake and
-        // discarded — the returned value is a placeholder.
-        let (_kind, type_id) = match &lit.value {
+        // diagnostics. The returned value is a placeholder, so this projects
+        // only the type while preserving the validation side effects.
+        match &lit.value {
             Literal::Number(repr) => {
                 // Default type: i32 if integer-compatible, f64 if float-only
                 if util::is_float_only_literal(repr) {
                     // Must be float (has decimal point or negative exponent)
-                    match util::parse_float_literal(repr) {
-                        Ok(value) => (
-                            TirExprKind::FloatLiteral {
-                                value,
-                                repr: repr.clone(),
-                            },
-                            TypeTable::F64,
-                        ),
-                        Err(message) => {
-                            let _ = self.logger.error(TypeError::InvalidLiteral {
-                                message,
-                                span: lit.span,
-                            });
-                            (
-                                TirExprKind::FloatLiteral {
-                                    value: 0.0,
-                                    repr: repr.clone(),
-                                },
-                                TypeTable::F64,
-                            )
-                        }
-                    }
-                } else {
-                    // Can be integer (default to i32)
-                    match util::parse_u128_literal(repr) {
-                        Ok(value) => (
-                            TirExprKind::IntLiteral {
-                                value: value as u64,
-                                repr: repr.clone(),
-                            },
-                            TypeTable::I32,
-                        ),
-                        Err(message) => {
-                            let _ = self.logger.error(TypeError::InvalidLiteral {
-                                message,
-                                span: lit.span,
-                            });
-                            (
-                                TirExprKind::IntLiteral {
-                                    value: 0,
-                                    repr: repr.clone(),
-                                },
-                                TypeTable::I32,
-                            )
-                        }
-                    }
-                }
-            }
-            Literal::Bool(b) => (TirExprKind::BoolLiteral(*b), TypeTable::BOOL),
-            Literal::Char(raw) => {
-                let c = match util::unescape_char(raw) {
-                    Ok(c) => c,
-                    Err(message) => {
+                    if let Err(message) = util::parse_float_literal(repr) {
                         let _ = self.logger.error(TypeError::InvalidLiteral {
                             message,
                             span: lit.span,
                         });
-                        '\0'
                     }
-                };
-                (TirExprKind::CharLiteral(c), TypeTable::CHAR)
+                    TypeTable::F64
+                } else {
+                    // Can be integer (default to i32)
+                    if let Err(message) = util::parse_u128_literal(repr) {
+                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                            message,
+                            span: lit.span,
+                        });
+                    }
+                    TypeTable::I32
+                }
+            }
+            Literal::Bool(_) => TypeTable::BOOL,
+            Literal::Char(raw) => {
+                if let Err(message) = util::unescape_char(raw) {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                        message,
+                        span: lit.span,
+                    });
+                }
+                TypeTable::CHAR
             }
             Literal::String(raw) => {
                 let string_type = self.get_string_struct_type();
-                let value = match util::unescape_string(raw) {
-                    Ok(s) => s,
-                    Err(message) => {
-                        let _ = self.logger.error(TypeError::InvalidLiteral {
-                            message,
-                            span: lit.span,
-                        });
-                        String::new()
-                    }
-                };
-                (TirExprKind::StringLiteral(value), string_type)
+                if let Err(message) = util::unescape_string(raw) {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                        message,
+                        span: lit.span,
+                    });
+                }
+                string_type
             }
-            Literal::Null => {
-                let option_unknown = self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_option(TypeTable::UNKNOWN);
-                (TirExprKind::Null, option_unknown)
-            }
-            Literal::Unit => (TirExprKind::Unit, TypeTable::UNIT),
+            Literal::Null => self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .make_option(TypeTable::UNKNOWN),
+            Literal::Unit => TypeTable::UNIT,
             Literal::LocationFile => {
                 // #file - returns the current module source as a string
-                let file_path = self.current_module_source.to_string();
-                let string_type = self.get_string_struct_type();
-                (TirExprKind::StringLiteral(file_path), string_type)
+                self.get_string_struct_type()
             }
             Literal::LocationLine => {
                 // #line - returns the line number (1-indexed)
-                let line = lit.span.line as u64;
-                (
-                    TirExprKind::IntLiteral {
-                        value: line,
-                        repr: line.to_string(),
-                    },
-                    TypeTable::I32,
-                )
+                TypeTable::I32
             }
             Literal::LocationFunction => {
                 // #function - returns the current function name
-                let string_type = self.get_string_struct_type();
-                (
-                    TirExprKind::StringLiteral(ctx.function_name.clone()),
-                    string_type,
-                )
+                self.get_string_struct_type()
             }
             Literal::DataSection => {
                 // #data - returns the __DATA__ section content as a String
@@ -344,54 +286,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .and_then(|m| m.data_section())
                     .map(str::to_owned);
                 let string_type = self.get_string_struct_type();
-                if let Some(content) = data {
-                    (TirExprKind::StringLiteral(content), string_type)
-                } else {
+                if data.is_none() {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
                         message: "`#data` requires a `__DATA__` section in the source file"
                             .to_owned(),
                         span: lit.span,
                     });
-                    (TirExprKind::StringLiteral(String::new()), string_type)
                 }
+                string_type
             }
             Literal::IncludeStr(raw_path) => {
                 let key = [self.current_module_source.to_string(), raw_path.clone()];
                 let string_type = self.get_string_struct_type();
                 if let Some(bytes) = self.tysys.included_files.get(&key) {
-                    if let Ok(s) = std::str::from_utf8(bytes) {
-                        (TirExprKind::StringLiteral(s.to_owned()), string_type)
-                    } else {
+                    if std::str::from_utf8(bytes).is_err() {
                         let _ = self.logger.error(TypeError::InvalidLiteral {
                             message: format!("file is not valid UTF-8: \"{raw_path}\""),
                             span: lit.span,
                         });
-                        (TirExprKind::StringLiteral(String::new()), string_type)
                     }
                 } else {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
                         message: format!("file not found: \"{raw_path}\""),
                         span: lit.span,
                     });
-                    (TirExprKind::StringLiteral(String::new()), string_type)
                 }
+                string_type
             }
             Literal::IncludeBytes(raw_path) => {
                 let key = [self.current_module_source.to_string(), raw_path.clone()];
                 let array_u8_type = self.tysys.type_table.borrow_mut().make_list(TypeTable::U8);
-                if let Some(bytes) = self.tysys.included_files.get(&key) {
-                    (TirExprKind::BytesLiteral(bytes.clone()), array_u8_type)
-                } else {
+                if !self.tysys.included_files.contains_key(&key) {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
                         message: format!("file not found: \"{raw_path}\""),
                         span: lit.span,
                     });
-                    (TirExprKind::BytesLiteral(Vec::new()), array_u8_type)
                 }
+                array_u8_type
             }
-        };
-        let _ = _kind;
-        type_id
+        }
     }
 
     /// Resolve an identifier expression
@@ -423,7 +356,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
             match var_ref {
                 VarRef::Local {
-                    index,
+                    index: _,
                     type_id,
                     defining_ast_id,
                 } => {
@@ -431,23 +364,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Stage 7-B: reify rebuilds the `Local` (`reify_ident`);
                     // record the place so `assign_to_target` can classify an
                     // ident l-value without the resolved `kind`.
-                    let _ = index;
                     self.record_assign_place(ident.id, super::sem::types::AssignPlace::Local);
                     return type_id;
                 }
                 VarRef::Capture {
-                    index,
+                    index: _,
                     type_id,
                     defining_ast_id,
                 } => {
                     self.record_reference_opt(ident.id, defining_ast_id);
                     // Stage 7-B: reify rebuilds the `Capture`. A by-value
                     // capture is not an l-value, so no place is recorded.
-                    let _ = index;
                     return type_id;
                 }
                 VarRef::DerefCapture {
-                    index,
+                    index: _,
                     ref_type_id,
                     inner_type_id,
                     defining_ast_id,
@@ -462,7 +393,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.tysys.type_table.borrow().get(ref_type_id),
                         ResolvedType::Ref(_)
                     );
-                    let _ = index;
                     self.record_assign_place(
                         ident.id,
                         super::sem::types::AssignPlace::DerefCapture { through_mut_ref },
@@ -490,11 +420,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .cloned()
         {
             let prev_override = self.ann_module_override.replace(const_module);
-            let resolved = self.resolve_expr(&const_expr, ctx, Some(type_id));
+            // Resolve the constant body for its fact-recording side effects;
+            // reify re-reifies it (`reify_ident`). Not an l-value.
+            self.resolve_expr(&const_expr, ctx, Some(type_id));
             self.ann_module_override = prev_override;
-            // Stage 7-B: reify re-reifies the constant body (`reify_ident`);
-            // the combined walk resolved it for fact recording. Not an l-value.
-            let _ = resolved;
             return type_id;
         }
 
@@ -505,7 +434,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             if let Some(variant_info) = self.lookup_variant_case(prefix).cloned() {
                 // Find the case by name
-                if let Some((case_index, case_data)) = variant_info
+                if let Some((_case_index, case_data)) = variant_info
                     .cases
                     .iter()
                     .enumerate()
@@ -560,7 +489,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Stage 7-B: reify rebuilds the payload-less
                     // `VariantConstruct` from the AST + recorded generic
                     // instantiation. Not an l-value.
-                    let _ = (case_index, &case_data);
                     return variant_type;
                 }
             }
@@ -583,7 +511,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .make_enum(enum_info.name.clone(), enum_info.module_source);
 
                 // Stage 7-B: reify rebuilds the `EnumConstruct`. Not an l-value.
-                let _ = &case_data;
                 return enum_type;
             }
 
@@ -618,7 +545,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .and_then(|m| m.get(type_name))
                     .cloned();
                 if let Some(variant_info) = ns_variant
-                    && let Some((case_index, case_data)) = variant_info
+                    && let Some((_case_index, case_data)) = variant_info
                         .cases
                         .iter()
                         .enumerate()
@@ -665,7 +592,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.record_generic_instantiation(ident.id, type_args, variant_type);
                     // Stage 7-B: reify rebuilds the namespace-qualified
                     // payload-less `VariantConstruct`. Not an l-value.
-                    let _ = (case_index, &case_data);
                     return variant_type;
                 }
 
@@ -687,7 +613,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .make_enum(enum_info.name.clone(), enum_info.module_source);
                     // Stage 7-B: reify rebuilds the namespace-qualified
                     // `EnumConstruct`. Not an l-value.
-                    let _ = &case_data;
                     return enum_type;
                 }
 
@@ -777,7 +702,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(fallback) = self.default_scope_module.clone()
             && fallback != self.current_module_source
             && let Some(result) =
-                self.resolve_ident_in_fallback_module(&ident.name, ident.span, &fallback)
+                self.resolve_ident_in_fallback_module(&ident.name, &fallback)
         {
             return result;
         }
@@ -795,10 +720,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn resolve_ident_in_fallback_module(
         &mut self,
         name: &str,
-        span: Span,
         fallback: &ModuleSource,
     ) -> Option<TypeId> {
-        let _ = span;
         let module = self.loaded_modules.get(fallback)?;
         for item in &module.items {
             match item {
@@ -951,28 +874,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         self.record_item_reference_by_name(ident.id, &ident.name);
 
-        let Some((func_ast, def_module, defining_name)) = self.lookup_func_ast_for_ref(&ident.name)
+        let Some((func_ast, def_module, _defining_name)) =
+            self.lookup_func_ast_for_ref(&ident.name)
         else {
             // Fallback: known function but its AST is unreachable (shouldn't
             // normally happen). Emit a stub FuncRef so downstream stays sane.
-            let module_source = if self
-                .sem
-                .decls
-                .function_return_types
-                .contains_key(&ident.name)
-            {
-                self.current_module_source.clone()
-            } else {
-                self.symbols
-                    .lookup(&ident.name)
-                    .map(|s| s.module_source().clone())
-                    .unwrap_or_else(|| self.current_module_source.clone())
-            };
             // Stage 7-B: reify rebuilds the stub `FuncRef`.
-            let _ = module_source;
             return TypeTable::UNKNOWN;
         };
-        let module_source = def_module.clone();
 
         let real_type_param_count = func_ast
             .type_params
@@ -1005,7 +914,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_func_ref_instantiation(ident.id, &resolved_args, type_id);
             // Stage 7-B: reify rebuilds the turbofish `FuncRef` from the
             // recorded instantiation. Project the type only.
-            let _ = (module_source, defining_name, resolved_args);
             return type_id;
         }
 
@@ -1015,7 +923,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .compute_func_ref_type_from_ast(&func_ast, &def_module)
                 .unwrap_or(TypeTable::UNKNOWN);
             // Stage 7-B: reify rebuilds the non-generic `FuncRef`.
-            let _ = (module_source, defining_name);
             return type_id;
         }
 
@@ -1029,7 +936,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.record_func_ref_instantiation(ident.id, &inferred, type_id);
                     // Stage 7-B: reify rebuilds the inferred-generic `FuncRef`
                     // from the recorded instantiation. Project the type only.
-                    let _ = (module_source, defining_name, inferred);
                     return type_id;
                 }
                 FuncRefInference::ArityMismatch {
@@ -2180,7 +2086,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // exhaustiveness / null / arm-agreement diagnostics. No analysis reads
         // the resolved match structure (missing-return walks arms off the AST
         // in `control_flow.rs`), so project only the result type.
-        let _ = arms;
         type_id
     }
 
@@ -2973,8 +2878,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Check if this is a generic struct and infer type arguments
-        let (struct_type, mangled_struct_name, fields) = if self
+        // Check if this is a generic struct and infer type arguments.
+        // Stage 7-B: reify rebuilds the mangled name + fields; the combined
+        // walk only needs the substitution / coercion side effects below and
+        // the resulting struct type.
+        let (struct_type, _mangled_struct_name, _fields) = if self
             .sem
             .decls
             .generic_struct_names
@@ -3103,7 +3011,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // instance type; the combined walk resolved the fields (and applied any
         // deferred tuple-to-sequence coercion) for their fact-recording side
         // effects. Project only the struct type.
-        let _ = (mangled_struct_name, fields);
         struct_type
     }
 
@@ -3151,11 +3058,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 struct_lit.id,
                 vec![],
                 existing_type,
-                Some(anon_name.clone()),
+                Some(anon_name),
             );
             // Stage 7-B: reify rebuilds the anonymous `StructLiteral`
             // (`reify_anonymous_struct_literal`); project only the type.
-            let _ = (anon_name, resolved_fields);
             return existing_type;
         }
 
@@ -3216,13 +3122,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             struct_lit.id,
             vec![],
             struct_type,
-            Some(anon_name.clone()),
+            Some(anon_name),
         );
 
         // Stage 7-B: reify rebuilds the anonymous `StructLiteral`; the combined
         // walk registered the struct type, field info, and pending TirStruct
         // above for their side effects. Project only the type.
-        let _ = (anon_name, resolved_fields);
         struct_type
     }
 
@@ -3504,7 +3409,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         drop(tt);
 
         ctx.enter_scope();
-        let v_local = ctx.add_local("__qm_v".to_string(), ok_type, false, None);
+        // The `__qm_v` local is allocated for walk-order parity; reify rebuilds
+        // the `?` desugar and its own bindings, so the index is not kept here.
+        ctx.add_local("__qm_v".to_string(), ok_type, false, None);
         let e_local = ctx.add_local("__qm_e".to_string(), inner_err_type, false, None);
 
         // Record the `From::from(e)` conversion facts when the inner and outer
@@ -3531,7 +3438,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `FromCallFacts`. The combined walk keeps the scope / local allocation
         // and the `resolve_from_call` fact-recording, and projects the
         // unwrapped `Ok` payload type.
-        let _ = v_local;
         ok_type
     }
 
