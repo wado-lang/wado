@@ -1042,7 +1042,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether an `Index` assignment target reaching `assign_to_target`'s
-    /// general path is an assignable place. The IndexAssign path above
+    /// general path is an assignable place. The `IndexAssign` path above
     /// already returned for index-assignable receivers, so AST + recorded
     /// facts replace reading the resolved `target.kind`:
     ///   - a read-only `Index` trait access (recorded `operator_dispatch`
