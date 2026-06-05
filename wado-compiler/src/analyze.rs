@@ -604,11 +604,6 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         }
     }
 
-    /// Look up a symbol by name (for use during codegen)
-    pub fn lookup(&self, name: &str) -> Option<&Symbol> {
-        self.symbols.lookup(name)
-    }
-
     /// Look up a symbol in a specific module
     pub fn lookup_in_module(&self, module_source: &ModuleSource, name: &str) -> Option<&Symbol> {
         self.symbols.lookup_in_module(module_source, name)
@@ -816,7 +811,8 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             {
                                 let key = symbol.defined_at.clone();
                                 let import_name = alias.as_ref().unwrap_or(name);
-                                self.symbols.register_import(import_name, key);
+                                self.symbols
+                                    .register_import(from_module_source, import_name, key);
                             } else {
                                 self.logger.error(AnalyzeError::ImportNotFound {
                                     module_source: module_source.clone(),
@@ -837,7 +833,11 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                     let key = symbol.defined_at.clone();
                                     let import_name =
                                         func_item.alias.as_ref().unwrap_or(&func_item.name);
-                                    self.symbols.register_import(import_name, key);
+                                    self.symbols.register_import(
+                                        from_module_source,
+                                        import_name,
+                                        key,
+                                    );
                                 } else {
                                     self.logger.error(AnalyzeError::ImportNotFound {
                                         module_source: module_source.clone(),
@@ -865,7 +865,11 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                 .map(|s| (s.name.clone(), s.defined_at.clone()))
                                 .collect();
                             for (sym_name, sym_key) in symbols {
-                                self.symbols.register_import(&sym_name, sym_key);
+                                self.symbols.register_import(
+                                    from_module_source,
+                                    &sym_name,
+                                    sym_key,
+                                );
                             }
                         }
                     }

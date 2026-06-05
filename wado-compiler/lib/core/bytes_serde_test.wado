@@ -1,0 +1,79 @@
+//! serde integration for the byte-buffer types: a byte string must serialize
+//! as base64 in JSON (via `serialize_bytes`), not as a sequence of integers
+//! (the inherited `List<u8>`/`Array<u8>` impl). This also verifies that the
+//! explicit `impl Serialize/Deserialize for ByteList` overrides the impl the
+//! newtype would otherwise inherit from its base.
+
+use { to_string, from_string } from "core:json";
+
+fn ser(b: &ByteList) -> String {
+    return match to_string::<ByteList>(b) {
+        Ok(v) => v,
+        Err(_) => {
+            panic("serialize failed");
+        },
+    };
+}
+
+test "ByteList serializes as a base64url string, not an int array" {
+    let b: ByteList = [1, 2, 3];
+    // base64url(no-pad) of [0x01,0x02,0x03] is "AQID"; as a JSON string: "AQID".
+    assert ser(&b) == `"AQID"`;
+}
+
+test "ByteList round-trips through JSON" {
+    let b: ByteList = [255, 0, 128, 64];
+    let s = ser(&b);
+    let back = match from_string::<ByteList>(s) {
+        Ok(v) => v,
+        Err(_) => {
+            panic("deserialize failed");
+        },
+    };
+    assert back.len() == 4;
+    assert back[0] == 255;
+    assert back[1] == 0;
+    assert back[2] == 128;
+    assert back[3] == 64;
+}
+
+test "empty ByteList serializes as an empty JSON string" {
+    let b: ByteList = [];
+    assert ser(&b) == `""`;
+}
+
+test "ByteSlice serializes as a base64url string" {
+    let b: ByteList = [1, 2, 3];
+    let sl = b.as_byte_slice();
+    let s = match to_string::<ByteSlice>(&sl) {
+        Ok(v) => v,
+        Err(_) => {
+            panic("serialize failed");
+        },
+    };
+    assert s == `"AQID"`;
+}
+
+test "ByteArray serializes as base64 and round-trips through JSON" {
+    let tmp: Array<u8> = Array::filled(3, 0);
+    let mut a: ByteArray = tmp as ByteArray;
+    a.set(0, 1);
+    a.set(1, 2);
+    a.set(2, 3);
+    let s = match to_string::<ByteArray>(&a) {
+        Ok(v) => v,
+        Err(_) => {
+            panic("serialize failed");
+        },
+    };
+    assert s == `"AQID"`;
+    let back = match from_string::<ByteArray>(s) {
+        Ok(v) => v,
+        Err(_) => {
+            panic("deserialize failed");
+        },
+    };
+    assert back.len() == 3;
+    assert back.get(0) == 1;
+    assert back.get(2) == 3;
+}

@@ -334,28 +334,25 @@ impl Monomorphizer {
         if !type_args.is_empty()
             && let Some(struct_name) = self.get_struct_name_from_type(receiver.type_id, type_table)
         {
-            // Try both inherent method and trait method formats
+            // Try both inherent and trait method formats. A newtype's OWN impl
+            // is tried before its base, so the rewrite lands on the newtype's
+            // own queued instantiation (`ByteList^…`) rather than the inherited
+            // base (`List<u8>^…`). Mirrors the collect path in `func_inst.rs`.
             let trait_name_opt = method_func
                 .method_info
                 .clone()
                 .and_then(|info| info.trait_name);
-            let mut names_to_try = vec![(
-                MethodName::format_local(&struct_name, None, &method_name),
-                None::<String>,
-            )];
-            if let Some(ref tn) = trait_name_opt {
-                names_to_try.push((
-                    MethodName::format_local(&struct_name, Some(tn), &method_name),
-                    Some(tn.clone()),
-                ));
-            }
+            let (own_name, names_to_try) = self.newtype_aware_method_names(
+                receiver.type_id,
+                type_table,
+                &method_name,
+                &struct_name,
+                trait_name_opt.as_deref(),
+            );
 
             let info_ref = method_func.method_info.as_ref();
-            let candidates: Vec<&str> = if let Some(info) = info_ref {
-                vec![&info.base_struct_name, &info.struct_name, &struct_name]
-            } else {
-                vec![&struct_name]
-            };
+            let candidates =
+                self.newtype_aware_candidates(own_name.as_deref(), info_ref, &struct_name);
             let receiver_module = receiver_module_hint(type_table, receiver.type_id);
             let mut rewritten = false;
             for (full_method_name, _tn) in &names_to_try {

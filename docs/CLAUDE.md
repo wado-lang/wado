@@ -119,3 +119,5 @@ It may include TODOs on WIP.
 - [Redesign `builtin::array` into a First-Class `List<T>`](./wep-2026-06-02-builtin-array-redesign.md)
 - [Optimizer Remarks for Missed Optimizations](./wep-2026-06-03-optimizer-remarks.md)
 - [Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md)
+- [Temporal Standard Library (`core:temporal`)](./wep-2026-06-05-core-temporal.md)
+- [CBOR Standard Library (`core:cbor`)](./wep-2026-06-05-core-cbor.md)

@@ -243,8 +243,13 @@ pub struct SymbolTable {
     modules: IndexMap<ModuleSource, IndexMap<String, SymbolKey>>,
     /// Re-exports: module → exported name → re-export target
     reexports: IndexMap<ModuleSource, IndexMap<String, ReExportTarget>>,
-    /// Imported symbols in the current module (name → canonical key)
-    imports: IndexMap<String, SymbolKey>,
+    /// Imported symbols, scoped per importing module: module → imported name →
+    /// canonical key. Each module sees only the names it explicitly `use`s
+    /// (plus the implicit prelude, resolved as a fallback in [`Self::lookup`]).
+    /// This is *not* a program-wide map: a name imported by one module is not
+    /// visible to another, so same-named imports in different modules cannot
+    /// collide.
+    imports: IndexMap<ModuleSource, IndexMap<String, SymbolKey>>,
 }
 
 impl SymbolTable {
@@ -305,16 +310,15 @@ impl SymbolTable {
         key
     }
 
-    /// Register an imported symbol in the current module
+    /// Register an imported symbol in `importing_module`.
     ///
-    /// This makes the symbol accessible by its short name (without module prefix).
-    pub fn register_import(&mut self, name: &str, key: SymbolKey) {
-        self.imports.insert(name.to_string(), key);
-    }
-
-    /// Clear all registered imports (when moving to a new module)
-    pub fn clear_imports(&mut self) {
-        self.imports.clear();
+    /// This makes the symbol accessible by its short name (without module
+    /// prefix) when resolving names referenced from `importing_module`.
+    pub fn register_import(&mut self, importing_module: &ModuleSource, name: &str, key: SymbolKey) {
+        self.imports
+            .entry(importing_module.clone())
+            .or_default()
+            .insert(name.to_string(), key);
     }
 
     /// Register a re-export in a module
@@ -356,24 +360,47 @@ impl SymbolTable {
     /// - The imported symbol is a struct
     pub fn get_struct_aliases(&self) -> Vec<(String, ModuleSource, String)> {
         let mut aliases = Vec::new();
-        for (alias_name, key) in &self.imports {
-            if let Some(symbol) = self.symbols.get(key)
-                && matches!(symbol.kind, SymbolKind::Struct(_))
-                && alias_name != &symbol.name
-            {
-                aliases.push((
-                    alias_name.clone(),
-                    symbol.defined_at.module.clone(),
-                    symbol.name.clone(),
-                ));
+        for names in self.imports.values() {
+            for (alias_name, key) in names {
+                if let Some(symbol) = self.symbols.get(key)
+                    && matches!(symbol.kind, SymbolKind::Struct(_))
+                    && alias_name != &symbol.name
+                {
+                    aliases.push((
+                        alias_name.clone(),
+                        symbol.defined_at.module.clone(),
+                        symbol.name.clone(),
+                    ));
+                }
             }
         }
         aliases
     }
 
-    /// Look up a symbol by name in the current import context.
-    pub fn lookup(&self, name: &str) -> Option<&Symbol> {
-        self.imports.get(name).and_then(|key| self.symbols.get(key))
+    /// Look up a name as it resolves when referenced from `module`: the
+    /// module's own explicit imports first, then the implicit prelude.
+    ///
+    /// The prelude (`core:prelude`) is in scope in every module without an
+    /// explicit `use`, so its public exports are consulted as a fallback. This
+    /// keeps `List`, `Option`, … resolvable everywhere while confining all
+    /// other imports to the module that declared them — a name imported by one
+    /// module never leaks into another (issue #1298). The prelude
+    /// implementation files (`core:prelude*`) resolve only their own imports;
+    /// they would otherwise recurse into themselves through this fallback.
+    pub fn lookup(&self, module: &ModuleSource, name: &str) -> Option<&Symbol> {
+        if let Some(symbol) = self
+            .imports
+            .get(module)
+            .and_then(|names| names.get(name))
+            .and_then(|key| self.symbols.get(key))
+        {
+            return Some(symbol);
+        }
+        let prelude = ModuleSource::prelude();
+        if module != &prelude {
+            return self.lookup_in_module(&prelude, name);
+        }
+        None
     }
 
     /// Look up a symbol in a specific module
@@ -506,6 +533,8 @@ mod tests {
         let mut table = SymbolTable::new();
 
         let core_cli = ModuleSource::cli();
+        let mut interner = ModuleSourceInterner::new();
+        let importer = interner.local("./main.wado");
         let key = table.define(
             &core_cli,
             AstId::fresh(),
@@ -520,11 +549,15 @@ mod tests {
             None,
         );
 
-        table.register_import("println", key);
+        table.register_import(&importer, "println", key);
 
-        let symbol = table.lookup("println");
+        let symbol = table.lookup(&importer, "println");
         assert!(symbol.is_some());
         assert_eq!(symbol.unwrap().name, "println");
+
+        // The import is scoped to `importer`; another module does not see it.
+        let other = interner.local("./other.wado");
+        assert!(table.lookup(&other, "println").is_none());
     }
 
     #[test]
@@ -544,7 +577,7 @@ mod tests {
             None,
         );
 
-        table.register_import("OtherPoint", key);
+        table.register_import(&geometry, "OtherPoint", key);
 
         let aliases = table.get_struct_aliases();
         assert_eq!(aliases.len(), 1);
@@ -570,7 +603,7 @@ mod tests {
             None,
         );
 
-        table.register_import("Point", key);
+        table.register_import(&geometry, "Point", key);
 
         let aliases = table.get_struct_aliases();
         assert_eq!(aliases.len(), 0);

@@ -32,6 +32,21 @@ use {
 } from "core:serde";
 
 use { parse as fpfmt_parse } from "core:prelude/fpfmt.wado";
+use { encode_with as base64_encode_with, decode as base64_decode, Encoding } from "core:base64";
+
+/// Writes a byte string as a base64url (no padding) JSON string into buf.
+/// Matches RFC 8949 §6.1 advice for representing binary data as JSON text.
+fn write_base64_string(buf: &mut String, v: ByteSlice) {
+    let mut bytes: List<u8> = [];
+    let mut i = 0;
+    while i < v.len() {
+        bytes.push(v[i]);
+        i += 1;
+    }
+    buf.push('"');
+    buf.push_str(&base64_encode_with(&bytes, Encoding::UrlSafe | Encoding::NoPadding));
+    buf.push('"');
+}
 
 /// Writes a JSON-escaped string (with surrounding quotes) into buf.
 pub fn write_escaped_string(buf: &mut String, s: &String) {
@@ -266,6 +281,11 @@ impl Serializer for JsonSerializer {
 
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
         write_escaped_string(self.buf, v);
+        return Result::Ok(());
+    }
+
+    fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError> {
+        write_base64_string(self.buf, v);
         return Result::Ok(());
     }
 
@@ -556,6 +576,11 @@ impl Serializer for PrettyJsonSerializer {
 
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
         write_escaped_string(self.buf, v);
+        return Result::Ok(());
+    }
+
+    fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError> {
+        write_base64_string(self.buf, v);
         return Result::Ok(());
     }
 
@@ -2051,6 +2076,17 @@ impl Deserializer for JsonDeserializer {
 
     fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
         return self.read_json_string();
+    }
+
+    fn deserialize_bytes(&mut self) -> Result<ByteList, DeserializeError> {
+        let s = self.read_json_string()?;
+        match base64_decode(s) {
+            Some(bytes) => return Result::Ok(bytes as ByteList),
+            None => return Result::Err(DeserializeError::invalid_value(
+                "invalid base64 byte string",
+                self.pos as i64,
+            )),
+        }
     }
 
     fn is_null(&mut self) -> Result<bool, DeserializeError> {

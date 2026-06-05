@@ -122,6 +122,13 @@ impl Deserialize for Config;
 
 #### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
 
+#### `fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError>`
+
+Serialize a byte string. Self-describing binary formats (CBOR) emit a
+native byte string; JSON emits base64. The default falls back to a
+sequence of `u8` (the historical `List<u8>` behaviour), so a format
+with no distinct byte-string form keeps working unchanged.
+
 #### `fn serialize_null(&mut self) -> Result<(), SerializeError>`
 
 #### `fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError>`
@@ -197,11 +204,34 @@ direct and inlinable — no closure value, no per-decode allocation.
 
 #### `fn visit_f64(&mut self, v: f64) -> Result<Self::Value, DeserializeError>`
 
+#### `fn visit_i64(&mut self, v: i64) -> Result<Self::Value, DeserializeError>`
+
+Integer visits. Self-describing binary formats (CBOR) call these to
+preserve full integer precision; the defaults widen to `f64` so a
+visitor that only cares about JSON-style numbers keeps working.
+
+#### `fn visit_u64(&mut self, v: u64) -> Result<Self::Value, DeserializeError>`
+
+#### `fn visit_i128(&mut self, v: i128) -> Result<Self::Value, DeserializeError>`
+
+#### `fn visit_u128(&mut self, v: u128) -> Result<Self::Value, DeserializeError>`
+
 #### `fn visit_string(&mut self, v: String) -> Result<Self::Value, DeserializeError>`
+
+#### `fn visit_bytes(&mut self, _v: ByteList) -> Result<Self::Value, DeserializeError>`
+
+Byte-string visit (CBOR major type 2; JSON base64). Defaults to an
+`UnexpectedType` error so text-only visitors are unaffected.
 
 #### `fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<Self::Value, DeserializeError>`
 
 #### `fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<Self::Value, DeserializeError>`
+
+#### `fn visit_unknown(&mut self, _raw: ByteList) -> Result<Self::Value, DeserializeError>`
+
+Opaque passthrough for a format item the value model cannot represent
+(e.g. an unassigned CBOR simple value or an uninterpreted tag). Only
+self-describing binary formats call this; defaults to an error.
 
 ### `pub trait Deserializer`
 
@@ -226,6 +256,11 @@ direct and inlinable — no closure value, no per-decode allocation.
 #### `fn deserialize_char(&mut self) -> Result<char, DeserializeError>`
 
 #### `fn deserialize_string(&mut self) -> Result<String, DeserializeError>`
+
+#### `fn deserialize_bytes(&mut self) -> Result<ByteList, DeserializeError>`
+
+Deserialize a byte string. Self-describing binary formats read a native
+byte string; JSON reads base64. The default reads a sequence of `u8`.
 
 #### `fn is_null(&mut self) -> Result<bool, DeserializeError>`
 

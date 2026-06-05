@@ -413,7 +413,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let Some(sym) = self
             .symbols
             .lookup_in_module(&self.current_module_source, name)
-            .or_else(|| self.symbols.lookup(name))
+            .or_else(|| self.symbols.lookup(&self.current_module_source, name))
         else {
             return;
         };
@@ -1050,14 +1050,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///    the current module (and non-aliased imports). Consulted second so
     ///    aliased effect/resource imports go through the alias-aware path
     ///    above.
-    /// 3. The global symbol table — canonicalises prelude / stdlib names
-    ///    even when they were imported transitively.
-    /// 4. The global decl indices on [`TraitEnv`] — last-resort fallback
+    /// 3. The current module — a name *defined* here shadows the symbol-table
+    ///    and decl-index fallbacks below, so a local declaration always wins
+    ///    over an unrelated same-named item in another module (issue #1298).
+    /// 4. The symbol table, scoped to the current module's imports plus the
+    ///    implicit prelude — canonicalises explicitly imported names and
+    ///    prelude/stdlib names to their defining module.
+    /// 5. The global decl indices on [`TraitEnv`] — last-resort fallback
     ///    for prelude traits referenced from stdlib code where neither
     ///    the per-module import context nor the symbol table carries the
     ///    binding (prelude is implicit, not threaded through `use`).
-    /// 5. The current module — the implicit declaration site for everything
-    ///    declared locally without re-export.
     ///
     /// When the canonicalised name had an alias (`use { Foo as Bar }`),
     /// the returned key uses the *original* declaration name, so the index
@@ -1123,7 +1125,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // only when no symbol exists (genuinely-local declaration).
                     let canonical = self
                         .symbols
-                        .lookup(name)
+                        .lookup(&self.current_module_source, name)
                         .map(|sym| {
                             if let Some(use_id) = use_id {
                                 self.record_reference_to_key(use_id, sym.defined_at.clone());

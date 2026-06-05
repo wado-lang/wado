@@ -48,7 +48,14 @@ pub(crate) fn canonical_decl_key_with(
             .unwrap_or_else(|| src.clone());
         return (canonical, name.to_string());
     }
-    if let Some(sym) = symbols.lookup(name) {
+    // A name defined in the current module resolves to it, ahead of the global
+    // decl-index fallbacks below (which are by-name and can pick a same-named
+    // declaration in another module). Without this a locally defined
+    // `trait Visitor` lost to `core:serde::Visitor` (issue #1298).
+    if symbols.is_defined_in_module(current_module_source, name) {
+        return (current_module_source.clone(), name.to_string());
+    }
+    if let Some(sym) = symbols.lookup(current_module_source, name) {
         return (sym.defined_at.module.clone(), name.to_string());
     }
     if let Some(key) = trait_env.find_trait_decl_key(name) {
@@ -77,6 +84,9 @@ pub(crate) fn find_trait_decl_methods_with_module_with(
     trait_env: &super::trait_env::TraitEnv,
     loaded_modules: &IndexMap<ModuleSource, ast::Module>,
 ) -> Option<(Vec<ast::Function>, ModuleSource)> {
+    // `canonical_decl_key_with` resolves the trait local-first (a local trait
+    // shadows a same-named one in another module — issue #1298), so this picks
+    // the right `Visitor` even when an unrelated `core:serde::Visitor` exists.
     let canonical_key = canonical_decl_key_with(
         trait_name,
         current_module_source,
@@ -134,6 +144,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         trait_name: &str,
     ) -> Option<Vec<ast::GenericParam>> {
+        // `canonical_decl_key` is local-first (issue #1298), so the type-param
+        // list and the default-method bodies resolve to the same trait.
         let canonical_key = self.canonical_decl_key(trait_name);
         if let Some((module_src, item_idx)) = self.tysys.trait_env.decl_index.get(&canonical_key) {
             let module = &self.loaded_modules[module_src];

@@ -181,6 +181,20 @@ pub trait Serializer {
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError>;
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>;
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
+    /// Serialize a byte string. Self-describing binary formats (CBOR) emit a
+    /// native byte string; JSON emits base64. The default falls back to a
+    /// sequence of `u8` (the historical `List<u8>` behaviour), so a format
+    /// with no distinct byte-string form keeps working unchanged.
+    fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError> {
+        let seq = self.begin_seq(v.len())?;
+        let mut i = 0;
+        while i < v.len() {
+            let b = v[i];
+            seq.element(&b)?;
+            i += 1;
+        }
+        return seq.end();
+    }
     fn serialize_null(&mut self) -> Result<(), SerializeError>;
     fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError> with stores[self];
     fn begin_map(&mut self, len: i32) -> Result<Self::MapSerializer, SerializeError> with stores[self];
@@ -247,9 +261,35 @@ pub trait Visitor {
     fn visit_null(&mut self) -> Result<Self::Value, DeserializeError>;
     fn visit_bool(&mut self, v: bool) -> Result<Self::Value, DeserializeError>;
     fn visit_f64(&mut self, v: f64) -> Result<Self::Value, DeserializeError>;
+    /// Integer visits. Self-describing binary formats (CBOR) call these to
+    /// preserve full integer precision; the defaults widen to `f64` so a
+    /// visitor that only cares about JSON-style numbers keeps working.
+    fn visit_i64(&mut self, v: i64) -> Result<Self::Value, DeserializeError> {
+        return self.visit_f64(v as f64);
+    }
+    fn visit_u64(&mut self, v: u64) -> Result<Self::Value, DeserializeError> {
+        return self.visit_f64(v as f64);
+    }
+    fn visit_i128(&mut self, v: i128) -> Result<Self::Value, DeserializeError> {
+        return self.visit_f64(v as f64);
+    }
+    fn visit_u128(&mut self, v: u128) -> Result<Self::Value, DeserializeError> {
+        return self.visit_f64(v as f64);
+    }
     fn visit_string(&mut self, v: String) -> Result<Self::Value, DeserializeError>;
+    /// Byte-string visit (CBOR major type 2; JSON base64). Defaults to an
+    /// `UnexpectedType` error so text-only visitors are unaffected.
+    fn visit_bytes(&mut self, _v: ByteList) -> Result<Self::Value, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("unexpected byte string", -1));
+    }
     fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<Self::Value, DeserializeError>;
     fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<Self::Value, DeserializeError>;
+    /// Opaque passthrough for a format item the value model cannot represent
+    /// (e.g. an unassigned CBOR simple value or an uninterpreted tag). Only
+    /// self-describing binary formats call this; defaults to an error.
+    fn visit_unknown(&mut self, _raw: ByteList) -> Result<Self::Value, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("unexpected opaque value", -1));
+    }
 }
 
 #[compiler_item("deserializer")]
@@ -270,6 +310,21 @@ pub trait Deserializer {
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError>;
     fn deserialize_char(&mut self) -> Result<char, DeserializeError>;
     fn deserialize_string(&mut self) -> Result<String, DeserializeError>;
+    /// Deserialize a byte string. Self-describing binary formats read a native
+    /// byte string; JSON reads base64. The default reads a sequence of `u8`.
+    fn deserialize_bytes(&mut self) -> Result<ByteList, DeserializeError> {
+        let seq = self.begin_seq()?;
+        let mut out: ByteList = [];
+        loop {
+            let opt = seq.next_element::<u8>()?;
+            if let Some(b) = opt {
+                out.push(b);
+            } else {
+                seq.end()?;
+                return Result::Ok(out);
+            }
+        }
+    }
     fn is_null(&mut self) -> Result<bool, DeserializeError>;
     fn begin_seq(&mut self) -> Result<Self::SeqAccess, DeserializeError> with stores[self];
     fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError> with stores[self];
@@ -401,6 +456,28 @@ impl<T: Serialize> Serialize for List<T> {
             seq.element(item)?;
         }
         return seq.end();
+    }
+}
+
+// Byte buffers serialize as a byte string (`serialize_bytes`), not as a
+// sequence of integers. These explicit impls override the `List<u8>` /
+// `Array<u8>` / `ArraySlice<u8>` sequence impls that the newtypes would
+// otherwise inherit.
+impl Serialize for ByteList {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_bytes(self.as_byte_slice());
+    }
+}
+
+impl Serialize for ByteArray {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_bytes(self.as_byte_slice());
+    }
+}
+
+impl Serialize for ByteSlice {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_bytes(self.as_byte_slice());
     }
 }
 
@@ -566,6 +643,24 @@ impl<T: Deserialize> Deserialize for List<T> {
             seq.end()?;
             return Result::Ok([] as List<T>);
         }
+    }
+}
+
+// Byte buffer (owned, growable) deserializes from a byte string, overriding
+// the inherited `List<u8>` sequence impl.
+impl Deserialize for ByteList {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<ByteList, DeserializeError> {
+        return d.deserialize_bytes();
+    }
+}
+
+// Owned, fixed-length byte buffer. Deserializes from a byte string into an
+// `Array<u8>` whose length is the decoded byte count (a fixed-length array's
+// length is a runtime value, so there is no compile-time length to enforce).
+impl Deserialize for ByteArray {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<ByteArray, DeserializeError> {
+        let bytes = d.deserialize_bytes()?;
+        return Result::Ok(bytes.as_slice().to_array() as ByteArray);
     }
 }
 

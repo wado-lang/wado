@@ -295,6 +295,18 @@ pub struct "RangeExclusive<i32>" {
     pub end: i32,
 }
 
+pub struct "ArraySlice<u8>" {
+    repr: &Array<u8>,
+    start: i32,
+    end: i32,
+}
+
+pub struct "ArrayIter<u8>" {
+    repr: &Array<u8>,
+    index: i32,
+    end: i32,
+}
+
 pub struct "Box<f64>" {
     value: f64,
 }
@@ -3353,6 +3365,285 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I
     self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
 }
 
+fn "ByteSlice^AsByteSlice::as_byte_slice"(self: &ArraySlice<u8>) -> ArraySlice<u8> with stores[self] {
+    return *self;
+}
+
+fn "ByteList^AsByteSlice::as_byte_slice"(self: &List<u8>) -> ArraySlice<u8> with stores[self] {
+    return self."List<u8>::as_slice"() as ArraySlice<u8>;
+}
+
+fn "ByteArray^AsByteSlice::as_byte_slice"(self: &Array<u8>) -> ArraySlice<u8> with stores[self] {
+    return self."Array<u8>::slice"(0, self."Array<u8>::len"()) as ArraySlice<u8>;
+}
+
+pub fn "ByteArray^Inspect::inspect"(self: &Array<u8>, f: &mut Formatter) {
+    *self as Array<u8>."Array<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(&" as ByteArray");
+}
+
+pub fn "ByteList^Inspect::inspect"(self: &List<u8>, f: &mut Formatter) {
+    *self as List<u8>."List<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(&" as ByteList");
+}
+
+pub fn "ByteSlice^Inspect::inspect"(self: &ArraySlice<u8>, f: &mut Formatter) {
+    *self as ArraySlice<u8>."ArraySlice<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(&" as ByteSlice");
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str(&"StreamWritable<u8>");
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str(&"Stream<u8>");
+}
+
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
+pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
+
+pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
+
+pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
+
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+
+pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
+
+pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+
+pub fn "ByteArray^InspectAlt::inspect_alt"(self: &Array<u8>, f: &mut Formatter) {
+    self."ByteArray^Inspect::inspect"(f);
+}
+
+pub fn "ByteList^InspectAlt::inspect_alt"(self: &List<u8>, f: &mut Formatter) {
+    self."List<u8>^Inspect::inspect"(f);
+}
+
+pub fn "ByteSlice^InspectAlt::inspect_alt"(self: &ArraySlice<u8>, f: &mut Formatter) {
+    self."ArraySlice<u8>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
+
+pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
+
+pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
+
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+
+pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+
+pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
+
+pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+
+pub fn "ByteArray^Display::fmt"(self: &Array<u8>, f: &mut Formatter) {
+    self."ByteArray^Inspect::inspect"(f);
+}
+
+pub fn "ByteList^Display::fmt"(self: &List<u8>, f: &mut Formatter) {
+    self."List<u8>^Inspect::inspect"(f);
+}
+
+pub fn "ByteSlice^Display::fmt"(self: &ArraySlice<u8>, f: &mut Formatter) {
+    self."ArraySlice<u8>^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
+    self."Fn<2,u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,char>^Display::fmt"(self: Box<Fn<2,char>>, f: &mut Formatter) {
+    self."Fn<2,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^Display::fmt"(self: Box<Fn<1,char>>, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
+    self."Fn<2,String>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter) {
+    self."Fn<2,I::Item>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "ByteArray^DisplayAlt::fmt_alt"(self: &Array<u8>, f: &mut Formatter) {
+    self."ByteArray^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "ByteList^DisplayAlt::fmt_alt"(self: &List<u8>, f: &mut Formatter) {
+    self."List<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "ByteSlice^DisplayAlt::fmt_alt"(self: &ArraySlice<u8>, f: &mut Formatter) {
+    self."ArraySlice<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
+    self."Fn<2,u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,char>^DisplayAlt::fmt_alt"(self: Box<Fn<2,char>>, f: &mut Formatter) {
+    self."Fn<2,char>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: Box<Fn<1,char>>, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
+    self."Fn<2,String>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
+    self."Fn<1,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter) {
+    self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+}
+
 pub fn pow10(n: i32) -> u64 {
     return core::prelude/fpfmt.wado::POW10."List<u64>^IndexValue<i32>::index_value"(n);
 }
@@ -4807,9 +5098,9 @@ fn u128::fmt_decimal(self: &u128, f: &mut Formatter) {
         return;
     }
     let ten: u128 = "core::prelude/int128.wado::u128::from_u64"(10);
-    let mut temp: u128 = "$value_copy$T91"(*self);
+    let mut temp: u128 = "$value_copy$T96"(*self);
     let mut digit_count: i32 = 0;
-    let mut temp: u128 = "$value_copy$T91"(*self);
+    let mut temp: u128 = "$value_copy$T96"(*self);
     loop {
         if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
             break;
@@ -4822,7 +5113,7 @@ fn u128::fmt_decimal(self: &u128, f: &mut Formatter) {
     let offset: i32 = f.Formatter::prepare_int_write(false, "", digit_count);
     let mut arr: Array<u8> = f.buf.String::internal_raw_bytes();
     let mut pos: i32 = (offset + digit_count);
-    let mut temp: u128 = "$value_copy$T91"(*self);
+    let mut temp: u128 = "$value_copy$T96"(*self);
     loop {
         if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
             break;
@@ -5124,7 +5415,7 @@ pub fn i128::from_str_radix(s: &String, radix: u32) -> Result<i128, ParseIntErro
 
 pub fn i128::from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) -> Result<i128, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = "$value_copy$T167"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let __pattern_temp_0: [bool, i32] = "$value_copy$T176"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
@@ -5249,9 +5540,9 @@ fn i128::fmt_decimal(self: &i128, f: &mut Formatter) {
         return;
     }
     let ten: u128 = "core::prelude/int128.wado::u128::from_u64"(10);
-    let mut temp: u128 = "$value_copy$T91"(abs_val);
+    let mut temp: u128 = "$value_copy$T96"(abs_val);
     let mut digit_count: i32 = 0;
-    let mut temp: u128 = "$value_copy$T91"(abs_val);
+    let mut temp: u128 = "$value_copy$T96"(abs_val);
     loop {
         if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
             break;
@@ -5264,8 +5555,8 @@ fn i128::fmt_decimal(self: &i128, f: &mut Formatter) {
     let offset: i32 = f.Formatter::prepare_int_write(is_neg, "", digit_count);
     let mut arr: Array<u8> = f.buf.String::internal_raw_bytes();
     let mut pos: i32 = (offset + digit_count);
-    temp = "$value_copy$T91"(abs_val);
-    let mut temp: u128 = "$value_copy$T91"(abs_val);
+    temp = "$value_copy$T96"(abs_val);
+    let mut temp: u128 = "$value_copy$T96"(abs_val);
     loop {
         if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
             break;
@@ -5998,7 +6289,7 @@ pub fn parse_unsigned_prefix(s: &String) -> Result<i32, IntErrorKind> {
 
 pub fn parse_i64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = "$value_copy$T167"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let __pattern_temp_0: [bool, i32] = "$value_copy$T176"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
@@ -11809,7 +12100,7 @@ pub fn "StrSplitIter^Iterator::for_each"(self: &mut StrSplitIter, f: fn mut(Stri
         let __match_3: Option<String> = self."StrSplitIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                f("$value_copy$T22"(item));
+                f("$value_copy$T28"(item));
             },
             _ => {
                 break;
@@ -11823,7 +12114,7 @@ pub fn "StrSplitIter^Iterator::find"(self: &mut StrSplitIter, pred: fn mut(Strin
         let __match_3: Option<String> = self."StrSplitIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T22"(item)) {
+                if pred("$value_copy$T28"(item)) {
                     return Option<String>::Some(item);
                 }
             },
@@ -11840,7 +12131,7 @@ pub fn "StrSplitIter^Iterator::any"(self: &mut StrSplitIter, pred: fn mut(String
         let __match_3: Option<String> = self."StrSplitIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T22"(item)) {
+                if pred("$value_copy$T28"(item)) {
                     return true;
                 }
             },
@@ -11857,7 +12148,7 @@ pub fn "StrSplitIter^Iterator::all"(self: &mut StrSplitIter, pred: fn mut(String
         let __match_3: Option<String> = self."StrSplitIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if !pred("$value_copy$T22"(item)) {
+                if !pred("$value_copy$T28"(item)) {
                     return false;
                 }
             },
@@ -11910,7 +12201,7 @@ pub fn "StrSplitIter^Iterator::position"(self: &mut StrSplitIter, pred: fn mut(S
         let __match_4: Option<String> = self."StrSplitIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                if pred("$value_copy$T22"(item)) {
+                if pred("$value_copy$T28"(item)) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
@@ -11927,12 +12218,12 @@ pub fn "StrSplitIter^Iterator::reduce"(self: &mut StrSplitIter, f: fn mut(String
     let __match_5: Option<String> = self."StrSplitIter^Iterator::next"();
     match __match_5 {
         Some(first) => {
-            let mut acc: String = "$value_copy$T22"(first);
+            let mut acc: String = "$value_copy$T28"(first);
             loop {
                 let __match_6: Option<String> = self."StrSplitIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = f("$value_copy$T22"(acc), "$value_copy$T22"(item));
+                        acc = f("$value_copy$T28"(acc), "$value_copy$T28"(item));
                     },
                     _ => {
                         break;
@@ -12050,7 +12341,7 @@ pub fn "StrSplitNIter^Iterator::for_each"(self: &mut StrSplitNIter, f: fn mut(St
         let __match_3: Option<String> = self."StrSplitNIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                f("$value_copy$T22"(item));
+                f("$value_copy$T28"(item));
             },
             _ => {
                 break;
@@ -12064,7 +12355,7 @@ pub fn "StrSplitNIter^Iterator::find"(self: &mut StrSplitNIter, pred: fn mut(Str
         let __match_3: Option<String> = self."StrSplitNIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T22"(item)) {
+                if pred("$value_copy$T28"(item)) {
                     return Option<String>::Some(item);
                 }
             },
@@ -12081,7 +12372,7 @@ pub fn "StrSplitNIter^Iterator::any"(self: &mut StrSplitNIter, pred: fn mut(Stri
         let __match_3: Option<String> = self."StrSplitNIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T22"(item)) {
+                if pred("$value_copy$T28"(item)) {
                     return true;
                 }
             },
@@ -12098,7 +12389,7 @@ pub fn "StrSplitNIter^Iterator::all"(self: &mut StrSplitNIter, pred: fn mut(Stri
         let __match_3: Option<String> = self."StrSplitNIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if !pred("$value_copy$T22"(item)) {
+                if !pred("$value_copy$T28"(item)) {
                     return false;
                 }
             },
@@ -12151,7 +12442,7 @@ pub fn "StrSplitNIter^Iterator::position"(self: &mut StrSplitNIter, pred: fn mut
         let __match_4: Option<String> = self."StrSplitNIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                if pred("$value_copy$T22"(item)) {
+                if pred("$value_copy$T28"(item)) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
@@ -12168,12 +12459,12 @@ pub fn "StrSplitNIter^Iterator::reduce"(self: &mut StrSplitNIter, f: fn mut(Stri
     let __match_5: Option<String> = self."StrSplitNIter^Iterator::next"();
     match __match_5 {
         Some(first) => {
-            let mut acc: String = "$value_copy$T22"(first);
+            let mut acc: String = "$value_copy$T28"(first);
             loop {
                 let __match_6: Option<String> = self."StrSplitNIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = f("$value_copy$T22"(acc), "$value_copy$T22"(item));
+                        acc = f("$value_copy$T28"(acc), "$value_copy$T28"(item));
                     },
                     _ => {
                         break;
@@ -12270,7 +12561,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::for_each"(self: &mut StrSplitWhitespace
         let __match_3: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                f("$value_copy$T22"(item));
+                f("$value_copy$T28"(item));
             },
             _ => {
                 break;
@@ -12284,7 +12575,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::find"(self: &mut StrSplitWhitespaceIter
         let __match_3: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T22"(item)) {
+                if pred("$value_copy$T28"(item)) {
                     return Option<String>::Some(item);
                 }
             },
@@ -12301,7 +12592,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::any"(self: &mut StrSplitWhitespaceIter,
         let __match_3: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T22"(item)) {
+                if pred("$value_copy$T28"(item)) {
                     return true;
                 }
             },
@@ -12318,7 +12609,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::all"(self: &mut StrSplitWhitespaceIter,
         let __match_3: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if !pred("$value_copy$T22"(item)) {
+                if !pred("$value_copy$T28"(item)) {
                     return false;
                 }
             },
@@ -12371,7 +12662,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::position"(self: &mut StrSplitWhitespace
         let __match_4: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                if pred("$value_copy$T22"(item)) {
+                if pred("$value_copy$T28"(item)) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
@@ -12388,12 +12679,12 @@ pub fn "StrSplitWhitespaceIter^Iterator::reduce"(self: &mut StrSplitWhitespaceIt
     let __match_5: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
     match __match_5 {
         Some(first) => {
-            let mut acc: String = "$value_copy$T22"(first);
+            let mut acc: String = "$value_copy$T28"(first);
             loop {
                 let __match_6: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = f("$value_copy$T22"(acc), "$value_copy$T22"(item));
+                        acc = f("$value_copy$T28"(acc), "$value_copy$T28"(item));
                     },
                     _ => {
                         break;
@@ -12507,7 +12798,7 @@ pub fn "StrLinesIter^Iterator::for_each"(self: &mut StrLinesIter, f: fn mut(Stri
         let __match_3: Option<String> = self."StrLinesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                f("$value_copy$T22"(item));
+                f("$value_copy$T28"(item));
             },
             _ => {
                 break;
@@ -12521,7 +12812,7 @@ pub fn "StrLinesIter^Iterator::find"(self: &mut StrLinesIter, pred: fn mut(Strin
         let __match_3: Option<String> = self."StrLinesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T22"(item)) {
+                if pred("$value_copy$T28"(item)) {
                     return Option<String>::Some(item);
                 }
             },
@@ -12538,7 +12829,7 @@ pub fn "StrLinesIter^Iterator::any"(self: &mut StrLinesIter, pred: fn mut(String
         let __match_3: Option<String> = self."StrLinesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T22"(item)) {
+                if pred("$value_copy$T28"(item)) {
                     return true;
                 }
             },
@@ -12555,7 +12846,7 @@ pub fn "StrLinesIter^Iterator::all"(self: &mut StrLinesIter, pred: fn mut(String
         let __match_3: Option<String> = self."StrLinesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if !pred("$value_copy$T22"(item)) {
+                if !pred("$value_copy$T28"(item)) {
                     return false;
                 }
             },
@@ -12608,7 +12899,7 @@ pub fn "StrLinesIter^Iterator::position"(self: &mut StrLinesIter, pred: fn mut(S
         let __match_4: Option<String> = self."StrLinesIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                if pred("$value_copy$T22"(item)) {
+                if pred("$value_copy$T28"(item)) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
@@ -12625,12 +12916,12 @@ pub fn "StrLinesIter^Iterator::reduce"(self: &mut StrLinesIter, f: fn mut(String
     let __match_5: Option<String> = self."StrLinesIter^Iterator::next"();
     match __match_5 {
         Some(first) => {
-            let mut acc: String = "$value_copy$T22"(first);
+            let mut acc: String = "$value_copy$T28"(first);
             loop {
                 let __match_6: Option<String> = self."StrLinesIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = f("$value_copy$T22"(acc), "$value_copy$T22"(item));
+                        acc = f("$value_copy$T28"(acc), "$value_copy$T28"(item));
                     },
                     _ => {
                         break;
@@ -12731,7 +13022,7 @@ pub fn "StrCharIndicesIter^Iterator::for_each"(self: &mut StrCharIndicesIter, f:
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                f("$value_copy$T305"(item));
+                f("$value_copy$T312"(item));
             },
             _ => {
                 break;
@@ -12745,7 +13036,7 @@ pub fn "StrCharIndicesIter^Iterator::find"(self: &mut StrCharIndicesIter, pred: 
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T305"(item)) {
+                if pred("$value_copy$T312"(item)) {
                     return Option<[i32, char]>::Some(item);
                 }
             },
@@ -12762,7 +13053,7 @@ pub fn "StrCharIndicesIter^Iterator::any"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T305"(item)) {
+                if pred("$value_copy$T312"(item)) {
                     return true;
                 }
             },
@@ -12779,7 +13070,7 @@ pub fn "StrCharIndicesIter^Iterator::all"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if !pred("$value_copy$T305"(item)) {
+                if !pred("$value_copy$T312"(item)) {
                     return false;
                 }
             },
@@ -12832,7 +13123,7 @@ pub fn "StrCharIndicesIter^Iterator::position"(self: &mut StrCharIndicesIter, pr
         let __match_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                if pred("$value_copy$T305"(item)) {
+                if pred("$value_copy$T312"(item)) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
@@ -12849,12 +13140,12 @@ pub fn "StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: f
     let __match_5: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
     match __match_5 {
         Some(first) => {
-            let mut acc: [i32, char] = "$value_copy$T305"(first);
+            let mut acc: [i32, char] = "$value_copy$T312"(first);
             loop {
                 let __match_6: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = f("$value_copy$T305"(acc), "$value_copy$T305"(item));
+                        acc = f("$value_copy$T312"(acc), "$value_copy$T312"(item));
                     },
                     _ => {
                         break;
@@ -18251,7 +18542,7 @@ pub fn Formatter::close_brace(self: &mut Formatter, close: String) {
 
 pub fn "String^Display::fmt"(self: &String, f: &mut Formatter) {
     if (f.precision >= 0) {
-        let mut capped: String = "$value_copy$T22"(*self);
+        let mut capped: String = "$value_copy$T28"(*self);
         capped.String::truncate_chars(f.precision);
         f.Formatter::pad(capped);
     } else {
@@ -18656,7 +18947,7 @@ pub fn "List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:
 fn "Tuple<f64,f64>^InspectAlt::inspect_alt"(self: &[f64, f64], f: &mut Formatter) {
     f.Formatter::open_brace("[");
     __tuple_for_of_2: {
-        let __tuple_2: [f64, f64] = "$value_copy$T20"(*self);
+        let __tuple_2: [f64, f64] = "$value_copy$T26"(*self);
         __tuple_iter_2_0: {
             let v: f64 = __tuple_2.0;
             f.Formatter::write_newline_indent();
@@ -18677,7 +18968,7 @@ fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
     f.Formatter::write_str(&"[");
     let mut first: bool = true;
     __tuple_for_of_3: {
-        let __tuple_3: [f64, f64] = "$value_copy$T20"(*self);
+        let __tuple_3: [f64, f64] = "$value_copy$T26"(*self);
         __tuple_iter_3_0: {
             let v: f64 = __tuple_3.0;
             if !first {
@@ -18856,6 +19147,69 @@ fn "List<u64>^IndexValue<i32>::index_value"(self: &List<u64>, index: i32) -> u64
     return core::builtin::array_get::<u64>(&self.repr, index);
 }
 
+pub fn "ArraySlice<u8>^InspectAlt::inspect_alt"(self: &ArraySlice<u8>, f: &mut Formatter) {
+    f.Formatter::open_brace("ArraySlice {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"repr: ");
+    self.repr."&Array<u8>^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"start: ");
+    Box<i32> { value: self.start }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&",");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"end: ");
+    Box<i32> { value: self.end }."i32^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&",");
+    f.Formatter::close_brace("}");
+}
+
+pub fn "List<u8>^InspectAlt::inspect_alt"(self: &List<u8>, f: &mut Formatter) {
+    let limit: i32 = if (f.precision == -2) {
+        256;
+    } else {
+        f.precision;
+    };
+    "core::prelude/format.wado::core/prelude/format.wado/write_array_inspect_alt<u8>"(self, f, true, limit);
+}
+
+pub fn "ArraySlice<u8>^Inspect::inspect"(self: &ArraySlice<u8>, f: &mut Formatter) {
+    f.Formatter::write_str(&"ArraySlice { ");
+    f.Formatter::write_str(&"repr: ");
+    self.repr."&Array<u8>^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ");
+    f.Formatter::write_str(&"start: ");
+    Box<i32> { value: self.start }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str(&", ");
+    f.Formatter::write_str(&"end: ");
+    Box<i32> { value: self.end }."i32^Inspect::inspect"(f);
+    f.Formatter::write_str(&" }");
+}
+
+pub fn "List<u8>^Inspect::inspect"(self: &List<u8>, f: &mut Formatter) {
+    let limit: i32 = if (f.precision == -2) {
+        256;
+    } else {
+        f.precision;
+    };
+    "core::prelude/format.wado::core/prelude/format.wado/write_array_inspect<u8>"(self, f, true, limit);
+}
+
+pub fn "Array<u8>::len"(self: &Array<u8>) -> i32 {
+    return core::builtin::array_len(self);
+}
+
+pub fn "Array<u8>::slice"(self: &Array<u8>, start: i32, end: i32) -> ArraySlice<u8> with stores[self] {
+    let len: i32 = core::builtin::array_len(self);
+    let s: i32 = core::internal::i32_clamp(start, 0, len);
+    let e: i32 = core::internal::i32_clamp(end, s, len);
+    return "core::prelude/slice.wado::ArraySlice<u8>::internal_new"(self, s, e);
+}
+
+pub fn "List<u8>::as_slice"(self: &List<u8>) -> ArraySlice<u8> {
+    return "core::prelude/slice.wado::ArraySlice<u8>::internal_new"(&self.repr, 0, self.used);
+}
+
 pub fn "List<u8>::with_capacity"(capacity: i32) -> List<u8> {
     return List<u8> { repr: "core::builtin::core/builtin/array_new<u8>"(capacity), used: 0 };
 }
@@ -18892,6 +19246,86 @@ pub fn "List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:
 fn "core/builtin/array_copy<u8>"(dst: &mut Array<u8>, dst_offset: i32, src: &Array<u8>, src_offset: i32, len: i32);
 
 fn "core/builtin/array_new<u8>"(len: i32) -> Array<u8>;
+
+pub fn "ArraySlice<u8>::internal_new"(repr: &Array<u8>, start: i32, end: i32) -> ArraySlice<u8> with stores[repr] {
+    return ArraySlice<u8> { repr: repr, start: start, end: end };
+}
+
+fn "core/prelude/format.wado/write_array_inspect<u8>"(arr: &List<u8>, f: &mut Formatter, marker: bool, limit: i32) {
+    f.Formatter::write_char('[');
+    let mut shown: i32 = 0;
+    let mut truncated: bool = false;
+    let mut i: i32 = 0;
+    loop {
+        if !(i < arr."List<u8>::len"()) {
+            break;
+        }
+        __for_0_body: {
+            if ((limit >= 0) && (shown >= limit)) {
+                truncated = true;
+                break;
+            }
+            if (shown > 0) {
+                f.Formatter::write_str(&", ");
+            }
+            Box<u8> { value: arr."List<u8>^IndexValue<i32>::index_value"(i) }."u8^Inspect::inspect"(f);
+            shown = (shown + 1);
+        }
+        i = (i + 1);
+    }
+    if (marker && truncated) {
+        if (shown > 0) {
+            f.Formatter::write_str(&", ...");
+        } else {
+            f.Formatter::write_str(&"...");
+        }
+    }
+    f.Formatter::write_char(']');
+}
+
+pub fn "&Array<u8>^Inspect::inspect"(self: &&Array<u8>, f: &mut Formatter) {
+    f.Formatter::write_str(&"&");
+    let inner: &Array<u8> = *self;
+    *inner."Array<u8>^Inspect::inspect"(f);
+}
+
+fn "core/prelude/format.wado/write_array_inspect_alt<u8>"(arr: &List<u8>, f: &mut Formatter, marker: bool, limit: i32) {
+    if arr."List<u8>::is_empty"() {
+        f.Formatter::write_str(&"[]");
+        return;
+    }
+    f.Formatter::open_brace("[");
+    let mut shown: i32 = 0;
+    let mut truncated: bool = false;
+    let mut i: i32 = 0;
+    loop {
+        if !(i < arr."List<u8>::len"()) {
+            break;
+        }
+        __for_0_body: {
+            if ((limit >= 0) && (shown >= limit)) {
+                truncated = true;
+                break;
+            }
+            f.Formatter::write_newline_indent();
+            Box<u8> { value: arr."List<u8>^IndexValue<i32>::index_value"(i) }."u8^InspectAlt::inspect_alt"(f);
+            f.Formatter::write_char(',');
+            shown = (shown + 1);
+        }
+        i = (i + 1);
+    }
+    if (marker && truncated) {
+        f.Formatter::write_newline_indent();
+        f.Formatter::write_str(&"...");
+    }
+    f.Formatter::close_brace("]");
+}
+
+pub fn "&Array<u8>^InspectAlt::inspect_alt"(self: &&Array<u8>, f: &mut Formatter) {
+    f.Formatter::write_str(&"&");
+    let inner: &Array<u8> = *self;
+    *inner."Array<u8>^InspectAlt::inspect_alt"(f);
+}
 
 pub fn "List<u8>::grow"(self: &mut List<u8>) {
     let capacity: i32 = core::builtin::array_len(&self.repr);
@@ -18977,6 +19411,17 @@ pub fn "List<u64>::grow"(self: &mut List<u64>) {
     self.repr = new_repr;
 }
 
+pub fn "List<u8>::is_empty"(self: &List<u8>) -> bool {
+    return (self.used == 0);
+}
+
+fn "List<u8>^IndexValue<i32>::index_value"(self: &List<u8>, index: i32) -> u8 {
+    if core::builtin::unlikely((index >= self.used)) {
+        core::internal::panic("index out of bounds");
+    }
+    return "core::builtin::core/builtin/array_get<u8>"(&self.repr, index);
+}
+
 pub fn __initialize_module() {
     core::prelude/fpfmt.wado::POW10 = __seq_lit: {
         let mut __b: List<u64> = "core::prelude/list.wado::List<u64>^SequenceLiteralBuilder::new_literal"(20);
@@ -19060,23 +19505,23 @@ fn __initialize_modules() {
     __modules_initialized = true;
 }
 
-fn "$value_copy$T20"(v: [f64, f64]) -> [f64, f64] {
+fn "$value_copy$T26"(v: [f64, f64]) -> [f64, f64] {
     return Tuple<f64,f64> { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T305"(v: [i32, char]) -> [i32, char] {
+fn "$value_copy$T312"(v: [i32, char]) -> [i32, char] {
     return Tuple<i32,char> { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T22"(v: String) -> String {
+fn "$value_copy$T28"(v: String) -> String {
     return String { repr: core::builtin::array_clone::<u8>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$T167"(v: [bool, i32]) -> [bool, i32] {
+fn "$value_copy$T176"(v: [bool, i32]) -> [bool, i32] {
     return Tuple<bool,i32> { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T91"(v: u128) -> u128 {
+fn "$value_copy$T96"(v: u128) -> u128 {
     return u128 { low: v.low, high: v.high };
 }
 
