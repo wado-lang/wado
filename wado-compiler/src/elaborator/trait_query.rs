@@ -48,14 +48,14 @@ pub(crate) fn canonical_decl_key_with(
             .unwrap_or_else(|| src.clone());
         return (canonical, name.to_string());
     }
-    // A declaration in the current module shadows a same-named `pub` item in
-    // another module, so prefer it before the global symbol lookup. Scoped to
-    // items actually *defined* here (`defined_at.module == current`) so it never
-    // affects imported names. Without this, a local trait `Visitor` lost to
-    // `core:serde::Visitor` (issue #1298).
-    if let Some(sym) = symbols.lookup_in_module(current_module_source, name)
-        && &sym.defined_at.module == current_module_source
-    {
+    // A declaration in the current module shadows a same-named item reached via
+    // the global symbol lookup below, which is a program-wide, last-writer-wins
+    // import map (`SymbolTable::imports` is never cleared per module). Without
+    // this, a locally defined `trait Visitor` lost to `core:serde::Visitor`
+    // (issue #1298). `is_defined_in_module` matches only genuine local
+    // definitions, not re-exports, so re-exported names still canonicalise to
+    // their true origin through the global path.
+    if symbols.is_defined_in_module(current_module_source, name) {
         return (current_module_source.clone(), name.to_string());
     }
     if let Some(sym) = symbols.lookup(name) {
