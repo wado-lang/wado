@@ -7,8 +7,7 @@ use crate::ast::{
 };
 use crate::compiler_host::CompilerHost;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirLiteralPattern, TirPattern,
-    TirStructPatternField, TypeId, TypeTable,
+    PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirPattern, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -26,6 +25,13 @@ enum RefBinding {
     Ref,
     MutRef,
 }
+
+/// Variables a pattern binds into the function context, as `(name,
+/// local_index, type_id)` triples in declaration (pre-order). The combined
+/// walk's pattern resolvers return these instead of a `TirPattern`: reify
+/// rebuilds the real pattern node independently, so the only thing the walk
+/// must surface is the binding set (used by or-pattern validation).
+type PatBindings = Vec<(String, u32, TypeId)>;
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Walk a block for its fact-recording side effects (Stage 7-B:
@@ -492,7 +498,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn is_known_case_of_type(
+    pub(super) fn is_known_case_of_type(
         &mut self,
         type_id: TypeId,
         case_name: &str,
@@ -516,7 +522,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn pattern_qualifier_matches_scrutinee(
+    pub(super) fn pattern_qualifier_matches_scrutinee(
         &mut self,
         scrutinee_type: TypeId,
         qualifier: Option<&Type>,
@@ -607,7 +613,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         is_mut: bool,
         span: Span,
         ctx: &mut FunctionContext,
-    ) -> TirPattern {
+    ) {
         // Match ergonomics for let patterns: peel references from the type
         // when the pattern is a compound (tuple/struct) pattern.
         let (peeled_type, ref_binding) = match pattern {
@@ -635,7 +641,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => (type_id, RefBinding::None),
         };
-        self.resolve_let_pattern_inner(pattern, peeled_type, is_mut, span, ctx, ref_binding)
+        self.resolve_let_pattern_inner(pattern, peeled_type, is_mut, span, ctx, ref_binding);
     }
 
     fn resolve_let_pattern_inner(
@@ -646,7 +652,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         ctx: &mut FunctionContext,
         ref_binding: RefBinding,
-    ) -> TirPattern {
+    ) {
         match pattern {
             ast::Pattern::Ident {
                 id,
@@ -672,13 +678,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .intern(ResolvedType::MutRef(type_id)),
                     RefBinding::None => type_id,
                 };
-                let local_index = ctx.add_local(name.clone(), binding_type, pat_mut, Some(*id));
+                ctx.add_local(name.clone(), binding_type, pat_mut, Some(*id));
                 self.record_local_symbol(*id, name, *name_span, pat_mut, binding_type);
-                TirPattern::Binding {
-                    name: name.clone(),
-                    local_index,
-                    type_id: binding_type,
-                }
             }
             ast::Pattern::Tuple(patterns, has_rest) => {
                 // Get element types from the tuple type
@@ -715,19 +716,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 // Resolve each sub-pattern with its corresponding element type
-                let tir_patterns: Vec<TirPattern> = patterns
-                    .iter()
-                    .zip(
-                        elem_types
-                            .iter()
-                            .chain(std::iter::repeat(&TypeTable::UNKNOWN)),
-                    )
-                    .map(|(p, &elem_type)| {
-                        self.resolve_let_pattern_inner(p, elem_type, is_mut, span, ctx, ref_binding)
-                    })
-                    .collect();
-
-                TirPattern::Tuple(tir_patterns, *has_rest)
+                for (p, &elem_type) in patterns.iter().zip(
+                    elem_types
+                        .iter()
+                        .chain(std::iter::repeat(&TypeTable::UNKNOWN)),
+                ) {
+                    self.resolve_let_pattern_inner(p, elem_type, is_mut, span, ctx, ref_binding);
+                }
             }
             ast::Pattern::Struct {
                 type_name,
@@ -769,15 +764,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         found: self.tysys.type_table.borrow().type_name(type_id),
                         span: *pat_span,
                     });
-                    return TirPattern::Wildcard;
+                    return;
                 }
 
                 // Resolve each field pattern
-                let mut tir_fields = Vec::new();
                 for field in fields {
-                    let (field_index, field_type) =
+                    let (_field_index, field_type) =
                         self.lookup_field_type(type_id, &field.field_name, field.span);
-                    let sub_pattern = self.resolve_let_pattern_inner(
+                    self.resolve_let_pattern_inner(
                         &field.pattern,
                         field_type,
                         is_mut,
@@ -785,11 +779,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ctx,
                         ref_binding,
                     );
-                    tir_fields.push(TirStructPatternField {
-                        field_name: field.field_name.clone(),
-                        field_index,
-                        pattern: sub_pattern,
-                    });
                 }
 
                 // Exhaustiveness check: without `..`, all fields must be listed
@@ -822,23 +811,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
-                TirPattern::Struct {
-                    struct_type: type_id,
-                    fields: tir_fields,
-                    has_rest: *has_rest,
-                }
+                let _ = has_rest;
             }
-            ast::Pattern::Wildcard => TirPattern::Wildcard,
-            ast::Pattern::Literal(_) | ast::Pattern::Variant { .. } => {
-                // Refutable pattern: error was already emitted by check_irrefutable_pattern.
-                TirPattern::Wildcard
-            }
-            ast::Pattern::Or(_) | ast::Pattern::Range { .. } => {
-                // Refutable pattern: error was already emitted by check_irrefutable_pattern.
-                TirPattern::Wildcard
-            }
-            // Parser error-recovery placeholder; inert.
-            ast::Pattern::Error(_) => TirPattern::Wildcard,
+            // Wildcard binds nothing. Refutable patterns (literal / variant /
+            // or / range) in let position already had an error emitted by
+            // `check_irrefutable_pattern`; the parser error placeholder is
+            // inert. None of them introduce a binding here.
+            ast::Pattern::Wildcard
+            | ast::Pattern::Literal(_)
+            | ast::Pattern::Variant { .. }
+            | ast::Pattern::Or(_)
+            | ast::Pattern::Range { .. }
+            | ast::Pattern::Error(_) => {}
         }
     }
 
@@ -997,13 +981,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a pattern in an if-pattern context with type information from the scrutinee.
     /// Match ergonomics: if the scrutinee is `&T`, peels the reference and propagates
     /// `ref_binding` so that identifier bindings get `&InnerType` instead of `InnerType`.
+    /// Bind a refutable pattern's variables into `ctx` and run the same
+    /// disambiguation / diagnostics as reify's pattern builder, returning the
+    /// bindings it introduced in declaration (pre-order). The combined walk
+    /// only needs the binding side effects and facts — reify rebuilds the real
+    /// `TirPattern` independently — so no `TirPattern` node is assembled here.
     pub(super) fn resolve_if_pattern(
         &mut self,
         pattern: &Pattern,
         scrutinee_type: TypeId,
         ctx: &mut FunctionContext,
         span: Span,
-    ) -> TirPattern {
+    ) -> PatBindings {
         let mut peeled_type = scrutinee_type;
         let mut ref_binding = RefBinding::None;
         while let resolved @ (ResolvedType::Ref(_) | ResolvedType::MutRef(_)) =
@@ -1035,9 +1024,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         span: Span,
         ref_binding: RefBinding,
-    ) -> TirPattern {
+    ) -> PatBindings {
         match pattern {
-            Pattern::Wildcard => TirPattern::Wildcard,
+            Pattern::Wildcard => Vec::new(),
             Pattern::Ident {
                 id,
                 name,
@@ -1075,34 +1064,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 // Check if the identifier refers to an immutable global constant
                 if !matches!(pattern, Pattern::MutIdent { .. }) {
-                    if let Some(&(ty, mutable)) = self.sem.decls.current_module_globals.get(name)
+                    if let Some(&(_ty, mutable)) = self.sem.decls.current_module_globals.get(name)
                         && !mutable
                     {
-                        return TirPattern::ConstantValue {
-                            expr: Box::new(TirExpr::new(
-                                TirExprKind::GlobalVarGet {
-                                    module_source: self.current_module_source.clone(),
-                                    name: name.clone(),
-                                },
-                                ty,
-                                span,
-                            )),
-                        };
+                        // Constant-value pattern: introduces no binding.
+                        return Vec::new();
                     }
-                    if let Some((source_module, original_name, ty, mutable)) =
+                    if let Some((_source_module, _original_name, _ty, mutable)) =
                         self.sem.decls.imported_globals.get(name)
                         && !*mutable
                     {
-                        return TirPattern::ConstantValue {
-                            expr: Box::new(TirExpr::new(
-                                TirExprKind::GlobalVarGet {
-                                    module_source: source_module.clone(),
-                                    name: original_name.clone(),
-                                },
-                                *ty,
-                                span,
-                            )),
-                        };
+                        // Constant-value pattern: introduces no binding.
+                        return Vec::new();
                     }
                 }
                 let is_mut = matches!(pattern, Pattern::MutIdent { .. });
@@ -1121,14 +1094,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 let index = ctx.add_local(name.clone(), binding_type, is_mut, Some(*id));
                 self.record_local_symbol(*id, name, *name_span, is_mut, binding_type);
-                TirPattern::Binding {
-                    name: name.clone(),
-                    local_index: index,
-                    type_id: binding_type,
-                }
+                vec![(name.clone(), index, binding_type)]
             }
             Pattern::Literal(lit) => {
-                let tir_lit = match lit {
+                match lit {
                     Literal::Number(repr) => {
                         // Float literals cannot be used in match patterns
                         if util::is_float_only_literal(repr) {
@@ -1137,54 +1106,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     .to_string(),
                                 span,
                             });
-                            return TirPattern::Wildcard;
                         }
-                        // Check if scrutinee type is unsigned
-                        let scrutinee_resolved =
-                            self.tysys.type_table.borrow().get(scrutinee_type).clone();
-                        let is_unsigned = matches!(
-                            scrutinee_resolved,
-                            ResolvedType::Primitive(
-                                PrimitiveType::U8
-                                    | PrimitiveType::U16
-                                    | PrimitiveType::U32
-                                    | PrimitiveType::U64
-                                    | PrimitiveType::U128
-                            )
-                        ) || matches!(
-                            scrutinee_resolved,
-                            ResolvedType::Struct { ref name, .. } if name == "u128"
-                        );
-                        if is_unsigned {
-                            match util::parse_u128_literal(repr) {
-                                Ok(value) => TirLiteralPattern::U128(value),
-                                Err(_) => TirLiteralPattern::U128(0),
-                            }
-                        } else {
-                            match util::parse_i128_literal(repr) {
-                                Ok(value) => TirLiteralPattern::I128(value),
-                                Err(_) => TirLiteralPattern::I128(0),
-                            }
-                        }
-                    }
-                    Literal::Bool(b) => TirLiteralPattern::Bool(*b),
-                    Literal::Char(raw) => {
-                        TirLiteralPattern::Char(util::unescape_char(raw).unwrap_or('\0'))
-                    }
-                    Literal::String(raw) => {
-                        TirLiteralPattern::String(util::unescape_string(raw).unwrap_or_default())
                     }
                     Literal::Null => {
                         // If the scrutinee is a variant type with a `None` case,
-                        // lower `null` to a variant pattern for `None`
-                        if let Some(none_pattern) = self.try_null_as_none_pattern(scrutinee_type) {
-                            return none_pattern;
-                        }
-                        TirLiteralPattern::Null
+                        // `null` lowers to a `None` variant pattern (no binding).
+                        let _ = self.try_null_as_none_pattern(scrutinee_type);
                     }
-                    _ => TirLiteralPattern::Null,
-                };
-                TirPattern::Literal(tir_lit)
+                    _ => {}
+                }
+                Vec::new()
             }
             Pattern::Tuple(patterns, has_rest) => {
                 // For tuple patterns, extract element types
@@ -1200,16 +1131,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         vec![TypeTable::UNKNOWN; patterns.len()]
                     };
 
-                let resolved: Vec<TirPattern> = patterns
-                    .iter()
-                    .zip(
-                        element_types
-                            .iter()
-                            .chain(std::iter::repeat(&TypeTable::UNKNOWN)),
-                    )
-                    .map(|(p, &ty)| self.resolve_if_pattern_inner(p, ty, ctx, span, ref_binding))
-                    .collect();
-                TirPattern::Tuple(resolved, *has_rest)
+                let _ = has_rest;
+                let mut bindings: PatBindings = Vec::new();
+                for (p, &ty) in patterns.iter().zip(
+                    element_types
+                        .iter()
+                        .chain(std::iter::repeat(&TypeTable::UNKNOWN)),
+                ) {
+                    bindings.extend(self.resolve_if_pattern_inner(p, ty, ctx, span, ref_binding));
+                }
+                bindings
             }
             Pattern::Variant {
                 variant_name,
@@ -1259,51 +1190,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // resolved value's kind. A literal body becomes a
                         // `Literal` pattern (switch optimization + exhaustiveness);
                         // anything else is an opaque `ConstantValue`.
+                        // Resolve the const body for its facts. An associated
+                        // constant introduces no binding (it is either a literal
+                        // or an opaque constant-value pattern), so return no
+                        // bindings either way.
                         self.resolve_expr(&const_expr, ctx, Some(type_id));
-                        if let ast::Expr::Literal(lit) = &const_expr {
-                            match &lit.value {
-                                ast::Literal::Number(repr)
-                                    if !util::is_float_only_literal(repr) =>
-                                {
-                                    let scrutinee_resolved =
-                                        self.tysys.type_table.borrow().get(scrutinee_type).clone();
-                                    let is_unsigned = matches!(
-                                        scrutinee_resolved,
-                                        ResolvedType::Primitive(
-                                            PrimitiveType::U8
-                                                | PrimitiveType::U16
-                                                | PrimitiveType::U32
-                                                | PrimitiveType::U64
-                                                | PrimitiveType::U128
-                                        )
-                                    ) || matches!(
-                                        scrutinee_resolved,
-                                        ResolvedType::Struct { ref name, .. } if name == "u128"
-                                    );
-                                    if is_unsigned {
-                                        if let Ok(v) = util::parse_u128_literal(repr) {
-                                            return TirPattern::Literal(TirLiteralPattern::U128(v));
-                                        }
-                                    } else if let Ok(v) = util::parse_i128_literal(repr) {
-                                        return TirPattern::Literal(TirLiteralPattern::I128(v));
-                                    }
-                                }
-                                ast::Literal::Bool(v) => {
-                                    return TirPattern::Literal(TirLiteralPattern::Bool(*v));
-                                }
-                                ast::Literal::Char(raw) => {
-                                    let c = util::unescape_char(raw).unwrap_or('\0');
-                                    return TirPattern::Literal(TirLiteralPattern::Char(c));
-                                }
-                                _ => {}
-                            }
-                        }
-                        // Reify rebuilds the constant's value expression from the
-                        // AST const body; the combined-walk pattern is discarded,
-                        // and exhaustiveness only reads the `ConstantValue` shape.
-                        return TirPattern::ConstantValue {
-                            expr: Box::new(TirExpr::new(TirExprKind::Unit, type_id, *span)),
-                        };
+                        return Vec::new();
                     }
 
                     let binding_type = match ref_binding {
@@ -1321,11 +1213,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     let index =
                         ctx.add_local(qualified_variant_name.clone(), binding_type, false, None);
-                    return TirPattern::Binding {
-                        name: qualified_variant_name,
-                        local_index: index,
-                        type_id: binding_type,
-                    };
+                    return vec![(qualified_variant_name, index, binding_type)];
                 }
 
                 let resolved_type = self.tysys.type_table.borrow().get(scrutinee_type).clone();
@@ -1345,7 +1233,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         found: qualified_variant_name,
                         span: *span,
                     });
-                    return TirPattern::Wildcard;
+                    return Vec::new();
                 }
 
                 // Handle enum types (no payload, just discriminant matching)
@@ -1369,11 +1257,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     case_data.ast_id,
                                 );
                             }
-                            return TirPattern::Enum {
-                                enum_type: scrutinee_type,
-                                case_name: normalized_variant_name.to_string(),
-                                case_index: case_data.index,
-                            };
+                            // Enum case carries no payload — no binding.
+                            return Vec::new();
                         }
                         let _ = self.logger.error(TypeError::PatternTypeMismatch {
                             expected: format!(
@@ -1389,14 +1274,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .format_pattern_case_name(variant_name, variant_qualifier.as_ref()),
                             span: *span,
                         });
-                        return TirPattern::Wildcard;
+                        return Vec::new();
                     }
                     let _ = self.logger.error(TypeError::PatternTypeMismatch {
                         expected: format!("enum type `{name}`"),
                         found: "unknown enum".to_string(),
                         span: *span,
                     });
-                    return TirPattern::Wildcard;
+                    return Vec::new();
                 }
 
                 // Record use->def for the variant case name in the pattern
@@ -1468,39 +1353,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Single payload = single binding pattern.
                 // For backward compatibility, we still accept `Some(x)` as single binding.
-                let resolved_bindings: Vec<TirPattern> = if bindings.len() == 1 {
-                    vec![self.resolve_if_pattern_inner(
+                if bindings.len() == 1 {
+                    self.resolve_if_pattern_inner(
                         &bindings[0],
                         payload_type,
                         ctx,
                         *span,
                         ref_binding,
-                    )]
+                    )
                 } else if bindings.is_empty() {
                     // Unit case like `None` - no bindings
-                    vec![]
+                    Vec::new()
                 } else {
                     // Multiple bindings are deprecated with single payload design.
                     // Error will be caught by test fixture updates.
-                    bindings
-                        .iter()
-                        .map(|p| {
-                            self.resolve_if_pattern_inner(
-                                p,
-                                TypeTable::UNKNOWN,
-                                ctx,
-                                *span,
-                                ref_binding,
-                            )
-                        })
-                        .collect()
-                };
-
-                TirPattern::Variant {
-                    enum_type: scrutinee_type,
-                    variant_name: normalized_variant_name.to_string(),
-                    bindings: resolved_bindings,
-                    payload_type,
+                    let mut out: PatBindings = Vec::new();
+                    for p in bindings {
+                        out.extend(self.resolve_if_pattern_inner(
+                            p,
+                            TypeTable::UNKNOWN,
+                            ctx,
+                            *span,
+                            ref_binding,
+                        ));
+                    }
+                    out
                 }
             }
             Pattern::Struct {
@@ -1527,22 +1404,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
-                let mut tir_fields = Vec::new();
+                let mut field_bindings: PatBindings = Vec::new();
                 for field in fields {
-                    let (field_index, field_type) =
+                    let (_field_index, field_type) =
                         self.lookup_field_type(scrutinee_type, &field.field_name, field.span);
-                    let sub_pattern = self.resolve_if_pattern_inner(
+                    field_bindings.extend(self.resolve_if_pattern_inner(
                         &field.pattern,
                         field_type,
                         ctx,
                         field.span,
                         ref_binding,
-                    );
-                    tir_fields.push(TirStructPatternField {
-                        field_name: field.field_name.clone(),
-                        field_index,
-                        pattern: sub_pattern,
-                    });
+                    ));
                 }
 
                 // Exhaustiveness check
@@ -1585,124 +1457,113 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
-                TirPattern::Struct {
-                    struct_type: scrutinee_type,
-                    fields: tir_fields,
-                    has_rest: *has_rest,
-                }
+                let _ = has_rest;
+                field_bindings
             }
             Pattern::Or(alternatives) => {
-                let mut resolved = Vec::with_capacity(alternatives.len());
-
                 // Resolve first alternative normally
-                if let Some(first_alt) = alternatives.first() {
-                    let first = self.resolve_if_pattern_inner(
-                        first_alt,
-                        scrutinee_type,
-                        ctx,
-                        span,
-                        ref_binding,
-                    );
-                    let first_bindings = collect_pattern_bindings_with_index(&first);
-                    resolved.push(first);
+                let Some(first_alt) = alternatives.first() else {
+                    return Vec::new();
+                };
+                let mut first_bindings =
+                    self.resolve_if_pattern_inner(first_alt, scrutinee_type, ctx, span, ref_binding);
+                // Match the old `collect_pattern_bindings_with_index` ordering
+                // (sorted by name) so or-pattern validation compares stable
+                // name lists across alternatives.
+                first_bindings.sort_by(|a, b| a.0.cmp(&b.0));
 
-                    // Resolve subsequent alternatives and remap their local indices
-                    // to match the first alternative's bindings
-                    for (i, alt) in alternatives.iter().enumerate().skip(1) {
-                        let alt_resolved = self.resolve_if_pattern_inner(
-                            alt,
-                            scrutinee_type,
-                            ctx,
+                // Resolve subsequent alternatives and validate their bindings
+                // against the first alternative's. The first alternative's
+                // local indices are canonical; subsequent alternatives still
+                // allocate their own locals (walk-order parity) but the scope
+                // entries below are remapped to the first's.
+                for (i, alt) in alternatives.iter().enumerate().skip(1) {
+                    let mut alt_bindings =
+                        self.resolve_if_pattern_inner(alt, scrutinee_type, ctx, span, ref_binding);
+                    alt_bindings.sort_by(|a, b| a.0.cmp(&b.0));
+
+                    // Validate same names and types
+                    let first_names: Vec<(&str, crate::tir::TypeId)> = first_bindings
+                        .iter()
+                        .map(|(n, _, t)| (n.as_str(), *t))
+                        .collect();
+                    let alt_names: Vec<(&str, crate::tir::TypeId)> = alt_bindings
+                        .iter()
+                        .map(|(n, _, t)| (n.as_str(), *t))
+                        .collect();
+
+                    if first_names != alt_names {
+                        let fn_: Vec<&str> = first_names.iter().map(|(n, _)| *n).collect();
+                        let an: Vec<&str> = alt_names.iter().map(|(n, _)| *n).collect();
+                        let _ = self.logger.error(TypeError::InvalidPattern {
+                            message: format!(
+                                "or-pattern alternatives must bind the same names with the same types: \
+                                 alternative 1 binds {:?}, but alternative {} binds {:?}",
+                                fn_, i + 1, an,
+                            ),
                             span,
-                            ref_binding,
-                        );
-                        let alt_bindings = collect_pattern_bindings_with_index(&alt_resolved);
-
-                        // Validate same names and types
-                        let first_names: Vec<(&str, crate::tir::TypeId)> = first_bindings
-                            .iter()
-                            .map(|(n, _, t)| (n.as_str(), *t))
-                            .collect();
-                        let alt_names: Vec<(&str, crate::tir::TypeId)> = alt_bindings
-                            .iter()
-                            .map(|(n, _, t)| (n.as_str(), *t))
-                            .collect();
-
-                        if first_names == alt_names {
-                            // Remap local indices in the alternative to match the first
-                            let mut remapped = alt_resolved;
-                            for (first_bind, alt_bind) in
-                                first_bindings.iter().zip(alt_bindings.iter())
-                            {
-                                if first_bind.1 != alt_bind.1 {
-                                    remap_pattern_local(&mut remapped, alt_bind.1, first_bind.1);
-                                }
-                            }
-                            resolved.push(remapped);
-                        } else {
-                            let fn_: Vec<&str> = first_names.iter().map(|(n, _)| *n).collect();
-                            let an: Vec<&str> = alt_names.iter().map(|(n, _)| *n).collect();
-                            let _ = self.logger.error(TypeError::InvalidPattern {
-                                message: format!(
-                                    "or-pattern alternatives must bind the same names with the same types: \
-                                     alternative 1 binds {:?}, but alternative {} binds {:?}",
-                                    fn_, i + 1, an,
-                                ),
-                                span,
-                            });
-                            resolved.push(alt_resolved);
-                        }
+                        });
                     }
+                }
 
-                    // Update scope entries to use the first alternative's local indices
-                    // so the arm body resolves names to the correct locals.
-                    //
-                    // Also align each binding's `defining_ast_id` with the first
-                    // alternative's pattern, so that LSP jump-to-def on a use
-                    // inside the arm body points at the first alternative's
-                    // binding (the canonical definition site).
-                    let mut first_alt_ast_ids: crate::hashmap::IndexMap<String, AstId> =
-                        crate::hashmap::IndexMap::default();
-                    if let Some(first_alt) = alternatives.first() {
-                        collect_ast_pattern_binding_ids(first_alt, &mut first_alt_ast_ids);
-                    }
-                    for (name, local_index, _type_id) in &first_bindings {
-                        if let Some(scope) = ctx.scopes.last_mut()
-                            && let Some(var) = scope.get_mut(name)
-                        {
-                            var.index = *local_index;
-                            if let Some(first_id) = first_alt_ast_ids.get(name) {
-                                var.defining_ast_id = Some(*first_id);
-                            }
+                // Update scope entries to use the first alternative's local indices
+                // so the arm body resolves names to the correct locals.
+                //
+                // Also align each binding's `defining_ast_id` with the first
+                // alternative's pattern, so that LSP jump-to-def on a use
+                // inside the arm body points at the first alternative's
+                // binding (the canonical definition site).
+                let mut first_alt_ast_ids: crate::hashmap::IndexMap<String, AstId> =
+                    crate::hashmap::IndexMap::default();
+                collect_ast_pattern_binding_ids(first_alt, &mut first_alt_ast_ids);
+                for (name, local_index, _type_id) in &first_bindings {
+                    if let Some(scope) = ctx.scopes.last_mut()
+                        && let Some(var) = scope.get_mut(name)
+                    {
+                        var.index = *local_index;
+                        if let Some(first_id) = first_alt_ast_ids.get(name) {
+                            var.defining_ast_id = Some(*first_id);
                         }
                     }
                 }
 
-                TirPattern::Or(resolved)
+                // The or-pattern's bindings are the first alternative's
+                // (matching the old `collect_pattern_bindings_with_index` Or
+                // handling, which collected only the first alternative).
+                first_bindings
             }
             Pattern::Range {
                 start,
                 end,
                 kind,
                 span: range_span,
-            } => self.resolve_range_pattern(start, end, *kind, scrutinee_type, *range_span),
+            } => {
+                // Range patterns introduce no binding; resolve for the
+                // reversed/empty-range diagnostics only.
+                self.resolve_range_pattern(start, end, *kind, scrutinee_type, *range_span);
+                Vec::new()
+            }
             // Parser error-recovery placeholder; inert.
-            Pattern::Error(_) => TirPattern::Wildcard,
+            Pattern::Error(_) => Vec::new(),
         }
     }
 
-    /// If the scrutinee is a variant type that has a `None` case, return
-    /// a `TirPattern::Variant` for `None`. Otherwise return `None`.
-    fn try_null_as_none_pattern(&self, scrutinee_type: TypeId) -> Option<TirPattern> {
+    /// True when the scrutinee is a variant type that has a `None` case, so a
+    /// `null` literal pattern lowers to a `None` variant pattern (which binds
+    /// nothing). Reify rebuilds the actual `None` pattern; the combined walk
+    /// only needs the yes/no answer for its binding/fact walk.
+    fn try_null_as_none_pattern(&self, scrutinee_type: TypeId) -> bool {
         let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
         let variant_name = match &resolved {
-            ResolvedType::Variant { name, .. } => Some(name.clone()),
+            ResolvedType::Variant { name, .. } => name.clone(),
             ResolvedType::GenericInstance { name, .. } if self.contains_variant(name) => {
-                Some(name.clone())
+                name.clone()
             }
-            _ => None,
-        }?;
-        let variant_info = self.lookup_variant_case(&variant_name)?;
+            _ => return false,
+        };
+        let Some(variant_info) = self.lookup_variant_case(&variant_name) else {
+            return false;
+        };
         let none_case_name = self
             .tysys
             .type_table
@@ -1710,19 +1571,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .compiler_items()
             .variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
             .to_string();
-        if variant_info.cases.iter().any(|c| c.name == none_case_name) {
-            Some(TirPattern::Variant {
-                enum_type: scrutinee_type,
-                variant_name: none_case_name,
-                bindings: vec![],
-                payload_type: TypeTable::UNIT,
-            })
-        } else {
-            None
-        }
+        variant_info.cases.iter().any(|c| c.name == none_case_name)
     }
 
-    /// Resolve a range pattern: `0..<10` or `'a'..='z'`
+    /// Validate a range pattern (`0..<10` or `'a'..='z'`) for the combined
+    /// walk, emitting the bad-bounds / reversed / empty diagnostics. Range
+    /// patterns bind nothing and reify rebuilds the real `TirPattern::Range`,
+    /// so no pattern node is produced here.
     fn resolve_range_pattern(
         &mut self,
         start: &Pattern,
@@ -1730,7 +1585,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         kind: crate::ast::RangeKind,
         scrutinee_type: TypeId,
         span: Span,
-    ) -> TirPattern {
+    ) {
         let scrutinee_resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
         let is_unsigned = matches!(
             scrutinee_resolved,
@@ -1754,7 +1609,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 message: "range pattern bounds must be integer or char literals".to_string(),
                 span,
             });
-            return TirPattern::Wildcard;
+            return;
         };
 
         // Check for reversed or empty range
@@ -1764,21 +1619,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 message: "reversed range pattern".to_string(),
                 span,
             });
-            return TirPattern::Wildcard;
+            return;
         }
         if !inclusive && start_val >= end_val {
             let _ = self.logger.error(TypeError::InvalidPattern {
                 message: "empty range pattern".to_string(),
                 span,
             });
-            return TirPattern::Wildcard;
-        }
-
-        TirPattern::Range {
-            start: start_val,
-            end: end_val,
-            inclusive,
-            is_unsigned,
         }
     }
 
