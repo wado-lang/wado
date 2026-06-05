@@ -450,12 +450,14 @@ unblocks in parentheses):
       `iterable.kind == TupleZip`. `TupleZip` is produced only by the tuple
       `.zip()` arm, so an AST shape check (a `.zip()` call) plus the existing
       `type_contains_pack` on the result type is equivalent.
-- [ ] **if-let-chain / let-chain result type** — the remaining
-      `block_result_type(TIR)` readers, over synthetic chain blocks. The
-      `resolve_if_expr` LetChain arm is now a placeholder but still computes
-      its result type from the synthetic `chain_block` (still built because
-      `resolve_block` still builds TIR); the AST result-type rule is only
-      needed when `resolve_block` is converted in the Phase 2 signature sweep.
+- [x] **if-let-chain / let-chain result type** — ported to the AST. The
+      `resolve_if_expr` LetChain arm computes its result type as
+      `agree_branch_types(ast_block_result_type(then_block), else_type)
+      .unwrap_or(UNIT)`, which is byte-identical to `block_result_type` over the
+      synthetic chain block (the per-level `unwrap_or(UNIT)` recursion collapses
+      to exactly this for single- and multi-element chains).
+      `resolve_let_chain_stmts` is records-only and no longer builds the chain
+      `Match` / `If` TIR; the `block_result_type(&TirBlock)` helper is deleted.
 - [x] **assign target ident classification** — `resolve_ident` records an
       `AssignPlace` fact (`Local` / `DerefCapture { through_mut_ref }` /
       `Global { name, mutable }`) keyed by the ident's `AstId`;
@@ -609,13 +611,14 @@ block-result-type reader.
         (`wado-lsp::build_semantics` → `semantics_of(.., false)`) runs only the
         body fact-walk and never builds or reads TIR; the batch path, the
         general `semantics()` entry, and kiln options extraction pass `true`.
-  - [ ] **Remaining (hardening): `resolve_expr -> TypeId`.** The combined-walk
-        resolvers still return a `placeholder` `TirExpr` (a `Unit` sentinel
-        carrying the resolved type + span) rather than a bare `TypeId`. reify
-        is already the sole producer of meaningful TIR, so this is a type-level
-        signature sweep over the ~56 body-walk resolvers + the expression
-        builders, not an architectural change. Pipeline diagrams stay accurate
-        either way.
+  - [x] **`resolve_expr -> TypeId`.** Every body-walk resolver returns the
+        resolved `TypeId` (the `placeholder` `TirExpr` sentinels are gone).
+        The TIR builders that reify shares (`build_tir_method_call`,
+        `adjust_receiver_for_self_kind`, `resolve_from_call`, …) keep returning
+        `TirExpr` — they are reify's real producers — and the few combined-walk
+        sites that still call them read `.type_id` (wrapping `placeholder` only
+        where a shared builder needs a `TirExpr` operand). reify (`reify.rs`) is
+        untouched and remains the sole TIR producer.
 
 ### Landing log
 
