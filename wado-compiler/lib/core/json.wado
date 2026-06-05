@@ -1813,7 +1813,7 @@ impl DeserializeStruct for JsonStructAccess {
             } else {
                 self.de.expect_char(':' as i32)?;
             }
-            let idx = match S::lookup(self.de.input.as_byte_slice().slice(key_start, key_end)) {
+            let idx = match S::lookup(self.de.input.as_bytes().slice(key_start, key_end)) {
                 Some(i) => i,
                 None => -1,
             };
@@ -1825,7 +1825,7 @@ impl DeserializeStruct for JsonStructAccess {
         self.de.pos = key_start - 1;
         let key = self.de.read_json_string()?;
         self.de.expect_char(':' as i32)?;
-        let idx = match S::lookup(key.as_byte_slice()) {
+        let idx = match S::lookup(key.as_bytes()) {
             Some(i) => i,
             None => -1,
         };

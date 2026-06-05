@@ -54,11 +54,12 @@ impl String {
         return builtin::array_get_u8(&self.repr, index);
     }
 
-    /// Zero-copy view of the string's UTF-8 bytes as an `ArraySlice<u8>`
-    /// (i.e. `ByteSlice`). No allocation: the slice references the string's
-    /// backing buffer over `[0, len())`. Used by the byte-based deserializers
-    /// to hand a wire key to `FieldSchema::lookup` without a `String` copy.
-    pub fn as_byte_slice(&self) -> ArraySlice<u8> with stores[self] {
+    /// Zero-copy view of the string's UTF-8 bytes as an `ArraySlice<u8>`.
+    /// No allocation: the slice references the string's backing buffer over
+    /// `[0, len())`. Used by the byte-based deserializers to hand a wire key
+    /// to `FieldSchema::lookup` without a `String` copy. The `AsByteSlice`
+    /// trait impl (in `core:prelude/bytes.wado`) wraps this as a `ByteSlice`.
+    pub fn as_bytes(&self) -> ArraySlice<u8> with stores[self] {
         return ArraySlice::internal_new(&self.repr, 0, self.used);
     }
 
