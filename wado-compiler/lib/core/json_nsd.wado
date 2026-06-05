@@ -588,7 +588,16 @@ impl Deserializer for NsdDeserializer {
     }
 }
 
-/// Serializes a value to a JSON NSD string.
+/// Serializes a value to UTF-8 JSON NSD bytes — the primary entry point.
+pub fn to_bytes<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError> {
+    let mut buf: String = "";
+    let mut ser = NsdSerializer { buf: &mut buf };
+    value.serialize::<NsdSerializer>(&mut ser)?;
+    return Result::Ok(List::<u8>::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
+}
+
+/// Serializes a value to a JSON NSD string. Convenience over `to_bytes` for
+/// text contexts; serde I/O is bytes-primary.
 pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError> {
     let mut buf: String = "";
     let mut ser = NsdSerializer { buf: &mut buf };

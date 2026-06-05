@@ -2497,7 +2497,11 @@ impl Serializer for CanonicalJsonSerializer {
 /// Initial serialization buffer capacity, in bytes. Most JSON values
 /// fit without a reallocation; larger outputs still grow amortized.
 /// Matches `serde_json`'s `to_vec` pre-sizing.
-global SERIALIZE_BUFFER_CAPACITY: i32 = 128;/// Serializes a value to a JSON string.
+global SERIALIZE_BUFFER_CAPACITY: i32 = 128;
+
+/// Serializes a value to a JSON string. Convenience over `to_bytes` for text
+/// contexts; serde I/O is bytes-primary, so prefer `to_bytes` when the output
+/// is consumed as bytes (e.g. an HTTP response body).
 pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError> {
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = JsonSerializer { buf: &mut buf };
@@ -2519,7 +2523,8 @@ pub fn to_bytes<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError> {
     return Result::Ok(List::<u8>::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
 }
 
-/// Serializes a value to a pretty JSON string.
+/// Serializes a value to a pretty JSON string. Convenience over
+/// `to_bytes_pretty`; serde I/O is bytes-primary.
 pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, SerializeError> {
     let indent = "  ";
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
@@ -2532,7 +2537,8 @@ pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, SerializeErro
     return Result::Ok(buf);
 }
 
-/// Deserializes a value from a JSON string.
+/// Deserializes a value from a JSON string. Convenience wrapper over
+/// `from_bytes` (a `String` is a UTF-8 byte source); serde I/O is bytes-primary.
 pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError> {
     return from_bytes::<T, String>(input);
 }
