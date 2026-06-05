@@ -106,9 +106,10 @@ Run a single phase and report its throughput.
 
 In auto mode (`iterations == 0`) the iteration count is calibrated so
 the timed loop runs for about `target_ms` milliseconds. In fixed mode
-(`iterations > 0`) it performs `warmup` unmeasured runs then exactly
-`iterations` timed runs. Prints the header on first call. Returns the
-final timed iteration's value.
+(`iterations > 0`) it performs `warmup` unmeasured runs (the `-1`
+default auto-derives to 1 when `iterations >= 2`, otherwise 0) then
+exactly `iterations` timed runs. Prints the header on first call.
+Returns the final timed iteration's value.
 
 `label` may be empty for an unlabeled single-phase benchmark.
 
