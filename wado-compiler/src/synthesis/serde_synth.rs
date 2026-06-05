@@ -1660,11 +1660,7 @@ fn generate_lookup_function(
 
     // let __len = key.byte_len()
     let len_local = alloc_local(&mut next_local, &mut locals, TypeTable::I32);
-    let len_expr = byte_slice_len_expr(
-        local_ref(0, "__key", key_slice_type),
-        span,
-        compiler_items,
-    );
+    let len_expr = byte_slice_len_expr(local_ref(0, "__key", key_slice_type), span, compiler_items);
     stmts.push(let_mut_stmt("__len", len_local, TypeTable::I32, len_expr));
 
     // For each field, generate:

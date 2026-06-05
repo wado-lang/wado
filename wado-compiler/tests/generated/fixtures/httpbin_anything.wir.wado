@@ -876,19 +876,19 @@ type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:va
 
 type "functype//core:value/Value^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "core:prelude/types.wado//Box<Value>", ref "core:json//JsonSerializer") -> ref null "core:serde//SerializeError";  // TypeId(247)
 
-type "functype//core:prelude/slice.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> ref "core:prelude/types.wado//Option<u8>";  // TypeId(248)
+type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(248)
 
-type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(249)
+type "functype//core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:value/Value>>::push" = fn(ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:value/Value>>", ref "tuple//[core:prelude/string.wado/String, core:value/Value]");  // TypeId(249)
 
-type "functype//core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:value/Value>>::push" = fn(ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:value/Value>>", ref "tuple//[core:prelude/string.wado/String, core:value/Value]");  // TypeId(250)
+type "functype//core:prelude/slice.wado/ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>") -> ref null "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>";  // TypeId(250)
 
-type "functype//core:prelude/slice.wado/ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>") -> ref null "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>";  // TypeId(251)
+type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::find_index" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>", ref "core:prelude/string.wado//String") -> i32;  // TypeId(251)
 
-type "functype//core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::find_index" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>", ref "core:prelude/string.wado//String") -> i32;  // TypeId(252)
+type "functype//core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>::grow" = fn(ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>");  // TypeId(252)
 
-type "functype//core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>::grow" = fn(ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>");  // TypeId(253)
+type "functype//core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow" = fn(ref "core:prelude//List<core:prelude/list.wado/List<u8>>");  // TypeId(253)
 
-type "functype//core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow" = fn(ref "core:prelude//List<core:prelude/list.wado/List<u8>>");  // TypeId(254)
+type "functype//core:prelude/slice.wado/ArrayIter<u8>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> ref "core:prelude/types.wado//Option<u8>";  // TypeId(254)
 
 type "functype//core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:value/Value>>::grow" = fn(ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:value/Value>>");  // TypeId(255)
 
@@ -6450,16 +6450,6 @@ fn "core:value/Value^Serialize::serialize<core:json/JsonSerializer>"(self, s) {
     });
 }
 
-fn "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(self) {
-    let item: u8;
-    if self.index >= self.end {
-        return struct.new "core:prelude/types.wado//Option<u8>" { 1 };
-    }
-    item = builtin::array_get<u8>(self.repr, self.index);
-    self.index = self.index + 1;
-    return struct.new "core:prelude/types.wado//Option<u8>::Some" { discriminant: 0, payload_0: item };
-}
-
 fn "core:prelude/list.wado/List<u8>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
@@ -6512,8 +6502,8 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::
     _licm_repr_13 = _licm_nodes_10.repr;
     _licm_used_14 = _licm_entries_11.used;
     _licm_repr_15 = _licm_entries_11.repr;
-    b786: block {
-        l787: loop {
+    b785: block {
+        l786: loop {
             let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
             __match_scrut_0 = current;
             if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) {
@@ -6541,9 +6531,9 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::
                     current = n.right;
                 }
             } else {
-                break b786;
+                break b785;
             }
-            continue l787;
+            continue l786;
         };
     };
     return -1;
@@ -6573,6 +6563,16 @@ fn "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"(self) {
     new_repr = builtin::array_new<ref "core:prelude//List<u8>">(new_capacity);
     builtin::array_copy<ref "core:prelude//List<u8>">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
+}
+
+fn "core:prelude/slice.wado/ArrayIter<u8>^Iterator::next"(self) {
+    let item: u8;
+    if self.index >= self.end {
+        return struct.new "core:prelude/types.wado//Option<u8>" { 1 };
+    }
+    item = builtin::array_get<u8>(self.repr, self.index);
+    self.index = self.index + 1;
+    return struct.new "core:prelude/types.wado//Option<u8>::Some" { discriminant: 0, payload_0: item };
 }
 
 fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:value/Value>>::grow"(self) {
