@@ -17,7 +17,12 @@ use std::collections::VecDeque;
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{
+    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, PatId, PatKind,
+    PatNode, StmtId, StmtKind, StmtNode,
+};
+use crate::tir::TypeId;
+use crate::token::Span;
 
 /// Per-local use information: where the local is defined and every node that
 /// reads it. Used by the engine to re-enqueue a local's uses when its
@@ -223,6 +228,392 @@ impl<'a> Engine<'a> {
         }
     }
 
+    /// Edit API: allocate a fresh expression node. Sets the parent of its id
+    /// children, registers a `Local` mention, and enqueues it (and its
+    /// children) so a freshly built subtree is visited.
+    pub fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: Span) -> ExprId {
+        let id = self.body.exprs.push(ExprNode {
+            kind,
+            type_id,
+            span,
+        });
+        self.expr_parent.push(None);
+        let mut children = Vec::new();
+        self.body
+            .for_each_child(NodeRef::Expr(id), |c| children.push(c));
+        for c in children {
+            self.set_parent(c, Some(NodeRef::Expr(id)));
+        }
+        if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
+            let index = *index;
+            self.uses.entry(index).or_default().reads.push(id);
+        }
+        self.enqueue(NodeRef::Expr(id));
+        id
+    }
+
+    /// Edit API: allocate a fresh statement node.
+    pub fn alloc_stmt(&mut self, kind: StmtKind, span: Span) -> StmtId {
+        let id = self.body.stmts.push(StmtNode { kind, span });
+        self.stmt_parent.push(None);
+        let mut children = Vec::new();
+        self.body
+            .for_each_child(NodeRef::Stmt(id), |c| children.push(c));
+        for c in children {
+            self.set_parent(c, Some(NodeRef::Stmt(id)));
+        }
+        if let StmtKind::Let { local_index, .. } = &self.body.stmts[id].kind {
+            let index = *local_index;
+            self.uses.entry(index).or_default().def = Some(id);
+        }
+        self.enqueue(NodeRef::Stmt(id));
+        id
+    }
+
+    /// Edit API: allocate a fresh block node from a statement list.
+    pub fn alloc_block(&mut self, stmts: Vec<StmtId>, span: Span) -> BlockId {
+        let id = self.body.blocks.push(BlockNode { stmts, span });
+        self.block_parent.push(None);
+        let kids: Vec<StmtId> = self.body.blocks[id].stmts.clone();
+        for s in kids {
+            self.set_parent(NodeRef::Stmt(s), Some(NodeRef::Block(id)));
+        }
+        self.enqueue(NodeRef::Block(id));
+        id
+    }
+
+    /// Edit API: allocate a fresh pattern node.
+    pub fn alloc_pat(&mut self, kind: PatKind, span: Span) -> PatId {
+        let id = self.body.pats.push(PatNode { kind, span });
+        self.pat_parent.push(None);
+        let mut children = Vec::new();
+        self.body
+            .for_each_child(NodeRef::Pat(id), |c| children.push(c));
+        for c in children {
+            self.set_parent(c, Some(NodeRef::Pat(id)));
+        }
+        self.enqueue(NodeRef::Pat(id));
+        id
+    }
+
+    /// Deep-copy the expression subtree rooted at `id` into fresh arena nodes,
+    /// returning the new root. Needed when a rewrite must duplicate a subtree
+    /// it cannot share — the arena is a tree (one parent per node), so two
+    /// references to one id would break the parent invariant.
+    pub fn clone_expr(&mut self, id: ExprId) -> ExprId {
+        let node = self.body.exprs[id].clone();
+        let kind = self.clone_expr_kind(node.kind);
+        self.alloc_expr(kind, node.type_id, node.span)
+    }
+
+    fn clone_block(&mut self, id: BlockId) -> BlockId {
+        let node = self.body.blocks[id].clone();
+        let stmts = node.stmts.iter().map(|s| self.clone_stmt(*s)).collect();
+        self.alloc_block(stmts, node.span)
+    }
+
+    fn clone_stmt(&mut self, id: StmtId) -> StmtId {
+        let node = self.body.stmts[id].clone();
+        let kind = self.clone_stmt_kind(node.kind);
+        self.alloc_stmt(kind, node.span)
+    }
+
+    fn clone_pat(&mut self, id: PatId) -> PatId {
+        let node = self.body.pats[id].clone();
+        let kind = self.clone_pat_kind(node.kind);
+        self.alloc_pat(kind, node.span)
+    }
+
+    fn clone_expr_kind(&mut self, kind: ExprKind) -> ExprKind {
+        match kind {
+            ExprKind::GlobalVarSet {
+                module_source,
+                name,
+                value,
+            } => ExprKind::GlobalVarSet {
+                module_source,
+                name,
+                value: self.clone_expr(value),
+            },
+            ExprKind::Binary { left, op, right } => ExprKind::Binary {
+                left: self.clone_expr(left),
+                op,
+                right: self.clone_expr(right),
+            },
+            ExprKind::Unary { op, expr } => ExprKind::Unary {
+                op,
+                expr: self.clone_expr(expr),
+            },
+            ExprKind::Assign { target, value } => ExprKind::Assign {
+                target: self.clone_expr(target),
+                value: self.clone_expr(value),
+            },
+            ExprKind::Cast { expr, target_type } => ExprKind::Cast {
+                expr: self.clone_expr(expr),
+                target_type,
+            },
+            ExprKind::Call {
+                func,
+                type_args,
+                args,
+            } => ExprKind::Call {
+                func,
+                type_args,
+                args: args
+                    .into_iter()
+                    .map(|a| crate::nir_arena::ArenaCallArg {
+                        expr: self.clone_expr(a.expr),
+                        is_mut: a.is_mut,
+                    })
+                    .collect(),
+            },
+            ExprKind::CmRawCall { local_name, args } => ExprKind::CmRawCall {
+                local_name,
+                args: args.into_iter().map(|a| self.clone_expr(a)).collect(),
+            },
+            ExprKind::MethodCall {
+                receiver,
+                func,
+                type_args,
+                args,
+            } => ExprKind::MethodCall {
+                receiver: self.clone_expr(receiver),
+                func,
+                type_args,
+                args: args
+                    .into_iter()
+                    .map(|a| crate::nir_arena::ArenaCallArg {
+                        expr: self.clone_expr(a.expr),
+                        is_mut: a.is_mut,
+                    })
+                    .collect(),
+            },
+            ExprKind::FieldAccess {
+                expr,
+                field_index,
+                field_name,
+            } => ExprKind::FieldAccess {
+                expr: self.clone_expr(expr),
+                field_index,
+                field_name,
+            },
+            ExprKind::Index { expr, index } => ExprKind::Index {
+                expr: self.clone_expr(expr),
+                index: self.clone_expr(index),
+            },
+            ExprKind::Block(b) => ExprKind::Block(self.clone_block(b)),
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => ExprKind::If {
+                condition: self.clone_expr(condition),
+                then_branch: self.clone_block(then_branch),
+                else_branch: else_branch.map(|b| self.clone_block(b)),
+            },
+            ExprKind::Match { expr, arms } => ExprKind::Match {
+                expr: self.clone_expr(expr),
+                arms: arms
+                    .into_iter()
+                    .map(|a| ArmData {
+                        pattern: self.clone_pat(a.pattern),
+                        guard: a.guard.map(|g| self.clone_expr(g)),
+                        body: self.clone_expr(a.body),
+                        span: a.span,
+                    })
+                    .collect(),
+            },
+            ExprKind::StructLiteral {
+                struct_type,
+                struct_name,
+                fields,
+            } => ExprKind::StructLiteral {
+                struct_type,
+                struct_name,
+                fields: fields
+                    .into_iter()
+                    .map(|f| crate::nir_arena::ArenaStructField {
+                        name: f.name,
+                        value: self.clone_expr(f.value),
+                        field_index: f.field_index,
+                    })
+                    .collect(),
+            },
+            ExprKind::TupleLiteral { elements } => ExprKind::TupleLiteral {
+                elements: elements.into_iter().map(|e| self.clone_expr(e)).collect(),
+            },
+            ExprKind::ArrayLiteral { elements } => ExprKind::ArrayLiteral {
+                elements: elements.into_iter().map(|e| self.clone_expr(e)).collect(),
+            },
+            ExprKind::IndirectCall { callee, args } => ExprKind::IndirectCall {
+                callee: self.clone_expr(callee),
+                args: args.into_iter().map(|a| self.clone_expr(a)).collect(),
+            },
+            ExprKind::ClosureToCanonical {
+                functor,
+                functor_id,
+                target_fn_type,
+                closure_module,
+            } => ExprKind::ClosureToCanonical {
+                functor: self.clone_expr(functor),
+                functor_id,
+                target_fn_type,
+                closure_module,
+            },
+            ExprKind::VariantConstruct {
+                variant_type,
+                case_index,
+                case_name,
+                payload,
+            } => ExprKind::VariantConstruct {
+                variant_type,
+                case_index,
+                case_name,
+                payload: payload.map(|p| self.clone_expr(p)),
+            },
+            ExprKind::LabeledBlock {
+                label,
+                block,
+                result_type,
+            } => ExprKind::LabeledBlock {
+                label,
+                block: self.clone_block(block),
+                result_type,
+            },
+            ExprKind::VariantTag { expr } => ExprKind::VariantTag {
+                expr: self.clone_expr(expr),
+            },
+            ExprKind::VariantTest {
+                expr,
+                case_index,
+                case_name,
+            } => ExprKind::VariantTest {
+                expr: self.clone_expr(expr),
+                case_index,
+                case_name,
+            },
+            ExprKind::VariantPayload {
+                expr,
+                case_index,
+                payload_type,
+            } => ExprKind::VariantPayload {
+                expr: self.clone_expr(expr),
+                case_index,
+                payload_type,
+            },
+            ExprKind::Switch {
+                scrutinee,
+                min_value,
+                arms,
+                default,
+            } => ExprKind::Switch {
+                scrutinee: self.clone_expr(scrutinee),
+                min_value,
+                arms: arms.into_iter().map(|a| self.clone_block(a)).collect(),
+                default: self.clone_block(default),
+            },
+            // Leaves carry no id children.
+            leaf => leaf,
+        }
+    }
+
+    fn clone_stmt_kind(&mut self, kind: StmtKind) -> StmtKind {
+        match kind {
+            StmtKind::Let {
+                name,
+                local_index,
+                is_mut,
+                is_reactive,
+                type_id,
+                value,
+                skip_value_copy,
+            } => StmtKind::Let {
+                name,
+                local_index,
+                is_mut,
+                is_reactive,
+                type_id,
+                value: self.clone_expr(value),
+                skip_value_copy,
+            },
+            StmtKind::Expr(e) => StmtKind::Expr(self.clone_expr(e)),
+            StmtKind::Return { value } => StmtKind::Return {
+                value: value.map(|e| self.clone_expr(e)),
+            },
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => StmtKind::If {
+                condition: self.clone_expr(condition),
+                then_block: self.clone_block(then_block),
+                else_block: else_block.map(|b| self.clone_block(b)),
+            },
+            StmtKind::Loop { body } => StmtKind::Loop {
+                body: self.clone_block(body),
+            },
+            StmtKind::Break { label, value } => StmtKind::Break {
+                label,
+                value: value.map(|e| self.clone_expr(e)),
+            },
+            StmtKind::Continue => StmtKind::Continue,
+            StmtKind::LabeledBlock { label, block } => StmtKind::LabeledBlock {
+                label,
+                block: self.clone_block(block),
+            },
+            StmtKind::LetDestructure {
+                pattern,
+                is_mut,
+                value,
+            } => StmtKind::LetDestructure {
+                pattern: self.clone_pat(pattern),
+                is_mut,
+                value: self.clone_expr(value),
+            },
+        }
+    }
+
+    fn clone_pat_kind(&mut self, kind: PatKind) -> PatKind {
+        match kind {
+            PatKind::Tuple(ps, rest) => {
+                PatKind::Tuple(ps.into_iter().map(|p| self.clone_pat(p)).collect(), rest)
+            }
+            PatKind::Or(ps) => PatKind::Or(ps.into_iter().map(|p| self.clone_pat(p)).collect()),
+            PatKind::Variant {
+                enum_type,
+                variant_name,
+                bindings,
+                payload_type,
+            } => PatKind::Variant {
+                enum_type,
+                variant_name,
+                bindings: bindings.into_iter().map(|p| self.clone_pat(p)).collect(),
+                payload_type,
+            },
+            PatKind::Struct {
+                struct_type,
+                fields,
+                has_rest,
+            } => PatKind::Struct {
+                struct_type,
+                fields: fields
+                    .into_iter()
+                    .map(|f| crate::nir_arena::ArenaStructPatternField {
+                        field_name: f.field_name,
+                        field_index: f.field_index,
+                        pattern: self.clone_pat(f.pattern),
+                    })
+                    .collect(),
+                has_rest,
+            },
+            PatKind::ConstantValue { expr } => PatKind::ConstantValue {
+                expr: self.clone_expr(expr),
+            },
+            // Leaves carry no id children.
+            leaf => leaf,
+        }
+    }
+
     /// Drive the worklist to a local fixed point with `rules`. Pops a node,
     /// tries the rules in priority order; the first that reports a change
     /// re-processes the node (its kind may now match a different rule). Edits
@@ -408,6 +799,37 @@ mod tests {
             ExprKind::IntLiteral { value, .. } => assert_eq!(*value, 12),
             other => panic!("expected folded IntLiteral(12), got {other:?}"),
         }
+    }
+
+    #[test]
+    fn clone_expr_deep_copies_into_fresh_nodes() {
+        // `{ let x = 1 + 2; return x; }`; clone the `1 + 2` subtree.
+        let mut body = sample_body();
+        let root = body.root;
+        let s0 = body.blocks[root].stmts[0];
+        let StmtKind::Let { value, .. } = &body.stmts[s0].kind else {
+            panic!("expected let");
+        };
+        let original = *value;
+        let (orig_left, orig_right) = match &body.exprs[original].kind {
+            ExprKind::Binary { left, right, .. } => (*left, *right),
+            other => panic!("expected Binary, got {other:?}"),
+        };
+        let before = body.exprs.len();
+        let clone = {
+            let mut eng = Engine::new(&mut body);
+            eng.clone_expr(original)
+        };
+        // A Binary plus its two literal operands were allocated.
+        assert_eq!(body.exprs.len(), before + 3);
+        assert_ne!(clone, original);
+        let (new_left, new_right) = match &body.exprs[clone].kind {
+            ExprKind::Binary { left, right, .. } => (*left, *right),
+            other => panic!("expected cloned Binary, got {other:?}"),
+        };
+        // Deep copy: the clone's operands are fresh ids, not shared.
+        assert_ne!(new_left, orig_left);
+        assert_ne!(new_right, orig_right);
     }
 
     #[test]
