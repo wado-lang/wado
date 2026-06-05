@@ -3226,18 +3226,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         assoc_type_name: &str,
         expected_index_type: Option<TypeId>,
     ) -> Option<(TypeId, ast::SelfKind, String, ModuleSource)> {
-        // Check cache first (include expected_index_type in key)
-        let cache_key = (
-            struct_name.to_string(),
-            base_type_id,
-            trait_base_name.to_string(),
-            method_name.to_string(),
-            format!("{assoc_type_name}:{expected_index_type:?}"),
-        );
-        if let Some(cached) = self.indexing_trait_cache.get(&cache_key) {
-            return cached.clone();
-        }
-
         // Get concrete type arguments from the base type (for generic instances like Triple<i32>).
         // The raw GC array `Array<T>` carries its element type as the single
         // type arg, mirroring a generic instance, so `impl IndexValue for Array<T>`
@@ -3345,13 +3333,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 drop(scope);
 
-                let result = Some((assoc_type, self_kind, trait_name, impl_source));
-                self.indexing_trait_cache.insert(cache_key, result.clone());
-                return result;
+                return Some((assoc_type, self_kind, trait_name, impl_source));
             }
         }
 
-        self.indexing_trait_cache.insert(cache_key, None);
         None
     }
 
