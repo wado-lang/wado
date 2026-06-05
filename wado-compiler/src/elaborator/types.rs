@@ -117,14 +117,11 @@ pub(crate) struct FlagsInfo {
 /// Resource info: module source and method names
 /// Note: This infrastructure was added for resource static methods but isn't fully used yet.
 /// Keep it for when wasi:sockets registration is re-enabled.
-#[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) struct ResourceInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
-    /// Method names defined on this resource (both static and instance)
-    pub(super) methods: Vec<String>,
 }
 
 /// Generic newtype definition: `type Foo<T> = Bar<T>`

@@ -573,7 +573,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 target_type,
                 impl_module_source,
                 builder_base_name,
-                mangled_builder_name,
                 type_arg_ids,
                 type_arg_names,
                 use_new_api,
@@ -739,7 +738,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 output_type,
                 impl_module_source,
                 builder_base_name,
-                mangled_builder_name,
                 type_arg_ids,
                 type_arg_names,
                 newtype_cast_to: if needs_newtype_cast {

@@ -86,16 +86,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
             })
             .collect();
-        let emitted_slot_indices: Vec<u32> = slots
-            .iter()
-            .enumerate()
-            .filter_map(|(i, c)| if c.emitted { Some(i as u32) } else { None })
-            .collect();
         self.record_assert_captures(
             assert_stmt.id,
             super::sem::types::AssertCaptureInfo {
                 slots: stage5_slots,
-                emitted_slot_indices,
             },
         );
 
@@ -146,12 +140,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // enter `local_symbols` and pollute LSP hover / go-to-def lookups.
         let _local_index = ctx.add_local(cap_name, type_id, false, None);
 
-        let cap_ctx = ctx
-            .assert_capture_ctx
-            .as_mut()
-            .expect("assert_capture_ctx survives recursive resolve");
-        cap_ctx.slots[slot_idx].emitted = true;
-
         type_id
     }
 }
@@ -162,12 +150,6 @@ struct Capture {
     name: String,
     /// Source text of the original sub-expression, used in the failure message.
     source: String,
-    /// `true` once the elaborator hook has fired for this slot. Slots that
-    /// stay `false` had their AST node evaporate during resolution
-    /// (e.g. reflexive `T::from(T_val)` returns its argument directly, so
-    /// the outer `Call` is never resolved as a node and the capture hook is
-    /// never called on its `AstId`).
-    emitted: bool,
 }
 
 /// Per-assert state carried on [`FunctionContext::assert_capture_ctx`]
@@ -244,11 +226,7 @@ impl CaptureScanner {
     fn add(&mut self, source: String, ast_id: AstId) {
         let idx = self.slots.len();
         let name = format!("__v{idx}");
-        self.slots.push(Capture {
-            name,
-            source,
-            emitted: false,
-        });
+        self.slots.push(Capture { name, source });
         self.ast_id_to_slot.insert(ast_id, idx);
     }
 

@@ -78,27 +78,21 @@ use crate::tir::{FunctionRef, TypeId};
 /// `wep-2026-05-26-elaborator-rearchitecture.md` §`Design notes (Stage 5)`).
 #[derive(Clone)]
 pub(crate) struct MethodDispatch {
-    #[allow(dead_code)]
     pub(crate) function_ref: FunctionRef,
-    #[allow(dead_code)]
     pub(crate) self_kind: ast::SelfKind,
     /// True when the resolved method's impl was found on a reference type
     /// (`impl Trait for &T`). Reify wraps the receiver in an extra `&` /
     /// `&mut` layer before passing it to the method.
-    #[allow(dead_code)]
     pub(crate) is_ref_impl: bool,
     /// Per-argument `is_mut` flag drained from the resolved method's
     /// parameter signature (`lookup_method_param_is_mut`). Reify zips
     /// this with the reified argument exprs to build [`crate::tir::CallArg`]s
     /// with the same `is_mut` shape annotate produced.
-    #[allow(dead_code)]
     pub(crate) param_is_mut: Vec<bool>,
     /// Parameter names in declaration order. Used as substitution keys
     /// when a default references an earlier parameter (`fn f(w, h = w)`).
-    #[allow(dead_code)]
     pub(crate) param_names: Vec<String>,
     /// Per-parameter default expression ASTs (`None` for required).
-    #[allow(dead_code)]
     pub(crate) param_defaults: Vec<Option<crate::ast::Expr>>,
     /// The resolved method's return [`TypeId`] — the authoritative result
     /// type of the call. Reify uses this for the `MethodCall`'s
@@ -123,7 +117,6 @@ pub(crate) struct MethodDispatch {
     /// the turbofish args (they pass straight through `build_tir_method_call`),
     /// so reify needs its own un-zeroed copy to avoid re-resolving the AST
     /// type-arg list against the current type-param scope.
-    #[allow(dead_code)]
     pub(crate) method_type_args: Vec<TypeId>,
 }
 
@@ -134,7 +127,6 @@ pub(crate) struct MethodDispatch {
 /// path without re-checking expected-type compatibility; the target type
 /// comes alongside on [`CoercionChoice`].
 #[derive(Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
 pub(crate) enum CoercionKind {
     /// `42 → i64`, `1.0 → f32`, `0xff_ff_ff_ff → u32`, etc.
     NumericLiteral,
@@ -209,7 +201,6 @@ pub(crate) struct TypeAnnotations {
     ///
     /// `#[allow(dead_code)]` until the call.rs / expr.rs recording call
     /// sites are wired up in a follow-up of Stage 5.
-    #[allow(dead_code)]
     pub(crate) generic_instantiations: IndexMap<SymbolKey, GenericInstantiation>,
     /// Capture analysis result for each closure expression (Gap 4 of
     /// Stage 5). Keyed by the [`crate::ast::ClosureExpr`]'s [`AstId`].
@@ -253,7 +244,6 @@ pub(crate) struct TypeAnnotations {
     /// `#[allow(dead_code)]` until `reify_with_handler` reads it
     /// and the recording sites in `resolve_with_handler` /
     /// `resolve_handler_binding` are wired through.
-    #[allow(dead_code)]
     pub(crate) handler_bindings: IndexMap<SymbolKey, HandlerBindingFacts>,
     /// Impl-block resolution facts (Gap 12 of Stage 5). Keyed by
     /// the [`crate::ast::ImplBlock`]'s [`AstId`]. Carries the
@@ -269,7 +259,6 @@ pub(crate) struct TypeAnnotations {
     /// in `reify_impl` are wired up; the field is introduced with
     /// the Gap 12 design so the data shape is reviewable
     /// independently.
-    #[allow(dead_code)]
     pub(crate) impl_facts: IndexMap<SymbolKey, ImplFacts>,
     /// Resolved `with` clause for each function / method declaration
     /// (Gap of Stage 5). Keyed by the [`crate::ast::Function`]'s or
@@ -281,7 +270,6 @@ pub(crate) struct TypeAnnotations {
     /// effect-param / import / canonicalisation lookups (none of which
     /// reify has the transient `current_effect_param_decls` scope to
     /// reproduce faithfully).
-    #[allow(dead_code)]
     pub(crate) function_effects: IndexMap<SymbolKey, Vec<crate::tir::EffectRef>>,
     /// Declared (pre-erasure) return [`TypeId`] for every `async`
     /// function / method, keyed by the function's [`AstId`]. An async
@@ -302,7 +290,6 @@ pub(crate) struct TypeAnnotations {
     /// reproduce the same TIR `Call` shape without re-running
     /// `locate_static_method_impl` / `MethodName::format_local` and
     /// without consulting the trait-impl index.
-    #[allow(dead_code)]
     pub(crate) static_method_dispatch: IndexMap<SymbolKey, StaticMethodDispatch>,
     /// `SequenceLiteralBuilder` coercion data for a tuple literal
     /// coerced into an `List<T>` / user-defined sequence type. Keyed
@@ -314,7 +301,6 @@ pub(crate) struct TypeAnnotations {
     /// info here lets reify rebuild the same desugar deterministically
     /// — the `__b` local lands at the same `FunctionContext` index
     /// reify reserves for it (Gap 7 walk-order invariant).
-    #[allow(dead_code)]
     pub(crate) sequence_coercions: IndexMap<SymbolKey, SequenceCoercionFacts>,
     /// `KeyValueLiteralBuilder` coercion data for an anonymous
     /// struct literal coerced into a map-style type. Keyed by the
@@ -323,14 +309,12 @@ pub(crate) struct TypeAnnotations {
     /// `try_coerce_struct_to_map_inner` records the resolved impl
     /// info so reify rebuilds the `__kv_lit:` desugar block
     /// deterministically.
-    #[allow(dead_code)]
     pub(crate) key_value_coercions: IndexMap<SymbolKey, KeyValueCoercionFacts>,
     /// `From<T>::from` call facts recorded at every site that synthesises
     /// a conversion call: the `?` operator's err-arm conversion, and the
     /// bodyless-impl static-call inline path. Keyed by the caller's
     /// [`crate::ast::AstId`] (the `?` expr / static-call expr). See
     /// [`FromCallFacts`].
-    #[allow(dead_code)]
     pub(crate) from_call_facts: IndexMap<SymbolKey, FromCallFacts>,
     /// `IndexAssign` trait dispatch decisions for `arr[i] = v` and
     /// `arr[i] OP= v` shapes whose target is an `Expr::Index`. Keyed
@@ -344,7 +328,6 @@ pub(crate) struct TypeAnnotations {
     /// annotations cohabit because an `Expr::Index` is read in
     /// `let x = arr[i]` and written in `arr[i] = v`, and the
     /// elaborator dispatches each shape to a different trait.
-    #[allow(dead_code)]
     pub(crate) index_assign_dispatch: IndexMap<SymbolKey, OperatorDispatch>,
     /// Per-element annotation overlays for compile-time-unrolled tuple
     /// `for-of` loops (Stage 5). Keyed by the [`crate::ast::ForOfStmt`]'s
@@ -466,7 +449,6 @@ pub(crate) enum AssignPlace {
 /// [`super::super::Elaborator::resolve_tuple_for_of`]; consumed by reify
 /// via its overlay-stack accessors.
 #[derive(Default, Clone)]
-#[allow(dead_code)]
 pub(crate) struct ElementOverlay {
     pub(crate) expression_types: IndexMap<SymbolKey, TypeId>,
     pub(crate) local_types: IndexMap<SymbolKey, TypeId>,
@@ -483,7 +465,6 @@ pub(crate) struct ElementOverlay {
     pub(crate) static_method_dispatch: IndexMap<SymbolKey, StaticMethodDispatch>,
     pub(crate) sequence_coercions: IndexMap<SymbolKey, SequenceCoercionFacts>,
     pub(crate) key_value_coercions: IndexMap<SymbolKey, KeyValueCoercionFacts>,
-    pub(crate) from_call_facts: IndexMap<SymbolKey, FromCallFacts>,
     pub(crate) index_assign_dispatch: IndexMap<SymbolKey, OperatorDispatch>,
 }
 
@@ -508,7 +489,6 @@ pub(crate) struct ElementOverlayLens {
     static_method_dispatch: usize,
     sequence_coercions: usize,
     key_value_coercions: usize,
-    from_call_facts: usize,
     index_assign_dispatch: usize,
 }
 
@@ -532,7 +512,6 @@ impl TypeAnnotations {
             static_method_dispatch: self.static_method_dispatch.len(),
             sequence_coercions: self.sequence_coercions.len(),
             key_value_coercions: self.key_value_coercions.len(),
-            from_call_facts: self.from_call_facts.len(),
             index_assign_dispatch: self.index_assign_dispatch.len(),
         }
     }
@@ -567,7 +546,6 @@ impl TypeAnnotations {
                 .split_off(base.static_method_dispatch),
             sequence_coercions: self.sequence_coercions.split_off(base.sequence_coercions),
             key_value_coercions: self.key_value_coercions.split_off(base.key_value_coercions),
-            from_call_facts: self.from_call_facts.split_off(base.from_call_facts),
             index_assign_dispatch: self
                 .index_assign_dispatch
                 .split_off(base.index_assign_dispatch),
@@ -580,7 +558,6 @@ impl TypeAnnotations {
 /// (`Struct::method`); mangled includes it
 /// (`Struct^Trait::method`). See [`TypeAnnotations::method_names`].
 #[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct MethodNames {
     pub(crate) display: String,
     pub(crate) mangled: String,
@@ -594,7 +571,6 @@ pub(crate) struct MethodNames {
 /// `TirExprKind::Call` without re-walking loaded modules to find the
 /// impl's home or re-mangling the method name.
 #[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct FromCallFacts {
     /// Module that hosts the `impl From<From> for Target` block (or
     /// the auto-derived synthesis site).
@@ -617,7 +593,6 @@ pub(crate) struct FromCallFacts {
 /// Resolved `SequenceLiteralBuilder` impl data for a tuple-to-sequence
 /// coercion site. See [`TypeAnnotations::sequence_coercions`].
 #[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct SequenceCoercionFacts {
     /// The builder struct's [`crate::tir::TypeId`] (e.g.
     /// `List<i32>`'s `SequenceLiteralBuilder` is `List<i32>` itself).
@@ -634,8 +609,6 @@ pub(crate) struct SequenceCoercionFacts {
     pub(crate) impl_module_source: crate::module_source::ModuleSource,
     /// Builder's base struct name (e.g. `"List"`).
     pub(crate) builder_base_name: String,
-    /// Mangled struct name used in `format_local` (e.g. `"List<i32>"`).
-    pub(crate) mangled_builder_name: String,
     /// Type-arg `TypeId`s on the builder (e.g. `[i32]` for `List<i32>`).
     pub(crate) type_arg_ids: Vec<crate::tir::TypeId>,
     /// Type-arg display names (mangled) parallel to `type_arg_ids`.
@@ -659,7 +632,6 @@ pub(crate) struct SequenceCoercionFacts {
 /// struct-literal → map coercion site. See
 /// [`TypeAnnotations::key_value_coercions`].
 #[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct KeyValueCoercionFacts {
     /// The builder struct's [`crate::tir::TypeId`].
     pub(crate) builder_type: crate::tir::TypeId,
@@ -676,8 +648,6 @@ pub(crate) struct KeyValueCoercionFacts {
     pub(crate) impl_module_source: crate::module_source::ModuleSource,
     /// Builder's base struct name.
     pub(crate) builder_base_name: String,
-    /// Mangled struct name used in `format_local`.
-    pub(crate) mangled_builder_name: String,
     /// Type-arg `TypeId`s on the builder.
     pub(crate) type_arg_ids: Vec<crate::tir::TypeId>,
     /// Type-arg display names (mangled) parallel to `type_arg_ids`.
@@ -699,7 +669,6 @@ pub(crate) struct KeyValueCoercionFacts {
 /// Static-method call dispatch decision. See
 /// [`TypeAnnotations::static_method_dispatch`].
 #[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct StaticMethodDispatch {
     /// The resolved callee — `module_source`, mangled `name`,
     /// `method_info`, `monomorph_info` — as the elaborator constructed
@@ -735,7 +704,6 @@ pub(crate) struct StaticMethodDispatch {
 ///
 /// `#[allow(dead_code)]` because reify is the consumer (Stage 5).
 #[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct GenericInstantiation {
     pub(crate) type_args: Vec<TypeId>,
     pub(crate) instance_type: TypeId,
@@ -757,7 +725,6 @@ pub(crate) struct GenericInstantiation {
 /// opening the closure body; reify replays the same `add_local` at the
 /// same point. The fields below carry every value the replay needs.
 #[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct MutCapture {
     /// Original outer-binding name (the source-level identifier).
     pub(crate) var_name: String,
@@ -779,7 +746,6 @@ pub(crate) struct MutCapture {
 /// [`crate::tir::TirCapture`] but lives off the TIR so reify produces
 /// the same shape from the recorded info.
 #[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct CaptureEntry {
     pub(crate) name: String,
     pub(crate) outer_index: u32,
@@ -791,7 +757,6 @@ pub(crate) struct CaptureEntry {
 /// Keyed by the closure expression's [`AstId`] in
 /// [`TypeAnnotations::closure_captures`].
 #[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct ClosureCaptureInfo {
     /// Mut-captures the outer scope must materialise before the closure
     /// body opens, in declaration order. Reify replays each as
@@ -810,7 +775,6 @@ pub(crate) struct ClosureCaptureInfo {
 /// for capture as `let __vK = …;` so the panic template can quote its
 /// value.
 #[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct AssertSlot {
     /// The flagged sub-expression's [`AstId`].
     pub(crate) ast_id: AstId,
@@ -821,14 +785,11 @@ pub(crate) struct AssertSlot {
 /// Power-assert capture map recorded by
 /// [`super::super::Elaborator::desugar_assert`]. Reify walks the
 /// condition AST and consults `slots` to decide which sub-expressions
-/// become `let __vK = …;`; only the indices in `emitted_slot_indices`
-/// actually produced a binding (slots whose AST evaporated during
+/// become `let __vK = …;` (slots whose AST evaporated during
 /// resolution stay unbound and are skipped by the template).
 #[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct AssertCaptureInfo {
     pub(crate) slots: Vec<AssertSlot>,
-    pub(crate) emitted_slot_indices: Vec<u32>,
 }
 
 /// Handler-binding resolution facts recorded once per
@@ -838,7 +799,6 @@ pub(crate) struct AssertCaptureInfo {
 /// without re-running `collect_effect_impls_for_type` or the
 /// explicit-form `trait_env` validation.
 #[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct HandlerBindingFacts {
     /// One entry per effect this binding installs. For the
     /// explicit form (`Effect => handler_expr`) this is a
@@ -865,7 +825,6 @@ pub(crate) struct HandlerBindingFacts {
 /// `resolve_explicit_handler_binding` /
 /// `resolve_bundled_handler_binding` (handlers.rs:108+, 236+).
 #[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct HandlerEffectEntry {
     pub(crate) name: String,
     pub(crate) module_source: crate::module_source::ModuleSource,
@@ -879,15 +838,7 @@ pub(crate) struct HandlerEffectEntry {
 /// the trait reference, the type params, or the associated
 /// types happens inside `reify_impl`.
 #[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct ImplFacts {
-    /// The impl's `Self` type. For non-generic impls a bare
-    /// `Struct { name, module }`; for generic impls a
-    /// `GenericInstance` whose `type_args` are the impl's own
-    /// `TypeParam` ids in declaration order. Reify uses this to
-    /// synthesise `&self` / `&mut self` via `make_ref` /
-    /// `make_mut_ref` without re-interning the type-param ids.
-    pub(crate) self_type: TypeId,
     /// Full mangled trait name (e.g. `"Stream<u8>"`) — `None` for
     /// inherent impls. Lives on `FunctionRef::method_info`'s
     /// `trait_name` field.
@@ -906,17 +857,6 @@ pub(crate) struct ImplFacts {
     /// trait_type_args)`, so a generic-effect handler needs the args to
     /// match the binding's instantiation.
     pub(crate) trait_type_args: Vec<crate::tir::TypeId>,
-    /// `TirTypeParam` projection of the impl's generic params, in
-    /// declaration order, with concrete-typed positions skipped
-    /// (e.g. `impl<i32, T>` projects only `T`). Written into
-    /// every method's `TirFunction::impl_type_params`.
-    pub(crate) impl_type_params: Vec<crate::tir::TirTypeParam>,
-    /// Associated-type bindings (`type Output = T;`) resolved
-    /// against the impl's type-param scope. Reify writes them
-    /// onto each method's `trait_ctx.assoc_type_bindings` so
-    /// `Self::X` resolves inside the method body via the shared
-    /// type lookup.
-    pub(crate) assoc_type_bindings: crate::hashmap::IndexMap<String, TypeId>,
     /// True iff the impl's trait reference names an effect
     /// (`interface`) declaration — i.e. this is an effect handler
     /// impl. Reify writes onto `FunctionContext::in_handler_method`
@@ -956,7 +896,6 @@ pub(crate) struct ImplFacts {
 /// [`crate::tir::TirExprKind::Binary`] / [`crate::tir::TirExprKind::Index`]
 /// path.
 #[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct OperatorDispatch {
     /// The trait method to dispatch to. Carries the impl block's
     /// module source, mangled name, and `LocalMethodName` metadata
@@ -998,7 +937,6 @@ pub(crate) struct OperatorDispatch {
 /// call_id: None)`, captured here so reify emits the synthetic calls
 /// without re-dispatching.
 #[derive(Clone)]
-#[allow(dead_code)]
 pub(crate) struct ForOfIteratorInfo {
     /// Resolved `IntoIterator::into_iter` dispatch target.
     pub(crate) into_iter: FunctionRef,
@@ -1031,7 +969,6 @@ pub(crate) struct ForOfIteratorInfo {
 /// `wado-compiler/CLAUDE.md`); the future `reify` pass (Stage 5) reads
 /// this tag to pick the same expansion without re-deciding the shape.
 #[derive(Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
 pub(crate) enum DesugarKind {
     /// `assert cond[, msg];` → power-assert capture + guard expansion.
     Assert,

@@ -1558,24 +1558,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             &impl_block.ty,
                             ast::Type::Reference(_) | ast::Type::MutReference(_),
                         );
-                        let impl_type_params_tir: Vec<crate::tir::TirTypeParam> = impl_block
-                            .type_params
-                            .iter()
-                            .enumerate()
-                            .filter_map(|(i, p)| {
-                                if self.tysys.is_known_type_name(&p.name) {
-                                    return None;
-                                }
-                                Some(crate::tir::TirTypeParam {
-                                    name: p.name.clone(),
-                                    is_effect: p.is_effect,
-                                    is_pack: p.is_pack,
-                                    bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                                    default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
-                                    index: i as u32,
-                                })
-                            })
-                            .collect();
                         // Concrete type args of the impl's trait reference
                         // (`impl Future<i32>` → `[i32]`), resolved in the
                         // impl's type-param scope so generic impls
@@ -1618,12 +1600,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         self.record_impl_facts(
                             impl_block.id,
                             sem::types::ImplFacts {
-                                self_type,
                                 trait_name_mangled: trait_name.clone(),
                                 trait_canonical,
                                 trait_type_args,
-                                impl_type_params: impl_type_params_tir,
-                                assoc_type_bindings: self.trait_ctx.assoc_type_bindings.clone(),
                                 is_handler_method,
                                 is_ref_impl,
                                 struct_name: struct_name.clone(),

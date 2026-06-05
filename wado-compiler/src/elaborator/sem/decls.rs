@@ -85,7 +85,6 @@ pub(crate) struct ModuleDecls {
     /// elaborator's existing `tir_module.synthesis_requests.push`
     /// is rerouted through `Elaborator::record_pending_synthesis_request`
     /// and `reify_module` reads the list.
-    #[allow(dead_code)]
     pub(crate) pending_synthesis_requests: Vec<crate::tir::SynthesisRequest>,
 
     /// Per-module additions to the type tables, consulted by

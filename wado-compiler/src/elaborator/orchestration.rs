@@ -338,11 +338,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 ResourceInfo {
                                     name: resource_decl.name.clone(),
                                     module_source: module_source.clone(),
-                                    methods: resource_decl
-                                        .methods
-                                        .iter()
-                                        .map(|m| m.name.clone())
-                                        .collect(),
                                 },
                             );
                     }
