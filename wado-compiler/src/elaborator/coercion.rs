@@ -305,12 +305,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         ctx: &mut FunctionContext,
         target_type: TypeId,
-    ) -> Option<TirExpr> {
+    ) -> Option<TypeId> {
         // Numeric literal coercion (int, float, i128/u128) — sub-helper
         // records `NumericLiteral` and `expression_types` for the visited
         // AST id (and the inner `-NUM` literal id, when applicable).
         if let Some(coerced) = self.try_coerce_numeric_literal(expr, target_type) {
-            return Some(coerced);
+            return Some(coerced.type_id);
         }
 
         // Null literal → Option<T>
@@ -328,7 +328,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 super::sem::types::CoercionKind::NullToOption,
                 target_type,
             );
-            return Some(placeholder(target_type, lit.span));
+            let _ = lit;
+            return Some(target_type);
         }
 
         // String/template literal → String newtype
@@ -366,7 +367,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // with the unwrapped String type; overwrite with the
                 // outer target newtype so reify reads the newtype here.
                 self.record_expression_type(expr.id(), target_type);
-                return Some(placeholder(target_type, expr.span()));
+                return Some(target_type);
             }
         }
 
@@ -395,20 +396,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Same pattern as StringNewtype above: overwrite the
                 // map's base-fn-type write with the outer newtype.
                 self.record_expression_type(expr.id(), target_type);
-                return Some(placeholder(target_type, expr.span()));
+                return Some(target_type);
             }
         }
 
         // Tuple literal → type implementing SequenceLiteralBuilder (List<T> and user types).
         // The sub-helper records `TupleToSequence` and `expression_types`.
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(expr, ctx, target_type) {
-            return Some(coerced);
+            return Some(coerced.type_id);
         }
 
         // Anonymous struct literal → type implementing KeyValueLiteralBuilder.
         // The sub-helper records `StructToMap` and `expression_types`.
         if let Some(coerced) = self.try_coerce_struct_to_map(expr, ctx, target_type) {
-            return Some(coerced);
+            return Some(coerced.type_id);
         }
 
         // If an anonymous struct literal targets a generic instance that doesn't
@@ -615,13 +616,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         for field in &struct_lit.fields {
             let value = self.resolve_expr(&field.value, ctx, Some(value_type));
-            if value.type_id != value_type
-                && value.type_id != TypeTable::UNKNOWN
-                && value.type_id != TypeTable::NEVER
-            {
+            if value != value_type && value != TypeTable::UNKNOWN && value != TypeTable::NEVER {
                 let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: self.tysys.type_table.borrow().type_name(value_type),
-                    found: self.tysys.type_table.borrow().type_name(value.type_id),
+                    found: self.tysys.type_table.borrow().type_name(value),
                     span: field.value.span(),
                 });
             }
@@ -776,8 +774,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the recorded `SequenceCoercionFacts` + the AST.
         for element in &tuple_lit.elements {
             let elem_expr = self.resolve_expr(element, ctx, Some(element_type));
-            if elem_expr.type_id != element_type
-                && elem_expr.type_id != TypeTable::UNKNOWN
+            if elem_expr != element_type
+                && elem_expr != TypeTable::UNKNOWN
                 && element_type != TypeTable::UNKNOWN
                 && !self
                     .tysys
@@ -792,7 +790,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ),
                     found: format!(
                         "heterogeneous element of type '{}'",
-                        self.tysys.type_table.borrow().type_name(elem_expr.type_id)
+                        self.tysys.type_table.borrow().type_name(elem_expr)
                     ),
                     span: element.span(),
                 });

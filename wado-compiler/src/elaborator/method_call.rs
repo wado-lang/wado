@@ -54,7 +54,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_call: &ast::MethodCallExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         // Check for IndexMut desugaring: container[i].method() where method needs &mut self
         // We need to detect this BEFORE resolving the receiver, because resolve_index
         // would otherwise generate Index::index instead of IndexMut::index_mut
@@ -62,10 +62,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(result) =
                 self.try_resolve_index_mut_method_call(index_expr, method_call, ctx)
         {
-            return result;
+            return result.type_id;
         }
 
-        let receiver = self.resolve_expr(&method_call.receiver, ctx, None);
+        let receiver = placeholder(
+            self.resolve_expr(&method_call.receiver, ctx, None),
+            method_call.receiver.span(),
+        );
 
         // Resolve explicit type arguments (method-level type args)
         let type_args: Vec<TypeId> = method_call
@@ -87,6 +90,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
             ctx,
         )
+        .type_id
     }
 
     /// Dispatch a method call from an already-resolved receiver TIR. See
@@ -490,7 +494,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .enumerate()
             .map(|(i, arg)| {
                 let expected_type = expected_param_types.get(i).copied();
-                self.resolve_expr(arg, ctx, expected_type)
+                placeholder(self.resolve_expr(arg, ctx, expected_type), arg.span())
             })
             .collect();
 
@@ -515,7 +519,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mut default_expr = default_ast.clone();
                 default_expr.substitute_idents(&subs);
                 let resolved = self.resolve_expr(&default_expr, ctx, Some(expected_type));
-                args.push(resolved);
+                args.push(placeholder(resolved, default_expr.span()));
                 if let Some(name) = param_names.get(i) {
                     subs.insert(name.clone(), default_expr);
                 }
@@ -917,7 +921,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
+    ) -> TypeId {
         // Resolve the target type first to get struct name for parameter type lookup
         let target_type_id = self.resolve_type(&static_call.target_type);
 
@@ -1079,7 +1083,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .enumerate()
             .map(|(i, a)| {
                 let expected_type = param_types.get(i).copied();
-                self.resolve_expr(a, ctx, expected_type)
+                placeholder(self.resolve_expr(a, ctx, expected_type), a.span())
             })
             .collect();
 
@@ -1103,13 +1107,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 found: args.len(),
                                 span: static_call.span,
                             });
-                            return TirExpr::new(
-                                TirExprKind::Unit,
-                                TypeTable::ERROR,
-                                static_call.span,
-                            );
+                            return TypeTable::ERROR;
                         }
-                        return placeholder(flags_info.type_id, static_call.span);
+                        return flags_info.type_id;
                     }
                     "all" => {
                         if !args.is_empty() {
@@ -1118,13 +1118,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 found: args.len(),
                                 span: static_call.span,
                             });
-                            return TirExpr::new(
-                                TirExprKind::Unit,
-                                TypeTable::ERROR,
-                                static_call.span,
-                            );
+                            return TypeTable::ERROR;
                         }
-                        return placeholder(flags_info.type_id, static_call.span);
+                        return flags_info.type_id;
                     }
                     _ => {}
                 }
@@ -1159,14 +1155,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             found: args.len(),
                             span: static_call.span,
                         });
-                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+                        return TypeTable::ERROR;
                     }
 
                     // Stage 7-B: reify rebuilds the `VariantConstruct` from
                     // the AST + variant info; the combined walk projects only
                     // the result type.
                     let _ = case_index;
-                    return placeholder(target_type_id, static_call.span);
+                    return target_type_id;
                 }
                 // If no matching case, fall through to general method lookup
                 // (e.g., trait methods like `AppError::from(e)`)
@@ -1206,7 +1202,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             found: args.len(),
                             span: static_call.span,
                         });
-                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+                        return TypeTable::ERROR;
                     }
 
                     // Check payload type against the variant case's expected type
@@ -1225,7 +1221,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // the result type. The payload was already resolved (and
                     // typechecked) above for its fact-recording side effects.
                     let _ = case_index;
-                    return placeholder(target_type_id, static_call.span);
+                    return target_type_id;
                 }
                 // If no matching case, fall through to general method lookup
                 // (e.g., trait methods like `Result::<T, E>::from(e)`)
@@ -1238,18 +1234,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && args.len() == 1
             && self.has_from_synthesis_request(&static_call.target_type, &args[0].type_id)
         {
-            return self.resolve_from_call(
-                target_type_id,
-                args[0].type_id,
-                args.into_iter().next().unwrap(),
-                static_call.span,
-                static_call.id,
-            );
+            return self
+                .resolve_from_call(
+                    target_type_id,
+                    args[0].type_id,
+                    args.into_iter().next().unwrap(),
+                    static_call.span,
+                    static_call.id,
+                )
+                .type_id;
         }
 
         // Reflexive identity: From<T> for T — return the value unchanged.
         if static_call.method == "from" && args.len() == 1 && args[0].type_id == target_type_id {
-            return args.into_iter().next().unwrap();
+            return args.into_iter().next().unwrap().type_id;
         }
 
         // Newtype From conversions: From<Base> for Newtype and From<Newtype> for Base.
@@ -1265,7 +1263,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if base_of_target == Some(arg_type) || base_of_arg == Some(target_type_id) {
                 // Stage 7-B: reify rebuilds the newtype `Cast`; the combined
                 // walk projects only the result type.
-                return placeholder(target_type_id, static_call.span);
+                return target_type_id;
             }
         }
 
@@ -1422,7 +1420,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 _ => {
                     // Unknown type - return error expression
-                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+                    return TypeTable::ERROR;
                 }
             };
 
@@ -1465,7 +1463,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name: format!("{}::{}", struct_name, static_call.method),
                 span: static_call.span,
             });
-            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
+            return TypeTable::ERROR;
         }
 
         // Substitute type parameters in the return type using SubstitutionContext
@@ -1564,7 +1562,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // walk projects only the result type. `args` was resolved above for
         // its fact-recording side effects and is now discarded.
         let _ = args;
-        placeholder(return_type, static_call.span)
+        return_type
     }
 
     /// Look up `#[cm("...")]` for a static (no-self) method on a resource type in a module.

@@ -13,7 +13,7 @@ use crate::hashmap::IndexSet;
 
 use crate::ast::{self};
 use crate::compiler_host::CompilerHost;
-use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirStmt, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TirStmt, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
@@ -86,7 +86,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         closure: &ast::ClosureExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         self.reject_closure_defaults(closure);
         let expected_fn = self.extract_expected_fn(expected_type);
 
@@ -146,7 +146,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
 
         let body_expected = expected_fn.as_ref().map(|ef| ef.return_type);
-        let body = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
+        let body_type = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
 
         // Build the recorded capture list from the closure scope's captures.
         let recorded_captures: Vec<super::sem::types::CaptureEntry> = closure_ctx
@@ -183,8 +183,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             match self.ast_find_return_type_in_block(block) {
                 Some(t) => {
                     if !self.ast_block_always_exits(block)
-                        && body.type_id != t
-                        && body.type_id != TypeTable::NEVER
+                        && body_type != t
+                        && body_type != TypeTable::NEVER
                     {
                         let _ = self.logger.error(TypeError::MissingReturn {
                             return_type: self.tysys.type_table.borrow().type_name(t),
@@ -193,19 +193,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     t
                 }
-                None if body.type_id == TypeTable::UNIT || body.type_id == TypeTable::NEVER => {
-                    body.type_id
-                }
+                None if body_type == TypeTable::UNIT || body_type == TypeTable::NEVER => body_type,
                 None => {
                     let _ = self.logger.error(TypeError::MissingReturn {
-                        return_type: self.tysys.type_table.borrow().type_name(body.type_id),
+                        return_type: self.tysys.type_table.borrow().type_name(body_type),
                         span: closure.span,
                     });
                     TypeTable::UNIT
                 }
             }
         } else {
-            body.type_id
+            body_type
         };
 
         // Project the closure's `fn(...)` / `fn mut(...)` type so the
@@ -221,8 +219,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         // Placeholder — reify is the sole producer of the closure's TIR shape.
-        let _ = (closure_ctx, body);
+        let _ = (closure_ctx, body_type);
         let _: Vec<TirStmt> = Vec::new();
-        TirExpr::new(TirExprKind::Unit, func_type, closure.span)
+        func_type
     }
 }

@@ -62,11 +62,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         let ast_id = expr.id();
-        let resolved = self.resolve_expr_inner(expr, ctx, expected_type);
-        self.record_expression_type(ast_id, resolved.type_id);
-        resolved
+        let type_id = self.resolve_expr_inner(expr, ctx, expected_type);
+        self.record_expression_type(ast_id, type_id);
+        type_id
     }
 
     fn resolve_expr_inner(
@@ -74,7 +74,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         // Power-assert capture hook. While `desugar_assert` is resolving
         // an assert condition, the scanner-flagged sub-expressions are
         // extracted into `let __vK = <resolved>;` bindings and replaced
@@ -132,7 +132,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // combined walk resolved it for fact recording. Project the
                 // shared block-result type.
                 let _ = tir_block;
-                placeholder(type_id, block.span)
+                type_id
             }
             Expr::If(if_expr) => self.resolve_if_expr(if_expr, ctx, expected_type),
             Expr::Match(match_expr) => self.resolve_match_expr(match_expr, ctx, expected_type),
@@ -211,7 +211,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // resolved the body and ran break-type / null diagnostics for
                 // their side effects; project only the unified result type.
                 let _ = tir_block;
-                placeholder(result_type, lb.span)
+                result_type
             }
             Expr::Matches(m) => self.desugar_matches_expr(m, ctx, expected_type),
             Expr::Spread(..) => {
@@ -223,7 +223,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Resume(r) => self.resolve_resume(r, ctx),
             // Parser error-recovery placeholder: the syntax error was already
             // reported, so resolve to the error type to suppress cascades.
-            Expr::Error(e) => TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, e.span),
+            Expr::Error(_e) => TypeTable::ERROR,
         }
     }
 
@@ -235,7 +235,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         lit: &ast::LiteralExpr,
         ctx: &FunctionContext,
-    ) -> TirExpr {
+    ) -> TypeId {
         // Stage 7-B: reify rebuilds every literal node from the AST; the
         // combined walk only needs the literal's type and its parse / unescape
         // diagnostics. The `kind` is computed for those diagnostics' sake and
@@ -409,7 +409,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
         };
-        placeholder(type_id, lit.span)
+        let _ = _kind;
+        type_id
     }
 
     /// Resolve an identifier expression
@@ -418,7 +419,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ident: &ast::IdentExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         // Canonicalize `<ns>::<member>` (single `::`, prefix is a namespace
         // import alias) to the bare `<member>` form. Every lookup table below
         // is keyed by canonical names; the rewritten ident keeps the original
@@ -451,7 +452,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // ident l-value without the resolved `kind`.
                     let _ = index;
                     self.record_assign_place(ident.id, super::sem::types::AssignPlace::Local);
-                    return placeholder(type_id, ident.span);
+                    return type_id;
                 }
                 VarRef::Capture {
                     index,
@@ -462,7 +463,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Stage 7-B: reify rebuilds the `Capture`. A by-value
                     // capture is not an l-value, so no place is recorded.
                     let _ = index;
-                    return placeholder(type_id, ident.span);
+                    return type_id;
                 }
                 VarRef::DerefCapture {
                     index,
@@ -485,7 +486,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ident.id,
                         super::sem::types::AssignPlace::DerefCapture { through_mut_ref },
                     );
-                    return placeholder(inner_type_id, ident.span);
+                    return inner_type_id;
                 }
             }
         }
@@ -513,7 +514,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Stage 7-B: reify re-reifies the constant body (`reify_ident`);
             // the combined walk resolved it for fact recording. Not an l-value.
             let _ = resolved;
-            return placeholder(type_id, ident.span);
+            return type_id;
         }
 
         // Check for qualified variant case names like Color::Red (without parentheses)
@@ -547,7 +548,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             found: 0,
                             span: ident.span,
                         });
-                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span);
+                        return TypeTable::ERROR;
                     }
 
                     // Infer variant type for generic variants
@@ -579,7 +580,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `VariantConstruct` from the AST + recorded generic
                     // instantiation. Not an l-value.
                     let _ = (case_index, &case_data);
-                    return placeholder(variant_type, ident.span);
+                    return variant_type;
                 }
             }
 
@@ -602,7 +603,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Stage 7-B: reify rebuilds the `EnumConstruct`. Not an l-value.
                 let _ = &case_data;
-                return placeholder(enum_type, ident.span);
+                return enum_type;
             }
 
             // Check for flags member: PathFlags::SymlinkFollow
@@ -616,7 +617,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 self.record_qualified_case(ident, prefix, &flags_info.module_source, member.ast_id);
                 // Stage 7-B: reify rebuilds the flags-member `IntLiteral`.
-                return placeholder(flags_info.type_id, ident.span);
+                return flags_info.type_id;
             }
 
             // Check for namespace import: ns::Type::Case or ns::Enum::Case
@@ -658,7 +659,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             found: 0,
                             span: ident.span,
                         });
-                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span);
+                        return TypeTable::ERROR;
                     }
                     let variant_type = if variant_info.type_params.is_empty() {
                         self.tysys.type_table.borrow_mut().make_variant(
@@ -684,7 +685,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Stage 7-B: reify rebuilds the namespace-qualified
                     // payload-less `VariantConstruct`. Not an l-value.
                     let _ = (case_index, &case_data);
-                    return placeholder(variant_type, ident.span);
+                    return variant_type;
                 }
 
                 // Check enum cases
@@ -706,7 +707,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Stage 7-B: reify rebuilds the namespace-qualified
                     // `EnumConstruct`. Not an l-value.
                     let _ = &case_data;
-                    return placeholder(enum_type, ident.span);
+                    return enum_type;
                 }
 
                 // Check flags members
@@ -726,7 +727,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.record_namespaced_case(ident, &flags_info.module_source, member.ast_id);
                     // Stage 7-B: reify rebuilds the namespace flags-member
                     // `IntLiteral`.
-                    return placeholder(flags_info.type_id, ident.span);
+                    return flags_info.type_id;
                 }
             }
         }
@@ -744,7 +745,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     mutable,
                 },
             );
-            return placeholder(ty, ident.span);
+            return ty;
         }
 
         // Check for imported global variables
@@ -767,7 +768,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     mutable,
                 },
             );
-            return placeholder(ty, ident.span);
+            return ty;
         }
 
         // Check if it's a known function (function reference)
@@ -785,7 +786,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // These are defined in core:internal and re-exported by core:prelude
         if matches!(ident.name.as_str(), "panic" | "unreachable") {
             // Stage 7-B: reify rebuilds the prelude `FuncRef`.
-            return placeholder(TypeTable::UNKNOWN, ident.span);
+            return TypeTable::UNKNOWN;
         }
 
         // Fallback: when resolving a default expression, look up the
@@ -805,7 +806,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             name: ident.name.clone(),
             span: ident.span,
         });
-        TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span)
+        TypeTable::ERROR
     }
 
     /// Look up an identifier in the callee module's global scope during
@@ -815,7 +816,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         name: &str,
         span: Span,
         fallback: &ModuleSource,
-    ) -> Option<TirExpr> {
+    ) -> Option<TypeId> {
+        let _ = span;
         let module = self.loaded_modules.get(fallback)?;
         for item in &module.items {
             match item {
@@ -825,14 +827,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // the same AST items (`reify_ident` branch 3b). Project the
                     // type only; this default-expr path is never an assignment
                     // target, so no place is recorded.
-                    return Some(placeholder(ty, span));
+                    return Some(ty);
                 }
                 crate::ast::Item::Function(func) if func.name == name => {
                     let type_id = self
                         .compute_func_ref_type_from_ast(func, fallback)
                         .unwrap_or(TypeTable::UNKNOWN);
                     // Stage 7-B: reify rebuilds the fallback-module `FuncRef`.
-                    return Some(placeholder(type_id, span));
+                    return Some(type_id);
                 }
                 _ => {}
             }
@@ -965,7 +967,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         ident: &ast::IdentExpr,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         self.record_item_reference_by_name(ident.id, &ident.name);
 
         let Some((func_ast, def_module, defining_name)) = self.lookup_func_ast_for_ref(&ident.name)
@@ -987,7 +989,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             // Stage 7-B: reify rebuilds the stub `FuncRef`.
             let _ = module_source;
-            return placeholder(TypeTable::UNKNOWN, ident.span);
+            return TypeTable::UNKNOWN;
         };
         let module_source = def_module.clone();
 
@@ -1009,7 +1011,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         found: ident.type_args.len(),
                         span: ident.span,
                     });
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span);
+                return TypeTable::ERROR;
             }
             let resolved_args: Vec<TypeId> = ident
                 .type_args
@@ -1023,7 +1025,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Stage 7-B: reify rebuilds the turbofish `FuncRef` from the
             // recorded instantiation. Project the type only.
             let _ = (module_source, defining_name, resolved_args);
-            return placeholder(type_id, ident.span);
+            return type_id;
         }
 
         // Non-generic function: keep the original behaviour.
@@ -1033,7 +1035,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .unwrap_or(TypeTable::UNKNOWN);
             // Stage 7-B: reify rebuilds the non-generic `FuncRef`.
             let _ = (module_source, defining_name);
-            return placeholder(type_id, ident.span);
+            return type_id;
         }
 
         // (b) Generic without turbofish: try to infer from `expected_type`.
@@ -1047,7 +1049,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Stage 7-B: reify rebuilds the inferred-generic `FuncRef`
                     // from the recorded instantiation. Project the type only.
                     let _ = (module_source, defining_name, inferred);
-                    return placeholder(type_id, ident.span);
+                    return type_id;
                 }
                 FuncRefInference::ArityMismatch {
                     expected_params,
@@ -1061,7 +1063,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             found_params,
                             span: ident.span,
                         });
-                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span);
+                    return TypeTable::ERROR;
                 }
                 FuncRefInference::NotApplicable => {}
             }
@@ -1072,7 +1074,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             name: ident.name.clone(),
             span: ident.span,
         });
-        TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span)
+        TypeTable::ERROR
     }
 
     /// Record the resolved type arguments and instance type of a generic
@@ -1253,24 +1255,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         field_access: &ast::FieldAccessExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
-        let expr = self.resolve_expr(&field_access.expr, ctx, None);
+    ) -> TypeId {
+        let expr_type = self.resolve_expr(&field_access.expr, ctx, None);
 
         // Record use→def reference for the field name, pointing at the field
         // definition's AstId in the struct declaration.
-        self.record_field_reference(expr.type_id, &field_access.field, field_access.field_id);
+        self.record_field_reference(expr_type, &field_access.field, field_access.field_id);
 
         // Look up field type from struct type (also emits the field-not-found
         // / tuple-index-out-of-bounds diagnostics). Reify re-derives the
         // `field_index` from the receiver type, so only the result type is
         // needed here.
         let (_field_index, field_type) =
-            self.lookup_field_type(expr.type_id, &field_access.field, field_access.span);
+            self.lookup_field_type(expr_type, &field_access.field, field_access.span);
 
         // Check field visibility: non-pub fields cannot be accessed from other modules
-        self.check_field_visibility(expr.type_id, &field_access.field, field_access.span);
+        self.check_field_visibility(expr_type, &field_access.field, field_access.span);
 
-        placeholder(field_type, field_access.span)
+        field_type
     }
 
     /// Record a use→def reference for a struct field access.
@@ -1531,13 +1533,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         index: &ast::IndexExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
-        let expr = self.resolve_expr(&index.expr, ctx, None);
+    ) -> TypeId {
+        let expr_type = self.resolve_expr(&index.expr, ctx, None);
 
         // Get base type (unwrap reference if needed)
-        let base_type_id = match self.tysys.type_table.borrow().get(expr.type_id) {
+        let base_type_id = match self.tysys.type_table.borrow().get(expr_type) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => expr.type_id,
+            _ => expr_type,
         };
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
 
@@ -1559,7 +1561,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 if idx < elements.len() {
                     let field_type = elements[idx];
-                    return placeholder(field_type, index.span);
+                    return field_type;
                 } else {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
                         message: format!(
@@ -1569,7 +1571,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ),
                         span: index.span,
                     });
-                    return placeholder(TypeTable::UNKNOWN, index.span);
+                    return TypeTable::UNKNOWN;
                 }
             }
             // Non-constant index on tuple
@@ -1577,7 +1579,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 message: "tuple index must be a constant integer".to_string(),
                 span: index.span,
             });
-            return placeholder(TypeTable::UNKNOWN, index.span);
+            return TypeTable::UNKNOWN;
         }
 
         // For List and custom types, look for Index or IndexValue trait implementation
@@ -1596,8 +1598,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (lookup_name, lookup_type_id) = self.newtype_base_lookup(&struct_name, base_type_id);
 
         if !struct_name.is_empty() {
-            let index_expr = self.resolve_expr(&index.index, ctx, None);
-            let index_type = index_expr.type_id;
+            let index_type = self.resolve_expr(&index.index, ctx, None);
 
             // Reject &T/&mut T used as index expression (would ICE in codegen)
             let derefed_index_type = match self.tysys.type_table.borrow().get(index_type) {
@@ -1653,7 +1654,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     },
                 );
 
-                return placeholder(trait_info.output_type, index.span);
+                return trait_info.output_type;
             }
 
             // Fallback: try IndexValue trait (returns value by copy)
@@ -1699,18 +1700,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     },
                 );
 
-                return placeholder(trait_info.output_type, index.span);
+                return trait_info.output_type;
             }
         }
 
         // Fallback: report error for unsupported indexing
-        let type_name = self.tysys.type_table.borrow().type_name(expr.type_id);
+        let type_name = self.tysys.type_table.borrow().type_name(expr_type);
         let _ = self.logger.error(TypeError::MissingTraitImpl {
             type_name,
             trait_name: "Index or IndexValue".to_string(),
             span: index.span,
         });
-        placeholder(TypeTable::UNKNOWN, index.span)
+        TypeTable::UNKNOWN
     }
 
     /// Resolve an if expression
@@ -1719,7 +1720,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if_expr: &IfExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         match &if_expr.condition {
             Condition::LetChain { elements, .. } => {
                 self.record_desugar(if_expr.id, super::sem::types::DesugarKind::IfLetChain);
@@ -1836,7 +1837,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // ran `resolve_let_chain_stmts` for its fact-recording side
                 // effects (pattern bindings, element resolution) and computed
                 // the result type. Project only the result type.
-                placeholder(type_id, if_expr.span)
+                type_id
             }
             Condition::Expr(expr) => {
                 let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
@@ -1959,7 +1960,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // null diagnostics off the AST (`ast_block_result_type`).
                 // Project only the result type.
                 let _ = (condition, then_block, else_block);
-                placeholder(type_id, if_expr.span)
+                type_id
             }
         }
     }
@@ -2107,9 +2108,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match_expr: &ast::MatchExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
-        let scrutinee = self.resolve_expr(&match_expr.expr, ctx, None);
-        let scrutinee_type = scrutinee.type_id;
+    ) -> TypeId {
+        let scrutinee_type = self.resolve_expr(&match_expr.expr, ctx, None);
 
         let arms: Vec<TirMatchArm> = match_expr
             .arms
@@ -2198,8 +2198,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // exhaustiveness / null / arm-agreement diagnostics. No analysis reads
         // the resolved match structure (missing-return walks arms off the AST
         // in `control_flow.rs`), so project only the result type.
-        let _ = (scrutinee, arms);
-        placeholder(type_id, match_expr.span)
+        let _ = arms;
+        type_id
     }
 
     pub(super) fn resolve_match_arm(
@@ -2215,8 +2215,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let guard = arm
             .guard
             .as_ref()
-            .map(|g| self.resolve_expr(g, ctx, Some(TypeTable::BOOL)));
-        let body = self.resolve_expr(&arm.body, ctx, expected_type);
+            .map(|g| placeholder(self.resolve_expr(g, ctx, Some(TypeTable::BOOL)), g.span()));
+        let body_type = self.resolve_expr(&arm.body, ctx, expected_type);
+        let body = placeholder(body_type, arm.body.span());
 
         ctx.exit_scope();
 
@@ -2550,19 +2551,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         cast: &ast::CastExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
+    ) -> TypeId {
         let target_type = self.resolve_type(&cast.target_type);
 
         // Special case: tuple literal cast to a type implementing SequenceLiteralBuilder
         // [1, 2, 3] as List<i32>, [1, 2, 3] as SeqVec<i32>
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(&cast.expr, ctx, target_type) {
-            return coerced;
+            return coerced.type_id;
         }
 
         // Special case: struct literal cast to a type implementing KeyValueLiteral
         // { a: 1, b: 2 } as TreeMap<String, i32>
         if let Some(coerced) = self.try_coerce_struct_to_map(&cast.expr, ctx, target_type) {
-            return coerced;
+            return coerced.type_id;
         }
 
         // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
@@ -2595,7 +2596,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             true,
                             target_type,
                             cast.span,
-                        );
+                        )
+                        .type_id;
                     }
                     Err(_) => {
                         let _ = self.logger.error(TypeError::InvalidLiteral {
@@ -2624,7 +2626,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         false,
                         target_type,
                         unary.span,
-                    );
+                    )
+                    .type_id;
                 }
                 let _ = self.logger.error(TypeError::InvalidLiteral {
                     message: format!("invalid i128 literal: -{repr}"),
@@ -2633,8 +2636,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // General expression cast (not a literal)
-            let expr_resolved = self.resolve_expr(&cast.expr, ctx, None);
-            let source_type = expr_resolved.type_id;
+            let source_type = self.resolve_expr(&cast.expr, ctx, None);
 
             // Check if source type is a numeric type we can convert from
             if self.tysys.type_table.borrow().is_integer(source_type)
@@ -2650,7 +2652,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `name::from_u64/from_i64(expr as u64/i64)`.
                 let casted_expr = TirExpr::new(
                     TirExprKind::Cast {
-                        expr: Box::new(expr_resolved),
+                        expr: Box::new(placeholder(source_type, cast.expr.span())),
                         target_type: intermediate_type,
                     },
                     intermediate_type,
@@ -2662,13 +2664,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     casted_expr,
                     target_type,
                     cast.span,
-                );
+                )
+                .type_id;
             }
         }
 
         // Normal cast
-        let expr = self.resolve_expr(&cast.expr, ctx, None);
-        let source_type = expr.type_id;
+        let source_type = self.resolve_expr(&cast.expr, ctx, None);
 
         // Validate char casts: prohibit integer/float -> char (use char::from_u32 instead)
         // Exception: u8 -> char is always valid (0..255 are valid Unicode scalar values)
@@ -2711,7 +2713,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Stage 7-B: reify rebuilds the `Cast` from `cast.expr` + the target
         // type recorded in `expression_types[cast.id]`; the char-cast
         // diagnostics above are the record-only work.
-        placeholder(target_type, cast.span)
+        target_type
     }
 
     /// Resolve a struct literal
@@ -2720,7 +2722,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_lit: &ast::StructLiteralExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         // Handle implicit struct literals (name is None) — anonymous struct inference
         let Some(raw_name) = &struct_lit.name else {
             return self.resolve_anonymous_struct_literal(struct_lit, ctx);
@@ -2876,7 +2878,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
 
                 // Use expected type for literal coercion (e.g., 0 -> u64 when field is u64)
-                let value = self.resolve_expr(&field.value, ctx, effective_expected);
+                let value = placeholder(
+                    self.resolve_expr(&field.value, ctx, effective_expected),
+                    field.value.span(),
+                );
 
                 // Track tuple literals whose coercion was deferred because the field
                 // type had unresolved type parameters. After type inference, we'll
@@ -2949,10 +2954,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let default_ast = struct_field_defaults.get(idx).and_then(Option::clone);
                 if let Some(default_expr) = default_ast {
                     let resolved = self.resolve_expr(&default_expr, ctx, Some(*expected_type_id));
-                    self.typecheck(resolved.type_id, *expected_type_id, struct_lit.span);
+                    self.typecheck(resolved, *expected_type_id, struct_lit.span);
                     fields.push(TirStructField {
                         name: expected_name.clone(),
-                        value: resolved,
+                        value: placeholder(resolved, default_expr.span()),
                         field_index: idx as u32,
                     });
                 } else {
@@ -3117,7 +3122,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // deferred tuple-to-sequence coercion) for their fact-recording side
         // effects. Project only the struct type.
         let _ = (mangled_struct_name, fields);
-        placeholder(struct_type, struct_lit.span)
+        struct_type
     }
 
     /// Resolve an anonymous struct literal `{ x: 1, y: 2 }` by inferring a struct type
@@ -3126,11 +3131,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_lit: &ast::StructLiteralExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
+    ) -> TypeId {
         // Resolve all field expressions first
         let mut resolved_fields: Vec<TirStructField> = Vec::new();
         for (index, field) in struct_lit.fields.iter().enumerate() {
-            let value = self.resolve_expr(&field.value, ctx, None);
+            let value = placeholder(
+                self.resolve_expr(&field.value, ctx, None),
+                field.value.span(),
+            );
             resolved_fields.push(TirStructField {
                 name: field.name.clone(),
                 value,
@@ -3166,7 +3174,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Stage 7-B: reify rebuilds the anonymous `StructLiteral`
             // (`reify_anonymous_struct_literal`); project only the type.
             let _ = (anon_name, resolved_fields);
-            return placeholder(existing_type, struct_lit.span);
+            return existing_type;
         }
 
         // Register the new anonymous struct type
@@ -3233,7 +3241,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // walk registered the struct type, field info, and pending TirStruct
         // above for their side effects. Project only the type.
         let _ = (anon_name, resolved_fields);
-        placeholder(struct_type, struct_lit.span)
+        struct_type
     }
 
     /// Infer type arguments for a generic struct from its field values, with
@@ -3324,7 +3332,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         tuple_lit: &ast::TupleLiteralExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         // When the expected type is a concrete tuple of matching arity and the
         // literal has no spread elements, propagate per-element expected types
         // so numeric literals and nested tuples are coerced to the target shape.
@@ -3351,20 +3359,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut elem_types: Vec<TypeId> = Vec::new();
         for (elem_idx, elem) in tuple_lit.elements.iter().enumerate() {
             if let Expr::Spread(inner, _span) = elem {
-                let spread_expr = self.resolve_expr(inner, ctx, None);
-                if self.type_contains_pack(spread_expr.type_id) {
+                let spread_type_id = self.resolve_expr(inner, ctx, None);
+                if self.type_contains_pack(spread_type_id) {
                     // A direct `TypePack` (`[..T::method()]`) or a tuple
                     // containing one (`[..rest]` where `rest: [..T]`): the
                     // spread element keeps the spread's own type; monomorphize
                     // expands it later.
-                    elem_types.push(spread_expr.type_id);
+                    elem_types.push(spread_type_id);
                 } else {
-                    let spread_type = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .get(spread_expr.type_id)
-                        .clone();
+                    let spread_type = self.tysys.type_table.borrow().get(spread_type_id).clone();
                     if let ResolvedType::GenericInstance {
                         name,
                         module_source,
@@ -3383,18 +3386,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 span: elem.span(),
                             },
                         );
-                        elem_types.push(spread_expr.type_id);
+                        elem_types.push(spread_type_id);
                     }
                 }
             } else {
                 let elem_expected = expected_elem_types.as_ref().map(|v| v[elem_idx]);
                 let resolved = self.resolve_expr(elem, ctx, elem_expected);
-                elem_types.push(resolved.type_id);
+                elem_types.push(resolved);
             }
         }
 
         let tuple_type = self.tysys.type_table.borrow_mut().make_tuple(elem_types);
-        placeholder(tuple_type, tuple_lit.span)
+        tuple_type
     }
 
     /// Resolve the postfix `?` operator.
@@ -3411,9 +3414,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         qm: &ast::TryOpExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
-        let inner = self.resolve_expr(&qm.expr, ctx, None);
-        let inner_type = inner.type_id;
+    ) -> TypeId {
+        let inner_type = self.resolve_expr(&qm.expr, ctx, None);
         let tt = self.tysys.type_table.borrow();
         let type_name = tt.type_name(inner_type);
 
@@ -3430,7 +3432,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 message: format!("cannot use ? on type {type_name}"),
                 span: qm.span,
             });
-            return TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
+            return TypeTable::UNIT;
         }
 
         // Check that the enclosing function returns a compatible type
@@ -3448,7 +3450,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 message: "cannot use ? on Option in a function returning Result".to_string(),
                 span: qm.span,
             });
-            return TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
+            return TypeTable::UNIT;
         }
         if is_result && !ret_is_result {
             if ret_is_option {
@@ -3462,23 +3464,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span: qm.span,
                 });
             }
-            return TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
+            return TypeTable::UNIT;
         }
 
         if is_option {
-            self.resolve_question_mark_option(inner, ctx, qm.span)
+            self.resolve_question_mark_option(inner_type, ctx, qm.span)
         } else {
-            self.resolve_question_mark_result(inner, ctx, qm.span, qm.id)
+            self.resolve_question_mark_result(inner_type, ctx, qm.span, qm.id)
         }
     }
 
     fn resolve_question_mark_option(
         &mut self,
-        inner: TirExpr,
+        inner_type: TypeId,
         ctx: &mut FunctionContext,
         span: Span,
-    ) -> TirExpr {
-        let inner_type = inner.type_id;
+    ) -> TypeId {
         let tt = self.tysys.type_table.borrow();
         let some_type = tt.as_option(inner_type).unwrap();
         // Look up the `Some` / `None` case names through the
@@ -3553,18 +3554,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (`reify_question_mark_option`) from the AST, allocating its own
         // `__qm_v` local. The combined walk keeps the scope/local allocation
         // (walk-order parity) and projects the unwrapped `Some` payload type.
-        let _ = (inner, some_arm, none_arm);
-        placeholder(some_type, span)
+        let _ = (some_arm, none_arm);
+        some_type
     }
 
     fn resolve_question_mark_result(
         &mut self,
-        inner: TirExpr,
+        inner_type: TypeId,
         ctx: &mut FunctionContext,
         span: Span,
         qm_id: AstId,
-    ) -> TirExpr {
-        let inner_type = inner.type_id;
+    ) -> TypeId {
         let return_type = ctx.return_type;
 
         // Extract T, E from inner Result<T, E>
@@ -3689,8 +3689,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // and outer error types differ). The combined walk keeps the scope /
         // local allocation and the `resolve_from_call` fact-recording, and
         // projects the unwrapped `Ok` payload type.
-        let _ = (inner, ok_arm, err_arm);
-        placeholder(ok_type, span)
+        let _ = (ok_arm, err_arm);
+        ok_type
     }
 
     /// Generate a call to `From::from(value)` that converts `value` of type
@@ -3891,7 +3891,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         range: &crate::ast::RangeExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
+    ) -> TypeId {
         use crate::ast::RangeKind;
         use crate::module_source::ModuleSource;
 
@@ -3901,22 +3901,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let (start, end) = if start_is_literal && !end_is_literal {
             let end = self.resolve_expr(&range.end, ctx, None);
-            let start = self.resolve_expr(&range.start, ctx, Some(end.type_id));
+            let start = self.resolve_expr(&range.start, ctx, Some(end));
             (start, end)
         } else {
             let start = self.resolve_expr(&range.start, ctx, None);
-            let end = self.resolve_expr(&range.end, ctx, Some(start.type_id));
+            let end = self.resolve_expr(&range.end, ctx, Some(start));
             (start, end)
         };
 
         // Check type mismatch between start and end
-        if start.type_id != end.type_id
-            && start.type_id != TypeTable::ERROR
-            && end.type_id != TypeTable::ERROR
-        {
+        if start != end && start != TypeTable::ERROR && end != TypeTable::ERROR {
             let type_table = self.tysys.type_table.borrow();
-            let start_name = type_table.type_name(start.type_id);
-            let end_name = type_table.type_name(end.type_id);
+            let start_name = type_table.type_name(start);
+            let end_name = type_table.type_name(end);
             if start_name != end_name {
                 let op_str = match range.kind {
                     RangeKind::Exclusive => "..<",
@@ -3929,11 +3926,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ),
                     span: range.span,
                 });
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
+                return TypeTable::ERROR;
             }
         }
 
-        let element_type = start.type_id;
+        let element_type = start;
 
         // Check that the element type implements Ord
         let ord_trait_name = self
@@ -3955,7 +3952,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 reason,
                 span: range.span,
             });
-            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
+            return TypeTable::ERROR;
         }
 
         // Check for reversed range literals (start > end)
@@ -3974,7 +3971,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ),
                     span: range.span,
                 });
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
+                return TypeTable::ERROR;
             }
         }
 
@@ -4023,7 +4020,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(mangled_name),
         );
 
-        placeholder(struct_type, range.span)
+        struct_type
     }
 }
 

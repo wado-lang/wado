@@ -13,7 +13,7 @@
 use crate::ast::{AssertStmt, AstId, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::tir::{TirExpr, TirExprKind, TypeId};
+use crate::tir::TypeId;
 use crate::unparse::unparse_expr_simple;
 
 use super::Elaborator;
@@ -43,14 +43,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Walk the condition for fact recording. The hook on `resolve_expr`
         // marks each `Capture::emitted` flag once it sees its slot's `AstId`.
-        let cond_tir = self.resolve_expr(&assert_stmt.condition, ctx, None);
+        let cond_type = self.resolve_expr(&assert_stmt.condition, ctx, None);
 
         // Reserve the outer-scope `__cond` slot so subsequent local-index
         // accounting in the enclosing function (closure capture
         // `outer_index`, recorded `MutCapture::outer_index`, etc.) stays in
         // lockstep with reify's expansion — reify's `reify_assert` also
         // allocates `__cond` at this point in its own walk.
-        let _cond_local_index = ctx.add_local("__cond".to_string(), cond_tir.type_id, false, None);
+        let _cond_local_index = ctx.add_local("__cond".to_string(), cond_type, false, None);
 
         // Walk the assert message for fact recording too.
         if let Some(msg) = &assert_stmt.message {
@@ -119,14 +119,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         ctx.assert_capture_ctx
             .as_mut()
             .expect("assert_capture_ctx present (guarded by caller)")
             .in_progress
             .insert(ast_id);
 
-        let resolved = self.resolve_expr(expr, ctx, expected_type);
+        let type_id = self.resolve_expr(expr, ctx, expected_type);
 
         ctx.assert_capture_ctx
             .as_mut()
@@ -134,8 +134,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .in_progress
             .shift_remove(&ast_id);
 
-        let type_id = resolved.type_id;
-        let cap_span = resolved.span;
         let cap_name = ctx
             .assert_capture_ctx
             .as_ref()
@@ -154,7 +152,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .expect("assert_capture_ctx survives recursive resolve");
         cap_ctx.slots[slot_idx].emitted = true;
 
-        TirExpr::new(TirExprKind::Unit, type_id, cap_span)
+        type_id
     }
 }
 

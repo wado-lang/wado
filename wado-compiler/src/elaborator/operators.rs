@@ -57,7 +57,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         binary: &ast::BinaryExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         let (left, right) = self.resolve_binary_operands_with_coercion(
             &binary.left,
             binary.op,
@@ -76,7 +76,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.pending_operator_ast_id = Some(binary.id);
         let result = self.build_binary_op_tir(left, binary.op, right, binary.span);
         self.pending_operator_ast_id = None;
-        result
+        result.type_id
     }
 
     /// Resolve both operands of a binary op, applying the standard
@@ -103,49 +103,67 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if left_is_numeric_literal && !right_is_numeric_literal {
             // Resolve right first, then coerce left
             let right = self.resolve_expr(right_ast, ctx, expected_type);
-            let coerce_type = if self.tysys.type_table.borrow().is_numeric(right.type_id) {
+            let coerce_type = if self.tysys.type_table.borrow().is_numeric(right) {
                 // Primitive type: coerce literal to the same type
-                Some(right.type_id)
+                Some(right)
             } else {
                 // Struct type: look up operator trait and use self type for lhs literal
-                self.find_operator_self_type(right.type_id, &op)
+                self.find_operator_self_type(right, &op)
             };
             let left = self.resolve_expr(left_ast, ctx, coerce_type);
-            (left, right)
+            (
+                placeholder(left, left_ast.span()),
+                placeholder(right, right_ast.span()),
+            )
         } else if right_is_numeric_literal && !left_is_numeric_literal {
             // Resolve left first, then coerce right
             let left = self.resolve_expr(left_ast, ctx, expected_type);
-            let coerce_type = if self.tysys.type_table.borrow().is_numeric(left.type_id) {
+            let coerce_type = if self.tysys.type_table.borrow().is_numeric(left) {
                 // Primitive type: coerce literal to the same type
-                Some(left.type_id)
+                Some(left)
             } else {
                 // Struct type: look up operator trait and use rhs parameter type
-                self.find_operator_rhs_type(left.type_id, &op)
+                self.find_operator_rhs_type(left, &op)
             };
             let right = self.resolve_expr(right_ast, ctx, coerce_type);
-            (left, right)
+            (
+                placeholder(left, left_ast.span()),
+                placeholder(right, right_ast.span()),
+            )
         } else if left_is_numeric_literal && right_is_numeric_literal {
             // Both literals - use expected type from context (e.g., assignment target)
             let left = self.resolve_expr(left_ast, ctx, expected_type);
             let right = self.resolve_expr(right_ast, ctx, expected_type);
-            (left, right)
+            (
+                placeholder(left, left_ast.span()),
+                placeholder(right, right_ast.span()),
+            )
         } else if self.tysys.is_null_literal(right_ast) && !self.tysys.is_null_literal(left_ast) {
             // `expr == null`: resolve the non-null side first and feed its
             // type to the bare `null` so it resolves to a concrete
             // `Option<T>` instead of `Option<UNKNOWN>`.
             let left = self.resolve_expr(left_ast, ctx, expected_type);
-            let right = self.resolve_expr(right_ast, ctx, Some(left.type_id));
-            (left, right)
+            let right = self.resolve_expr(right_ast, ctx, Some(left));
+            (
+                placeholder(left, left_ast.span()),
+                placeholder(right, right_ast.span()),
+            )
         } else if self.tysys.is_null_literal(left_ast) && !self.tysys.is_null_literal(right_ast) {
             // `null == expr`: symmetric to the above.
             let right = self.resolve_expr(right_ast, ctx, expected_type);
-            let left = self.resolve_expr(left_ast, ctx, Some(right.type_id));
-            (left, right)
+            let left = self.resolve_expr(left_ast, ctx, Some(right));
+            (
+                placeholder(left, left_ast.span()),
+                placeholder(right, right_ast.span()),
+            )
         } else {
             // Both non-literals - propagate expected type for coercion
             let left = self.resolve_expr(left_ast, ctx, expected_type);
             let right = self.resolve_expr(right_ast, ctx, expected_type);
-            (left, right)
+            (
+                placeholder(left, left_ast.span()),
+                placeholder(right, right_ast.span()),
+            )
         }
     }
 
@@ -857,7 +875,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         unary: &ast::UnaryExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         // For `&x` / `&mut x`, peel one layer of the expected type so the
         // operand sees the underlying expected shape. This lets a generic
         // function reference taken by `&identity` (expected `&fn(i32) -> i32`)
@@ -874,7 +892,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             None
         };
-        let expr = self.resolve_expr(&unary.expr, ctx, inner_expected);
+        let expr_type = self.resolve_expr(&unary.expr, ctx, inner_expected);
 
         // Address-taken-local tracking for `&x` / `&mut x` is owned by reify
         // (`reify.rs` unary arm), which marks `TirFunction::address_taken_locals`
@@ -905,7 +923,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `kind` is no longer `FieldAccess`); the operand's `type_id` still
         // carries the field type via the placeholder.
         if unary.op == UnaryOp::MutRef && matches!(&unary.expr, ast::Expr::FieldAccess(_)) {
-            let field_type = self.tysys.type_table.borrow().get(expr.type_id).clone();
+            let field_type = self.tysys.type_table.borrow().get(expr_type).clone();
             let base_type = self
                 .tysys
                 .type_table
@@ -914,7 +932,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.tysys
                         .type_table
                         .borrow()
-                        .get_ultimate_base_type(expr.type_id),
+                        .get_ultimate_base_type(expr_type),
                 )
                 .clone();
             if matches!(field_type, ResolvedType::Primitive(_))
@@ -936,8 +954,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             UnaryOp::BitNot => Some(("BitNot", "bitnot")),
             _ => None,
         } {
-            let expr_type = self.tysys.type_table.borrow().get(expr.type_id).clone();
-            let struct_name = match &expr_type {
+            let operand_resolved = self.tysys.type_table.borrow().get(expr_type).clone();
+            let struct_name = match &operand_resolved {
                 ResolvedType::Struct { name, .. } => Some(name.clone()),
                 ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
                 ResolvedType::Newtype { name, .. } | ResolvedType::Flags { name, .. } => {
@@ -947,11 +965,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             if let Some(struct_name) = struct_name {
                 let (lookup_name, lookup_type_id) =
-                    self.newtype_base_lookup(&struct_name, expr.type_id);
+                    self.newtype_base_lookup(&struct_name, expr_type);
                 let resolved = self
                     .resolve_trait_method_for_op(
                         &struct_name,
-                        expr.type_id,
+                        expr_type,
                         trait_name,
                         method_name,
                         false,
@@ -973,26 +991,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // struct (which codegen rejects: `expected i32, found
                     // (ref $T)`). Mirrors the binary-operator path.
                     self.pending_operator_ast_id = Some(unary.id);
-                    return self.build_trait_op_method_call_on_resolved(
-                        expr,
-                        vec![],
-                        &resolved,
-                        unary.span,
-                    );
+                    return self
+                        .build_trait_op_method_call_on_resolved(
+                            placeholder(expr_type, unary.expr.span()),
+                            vec![],
+                            &resolved,
+                            unary.span,
+                        )
+                        .type_id;
                 }
             }
         }
 
         let type_id = match unary.op {
             UnaryOp::Not => TypeTable::BOOL,
-            UnaryOp::Ref => self.tysys.type_table.borrow_mut().make_ref(expr.type_id),
-            UnaryOp::MutRef => self
-                .tysys
-                .type_table
-                .borrow_mut()
-                .make_mut_ref(expr.type_id),
+            UnaryOp::Ref => self.tysys.type_table.borrow_mut().make_ref(expr_type),
+            UnaryOp::MutRef => self.tysys.type_table.borrow_mut().make_mut_ref(expr_type),
             UnaryOp::Deref => {
-                let outer = self.tysys.type_table.borrow().get(expr.type_id).clone();
+                let outer = self.tysys.type_table.borrow().get(expr_type).clone();
                 match outer {
                     ResolvedType::MutRef(inner) => inner,
                     ResolvedType::Ref(inner) => {
@@ -1008,14 +1024,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => {
                         let _ = self.logger.error(TypeError::TypeMismatch {
                             expected: "reference type".to_string(),
-                            found: self.tysys.type_table.borrow().type_name(expr.type_id),
+                            found: self.tysys.type_table.borrow().type_name(expr_type),
                             span: unary.span,
                         });
                         TypeTable::ERROR
                     }
                 }
             }
-            _ => expr.type_id,
+            _ => expr_type,
         };
 
         // Stage 7-B: reify rebuilds the `Unary` (`*ptr` / `&x` / `&mut x` /
@@ -1024,7 +1040,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // record-only work. `assign_to_target`'s deref l-value check now
         // reads the operand type from `expression_types` instead of this
         // resolved `kind`.
-        placeholder(type_id, unary.span)
+        type_id
     }
 
     /// Resolve an assignment expression.
@@ -1032,7 +1048,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         assign: &ast::AssignExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
+    ) -> TypeId {
         self.assign_to_target(
             &assign.target,
             AssignValue::Ast(&assign.value),
@@ -1141,16 +1157,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         value: AssignValue<'_>,
         span: Span,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
+    ) -> TypeId {
         // Check for index assignment on custom types: arr[i] = value -> arr.index_assign(i, value)
         if let ast::Expr::Index(index_expr) = target_ast {
             // Resolve the indexed expression to get its type
-            let indexed_expr = self.resolve_expr(&index_expr.expr, ctx, None);
+            let indexed_type = self.resolve_expr(&index_expr.expr, ctx, None);
 
             // Get base type (unwrap reference if needed)
-            let base_type_id = match self.tysys.type_table.borrow().get(indexed_expr.type_id) {
+            let base_type_id = match self.tysys.type_table.borrow().get(indexed_type) {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                _ => indexed_expr.type_id,
+                _ => indexed_type,
             };
 
             // Check for IndexAssign trait implementation
@@ -1172,8 +1188,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.newtype_base_lookup(&struct_name, base_type_id);
 
                 if !struct_name.is_empty() {
-                    let index_resolved = self.resolve_expr(&index_expr.index, ctx, None);
-                    let index_type = index_resolved.type_id;
+                    let index_type = self.resolve_expr(&index_expr.index, ctx, None);
 
                     // Reject &T/&mut T used as index expression (would ICE in codegen)
                     let derefed_index_type = match self.tysys.type_table.borrow().get(index_type) {
@@ -1196,18 +1211,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(trait_info) = assign_info {
                         // Generate: expr.index_assign(index, value)
                         let value_span = value.span();
-                        let value_tir = match value {
+                        let value_type = match value {
                             AssignValue::Ast(expr) => {
                                 self.resolve_expr(expr, ctx, Some(trait_info.input_type))
                             }
-                            AssignValue::Resolved(tir) => *tir,
+                            AssignValue::Resolved(tir) => tir.type_id,
                         };
 
                         // Check: reject &T/&mut T assigned where non-ref expected
-                        self.typecheck(value_tir.type_id, trait_info.input_type, value_span);
+                        self.typecheck(value_type, trait_info.input_type, value_span);
 
                         let receiver = self.adjust_receiver_for_self_kind(
-                            indexed_expr,
+                            placeholder(indexed_type, index_expr.expr.span()),
                             trait_info.self_kind,
                             false,
                             span,
@@ -1253,8 +1268,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // AST; project only the (unit) result type. `receiver`
                         // / `index_resolved` / `value_tir` were resolved above
                         // for their fact-recording side effects.
-                        let _ = (receiver, index_resolved, value_tir);
-                        return placeholder(TypeTable::UNIT, span);
+                        let _ = (receiver, index_type, value_type);
+                        return TypeTable::UNIT;
                     }
                 }
             }
@@ -1263,15 +1278,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Standard assignment handling. Fall through here happens when the
         // target isn't `Expr::Index`, or when the IndexAssign trait lookup
         // returned None — `value` was not consumed on either of those paths.
-        let target = self.resolve_expr(target_ast, ctx, None);
+        let target_type = self.resolve_expr(target_ast, ctx, None);
         let value_span = value.span();
-        let value_tir = match value {
-            AssignValue::Ast(expr) => self.resolve_expr(expr, ctx, Some(target.type_id)),
-            AssignValue::Resolved(tir) => *tir,
+        let value_type = match value {
+            AssignValue::Ast(expr) => self.resolve_expr(expr, ctx, Some(target_type)),
+            AssignValue::Resolved(tir) => tir.type_id,
         };
 
         // Reject &T assigned where non-ref T expected
-        self.typecheck(value_tir.type_id, target.type_id, value_span);
+        self.typecheck(value_type, target_type, value_span);
 
         // Handle assignment to global variables. Stage 7-B: the target is a
         // placeholder, so the global is recognised from the recorded
@@ -1293,12 +1308,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     message: format!("cannot assign to immutable global variable '{name}'"),
                     span: target_ast.span(),
                 });
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
+                return TypeTable::ERROR;
             }
             // reify rebuilds the `GlobalVarSet` from the AST; project the
             // (unit) result type.
-            let _ = value_tir;
-            return placeholder(TypeTable::UNIT, span);
+            let _ = value_type;
+            return TypeTable::UNIT;
         }
 
         // Validate that the target is a valid l-value. Stage 7-B: every
@@ -1352,15 +1367,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 message: "expression is not assignable".to_string(),
                 span: target_ast.span(),
             });
-            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
+            return TypeTable::ERROR;
         }
 
         // Stage 7-B: reify rebuilds the `Assign` from the AST + recorded
         // target / value types; project only the (unit) result type. The
         // target + value were resolved above for their side effects, and the
         // l-value validation / global-mutability checks already ran.
-        let _ = (target, value_tir);
-        placeholder(TypeTable::UNIT, span)
+        let _ = (target_type, value_type);
+        TypeTable::UNIT
     }
 
     /// Resolve `target op= value` as the equivalent `target = target op value`,
@@ -1382,7 +1397,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         compound: &ast::CompoundAssignExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
+    ) -> TypeId {
         self.record_desugar(compound.id, super::sem::types::DesugarKind::CompoundAssign);
         let op = match compound.op {
             ast::CompoundAssignOp::Add => BinaryOp::Add,
@@ -1396,8 +1411,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::CompoundAssignOp::Shl => BinaryOp::Shl,
             ast::CompoundAssignOp::Shr => BinaryOp::Shr,
         };
-        let read = self.resolve_expr(&compound.target, ctx, None);
-        let rhs = self.resolve_expr(&compound.value, ctx, Some(read.type_id));
+        let read_type = self.resolve_expr(&compound.target, ctx, None);
+        let rhs_type = self.resolve_expr(&compound.value, ctx, Some(read_type));
+        let read = placeholder(read_type, compound.target.span());
+        let rhs = placeholder(rhs_type, compound.value.span());
         // Stage 5 (Gap 11 / WEP 2026-05-26): when the operands are
         // operator-overloaded (non-primitive, e.g. `u128 /= u128`),
         // `build_binary_op_tir` dispatches the combined value through the
@@ -1427,7 +1444,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         chain: &ast::ComparisonChainExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
+    ) -> TypeId {
         use crate::tir::TirStmt;
 
         if chain.comparisons.is_empty() {
@@ -1457,7 +1474,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.pending_operator_ast_id = Some(chain.id);
             let result = self.build_binary_op_tir(left_tir, cmp.op, right_tir, cmp.op_span);
             self.pending_operator_ast_id = None;
-            return result;
+            return result.type_id;
         }
 
         // Multi-comparison: actual chain expansion. Tag the node so the
@@ -1493,7 +1510,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Coerce a literal `right` against `prev_tir`'s type; non-literals
             // resolve normally (`resolve_expr` ignores `expected_type` when it
             // can't help).
-            let raw_right = self.resolve_expr(&cmp.right, ctx, Some(prev_tir.type_id));
+            let raw_right_type = self.resolve_expr(&cmp.right, ctx, Some(prev_tir.type_id));
+            let raw_right = placeholder(raw_right_type, cmp.right.span());
             let right_tir = if idx == last_idx {
                 // Tail operand: only one use, no binding needed.
                 raw_right
@@ -1515,7 +1533,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // allocations, and per-comparison dispatch above ran for their
         // fact-recording side effects.
         let _ = (stmts, acc_tir);
-        placeholder(TypeTable::BOOL, chain.span)
+        TypeTable::BOOL
     }
 
     /// Helper: bind a comparison-chain middle term to a `__mK` local and

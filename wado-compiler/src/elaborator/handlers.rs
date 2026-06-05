@@ -28,16 +28,10 @@
 use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::tir::{EffectRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
+use crate::tir::{EffectRef, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
-
-/// Stage 7-B placeholder: the combined walk no longer builds real TIR for
-/// `with`/`resume`; reify is the sole producer. See `expr.rs::placeholder`.
-fn placeholder(type_id: TypeId, span: crate::token::Span) -> TirExpr {
-    TirExpr::new(TirExprKind::Unit, type_id, span)
-}
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Annotate `with E1 => h1, ... do { body }`. Walks each handler
@@ -54,7 +48,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         with_expr: &ast::WithHandlerExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         // Counter feeding `HandlerBindingFacts.bundle_group` for the
         // bundled-handler form. A bundled clause may expand into multiple
         // effect bindings that share one synthesised `__h_<bundle>` local
@@ -93,7 +87,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `with`/`resume` off the AST via `control_flow.rs`, so nothing
         // consumes this node's structure.
         let _ = body;
-        placeholder(result_type, with_expr.span)
+        result_type
     }
 
     /// Annotate a single binding inside a `with ... do` clause. `bundle_group`
@@ -175,7 +169,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Resolve the handler value expression in the outer scope.
         let handler = self.resolve_expr(&binding.handler, ctx, None);
-        let handler_type = self.handler_underlying_type(handler.type_id);
+        let handler_type = self.handler_underlying_type(handler);
 
         // Verify the underlying struct type has `impl <Effect> for <Type>`.
         if let Some(EffectRef::Concrete {
@@ -250,7 +244,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         next_bundle_group: &mut u32,
     ) {
         let handler = self.resolve_expr(&binding.handler, ctx, None);
-        let handler_type = self.handler_underlying_type(handler.type_id);
+        let handler_type = self.handler_underlying_type(handler);
 
         let resolved = self.tysys.type_table.borrow().get(handler_type).clone();
         match resolved {
@@ -465,7 +459,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         resume: &ast::ResumeExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
+    ) -> TypeId {
         if !ctx.in_handler_method {
             let _ = self
                 .logger
@@ -483,11 +477,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let value = self.resolve_expr(&resume.value, ctx, expected);
 
         if ctx.in_handler_method {
-            self.typecheck(value.type_id, ctx.return_type, resume.span);
+            self.typecheck(value, ctx.return_type, resume.span);
         }
 
-        let _ = value;
-        placeholder(TypeTable::UNIT, resume.span)
+        TypeTable::UNIT
     }
 }
 

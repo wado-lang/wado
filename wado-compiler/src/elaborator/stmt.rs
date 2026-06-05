@@ -8,7 +8,7 @@ use crate::ast::{
 use crate::compiler_host::CompilerHost;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirLiteralPattern, TirPattern,
-    TirStructField, TirStructPatternField, TypeId, TypeTable,
+    TirStructPatternField, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -16,6 +16,13 @@ use super::Elaborator;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError};
 use super::util;
+
+/// Body-walk placeholder for a resolved expression. Stage 7-B: the combined
+/// walk records facts; reify is the sole TIR producer. Used at the few sites
+/// that still hand a resolved operand to a TIR builder that takes a `TirExpr`.
+fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(TirExprKind::Unit, type_id, span)
+}
 
 /// Tracks the reference binding mode for match ergonomics.
 /// When matching a reference-typed scrutinee, bindings inherit the reference kind.
@@ -57,7 +64,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `resolve_expr` wrapper; record the type explicitly (as
                     // the stmt-position arm does) so `ast_block_result_type`
                     // can read a trailing match's value type.
-                    self.record_expression_type(match_expr.id, ty.type_id);
+                    self.record_expression_type(match_expr.id, ty);
                     continue;
                 }
                 if let Stmt::LabeledBlock(labeled_block) = s {
@@ -91,7 +98,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `resolve_match_expr` does not go through the `resolve_expr`
                 // wrapper.
                 let ty = self.resolve_match_expr(match_expr, ctx, Some(TypeTable::UNIT));
-                self.record_expression_type(match_expr.id, ty.type_id);
+                self.record_expression_type(match_expr.id, ty);
             }
             Stmt::Break(break_stmt) => self.resolve_break(break_stmt, ctx),
             Stmt::Continue(continue_stmt) => self.resolve_continue(continue_stmt, ctx),
@@ -136,7 +143,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ast_value = let_stmt.value.as_ref().unwrap();
 
         // Check for tuple literal to array coercion when type annotation is present
-        let (value, type_id) = if let Some(annotated_type) = &let_stmt.ty {
+        let (value_type, type_id) = if let Some(annotated_type) = &let_stmt.ty {
             let target_type = self.resolve_type(annotated_type);
             // Publish the resolved whole-pattern annotation so reify reads it
             // instead of re-running `resolve_type` against the AST.
@@ -148,19 +155,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     let tuple_elems = self.tysys.type_table.borrow().as_tuple(target_type);
                     if let Some(expected_elem_types) = tuple_elems {
-                        let elements: Vec<TirExpr> = tuple_lit
-                            .elements
-                            .iter()
-                            .enumerate()
-                            .map(|(i, elem)| {
-                                let expected = expected_elem_types.get(i).copied();
-                                let resolved = self.resolve_expr(elem, ctx, expected);
-                                if let Some(expected_type) = expected {
-                                    self.typecheck(resolved.type_id, expected_type, elem.span());
-                                }
-                                resolved
-                            })
-                            .collect();
+                        for (i, elem) in tuple_lit.elements.iter().enumerate() {
+                            let expected = expected_elem_types.get(i).copied();
+                            let resolved = self.resolve_expr(elem, ctx, expected);
+                            if let Some(expected_type) = expected {
+                                self.typecheck(resolved, expected_type, elem.span());
+                            }
+                        }
 
                         // Also check length mismatch
                         if tuple_lit.elements.len() != expected_elem_types.len() {
@@ -174,15 +175,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             });
                         }
 
-                        let value = TirExpr::new(
-                            TirExprKind::TupleLiteral { elements },
-                            target_type,
-                            ast_value.span(),
-                        );
-                        (value, target_type)
+                        (target_type, target_type)
                     } else {
-                        let value = self.resolve_expr(ast_value, ctx, Some(target_type));
-                        (value, target_type)
+                        let value_type = self.resolve_expr(ast_value, ctx, Some(target_type));
+                        (value_type, target_type)
                     }
                 }
             } else if let ast::Expr::StructLiteral(struct_lit) = ast_value {
@@ -223,34 +219,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             }
                         }
 
-                        let fields: Vec<TirStructField> = struct_lit
-                            .fields
-                            .iter()
-                            .enumerate()
-                            .map(|(index, field)| {
-                                // Check field name exists in struct definition
-                                if !struct_field_types.iter().any(|(n, _)| n == &field.name)
-                                    && !struct_field_types.is_empty()
-                                {
-                                    let _ = self.logger.error(TypeError::ExtraField {
-                                        struct_name: name.clone(),
-                                        field_name: field.name.clone(),
-                                        span: field.span,
-                                    });
-                                }
-                                let expected_field_type = struct_field_types
-                                    .iter()
-                                    .find(|(n, _)| n == &field.name)
-                                    .map(|(_, type_id)| *type_id);
-                                let value =
-                                    self.resolve_expr(&field.value, ctx, expected_field_type);
-                                TirStructField {
-                                    name: field.name.clone(),
-                                    value,
-                                    field_index: index as u32,
-                                }
-                            })
-                            .collect();
+                        for field in &struct_lit.fields {
+                            // Check field name exists in struct definition
+                            if !struct_field_types.iter().any(|(n, _)| n == &field.name)
+                                && !struct_field_types.is_empty()
+                            {
+                                let _ = self.logger.error(TypeError::ExtraField {
+                                    struct_name: name.clone(),
+                                    field_name: field.name.clone(),
+                                    span: field.span,
+                                });
+                            }
+                            let expected_field_type = struct_field_types
+                                .iter()
+                                .find(|(n, _)| n == &field.name)
+                                .map(|(_, type_id)| *type_id);
+                            self.resolve_expr(&field.value, ctx, expected_field_type);
+                        }
 
                         // Record the implicit struct literal's mangled name
                         // (the target struct's name as the elaborator picks
@@ -264,20 +249,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             struct_type,
                             Some(name.clone()),
                         );
-                        let value = TirExpr::new(
-                            TirExprKind::StructLiteral {
-                                struct_type,
-                                struct_name: name,
-                                fields,
-                            },
-                            struct_type,
-                            struct_lit.span,
-                        );
-                        (value, target_type)
+                        let _ = name;
+                        (struct_type, target_type)
                     } else if let Some(coerced) =
                         self.try_coerce_struct_to_map(ast_value, ctx, target_type)
                     {
-                        (coerced, target_type)
+                        (coerced.type_id, target_type)
                     } else {
                         // Target type does not implement KeyValueLiteral
                         let type_name = self.tysys.type_table.borrow().type_name(target_type);
@@ -286,22 +263,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             trait_name: "KeyValueLiteral".to_string(),
                             span: struct_lit.span,
                         });
-                        let value = self.resolve_expr(ast_value, ctx, None);
-                        (value, target_type)
+                        let value_type = self.resolve_expr(ast_value, ctx, None);
+                        (value_type, target_type)
                     }
                 } else {
                     // Named struct literal - resolve normally
-                    let value = self.resolve_expr(ast_value, ctx, Some(target_type));
-                    (value, target_type)
+                    let value_type = self.resolve_expr(ast_value, ctx, Some(target_type));
+                    (value_type, target_type)
                 }
             } else {
                 // Use expected type for numeric literal coercion
-                let value = self.resolve_expr(ast_value, ctx, Some(target_type));
-                (value, target_type)
+                let value_type = self.resolve_expr(ast_value, ctx, Some(target_type));
+                (value_type, target_type)
             }
         } else {
-            let value = self.resolve_expr(ast_value, ctx, None);
-            (value.clone(), value.type_id)
+            let value_type = self.resolve_expr(ast_value, ctx, None);
+            (value_type, value_type)
         };
 
         // Type check: if type annotation is present, verify value type matches.
@@ -310,15 +287,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // at definition time. check_assignable defers all type param cases because
         // trait impls legitimately use TypeParam-vs-concrete (monomorphized later).
         if let_stmt.ty.is_some()
-            && value.type_id != type_id
-            && value.type_id != TypeTable::UNKNOWN
-            && value.type_id != TypeTable::NEVER
+            && value_type != type_id
+            && value_type != TypeTable::UNKNOWN
+            && value_type != TypeTable::NEVER
         {
             // Allow null (Option<unknown>) to be assigned to Option<T>
             let is_null_to_option = {
                 let type_table = self.tysys.type_table.borrow();
                 type_table
-                    .as_option(value.type_id)
+                    .as_option(value_type)
                     .is_some_and(|inner| inner == TypeTable::UNKNOWN)
                     && type_table.as_option(type_id).is_some()
             };
@@ -346,9 +323,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return_type: expected_return,
                         ..
                     },
-                ) = (type_table.get(value.type_id), type_table.get(type_id))
+                ) = (type_table.get(value_type), type_table.get(type_id))
                 {
-                    match check_assignable(value.type_id, type_id, &type_table) {
+                    match check_assignable(value_type, type_id, &type_table) {
                         TypeCheckResult::Compatible => true,
                         TypeCheckResult::Deferred => {
                             actual_params.len() == expected_params.len()
@@ -367,7 +344,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !is_null_to_option && !is_compatible_fn_type {
                 let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: self.tysys.type_table.borrow().type_name(type_id),
-                    found: self.tysys.type_table.borrow().type_name(value.type_id),
+                    found: self.tysys.type_table.borrow().type_name(value_type),
                     span: ast_value.span(),
                 });
             }
@@ -379,7 +356,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `ctx`, records the local symbols, registers closure defaults, and
         // runs the type-mismatch diagnostic above; the resolved `value` is kept
         // only for that diagnostic and then discarded.
-        let _ = &value;
+        let _ = value_type;
         match &let_stmt.pattern {
             ast::Pattern::Ident {
                 id,
@@ -894,8 +871,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Use expected type for coercion (numeric literals, tuple to array,
         // etc.) and check the value type against the function return type.
         if let Some(expr) = ret_stmt.value.as_ref() {
-            let value = self.resolve_expr(expr, ctx, Some(return_type));
-            self.typecheck_return(value.type_id, return_type, ret_stmt.span);
+            let value_type = self.resolve_expr(expr, ctx, Some(return_type));
+            self.typecheck_return(value_type, return_type, ret_stmt.span);
         }
     }
 
@@ -1001,8 +978,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 expr,
                 span: elem_span,
             } => {
-                let scrutinee = self.resolve_expr(expr, ctx, None);
-                let scrutinee_type = scrutinee.type_id;
+                let scrutinee_type = self.resolve_expr(expr, ctx, None);
                 // Adds pattern bindings to ctx — subsequent elements can see them.
                 self.resolve_if_pattern(pattern, scrutinee_type, ctx, *elem_span);
                 self.resolve_let_chain_stmts(
@@ -1931,8 +1907,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Resolve the iterable to determine its type
-        let iterable = self.resolve_expr(actual_iterable, ctx, None);
-        let iterable_type_id = iterable.type_id;
+        let iterable_type_id = self.resolve_expr(actual_iterable, ctx, None);
+        let iterable = placeholder(iterable_type_id, actual_iterable.span());
 
         // Check if it's a tuple type — looking through a single `&`/`&mut`
         // wrapper. A reference iterable (`&[..T]`) iterates element-by-ref
@@ -2319,7 +2295,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve the iterable receiver verbatim, then dispatch `.into_iter()`
         // on it. Whatever adapter chain the user wrote (e.g. `.enumerate()`,
         // `.filter(…)`, `.map(…)`) is already part of `for_of.iterable`.
-        let into_iter_receiver = self.resolve_expr(&for_of.iterable, ctx, None);
+        let into_iter_receiver_type = self.resolve_expr(&for_of.iterable, ctx, None);
+        let into_iter_receiver = placeholder(into_iter_receiver_type, for_of.iterable.span());
 
         // `<receiver>.into_iter()`
         let into_iter_call = self.resolve_method_call_with(
@@ -2552,7 +2529,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let (Some(label), Some(val)) = (&break_stmt.label, &value) {
             for target in ctx.labeled_block_targets.iter_mut().rev() {
                 if &target.label == label {
-                    target.break_types.push(val.type_id);
+                    target.break_types.push(*val);
                     break;
                 }
             }
@@ -2740,8 +2717,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return;
                 };
 
-                let scrutinee = self.resolve_expr(expr, ctx, None);
-                let scrutinee_type = scrutinee.type_id;
+                let scrutinee_type = self.resolve_expr(expr, ctx, None);
                 ctx.enter_scope();
                 self.resolve_if_pattern(pattern, scrutinee_type, ctx, elem_span);
                 // Body and update both run inside the pattern scope so they can

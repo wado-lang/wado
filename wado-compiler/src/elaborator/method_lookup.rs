@@ -3515,23 +3515,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
         // First, resolve the indexed container to get its type
-        let container_expr = self.resolve_expr(&index_expr.expr, ctx, None);
+        let container_type = self.resolve_expr(&index_expr.expr, ctx, None);
 
         // Check if this is an List type (Arrays use optimized direct access, not traits)
         let is_array = self
             .tysys
             .type_table
             .borrow()
-            .as_list(container_expr.type_id)
+            .as_list(container_type)
             .is_some();
         if is_array {
             return None; // Use normal resolution for arrays
         }
 
         // Get base type (unwrap reference if needed)
-        let base_type_id = match self.tysys.type_table.borrow().get(container_expr.type_id) {
+        let base_type_id = match self.tysys.type_table.borrow().get(container_type) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => container_expr.type_id,
+            _ => container_type,
         };
 
         // Get struct name from base type
@@ -3542,8 +3542,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Check if the type implements IndexMut
-        let index_resolved = self.resolve_expr(&index_expr.index, ctx, None);
-        let index_type = index_resolved.type_id;
+        let index_type = self.resolve_expr(&index_expr.index, ctx, None);
 
         let index_mut_info =
             self.find_index_mut_trait_impl(&struct_name, base_type_id, index_type)?;
@@ -3633,7 +3632,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Generate: container.index_mut(index).method(args)
         // Step 1: Create container.index_mut(index) call
         let receiver_for_index_mut = self.adjust_receiver_for_self_kind(
-            container_expr,
+            placeholder(container_type, index_expr.expr.span()),
             index_mut_info.self_kind,
             false,
             index_expr.span,
@@ -3685,7 +3684,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // inner `*expr.index_mut(idx)` from the recorded `operator_dispatch`
         // above; the combined walk only needed the dispatch fact. The
         // receiver + index were resolved above for their side effects.
-        let _ = (receiver_for_index_mut, index_mut_func, index_resolved);
+        let _ = (receiver_for_index_mut, index_mut_func, index_type);
 
         // Step 2: Resolve method args with expected parameter types for literal coercion
         let args: Vec<TirExpr> = method_call
@@ -3694,7 +3693,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .enumerate()
             .map(|(i, a)| {
                 let expected = param_types.get(i).copied();
-                self.resolve_expr(a, ctx, expected)
+                placeholder(self.resolve_expr(a, ctx, expected), a.span())
             })
             .collect();
 
