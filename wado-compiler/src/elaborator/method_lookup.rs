@@ -644,13 +644,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )
                 })
                 .unwrap_or_default();
-            if let Some(module) = self.loaded_modules.get(module_source) {
-                for item in &module.items {
-                    if let Item::Impl(impl_block) = item {
-                        // Skip trait impls - only look at inherent impls
-                        if impl_block.trait_type.is_some() {
-                            continue;
-                        }
+            // Fetch only the inherent impls registered for this type name in
+            // the struct's own module, instead of scanning every item.
+            let entries: Vec<usize> = self
+                .tysys
+                .trait_env
+                .inherent_impl_index
+                .get(&struct_name)
+                .map(|v| {
+                    v.iter()
+                        .filter(|(ms, _)| ms == module_source)
+                        .map(|(_, idx)| *idx)
+                        .collect()
+                })
+                .unwrap_or_default();
+            for item_idx in entries {
+                let Item::Impl(impl_block) =
+                    &self.loaded_modules[module_source].items[item_idx]
+                else {
+                    continue;
+                };
                         let impl_struct_name = self.get_type_name(&impl_block.ty);
                         if impl_struct_name == struct_name
                             && self.inherent_impl_type_args_match(
@@ -778,21 +791,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 }
                             }
                         }
-                    }
-                }
             }
         }
 
         // Search all loaded modules if no specific module (for prelude types)
         // Only check inherent impls (not trait impls) - trait impls are handled separately
         if struct_module_source.is_none() {
-            for (search_module_source, module) in self.loaded_modules {
-                for item in &module.items {
-                    if let Item::Impl(impl_block) = item {
-                        // Skip trait impls - only look at inherent impls
-                        if impl_block.trait_type.is_some() {
-                            continue;
-                        }
+            // No specific module: fetch every inherent impl registered for
+            // this type name across all loaded modules from the index.
+            let entries: Vec<(ModuleSource, usize)> = self
+                .tysys
+                .trait_env
+                .inherent_impl_index
+                .get(&struct_name)
+                .cloned()
+                .unwrap_or_default();
+            for (search_module_source, item_idx) in &entries {
+                let Item::Impl(impl_block) =
+                    &self.loaded_modules[search_module_source].items[*item_idx]
+                else {
+                    continue;
+                };
                         let impl_struct_name = self.get_type_name(&impl_block.ty);
                         if impl_struct_name == struct_name
                             && self.inherent_impl_type_args_match(
@@ -897,8 +916,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 }
                             }
                         }
-                    }
-                }
             }
         }
 
