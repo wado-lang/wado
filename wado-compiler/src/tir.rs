@@ -501,12 +501,6 @@ impl<V> Default for TypeMap<V> {
 }
 
 impl<V> TypeMap<V> {
-    /// Number of slots allocated (including erased holes). Because the map
-    /// is dense, this is also the `TypeId` space currently in use.
-    pub(crate) fn len(&self) -> usize {
-        self.slots.len()
-    }
-
     /// The `TypeId` the next [`Self::push`] will occupy.
     pub(crate) fn next_id(&self) -> TypeId {
         TypeId(self.slots.len() as u32)
@@ -826,14 +820,6 @@ impl TypeTable {
         self.is_integer(id) || self.is_float(id)
     }
 
-    pub fn len(&self) -> usize {
-        self.types.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.types.len() <= 19
-    }
-
     /// Iterate over all live type IDs in the table. Erased slots are skipped.
     pub fn iter_type_ids(&self) -> impl Iterator<Item = TypeId> + '_ {
         self.types.ids()
@@ -953,9 +939,12 @@ impl TypeTable {
 
     /// Remove all type entries whose `TypeId` is not in `keep`.
     ///
-    /// This physically removes entries from the backing `IndexMap`s so that
-    /// subsequent iterations (e.g. WIR type registration) no longer see them.
-    /// The intern map and secondary indices are rebuilt to stay consistent.
+    /// Erased entries become empty (`None`) holes in the backing [`TypeMap`]s
+    /// rather than being physically removed — `TypeId`s are never renumbered,
+    /// so surviving ids keep their indices — and `all_types` / `iter_type_ids`
+    /// skip the holes, so subsequent iterations (e.g. WIR type registration)
+    /// no longer see them. The intern map and secondary indices are rebuilt to
+    /// stay consistent.
     ///
     /// `retain` preserves the invariant that `self.get(id)` does not panic
     /// for any surviving `id`. After `erase_newtypes_and_flags`, `get(id)`
