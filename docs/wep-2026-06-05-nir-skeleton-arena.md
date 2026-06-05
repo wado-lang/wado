@@ -149,10 +149,13 @@ Each phase keeps the full e2e suite and golden WIR fixtures green
 (`tests/generated/fixtures/*.wir.wado`), satisfying the engine WEP's "codegen
 must not regress" requirement.
 
-- [ ] Phase 1 — define `Body`, the id spaces, and the edit API; add tree ↔
-      arena converters. `NirFunction.body` gains a `Body`; the tree stays in
-      parallel behind the converters. Green check: the converters round-trip
-      every fixture body bit-identically.
+- [ ] Phase 1 — define `Body`, the id spaces, the node payloads, and the
+      `alloc_*` builders; add tree ↔ arena converters. The parent map, use
+      index, and the mutating edit API are _not_ part of Phase 1 — they are
+      only needed once passes run on the arena, so they land in Phase 4. The
+      tree stays canonical; the arena is built on the side. Green check: a
+      tree → arena → tree round-trip inserted at the optimize entry keeps the
+      full e2e suite and golden WIR fixtures bit-identical.
 - [ ] Phase 2 — port `lower` to emit `Body` directly; drop the tree → arena
       converter.
 - [ ] Phase 3 — port `wir_build` to read `Body`; drop the arena → tree
@@ -163,6 +166,35 @@ must not regress" requirement.
       walkers but read the arena.
 - [ ] Phase 5 — delete the tree enums (`NirExprKind` / `NirStmtKind` /
       `NirBlock` / `NirPattern` as owned trees) once no consumer remains.
+
+## Phase 1 implementation notes
+
+Decisions pinned before coding, so Phase 1 is mechanical:
+
+- Substrate crate. Built on `cranelift-entity` (already in the tree at the
+  vendored `0.133` generation via `cranelift-codegen`), promoted to a direct
+  dependency: `entity_impl!` for the id newtypes, `PrimaryMap<Id, Node>` per
+  category, `EntityList` + `ListPool` available for variable-arity children
+  when `Vec` churn warrants it. It is pure data structures and builds on
+  `wasm32-unknown-unknown` (the crate's CI target); `mise run check-deps` is
+  updated to pin it to the same generation as the other vendored cranelift /
+  wasm-tools crates.
+- `Body` shape. `NirFunction.body: Option<NirBlock>` is joined (Phase 1) by an
+  out-of-band `Body` holding `exprs / stmts / blocks / pats: PrimaryMap<…>`, a
+  `root: BlockId`, and the function-level facts the later passes read beside
+  the arena (`locals`, `address_taken_locals`, `stores_aliased_locals`).
+  Signature metadata (params, return, effects, kind, …) stays on
+  `NirFunction`. The parent map and per-`Body` use index are added in Phase 4.
+- Phase 1 oracle. NIR's tree carries no `PartialEq`, so equivalence is not
+  checked structurally on the IR. Instead the round-trip is validated through
+  the existing safety net: a `tree → Body → tree` pass spliced in at the
+  optimize entry must leave every e2e and golden WIR fixture bit-identical.
+  This reuses the golden / wasm comparison already in CI rather than growing a
+  new `PartialEq` over ~40 expr kinds.
+- Variant mapping. `ExprKind` / `StmtKind` / `PatKind` are transcribed
+  field-for-field from `NirExprKind` / `NirStmtKind` / `NirPattern` with child
+  references rewritten to ids; the one-to-one table is the converter's body and
+  is the single place the two enums are kept in lockstep.
 
 ## Consequences
 
