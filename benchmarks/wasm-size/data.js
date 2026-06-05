@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780670430350,
+  "lastUpdate": 1780671695838,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30153,6 +30153,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/86cc513cf9ef667cb243264f897340366905a31b"
         },
         "date": 1780670429896,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1767,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8808,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16711,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 456413,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "788d2f0ad38c06cac159466ea89f4750930327b2",
+          "message": "Merge pull request #1300 from wado-lang/claude/core-cbor-design-pPn6m\n\ncore:cbor design + byte-buffer/serde groundwork",
+          "timestamp": "2026-06-05T23:51:56+09:00",
+          "tree_id": "e2f8ed760436a67f0dcc2b6a28f7f8cec3dd4b81",
+          "url": "https://github.com/wado-lang/wado/commit/788d2f0ad38c06cac159466ea89f4750930327b2"
+        },
+        "date": 1780671695558,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
