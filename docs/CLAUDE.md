@@ -121,3 +121,4 @@ It may include TODOs on WIP.
 - [Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md)
 - [Temporal Standard Library (`core:temporal`)](./wep-2026-06-05-core-temporal.md)
 - [CBOR Standard Library (`core:cbor`)](./wep-2026-06-05-core-cbor.md)
+- [NIR Skeleton Arena (Layer 1)](./wep-2026-06-05-nir-skeleton-arena.md)
