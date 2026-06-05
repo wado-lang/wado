@@ -897,56 +897,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             // Fallback: known function but its AST is unreachable (shouldn't
             // normally happen). Emit a stub FuncRef so downstream stays sane.
-<<<<<<< HEAD
-            let module_source = if self
-                .sem
-                .decls
-                .function_return_types
-                .contains_key(&ident.name)
-            {
-                self.current_module_source.clone()
-            } else {
-                self.symbols
-                    .lookup(&self.current_module_source, &ident.name)
-                    .map(|s| s.module_source().clone())
-                    .unwrap_or_else(|| self.current_module_source.clone())
-            };
-            return TirExpr::new(
-                TirExprKind::FuncRef {
-                    module_source,
-                    name: ident.name.clone(),
-                    type_args: Vec::new(),
-                },
-                TypeTable::UNKNOWN,
-                ident.span,
-            );
-||||||| bdc129b1
-            let module_source = if self
-                .sem
-                .decls
-                .function_return_types
-                .contains_key(&ident.name)
-            {
-                self.current_module_source.clone()
-            } else {
-                self.symbols
-                    .lookup(&ident.name)
-                    .map(|s| s.module_source().clone())
-                    .unwrap_or_else(|| self.current_module_source.clone())
-            };
-            return TirExpr::new(
-                TirExprKind::FuncRef {
-                    module_source,
-                    name: ident.name.clone(),
-                    type_args: Vec::new(),
-                },
-                TypeTable::UNKNOWN,
-                ident.span,
-            );
-=======
             // Stage 7-B: reify rebuilds the stub `FuncRef`.
             return TypeTable::UNKNOWN;
->>>>>>> origin/main
         };
 
         let real_type_param_count = func_ast
