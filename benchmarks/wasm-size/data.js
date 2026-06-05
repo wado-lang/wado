@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780658508846,
+  "lastUpdate": 1780669738244,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30065,6 +30065,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bdc129b1d58a924aeda8d113f7b006aafc699495"
         },
         "date": 1780658508316,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9659,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17191,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460509,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a91e8bae1b19cb79a6e499f1b526bb1882095656",
+          "message": "Merge pull request #1301 from wado-lang/claude/elaborator-refactor-stage-7-tOL8R\n\nrefactor(compiler): elaborator stage 7-B — annotate records facts, reify is the sole TIR producer",
+          "timestamp": "2026-06-05T23:17:54+09:00",
+          "tree_id": "7eed374a439c8e73b94ce7e310a6f5305320ed8c",
+          "url": "https://github.com/wado-lang/wado/commit/a91e8bae1b19cb79a6e499f1b526bb1882095656"
+        },
+        "date": 1780669737892,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
