@@ -469,11 +469,13 @@ impl<T: Display> List<T> {
 }
 
 impl List<u8> {
-    /// Returns the byte at `index` without bounds checking.
+    /// Returns the byte at `index` without bounds checking — the `List<u8>`
+    /// parallel to `String::get_byte_unchecked`.
     ///
-    /// The caller must guarantee `0 <= index < len()`. Used by the byte-based
-    /// deserializers (`core:json`, `core:json_nsd`) whose scanning loops have
-    /// already range-checked `index`.
+    /// The caller must guarantee `0 <= index < len()`; an out-of-range `index`
+    /// reads past the buffer or traps. Intended for hot byte-scanning loops that
+    /// have already range-checked `index` (e.g. a forthcoming `core:cbor`
+    /// decoder over an owned `ByteList`).
     pub fn get_byte_unchecked(&self, index: i32) -> u8 {
         return builtin::array_get(&self.repr, index);
     }

@@ -1521,7 +1521,7 @@ fn generate_struct_deserialize(
     Some((lookup_func, deser_func))
 }
 
-/// Build a `key.get_byte_unchecked(index_expr) as i32` expression on a
+/// Build a `key.get_unchecked(index_expr) as i32` expression on a
 /// `ByteSlice` (`ArraySlice<u8>`) key, with a computed index.
 ///
 /// The method is looked up via [`CompilerItem::ByteSliceGetUnchecked`] —

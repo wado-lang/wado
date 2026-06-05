@@ -744,7 +744,7 @@ impl JsonDeserializer {
         // build it with checked UTF-8 construction (only string *content* can be
         // multi-byte; JSON structure is ASCII). Invalid UTF-8 is `MalformedInput`.
         if scan_pos < input_len && self.input.get_unchecked(scan_pos) as i32 == '"' as i32 {
-            let result = match String::from_utf8(self.input.slice(prefix_start, prefix_start + prefix_len)) {
+            let result = match String::from_utf8_slice(self.input.slice(prefix_start, prefix_start + prefix_len)) {
                 Ok(s) => s,
                 Err(_) => {
                     builtin::cold_path();
@@ -760,7 +760,7 @@ impl JsonDeserializer {
 
         // Slow path: has escape sequences (or hit EOF). Build the escape-free
         // prefix with checked UTF-8 construction, then handle escapes.
-        let mut result = match String::from_utf8(self.input.slice(prefix_start, prefix_start + prefix_len)) {
+        let mut result = match String::from_utf8_slice(self.input.slice(prefix_start, prefix_start + prefix_len)) {
             Ok(s) => s,
             Err(_) => {
                 builtin::cold_path();
@@ -773,9 +773,10 @@ impl JsonDeserializer {
         self.pos = scan_pos;
 
         loop {
-            // Scan for next terminator or escape. Bytes between escapes are already
-            // valid UTF-8 (the input is valid UTF-8), so we can copy them as raw bytes
-            // without per-byte UTF-8 decoding.
+            // Scan to the next terminator or escape. The bytes between escapes
+            // form one contiguous run that is validated and copied in a single
+            // pass below (the `"` / `\` delimiters are ASCII, so a multi-byte
+            // sequence never straddles a chunk boundary).
             let chunk_start = self.pos;
             while self.pos < self.input.len() {
                 let b = self.input.get_unchecked(self.pos) as i32;
@@ -786,10 +787,7 @@ impl JsonDeserializer {
             }
             let chunk_len = self.pos - chunk_start;
             if chunk_len > 0 {
-                // A multi-byte UTF-8 sequence never spans an escape boundary (the
-                // delimiters `"` / `\` are ASCII), so validating each chunk in
-                // isolation is correct.
-                match String::from_utf8(self.input.slice(chunk_start, self.pos)) {
+                match String::from_utf8_slice(self.input.slice(chunk_start, self.pos)) {
                     Ok(s) => result.push_str(&s),
                     Err(_) => {
                         builtin::cold_path();

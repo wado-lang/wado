@@ -635,13 +635,14 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                 }
 
                 // A tuple is a generic instance, so its elements are type
-                // arguments: mangle them with the module-qualified form so a
-                // monomorphized `Struct` element and the equivalent
-                // `GenericInstance` element (the substitution-boundary flip)
-                // produce the *same* fq. Using the short form here let the same
-                // logical tuple (e.g. `[String, TreeMap<String,i32>]`) register
-                // twice — once qualified, once not — yielding two distinct WIR
-                // struct types and a `ref`/`ref null` validation mismatch when
+                // arguments and must be mangled with the module-qualified form.
+                // The non-type-arg mangler qualifies inconsistently — a
+                // monomorphized `Struct` element keeps its short stored name
+                // while the equivalent `GenericInstance` element comes out
+                // qualified (the substitution-boundary flip) — so the same
+                // logical tuple (e.g. `[String, TreeMap<String,i32>]`) would
+                // register under two different fqs, yielding two distinct WIR
+                // struct types and a `ref`/`ref null` validation mismatch where
                 // they meet (e.g. iterating a `TreeMap`-valued map's entries).
                 // Newtypes still resolve to their base so they share the type.
                 let elem_names: Vec<String> = elements

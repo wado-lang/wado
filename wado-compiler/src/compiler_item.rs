@@ -272,15 +272,15 @@ pub enum CompilerItem {
     /// through this item so renames in the stdlib do not silently
     /// break code generation. See issue #1077.
     StringGetByteUnchecked,
-    /// `ByteSlice::get_byte_unchecked` (`ArraySlice<u8>`) — the unchecked
-    /// byte read used by synthesised deserializers (`serde_synth`) when
-    /// comparing a wire key against a struct's `FieldSchema`. Routed
-    /// through this item for the same rename-safety reason as
-    /// [`Self::StringGetByteUnchecked`].
+    /// `ByteSlice::get_unchecked` (`ArraySlice<u8>`) — the unchecked byte
+    /// read used by synthesised deserializers (`serde_synth`) when comparing
+    /// a wire key against a struct's `FieldSchema`. Routed through this item
+    /// for the same rename-safety reason as [`Self::StringGetByteUnchecked`].
     ByteSliceGetUnchecked,
-    /// `ByteSlice::byte_len` (`ArraySlice<u8>`) — the concrete byte-length
-    /// accessor the synthesised `FieldSchema::lookup` uses to size the wire
-    /// key. A monomorphization-free companion to [`Self::ByteSliceGetUnchecked`].
+    /// `ByteSlice::len` (`ArraySlice<u8>`) — the byte-length accessor the
+    /// synthesised `FieldSchema::lookup` uses to size the wire key. Routed
+    /// through a compiler item for the same rename-safety reason as
+    /// [`Self::ByteSliceGetUnchecked`].
     ByteSliceLen,
     /// `i128::from_i64` — sign-extending constructor used by the
     /// wide-int literal lowering pass.

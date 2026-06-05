@@ -1153,3 +1153,28 @@ test "remove_unchecked ASCII" {
     assert c == 'b';
     assert s == "ac";
 }
+
+test "String::from_utf8_slice valid (ASCII, multi-byte, mixed)" {
+    assert String::from_utf8_slice(([] as List<u8>).as_slice()) matches { Ok(s) && s == "" };
+    assert String::from_utf8_slice(([72, 105] as List<u8>).as_slice()) matches { Ok(s) && s == "Hi" };
+    // ñ 日 😀 — 2-, 3-, and 4-byte sequences
+    let mixed: List<u8> = [0x41, 0xC3, 0xB1, 0xE6, 0x97, 0xA5, 0xF0, 0x9F, 0x98, 0x80];
+    assert String::from_utf8_slice(mixed.as_slice()) matches { Ok(s) && s == "Añ日😀" };
+}
+
+test "String::from_utf8_slice roundtrip matches from_utf8" {
+    let original = "Hello, 世界! 😀";
+    let bytes: List<u8> = original.bytes().collect();
+    assert String::from_utf8_slice(bytes.as_slice()) matches { Ok(s) && s == original };
+}
+
+test "String::from_utf8_slice rejects invalid UTF-8" {
+    // lonely continuation, overlong, bad continuation, truncated,
+    // surrogate codepoint, out-of-Unicode-range — one per error class.
+    assert String::from_utf8_slice(([0x80] as List<u8>).as_slice()) matches { Err(_) };
+    assert String::from_utf8_slice(([0xC0, 0x80] as List<u8>).as_slice()) matches { Err(_) };
+    assert String::from_utf8_slice(([0xC3, 0x41] as List<u8>).as_slice()) matches { Err(_) };
+    assert String::from_utf8_slice(([0xE6, 0x97] as List<u8>).as_slice()) matches { Err(_) };
+    assert String::from_utf8_slice(([0xED, 0xA0, 0x80] as List<u8>).as_slice()) matches { Err(_) };
+    assert String::from_utf8_slice(([0xF4, 0x90, 0x80, 0x80] as List<u8>).as_slice()) matches { Err(_) };
+}
