@@ -760,7 +760,7 @@ pub struct NirFunction {
     pub effects: Vec<EffectRef>,
     /// Parameter names declared in `stores[...]` — the function may store these references.
     pub stores: Vec<String>,
-    pub body: Option<NirBlock>,
+    pub body: Option<crate::nir_arena::Body>,
     pub span: Span,
     pub local_count: u32,
     /// Per-local metadata — `name`, `type_id`, `is_mut` — indexed by Wasm

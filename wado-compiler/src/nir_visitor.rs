@@ -866,8 +866,13 @@ pub fn visit_project_functions(project: &mut NirPackage, visitor: &mut impl NirO
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        if let Some(ref mut body) = func.body {
-            changed |= visitor.visit_block(body);
+        // Phase 3 bridge: the canonical body is the arena `Body`; tree-based
+        // optimization passes still consume `NirBlock`, so convert in/out per
+        // function. Removed pass-by-pass as passes port to arena traversal.
+        if func.body.is_some() {
+            let mut body = func.body.as_ref().unwrap().to_block();
+            changed |= visitor.visit_block(&mut body);
+            func.body = Some(crate::nir_arena::Body::from_block(&body));
         }
     }
     changed

@@ -187,9 +187,32 @@ must not regress" requirement.
       `&[TypeId]`. `functions.rs`'s global-init path (`translate_global_init`)
       stays on the tree — globals are not part of the `FunctionTranslator`
       cluster.
-- [ ] Phase 3 — port `lower` to emit `Body` directly; `optimize` is ported
-      alongside / before so the arena flows lower → optimize → wir_build with
-      no converter. The arena is now the only post-lower body form.
+- [ ] Phase 3 — make `Body` the canonical `NirFunction.body` and flow it
+      lower → optimize → wir_build. In progress (WIP, non-compiling).
+      - Execution strategy. Flipping `NirFunction.body: Option<NirBlock>` →
+        `Option<Body>` breaks every `func.body` consumer at once (no green
+        checkpoint), so it lands in two stages:
+        1. Bridge to green: keep the tree-based optimize passes unchanged and
+           convert `Body ↔ NirBlock` per function at each `func.body` access
+           (`visit_project_functions` driver, plus the ~50 direct accesses in
+           inline / dce / sroa / ref_elim / … and the flow-sensitive walkers);
+           `lower` emits `Body` (build tree, `Body::from_block`); `wir_build`
+           reads the func's `Body` directly (its Phase 2 entry converter is
+           dropped). `niri` stays tree-based and functional — `const_fold`
+           bridges at the leaf via `expr_to_tree`/replace, so its 130 KB is not
+           ported.
+        2. Port pass logic to arena traversal one pass at a time, removing that
+           pass's bridge each time; when the last bridge is gone the per-pass
+           `Body ↔ tree` conversions vanish and the arena flows with no
+           converter (the Phase 3 goal). This per-pass work overlaps Phase 4
+           (the passes become engine rules), so it is sequenced with it.
+      - Done so far: field flipped to `Option<Body>`; `visit_project_functions`
+        driver bridged; `wir_build` entry uses the func's `Body` directly; the
+        obsolete Phase-1 round-trip oracle removed; dead `Body::from_function`
+        removed.
+      - Remaining for stage 1: bridge the ~50 direct `func.body` accesses across
+        the passes, `lower`'s producer, `niri`/`const_fold`, and `remarks`;
+        then green + e2e.
 - [ ] Phase 4 — port the peephole passes onto the edit API. This is where the
       engine WEP begins. Flow-sensitive passes (`field_scalarize`, `licm`,
       `tmpl_hoist`, `value_copy_demote`, `store_load_forward`) keep their own

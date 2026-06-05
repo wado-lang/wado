@@ -335,24 +335,6 @@ pub struct Body {
 }
 
 impl Body {
-    /// Build a `Body` from a resolved function, or `None` if the function has
-    /// no body (declaration only).
-    pub fn from_function(func: &NirFunction) -> Option<Self> {
-        let body = func.body.as_ref()?;
-        let mut b = Lower::default();
-        let root = b.block(body);
-        Some(Self {
-            exprs: b.exprs,
-            stmts: b.stmts,
-            blocks: b.blocks,
-            pats: b.pats,
-            root,
-            locals: func.locals.clone(),
-            address_taken_locals: func.address_taken_locals.clone(),
-            stores_aliased_locals: func.stores_aliased_locals.clone(),
-        })
-    }
-
     /// Build a `Body` from a standalone block (e.g. a global initializer or a
     /// test fixture); function-level fact sets are left empty.
     pub fn from_block(block: &NirBlock) -> Self {

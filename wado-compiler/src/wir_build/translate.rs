@@ -864,7 +864,8 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
             for param in &tir_func.params {
                 local_names.insert(param.local_index, param.name.clone());
             }
-            collect_let_names(&mut local_names, &body.stmts);
+            let body_tree = body.to_block();
+            collect_let_names(&mut local_names, &body_tree.stmts);
             for (idx, local) in tir_func.locals.iter().enumerate() {
                 let key = u32::try_from(idx).unwrap();
                 local_names.entry(key).or_insert_with(|| local.name.clone());
@@ -874,12 +875,11 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
             // Translate inside a nested block so the translator (and its reborrow of ctx)
             // is dropped before we write back to ctx.functions below.
             let mut wir_body = {
-                let arena_body = Body::from_block(body);
                 let mut translator = FunctionTranslator {
                     ctx: &mut *ctx,
                     type_table: &type_table,
                     tir_func: &tir_func,
-                    body: &arena_body,
+                    body,
                     label_stack: Vec::new(),
                     match_counter: 0,
                     local_counter: 0,
@@ -887,7 +887,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     immutable_locals: IndexSet::default(),
                     multi_value_split_locals: IndexMap::default(),
                 };
-                translator.translate_block(arena_body.root)
+                translator.translate_block(body.root)
             };
             apply_cold_path_hints(&mut wir_body);
             let _ = type_table;
