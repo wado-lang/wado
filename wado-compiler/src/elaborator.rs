@@ -1050,12 +1050,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///    the current module (and non-aliased imports). Consulted second so
     ///    aliased effect/resource imports go through the alias-aware path
     ///    above.
-    /// 3. The current module — a name *defined* here shadows the global
-    ///    fallbacks below (which are last-writer-wins across the program),
-    ///    so a local declaration always wins over an unrelated same-named
-    ///    item elsewhere (issue #1298).
-    /// 4. The global symbol table — canonicalises prelude / stdlib names
-    ///    even when they were imported transitively.
+    /// 3. The current module — a name *defined* here shadows the symbol-table
+    ///    and decl-index fallbacks below, so a local declaration always wins
+    ///    over an unrelated same-named item in another module (issue #1298).
+    /// 4. The symbol table, scoped to the current module's imports plus the
+    ///    implicit prelude — canonicalises explicitly imported names and
+    ///    prelude/stdlib names to their defining module.
     /// 5. The global decl indices on [`TraitEnv`] — last-resort fallback
     ///    for prelude traits referenced from stdlib code where neither
     ///    the per-module import context nor the symbol table carries the
