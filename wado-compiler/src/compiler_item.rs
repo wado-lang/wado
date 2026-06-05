@@ -272,6 +272,12 @@ pub enum CompilerItem {
     /// through this item so renames in the stdlib do not silently
     /// break code generation. See issue #1077.
     StringGetByteUnchecked,
+    /// `ByteSlice::get_byte_unchecked` (`ArraySlice<u8>`) — the unchecked
+    /// byte read used by synthesised deserializers (`serde_synth`) when
+    /// comparing a wire key against a struct's `FieldSchema`. Routed
+    /// through this item for the same rename-safety reason as
+    /// [`Self::StringGetByteUnchecked`].
+    ByteSliceGetUnchecked,
     /// `i128::from_i64` — sign-extending constructor used by the
     /// wide-int literal lowering pass.
     I128FromI64,
@@ -365,6 +371,7 @@ impl CompilerItem {
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringGetByteUnchecked,
+        Self::ByteSliceGetUnchecked,
         Self::I128FromI64,
         Self::I128FromPair,
         Self::U128FromU64,
@@ -448,6 +455,7 @@ impl CompilerItem {
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringGetByteUnchecked => "string_get_byte_unchecked",
+            Self::ByteSliceGetUnchecked => "byte_slice_get_unchecked",
             Self::I128FromI64 => "i128_from_i64",
             Self::I128FromPair => "i128_from_pair",
             Self::U128FromU64 => "u128_from_u64",
@@ -503,6 +511,7 @@ impl CompilerItem {
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringGetByteUnchecked
+            | Self::ByteSliceGetUnchecked
             | Self::I128FromI64
             | Self::I128FromPair
             | Self::U128FromU64
@@ -621,6 +630,7 @@ impl CompilerItem {
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringGetByteUnchecked
+            | Self::ByteSliceGetUnchecked
             | Self::I128FromI64
             | Self::I128FromPair
             | Self::U128FromU64

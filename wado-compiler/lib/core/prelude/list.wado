@@ -469,6 +469,15 @@ impl<T: Display> List<T> {
 }
 
 impl List<u8> {
+    /// Returns the byte at `index` without bounds checking.
+    ///
+    /// The caller must guarantee `0 <= index < len()`. Used by the byte-based
+    /// deserializers (`core:json`, `core:json_nsd`) whose scanning loops have
+    /// already range-checked `index`.
+    pub fn get_byte_unchecked(&self, index: i32) -> u8 {
+        return builtin::array_get(&self.repr, index);
+    }
+
     /// Renders the bytes as a lowercase hexadecimal string, two digits per
     /// byte (e.g. `[0x0f, 0xa0]` -> `"0fa0"`).
     pub fn to_hex(&self) -> String {

@@ -48,3 +48,18 @@ test "ByteList inherits List<u8> mutation" {
     assert b[0] == 1;
     assert b.as_byte_slice().len() == 2;
 }
+
+test "ByteList get_byte_unchecked reads raw bytes" {
+    let b: ByteList = [5, 6, 7];
+    assert b.get_byte_unchecked(0) == 5;
+    assert b.get_byte_unchecked(2) == 7;
+}
+
+test "ByteSlice get_byte_unchecked / get_unchecked respect the view offset" {
+    let b: ByteList = [10, 20, 30, 40, 50];
+    let s = b.as_byte_slice().slice(1, 4);
+    assert s.len() == 3;
+    assert s.get_byte_unchecked(0) == 20;
+    assert s.get_byte_unchecked(2) == 40;
+    assert s.get_unchecked(1) == 30;
+}
