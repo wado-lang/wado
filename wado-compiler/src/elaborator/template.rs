@@ -28,7 +28,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `TemplateString`) from the AST + these facts.
         for part in &template.parts {
             if let ast::TemplatePart::Interpolation { expr, .. } = part {
-                let _ = self.resolve_expr(expr, ctx, None);
+                self.resolve_expr(expr, ctx, None);
             }
         }
 

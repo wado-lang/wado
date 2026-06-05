@@ -26,7 +26,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // scope for the optional guard, and `resolve_if_pattern` records
         // their `local_symbols` / `local_types` entries.
         ctx.enter_scope();
-        let _ = self.resolve_if_pattern(&m.pattern, scrutinee_type, ctx, m.span);
+        self.resolve_if_pattern(&m.pattern, scrutinee_type, ctx, m.span);
         if let Some(guard) = &m.guard {
             let body = self.resolve_expr(guard, ctx, Some(TypeTable::BOOL));
             // `expected_type` on `resolve_expr` is only a coercion hint;

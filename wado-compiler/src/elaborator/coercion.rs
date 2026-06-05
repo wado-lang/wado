@@ -319,7 +319,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 super::sem::types::CoercionKind::NullToOption,
                 target_type,
             );
-            let _ = lit;
             return Some(target_type);
         }
 
@@ -348,7 +347,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ) && target_type != base_id;
             if is_string_newtype {
                 // Walk the inner literal / template for fact recording.
-                let _ = self.resolve_expr(expr, ctx, None);
+                self.resolve_expr(expr, ctx, None);
                 self.record_coercion(
                     expr.id(),
                     super::sem::types::CoercionKind::StringNewtype,
@@ -378,7 +377,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if is_fn_newtype {
                 // Walk the closure for fact recording (param types,
                 // captures, body) under the unwrapped fn type.
-                let _ = self.resolve_expr(expr, ctx, Some(base_id));
+                self.resolve_expr(expr, ctx, Some(base_id));
                 self.record_coercion(
                     expr.id(),
                     super::sem::types::CoercionKind::ClosureToFnNewtype,
@@ -514,12 +513,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
 
         let span = expr.span();
-        let string_type = self
-            .tysys
+        // Intern the `String` compiler struct so reify and downstream phases
+        // see the same canonical `TypeId` the elaborator picked. The result is
+        // not otherwise needed here — reify rebuilds the `__kv_lit:` desugar.
+        self.tysys
             .type_table
             .borrow_mut()
             .make_compiler_struct(crate::compiler_item::CompilerItem::String);
-        let i32_type = TypeTable::I32;
 
         // Get type args for monomorphization from builder type
         let builder_base_name = self
@@ -584,10 +584,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Reserve the `__b` builder local on the surrounding scope so
         // subsequent local-index accounting in the enclosing function
-        // matches reify's expansion. The `string_type` / `i32_type`
-        // intern calls above stay live so reify and downstream phases
-        // see the same canonical `TypeId`s the elaborator picked.
-        let _ = (string_type, i32_type);
+        // matches reify's expansion.
         ctx.enter_scope();
         let _builder_index = ctx.add_local("__b".to_string(), builder_type, true, None);
 

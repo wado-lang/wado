@@ -54,7 +54,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Walk the assert message for fact recording too.
         if let Some(msg) = &assert_stmt.message {
-            let _ = self.resolve_expr(msg, ctx, None);
+            self.resolve_expr(msg, ctx, None);
         }
 
         let AssertCaptureContext {

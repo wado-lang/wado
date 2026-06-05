@@ -1215,7 +1215,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 variant_name,
                 variant_qualifier,
                 name_id,
-                name_span,
+                name_span: _,
                 bindings,
                 span,
             } => {
@@ -1259,7 +1259,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // resolved value's kind. A literal body becomes a
                         // `Literal` pattern (switch optimization + exhaustiveness);
                         // anything else is an opaque `ConstantValue`.
-                        let _ = self.resolve_expr(&const_expr, ctx, Some(type_id));
+                        self.resolve_expr(&const_expr, ctx, Some(type_id));
                         if let ast::Expr::Literal(lit) = &const_expr {
                             match &lit.value {
                                 ast::Literal::Number(repr)
@@ -1369,7 +1369,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     case_data.ast_id,
                                 );
                             }
-                            let _ = name_span;
                             return TirPattern::Enum {
                                 enum_type: scrutinee_type,
                                 case_name: normalized_variant_name.to_string(),
@@ -1425,7 +1424,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         case_data.ast_id,
                     );
                 }
-                let _ = name_span;
 
                 // Each variant case has exactly one payload type.
                 // Determine the payload type for the variant case.
