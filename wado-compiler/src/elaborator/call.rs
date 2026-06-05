@@ -7,7 +7,7 @@ use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
-    CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable,
+    FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TypeId, TypeTable,
 };
 
 use super::Elaborator;
@@ -209,28 +209,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(local) = ctx.lookup(&ident.name)
             && let Some(sig) = self.as_fn_signature(local.type_id)
         {
-            let local_index = local.index;
-            let local_type_id = local.type_id;
-
             // `fn mut` closures need a `mut` root binding — mirrors
             // Rust's FnMut rule. The check goes through the same helper
             // used by the indirect-call path below so identifier and
             // non-identifier callees share one code path.
             self.check_fn_mut_root_mutability(&call.callee, ctx, sig.is_mut);
 
-            let local_expr = TirExpr::new(
-                TirExprKind::Local {
-                    index: local_index,
-                    name: ident.name.clone(),
-                },
-                local_type_id,
-                ident.span,
-            );
-
             return self.build_indirect_call(
                 call,
                 ctx,
-                local_expr,
                 &sig.params,
                 sig.return_type,
                 /* pad_with_defaults */ true,
@@ -257,7 +244,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return self.build_indirect_call(
                     call,
                     ctx,
-                    placeholder(callee_type, call.callee.span()),
                     &sig.params,
                     sig.return_type,
                     /* pad_with_defaults */ false,
@@ -640,7 +626,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let prefix_owned = prefix.to_string();
 
                 // Find the case by name
-                if let Some((case_index, case_data)) = case_match {
+                if let Some((_case_index, case_data)) = case_match {
                     self.record_qualified_case(
                         ident,
                         &prefix_owned,
@@ -698,7 +684,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // the combined walk projects only the result type. The
                     // payload was resolved above (and fed variant type-arg
                     // inference) for its fact-recording side effects.
-                    let _ = (case_index, payload);
                     return variant_type;
                 }
                 // If no matching case, check for From<T> synthesis requests
@@ -791,7 +776,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .enumerate()
                             .find(|(_, c)| c.name == method_name)
                             .map(|(i, c)| (i, c.clone()));
-                        if let Some((case_index, case_data)) = case_match {
+                        if let Some((_case_index, case_data)) = case_match {
                             self.record_namespaced_case(
                                 ident,
                                 &variant_info.module_source,
@@ -838,7 +823,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                             // Stage 7-B: reify rebuilds the `VariantConstruct`;
                             // the combined walk projects only the result type.
-                            let _ = (case_index, payload);
                             return variant_type;
                         }
                     }
@@ -896,11 +880,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     let param_is_mut =
                         self.lookup_static_method_param_is_mut(type_name, method_name);
-                    let call_args: Vec<CallArg> = args
-                        .into_iter()
-                        .zip(param_is_mut.iter().copied().chain(std::iter::repeat(false)))
-                        .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
-                        .collect();
 
                     let func_ref = FunctionRef {
                         module_source: struct_module,
@@ -929,9 +908,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Stage 7-B: reify rebuilds the `Call` from the recorded
                     // `static_method_dispatch`; the combined walk projects
-                    // only the result type. `call_args` (resolved above) is
-                    // discarded.
-                    let _ = call_args;
+                    // only the result type.
                     return return_type;
                 }
                 (
@@ -1149,9 +1126,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Stage 7-B: reify rebuilds the `Call` TIR from the recorded
         // `static_method_dispatch` + `generic_instantiations` +
         // `call_param_types` and the resolved args; the combined walk
-        // projects only the result type. `args` was resolved above for its
-        // fact-recording side effects and is now discarded.
-        let _ = (args, type_args);
+        // projects only the result type.
         return_type
     }
 
@@ -1167,7 +1142,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         call: &ast::CallExpr,
         ctx: &mut FunctionContext,
-        callee_expr: TirExpr,
         fn_params: &[TypeId],
         return_type: TypeId,
         pad_with_defaults: bool,
@@ -1208,9 +1182,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Stage 7-B: reify (`reify_call`'s indirect-call branch) rebuilds
         // the `IndirectCall` from the AST — resolving the callee, applying
         // `deref_to_value_static`, and reifying the args — so the combined walk
-        // projects only the result type. `callee_expr` and `args` were
-        // resolved / typechecked above for their fact-recording side effects.
-        let _ = (callee_expr, args);
+        // projects only the result type. The `args` Vec was built above for the
+        // `resolve_expr` / `typecheck` fact-recording side effects.
         return_type
     }
 
@@ -2778,7 +2751,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Stage 7-B: reify rebuilds the `T::method(...)` `Call` from the
             // recorded `static_method_dispatch`; project only the result type.
-            let _ = args;
             return final_return_type;
         }
 

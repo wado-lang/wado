@@ -828,7 +828,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // recorded operand `expression_types`; the combined walk projects
         // only the result type. `left` / `right` were resolved by the
         // caller and typechecked above for their side effects.
-        let _ = (left, right);
         type_id
     }
 
@@ -1012,12 +1011,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         assign: &ast::AssignExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        self.assign_to_target(
-            &assign.target,
-            AssignValue::Ast(&assign.value),
-            assign.span,
-            ctx,
-        )
+        self.assign_to_target(&assign.target, AssignValue::Ast(&assign.value), ctx)
     }
 
     /// Whether an `Index` assignment target reaching `assign_to_target`'s
@@ -1118,7 +1112,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         target_ast: &ast::Expr,
         value: AssignValue<'_>,
-        span: Span,
         ctx: &mut FunctionContext,
     ) -> TypeId {
         // Check for index assignment on custom types: arr[i] = value -> arr.index_assign(i, value)
@@ -1184,13 +1177,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // Check: reject &T/&mut T assigned where non-ref expected
                         self.typecheck(value_type, trait_info.input_type, value_span);
 
-                        let receiver = self.adjust_receiver_for_self_kind(
-                            placeholder(indexed_type, index_expr.expr.span()),
-                            trait_info.self_kind,
-                            false,
-                            span,
-                        );
-
                         // Get the mangled method name: StructName^IndexAssign<IndexType>::index_assign
                         let mangled_method_name = MethodName::format_local(
                             &lookup_name,
@@ -1228,10 +1214,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                         // Stage 7-B: reify rebuilds `arr.index_assign(idx,
                         // value)` from the recorded `index_assign_dispatch` +
-                        // AST; project only the (unit) result type. `receiver`
-                        // / `index_resolved` / `value_tir` were resolved above
-                        // for their fact-recording side effects.
-                        let _ = (receiver, index_type, value_type);
+                        // AST; project only the (unit) result type. `index_type`
+                        // / `value_type` were resolved above for their
+                        // fact-recording side effects.
                         return TypeTable::UNIT;
                     }
                 }
@@ -1275,7 +1260,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // reify rebuilds the `GlobalVarSet` from the AST; project the
             // (unit) result type.
-            let _ = value_type;
             return TypeTable::UNIT;
         }
 
@@ -1337,7 +1321,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // target / value types; project only the (unit) result type. The
         // target + value were resolved above for their side effects, and the
         // l-value validation / global-mutability checks already ran.
-        let _ = (target_type, value_type);
         TypeTable::UNIT
     }
 
@@ -1395,7 +1378,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_id: combined,
                 span: compound.span,
             },
-            compound.span,
             ctx,
         )
     }
@@ -1497,7 +1479,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // result type. The operand resolutions, middle-binding local
         // allocations, and per-comparison dispatch above ran for their
         // fact-recording side effects.
-        let _ = acc_tir;
         TypeTable::BOOL
     }
 
@@ -1635,7 +1616,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `self_kind`, arg `&`-wrapping via `arg_ref_wraps`) + the AST; the
         // combined walk projects only the result type. `receiver` and
         // `args` were resolved / typechecked above for their side effects.
-        let _ = (receiver, args);
         placeholder(resolved.return_type, span)
     }
 
