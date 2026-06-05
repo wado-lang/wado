@@ -474,18 +474,103 @@ impl ResolvedType {
     }
 }
 
+/// A dense map from [`TypeId`] to `V`, backed by a `Vec` indexed by
+/// `TypeId.0`.
+///
+/// `TypeId`s are dense and sequential — [`TypeTable::intern`] only ever
+/// hands out [`TypeMap::next_id`] — so a `Vec` replaces what would
+/// otherwise be a `TypeId`-keyed hash map and every access becomes a
+/// hash-free array index. This matters because [`TypeTable::get`] is the
+/// single hottest accessor in the compiler.
+///
+/// The newtype keeps the storage **type-safe**: callers index by `TypeId`
+/// (never a bare `usize`), so an unrelated integer or the wrong table
+/// cannot be passed by mistake, and the lone `TypeId`→`usize` conversion
+/// lives here. Absent / erased entries are `None`; [`TypeMap::retain`]
+/// punches holes rather than renumbering, so surviving `TypeId`s keep
+/// their indices.
+#[derive(Debug, Clone)]
+struct TypeMap<V> {
+    slots: Vec<Option<V>>,
+}
+
+impl<V> Default for TypeMap<V> {
+    fn default() -> Self {
+        Self { slots: Vec::new() }
+    }
+}
+
+impl<V> TypeMap<V> {
+    /// Number of slots allocated (including erased holes). Because the map
+    /// is dense, this is also the `TypeId` space currently in use.
+    fn len(&self) -> usize {
+        self.slots.len()
+    }
+
+    /// The `TypeId` the next [`Self::push`] will occupy.
+    fn next_id(&self) -> TypeId {
+        TypeId(self.slots.len() as u32)
+    }
+
+    /// Live value at `id`, or `None` if absent, erased, or out of range.
+    fn get(&self, id: TypeId) -> Option<&V> {
+        self.slots.get(id.0 as usize).and_then(Option::as_ref)
+    }
+
+    /// Append a value at the next dense `TypeId` (== [`Self::next_id`]).
+    fn push(&mut self, value: V) {
+        self.slots.push(Some(value));
+    }
+
+    /// Set `id`'s value in place; `id` must already be in range.
+    fn replace(&mut self, id: TypeId, value: V) {
+        self.slots[id.0 as usize] = Some(value);
+    }
+
+    /// Set `id`'s value, growing the backing storage with empty slots as
+    /// needed. Used for sparse maps such as erasure redirects.
+    fn set_growing(&mut self, id: TypeId, value: V) {
+        let idx = id.0 as usize;
+        if idx >= self.slots.len() {
+            self.slots.resize_with(idx + 1, || None);
+        }
+        self.slots[idx] = Some(value);
+    }
+
+    /// Drop every live slot for which `keep(id, &value)` returns false.
+    fn retain(&mut self, mut keep: impl FnMut(TypeId, &V) -> bool) {
+        for (i, slot) in self.slots.iter_mut().enumerate() {
+            if let Some(value) = slot
+                && !keep(TypeId(i as u32), value)
+            {
+                *slot = None;
+            }
+        }
+    }
+
+    /// Iterate live `(TypeId, &value)` pairs, skipping erased holes.
+    fn iter(&self) -> impl Iterator<Item = (TypeId, &V)> {
+        self.slots
+            .iter()
+            .enumerate()
+            .filter_map(|(i, slot)| slot.as_ref().map(|v| (TypeId(i as u32), v)))
+    }
+
+    /// Iterate the `TypeId`s of every live slot.
+    fn ids(&self) -> impl Iterator<Item = TypeId> + '_ {
+        self.slots
+            .iter()
+            .enumerate()
+            .filter_map(|(i, slot)| slot.as_ref().map(|_| TypeId(i as u32)))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TypeTable {
-    /// `TypeId` → `ResolvedType`, indexed directly by the dense, sequential
-    /// `TypeId.0`. `intern` only ever hands out `TypeId(next_id)` and bumps
-    /// `next_id`, so this stays dense (`types.len() == next_id`) and a plain
-    /// `Vec` replaces what was a `TypeId`-keyed hash map — `get` is the
-    /// single hottest accessor in the compiler, and an array index avoids
-    /// hashing on every type read. `retain` punches holes (`None`) rather
-    /// than renumbering, so surviving `TypeId`s keep their indices.
-    types: Vec<Option<ResolvedType>>,
+    /// `TypeId` → `ResolvedType`. See [`TypeMap`]; `get` reads this on
+    /// essentially every type query, so it is a hash-free `Vec` index.
+    types: TypeMap<ResolvedType>,
     intern_map: IndexMap<ResolvedType, TypeId>,
-    next_id: u32,
     /// Registry of stdlib items the compiler is allowed to reference
     /// (Box, Option, Default, `push_str`, …). Populated during the
     /// annotate pass from `#[compiler_item("...")]` attributes; see
@@ -504,11 +589,10 @@ pub struct TypeTable {
     /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
     /// Newtype → ultimate base type; Flags → u32.
     ///
-    /// Indexed by `TypeId.0` like [`Self::types`]; `Some(target)` is a live
-    /// redirect, `None` (or out-of-range) means "no redirect". Most types are
-    /// not erased, so this stays sparse but the index is still O(1) and
-    /// hash-free, which matters because `get` consults it on every call.
-    redirects: Vec<Option<TypeId>>,
+    /// A sparse [`TypeMap`] (most types are not erased): `Some(target)` is a
+    /// live redirect, an absent slot means "no redirect". `get` consults it
+    /// on every call, so the hash-free index matters here too.
+    redirects: TypeMap<TypeId>,
     /// Maps newtype names to their ultimate base type name.
     /// Populated by `erase_newtypes_and_flags()` and used by `wir_build` for name-based newtype resolution.
     newtype_to_base_name: IndexMap<String, String>,
@@ -594,13 +678,12 @@ impl TypeTable {
 
     pub fn new() -> Self {
         let mut table = Self {
-            types: Vec::new(),
+            types: TypeMap::default(),
             intern_map: IndexMap::default(),
-            next_id: 0,
             compiler_items: crate::compiler_item::CompilerItems::new(),
             assoc_type_resolutions: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
-            redirects: Vec::new(),
+            redirects: TypeMap::default(),
             newtype_to_base_name: IndexMap::default(),
             box_payload_types: IndexMap::default(),
             struct_name_index: IndexMap::default(),
@@ -637,8 +720,7 @@ impl TypeTable {
         if let Some(&id) = self.intern_map.get(&ty) {
             return id;
         }
-        let id = TypeId(self.next_id);
-        self.next_id += 1;
+        let id = self.types.next_id();
         // Update struct name index for O(1) lookups by (name, module_source)
         if let ResolvedType::Struct {
             ref name,
@@ -649,23 +731,15 @@ impl TypeTable {
             self.struct_name_index
                 .insert((name.clone(), module_source.clone()), id);
         }
-        // `types` stays dense: `id.0 == next_id == types.len()` here.
-        debug_assert_eq!(self.types.len(), id.0 as usize);
-        self.types.push(Some(ty.clone()));
+        self.types.push(ty.clone());
         self.intern_map.insert(ty, id);
         id
     }
 
     pub fn get(&self, id: TypeId) -> &ResolvedType {
-        let id = self
-            .redirects
-            .get(id.0 as usize)
-            .copied()
-            .flatten()
-            .unwrap_or(id);
+        let id = self.redirects.get(id).copied().unwrap_or(id);
         self.types
-            .get(id.0 as usize)
-            .and_then(Option::as_ref)
+            .get(id)
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
@@ -680,10 +754,7 @@ impl TypeTable {
     /// Iterate over all live types in the type table. Erased slots (`None`,
     /// produced by [`Self::retain`]) are skipped.
     pub fn all_types(&self) -> impl Iterator<Item = (TypeId, &ResolvedType)> {
-        self.types
-            .iter()
-            .enumerate()
-            .filter_map(|(i, slot)| slot.as_ref().map(|ty| (TypeId(i as u32), ty)))
+        self.types.iter()
     }
 
     pub fn is_integer(&self, id: TypeId) -> bool {
@@ -729,10 +800,7 @@ impl TypeTable {
 
     /// Iterate over all live type IDs in the table. Erased slots are skipped.
     pub fn iter_type_ids(&self) -> impl Iterator<Item = TypeId> + '_ {
-        self.types
-            .iter()
-            .enumerate()
-            .filter_map(|(i, slot)| slot.as_ref().map(|_| TypeId(i as u32)))
+        self.types.ids()
     }
 
     /// Look up a struct `TypeId` by its name and module source.
@@ -865,27 +933,18 @@ impl TypeTable {
         // result lives at a different id must keep that target alive too.
         let mut effective_keep: IndexSet<TypeId> = keep.clone();
         for &id in keep {
-            if let Some(target) = self.redirects.get(id.0 as usize).copied().flatten() {
+            if let Some(&target) = self.redirects.get(id) {
                 effective_keep.insert(target);
             }
         }
 
-        // Punch holes (`None`) for dropped ids; `TypeId`s are never renumbered,
-        // so surviving entries keep their indices.
-        for (i, slot) in self.types.iter_mut().enumerate() {
-            if !effective_keep.contains(&TypeId(i as u32)) {
-                *slot = None;
-            }
-        }
+        // Punch holes for dropped ids; `TypeId`s are never renumbered, so
+        // surviving entries keep their indices.
+        self.types.retain(|id, _| effective_keep.contains(&id));
         // A redirect entry is meaningful only when both endpoints survive.
-        for (i, slot) in self.redirects.iter_mut().enumerate() {
-            if let Some(target) = *slot
-                && !(effective_keep.contains(&TypeId(i as u32))
-                    && effective_keep.contains(&target))
-            {
-                *slot = None;
-            }
-        }
+        self.redirects.retain(|id, &target| {
+            effective_keep.contains(&id) && effective_keep.contains(&target)
+        });
         // Retain SymbolKey indices to surviving TypeIds only.
         self.symbol_by_type
             .retain(|id, _| effective_keep.contains(id));
@@ -894,9 +953,7 @@ impl TypeTable {
         // Rebuild intern map from the surviving entries.
         self.intern_map.clear();
         self.struct_name_index.clear();
-        for (i, slot) in self.types.iter().enumerate() {
-            let Some(ty) = slot else { continue };
-            let id = TypeId(i as u32);
+        for (id, ty) in self.types.iter() {
             self.intern_map.insert(ty.clone(), id);
             if let ResolvedType::Struct {
                 name,
@@ -1354,13 +1411,13 @@ impl TypeTable {
     /// Used by the boxing lowering pass to rewrite `Ref(primitive)` → `Struct(Box<T>)`.
     /// Removes the old type from the intern map so it won't be found by future `intern()` calls.
     pub fn replace_type(&mut self, id: TypeId, new_ty: ResolvedType) {
-        if let Some(old_ty) = self.types.get(id.0 as usize).and_then(Option::as_ref).cloned() {
+        if let Some(old_ty) = self.types.get(id).cloned() {
             // Only remove from intern_map if this TypeId was the canonical one
             if self.intern_map.get(&old_ty) == Some(&id) {
                 self.intern_map.shift_remove(&old_ty);
             }
         }
-        self.types[id.0 as usize] = Some(new_ty);
+        self.types.replace(id, new_ty);
     }
 
     /// Check if a type is a primitive (including following newtypes).
@@ -1806,33 +1863,21 @@ impl TypeTable {
     pub fn erase_newtypes_and_flags(&mut self) {
         let ids: Vec<TypeId> = self.iter_type_ids().collect();
         for id in ids {
-            let redirect = match self.types[id.0 as usize].as_ref().unwrap() {
+            let redirect = match self.types.get(id).unwrap() {
                 ResolvedType::Newtype { .. } => Some(self.get_ultimate_base_type(id)),
                 ResolvedType::Flags { .. } => Some(TypeTable::U32),
                 _ => None,
             };
             if let Some(target) = redirect {
-                self.set_redirect(id, target);
+                self.redirects.set_growing(id, target);
                 // Populate name map for Newtype entries (used by wir_build for name-based lookup)
-                if let Some(ResolvedType::Newtype { name, .. }) =
-                    self.types[id.0 as usize].as_ref()
-                {
+                if let Some(ResolvedType::Newtype { name, .. }) = self.types.get(id) {
                     let name = name.clone();
                     let base_name = self.type_name(target);
                     self.newtype_to_base_name.insert(name, base_name);
                 }
             }
         }
-    }
-
-    /// Record `id`'s erasure redirect, growing the sparse `redirects` vector
-    /// to cover `id` as needed.
-    fn set_redirect(&mut self, id: TypeId, target: TypeId) {
-        let idx = id.0 as usize;
-        if idx >= self.redirects.len() {
-            self.redirects.resize(idx + 1, None);
-        }
-        self.redirects[idx] = Some(target);
     }
 
     /// Get the base type if this is a newtype, or None otherwise
@@ -1849,25 +1894,19 @@ impl TypeTable {
     /// Returns the original type if it's not a newtype or flags.
     pub fn get_ultimate_base_type(&self, id: TypeId) -> TypeId {
         // Fast path: after erasure, redirects always point directly to the ultimate base.
-        if let Some(redirect) = self.redirects.get(id.0 as usize).copied().flatten() {
+        if let Some(&redirect) = self.redirects.get(id) {
             return redirect;
         }
         let mut current = id;
         loop {
             match self
                 .types
-                .get(current.0 as usize)
-                .and_then(Option::as_ref)
+                .get(current)
                 .unwrap_or_else(|| panic!("TypeId {current:?} not found in TypeTable"))
             {
                 ResolvedType::Newtype { base_type, .. } => {
                     // Use redirect if already computed; otherwise follow the raw chain.
-                    current = self
-                        .redirects
-                        .get(base_type.0 as usize)
-                        .copied()
-                        .flatten()
-                        .unwrap_or(*base_type);
+                    current = self.redirects.get(*base_type).copied().unwrap_or(*base_type);
                 }
                 ResolvedType::Flags { .. } => return TypeTable::U32,
                 _ => return current,
@@ -2038,24 +2077,18 @@ impl TypeTable {
     #[must_use]
     pub fn resolve_newtype_base(&self, id: TypeId) -> TypeId {
         // Fast path: after erasure, redirects already point to the base.
-        if let Some(redirect) = self.redirects.get(id.0 as usize).copied().flatten() {
+        if let Some(&redirect) = self.redirects.get(id) {
             return redirect;
         }
         let mut current = id;
         loop {
             match self
                 .types
-                .get(current.0 as usize)
-                .and_then(Option::as_ref)
+                .get(current)
                 .unwrap_or_else(|| panic!("TypeId {current:?} not found in TypeTable"))
             {
                 ResolvedType::Newtype { base_type, .. } => {
-                    current = self
-                        .redirects
-                        .get(base_type.0 as usize)
-                        .copied()
-                        .flatten()
-                        .unwrap_or(*base_type);
+                    current = self.redirects.get(*base_type).copied().unwrap_or(*base_type);
                 }
                 ResolvedType::Flags { .. } => return TypeTable::U32,
                 _ => return current,
