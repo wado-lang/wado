@@ -421,22 +421,30 @@ already share code.
 
 ## TODO
 
+The groundwork below is complete; the `core:cbor` encoder/decoder and its
+tags/tests remain (the format itself, a follow-up).
+
 - [x] Vendor RFC 8949 at `wado-compiler/ref/rfc8949.txt`
-- [ ] prelude: `AsByteSlice` trait — new, since Wado has only `From`/`TryFrom`
-      today
-- [ ] prelude: `ByteArray`/`ByteList`/`ByteSlice` newtypes and their
+- [x] prelude: `AsByteSlice` trait — new, since Wado has only `From`/`TryFrom`
+      today (also impl'd for `String`, so `from_bytes("...")` accepts a literal)
+- [x] prelude: `ByteArray`/`ByteList`/`ByteSlice` newtypes and their
       `AsByteSlice` and `Serialize`/`Deserialize` impls
-- [ ] serde: `serialize_bytes`/`deserialize_bytes`; `visit_i64`/`u64`/`i128`/
+- [x] serde: `serialize_bytes`/`deserialize_bytes`; `visit_i64`/`u64`/`i128`/
       `u128`/`bytes`/`unknown` with defaults; `FieldSchema::lookup(ByteSlice)`
-- [ ] compiler: emit the new `lookup` signature from the struct-deserialize
-      synthesizer
-- [ ] `core:json`/`core:json_nsd`: `ByteList` input, bytes-only API
-      (`to_bytes`/`to_bytes_canonical`/`to_bytes_pretty`/`from_bytes`);
-      `core:router` follows
-- [ ] `core:value` (replacing `core:json_value`)
+- [x] compiler: emit the new `lookup` signature from the struct-deserialize
+      synthesizer (reads the key via the generic `ArraySlice<u8>` ops,
+      monomorphized at `u8`)
+- [x] `core:json`/`core:json_nsd`: bytes-primary API
+      (`from_bytes`/`to_bytes`/`to_bytes_pretty`/`to_bytes_canonical`); the
+      deserializer scans a borrowed `ByteSlice` (zero-copy, UTF-8 validation
+      localized to string tokens); `core:router` shares the bytes `FieldSchema`.
+      The string entries (`from_string`/`to_string`/`to_string_pretty`) are kept
+      as thin convenience wrappers rather than removed.
+- [x] `core:value` (replacing `core:json_value`)
+- [x] `to_bytes_canonical` for JSON (sorted keys, RFC 8785-style)
 - [ ] `core:cbor` encoder (preferred serialization)
 - [ ] `core:cbor` decoder (variation-tolerant, definite + indefinite)
-- [ ] `to_bytes_canonical` (sorted keys, shortest forms)
+- [ ] `to_bytes_canonical` for CBOR (sorted keys, shortest forms)
 - [ ] tags: bignum (2/3); date/time (0/1) via `core:temporal`
 - [ ] tests: RFC 8949 Appendix A vectors, round-trip, canonical determinism,
       well-formedness/Appendix F rejection, security limits

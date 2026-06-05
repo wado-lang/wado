@@ -21,13 +21,23 @@ let val: Result<Point, DeserializeError> = from_string("[1,2]"); // Ok(Point { x
 
 ## Functions
 
+### `pub fn to_bytes<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError>`
+
+Serializes a value to UTF-8 JSON NSD bytes — the primary entry point.
+
 ### `pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError>`
 
-Serializes a value to a JSON NSD string.
+Serializes a value to a JSON NSD string. Convenience over `to_bytes` for
+text contexts; serde I/O is bytes-primary.
 
 ### `pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError>`
 
 Deserializes a value from a JSON NSD string.
+
+### `pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S) -> Result<T, DeserializeError>`
+
+Deserializes a value from UTF-8 JSON NSD bytes — the primary entry point.
+Accepts any byte source via `AsByteSlice` (including a `String`).
 
 ## Structs
 
