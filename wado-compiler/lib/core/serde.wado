@@ -654,6 +654,16 @@ impl Deserialize for ByteList {
     }
 }
 
+// Owned, fixed-length byte buffer. Deserializes from a byte string into an
+// `Array<u8>` whose length is the decoded byte count (a fixed-length array's
+// length is a runtime value, so there is no compile-time length to enforce).
+impl Deserialize for ByteArray {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<ByteArray, DeserializeError> {
+        let bytes = d.deserialize_bytes()?;
+        return Result::Ok(bytes.as_slice().to_array() as ByteArray);
+    }
+}
+
 impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Result<T, E>, DeserializeError> {
         let va = d.begin_variant(&"Result", 2)?;

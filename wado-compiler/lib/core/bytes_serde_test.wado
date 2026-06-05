@@ -45,3 +45,39 @@ test "empty ByteList serializes as an empty JSON string" {
     let b: ByteList = [];
     assert ser(&b) == `""`;
 }
+
+test "ByteSlice serializes as a base64url string" {
+    let b: ByteList = [1, 2, 3];
+    let sl = b.as_byte_slice();
+    let s = match to_string::<ByteSlice>(&sl) {
+        Ok(v) => v,
+        Err(_) => {
+            panic("serialize failed");
+        },
+    };
+    assert s == `"AQID"`;
+}
+
+test "ByteArray serializes as base64 and round-trips through JSON" {
+    let tmp: Array<u8> = Array::filled(3, 0);
+    let mut a: ByteArray = tmp as ByteArray;
+    a.set(0, 1);
+    a.set(1, 2);
+    a.set(2, 3);
+    let s = match to_string::<ByteArray>(&a) {
+        Ok(v) => v,
+        Err(_) => {
+            panic("serialize failed");
+        },
+    };
+    assert s == `"AQID"`;
+    let back = match from_string::<ByteArray>(s) {
+        Ok(v) => v,
+        Err(_) => {
+            panic("deserialize failed");
+        },
+    };
+    assert back.len() == 3;
+    assert back.get(0) == 1;
+    assert back.get(2) == 3;
+}
