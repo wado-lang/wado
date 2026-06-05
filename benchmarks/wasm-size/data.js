@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780613349877,
+  "lastUpdate": 1780618876883,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29845,6 +29845,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f493160e2f99a0dd4f51b9bd9801912779be7ed1"
         },
         "date": 1780613349357,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9659,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17191,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460509,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b3f0f5a9d0f720ae8c123ddaad6436c8a0929e1b",
+          "message": "Merge pull request #1294 from wado-lang/claude/unlikely-branch-cost-ey5Xj\n\nAdd builtin::cold_path branch-hint intrinsic",
+          "timestamp": "2026-06-05T09:11:26+09:00",
+          "tree_id": "d25796259275ba880a1abfb6bc6d2c4d7e005120",
+          "url": "https://github.com/wado-lang/wado/commit/b3f0f5a9d0f720ae8c123ddaad6436c8a0929e1b"
+        },
+        "date": 1780618876694,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
