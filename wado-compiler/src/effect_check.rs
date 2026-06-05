@@ -14,7 +14,7 @@ use crate::logger::{Bail, Logger};
 use crate::module_source::ModuleSource;
 use crate::tir::{
     CallArg, EffectRef, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirModule, TirStmt, TirStmtKind, TirTemplatePart, TypeId, TypeTable,
+    TirModule, TirStmt, TirStmtKind, TirTemplatePart, TypeId, TypeSet, TypeTable,
 };
 use crate::token::Span;
 use std::cell::RefCell;
@@ -350,7 +350,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             return out;
         };
         let tt = tt_rc.borrow();
-        let mut visited: IndexSet<TypeId> = IndexSet::default();
+        let mut visited = TypeSet::default();
         for p in &func.params {
             collect_resource_refs(
                 p.type_id,
@@ -1355,7 +1355,7 @@ fn build_propagation_closure(
                         struct_fields,
                         variant_payloads,
                         &mut refs,
-                        &mut IndexSet::default(),
+                        &mut TypeSet::default(),
                     );
                 }
                 collect_resource_refs(
@@ -1364,7 +1364,7 @@ fn build_propagation_closure(
                     struct_fields,
                     variant_payloads,
                     &mut refs,
-                    &mut IndexSet::default(),
+                    &mut TypeSet::default(),
                 );
             }
             // Do not include the effect itself (effects are not resources).
@@ -1384,7 +1384,7 @@ fn build_propagation_closure(
                         struct_fields,
                         variant_payloads,
                         &mut refs,
-                        &mut IndexSet::default(),
+                        &mut TypeSet::default(),
                     );
                 }
                 collect_resource_refs(
@@ -1393,7 +1393,7 @@ fn build_propagation_closure(
                     struct_fields,
                     variant_payloads,
                     &mut refs,
-                    &mut IndexSet::default(),
+                    &mut TypeSet::default(),
                 );
             }
             // Drop the self-reference: holding `with R` already implies `R`.
@@ -1454,7 +1454,7 @@ fn collect_resource_refs(
     struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
     variant_payloads: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
     out: &mut IndexSet<EffectRef>,
-    visited: &mut IndexSet<TypeId>,
+    visited: &mut TypeSet,
 ) {
     if !visited.insert(type_id) {
         return;

@@ -720,10 +720,15 @@ struct AnalysisGraph {
 /// walks collapsed into one.
 fn build_analysis_graph(project: &NirPackage) -> AnalysisGraph {
     let n = project.functions.len();
-    let mut call_graph: CallGraph = IndexMap::default();
+    // `call_graph` and `func_positions` get exactly one entry per function,
+    // so size them up front to avoid the incremental rehashing that an
+    // empty map would do as the whole program is walked.
+    let mut call_graph: CallGraph =
+        IndexMap::with_capacity_and_hasher(n, rustc_hash::FxBuildHasher);
     let mut effect_usage: EffectUsageMap = IndexMap::default();
     let mut pending_inspects: PendingInspectsByCaller = IndexMap::default();
-    let mut func_positions: FuncPositions = IndexMap::default();
+    let mut func_positions: FuncPositions =
+        IndexMap::with_capacity_and_hasher(n, rustc_hash::FxBuildHasher);
     let mut per_func_globals: Vec<IndexSet<(String, String)>> = Vec::with_capacity(n);
     let mut per_func_types: Vec<IndexSet<TypeId>> = Vec::with_capacity(n);
 

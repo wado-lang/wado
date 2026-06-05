@@ -358,6 +358,66 @@ pub const DEFAULT_STEP_BUDGET: u32 = 1000;
 // Field knowledge
 // ──────────────────────────────────────────────────────────────────────────────
 
+/// A dense set of local indices, backed by a bitset indexed by the local
+/// index itself.
+///
+/// Local indices within a function body are dense (`0..locals.len()`), so
+/// this replaces an `IndexSet<u32>` used purely for membership with a
+/// hash-free bitset — the same idea as [`crate::tir::TypeSet`]. The alias
+/// analysis rebuilds these sets for every function on every const-fold
+/// iteration, so dropping the per-grow allocation + hashing of an
+/// `IndexSet` is worthwhile.
+#[derive(Default, Clone, Debug)]
+pub struct LocalSet {
+    words: Vec<u64>,
+}
+
+impl LocalSet {
+    /// An empty set pre-sized to hold `locals` indices without regrowing.
+    #[must_use]
+    pub fn with_capacity(locals: usize) -> Self {
+        Self {
+            words: vec![0; locals.div_ceil(64)],
+        }
+    }
+
+    fn slot(index: u32) -> (usize, u64) {
+        ((index / 64) as usize, 1u64 << (index % 64))
+    }
+
+    /// Insert `index`, returning `true` if it was not already present.
+    pub fn insert(&mut self, index: u32) -> bool {
+        let (word, mask) = Self::slot(index);
+        if word >= self.words.len() {
+            self.words.resize(word + 1, 0);
+        }
+        let newly = self.words[word] & mask == 0;
+        self.words[word] |= mask;
+        newly
+    }
+
+    /// Whether `index` is a member.
+    #[must_use]
+    pub fn contains(&self, index: u32) -> bool {
+        let (word, mask) = Self::slot(index);
+        self.words.get(word).is_some_and(|w| w & mask != 0)
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.words.iter().all(|&w| w == 0)
+    }
+
+    /// Iterate members in ascending index order.
+    pub fn iter(&self) -> impl Iterator<Item = u32> + '_ {
+        self.words.iter().enumerate().flat_map(|(wi, &word)| {
+            (0..64u32)
+                .filter(move |&b| word & (1u64 << b) != 0)
+                .map(move |b| wi as u32 * 64 + b)
+        })
+    }
+}
+
 /// Per-function alias / aliasing-trackability annotations consumed by
 /// the interpreter's field-knowledge bookkeeping.
 ///
@@ -384,8 +444,8 @@ pub const DEFAULT_STEP_BUDGET: u32 = 1000;
 ///   alias.
 #[derive(Default, Clone, Debug)]
 pub struct AliasInfo {
-    pub aliased: IndexSet<u32>,
-    pub untrackable: IndexSet<u32>,
+    pub aliased: LocalSet,
+    pub untrackable: LocalSet,
     pub alias_groups: IndexMap<u32, IndexSet<u32>>,
 }
 
@@ -830,7 +890,7 @@ impl<'a> Interpreter<'a> {
     /// condition that, after the constructor runs, has to invalidate
     /// every aliased local's recorded fields.
     #[must_use]
-    pub fn aliased_locals(&self) -> &IndexSet<u32> {
+    pub fn aliased_locals(&self) -> &LocalSet {
         &self.alias_info.aliased
     }
 
@@ -872,7 +932,7 @@ impl<'a> Interpreter<'a> {
     /// [`expr_to_lattice`]: Self::expr_to_lattice
     /// [`reduce_local`]: Self::reduce_local
     pub fn bind_field(&mut self, local_index: u32, field_name: &str, value: Value) {
-        if self.alias_info.untrackable.contains(&local_index) {
+        if self.alias_info.untrackable.contains(local_index) {
             return;
         }
         self.field_env
@@ -925,8 +985,8 @@ impl<'a> Interpreter<'a> {
         if self.alias_info.aliased.is_empty() || self.field_env.is_empty() {
             return;
         }
-        for idx in &self.alias_info.aliased {
-            self.field_env.swap_remove(idx);
+        for idx in self.alias_info.aliased.iter() {
+            self.field_env.swap_remove(&idx);
         }
     }
 
@@ -944,7 +1004,7 @@ impl<'a> Interpreter<'a> {
     /// present on `src` are overwritten with `src`'s values (src
     /// wins); fields present only on `dst` are preserved.
     pub fn copy_fields_from(&mut self, src: u32, dst: u32) {
-        if src == dst || self.alias_info.untrackable.contains(&dst) {
+        if src == dst || self.alias_info.untrackable.contains(dst) {
             return;
         }
         // Collect from a *borrowed* `src` map into a flat Vec so the
