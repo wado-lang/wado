@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780699006154,
+  "lastUpdate": 1780700807039,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30285,6 +30285,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/de7067ce5ef607b2624068507b19391e1db7a0c9"
         },
         "date": 1780699005824,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1767,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8808,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16711,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 456413,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1194f10083642454a0d6eb6c628cef985f147fce",
+          "message": "Merge pull request #1306 from wado-lang/claude/cross-module-struct-literal-PT0nv\n\ncompiler: fix cross-module struct-literal default synthesis (#1263)",
+          "timestamp": "2026-06-06T07:55:55+09:00",
+          "tree_id": "559b53424df1d149a2498bb3bb21c6132e304507",
+          "url": "https://github.com/wado-lang/wado/commit/1194f10083642454a0d6eb6c628cef985f147fce"
+        },
+        "date": 1780700806698,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
