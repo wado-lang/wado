@@ -18,13 +18,27 @@ test "ByteSlice as_byte_slice is identity" {
     assert s2[3] == 40;
 }
 
-// NOTE: `ByteArray` (a newtype of the compiler-item `Array<u8>`) is defined in
-// the prelude, but calling an inherited method on such a value currently hits a
-// codegen bug (`wir_build` does not push `self` for methods dispatched through a
-// newtype whose ultimate base is `BuiltinArray`), producing invalid Wasm. A
-// `ByteArray` method-call test is intentionally omitted until that bug is fixed.
-// `ByteList`/`ByteSlice` (newtypes of the `List`/`ArraySlice` structs) are
-// unaffected.
+test "ByteArray construction, mutation, and as_byte_slice view" {
+    let tmp: Array<u8> = Array::filled(3, 0);
+    let mut a: ByteArray = tmp as ByteArray;
+    a.set(0, 7);
+    a.set(2, 9);
+    assert a.len() == 3;
+    assert a.get(0) == 7;
+    let s = a.as_byte_slice();
+    assert s.len() == 3;
+    assert s[0] == 7;
+    assert s[2] == 9;
+}
+
+test "Array range indexing yields a slice" {
+    let a: Array<i32> = Array::filled(5, 7);
+    let s = a[1..<4];
+    assert s.len() == 3;
+    assert s[0] == 7;
+    let s2 = a[1..=3];
+    assert s2.len() == 3;
+}
 
 test "ByteList inherits List<u8> mutation" {
     let mut b: ByteList = [];
