@@ -123,20 +123,11 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         .iter()
         .filter(|g| g.name.starts_with("__const_obj_"))
         .count();
-<<<<<<< HEAD
-    for (offset, cand) in candidates.into_iter().enumerate() {
-        let name = format!("__const_obj_{}", base + offset);
-||||||| 02dfcc5b
-    for cand in candidates {
-        let name = format!("__const_obj_{counter}");
-        counter += 1;
-=======
     // Number continues after any existing `__const_obj_` globals (a 0-based
     // counter would collide names — see above). Zipping a counting range keeps
     // that base offset without an explicit mutable loop counter.
     for (n, cand) in (base..).zip(candidates) {
         let name = format!("__const_obj_{n}");
->>>>>>> origin/main
 
         let mut func = project.functions[cand.func_idx].borrow_mut();
         let body = func.body.as_mut().expect("candidate function has a body");
