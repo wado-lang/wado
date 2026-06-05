@@ -75,6 +75,18 @@
         flex-wrap: wrap;
         width: 100%;
       }
+      .benchmark-graph {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+      .benchmark-graph-title {
+        font-size: 18px;
+        font-weight: 600;
+        text-align: center;
+        margin: 8px 0;
+        word-break: break-word;
+      }
       .benchmark-scroller {
         width: 100%;
         overflow-x: auto;
@@ -193,11 +205,23 @@
         const PX_PER_POINT = 16;
 
         function renderCombinedGraph(parent, baseName, optLevelMap) {
+          // Column wrapper so the fixed title sits above the scrollable chart.
+          const graph = document.createElement('div');
+          graph.className = 'benchmark-graph';
+          parent.appendChild(graph);
+
+          // Title lives outside the scroller, so it stays fixed while only the
+          // chart area scrolls horizontally.
+          const title = document.createElement('div');
+          title.className = 'benchmark-graph-title';
+          title.textContent = baseName;
+          graph.appendChild(title);
+
           // Scroll container: keeps the chart within the page width but lets
           // the user scroll horizontally when there are many commits.
           const scroller = document.createElement('div');
           scroller.className = 'benchmark-scroller';
-          parent.appendChild(scroller);
+          graph.appendChild(scroller);
 
           const canvasBox = document.createElement('div');
           canvasBox.className = 'benchmark-canvas-box';
@@ -270,9 +294,7 @@
               responsive: true,
               maintainAspectRatio: false,
               title: {
-                display: true,
-                text: baseName,
-                fontSize: 18,
+                display: false,
               },
               scales: {
                 xAxes: [{
