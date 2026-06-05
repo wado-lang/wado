@@ -51,7 +51,7 @@ test "smoke" {
 
 export fn run() with Stdout, MonotonicClock, Preopens {
     let data = read_file_bytes("json_twitter/twitter.json");
-    let mut b = Benchmark::new("zlib");
+    let mut b = Benchmark { name: "zlib" };
     b.input_size = Option::Some(data.len());
 
     let compressed = b.run("compress", || zlib_compress(&data));

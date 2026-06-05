@@ -148,7 +148,7 @@ fn parse_counts(json_data: String) -> CatalogCounts {
 
 export fn run() with Stdout, MonotonicClock, Preopens {
     let json_data = read_file("json_catalog/citm_catalog.json");
-    let mut b = Benchmark::new("json-catalog");
+    let mut b = Benchmark { name: "json-catalog" };
     b.input_size = Option::Some(json_data.len());
 
     let counts = b.run("", || parse_counts(json_data));

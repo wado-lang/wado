@@ -20,7 +20,7 @@
 //! test "benchmark" { run(); }
 //!
 //! export fn run() with Stdout, MonotonicClock {
-//!     let mut b = Benchmark::new("count-prime");
+//!     let mut b = Benchmark { name: "count-prime" };
 //!     b.work_per_iter = Option::Some(10_000_000.0);  // numbers screened
 //!     b.unit = "numbers";
 //!     let count = b.run("", || count_primes(10_000_000));
@@ -32,7 +32,7 @@
 //! reports `MB/s` automatically:
 //!
 //! ```wado
-//! let mut b = Benchmark::new("zlib");
+//! let mut b = Benchmark { name: "zlib" };
 //! b.input_size = Option::Some(data.len());  // → MB/s
 //! let compressed = b.run("compress", || zlib_compress(&data));
 //! let _ = b.run("decompress", || inflate_zlib(&compressed).unwrap());
@@ -78,12 +78,6 @@ pub struct Benchmark {
 }
 
 impl Benchmark {
-    /// Create a benchmark with default settings (auto-calibrated to ~1s,
-    /// no input size).
-    pub fn new(name: String) -> Benchmark {
-        return Benchmark { name };
-    }
-
     /// Run a single phase and report its throughput.
     ///
     /// In auto mode (`iterations == 0`) the iteration count is calibrated so

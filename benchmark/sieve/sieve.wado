@@ -63,7 +63,7 @@ export fn run() with Stdout, MonotonicClock {
     let limit = 10000000;
     // Allocate the sieve buffer once, outside the timed region.
     let mut is_prime = List::<bool>::filled(limit + 1, true);
-    let mut b = Benchmark::new(`sieve up to {limit}`);
+    let mut b = Benchmark { name: `sieve up to {limit}` };
     b.work_per_iter = Option::Some(limit as f64);
     b.unit = "numbers";
     let count = b.run("", || sieve_count(&mut is_prime, limit));

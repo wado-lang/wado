@@ -39,7 +39,7 @@ test "smoke" {
 
 export fn run() with Stdout, MonotonicClock {
     let n = 1000000;
-    let mut b = Benchmark::new(`fts: {n} f64 conversions (%.6f)`);
+    let mut b = Benchmark { name: `fts: {n} f64 conversions (%.6f)` };
     b.work_per_iter = Option::Some(n as f64);
     b.unit = "conversions";
     let r = b.run("", || fts_run(n));
