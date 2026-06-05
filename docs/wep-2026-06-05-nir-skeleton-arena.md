@@ -149,13 +149,12 @@ Each phase keeps the full e2e suite and golden WIR fixtures green
 (`tests/generated/fixtures/*.wir.wado`), satisfying the engine WEP's "codegen
 must not regress" requirement.
 
-- [ ] Phase 1 — define `Body`, the id spaces, the node payloads, and the
-      `alloc_*` builders; add tree ↔ arena converters. The parent map, use
-      index, and the mutating edit API are _not_ part of Phase 1 — they are
-      only needed once passes run on the arena, so they land in Phase 4. The
-      tree stays canonical; the arena is built on the side. Green check: a
-      tree → arena → tree round-trip inserted at the optimize entry keeps the
-      full e2e suite and golden WIR fixtures bit-identical.
+- [x] Phase 1 — `Body`, the id spaces, the node payloads, and the converters
+      (`nir_arena.rs`); the parent map, use index, and the mutating edit API
+      are deferred to Phase 4 as planned. The tree stays canonical; the arena
+      is built on the side. Green check: a `tree → arena → tree` round-trip at
+      the optimize entry (`WADO_TRACE=arena_roundtrip`) keeps the full e2e
+      suite bit-identical — 2786 passed, 0 failed at O0/O2.
 - [ ] Phase 2 — port `lower` to emit `Body` directly; drop the tree → arena
       converter.
 - [ ] Phase 3 — port `wir_build` to read `Body`; drop the arena → tree
