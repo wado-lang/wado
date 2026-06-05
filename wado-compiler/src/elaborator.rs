@@ -550,6 +550,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         control_flow::CtrlFlowCtx {
             expression_types: &self.sem.types.expression_types,
             module,
+            type_table: &self.tysys.type_table,
         }
     }
 
@@ -562,6 +563,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     pub(super) fn ast_block_always_exits(&self, block: &crate::ast::Block) -> bool {
         control_flow::block_always_exits(self.ctrl_flow_ctx(), block)
+    }
+
+    /// Result type of an AST block, read from `expression_types` rather
+    /// than a built `TirBlock`. AST-level replacement for
+    /// `Self::block_result_type(&TirBlock)` (Stage 7-B): lets the combined
+    /// walk type `{ … }`, `if`/`match` arms, loop and handler bodies
+    /// without inspecting the body TIR it produces.
+    pub(super) fn ast_block_result_type(&self, block: &crate::ast::Block) -> TypeId {
+        control_flow::block_result_type(self.ctrl_flow_ctx(), block)
     }
 
     /// Emit a `MissingReturn` diagnostic when a declared non-Unit
@@ -617,9 +627,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if type_id == TypeTable::ERROR {
             return;
         }
-        if self.tysys.type_table.borrow().contains_unknown(type_id) {
-            return;
-        }
+        // UNKNOWN-containing types ARE recorded (Stage 7-B): a bare `null` is
+        // `Option<UNKNOWN>`, and the AST-level block-result-type analysis the
+        // combined walk uses (in place of reading the body TIR) needs to see
+        // an unresolved-null branch to type it the same way the TIR walker
+        // did. Readers that want a *definite* type filter `contains_unknown`
+        // explicitly: reify's `ann_expression_types` (so a null still falls
+        // back to its `expected_type`) and the missing-return walk in
+        // `control_flow.rs`.
         self.sem
             .types
             .expression_types

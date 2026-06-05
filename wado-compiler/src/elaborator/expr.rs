@@ -11,7 +11,6 @@ use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirMatchArm,
     TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
-use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
 
 use super::Elaborator;
@@ -36,6 +35,17 @@ enum FuncRefInference {
     /// or via `&`/`&mut`), or some parameters could not be bound. Callers
     /// fall through to the generic bare-reference diagnostic.
     NotApplicable,
+}
+
+/// Body-walk placeholder for a resolved expression. Stage 7-B: the combined
+/// walk resolves sub-expressions for their side-effect fact recording and
+/// computes the result type, but no longer assembles the expression's TIR —
+/// reify is the sole producer and rebuilds it from the recorded facts
+/// (`expression_types`, `operator_dispatch`, `generic_instantiations`, …).
+/// The returned `TirExpr` only needs the right `type_id` + `span` for the
+/// caller's outer typecheck / `expression_types` recording.
+fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(TirExprKind::Unit, type_id, span)
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -109,20 +119,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Index(index) => self.resolve_index(index, ctx),
             Expr::Block(block) => {
                 let tir_block = self.resolve_block(block, ctx, expected_type);
-                // Reuse `block_result_type` so the block expression's
-                // overall type matches the inference rule applied
-                // everywhere else (function body trailing expressions,
-                // `if` / `match` arm bodies, etc.). The previous local
-                // copy of the rule only handled `TirStmtKind::Expr` /
-                // `Return` / `Break` / `Continue` as trailing forms
-                // and fell back to `Unit` for trailing `if` / `if let`
-                // — which mis-typed `{ if cond { a } else { b } }` as
-                // `Unit` and silently miscompiled when such a block
-                // was used as a match-arm body. Routing through the
-                // shared `block_result_type` makes a trailing
-                // `TirStmtKind::If` / `IfLet` with both branches
-                // present propagate its branch-agreed type through.
-                let type_id = Self::block_result_type(&tir_block);
+                // Reuse the shared block-result rule so the block
+                // expression's overall type matches the inference rule
+                // applied everywhere else (function body trailing
+                // expressions, `if` / `match` arm bodies, etc.): a
+                // trailing `if cond { a } else { b }` propagates its
+                // branch-agreed type, not `Unit`. Read from
+                // `expression_types` (AST level) rather than the built
+                // block so this does not depend on the body TIR.
+                let type_id = self.ast_block_result_type(block);
                 TirExpr::new(TirExprKind::Block(tir_block), type_id, block.span)
             }
             Expr::If(if_expr) => self.resolve_if_expr(if_expr, ctx, expected_type),
@@ -181,27 +186,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     TypeTable::UNIT
                 };
 
-                // Patch `break label: null` values whose `Option<...>` inner
-                // could not be inferred from the break alone. Now that the
-                // result type is known, rewrite the unresolved `Null`'s
-                // `type_id` so WIR translation sees a fully-resolved type.
-                // When the type stayed UNKNOWN (every break a bare `null`),
-                // or a `null` break cannot fit a non-`Option` result, report
-                // it rather than letting an unresolved type reach codegen.
-                let mut tir_block = tir_block;
+                // Report any `break label: null` whose `Option<...>` inner
+                // could not be inferred against a resolved non-`Option`
+                // result — AST mirror of the old `NullBreakPatcher` pass
+                // (whose TIR mutation was dead). When the type stayed UNKNOWN
+                // (every break a bare `null`) `report_uninferable_result`
+                // already fired and the null pass is skipped.
                 if !self.report_uninferable_result(result_type, lb.span, "labeled block") {
-                    let unresolved = {
-                        let tt = self.tysys.type_table.borrow();
-                        let mut patcher = NullBreakPatcher {
-                            label: &lb.label,
-                            target_type: result_type,
-                            type_table: &tt,
-                            unresolved: Vec::new(),
-                        };
-                        patcher.visit_block(&mut tir_block);
-                        patcher.unresolved
-                    };
-                    self.report_unresolved_nulls(&unresolved, result_type);
+                    self.report_unresolved_null_breaks(result_type, &lb.block, &lb.label);
                 }
 
                 // Report any break whose value type disagrees with the
@@ -243,7 +235,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         lit: &ast::LiteralExpr,
         ctx: &FunctionContext,
     ) -> TirExpr {
-        let (kind, type_id) = match &lit.value {
+        // Stage 7-B: reify rebuilds every literal node from the AST; the
+        // combined walk only needs the literal's type and its parse / unescape
+        // diagnostics. The `kind` is computed for those diagnostics' sake and
+        // discarded — the returned value is a placeholder.
+        let (_kind, type_id) = match &lit.value {
             Literal::Number(repr) => {
                 // Default type: i32 if integer-compatible, f64 if float-only
                 if util::is_float_only_literal(repr) {
@@ -412,7 +408,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
         };
-        TirExpr::new(kind, type_id, lit.span)
+        placeholder(type_id, lit.span)
     }
 
     /// Resolve an identifier expression
@@ -1333,22 +1329,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // definition's AstId in the struct declaration.
         self.record_field_reference(expr.type_id, &field_access.field, field_access.field_id);
 
-        // Look up field type from struct type
-        let (field_index, field_type) =
+        // Look up field type from struct type (also emits the field-not-found
+        // / tuple-index-out-of-bounds diagnostics). Reify re-derives the
+        // `field_index` from the receiver type, so only the result type is
+        // needed here.
+        let (_field_index, field_type) =
             self.lookup_field_type(expr.type_id, &field_access.field, field_access.span);
 
         // Check field visibility: non-pub fields cannot be accessed from other modules
         self.check_field_visibility(expr.type_id, &field_access.field, field_access.span);
 
-        TirExpr::new(
-            TirExprKind::FieldAccess {
-                expr: Box::new(expr),
-                field_index,
-                field_name: field_access.field.clone(),
-            },
-            field_type,
-            field_access.span,
-        )
+        placeholder(field_type, field_access.span)
     }
 
     /// Record a use→def reference for a struct field access.
@@ -1637,15 +1628,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 if idx < elements.len() {
                     let field_type = elements[idx];
-                    return TirExpr::new(
-                        TirExprKind::FieldAccess {
-                            expr: Box::new(expr),
-                            field_index: idx as u32,
-                            field_name: idx.to_string(),
-                        },
-                        field_type,
-                        index.span,
-                    );
+                    return placeholder(field_type, index.span);
                 } else {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
                         message: format!(
@@ -1655,8 +1638,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ),
                         span: index.span,
                     });
-                    // Return a placeholder expression with unknown type
-                    return TirExpr::new(TirExprKind::Unit, TypeTable::UNKNOWN, index.span);
+                    return placeholder(TypeTable::UNKNOWN, index.span);
                 }
             }
             // Non-constant index on tuple
@@ -1664,7 +1646,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 message: "tuple index must be a constant integer".to_string(),
                 span: index.span,
             });
-            return TirExpr::new(TirExprKind::Unit, TypeTable::UNKNOWN, index.span);
+            return placeholder(TypeTable::UNKNOWN, index.span);
         }
 
         // For List and custom types, look for Index or IndexValue trait implementation
@@ -1702,14 +1684,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .or_else(|| self.find_index_trait_impl(&lookup_name, lookup_type_id, index_type));
             if let Some(trait_info) = index_trait_info {
                 // Generate: *expr.index(index_expr)
-                // First, create the method call to .index(index_expr)
-                let receiver = self.adjust_receiver_for_self_kind(
-                    expr,
-                    trait_info.self_kind,
-                    false,
-                    index.span,
-                );
-
                 let mangled_method_name =
                     MethodName::format_local(&lookup_name, Some(&trait_info.trait_name), "index");
 
@@ -1740,7 +1714,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.record_operator_dispatch(
                     index.id,
                     super::sem::types::OperatorDispatch {
-                        function_ref: func.clone(),
+                        function_ref: func,
                         self_kind: trait_info.self_kind,
                         arg_ref_wraps: vec![false],
                         return_type: ref_output_type,
@@ -1748,24 +1722,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     },
                 );
 
-                let method_call = Self::build_tir_method_call(
-                    receiver,
-                    func,
-                    vec![],
-                    vec![CallArg::new(index_expr, false)],
-                    ref_output_type,
-                    index.span,
-                );
-
-                // Dereference the result: *expr.index(...)
-                return TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Deref,
-                        expr: Box::new(method_call),
-                    },
-                    trait_info.output_type,
-                    index.span,
-                );
+                return placeholder(trait_info.output_type, index.span);
             }
 
             // Fallback: try IndexValue trait (returns value by copy)
@@ -1776,13 +1733,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
             if let Some(trait_info) = index_value_info {
                 // Generate: expr.index_value(index_expr)
-                let receiver = self.adjust_receiver_for_self_kind(
-                    expr,
-                    trait_info.self_kind,
-                    false,
-                    index.span,
-                );
-
                 let mangled_method_name = MethodName::format_local(
                     &lookup_name,
                     Some(&trait_info.trait_name),
@@ -1810,7 +1760,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.record_operator_dispatch(
                     index.id,
                     super::sem::types::OperatorDispatch {
-                        function_ref: func.clone(),
+                        function_ref: func,
                         self_kind: trait_info.self_kind,
                         arg_ref_wraps: vec![false],
                         return_type: trait_info.output_type,
@@ -1818,14 +1768,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     },
                 );
 
-                return Self::build_tir_method_call(
-                    receiver,
-                    func,
-                    vec![],
-                    vec![CallArg::new(index_expr, false)],
-                    trait_info.output_type,
-                    index.span,
-                );
+                return placeholder(trait_info.output_type, index.span);
             }
         }
 
@@ -1836,7 +1779,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             trait_name: "Index or IndexValue".to_string(),
             span: index.span,
         });
-        TirExpr::new(TirExprKind::Unit, TypeTable::UNKNOWN, index.span)
+        placeholder(TypeTable::UNKNOWN, index.span)
     }
 
     /// Extract the result type from a block (the type of its last
@@ -1964,8 +1907,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Condition::Expr(expr) => {
                 let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
-                let mut then_block = self.resolve_block(&if_expr.then_block, ctx, expected_type);
-                let mut else_block = if_expr
+                let then_block = self.resolve_block(&if_expr.then_block, ctx, expected_type);
+                let else_block = if_expr
                     .else_block
                     .as_ref()
                     .map(|b| self.resolve_block(b, ctx, expected_type));
@@ -1973,10 +1916,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
-                    let then_type = Self::block_result_type(&then_block);
-                    let else_type = else_block
+                    let then_type = self.ast_block_result_type(&if_expr.then_block);
+                    let else_type = if_expr
+                        .else_block
                         .as_ref()
-                        .map_or(TypeTable::UNIT, Self::block_result_type);
+                        .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
 
                     // `never` is the bottom type: a branch returning `never` is compatible
                     // with any type, so the result type comes from the non-never branch.
@@ -2020,27 +1964,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 };
 
-                // Patch unresolved `null` tails in either branch using the
-                // determined result type — see `patch_unresolved_null`. When
-                // the type stayed UNKNOWN (both branches a bare `null`), or a
-                // `null` branch cannot fit a non-`Option` result, report it
-                // rather than letting an unresolved type reach codegen.
+                // Report any unresolved `null` tail in either branch against
+                // the determined result type — AST mirror of the old
+                // `patch_unresolved_null` pass (whose TIR mutation was dead).
+                // When the type stayed UNKNOWN (both branches a bare `null`)
+                // `report_uninferable_result` already fired and the null pass
+                // is skipped.
                 if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
-                    let unresolved = {
-                        let tt = self.tysys.type_table.borrow();
-                        let mut unresolved = Vec::new();
-                        patch_unresolved_null_in_block(
-                            &mut then_block,
-                            type_id,
-                            &tt,
-                            &mut unresolved,
-                        );
-                        if let Some(eb) = else_block.as_mut() {
-                            patch_unresolved_null_in_block(eb, type_id, &tt, &mut unresolved);
-                        }
-                        unresolved
-                    };
-                    self.report_unresolved_nulls(&unresolved, type_id);
+                    let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
+                    if let Some(eb) = &if_expr.else_block {
+                        blocks.push(eb);
+                    }
+                    self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
                 }
 
                 // Same rule as `resolve_match_expr`: an if-expression
@@ -2054,12 +1989,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // X) ...)` whose other branch pushes the wrong
                 // type. Skip when `type_id == Unit`: that's
                 // statement-position use, where each branch's value
-                // gets dropped at the WIR stmt level.
+                // gets dropped at the WIR stmt level. Branch types read
+                // from `expression_types` (AST level), not the built block.
                 if expected_type.is_some() && type_id != TypeTable::UNIT {
-                    let then_type = Self::block_result_type(&then_block);
+                    let then_type = self.ast_block_result_type(&if_expr.then_block);
                     self.check_branch_type(then_type, type_id, if_expr.then_block.span);
-                    if let Some(eb) = &else_block {
-                        let else_type = Self::block_result_type(eb);
+                    if let Some(eb) = &if_expr.else_block {
+                        let else_type = self.ast_block_result_type(eb);
                         self.check_branch_type(
                             else_type,
                             type_id,
@@ -2157,6 +2093,83 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Report each unresolved-`null` tail in `blocks` against a resolved
+    /// non-`Option` `result_type` (AST replacement for the
+    /// `patch_unresolved_null_in_block` + `report_unresolved_nulls` pass).
+    /// A `null` tail is an `Option`, so when `result_type` is itself an
+    /// `Option` every tail fits and nothing is reported.
+    fn report_unresolved_null_tails_in_blocks(
+        &mut self,
+        result_type: TypeId,
+        blocks: &[&ast::Block],
+    ) {
+        if self
+            .tysys
+            .type_table
+            .borrow()
+            .as_option(result_type)
+            .is_some()
+        {
+            return;
+        }
+        let mut spans = Vec::new();
+        let ctx = self.ctrl_flow_ctx();
+        for block in blocks {
+            super::control_flow::collect_unresolved_null_tails_in_block(ctx, block, &mut spans);
+        }
+        self.report_unresolved_nulls(&spans, result_type);
+    }
+
+    /// Report each unresolved-`null` arm body of `match_expr` against a
+    /// resolved non-`Option` `result_type` (AST replacement for the
+    /// per-arm `patch_unresolved_null` + `report_unresolved_nulls` pass).
+    fn report_unresolved_null_match_arms(
+        &mut self,
+        result_type: TypeId,
+        match_expr: &ast::MatchExpr,
+    ) {
+        if self
+            .tysys
+            .type_table
+            .borrow()
+            .as_option(result_type)
+            .is_some()
+        {
+            return;
+        }
+        let mut spans = Vec::new();
+        let ctx = self.ctrl_flow_ctx();
+        for arm in &match_expr.arms {
+            super::control_flow::collect_unresolved_null_tails(ctx, &arm.body, &mut spans);
+        }
+        self.report_unresolved_nulls(&spans, result_type);
+    }
+
+    /// Report each `break <label>: null` value inside `block` against a
+    /// resolved non-`Option` `result_type` (AST replacement for the
+    /// `NullBreakPatcher` pass).
+    fn report_unresolved_null_breaks(
+        &mut self,
+        result_type: TypeId,
+        block: &ast::Block,
+        label: &str,
+    ) {
+        if self
+            .tysys
+            .type_table
+            .borrow()
+            .as_option(result_type)
+            .is_some()
+        {
+            return;
+        }
+        let spans = {
+            let ctx = self.ctrl_flow_ctx();
+            super::control_flow::collect_unresolved_null_breaks(ctx, block, label)
+        };
+        self.report_unresolved_nulls(&spans, result_type);
+    }
+
     /// Resolve a match expression
     pub(super) fn resolve_match_expr(
         &mut self,
@@ -2167,7 +2180,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let scrutinee = self.resolve_expr(&match_expr.expr, ctx, None);
         let scrutinee_type = scrutinee.type_id;
 
-        let mut arms: Vec<TirMatchArm> = match_expr
+        let arms: Vec<TirMatchArm> = match_expr
             .arms
             .iter()
             .map(|arm| self.resolve_match_arm(arm, scrutinee_type, ctx, expected_type))
@@ -2201,22 +2214,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
         });
 
-        // Patch `null`-bodied arms whose `Option<???>` inner could not be
-        // inferred. If the match's overall type is fully resolved we know the
-        // inner type; rewrite the `Null`'s `type_id` so WIR translation can
-        // see it. When the type itself stayed UNKNOWN (every arm a bare
-        // `null`), or a `null` arm cannot fit a non-`Option` result, report
-        // it rather than letting an unresolved type reach codegen.
+        // Report any `null`-bodied arm whose `Option<???>` inner could not be
+        // inferred against a resolved non-`Option` result — AST mirror of the
+        // old `patch_unresolved_null` pass (whose TIR mutation was dead). When
+        // the match type itself stayed UNKNOWN (every arm a bare `null`)
+        // `report_uninferable_result` already fired and the null pass is
+        // skipped.
         if !self.report_uninferable_result(type_id, match_expr.span, "match expression") {
-            let unresolved = {
-                let tt = self.tysys.type_table.borrow();
-                let mut unresolved = Vec::new();
-                for arm in &mut arms {
-                    patch_unresolved_null(&mut arm.body, type_id, &tt, &mut unresolved);
-                }
-                unresolved
-            };
-            self.report_unresolved_nulls(&unresolved, type_id);
+            self.report_unresolved_null_match_arms(type_id, match_expr);
         }
 
         // Reject arms whose body type disagrees with the match's overall
@@ -2772,14 +2777,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        TirExpr::new(
-            TirExprKind::Cast {
-                expr: Box::new(expr),
-                target_type,
-            },
-            target_type,
-            cast.span,
-        )
+        // Stage 7-B: reify rebuilds the `Cast` from `cast.expr` + the target
+        // type recorded in `expression_types[cast.id]`; the char-cast
+        // diagnostics above are the record-only work.
+        placeholder(target_type, cast.span)
     }
 
     /// Resolve a struct literal
@@ -2948,9 +2949,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Track tuple literals whose coercion was deferred because the field
                 // type had unresolved type parameters. After type inference, we'll
-                // re-coerce with the concrete type.
-                if needs_deferred_coercion && matches!(value.kind, TirExprKind::TupleLiteral { .. })
-                {
+                // re-coerce with the concrete type (the second pass below records
+                // the coercion via `try_coerce_tuple_to_sequence`; reify replays
+                // it). Stage 7-B: `resolve_tuple_literal` is now a placeholder, so
+                // the old `value.kind == TupleLiteral` test is read from the AST —
+                // a spread tuple used to resolve to a block (never deferred), so
+                // only spread-free tuple literals are deferred here.
+                let tuple_is_spread_free = matches!(
+                    &field.value,
+                    ast::Expr::TupleLiteral(t)
+                        if !t.elements.iter().any(|e| matches!(e, Expr::Spread(..)))
+                );
+                if needs_deferred_coercion && tuple_is_spread_free {
                     deferred_coercions.push((provided_idx, provided_idx));
                 }
 
@@ -3413,145 +3423,58 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(elems)
         });
 
-        // Resolve each element expression, handling spread elements
-        let mut elements: Vec<TirExpr> = Vec::new();
+        // Resolve each element for its side effects and collect the element
+        // types so the tuple `TypeId` matches what reify builds. Stage 7-B:
+        // reify's `reify_tuple_literal` owns the element / spread-expansion /
+        // single-evaluation-temporary construction (with its own `ctx`), so
+        // this records only the types + the spread diagnostic.
         let mut elem_types: Vec<TypeId> = Vec::new();
-        // Bindings for non-trivial spread expressions: (local_idx, name, expr, span)
-        let mut spread_bindings: Vec<(u32, String, TirExpr, crate::token::Span)> = Vec::new();
         for (elem_idx, elem) in tuple_lit.elements.iter().enumerate() {
             if let Expr::Spread(inner, _span) = elem {
                 let spread_expr = self.resolve_expr(inner, ctx, None);
-                let contains_pack = self.type_contains_pack(spread_expr.type_id);
-                let spread_type = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .get(spread_expr.type_id)
-                    .clone();
-                if contains_pack {
-                    // Check if the expression's type IS a TypePack directly.
-                    // If so, this is a type pack expansion (e.g., [..T::method()])
-                    // where the expression template is instantiated per element.
-                    // If the type is a Tuple containing TypePack, this is a value
-                    // spread (e.g., [..rest] where rest: [..T]).
-                    let is_direct_pack = matches!(
-                        self.tysys.type_table.borrow().get(spread_expr.type_id),
-                        ResolvedType::TypePack { .. }
-                    );
-                    if is_direct_pack {
-                        let pack_type_id = spread_expr.type_id;
-                        elem_types.push(spread_expr.type_id);
-                        elements.push(TirExpr::new(
-                            TirExprKind::TypePackExpansion {
-                                call_expr: Box::new(spread_expr),
-                                pack_type_id,
-                            },
-                            *elem_types.last().unwrap(),
-                            elem.span(),
-                        ));
-                    } else {
-                        // Keep as TupleSpread for monomorphization to expand later
-                        elem_types.push(spread_expr.type_id);
-                        elements.push(TirExpr::new(
-                            TirExprKind::TupleSpread {
-                                expr: Box::new(spread_expr),
-                            },
-                            *elem_types.last().unwrap(),
-                            elem.span(),
-                        ));
-                    }
-                } else if let ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    type_args: inner_elems,
-                } = spread_type
-                    && TypeTable::is_tuple_type(&name, &module_source)
-                {
-                    // For concrete tuples, expand inline via FieldAccess.
-                    // If the expression is non-trivial (not a local), bind it to a
-                    // temporary to ensure single evaluation.
-                    let spread_ref = if matches!(spread_expr.kind, TirExprKind::Local { .. }) {
-                        spread_expr
-                    } else {
-                        let spread_type_id = spread_expr.type_id;
-                        let tmp_name = format!("__spread_{}", ctx.next_local);
-                        let tmp_idx = ctx.add_local(tmp_name.clone(), spread_type_id, false, None);
-                        spread_bindings.push((tmp_idx, tmp_name.clone(), spread_expr, elem.span()));
-                        TirExpr::new(
-                            TirExprKind::Local {
-                                index: tmp_idx,
-                                name: tmp_name,
-                            },
-                            spread_type_id,
-                            elem.span(),
-                        )
-                    };
-                    for (i, &et) in inner_elems.iter().enumerate() {
-                        elements.push(TirExpr::new(
-                            TirExprKind::FieldAccess {
-                                expr: Box::new(spread_ref.clone()),
-                                field_index: i as u32,
-                                field_name: i.to_string(),
-                            },
-                            et,
-                            elem.span(),
-                        ));
-                        elem_types.push(et);
-                    }
+                if self.type_contains_pack(spread_expr.type_id) {
+                    // A direct `TypePack` (`[..T::method()]`) or a tuple
+                    // containing one (`[..rest]` where `rest: [..T]`): the
+                    // spread element keeps the spread's own type; monomorphize
+                    // expands it later.
+                    elem_types.push(spread_expr.type_id);
                 } else {
-                    let _ =
-                        self.logger
-                            .error(crate::elaborator::types::TypeError::InvalidLiteral {
+                    let spread_type = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .get(spread_expr.type_id)
+                        .clone();
+                    if let ResolvedType::GenericInstance {
+                        name,
+                        module_source,
+                        type_args: inner_elems,
+                    } = spread_type
+                        && TypeTable::is_tuple_type(&name, &module_source)
+                    {
+                        // A concrete tuple spread expands inline to one element
+                        // per field.
+                        elem_types.extend(inner_elems);
+                    } else {
+                        let _ = self.logger.error(
+                            crate::elaborator::types::TypeError::InvalidLiteral {
                                 message: "spread operator `..` can only be used with tuple types"
                                     .to_string(),
                                 span: elem.span(),
-                            });
-                    elem_types.push(spread_expr.type_id);
-                    elements.push(spread_expr);
+                            },
+                        );
+                        elem_types.push(spread_expr.type_id);
+                    }
                 }
             } else {
                 let elem_expected = expected_elem_types.as_ref().map(|v| v[elem_idx]);
                 let resolved = self.resolve_expr(elem, ctx, elem_expected);
                 elem_types.push(resolved.type_id);
-                elements.push(resolved);
             }
         }
 
         let tuple_type = self.tysys.type_table.borrow_mut().make_tuple(elem_types);
-
-        let tuple_expr = TirExpr::new(
-            TirExprKind::TupleLiteral { elements },
-            tuple_type,
-            tuple_lit.span,
-        );
-
-        if spread_bindings.is_empty() {
-            tuple_expr
-        } else {
-            // Wrap in a block: { let __spread_N = expr; ...; [fields...] }
-            let mut stmts: Vec<TirStmt> = spread_bindings
-                .into_iter()
-                .map(|(idx, name, value, span)| {
-                    let type_id = value.type_id;
-                    TirStmt::new(
-                        TirStmtKind::Let {
-                            name,
-                            local_index: idx,
-                            value,
-                            is_mut: false,
-                            is_reactive: false,
-                            type_id,
-                            skip_value_copy: false,
-                        },
-                        span,
-                    )
-                })
-                .collect();
-            // The tuple literal is the block's return expression
-            stmts.push(TirStmt::new(TirStmtKind::Expr(tuple_expr), tuple_lit.span));
-            let block = TirBlock::new(stmts, tuple_lit.span);
-            TirExpr::new(TirExprKind::Block(block), tuple_type, tuple_lit.span)
-        }
+        placeholder(tuple_type, tuple_lit.span)
     }
 
     /// Resolve the postfix `?` operator.
@@ -4053,7 +3976,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TirExpr {
         use crate::ast::RangeKind;
         use crate::module_source::ModuleSource;
-        use crate::tir::{TirExprKind, TirStructField};
 
         // Bidirectional coercion: resolve non-literal first to infer the element type
         let start_is_literal = self.tysys.is_numeric_literal(&range.start);
@@ -4138,7 +4060,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let (struct_name, module_source, fields) = match range.kind {
+        let (struct_name, module_source) = match range.kind {
             RangeKind::Exclusive => {
                 let ms = self
                     .tysys
@@ -4148,19 +4070,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .struct_module(crate::compiler_item::CompilerItem::RangeExclusive)
                     .cloned()
                     .unwrap_or_else(ModuleSource::range);
-                let fields = vec![
-                    TirStructField {
-                        name: "start".to_string(),
-                        value: start,
-                        field_index: 0,
-                    },
-                    TirStructField {
-                        name: "end".to_string(),
-                        value: end,
-                        field_index: 1,
-                    },
-                ];
-                ("RangeExclusive".to_string(), ms, fields)
+                ("RangeExclusive".to_string(), ms)
             }
             RangeKind::Inclusive => {
                 let ms = self
@@ -4171,28 +4081,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .struct_module(crate::compiler_item::CompilerItem::RangeInclusive)
                     .cloned()
                     .unwrap_or_else(ModuleSource::range);
-                let fields = vec![
-                    TirStructField {
-                        name: "start".to_string(),
-                        value: start,
-                        field_index: 0,
-                    },
-                    TirStructField {
-                        name: "end".to_string(),
-                        value: end,
-                        field_index: 1,
-                    },
-                    TirStructField {
-                        name: "exhausted".to_string(),
-                        value: TirExpr::new(
-                            TirExprKind::BoolLiteral(false),
-                            TypeTable::BOOL,
-                            range.span,
-                        ),
-                        field_index: 2,
-                    },
-                ];
-                ("RangeInclusive".to_string(), ms, fields)
+                ("RangeInclusive".to_string(), ms)
             }
         };
 
@@ -4213,155 +4102,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             range.id,
             vec![element_type],
             struct_type,
-            Some(mangled_name.clone()),
+            Some(mangled_name),
         );
 
-        TirExpr::new(
-            TirExprKind::StructLiteral {
-                struct_type,
-                struct_name: mangled_name,
-                fields,
-            },
-            struct_type,
-            range.span,
-        )
-    }
-}
-
-/// Recursively patch any `Null` literals inside `expr` whose `Option<???>`
-/// inner is still UNKNOWN, rewriting them to use `target_type`.
-///
-/// `Literal::Null` initially resolves to `Option<UNKNOWN>` (see
-/// `resolve_literal`). When a `null` literal sits in a match arm or `if`
-/// branch, its concrete inner type is determined by a sibling arm — but
-/// that information isn't propagated back during arm resolution. Once the
-/// match/if's overall result type is known we walk the arm bodies and
-/// rewrite the unresolved `Null`'s `type_id` so WIR translation sees a
-/// fully-resolved `Option<T>`.
-///
-/// Only the tail/result positions are walked; nested expressions whose
-/// value is discarded (e.g. inside an arbitrary call argument) are not
-/// affected — they would have been forced to a known type by their own
-/// surrounding context anyway.
-///
-/// A `null` whose surrounding type is not an `Option<...>` cannot be
-/// rewritten; its span is pushed onto `unresolved` so the caller can
-/// report a type mismatch instead of letting `Option<UNKNOWN>` reach
-/// codegen.
-fn patch_unresolved_null(
-    expr: &mut TirExpr,
-    target_type: TypeId,
-    type_table: &TypeTable,
-    unresolved: &mut Vec<Span>,
-) {
-    if matches!(expr.kind, TirExprKind::Null) && type_table.contains_unknown(expr.type_id) {
-        // Only rewrite when the surrounding type is genuinely an
-        // `Option<...>`. In ill-typed programs the unified result type may
-        // be a non-Option type alongside a `null` branch; rewriting the
-        // `Null` to that type would produce nonsensical TIR.
-        if type_table.as_option(target_type).is_some() {
-            expr.type_id = target_type;
-        } else {
-            unresolved.push(expr.span);
-        }
-        return;
-    }
-    match &mut expr.kind {
-        TirExprKind::Block(block) => {
-            patch_unresolved_null_in_block(block, target_type, type_table, unresolved);
-        }
-        TirExprKind::If {
-            then_branch,
-            else_branch,
-            ..
-        } => {
-            patch_unresolved_null_in_block(then_branch, target_type, type_table, unresolved);
-            if let Some(eb) = else_branch {
-                patch_unresolved_null_in_block(eb, target_type, type_table, unresolved);
-            }
-        }
-        TirExprKind::Match { arms, .. } => {
-            for arm in arms {
-                patch_unresolved_null(&mut arm.body, target_type, type_table, unresolved);
-            }
-        }
-        _ => {}
-    }
-}
-
-/// Patches `break <label>: null` values inside a labeled block once the
-/// block's result type is known. A bare `null` resolves to `Option<UNKNOWN>`
-/// when nothing constrains its inner type; after unification the result
-/// type pins it, so the unresolved `Null` is rewritten via
-/// [`patch_unresolved_null`]. Built on [`TirMutVisitor`] so every nesting
-/// construct is descended automatically.
-///
-/// A break value that still contains UNKNOWN after the patch — e.g. a
-/// `break label: null` whose block type is not an `Option` — cannot be
-/// reconciled; its span is collected in `unresolved` for the caller to
-/// report, since `check_assignable` treats UNKNOWN leniently and would
-/// otherwise let it slip through to codegen.
-struct NullBreakPatcher<'a> {
-    /// The labeled block whose breaks are being patched.
-    label: &'a str,
-    /// The block's unified result type.
-    target_type: TypeId,
-    type_table: &'a TypeTable,
-    /// Spans of break values left unresolved after the patch attempt.
-    unresolved: Vec<Span>,
-}
-
-impl TirMutVisitor for NullBreakPatcher<'_> {
-    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
-        match &mut stmt.kind {
-            // A `break label: expr` targeting our block — patch its value.
-            TirStmtKind::Break {
-                label: Some(l),
-                value: Some(v),
-            } if l == self.label => {
-                patch_unresolved_null(v, self.target_type, self.type_table, &mut self.unresolved);
-            }
-            // A nested labeled block reusing our label shadows it: its
-            // breaks target the inner block, so do not descend.
-            TirStmtKind::LabeledBlock { label, .. } if label == self.label => {}
-            _ => self.walk_stmt(stmt),
-        }
-    }
-
-    fn visit_expr(&mut self, expr: &mut TirExpr) {
-        match &mut expr.kind {
-            // Closures are separate functions — a `break` inside cannot
-            // target our label.
-            TirExprKind::Closure { .. } => {}
-            // A nested labeled-block expression reusing our label shadows it.
-            TirExprKind::LabeledBlock { label, .. } if label == self.label => {}
-            _ => self.walk_expr(expr),
-        }
-    }
-}
-
-fn patch_unresolved_null_in_block(
-    block: &mut TirBlock,
-    target_type: TypeId,
-    type_table: &TypeTable,
-    unresolved: &mut Vec<Span>,
-) {
-    let Some(last) = block.stmts.last_mut() else {
-        return;
-    };
-    match &mut last.kind {
-        TirStmtKind::Expr(e) => {
-            patch_unresolved_null(e, target_type, type_table, unresolved);
-        }
-        TirStmtKind::If {
-            then_block,
-            else_block: Some(eb),
-            ..
-        } => {
-            patch_unresolved_null_in_block(then_block, target_type, type_table, unresolved);
-            patch_unresolved_null_in_block(eb, target_type, type_table, unresolved);
-        }
-        _ => {}
+        placeholder(struct_type, range.span)
     }
 }
 

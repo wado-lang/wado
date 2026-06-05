@@ -51,6 +51,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 if let Stmt::Match(match_expr) = s {
                     let tir = self.resolve_match_expr(match_expr, ctx, expected_type);
+                    // `resolve_match_expr` does not go through the
+                    // `resolve_expr` wrapper; record the type explicitly (as
+                    // the stmt-position arm does) so `ast_block_result_type`
+                    // can read a trailing match's value type.
+                    self.record_expression_type(match_expr.id, tir.type_id);
                     stmts.push(TirStmt::new(TirStmtKind::Expr(tir), match_expr.span));
                     continue;
                 }
@@ -1494,44 +1499,57 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .get(&assoc_const_key)
                         .cloned()
                     {
-                        let resolved = self.resolve_expr(&const_expr, ctx, Some(type_id));
-                        // If the resolved expression is a literal, emit a Literal pattern
-                        // so it benefits from switch optimization and exhaustiveness checking.
-                        match &resolved.kind {
-                            TirExprKind::IntLiteral { repr, .. } => {
-                                let scrutinee_resolved =
-                                    self.tysys.type_table.borrow().get(scrutinee_type).clone();
-                                let is_unsigned = matches!(
-                                    scrutinee_resolved,
-                                    ResolvedType::Primitive(
-                                        PrimitiveType::U8
-                                            | PrimitiveType::U16
-                                            | PrimitiveType::U32
-                                            | PrimitiveType::U64
-                                            | PrimitiveType::U128
-                                    )
-                                ) || matches!(
-                                    scrutinee_resolved,
-                                    ResolvedType::Struct { ref name, .. } if name == "u128"
-                                );
-                                if is_unsigned {
-                                    if let Ok(v) = util::parse_u128_literal(repr) {
-                                        return TirPattern::Literal(TirLiteralPattern::U128(v));
+                        // Resolve for side effects (records the const body's
+                        // types for reify). Stage 7-B: `resolve_literal` is a
+                        // placeholder, so classify the Literal-vs-ConstantValue
+                        // pattern from the const body AST rather than the
+                        // resolved value's kind. A literal body becomes a
+                        // `Literal` pattern (switch optimization + exhaustiveness);
+                        // anything else is an opaque `ConstantValue`.
+                        let _ = self.resolve_expr(&const_expr, ctx, Some(type_id));
+                        if let ast::Expr::Literal(lit) = &const_expr {
+                            match &lit.value {
+                                ast::Literal::Number(repr)
+                                    if !util::is_float_only_literal(repr) =>
+                                {
+                                    let scrutinee_resolved =
+                                        self.tysys.type_table.borrow().get(scrutinee_type).clone();
+                                    let is_unsigned = matches!(
+                                        scrutinee_resolved,
+                                        ResolvedType::Primitive(
+                                            PrimitiveType::U8
+                                                | PrimitiveType::U16
+                                                | PrimitiveType::U32
+                                                | PrimitiveType::U64
+                                                | PrimitiveType::U128
+                                        )
+                                    ) || matches!(
+                                        scrutinee_resolved,
+                                        ResolvedType::Struct { ref name, .. } if name == "u128"
+                                    );
+                                    if is_unsigned {
+                                        if let Ok(v) = util::parse_u128_literal(repr) {
+                                            return TirPattern::Literal(TirLiteralPattern::U128(v));
+                                        }
+                                    } else if let Ok(v) = util::parse_i128_literal(repr) {
+                                        return TirPattern::Literal(TirLiteralPattern::I128(v));
                                     }
-                                } else if let Ok(v) = util::parse_i128_literal(repr) {
-                                    return TirPattern::Literal(TirLiteralPattern::I128(v));
                                 }
+                                ast::Literal::Bool(v) => {
+                                    return TirPattern::Literal(TirLiteralPattern::Bool(*v));
+                                }
+                                ast::Literal::Char(raw) => {
+                                    let c = util::unescape_char(raw).unwrap_or('\0');
+                                    return TirPattern::Literal(TirLiteralPattern::Char(c));
+                                }
+                                _ => {}
                             }
-                            TirExprKind::BoolLiteral(v) => {
-                                return TirPattern::Literal(TirLiteralPattern::Bool(*v));
-                            }
-                            TirExprKind::CharLiteral(v) => {
-                                return TirPattern::Literal(TirLiteralPattern::Char(*v));
-                            }
-                            _ => {}
                         }
+                        // Reify rebuilds the constant's value expression from the
+                        // AST const body; the combined-walk pattern is discarded,
+                        // and exhaustiveness only reads the `ConstantValue` shape.
                         return TirPattern::ConstantValue {
-                            expr: Box::new(TirExpr::new(resolved.kind, type_id, *span)),
+                            expr: Box::new(TirExpr::new(TirExprKind::Unit, type_id, *span)),
                         };
                     }
 
@@ -2827,7 +2845,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             payload_type: item_type,
         };
 
-        let body_type = Self::block_result_type(&body_block);
+        let body_type = self.ast_block_result_type(&for_of.body);
         let some_body = TirExpr::new(TirExprKind::Block(body_block), body_type, span);
 
         // `_ => break;` — Wildcard arm body is a block holding a single

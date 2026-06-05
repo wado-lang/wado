@@ -386,6 +386,102 @@ Each stage keeps `mise run test`, the WIR golden fixtures, and the LSP
 query tests green. Performance is not tracked during migration; see
 Trade-offs.
 
+### Stage 7-B execution plan
+
+7-B is not a single mechanical edit. The combined walk's TIR is already
+dead (reify is the sole producer since Stage 5/7a), so an arm's only
+reason to still build a real `TirExpr` is that some _analysis or
+diagnostic inside the combined walk_ reads the structure (`.kind`) of
+the resolved value. Those readers must move to the AST + recorded facts
+before the arm that feeds them can return a placeholder. Hence two
+phases:
+
+Phase 1 — port each structural reader off combined-walk TIR. Each is a
+behaviour-preserving refactor (the recorded values are unchanged, so
+reify's output is byte-identical) verified green on its own. Precedent:
+`control_flow.rs` (Stage 5 moved missing-return off the body TIR).
+
+Phase 2 — once no analysis reads resolved TIR structure, convert every
+`resolve_*` arm to a placeholder, then change signatures
+(`resolve_expr -> TypeId`, `resolve_stmt` records only) file by file,
+make `build_tir_from_state` TIR-free, and run LSP through `annotate`
+alone. Reify is the only TIR.
+
+The Phase 1 readers, grouped by the analysis to port (the arm each
+unblocks in parentheses):
+
+- [x] **assign l-value + ref validity** — `assign_to_target`'s l-value
+      match on `target.kind` and `resolve_unary`'s `&mut`-on-primitive-field
+      check ported to the AST target shape + recorded dispatch facts
+      (`operator_dispatch` / `expression_types`); `Local` and the
+      `&mut`-captured-ident deref still read `target.kind` (their resolvers
+      are not placeholders yet). (`resolve_field_access`, `resolve_index`,
+      and the assign side of `resolve_unary` are now placeholders)
+- [x] **null / unknown inference** — `patch_unresolved_null` /
+      `NullBreakPatcher` replaced by AST walks
+      (`control_flow::collect_unresolved_null_tails` /
+      `collect_unresolved_null_breaks`); the TIR-mutating machinery is
+      deleted. Required the `expression_types` UNKNOWN-faithfulness change
+      (see the note below) so the AST walk sees an unresolved-null branch.
+- [x] **block result type** — `crate::tir::block_result_type` callers in the
+      `Block` / `If` (no-expected-type inference and post-null checks) arms,
+      `with … do`, for-of, and the trailing-match path ported to
+      `control_flow::block_result_type` over `expression_types`. The
+      if-let-chain / let-chain lowerings still call the TIR version on their
+      _synthetic_ blocks (no 1:1 AST block); those readers remain.
+- [x] **unary constant folding** — the `-literal` fold and native `Unary`
+      construction are deleted; reify owns the fold (it reads
+      `expression_types[unary.id]` + the AST). (`resolve_unary` is a
+      placeholder)
+- [x] **tuple spread** — `resolve_tuple_literal` resolves the elements,
+      collects their types (incl. the concrete-tuple-spread inline
+      expansion), keeps the spread diagnostic, and returns a placeholder;
+      reify's `reify_tuple_literal` owns the actual node / temporary
+      construction.
+- [x] **struct-literal deferred coercion** — the `value.kind == TupleLiteral`
+      gate is read from the AST (a spread-free tuple-literal field), so the
+      deferred second pass still records the coercion via
+      `try_coerce_tuple_to_sequence`.
+- [x] **pattern variant const literals** — the const body AST is classified
+      directly (`Number`/`Bool`/`Char` → `Literal` pattern, else
+      `ConstantValue`), unblocking `resolve_literal` and `resolve_cast`
+      placeholders.
+- [ ] **for-of `TupleZip`** — `resolve_for_of` detects the variadic form by
+      the iterator's `TupleZip` kind. Record the form. (coupled with the
+      `TupleZip` producer)
+- [ ] **if-let-chain / let-chain result type** — the remaining
+      `block_result_type(TIR)` readers, over synthetic chain blocks. Needs
+      the chain's result-type rule expressed on the AST.
+- [ ] **assign target ident classification** — `assign_to_target` still
+      reads `target.kind` to classify an `Ident` / `&mut`-captured-ident
+      target (`Local` / `GlobalVarGet` / deref-capture `Unary { Deref }`).
+      Porting it (name-resolution replication or a recorded place-kind fact)
+      unblocks `resolve_ident`.
+
+Arms now returning placeholders: range, field-access, index, unary, cast,
+tuple-literal, literal (joining binary / call / method-call / operators /
+coercion / assert / matches / template / item / module / handlers from
+earlier stages). Still building TIR: `resolve_ident`,
+`resolve_struct_literal`, the structural `Block` / `If` / `Match` /
+`LabeledBlock` arms, and `resolve_block` / `resolve_stmt` (the Phase 2
+signature sweep).
+
+`adjust_receiver_for_self_kind` (method-call receiver wrapping) reads
+`ResolvedType`, not a TIR `kind`, and reify does its own adjustment, so
+it needs no port.
+
+Foundational note (discovered porting "block result type"):
+`record_expression_type` deliberately drops `ERROR` and
+UNKNOWN-containing types, but the combined walk's TIR carries them in
+`expr.type_id` (a bare `null` is `Option<UNKNOWN>`). An AST analysis
+reading `expression_types` therefore cannot see an unresolved-null
+branch and mistypes the block as `Unit`. So the null/unknown handling is
+a prerequisite for the block-result-type port: either `expression_types`
+must faithfully carry the combined walk's types (including UNKNOWN), or
+the null inference must be recorded as an explicit fact. This reorders
+Phase 1 so the null/unknown reader is handled before (or with) the
+block-result-type reader.
+
 ## Status
 
 - [x] **Stages 1–4** — God Object decomposed; `TypeAnnotations` is the

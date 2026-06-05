@@ -875,7 +875,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None
         };
         let expr = self.resolve_expr(&unary.expr, ctx, inner_expected);
-        let op = util::convert_unary_op(unary.op);
 
         // Track address-taken locals for &x and &mut x
         if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef)
@@ -901,7 +900,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // creates a disconnected Box — mutations don't propagate back to the struct.
         // For GC reference types (struct, String, List, etc.), struct.get returns
         // the shared reference, so &mut field works correctly.
-        if unary.op == UnaryOp::MutRef && matches!(&expr.kind, TirExprKind::FieldAccess { .. }) {
+        // Detect the field-access shape from the AST (Stage 7-B:
+        // `resolve_field_access` returns a placeholder, so its resolved
+        // `kind` is no longer `FieldAccess`); the operand's `type_id` still
+        // carries the field type via the placeholder.
+        if unary.op == UnaryOp::MutRef && matches!(&unary.expr, ast::Expr::FieldAccess(_)) {
             let field_type = self.tysys.type_table.borrow().get(expr.type_id).clone();
             let base_type = self
                 .tysys
@@ -980,63 +983,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Constant folding: fold -literal into a negative literal
-        if unary.op == UnaryOp::Neg {
-            match &expr.kind {
-                TirExprKind::IntLiteral { value, repr } => {
-                    // Fold -N into a negative literal
-                    // Use wrapping negation to handle edge cases like -i64::MIN
-                    // Store as u64 (two's complement representation)
-                    let neg_value = (*value as i64).wrapping_neg().cast_unsigned();
-                    return TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: neg_value,
-                            repr: format!("-{repr}"),
-                        },
-                        expr.type_id,
-                        unary.span,
-                    );
-                }
-                TirExprKind::FloatLiteral { value, repr } => {
-                    // Fold -N.M into a negative float literal
-                    return TirExpr::new(
-                        TirExprKind::FloatLiteral {
-                            value: -value,
-                            repr: format!("-{repr}"),
-                        },
-                        expr.type_id,
-                        unary.span,
-                    );
-                }
-                // Handle -(N as T) -> (-N) as T for integer casts
-                TirExprKind::Cast {
-                    expr: inner,
-                    target_type,
-                } => {
-                    if let TirExprKind::IntLiteral { value, repr } = &inner.kind {
-                        let neg_value = (*value as i64).wrapping_neg().cast_unsigned();
-                        let neg_literal = TirExpr::new(
-                            TirExprKind::IntLiteral {
-                                value: neg_value,
-                                repr: format!("-{repr}"),
-                            },
-                            inner.type_id,
-                            unary.span,
-                        );
-                        return TirExpr::new(
-                            TirExprKind::Cast {
-                                expr: Box::new(neg_literal),
-                                target_type: *target_type,
-                            },
-                            *target_type,
-                            unary.span,
-                        );
-                    }
-                }
-                _ => {}
-            }
-        }
-
         let type_id = match unary.op {
             UnaryOp::Not => TypeTable::BOOL,
             UnaryOp::Ref => self.tysys.type_table.borrow_mut().make_ref(expr.type_id),
@@ -1072,20 +1018,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => expr.type_id,
         };
 
-        // NOTE (Stage 7-B): `resolve_unary` still builds its `Unary` TIR.
-        // The `*ptr` / `&x` / `&mut x` shapes are structurally inspected by
-        // `assign_to_target`'s l-value validation and by receiver
-        // adjustment, so the resolved `kind` must stay real until those
-        // consumers read the validity from the AST instead. Converting this
-        // to a placeholder broke `*x = v` ("expression is not assignable").
-        TirExpr::new(
-            TirExprKind::Unary {
-                op,
-                expr: Box::new(expr),
-            },
-            type_id,
-            unary.span,
-        )
+        // Stage 7-B: reify rebuilds the `Unary` (`*ptr` / `&x` / `&mut x` /
+        // `!b`) and folds `-literal` from the AST; the `&mut`-field
+        // diagnostic and the deref/ref type computation above are the
+        // record-only work. `assign_to_target`'s deref l-value check now
+        // reads the operand type from `expression_types` instead of this
+        // resolved `kind`.
+        placeholder(type_id, unary.span)
     }
 
     /// Resolve an assignment expression.
@@ -1100,6 +1039,92 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             assign.span,
             ctx,
         )
+    }
+
+    /// Whether an `Index` assignment target reaching `assign_to_target`'s
+    /// general path is an assignable place. The `IndexAssign` path above
+    /// already returned for index-assignable receivers, so AST + recorded
+    /// facts replace reading the resolved `target.kind`:
+    ///   - a read-only `Index` trait access (recorded `operator_dispatch`
+    ///     with `needs_deref`) lowers to `*recv.index(i)` over `&Output`, so
+    ///     a write would go through an immutable reference (diagnosed here,
+    ///     mirroring the old `Unary { Deref, expr: Ref(_) }` arm);
+    ///   - an `IndexValue` access is a by-value method call — not a place;
+    ///   - with no recorded read dispatch the only assignable shape is a
+    ///     tuple index (`t[0]`, lowered to a `FieldAccess`); an unindexable
+    ///     receiver was already diagnosed by `resolve_index`.
+    fn index_target_assignable(&mut self, index_expr: &ast::IndexExpr) -> bool {
+        let needs_deref = self
+            .sem
+            .types
+            .operator_dispatch
+            .get(&self.ann_key(index_expr.id))
+            .map(|d| d.needs_deref);
+        if let Some(needs_deref) = needs_deref {
+            if needs_deref {
+                let _ = self.logger.error(TypeError::CannotAssign {
+                    message: "cannot assign through immutable reference".to_string(),
+                    span: index_expr.span,
+                });
+            }
+            return false;
+        }
+        let Some(recv_type) = self
+            .sem
+            .types
+            .expression_types
+            .get(&self.ann_key(index_expr.expr.id()))
+            .copied()
+        else {
+            return false;
+        };
+        let table = self.tysys.type_table.borrow();
+        // Mirror `resolve_index`'s one-level reference peel before the tuple
+        // check.
+        let base = match table.get(recv_type) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => recv_type,
+        };
+        matches!(
+            table.get(base),
+            ResolvedType::GenericInstance { name, module_source, .. }
+                if TypeTable::is_tuple_type(name, module_source)
+        )
+    }
+
+    /// Whether `*operand = v` is a valid l-value: it is, unless `operand`
+    /// is an immutable reference (`&T`), in which case the write is through
+    /// an immutable reference and is diagnosed here. AST + recorded-fact
+    /// replacement for reading the resolved `Unary { Deref, expr }` kind
+    /// (Stage 7-B made `resolve_unary` a placeholder): `operand`'s type
+    /// rides on `expression_types`. Mirrors the old check, which inspected
+    /// the *operand* type, so `*5 = v` (operand `5: i32`, already diagnosed
+    /// by `resolve_unary`) is not re-flagged here.
+    fn deref_target_assignable(&mut self, unary: &ast::UnaryExpr, span: Span) -> bool {
+        let Some(operand_type) = self
+            .sem
+            .types
+            .expression_types
+            .get(&self.ann_key(unary.expr.id()))
+            .copied()
+        else {
+            // ERROR-typed operand (not recorded): lenient, like the old
+            // `get(ERROR)` arm that did not match `Ref`.
+            return true;
+        };
+        let is_immutable_ref = matches!(
+            self.tysys.type_table.borrow().get(operand_type),
+            ResolvedType::Ref(_)
+        );
+        if is_immutable_ref {
+            let _ = self.logger.error(TypeError::CannotAssign {
+                message: "cannot assign through immutable reference".to_string(),
+                span,
+            });
+            false
+        } else {
+            true
+        }
     }
 
     /// Build an assignment TIR for `target = value`, where the value may
@@ -1287,29 +1312,54 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Validate that the target is a valid l-value
-        let is_valid_lvalue = match &target.kind {
-            TirExprKind::Local { .. } => true,
-            TirExprKind::FieldAccess { .. } => true,
-            TirExprKind::Index { .. } => true,
-            // Dereference is a valid l-value only through mutable reference
-            TirExprKind::Unary {
-                op: TirUnaryOp::Deref,
-                expr,
-                ..
-            } => {
-                let inner_type = self.tysys.type_table.borrow().get(expr.type_id).clone();
-                if matches!(inner_type, ResolvedType::Ref(_)) {
-                    let _ = self.logger.error(TypeError::CannotAssign {
-                        message: "cannot assign through immutable reference".to_string(),
-                        span: target_ast.span(),
-                    });
-                    false
-                } else {
-                    true
-                }
+        // Validate that the target is a valid l-value. `FieldAccess` and
+        // `Index` targets are classified from the AST + recorded facts
+        // (Stage 7-B made `resolve_field_access` / `resolve_index` return
+        // placeholders); `Local` (from `resolve_ident`) and `Unary { Deref }`
+        // (from `resolve_unary`) still build real TIR, so they are read from
+        // the resolved `target.kind`.
+        let is_valid_lvalue = match target_ast {
+            // A field access is always a place (the resolved kind was
+            // `FieldAccess`, accepted unconditionally below).
+            ast::Expr::FieldAccess(_) => true,
+            // The IndexAssign path at the top of `assign_to_target` already
+            // returned for index-assignable receivers, so an `Index` target
+            // here is a tuple index (a place), a read-only `Index` /
+            // `IndexValue` trait access (not a place), or an unindexable
+            // receiver (already diagnosed by `resolve_index`).
+            ast::Expr::Index(index_expr) => self.index_target_assignable(index_expr),
+            // `*x = v`: valid only through a mutable reference. The operand's
+            // type rides on `expression_types` now that `resolve_unary`
+            // returns a placeholder.
+            ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => {
+                self.deref_target_assignable(u, target_ast.span())
             }
-            _ => false,
+            // `Local` (from `resolve_ident`) and a `&mut`-captured ident
+            // (which `resolve_ident` lowers to a real `Unary { Deref,
+            // Capture }`) still build real TIR, so classify them from the
+            // resolved `target.kind`.
+            _ => match &target.kind {
+                TirExprKind::Local { .. } => true,
+                TirExprKind::FieldAccess { .. } => true,
+                TirExprKind::Index { .. } => true,
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Deref,
+                    expr,
+                    ..
+                } => {
+                    let inner_type = self.tysys.type_table.borrow().get(expr.type_id).clone();
+                    if matches!(inner_type, ResolvedType::Ref(_)) {
+                        let _ = self.logger.error(TypeError::CannotAssign {
+                            message: "cannot assign through immutable reference".to_string(),
+                            span: target_ast.span(),
+                        });
+                        false
+                    } else {
+                        true
+                    }
+                }
+                _ => false,
+            },
         };
 
         if !is_valid_lvalue {

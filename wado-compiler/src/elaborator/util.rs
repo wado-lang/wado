@@ -1,7 +1,7 @@
 //! Utility functions for the elaborator phase.
 
-use crate::ast::{BinaryOp, UnaryOp};
-use crate::tir::{PrimitiveType, ResolvedType, TirBinaryOp, TirUnaryOp, TypeId, TypeTable};
+use crate::ast::BinaryOp;
+use crate::tir::{PrimitiveType, ResolvedType, TirBinaryOp, TypeId, TypeTable};
 
 /// Convert AST `BinaryOp` to TIR `BinaryOp`.
 pub(super) fn convert_binary_op(op: BinaryOp) -> TirBinaryOp {
@@ -24,18 +24,6 @@ pub(super) fn convert_binary_op(op: BinaryOp) -> TirBinaryOp {
         BinaryOp::BitXor => TirBinaryOp::BitXor,
         BinaryOp::Shl => TirBinaryOp::Shl,
         BinaryOp::Shr => TirBinaryOp::Shr,
-    }
-}
-
-/// Convert AST `UnaryOp` to TIR `UnaryOp`.
-pub(super) fn convert_unary_op(op: UnaryOp) -> TirUnaryOp {
-    match op {
-        UnaryOp::Neg => TirUnaryOp::Neg,
-        UnaryOp::Not => TirUnaryOp::Not,
-        UnaryOp::BitNot => TirUnaryOp::BitNot,
-        UnaryOp::Ref => TirUnaryOp::Ref,
-        UnaryOp::MutRef => TirUnaryOp::MutRef,
-        UnaryOp::Deref => TirUnaryOp::Deref,
     }
 }
 

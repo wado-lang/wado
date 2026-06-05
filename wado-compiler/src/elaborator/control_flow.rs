@@ -18,25 +18,45 @@
 //! NEVER detection (TIR walker's `expr.type_id == TypeTable::NEVER`)
 //! becomes an `expression_types[(module, expr.id)] == NEVER` lookup.
 
+use std::cell::RefCell;
+
 use crate::ast;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::symbol::SymbolKey;
 use crate::tir::{TypeId, TypeTable};
+use crate::token::Span;
 
 /// Lookup context for AST control-flow walks. Holds the per-AstId
 /// type table and the current module key so `expression_types` reads
-/// resolve to the right module's facts.
+/// resolve to the right module's facts. `type_table` backs the
+/// `contains_unknown` filter the missing-return walk applies (since
+/// Stage 7-B `expression_types` records UNKNOWN-containing types).
 #[derive(Clone, Copy)]
 pub(super) struct CtrlFlowCtx<'a> {
     pub(super) expression_types: &'a IndexMap<SymbolKey, TypeId>,
     pub(super) module: &'a ModuleSource,
+    pub(super) type_table: &'a RefCell<TypeTable>,
 }
 
 impl CtrlFlowCtx<'_> {
     fn type_of(&self, expr: &ast::Expr) -> Option<TypeId> {
-        let key = SymbolKey::new(self.module.clone(), expr.id());
+        self.type_of_id(expr.id())
+    }
+
+    fn type_of_id(&self, id: crate::ast::AstId) -> Option<TypeId> {
+        let key = SymbolKey::new(self.module.clone(), id);
         self.expression_types.get(&key).copied()
+    }
+
+    /// `type_of`, but an UNKNOWN-containing recorded type counts as "no
+    /// definite type" (`None`). The missing-return walk uses this so an
+    /// unresolved-`null` return value does not masquerade as a concrete
+    /// return type — preserving the behaviour from when the recording site
+    /// skipped UNKNOWN types entirely.
+    fn definite_type_of(&self, expr: &ast::Expr) -> Option<TypeId> {
+        self.type_of(expr)
+            .filter(|t| !self.type_table.borrow().contains_unknown(*t))
     }
 
     fn is_never(&self, expr: &ast::Expr) -> bool {
@@ -106,6 +126,113 @@ pub(super) fn expr_always_exits(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr) -> bool 
     }
 }
 
+/// Result type of `block` — the type of its trailing expression, or
+/// `Unit`. AST mirror of [`crate::tir::block_result_type`] (which reads
+/// the built `TirBlock`); this reads `expression_types[(module, id)]`
+/// instead so the combined walk can compute a block's value type without
+/// inspecting the body TIR it builds.
+///
+/// Unlike the missing-return walk this does NOT filter `contains_unknown`:
+/// an unresolved-`null` tail is `Option<UNKNOWN>` here exactly as the TIR
+/// walker saw `null_tir.type_id`, so the if/match result-type inference
+/// (which special-cases `contains_unknown` branches) behaves identically.
+///
+/// The arm-to-arm correspondence with the TIR walker:
+/// - trailing `Stmt::Expr(e)` ↔ `TirStmtKind::Expr` — the recorded type of
+///   `e` (an `if`/`match`/block tail keeps its already-recorded result
+///   type here).
+/// - trailing `Stmt::If` with an `else` ↔ `TirStmtKind::If` — the branches
+///   agree via [`crate::tir::agree_branch_types`].
+/// - trailing `Return`/`Break`/`Continue` ↔ the diverging arms — `Never`.
+/// - anything else ↔ the TIR walker's `_ => None` — `Unit`.
+pub(super) fn block_result_type(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> TypeId {
+    block
+        .stmts
+        .last()
+        .and_then(|s| match s {
+            ast::Stmt::Expr(e) => ctx.type_of(&e.expr),
+            // A trailing `match` lowers to `TirStmtKind::Expr(match)`, so its
+            // recorded type is the block's value (the combined walk records
+            // `match.id` for both stmt-position and trailing-with-expected
+            // matches). The TIR walker reached it through the `Expr` arm.
+            ast::Stmt::Match(m) => ctx.type_of_id(m.id),
+            ast::Stmt::If(if_stmt) => if_stmt.else_block.as_ref().and_then(|else_block| {
+                crate::tir::agree_branch_types(
+                    block_result_type(ctx, &if_stmt.then_block),
+                    block_result_type(ctx, else_block),
+                )
+            }),
+            ast::Stmt::Return(_) | ast::Stmt::Break(_) | ast::Stmt::Continue(_) => {
+                Some(TypeTable::NEVER)
+            }
+            _ => None,
+        })
+        .unwrap_or(TypeTable::UNIT)
+}
+
+/// Spans of unresolved-`null` tail values in `expr` whose recorded type
+/// still contains UNKNOWN. AST mirror of `patch_unresolved_null` (which
+/// mutated the built TIR's `null.type_id`): only the *tail* positions are
+/// walked (block tails, `if`/`match` arms), and a tail `null` that cannot
+/// fit a non-`Option` result type is collected for the caller to report.
+/// The TIR-mutation half was dead (reify rebuilds the `null` from its
+/// `expected_type`), so only the diagnostic survives.
+pub(super) fn collect_unresolved_null_tails(
+    ctx: CtrlFlowCtx<'_>,
+    expr: &ast::Expr,
+    out: &mut Vec<Span>,
+) {
+    match expr {
+        ast::Expr::Literal(lit) if matches!(lit.value, ast::Literal::Null) => {
+            if ctx
+                .type_of_id(lit.id)
+                .is_some_and(|t| ctx.type_table.borrow().contains_unknown(t))
+            {
+                out.push(lit.span);
+            }
+        }
+        ast::Expr::Block(block) => collect_unresolved_null_tails_in_block(ctx, block, out),
+        ast::Expr::If(if_expr) => {
+            collect_unresolved_null_tails_in_block(ctx, &if_expr.then_block, out);
+            if let Some(eb) = &if_expr.else_block {
+                collect_unresolved_null_tails_in_block(ctx, eb, out);
+            }
+        }
+        ast::Expr::Match(m) => {
+            for arm in &m.arms {
+                collect_unresolved_null_tails(ctx, &arm.body, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Tail-position helper for [`collect_unresolved_null_tails`], mirroring
+/// `patch_unresolved_null_in_block`. A trailing `match` lowers to
+/// `TirStmtKind::Expr(match)`, which the TIR walker reached through its
+/// `Expr` arm, so it is descended here too.
+pub(super) fn collect_unresolved_null_tails_in_block(
+    ctx: CtrlFlowCtx<'_>,
+    block: &ast::Block,
+    out: &mut Vec<Span>,
+) {
+    match block.stmts.last() {
+        Some(ast::Stmt::Expr(e)) => collect_unresolved_null_tails(ctx, &e.expr, out),
+        Some(ast::Stmt::Match(m)) => {
+            for arm in &m.arms {
+                collect_unresolved_null_tails(ctx, &arm.body, out);
+            }
+        }
+        Some(ast::Stmt::If(if_stmt)) => {
+            if let Some(eb) = &if_stmt.else_block {
+                collect_unresolved_null_tails_in_block(ctx, &if_stmt.then_block, out);
+                collect_unresolved_null_tails_in_block(ctx, eb, out);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// First return statement's value type discovered while walking
 /// `block`. AST mirror of `Elaborator::find_return_type_in_block`.
 pub(super) fn find_return_type_in_block(
@@ -123,12 +250,12 @@ pub(super) fn find_return_type_in_block(
 fn find_return_type_in_stmt(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt) -> Option<TypeId> {
     match stmt {
         ast::Stmt::Return(r) => match &r.value {
-            // The value's type comes from `expression_types`; if it
-            // isn't recorded (ERROR / UNKNOWN propagation skipped it),
-            // surface `None` so the caller treats this arm as "no return
-            // type found" rather than silently fabricating `Unit` and
+            // The value's type comes from `expression_types`; an ERROR /
+            // UNKNOWN-containing type counts as "not recorded" (via
+            // `definite_type_of`), so the caller treats this arm as "no
+            // return type found" rather than silently fabricating `Unit` and
             // producing a misleading missing-return diagnostic.
-            Some(expr) => ctx.type_of(expr),
+            Some(expr) => ctx.definite_type_of(expr),
             None => Some(TypeTable::UNIT),
         },
         ast::Stmt::If(if_stmt) => {
@@ -191,7 +318,7 @@ pub(super) fn find_return_type_in_expr(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr) -
         // rule as `Stmt::Return` above: yield `None` rather than
         // synthesising `Unit`, to keep ERROR-recovery diagnostics
         // free of bogus missing-return reports.
-        ast::Expr::Resume(r) => ctx.type_of(&r.value),
+        ast::Expr::Resume(r) => ctx.definite_type_of(&r.value),
         _ => None,
     }
 }
@@ -279,6 +406,61 @@ impl AstTreeProbe for BreakToLabel<'_> {
             _ => Step::Descend,
         }
     }
+}
+
+/// Collects the spans of `break <label>: <null>` values whose recorded
+/// type is still unresolved. AST mirror of `NullBreakPatcher` (whose TIR
+/// mutation was dead — reify rebuilds the `null` from its `expected_type`):
+/// a matching break's value is walked for unresolved `null` tails via
+/// [`collect_unresolved_null_tails`]; an inner labeled block reusing the
+/// same name shadows it (its breaks target the inner block), and closure
+/// bodies have their own control-flow scope (`any_in_expr` does not descend
+/// into them).
+struct NullBreakCollector<'a> {
+    ctx: CtrlFlowCtx<'a>,
+    label: &'a str,
+    spans: Vec<Span>,
+}
+
+impl AstTreeProbe for NullBreakCollector<'_> {
+    fn check_stmt(&mut self, stmt: &ast::Stmt) -> Step {
+        match stmt {
+            ast::Stmt::Break(b) if b.label.as_deref() == Some(self.label) && b.value.is_some() => {
+                let value = b.value.as_ref().unwrap();
+                collect_unresolved_null_tails(self.ctx, value, &mut self.spans);
+                // The value was walked here; do not descend into it again
+                // (mirrors `NullBreakPatcher::visit_stmt` returning after the
+                // patch).
+                Step::Skip
+            }
+            ast::Stmt::LabeledBlock(lb) if lb.label == self.label => Step::Skip,
+            _ => Step::Descend,
+        }
+    }
+
+    fn check_expr(&mut self, expr: &ast::Expr) -> Step {
+        match expr {
+            ast::Expr::LabeledBlock(lb) if lb.label == self.label => Step::Skip,
+            _ => Step::Descend,
+        }
+    }
+}
+
+/// Spans of `break <label>: null` values inside `block` that cannot fit the
+/// labeled block's resolved non-`Option` result type. AST replacement for
+/// the `NullBreakPatcher` pass.
+pub(super) fn collect_unresolved_null_breaks(
+    ctx: CtrlFlowCtx<'_>,
+    block: &ast::Block,
+    label: &str,
+) -> Vec<Span> {
+    let mut probe = NullBreakCollector {
+        ctx,
+        label,
+        spans: Vec::new(),
+    };
+    any_in_tree(ctx, block, &mut probe);
+    probe.spans
 }
 
 fn loop_body_can_escape(ctx: CtrlFlowCtx<'_>, body: &ast::Block) -> bool {

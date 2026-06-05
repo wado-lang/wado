@@ -80,13 +80,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx.exit_scope();
 
         // `with ... do { ... }` is an expression: it evaluates to its body
-        // block's value (the shared `block_result_type` handles every tail
-        // kind — a bare expression, an `if`/`else`, a `match`, a labeled
-        // block, or a diverging `return`). Typing it this way rather than a
-        // hardcoded `Unit` is what makes the value form
-        // `let x = with E => h do { ... }` work; for the common statement form
-        // the body's tail is `Unit`, so this is unchanged.
-        let result_type = crate::tir::block_result_type(&body);
+        // block's value. The shared block-result rule types it from the
+        // body's tail — a bare expression, an `if`/`else` (with both
+        // branches), a `match`, or a diverging `return` — rather than a
+        // hardcoded `Unit`; that is what makes the value form
+        // `let x = with E => h do { ... }` work, while the common statement
+        // form (tail `Unit`) is unchanged. Read from `expression_types` (AST
+        // level) so it does not depend on the body TIR.
+        let result_type = self.ast_block_result_type(&with_expr.body);
 
         TirExpr::new(
             TirExprKind::WithHandler {
