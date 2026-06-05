@@ -378,12 +378,12 @@ impl FunctionTranslator<'_, '_> {
     /// Translate a type cast.
     pub(super) fn translate_cast(
         &mut self,
-        inner: &NirExpr,
+        inner: ExprId,
         from_type: TypeId,
         to_type: TypeId,
     ) -> WirInstr {
         // Optimize: IntLiteral cast to i64/u64 → emit I64Const directly to avoid i32 truncation
-        if let NirExprKind::IntLiteral { value, .. } = &inner.kind
+        if let ExprKind::IntLiteral { value, .. } = &self.body.exprs[inner].kind
             && matches!(
                 self.type_table.get(to_type),
                 ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
@@ -587,16 +587,17 @@ impl FunctionTranslator<'_, '_> {
     /// Translate array index read: `arr[i]`
     pub(super) fn translate_index(
         &mut self,
-        array_expr: &NirExpr,
-        index_expr: &NirExpr,
+        array_expr: ExprId,
+        index_expr: ExprId,
     ) -> WirInstr {
         let arr = self.translate_expr(array_expr);
         let idx = self.translate_expr(index_expr);
 
         // Unwrap reference types
-        let base_type_id = match self.type_table.get(array_expr.type_id) {
+        let array_type_id = self.body.exprs[array_expr].type_id;
+        let base_type_id = match self.type_table.get(array_type_id) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => array_expr.type_id,
+            _ => array_type_id,
         };
 
         if let Some(element_type_id) = self.type_table.as_list(base_type_id) {
@@ -707,16 +708,17 @@ impl FunctionTranslator<'_, '_> {
     /// Translate array index assignment: `arr[i] = val`
     pub(super) fn translate_index_assign(
         &mut self,
-        array_expr: &NirExpr,
-        index_expr: &NirExpr,
+        array_expr: ExprId,
+        index_expr: ExprId,
         val: WirInstr,
     ) -> WirInstr {
         let arr = self.translate_expr(array_expr);
         let idx = self.translate_expr(index_expr);
 
-        let base_type_id = match self.type_table.get(array_expr.type_id) {
+        let array_type_id = self.body.exprs[array_expr].type_id;
+        let base_type_id = match self.type_table.get(array_type_id) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => array_expr.type_id,
+            _ => array_type_id,
         };
 
         if let Some(element_type_id) = self.type_table.as_list(base_type_id) {
