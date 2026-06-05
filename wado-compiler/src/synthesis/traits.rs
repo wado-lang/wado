@@ -3363,7 +3363,7 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<Strin
                     return None;
                 }
                 let args = type_args.iter().map(|e| tt.mangle_type_name(*e)).collect();
-                Some((*id, TypeTable::TUPLE_TYPE_NAME.to_string(), args))
+                Some((id, TypeTable::TUPLE_TYPE_NAME.to_string(), args))
             }
             ResolvedType::GenericResource {
                 name, type_args, ..
@@ -3372,7 +3372,7 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<Strin
                     return None;
                 }
                 let args = type_args.iter().map(|t| tt.mangle_type_name(*t)).collect();
-                Some((*id, name.clone(), args))
+                Some((id, name.clone(), args))
             }
             _ => None,
         })
@@ -3421,7 +3421,7 @@ fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
             continue;
         }
         result.push(FnSignature {
-            repr_type_id: *id,
+            repr_type_id: id,
             arity,
             return_type: *return_type,
             type_arg_names: vec![arity.to_string(), tt.mangle_type_name(*return_type)],

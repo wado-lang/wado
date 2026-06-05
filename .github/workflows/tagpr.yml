@@ -31,39 +31,6 @@ jobs:
       - name: Check out the vendored wasmtime fork (path dependency)
         run: git submodule update --init --depth 1 vendor/wasmtime
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ci
-          save-if: false
-
       - uses: Songmu/tagpr@v1
-        id: tagpr
         env:
           GITHUB_TOKEN: "${{ steps.app-token.outputs.token }}"
-
-      # tagpr's changelog isn't dprint-clean, so Tidy would push a chore commit
-      # (retriggering CI) on every release PR. Format it here instead.
-      - name: Format the release changelog
-        if: steps.tagpr.outputs.pull_request != ''
-        env:
-          GH_TOKEN: "${{ steps.app-token.outputs.token }}"
-          APP_SLUG: "${{ steps.app-token.outputs.app-slug }}"
-          TAGPR_PR: "${{ steps.tagpr.outputs.pull_request }}"
-        run: |
-          set -e
-          branch=$(jq -r .head.ref <<<"$TAGPR_PR")
-          git fetch origin "$branch"
-          git checkout "$branch"
-          git submodule update --init --depth 1 vendor/wasmtime
-          cargo run -p wado-dev-tools --quiet -- format-md CHANGELOG.md
-          if git diff --quiet -- CHANGELOG.md; then
-            echo "CHANGELOG.md already formatted; nothing to do."
-            exit 0
-          fi
-          user_id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)
-          git config user.name "${APP_SLUG}[bot]"
-          git config user.email "${user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          # Use the "chore: tidy" subject so Tidy's precheck short-circuits.
-          git commit -m "chore: tidy"
-          git push origin "HEAD:$branch"
