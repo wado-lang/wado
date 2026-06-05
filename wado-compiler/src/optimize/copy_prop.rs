@@ -823,9 +823,10 @@ fn propagate_copies_in_function(
     type_table: &TypeTable,
     first_param_types: &FirstParamTypes,
 ) -> bool {
-    let Some(body) = &mut func.body else {
+    let Some(mut owned) = func.body_block() else {
         return false;
     };
+    let body = &mut owned;
 
     let mut ever_changed = false;
 
@@ -882,6 +883,7 @@ fn propagate_copies_in_function(
         }
     }
 
+    func.set_body_block(owned);
     ever_changed
 }
 

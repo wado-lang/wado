@@ -97,9 +97,10 @@ fn sroa_in_function(
     stores_lookup: &StoresLookup,
     current_module: &ModuleSource,
 ) -> bool {
-    let Some(body) = &mut func.body else {
+    let Some(mut owned) = func.body_block() else {
         return false;
     };
+    let body = &mut owned;
 
     // Step 1: Identify candidate Let bindings (struct/tuple literals).
     let candidates = collect_candidates(&body.stmts);
@@ -206,6 +207,7 @@ fn sroa_in_function(
         reconstruct_info: &reconstruct_info,
     }
     .visit_block(body);
+    func.set_body_block(owned);
 
     true
 }

@@ -1992,8 +1992,9 @@ pub fn remove_unreachable_globals(
 
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        if let Some(body) = &mut func.body {
-            remove_dead_global_sets_block(body, used_globals);
+        if let Some(mut owned) = func.body_block() {
+            remove_dead_global_sets_block(&mut owned, used_globals);
+            func.set_body_block(owned);
         }
     }
 }

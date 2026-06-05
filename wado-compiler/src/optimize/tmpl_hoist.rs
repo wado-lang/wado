@@ -56,14 +56,16 @@ pub fn hoist_template_buffers(project: &mut NirPackage) -> bool {
 }
 
 fn hoist_in_function(func: &mut NirFunction, type_table: &std::cell::RefCell<TypeTable>) -> bool {
-    let Some(ref mut body) = func.body else {
+    let Some(mut owned) = func.body_block() else {
         return false;
     };
+    let body = &mut owned;
     let mut local_count = func.local_count;
     let mut locals = func.locals.clone();
     let changed = hoist_in_block(body, &mut local_count, &mut locals, type_table);
     func.local_count = local_count;
     func.locals = locals;
+    func.set_body_block(owned);
     changed
 }
 

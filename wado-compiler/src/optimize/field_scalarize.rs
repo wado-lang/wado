@@ -151,7 +151,7 @@ fn analyze_function_field_usage(
     func: &NirFunction,
     type_table: &TypeTable,
 ) -> IndexMap<u32, ParamFieldUsage> {
-    let Some(ref body) = func.body else {
+    let Some(body) = &func.body_block() else {
         return IndexMap::default();
     };
 

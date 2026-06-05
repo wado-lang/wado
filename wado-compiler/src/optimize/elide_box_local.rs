@@ -72,7 +72,8 @@ fn elide_in_function(func: &mut NirFunction) -> bool {
     blacklist.extend(func.address_taken_locals.iter().copied());
     blacklist.extend(func.stores_aliased_locals.iter().copied());
 
-    let body = func.body.as_mut().unwrap();
+    let mut owned = func.body_block().unwrap();
+    let body = &mut owned;
     let stats = collect_local_stats(body);
     let mut elider = Elider {
         stats: &stats,
@@ -82,6 +83,7 @@ fn elide_in_function(func: &mut NirFunction) -> bool {
     while elider.visit_block(body) {
         changed = true;
     }
+    func.set_body_block(owned);
     changed
 }
 

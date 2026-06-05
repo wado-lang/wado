@@ -514,9 +514,10 @@ impl NirOptVisitor for DerefOnlyRewriter<'_> {
 /// break label: StrUtf8ByteIter { repr, used, index: 0 };
 /// ```
 fn eliminate_deref_ref_pairs_in_function(func: &mut NirFunction) -> bool {
-    let Some(body) = &mut func.body else {
+    let Some(mut owned) = func.body_block() else {
         return false;
     };
+    let body = &mut owned;
 
     let mut refs: IndexMap<u32, DerefOnlyRef> = IndexMap::default();
     collect_deref_only_refs_in_block(body, &mut refs);
@@ -538,14 +539,17 @@ fn eliminate_deref_ref_pairs_in_function(func: &mut NirFunction) -> bool {
     let mut rewriter = DerefOnlyRewriter {
         eliminable: &eliminable,
     };
-    rewriter.visit_block(body)
+    let r = rewriter.visit_block(body);
+    func.set_body_block(owned);
+    r
 }
 
 /// Eliminate unnecessary reference bindings in a single function.
 fn eliminate_refs_in_function(func: &mut NirFunction) -> bool {
-    let Some(body) = &mut func.body else {
+    let Some(mut owned) = func.body_block() else {
         return false;
     };
+    let body = &mut owned;
 
     // Pre-scan: locals bound by more than one `Let` (the inliner reuses
     // an index when expanding mutually-exclusive branches that each
@@ -575,6 +579,7 @@ fn eliminate_refs_in_function(func: &mut NirFunction) -> bool {
 
     // Pass 2: Replace field accesses and remove dead bindings in a single traversal.
     transform_block(body, &eliminable);
+    func.set_body_block(owned);
     true
 }
 

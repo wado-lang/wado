@@ -93,12 +93,15 @@ pub fn eliminate_implied_conditions(project: &mut NirPackage) -> bool {
 }
 
 fn process_function(func: &mut NirFunction) -> bool {
-    let Some(ref mut body) = func.body else {
+    let Some(mut owned) = func.body_block() else {
         return false;
     };
+    let body = &mut owned;
     let tainted = collect_tainted_locals(body);
     let mut defs = DefMap::default();
-    process_block(body, &mut defs, &tainted)
+    let r = process_block(body, &mut defs, &tainted);
+    func.set_body_block(owned);
+    r
 }
 
 /// Per-function summary of locals and `(local, field_index)` pairs

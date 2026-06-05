@@ -58,12 +58,14 @@ fn elide_in_function(func: &mut NirFunction) -> bool {
     let mut collector = ReadCollector { kept: &mut kept };
     collector.visit_block(&func.body_block().unwrap());
 
-    let body = func.body.as_mut().unwrap();
+    let mut owned = func.body_block().unwrap();
+    let body = &mut owned;
     let mut elider = Elider {
         kept: &kept,
         changed: false,
     };
     elider.visit_block(body);
+    func.set_body_block(owned);
     elider.changed
 }
 

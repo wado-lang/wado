@@ -131,9 +131,10 @@ pub fn apply_licm(project: &mut NirPackage) -> bool {
 
 /// Apply LICM to a function
 fn licm_function(func: &mut NirFunction, type_table: &TypeTable) -> bool {
-    let Some(ref mut body) = func.body else {
+    let Some(mut owned) = func.body_block() else {
         return false;
     };
+    let body = &mut owned;
     let mut local_count = func.local_count;
     let mut locals = func.locals.clone();
     let mut outer_aliases: Vec<(u32, u32)> = Vec::new();
@@ -146,6 +147,7 @@ fn licm_function(func: &mut NirFunction, type_table: &TypeTable) -> bool {
     );
     func.local_count = local_count;
     func.locals = locals;
+    func.set_body_block(owned);
     changed
 }
 
