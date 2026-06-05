@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780618876883,
+  "lastUpdate": 1780620976875,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29889,6 +29889,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b3f0f5a9d0f720ae8c123ddaad6436c8a0929e1b"
         },
         "date": 1780618876694,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9659,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17191,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460509,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "02dfcc5b9c151809f7790b00539aeb40de215362",
+          "message": "Merge pull request #1293 from wado-lang/claude/elaborator-refactoring-wep-UfxWY\n\nelaborator(7-B): combined walk stops building TIR — reify becomes the sole producer (Phase 1)",
+          "timestamp": "2026-06-05T09:47:26+09:00",
+          "tree_id": "bce061e27d9463c407da181e8fec41e2c012e9e2",
+          "url": "https://github.com/wado-lang/wado/commit/02dfcc5b9c151809f7790b00539aeb40de215362"
+        },
+        "date": 1780620976687,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
