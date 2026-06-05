@@ -6,7 +6,7 @@
 
 use { Stdout } from "core:cli";
 use { Serialize, Deserialize } from "core:serde";
-use { from_string } from "core:json";
+use { from_bytes } from "core:json";
 use { MonotonicClock } from "wasi:clocks";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { Benchmark } from "core:benchmark";
@@ -138,7 +138,7 @@ struct TwitterResponse {
 }
 impl Deserialize for TwitterResponse;
 
-fn read_file(path: String) -> String with Preopens {
+fn read_file_bytes(path: String) -> ByteList with Preopens {
     let dirs = Preopens::get_directories();
     let root = dirs[0].0;
     let open_result = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait();
@@ -150,16 +150,16 @@ fn read_file(path: String) -> String with Preopens {
         Err(_) => unreachable(),
     };
     let [stream, _done] = file.read_via_stream(0 as Filesize);
-    let mut buf = String::with_capacity(1024 * 1024);
+    let mut buf: List<u8> = [];
     loop {
         let chunk = stream.read(4096);
         if chunk.len() == 0 {
             break;
         }
-        buf.push_bytes_unchecked(chunk);
+        buf.extend(&chunk);
     }
     stream.drop();
-    return buf;
+    return buf as ByteList;
 }
 
 test "smoke" {
@@ -170,8 +170,8 @@ test "smoke" {
     assert count == 0;
 }
 
-fn parse_statuses(json_data: String) -> i32 {
-    let resp = match from_string::<TwitterResponse>(json_data) {
+fn parse_statuses<B: AsByteSlice>(json_data: B) -> i32 {
+    let resp = match from_bytes::<TwitterResponse, B>(json_data) {
         Ok(r) => r,
         Err(e) => panic(`Parse error: {e.message}`),
     };
@@ -179,7 +179,7 @@ fn parse_statuses(json_data: String) -> i32 {
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {
-    let json_data = read_file("json_twitter/twitter.json");
+    let json_data = read_file_bytes("json_twitter/twitter.json");
     let mut b = Benchmark::new("json-twitter");
     b.input_size = Option::Some(json_data.len());
 
