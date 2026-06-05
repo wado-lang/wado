@@ -424,6 +424,37 @@ pub(crate) struct TypeAnnotations {
     /// walk already resolves these correctly during `resolve_struct`; we just
     /// publish the resolved vector here for reify to read.
     pub(crate) struct_field_types: IndexMap<SymbolKey, Vec<crate::tir::TypeId>>,
+    /// Assignment-target place classification for each identifier that
+    /// resolves to a place (local / `&mut`-deref-capture / global), keyed by
+    /// the [`crate::ast::IdentExpr`]'s [`AstId`]. Recorded by
+    /// [`super::super::Elaborator::resolve_ident`] (Stage 7-B) so
+    /// [`super::super::Elaborator::assign_to_target`] can validate l-values
+    /// and global mutability from the AST + this fact instead of reading the
+    /// now-placeholder resolved `target.kind`. Idents that resolve to
+    /// functions, variants, enums, flags, or constants leave no entry and are
+    /// treated as "not an l-value". Keyed by `AstId` and structurally
+    /// constant across tuple-`for-of` iterations (the place kind of an ident
+    /// does not depend on element type), so it needs no per-element overlay.
+    pub(crate) assign_places: IndexMap<SymbolKey, AssignPlace>,
+}
+
+/// Assignment-target place classification recorded for an identifier by
+/// [`super::super::Elaborator::resolve_ident`]. See
+/// [`TypeAnnotations::assign_places`].
+#[derive(Clone)]
+pub(crate) enum AssignPlace {
+    /// A function-frame local — always a valid l-value.
+    Local,
+    /// A `&mut`-captured outer binding accessed through `*__ref` inside a
+    /// closure body. Assignable iff the captured reference is `&mut T`
+    /// (`through_mut_ref`); a shared-`&` capture is not assignable.
+    DerefCapture { through_mut_ref: bool },
+    /// A module global. Carries the resolved name (for the immutable-global
+    /// diagnostic) and mutability so the assign path validates the write and
+    /// projects the `GlobalVarSet`. The module source / original name needed
+    /// to rebuild the `GlobalVarSet` are re-derived by reify from the AST, so
+    /// they are not stored here.
+    Global { name: String, mutable: bool },
 }
 
 /// One tuple-`for-of` element's slice of the body-level annotation maps.

@@ -876,21 +876,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let expr = self.resolve_expr(&unary.expr, ctx, inner_expected);
 
-        // Track address-taken locals for &x and &mut x
-        if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef)
-            && let TirExprKind::Local { index, .. } = &expr.kind
-        {
-            ctx.address_taken_locals.insert(*index);
-        }
-
-        // Check that &mut is only applied to mutable locals
+        // Address-taken-local tracking for `&x` / `&mut x` is owned by reify
+        // (`reify.rs` unary arm), which marks `TirFunction::address_taken_locals`
+        // on the TIR it actually emits; the combined walk's marking was dead.
+        // The `&mut`-on-immutable-local diagnostic stays here (annotate emits
+        // diagnostics once) and reads the target off the AST now that
+        // `resolve_ident` returns a placeholder: `&mut x` is an immutable-local
+        // error only when `x` is a function-frame local (a `Local` `kind`
+        // before 7-B), so classify it via a read-only `ctx.lookup`.
         if unary.op == UnaryOp::MutRef
-            && let TirExprKind::Local { name, .. } = &expr.kind
-            && let Some(local) = ctx.lookup(name)
+            && let ast::Expr::Ident(id) = &unary.expr
+            && let Some(local) = ctx.lookup(&id.name)
             && !local.is_mut
         {
             let _ = self.logger.error(TypeError::CannotAssign {
-                message: format!("cannot take &mut of immutable variable '{name}'"),
+                message: format!("cannot take &mut of immutable variable '{}'", id.name),
                 span: unary.span,
             });
         }
@@ -1273,54 +1273,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Reject &T assigned where non-ref T expected
         self.typecheck(value_tir.type_id, target.type_id, value_span);
 
-        // Handle assignment to global variables
-        if let TirExprKind::GlobalVarGet {
-            module_source,
-            name,
-        } = &target.kind
-        {
-            // Check if the global is mutable (check both local and imported globals)
-            let is_mutable = self
-                .sem
-                .decls
-                .current_module_globals
-                .get(name)
-                .map(|(_, m)| *m)
-                .or_else(|| {
-                    // For imported globals, the name in the TIR is the original name from source
-                    // We need to find it by iterating through imported_globals
-                    self.sem
-                        .decls
-                        .imported_globals
-                        .values()
-                        .find(|(src, orig_name, _, _)| src == module_source && orig_name == name)
-                        .map(|(_, _, _, m)| *m)
-                });
-
-            if let Some(is_mut) = is_mutable {
-                if !is_mut {
-                    let _ = self.logger.error(TypeError::CannotAssign {
-                        message: format!("cannot assign to immutable global variable '{name}'"),
-                        span: target_ast.span(),
-                    });
-                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
+        // Handle assignment to global variables. Stage 7-B: the target is a
+        // placeholder, so the global is recognised from the recorded
+        // `AssignPlace::Global` on the target ident (which carries the
+        // resolved mutability) rather than the resolved `GlobalVarGet` kind.
+        let global_assign = if let ast::Expr::Ident(id) = target_ast {
+            match self.assign_place_of(id.id) {
+                Some(super::sem::types::AssignPlace::Global { name, mutable, .. }) => {
+                    Some((name.clone(), *mutable))
                 }
-                // Stage 7-B: reify rebuilds the `GlobalVarSet` from the AST;
-                // project only the (unit) result type.
-                let _ = value_tir;
-                return placeholder(TypeTable::UNIT, span);
+                _ => None,
             }
+        } else {
+            None
+        };
+        if let Some((name, is_mut)) = global_assign {
+            if !is_mut {
+                let _ = self.logger.error(TypeError::CannotAssign {
+                    message: format!("cannot assign to immutable global variable '{name}'"),
+                    span: target_ast.span(),
+                });
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
+            }
+            // reify rebuilds the `GlobalVarSet` from the AST; project the
+            // (unit) result type.
+            let _ = value_tir;
+            return placeholder(TypeTable::UNIT, span);
         }
 
-        // Validate that the target is a valid l-value. `FieldAccess` and
-        // `Index` targets are classified from the AST + recorded facts
-        // (Stage 7-B made `resolve_field_access` / `resolve_index` return
-        // placeholders); `Local` (from `resolve_ident`) and `Unary { Deref }`
-        // (from `resolve_unary`) still build real TIR, so they are read from
-        // the resolved `target.kind`.
+        // Validate that the target is a valid l-value. Stage 7-B: every
+        // resolver returns a placeholder, so each target shape is classified
+        // from the AST + recorded facts.
         let is_valid_lvalue = match target_ast {
-            // A field access is always a place (the resolved kind was
-            // `FieldAccess`, accepted unconditionally below).
+            // A field access is always a place.
             ast::Expr::FieldAccess(_) => true,
             // The IndexAssign path at the top of `assign_to_target` already
             // returned for index-assignable receivers, so an `Index` target
@@ -1329,37 +1314,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // receiver (already diagnosed by `resolve_index`).
             ast::Expr::Index(index_expr) => self.index_target_assignable(index_expr),
             // `*x = v`: valid only through a mutable reference. The operand's
-            // type rides on `expression_types` now that `resolve_unary`
-            // returns a placeholder.
+            // type rides on `expression_types`.
             ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => {
                 self.deref_target_assignable(u, target_ast.span())
             }
-            // `Local` (from `resolve_ident`) and a `&mut`-captured ident
-            // (which `resolve_ident` lowers to a real `Unary { Deref,
-            // Capture }`) still build real TIR, so classify them from the
-            // resolved `target.kind`.
-            _ => match &target.kind {
-                TirExprKind::Local { .. } => true,
-                TirExprKind::FieldAccess { .. } => true,
-                TirExprKind::Index { .. } => true,
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Deref,
-                    expr,
-                    ..
-                } => {
-                    let inner_type = self.tysys.type_table.borrow().get(expr.type_id).clone();
-                    if matches!(inner_type, ResolvedType::Ref(_)) {
-                        let _ = self.logger.error(TypeError::CannotAssign {
-                            message: "cannot assign through immutable reference".to_string(),
-                            span: target_ast.span(),
-                        });
-                        false
-                    } else {
-                        true
+            // An identifier target classified by the place fact `resolve_ident`
+            // recorded: a function-frame `Local`, or a `&mut`-captured ident
+            // (`*__ref` deref-capture, assignable iff the captured ref is
+            // `&mut`). Globals returned above; anything else (function /
+            // variant / enum / const ident, or a non-ident expression) is not
+            // a place.
+            ast::Expr::Ident(id) => {
+                // Clone to release the `&self` borrow before the diagnostic's
+                // `&mut self.logger` use.
+                match self.assign_place_of(id.id).cloned() {
+                    Some(super::sem::types::AssignPlace::Local) => true,
+                    Some(super::sem::types::AssignPlace::DerefCapture { through_mut_ref }) => {
+                        if through_mut_ref {
+                            true
+                        } else {
+                            let _ = self.logger.error(TypeError::CannotAssign {
+                                message: "cannot assign through immutable reference".to_string(),
+                                span: target_ast.span(),
+                            });
+                            false
+                        }
                     }
+                    _ => false,
                 }
-                _ => false,
-            },
+            }
+            _ => false,
         };
 
         if !is_valid_lvalue {

@@ -456,20 +456,25 @@ unblocks in parentheses):
       its result type from the synthetic `chain_block` (still built because
       `resolve_block` still builds TIR); the AST result-type rule is only
       needed when `resolve_block` is converted in the Phase 2 signature sweep.
-- [ ] **assign target ident classification** — `assign_to_target` still
-      reads `target.kind` to classify an `Ident` / `&mut`-captured-ident
-      target (`Local` / `GlobalVarGet` / deref-capture `Unary { Deref }`).
-      Porting it (name-resolution replication or a recorded place-kind fact)
-      unblocks `resolve_ident`.
+- [x] **assign target ident classification** — `resolve_ident` records an
+      `AssignPlace` fact (`Local` / `DerefCapture { through_mut_ref }` /
+      `Global { name, mutable }`) keyed by the ident's `AstId`;
+      `assign_to_target` reads it to validate the l-value and global
+      mutability from the AST + fact instead of the resolved `target.kind`.
+      The address-taken-local marking the unary / method-call readers did is
+      owned by reify (it marks `TirFunction::address_taken_locals` on the TIR
+      it emits), so the combined-walk marking was deleted as dead; the
+      `&mut`-on-immutable-local diagnostic moved to a read-only `ctx.lookup`
+      over the AST target. This unblocked the `resolve_ident` placeholder.
 
 Arms now returning placeholders: range, field-access, index, unary, cast,
-tuple-literal, literal, match, struct-literal, anonymous-struct, `?`
+tuple-literal, literal, ident, match, struct-literal, anonymous-struct, `?`
 (option + result), if-expr (both arms), block, labeled-block, with-handler,
 resume (joining binary / call / method-call / operators / coercion / assert /
 matches / template / item / module from earlier stages). Still building TIR:
-`resolve_ident` (blocked on the assign target ident classification above) and
 `resolve_block` / `resolve_stmt` with the stmt-level builders (the Phase 2
-signature sweep).
+signature sweep). The combined walk no longer builds any `TirExpr` outside the
+statement-level scaffolding.
 
 `adjust_receiver_for_self_kind` (method-call receiver wrapping) reads
 `ResolvedType`, not a TIR `kind`, and reify does its own adjustment, so
@@ -587,13 +592,13 @@ block-result-type reader.
       assert.rs / closure.rs / handlers.rs / matches.rs / template.rs /
       module.rs are deleted, and `build_tir_from_state` becomes a
       body-walk pass that returns no TIR. LSP then runs `annotate` only.
-      Progress: every structural expression arm now returns a placeholder —
-      `match`, struct / anonymous-struct literals, `?` (option + result),
-      if-expr (both arms), block, labeled-block, `with` / `resume` — joining
-      the earlier-stage leaves. The two remaining real-TIR producers are
-      `resolve_ident` (blocked on the assign target ident classification) and
-      the `resolve_block` / `resolve_stmt` family (the signature sweep), both
-      tracked under Phase 1 / Phase 2 above.
+      Progress: every expression arm now returns a placeholder — `match`,
+      struct / anonymous-struct literals, `?` (option + result), if-expr
+      (both arms), block, labeled-block, `with` / `resume`, and `ident` (via
+      the `AssignPlace` fact that unblocked it) — joining the earlier-stage
+      leaves. The combined walk builds no `TirExpr`; the sole remaining
+      real-TIR producer is the `resolve_block` / `resolve_stmt` family (the
+      statement-level signature sweep), tracked under Phase 2 above.
 
 ### Landing log
 

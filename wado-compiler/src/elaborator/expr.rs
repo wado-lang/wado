@@ -9,7 +9,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirMatchArm,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
+    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -446,14 +446,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     defining_ast_id,
                 } => {
                     self.record_reference_opt(ident.id, defining_ast_id);
-                    return TirExpr::new(
-                        TirExprKind::Local {
-                            index,
-                            name: ident.name.clone(),
-                        },
-                        type_id,
-                        ident.span,
-                    );
+                    // Stage 7-B: reify rebuilds the `Local` (`reify_ident`);
+                    // record the place so `assign_to_target` can classify an
+                    // ident l-value without the resolved `kind`.
+                    let _ = index;
+                    self.record_assign_place(ident.id, super::sem::types::AssignPlace::Local);
+                    return placeholder(type_id, ident.span);
                 }
                 VarRef::Capture {
                     index,
@@ -461,14 +459,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     defining_ast_id,
                 } => {
                     self.record_reference_opt(ident.id, defining_ast_id);
-                    return TirExpr::new(
-                        TirExprKind::Capture {
-                            index,
-                            name: ident.name.clone(),
-                        },
-                        type_id,
-                        ident.span,
-                    );
+                    // Stage 7-B: reify rebuilds the `Capture`. A by-value
+                    // capture is not an l-value, so no place is recorded.
+                    let _ = index;
+                    return placeholder(type_id, ident.span);
                 }
                 VarRef::DerefCapture {
                     index,
@@ -477,23 +471,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     defining_ast_id,
                 } => {
                     self.record_reference_opt(ident.id, defining_ast_id);
-                    // Deref capture: `*self.__capture_N` where the field holds `&mut T`
-                    let capture_expr = TirExpr::new(
-                        TirExprKind::Capture {
-                            index,
-                            name: format!("__deref_cap_{index}"),
-                        },
-                        ref_type_id,
-                        ident.span,
+                    // Deref capture: `*self.__capture_N` where the field holds
+                    // `&mut T` (mutable closure capture). Stage 7-B: reify
+                    // rebuilds the `*capture` shape; record the place so the
+                    // assign path can validate it (assignable iff the captured
+                    // reference is `&mut`, not a shared `&`).
+                    let through_mut_ref = !matches!(
+                        self.tysys.type_table.borrow().get(ref_type_id),
+                        ResolvedType::Ref(_)
                     );
-                    return TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Deref,
-                            expr: Box::new(capture_expr),
-                        },
-                        inner_type_id,
-                        ident.span,
+                    let _ = index;
+                    self.record_assign_place(
+                        ident.id,
+                        super::sem::types::AssignPlace::DerefCapture { through_mut_ref },
                     );
+                    return placeholder(inner_type_id, ident.span);
                 }
             }
         }
@@ -518,7 +510,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let prev_override = self.ann_module_override.replace(const_module);
             let resolved = self.resolve_expr(&const_expr, ctx, Some(type_id));
             self.ann_module_override = prev_override;
-            return TirExpr::new(resolved.kind, type_id, ident.span);
+            // Stage 7-B: reify re-reifies the constant body (`reify_ident`);
+            // the combined walk resolved it for fact recording. Not an l-value.
+            let _ = resolved;
+            return placeholder(type_id, ident.span);
         }
 
         // Check for qualified variant case names like Color::Red (without parentheses)
@@ -580,16 +575,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     self.record_generic_instantiation(ident.id, type_args, variant_type);
 
-                    return TirExpr::new(
-                        TirExprKind::VariantConstruct {
-                            variant_type,
-                            case_index: case_index as u32,
-                            case_name: case_data.name.clone(),
-                            payload: None,
-                        },
-                        variant_type,
-                        ident.span,
-                    );
+                    // Stage 7-B: reify rebuilds the payload-less
+                    // `VariantConstruct` from the AST + recorded generic
+                    // instantiation. Not an l-value.
+                    let _ = (case_index, &case_data);
+                    return placeholder(variant_type, ident.span);
                 }
             }
 
@@ -610,15 +600,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow_mut()
                     .make_enum(enum_info.name.clone(), enum_info.module_source);
 
-                return TirExpr::new(
-                    TirExprKind::EnumConstruct {
-                        enum_type,
-                        case_index: case_data.index,
-                        case_name: case_data.name,
-                    },
-                    enum_type,
-                    ident.span,
-                );
+                // Stage 7-B: reify rebuilds the `EnumConstruct`. Not an l-value.
+                let _ = &case_data;
+                return placeholder(enum_type, ident.span);
             }
 
             // Check for flags member: PathFlags::SymlinkFollow
@@ -631,14 +615,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .cloned()
             {
                 self.record_qualified_case(ident, prefix, &flags_info.module_source, member.ast_id);
-                return TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: u64::from(member.bitmask),
-                        repr: member.bitmask.to_string(),
-                    },
-                    flags_info.type_id,
-                    ident.span,
-                );
+                // Stage 7-B: reify rebuilds the flags-member `IntLiteral`.
+                return placeholder(flags_info.type_id, ident.span);
             }
 
             // Check for namespace import: ns::Type::Case or ns::Enum::Case
@@ -703,16 +681,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         _ => Vec::new(),
                     };
                     self.record_generic_instantiation(ident.id, type_args, variant_type);
-                    return TirExpr::new(
-                        TirExprKind::VariantConstruct {
-                            variant_type,
-                            case_index: case_index as u32,
-                            case_name: case_data.name.clone(),
-                            payload: None,
-                        },
-                        variant_type,
-                        ident.span,
-                    );
+                    // Stage 7-B: reify rebuilds the namespace-qualified
+                    // payload-less `VariantConstruct`. Not an l-value.
+                    let _ = (case_index, &case_data);
+                    return placeholder(variant_type, ident.span);
                 }
 
                 // Check enum cases
@@ -731,15 +703,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_table
                         .borrow_mut()
                         .make_enum(enum_info.name.clone(), enum_info.module_source);
-                    return TirExpr::new(
-                        TirExprKind::EnumConstruct {
-                            enum_type,
-                            case_index: case_data.index,
-                            case_name: case_data.name,
-                        },
-                        enum_type,
-                        ident.span,
-                    );
+                    // Stage 7-B: reify rebuilds the namespace-qualified
+                    // `EnumConstruct`. Not an l-value.
+                    let _ = &case_data;
+                    return placeholder(enum_type, ident.span);
                 }
 
                 // Check flags members
@@ -757,48 +724,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .cloned()
                 {
                     self.record_namespaced_case(ident, &flags_info.module_source, member.ast_id);
-                    return TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: u64::from(member.bitmask),
-                            repr: member.bitmask.to_string(),
-                        },
-                        flags_info.type_id,
-                        ident.span,
-                    );
+                    // Stage 7-B: reify rebuilds the namespace flags-member
+                    // `IntLiteral`.
+                    return placeholder(flags_info.type_id, ident.span);
                 }
             }
         }
 
         // Check for global variables in current module
-        if let Some(&(ty, _mutable)) = self.sem.decls.current_module_globals.get(&ident.name) {
+        if let Some(&(ty, mutable)) = self.sem.decls.current_module_globals.get(&ident.name) {
             self.record_item_reference_by_name(ident.id, &ident.name);
-            return TirExpr::new(
-                TirExprKind::GlobalVarGet {
-                    module_source: self.current_module_source.clone(),
+            // Stage 7-B: reify rebuilds the `GlobalVarGet`; record the place so
+            // `assign_to_target` validates global mutability + emits the
+            // `GlobalVarSet` projection without the resolved `kind`.
+            self.record_assign_place(
+                ident.id,
+                super::sem::types::AssignPlace::Global {
                     name: ident.name.clone(),
+                    mutable,
                 },
-                ty,
-                ident.span,
             );
+            return placeholder(ty, ident.span);
         }
 
         // Check for imported global variables
-        if let Some((source_module, original_name, ty)) = self
+        if let Some((original_name, ty, mutable)) = self
             .sem
             .decls
             .imported_globals
             .get(&ident.name)
-            .map(|(src, orig, ty, _mut)| (src.clone(), orig.clone(), *ty))
+            .map(|(_src, orig, ty, m)| (orig.clone(), *ty, *m))
         {
             self.record_item_reference_by_name(ident.id, &ident.name);
-            return TirExpr::new(
-                TirExprKind::GlobalVarGet {
-                    module_source: source_module,
+            // Stage 7-B: reify rebuilds the imported `GlobalVarGet` (keyed by
+            // the original name); record the place for the assign path. Keep
+            // the original (source) name for the immutable-global diagnostic,
+            // matching the pre-7-B message that read it off `GlobalVarGet`.
+            self.record_assign_place(
+                ident.id,
+                super::sem::types::AssignPlace::Global {
                     name: original_name,
+                    mutable,
                 },
-                ty,
-                ident.span,
             );
+            return placeholder(ty, ident.span);
         }
 
         // Check if it's a known function (function reference)
@@ -815,15 +784,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check if it's a prelude function (panic, unreachable)
         // These are defined in core:internal and re-exported by core:prelude
         if matches!(ident.name.as_str(), "panic" | "unreachable") {
-            return TirExpr::new(
-                TirExprKind::FuncRef {
-                    module_source: ModuleSource::internal(),
-                    name: ident.name.clone(),
-                    type_args: Vec::new(),
-                },
-                TypeTable::UNKNOWN,
-                ident.span,
-            );
+            // Stage 7-B: reify rebuilds the prelude `FuncRef`.
+            return placeholder(TypeTable::UNKNOWN, ident.span);
         }
 
         // Fallback: when resolving a default expression, look up the
@@ -859,28 +821,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             match item {
                 crate::ast::Item::Global(global_decl) if global_decl.name == name => {
                     let ty = self.resolve_type(&global_decl.ty);
-                    return Some(TirExpr::new(
-                        TirExprKind::GlobalVarGet {
-                            module_source: fallback.clone(),
-                            name: name.to_string(),
-                        },
-                        ty,
-                        span,
-                    ));
+                    // Stage 7-B: reify resolves the fallback-module global from
+                    // the same AST items (`reify_ident` branch 3b). Project the
+                    // type only; this default-expr path is never an assignment
+                    // target, so no place is recorded.
+                    return Some(placeholder(ty, span));
                 }
                 crate::ast::Item::Function(func) if func.name == name => {
                     let type_id = self
                         .compute_func_ref_type_from_ast(func, fallback)
                         .unwrap_or(TypeTable::UNKNOWN);
-                    return Some(TirExpr::new(
-                        TirExprKind::FuncRef {
-                            module_source: fallback.clone(),
-                            name: name.to_string(),
-                            type_args: Vec::new(),
-                        },
-                        type_id,
-                        span,
-                    ));
+                    // Stage 7-B: reify rebuilds the fallback-module `FuncRef`.
+                    return Some(placeholder(type_id, span));
                 }
                 _ => {}
             }
@@ -1033,15 +985,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map(|s| s.module_source().clone())
                     .unwrap_or_else(|| self.current_module_source.clone())
             };
-            return TirExpr::new(
-                TirExprKind::FuncRef {
-                    module_source,
-                    name: ident.name.clone(),
-                    type_args: Vec::new(),
-                },
-                TypeTable::UNKNOWN,
-                ident.span,
-            );
+            // Stage 7-B: reify rebuilds the stub `FuncRef`.
+            let _ = module_source;
+            return placeholder(TypeTable::UNKNOWN, ident.span);
         };
         let module_source = def_module.clone();
 
@@ -1074,15 +1020,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .compute_func_ref_type_from_ast_with_args(&func_ast, &def_module, &resolved_args)
                 .unwrap_or(TypeTable::UNKNOWN);
             self.record_func_ref_instantiation(ident.id, &resolved_args, type_id);
-            return TirExpr::new(
-                TirExprKind::FuncRef {
-                    module_source,
-                    name: defining_name,
-                    type_args: resolved_args,
-                },
-                type_id,
-                ident.span,
-            );
+            // Stage 7-B: reify rebuilds the turbofish `FuncRef` from the
+            // recorded instantiation. Project the type only.
+            let _ = (module_source, defining_name, resolved_args);
+            return placeholder(type_id, ident.span);
         }
 
         // Non-generic function: keep the original behaviour.
@@ -1090,15 +1031,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let type_id = self
                 .compute_func_ref_type_from_ast(&func_ast, &def_module)
                 .unwrap_or(TypeTable::UNKNOWN);
-            return TirExpr::new(
-                TirExprKind::FuncRef {
-                    module_source,
-                    name: defining_name,
-                    type_args: Vec::new(),
-                },
-                type_id,
-                ident.span,
-            );
+            // Stage 7-B: reify rebuilds the non-generic `FuncRef`.
+            let _ = (module_source, defining_name);
+            return placeholder(type_id, ident.span);
         }
 
         // (b) Generic without turbofish: try to infer from `expected_type`.
@@ -1109,15 +1044,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .compute_func_ref_type_from_ast_with_args(&func_ast, &def_module, &inferred)
                         .unwrap_or(TypeTable::UNKNOWN);
                     self.record_func_ref_instantiation(ident.id, &inferred, type_id);
-                    return TirExpr::new(
-                        TirExprKind::FuncRef {
-                            module_source,
-                            name: defining_name,
-                            type_args: inferred,
-                        },
-                        type_id,
-                        ident.span,
-                    );
+                    // Stage 7-B: reify rebuilds the inferred-generic `FuncRef`
+                    // from the recorded instantiation. Project the type only.
+                    let _ = (module_source, defining_name, inferred);
+                    return placeholder(type_id, ident.span);
                 }
                 FuncRefInference::ArityMismatch {
                     expected_params,

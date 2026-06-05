@@ -551,11 +551,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .get(self.get_base_type(receiver.type_id)),
                 ResolvedType::Primitive(_)
             );
-        if needs_implicit_mut_borrow_on_primitive_local
-            && let TirExprKind::Local { index, .. } = &receiver.kind
-        {
-            ctx.address_taken_locals.insert(*index);
-        }
+        // Address-taken tracking for an implicit `&mut self` borrow on a
+        // primitive local receiver is owned by reify (`reify.rs` method-call
+        // arm marks `address_taken_locals` on the TIR it emits); the combined
+        // walk's marking was dead now that `resolve_ident` returns a
+        // placeholder.
+        let _ = needs_implicit_mut_borrow_on_primitive_local;
 
         // Adjust receiver based on what the method expects (self_kind)
         receiver = self.adjust_receiver_for_self_kind(receiver, self_kind, is_ref_impl, span);

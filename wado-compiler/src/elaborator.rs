@@ -885,6 +885,31 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .insert(key, sem::types::CoercionChoice { kind, target_type });
     }
 
+    /// Record the assignment-target place classification for the identifier
+    /// at `ast_id` (Stage 7-B). Called from [`Self::resolve_ident`] at each
+    /// site that resolves to a place (local / `&mut`-deref-capture / global)
+    /// so [`Self::assign_to_target`] can validate l-values and global
+    /// mutability from the AST + this fact instead of the now-placeholder
+    /// resolved `target.kind`. See [`sem::types::AssignPlace`].
+    pub(super) fn record_assign_place(
+        &mut self,
+        ast_id: crate::ast::AstId,
+        place: sem::types::AssignPlace,
+    ) {
+        let key = self.ann_key(ast_id);
+        self.sem.types.assign_places.insert(key, place);
+    }
+
+    /// Look up the recorded assignment-target place classification for the
+    /// identifier at `ast_id`. Returns `None` for idents that did not resolve
+    /// to a place (functions, variants, enums, flags, constants).
+    pub(super) fn assign_place_of(
+        &self,
+        ast_id: crate::ast::AstId,
+    ) -> Option<&sem::types::AssignPlace> {
+        self.sem.types.assign_places.get(&self.ann_key(ast_id))
+    }
+
     /// Record a TIR-direct desugar tag for the AST node at `ast_id`.
     /// Called from each `assert` / `matches` / comparison-chain / for-of
     /// / `while` / compound-assignment lowering site so the future
