@@ -3,8 +3,12 @@ name: Benchmark
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
 
 env:
   CARGO_TERM_COLOR: always
@@ -53,6 +57,7 @@ jobs:
           auto-push: true
           comment-on-alert: false
           fail-on-alert: false
+          summary-always: true
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: benchmarks/runtime-throughput
           skip-fetch-gh-pages: true
@@ -67,6 +72,7 @@ jobs:
           auto-push: true
           comment-on-alert: false
           fail-on-alert: false
+          summary-always: true
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: benchmarks/wasm-size
           skip-fetch-gh-pages: true
@@ -104,6 +110,7 @@ jobs:
           alert-threshold: '150%'
           fail-threshold: '200%'
           alert-comment-cc-users: ''
+          summary-always: true
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: benchmarks/runtime-throughput
           skip-fetch-gh-pages: true
@@ -122,6 +129,7 @@ jobs:
           alert-threshold: '110%'
           fail-threshold: '130%'
           alert-comment-cc-users: ''
+          summary-always: true
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: benchmarks/wasm-size
           skip-fetch-gh-pages: true

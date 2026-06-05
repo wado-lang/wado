@@ -12,7 +12,7 @@
       }
       body {
         color: #4a4a4a;
-        margin: 8px;
+        margin: 16px;
         font-size: 1em;
         font-weight: 400;
       }
@@ -75,8 +75,28 @@
         flex-wrap: wrap;
         width: 100%;
       }
+      .benchmark-scroller {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .benchmark-canvas-box {
+        min-width: 100%;
+        height: 400px;
+      }
       .benchmark-chart {
-        max-width: 1000px;
+        display: block;
+      }
+      @media (max-width: 600px) {
+        body {
+          margin: 8px;
+        }
+        .benchmark-canvas-box {
+          height: 300px;
+        }
+        .benchmark-title {
+          font-size: 1.5rem;
+        }
       }
     </style>
     <title>Runtime Benchmarks (Combined)</title>
@@ -91,6 +111,10 @@
       <div class="header-item">
         <strong>Repository:</strong>
         <a id="repository-link" rel="noopener"></a>
+      </div>
+      <div class="header-item">
+        <strong>Note:</strong>
+        <span>The graphs show throughput, so higher is better.</span>
       </div>
     </header>
     <main id="main"></main>
@@ -163,10 +187,25 @@
           return groups;
         }
 
+        // Every commit gets a fixed horizontal slot, so the chart grows as wide
+        // as it needs and the container scrolls horizontally. How many points
+        // are visible at once therefore depends on the viewport width.
+        const PX_PER_POINT = 16;
+
         function renderCombinedGraph(parent, baseName, optLevelMap) {
+          // Scroll container: keeps the chart within the page width but lets
+          // the user scroll horizontally when there are many commits.
+          const scroller = document.createElement('div');
+          scroller.className = 'benchmark-scroller';
+          parent.appendChild(scroller);
+
+          const canvasBox = document.createElement('div');
+          canvasBox.className = 'benchmark-canvas-box';
+          scroller.appendChild(canvasBox);
+
           const canvas = document.createElement('canvas');
           canvas.className = 'benchmark-chart';
-          parent.appendChild(canvas);
+          canvasBox.appendChild(canvas);
 
           // Find all unique commit IDs across all optimization levels, preserving order
           const commitIds = [];
@@ -182,6 +221,12 @@
               }
             }
           }
+
+          // Give every commit PX_PER_POINT of width. CSS min-width keeps the box
+          // filling the viewport when there are only a few points, so the chart
+          // never looks cramped on the left; once it grows past the viewport the
+          // container scrolls instead.
+          canvasBox.style.width = (commitIds.length * PX_PER_POINT) + 'px';
 
           // Sort optimization levels
           const sortedOpts = [...optLevelMap.keys()].sort();
@@ -214,10 +259,16 @@
           new Chart(canvas, {
             type: 'line',
             data: {
-              labels: commitIds.map(id => id.slice(0, 7)),
+              labels: commitIds.map(id => {
+                const meta = commitMeta.get(id);
+                const ymd = new Date(meta.commit.timestamp).toISOString().slice(0, 10);
+                return ymd + ' ' + id.slice(0, 7);
+              }),
               datasets,
             },
             options: {
+              responsive: true,
+              maintainAspectRatio: false,
               title: {
                 display: true,
                 text: baseName,
@@ -258,6 +309,9 @@
               },
             },
           });
+
+          // Start scrolled to the most recent commits (the right edge).
+          scroller.scrollLeft = scroller.scrollWidth;
         }
 
         function render(groups) {
