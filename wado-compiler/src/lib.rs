@@ -360,7 +360,8 @@ fn compile_after_load<H: CompilerHost>(
     // resolve — the downstream phases assume populated `state` /
     // `tir_modules`. Diagnostics explaining the failure have already
     // been emitted to the host.
-    let sem = semantics::semantics_with_logger(load_result, logger);
+    // Batch path: build TIR (reify) for codegen.
+    let sem = semantics::semantics_with_logger(load_result, logger, true);
     if !sem.is_complete() {
         return Err(Bail);
     }

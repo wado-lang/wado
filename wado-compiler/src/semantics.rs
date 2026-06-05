@@ -816,7 +816,8 @@ pub fn semantics_of<H: CompilerHost>(
     if !entry_filename.is_empty() {
         logger.set_file(&entry_filename);
     }
-    semantics_with_logger(loaded, &logger)
+    // LSP path: facts only, no TIR.
+    semantics_with_logger(loaded, &logger, false)
 }
 
 /// Logger-sharing variant. Internal: lets callers that already maintain a
@@ -825,6 +826,7 @@ pub fn semantics_of<H: CompilerHost>(
 pub(crate) fn semantics_with_logger<H: CompilerHost>(
     load_result: loader::LoadResult,
     logger: &Logger<'_, H>,
+    build_tir: bool,
 ) -> Semantics {
     // Wrap the loader's interner in `Rc<RefCell<>>` so analyze and the
     // per-module elaborators can each `borrow_mut()` it from `&self`
@@ -939,6 +941,10 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // On Bail we still drain the partial reference / local maps so the LSP
     // can answer cursor queries against whatever bodies the elaborator did
     // reach before bailing.
+    //
+    // `build_tir == false` (the LSP path) runs only the body fact-walk
+    // (`annotate_bodies`); reify is skipped and `tir_modules` stays empty —
+    // the LSP never reads TIR. The batch path passes `true`.
     let (tir_modules, lower_ok) = {
         let _span = logger.span("elaborate/build_tir");
         match Elaborator::build_tir_from_state(
@@ -948,6 +954,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             load_result.entry_module_source.clone(),
             logger,
             snapshot.as_deref(),
+            build_tir,
         ) {
             Ok(m) => (m, true),
             Err(_) => (IndexMap::default(), false),

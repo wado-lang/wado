@@ -143,6 +143,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             entry_module_source,
             logger,
             None,
+            true,
         )?;
         Ok((tir_modules, trait_env))
     }
@@ -1090,6 +1091,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Lower phase: emit one [`TirModule`] per source module using the state
     /// produced by [`Elaborator::annotate_modules`]. Errors are collected in the
     /// logger; the function returns [`Bail`] if any module failed.
+    /// Run the body-level walk over every module (the `annotate_bodies` pass:
+    /// `resolve_module` populates each `ModuleSemantics` with facts), and —
+    /// when `build_tir` is set — reify each module to its final `TirModule`.
+    ///
+    /// The LSP path passes `build_tir = false`: it needs only the recorded
+    /// facts (use→def edges, types, dispatch) and never reads TIR, so reify and
+    /// the stdlib-snapshot `TirModule` rehydration are skipped and the returned
+    /// map is empty. The batch path (and stdlib-snapshot build) passes `true`.
     pub(crate) fn build_tir_from_state(
         state: &mut AnnotateState,
         symbols: &'a SymbolTable,
@@ -1097,6 +1106,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         entry_module_source: ModuleSource,
         logger: &'a Logger<'a, H>,
         snapshot: Option<&crate::semantics::Semantics>,
+        build_tir: bool,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
         let mut result = IndexMap::default();
         // Per-rehydration memo: maps each cached function `Rc`'s pointer
@@ -1135,14 +1145,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. }
             ) && let Some(snap_module) = snapshot.and_then(|s| s.tir_modules.get(module_source))
             {
-                result.insert(
-                    module_source.clone(),
-                    crate::stdlib_snapshot::rehydrate_tir_module(
-                        snap_module,
-                        &state.tysys.type_table,
-                        &mut fn_remap,
-                    ),
-                );
+                // Stdlib facts are already seeded into `state.module_semantics`
+                // from the snapshot (annotate_modules); only the cached
+                // `TirModule` needs rehydrating, and only when TIR is wanted.
+                if build_tir {
+                    result.insert(
+                        module_source.clone(),
+                        crate::stdlib_snapshot::rehydrate_tir_module(
+                            snap_module,
+                            &state.tysys.type_table,
+                            &mut fn_remap,
+                        ),
+                    );
+                }
                 continue;
             }
             let module = modules.get(module_source).expect("module should exist");
@@ -1308,9 +1323,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .module_semantics
                 .insert(module_source.clone(), saved_sem);
 
-            if resolve_result.is_ok() && !module.has_syntax_errors() {
+            if build_tir && resolve_result.is_ok() && !module.has_syntax_errors() {
                 // Phase 2 — `reify_modules`: walk the AST + `ModuleSemantics`
-                // to produce the TIR. Reify is the source of truth.
+                // to produce the TIR. Reify is the source of truth. Skipped
+                // entirely on the LSP path (`build_tir == false`), which reads
+                // only the Phase 1 facts.
                 //
                 // Skipped for a module with recovered syntax errors: its TIR is
                 // never consumed (the batch path bails on `!is_complete()`
