@@ -34,6 +34,11 @@ impl ArraySlice<T> {
     }
 
     /// Returns the number of elements in the slice.
+    ///
+    /// Also the byte-length anchor for the synthesised `FieldSchema::lookup`
+    /// (on `ArraySlice<u8>`), routed through `#[compiler_item]` so a rename
+    /// here cannot silently break code generation.
+    #[compiler_item("byte_slice_len")]
     pub fn len(&self) -> i32 {
         return self.end - self.start;
     }
@@ -55,6 +60,11 @@ impl ArraySlice<T> {
     ///
     /// The caller must guarantee `0 <= index < len()`; an out-of-range
     /// `index` reads past the view into the backing array or traps.
+    ///
+    /// Also the byte-read anchor for the synthesised `FieldSchema::lookup`
+    /// (on `ArraySlice<u8>`), routed through `#[compiler_item]` for the same
+    /// rename-safety reason as `len`.
+    #[compiler_item("byte_slice_get_unchecked")]
     pub fn get_unchecked(&self, index: i32) -> T {
         return builtin::array_get(self.repr, self.start + index);
     }
@@ -89,18 +99,6 @@ impl ArraySlice<T> {
             builtin::array_copy(&mut out, 0, self.repr, self.start, len);
         }
         return out;
-    }
-}
-
-impl ArraySlice<u8> {
-    /// Unchecked byte read used by the synthesised struct deserializers
-    /// (`serde_synth`) when comparing a wire key against `FieldSchema`.
-    ///
-    /// Routed through `#[compiler_item]` so a rename here cannot silently
-    /// break code generation, mirroring `String::get_byte_unchecked`.
-    #[compiler_item("byte_slice_get_unchecked")]
-    pub fn get_byte_unchecked(&self, index: i32) -> u8 {
-        return builtin::array_get(self.repr, self.start + index);
     }
 }
 

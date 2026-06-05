@@ -55,11 +55,11 @@ test "ByteList get_byte_unchecked reads raw bytes" {
     assert b.get_byte_unchecked(2) == 7;
 }
 
-test "ByteSlice get_byte_unchecked / get_unchecked respect the view offset" {
+test "ByteSlice get_unchecked respects the view offset" {
     let b: ByteList = [10, 20, 30, 40, 50];
     let s = b.as_byte_slice().slice(1, 4);
     assert s.len() == 3;
-    assert s.get_byte_unchecked(0) == 20;
-    assert s.get_byte_unchecked(2) == 40;
+    assert s.get_unchecked(0) == 20;
     assert s.get_unchecked(1) == 30;
+    assert s.get_unchecked(2) == 40;
 }

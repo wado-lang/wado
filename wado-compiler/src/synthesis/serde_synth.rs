@@ -1011,6 +1011,19 @@ fn generate_struct_deserialize(
     let string_type = tt.make_compiler_struct(crate::compiler_item::CompilerItem::String);
     let ref_string_type = tt.make_ref(string_type);
     let option_i32 = tt.make_option(TypeTable::I32);
+    // `FieldSchema::lookup(key: ArraySlice<u8>)` — the wire key is a borrowed
+    // byte view. The slice module is taken from the byte-read compiler item so
+    // the synthesiser never hard-codes a stdlib path. Newtype erasure later
+    // collapses `ByteSlice` and `ArraySlice<u8>` to the same type, so building
+    // the base instance here matches the trait's `ByteSlice` spelling.
+    let key_slice_type = {
+        let slice_module = tt
+            .compiler_items()
+            .require_method(crate::compiler_item::CompilerItem::ByteSliceGetUnchecked)
+            .0
+            .clone();
+        tt.make_generic_instance("ArraySlice".to_string(), slice_module, vec![TypeTable::U8])
+    };
     let deser_error_type = tt.make_struct(names.deserialize_error.clone(), serde_module.clone());
     let deser_error_kind_type = tt
         .find_enum_type(&names.deserialize_error_kind, &serde_module)
@@ -1061,8 +1074,7 @@ fn generate_struct_deserialize(
         &req.target_type_name,
         &names.field_schema,
         &fields,
-        string_type,
-        ref_string_type,
+        key_slice_type,
         option_i32,
         span,
         &compiler_items,
@@ -1509,35 +1521,26 @@ fn generate_struct_deserialize(
     Some((lookup_func, deser_func))
 }
 
-/// Build a `string.get_byte_unchecked(index_expr) as i32` expression with a computed index.
+/// Build a `key.get_byte_unchecked(index_expr) as i32` expression on a
+/// `ByteSlice` (`ArraySlice<u8>`) key, with a computed index.
 ///
-/// The method is looked up via [`CompilerItem::StringGetByteUnchecked`] —
+/// The method is looked up via [`CompilerItem::ByteSliceGetUnchecked`] —
 /// renaming the underlying Wado declaration cannot break this site as
-/// long as its `#[compiler_item("string_get_byte_unchecked")]` annotation
+/// long as its `#[compiler_item("byte_slice_get_unchecked")]` annotation
 /// stays put. See issue #1077 for the rationale.
 fn key_get_byte_as_i32_expr(
-    string_ref: TirExpr,
+    key_ref: TirExpr,
     index_expr: TirExpr,
     span: Span,
     compiler_items: &crate::compiler_item::CompilerItems,
 ) -> TirExpr {
-    let (module_source, owner, name) =
-        compiler_items.require_method(crate::compiler_item::CompilerItem::StringGetByteUnchecked);
-    let get_byte_method = LocalMethodName::new(owner.to_string(), None, name.to_string());
-    let get_byte_call = TirExpr::new(
-        TirExprKind::method_call(
-            Box::new(string_ref),
-            FunctionRef {
-                module_source: module_source.clone(),
-                name: get_byte_method.to_mangled_name(),
-                monomorph_info: None,
-                method_info: Some(get_byte_method),
-            },
-            vec![],
-            vec![CallArg::new(index_expr, false)],
-        ),
+    let get_byte_call = byte_slice_method_call(
+        crate::compiler_item::CompilerItem::ByteSliceGetUnchecked,
+        key_ref,
+        vec![CallArg::new(index_expr, false)],
         TypeTable::U8,
         span,
+        compiler_items,
     );
     TirExpr::new(
         TirExprKind::Cast {
@@ -1545,6 +1548,65 @@ fn key_get_byte_as_i32_expr(
             target_type: TypeTable::I32,
         },
         TypeTable::I32,
+        span,
+    )
+}
+
+/// Build a `key.len()` expression on a `ByteSlice` (`ArraySlice<u8>`) key,
+/// returning the byte length as `i32`.
+fn byte_slice_len_expr(
+    key_ref: TirExpr,
+    span: Span,
+    compiler_items: &crate::compiler_item::CompilerItems,
+) -> TirExpr {
+    byte_slice_method_call(
+        crate::compiler_item::CompilerItem::ByteSliceLen,
+        key_ref,
+        vec![],
+        TypeTable::I32,
+        span,
+        compiler_items,
+    )
+}
+
+/// Build a call to a generic `ArraySlice<T>` method on a `ByteSlice`
+/// (`ArraySlice<u8>`) receiver, monomorphized at `T = u8`.
+///
+/// The method is resolved via `#[compiler_item]` (rename-safe, per issue
+/// #1077) and called with `impl_type_args = [u8]` so the monomorphizer
+/// instantiates the `u8` specialization instead of inheriting the enclosing
+/// function's type parameters — the same shape as the generic `default()`
+/// call synthesised for field defaults.
+fn byte_slice_method_call(
+    item: crate::compiler_item::CompilerItem,
+    receiver: TirExpr,
+    args: Vec<CallArg>,
+    return_type: TypeId,
+    span: Span,
+    compiler_items: &crate::compiler_item::CompilerItems,
+) -> TirExpr {
+    let (module_source, owner, name) = compiler_items.require_method(item);
+    let method_info = LocalMethodName::new(owner.to_string(), None, name.to_string())
+        .with_struct_type_args(&["u8".to_string()]);
+    let monomorph_info = crate::tir::MonomorphInfo {
+        generic_name: method_info.base_struct_name.clone(),
+        impl_type_args: vec![TypeTable::U8],
+        method_type_args: vec![],
+        is_blanket: false,
+    };
+    TirExpr::new(
+        TirExprKind::method_call(
+            Box::new(receiver),
+            FunctionRef {
+                module_source: module_source.clone(),
+                name: method_info.to_mangled_name(),
+                monomorph_info: Some(monomorph_info),
+                method_info: Some(method_info),
+            },
+            vec![],
+            args,
+        ),
+        return_type,
         span,
     )
 }
@@ -1579,41 +1641,34 @@ fn generate_lookup_function(
     type_name: &str,
     field_schema_trait: &str,
     fields: &[(String, String, TypeId, u32)],
-    _string_type: TypeId,
-    ref_string_type: TypeId,
+    key_slice_type: TypeId,
     option_i32: TypeId,
     span: Span,
     compiler_items: &crate::compiler_item::CompilerItems,
 ) -> TirFunction {
-    // `impl FieldSchema for <Type> { fn lookup(input, start, end) }` — a static
+    // `impl FieldSchema for <Type> { fn lookup(key: ByteSlice) }` — a static
     // trait method (no `self`). `next_field::<Type>()` resolves it directly at
-    // monomorphization, replacing the former runtime `lookup` closure.
+    // monomorphization, replacing the former runtime `lookup` closure. The key
+    // is a borrowed byte view, so each format passes its wire key's bytes with
+    // no `String` round-trip.
     let fn_name = MethodName::format_local(type_name, Some(field_schema_trait), "lookup");
-    // Parameters: input: &String (0), start: i32 (1), end: i32 (2)
-    let mut locals = vec![
-        param_local("__input", ref_string_type, false),
-        param_local("__start", TypeTable::I32, false),
-        param_local("__end", TypeTable::I32, false),
-    ];
-    let mut next_local: u32 = 3;
+    // Parameter: key: ByteSlice (ArraySlice<u8>) at local 0.
+    let mut locals = vec![param_local("__key", key_slice_type, false)];
+    let mut next_local: u32 = 1;
 
     let mut stmts = Vec::new();
 
-    // Allocate a local for `let __len = end - start`
+    // let __len = key.byte_len()
     let len_local = alloc_local(&mut next_local, &mut locals, TypeTable::I32);
-    let len_expr = TirExpr::new(
-        TirExprKind::Binary {
-            left: Box::new(local_ref(2, "__end", TypeTable::I32)),
-            op: TirBinaryOp::Sub,
-            right: Box::new(local_ref(1, "__start", TypeTable::I32)),
-        },
-        TypeTable::I32,
+    let len_expr = byte_slice_len_expr(
+        local_ref(0, "__key", key_slice_type),
         span,
+        compiler_items,
     );
     stmts.push(let_mut_stmt("__len", len_local, TypeTable::I32, len_expr));
 
     // For each field, generate:
-    //   if __len == N && input.get_byte(start + 0) as i32 == B0 && ... { return Some(i); }
+    //   if __len == N && key.get_byte(0) as i32 == B0 && ... { return Some(i); }
     for (i, (_, wire_name, _, _)) in fields.iter().enumerate() {
         let name_bytes = wire_name.as_bytes();
         let name_len = name_bytes.len() as i32;
@@ -1625,22 +1680,12 @@ fn generate_lookup_function(
             span,
         );
 
-        // Chain: && input.get_byte(start + j) as i32 == byte_j
+        // Chain: && key.get_byte(j) as i32 == byte_j
         for (j, &byte_val) in name_bytes.iter().enumerate() {
-            // start + j
-            let index_expr = TirExpr::new(
-                TirExprKind::Binary {
-                    left: Box::new(local_ref(1, "__start", TypeTable::I32)),
-                    op: TirBinaryOp::Add,
-                    right: Box::new(i32_const(j as i32)),
-                },
-                TypeTable::I32,
-                span,
-            );
             let byte_check = i32_eq(
                 key_get_byte_as_i32_expr(
-                    local_ref(0, "__input", ref_string_type),
-                    index_expr,
+                    local_ref(0, "__key", key_slice_type),
+                    i32_const(j as i32),
                     span,
                     compiler_items,
                 ),
@@ -1679,32 +1724,14 @@ fn generate_lookup_function(
             Some(field_schema_trait.to_string()),
             "lookup".to_string(),
         )),
-        params: vec![
-            TirParam {
-                name: "__input".to_string(),
-                type_id: ref_string_type,
-                local_index: 0,
-                is_mut: false,
-                span,
-                default_expr: None,
-            },
-            TirParam {
-                name: "__start".to_string(),
-                type_id: TypeTable::I32,
-                local_index: 1,
-                is_mut: false,
-                span,
-                default_expr: None,
-            },
-            TirParam {
-                name: "__end".to_string(),
-                type_id: TypeTable::I32,
-                local_index: 2,
-                is_mut: false,
-                span,
-                default_expr: None,
-            },
-        ],
+        params: vec![TirParam {
+            name: "__key".to_string(),
+            type_id: key_slice_type,
+            local_index: 0,
+            is_mut: false,
+            span,
+            default_expr: None,
+        }],
         return_type: option_i32,
         task_return_type: None,
         effects: Vec::new(),

@@ -278,6 +278,10 @@ pub enum CompilerItem {
     /// through this item for the same rename-safety reason as
     /// [`Self::StringGetByteUnchecked`].
     ByteSliceGetUnchecked,
+    /// `ByteSlice::byte_len` (`ArraySlice<u8>`) — the concrete byte-length
+    /// accessor the synthesised `FieldSchema::lookup` uses to size the wire
+    /// key. A monomorphization-free companion to [`Self::ByteSliceGetUnchecked`].
+    ByteSliceLen,
     /// `i128::from_i64` — sign-extending constructor used by the
     /// wide-int literal lowering pass.
     I128FromI64,
@@ -372,6 +376,7 @@ impl CompilerItem {
         Self::StringPushChar,
         Self::StringGetByteUnchecked,
         Self::ByteSliceGetUnchecked,
+        Self::ByteSliceLen,
         Self::I128FromI64,
         Self::I128FromPair,
         Self::U128FromU64,
@@ -456,6 +461,7 @@ impl CompilerItem {
             Self::StringPushChar => "string_push_char",
             Self::StringGetByteUnchecked => "string_get_byte_unchecked",
             Self::ByteSliceGetUnchecked => "byte_slice_get_unchecked",
+            Self::ByteSliceLen => "byte_slice_len",
             Self::I128FromI64 => "i128_from_i64",
             Self::I128FromPair => "i128_from_pair",
             Self::U128FromU64 => "u128_from_u64",
@@ -512,6 +518,7 @@ impl CompilerItem {
             | Self::StringPushChar
             | Self::StringGetByteUnchecked
             | Self::ByteSliceGetUnchecked
+            | Self::ByteSliceLen
             | Self::I128FromI64
             | Self::I128FromPair
             | Self::U128FromU64
@@ -631,6 +638,7 @@ impl CompilerItem {
             | Self::StringPushChar
             | Self::StringGetByteUnchecked
             | Self::ByteSliceGetUnchecked
+            | Self::ByteSliceLen
             | Self::I128FromI64
             | Self::I128FromPair
             | Self::U128FromU64

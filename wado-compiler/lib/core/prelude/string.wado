@@ -7,6 +7,7 @@
 
 use { Eq, Ord, Iterator, IntoIterator } from "core:prelude/traits.wado";
 use { Option, Result } from "core:prelude/types.wado";
+use { ArraySlice } from "core:prelude/slice.wado";
 use { i32_min, i32_max } from "core:internal";
 
 fn byte_to_ascii_lowercase(b: u8) -> u8 {
@@ -51,6 +52,14 @@ impl String {
     #[compiler_item("string_get_byte_unchecked")]
     pub fn get_byte_unchecked(&self, index: i32) -> u8 {
         return builtin::array_get_u8(&self.repr, index);
+    }
+
+    /// Zero-copy view of the string's UTF-8 bytes as an `ArraySlice<u8>`
+    /// (i.e. `ByteSlice`). No allocation: the slice references the string's
+    /// backing buffer over `[0, len())`. Used by the byte-based deserializers
+    /// to hand a wire key to `FieldSchema::lookup` without a `String` copy.
+    pub fn as_byte_slice(&self) -> ArraySlice<u8> with stores[self] {
+        return ArraySlice::internal_new(&self.repr, 0, self.used);
     }
 
     /// Write the byte at `index` without bounds or UTF-8 checks.
