@@ -3,6 +3,7 @@
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use super::util;
+use super::util::placeholder;
 use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexSet;
@@ -10,16 +11,6 @@ use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
 use crate::token::Span;
-
-/// Body-walk placeholder for a successful coercion. The combined walk no
-/// longer builds the coercion's actual TIR (Stage 7-B); reify reads the
-/// recorded `CoercionChoice` + `SequenceCoercionFacts` /
-/// `KeyValueCoercionFacts` and emits the real expansion. The returned
-/// `TirExpr` only needs the right `type_id` + `span` for the caller's
-/// outer typecheck / `expression_types` recording.
-fn placeholder(target_type: TypeId, span: Span) -> TirExpr {
-    TirExpr::new(TirExprKind::Unit, target_type, span)
-}
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Coerce a numeric literal (or negated numeric literal) to the

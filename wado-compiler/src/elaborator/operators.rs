@@ -12,17 +12,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 
-/// Body-walk placeholder for an operator / assignment expression. Stage
-/// 7-B: the combined walk typechecks the operands and records any dispatch
-/// decision (`operator_dispatch` for an overloaded op, `index_assign_dispatch`
-/// for `arr[i] = v`), but no longer assembles the resulting TIR (the native
-/// `Binary`, the overloaded `MethodCall`, the `Assign` / `GlobalVarSet`, or
-/// the comparison-chain `Block`) — reify rebuilds it from the recorded facts
-/// + the AST. The returned `TirExpr` only needs the right `type_id` + `span`
-///   for the caller's outer typecheck / `expression_types` recording.
-fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
-    TirExpr::new(TirExprKind::Unit, type_id, span)
-}
+use super::util::placeholder;
 
 /// The right-hand side of an assignment passed to
 /// [`Elaborator::assign_to_target`]. Either an AST expression (the

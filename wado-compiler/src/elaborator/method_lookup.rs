@@ -18,13 +18,7 @@ use super::types::{
     IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, SequenceLiteralTraitInfo, TypeError,
 };
 
-/// Body-walk placeholder for the `IndexMut` method-call rewrite. Stage 7-B:
-/// the combined walk records the inner `operator_dispatch`, the outer
-/// `method_dispatch`, and the `IndexMutMethodCall` desugar; reify rebuilds
-/// the full `*recv.index_mut(idx).method(args)` expansion from those facts.
-fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
-    TirExpr::new(TirExprKind::Unit, type_id, span)
-}
+use super::util::placeholder;
 
 /// Lightweight reference to an impl block, avoiding deep clones.
 /// Stores just enough info to re-access the impl block's fields on demand.

@@ -16,13 +16,7 @@ use super::Elaborator;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError};
 use super::util;
-
-/// Body-walk placeholder for a resolved expression. Stage 7-B: the combined
-/// walk records facts; reify is the sole TIR producer. Used at the few sites
-/// that still hand a resolved operand to a TIR builder that takes a `TirExpr`.
-fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
-    TirExpr::new(TirExprKind::Unit, type_id, span)
-}
+use super::util::placeholder;
 
 /// Tracks the reference binding mode for match ergonomics.
 /// When matching a reference-typed scrutinee, bindings inherit the reference kind.
@@ -353,9 +347,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // stmt from the AST + recorded facts (`let_annotated_types`,
         // `local_types`, the binding symbols). This walk binds the pattern into
         // `ctx`, records the local symbols, registers closure defaults, and
-        // runs the type-mismatch diagnostic above; the resolved `value` is kept
-        // only for that diagnostic and then discarded.
-        let _ = value_type;
+        // ran the type-mismatch diagnostic above (the resolved `value_type`'s
+        // only consumer).
         match &let_stmt.pattern {
             ast::Pattern::Ident {
                 id,
@@ -1880,7 +1873,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// For tuples: compile-time expansion (one copy of the body per element).
     /// For non-tuples: iterator pattern via `into_iter()` + `next()`.
     pub(super) fn resolve_for_of(&mut self, for_of: &ForOfStmt, ctx: &mut FunctionContext) {
-        let _ = for_of.span;
         // Naked `continue` inside this for-of's body targets *this* loop,
         // not an enclosing C-style `for` body label. The iterable itself
         // is an expression — no `continue` stmt syntactically — but we
@@ -2102,8 +2094,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.resolve_stmt(stmt, ctx);
         }
         ctx.exit_scope();
-
-        let _ = (iterable, unique_id, by_ref);
     }
 
     fn resolve_tuple_for_of(
@@ -2136,7 +2126,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let tuple_type_id = iterable.type_id;
         let temp_name = format!("__tuple_{unique_id}");
         ctx.add_local(temp_name, tuple_type_id, false, None);
-        let _ = iterable;
 
         // Stage 5: capture each unrolled element's body facts separately. The
         // body is a single source sub-tree resolved once per element here;
@@ -2343,12 +2332,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `let`; we reserve the local slot here for walk-order parity.
         let iter_local_index =
             ctx.add_local(iter_var.clone(), iter_type, /* is_mut */ true, None);
-        let _ = into_iter_call;
 
         // Make `__for_of_N` visible to a body-level `break __for_of_N`
         // (no existing user does this, but the validation in `resolve_break`
         // would otherwise reject it). Pop after the body has been resolved.
-        ctx.active_labels.push(label.clone());
+        ctx.active_labels.push(label);
 
         // `__iter_N.next()` — dispatch on the Local receiver, no AST.
         let iter_local_ref = TirExpr::new(
@@ -2448,13 +2436,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_block(&for_of.body, ctx, None);
         ctx.exit_scope();
 
-        let _ = (
-            next_call,
-            option_type,
-            some_case_name,
-            iter_local_index,
-            label,
-        );
         ctx.active_labels.pop();
     }
 
@@ -2642,7 +2623,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// ```
     pub(super) fn resolve_for(&mut self, f: &ForStmt, ctx: &mut FunctionContext) {
         self.record_desugar(f.id, super::sem::types::DesugarKind::CStyleFor);
-        let span = f.span;
         let loop_id = ctx.next_loop_id;
         ctx.next_loop_id += 1;
         let body_label = format!("__for_{loop_id}_body");
@@ -2669,7 +2649,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Body and update are resolved here (not up-front) because in the
         // let-chain form the pattern's bindings must be in scope for both — see
         // `lib/core/prelude/string.wado::String::find_char`.
-        let _ = span;
         if let Some(init) = &f.init {
             self.resolve_stmt(init, ctx);
         }

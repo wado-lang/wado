@@ -37,16 +37,7 @@ enum FuncRefInference {
     NotApplicable,
 }
 
-/// Body-walk placeholder for a resolved expression. Stage 7-B: the combined
-/// walk resolves sub-expressions for their side-effect fact recording and
-/// computes the result type, but no longer assembles the expression's TIR —
-/// reify is the sole producer and rebuilds it from the recorded facts
-/// (`expression_types`, `operator_dispatch`, `generic_instantiations`, …).
-/// The returned `TirExpr` only needs the right `type_id` + `span` for the
-/// caller's outer typecheck / `expression_types` recording.
-fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
-    TirExpr::new(TirExprKind::Unit, type_id, span)
-}
+use super::util::placeholder;
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve an AST expression to its TIR form. Records the resolved
@@ -3469,7 +3460,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         inner_type: TypeId,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        let some_type = self.tysys.type_table.borrow().as_option(inner_type).unwrap();
+        let some_type = self
+            .tysys
+            .type_table
+            .borrow()
+            .as_option(inner_type)
+            .unwrap();
 
         // Allocate a local for the Some payload binding (walk-order parity).
         ctx.enter_scope();

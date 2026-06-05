@@ -14,18 +14,7 @@ use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
 use super::infer::InferCtx;
 use super::types::{FunctionContext, TypeError};
-
-/// Body-walk placeholder for a resolved call. Stage 7-B: the combined walk
-/// records the dispatch decision (`static_method_dispatch` /
-/// `generic_instantiations` / `call_param_types` / the variant + `From`
-/// facts) and resolves the arguments for their side-effect fact recording,
-/// but no longer assembles the call's TIR — reify is the sole producer and
-/// rebuilds it from the recorded facts. The returned `TirExpr` only needs
-/// the right `type_id` + `span` for the caller's outer typecheck /
-/// `expression_types` recording.
-fn placeholder(type_id: TypeId, span: crate::token::Span) -> TirExpr {
-    TirExpr::new(TirExprKind::Unit, type_id, span)
-}
+use super::util::placeholder;
 
 /// View of a `ResolvedType::Function` after peeling references and
 /// fn-type newtypes. Returned by [`Elaborator::as_fn_signature`].

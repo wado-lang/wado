@@ -43,10 +43,7 @@ pub(super) struct MethodCallInput<'a> {
     pub span: Span,
 }
 
-/// Body-walk placeholder for a resolved (method / static) call. Stage 7-B.
-fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
-    TirExpr::new(TirExprKind::Unit, type_id, span)
-}
+use super::util::placeholder;
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_method_call(
