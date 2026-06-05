@@ -87,6 +87,24 @@
         margin: 8px 0;
         word-break: break-word;
       }
+      .benchmark-graph-legend {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 4px 16px;
+        margin-bottom: 8px;
+      }
+      .benchmark-legend-item {
+        display: flex;
+        align-items: center;
+        font-size: 0.75rem;
+      }
+      .benchmark-legend-swatch {
+        width: 24px;
+        height: 2px;
+        margin-right: 6px;
+      }
       .benchmark-scroller {
         width: 100%;
         overflow-x: auto;
@@ -217,6 +235,13 @@
           title.textContent = baseName;
           graph.appendChild(title);
 
+          // Legend lives outside the scroller too, so it stays fixed while the
+          // chart scrolls. Populated below once the optimization levels and
+          // their colors are known.
+          const legend = document.createElement('div');
+          legend.className = 'benchmark-graph-legend';
+          graph.appendChild(legend);
+
           // Scroll container: keeps the chart within the page width but lets
           // the user scroll horizontally when there are many commits.
           const scroller = document.createElement('div');
@@ -254,6 +279,19 @@
 
           // Sort optimization levels
           const sortedOpts = [...optLevelMap.keys()].sort();
+
+          // Build the HTML legend now that the optimization levels are known.
+          for (const opt of sortedOpts) {
+            const color = OPT_COLORS[opt] || FALLBACK_COLOR;
+            const item = document.createElement('div');
+            item.className = 'benchmark-legend-item';
+            const swatch = document.createElement('span');
+            swatch.className = 'benchmark-legend-swatch';
+            swatch.style.backgroundColor = color;
+            item.appendChild(swatch);
+            item.appendChild(document.createTextNode(opt));
+            legend.appendChild(item);
+          }
 
           // Build datasets: one line per optimization level
           const datasets = sortedOpts.map(opt => {
@@ -294,6 +332,9 @@
               responsive: true,
               maintainAspectRatio: false,
               title: {
+                display: false,
+              },
+              legend: {
                 display: false,
               },
               scales: {
