@@ -585,20 +585,37 @@ block-result-type reader.
       reify through a direct construction over `self.sem.types`. The
       TIR walkers (~330 lines in `expr.rs`) and the
       `validate_missing_return(TirBlock)` helper are deleted.
-- [ ] **Stage 7-B** — `annotate` stops building TIR. Each `resolve_*`
-      returns the resolved type + records facts only; the duplicate
-      `TirExpr` / `TirStmt` / `TirItem` halves of expr.rs / stmt.rs /
-      item.rs / call.rs / method_call.rs / operators.rs / coercion.rs /
-      assert.rs / closure.rs / handlers.rs / matches.rs / template.rs /
-      module.rs are deleted, and `build_tir_from_state` becomes a
-      body-walk pass that returns no TIR. LSP then runs `annotate` only.
-      Progress: every expression arm now returns a placeholder — `match`,
-      struct / anonymous-struct literals, `?` (option + result), if-expr
-      (both arms), block, labeled-block, `with` / `resume`, and `ident` (via
-      the `AssignPlace` fact that unblocked it) — joining the earlier-stage
-      leaves. The combined walk builds no `TirExpr`; the sole remaining
-      real-TIR producer is the `resolve_block` / `resolve_stmt` family (the
-      statement-level signature sweep), tracked under Phase 2 above.
+- [x] **Stage 7-B — `annotate` builds no TIR; LSP runs `annotate` only.**
+  - [x] Every expression arm returns a placeholder — literal / ident / binary
+        / unary / call / method-call / static-call / field / index / cast /
+        range / tuple-literal / struct + anonymous-struct literal / `match` /
+        `?` (option + result) / if-expr (both arms) / block / labeled-block /
+        `with` / `resume` / template / matches / assert-capture / closure. The
+        `ident` arm was unblocked by the `AssignPlace` fact (`assign_to_target`
+        classifies l-values from it + the AST instead of the resolved kind).
+  - [x] Every statement is records-only: `resolve_block` / `resolve_stmt` and
+        all helpers (let, return, task-return, if, while, C-style for, for-of
+        + tuple/variadic/iterator, loop, break, continue, assert,
+        labeled-block, let-chain) record facts (types, dispatch, desugar tags,
+        `ForOfIteratorInfo`, `tuple_overlays`, local symbols) and build no
+        `TirStmt` / `TirBlock`. The if-let-chain result type is computed on the
+        AST (`agree_branch_types(ast_block_result_type(then), else)`).
+  - [x] `resolve_module` is records-only (returns `Result<(), Bail>`); it
+        walks every item for its facts and assembles no `TirModule`. Synthesis
+        requests flow through `pending_synthesis_requests`, anon structs
+        through `pending_anonymous_structs` — both read by reify.
+  - [x] `build_tir_from_state` gates reify (and stdlib-snapshot `TirModule`
+        rehydration) on a `build_tir` flag. The LSP engine
+        (`wado-lsp::build_semantics` → `semantics_of(.., false)`) runs only the
+        body fact-walk and never builds or reads TIR; the batch path, the
+        general `semantics()` entry, and kiln options extraction pass `true`.
+  - [ ] **Remaining (hardening): `resolve_expr -> TypeId`.** The combined-walk
+        resolvers still return a `placeholder` `TirExpr` (a `Unit` sentinel
+        carrying the resolved type + span) rather than a bare `TypeId`. reify
+        is already the sole producer of meaningful TIR, so this is a type-level
+        signature sweep over the ~56 body-walk resolvers + the expression
+        builders, not an architectural change. Pipeline diagrams stay accurate
+        either way.
 
 ### Landing log
 
