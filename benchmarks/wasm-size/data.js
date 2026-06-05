@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780673364733,
+  "lastUpdate": 1780699006154,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30241,6 +30241,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b3ed65540004a77bd260b4b9689bc9c354a40179"
         },
         "date": 1780673364193,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1767,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8808,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16711,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 456413,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "de7067ce5ef607b2624068507b19391e1db7a0c9",
+          "message": "Merge pull request #1307 from wado-lang/claude/benchmark-workflow-graph-scroll-LaP4c\n\nfix(benchmark): fixed header/legend/axis on combined benchmark pages",
+          "timestamp": "2026-06-06T07:27:55+09:00",
+          "tree_id": "b4a3d68a2cf58c82224e96b5f69f8d514412fac1",
+          "url": "https://github.com/wado-lang/wado/commit/de7067ce5ef607b2624068507b19391e1db7a0c9"
+        },
+        "date": 1780699005824,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
