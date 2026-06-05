@@ -66,7 +66,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // so handler-introduced bindings, if any, don't leak — matches how
         // regular block expressions behave.
         ctx.enter_scope();
-        let body = self.resolve_block(&with_expr.body, ctx, expected_type);
+        self.resolve_block(&with_expr.body, ctx, expected_type);
         ctx.exit_scope();
 
         // `with ... do { ... }` is an expression: it evaluates to its body
@@ -86,7 +86,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // effects and projects the result type. Missing-return analysis reads
         // `with`/`resume` off the AST via `control_flow.rs`, so nothing
         // consumes this node's structure.
-        let _ = body;
         result_type
     }
 

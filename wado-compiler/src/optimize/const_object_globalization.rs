@@ -118,14 +118,13 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
     // per-call `0`-based counter would emit a second `__const_obj_0` with an
     // unrelated type, colliding two globals under one name (an invalid-Wasm
     // type mismatch). The pass runs once today, but this keeps it idempotent.
-    let mut counter = project
+    let base = project
         .globals
         .iter()
         .filter(|g| g.name.starts_with("__const_obj_"))
         .count();
-    for cand in candidates {
-        let name = format!("__const_obj_{counter}");
-        counter += 1;
+    for (offset, cand) in candidates.into_iter().enumerate() {
+        let name = format!("__const_obj_{}", base + offset);
 
         let mut func = project.functions[cand.func_idx].borrow_mut();
         let body = func.body.as_mut().expect("candidate function has a body");

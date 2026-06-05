@@ -1312,7 +1312,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .loaded_modules
             .iter()
             .map(|(src, m)| (src.clone(), &m.items))
-            .chain(std::iter::once((module_source.clone(), &module.items)))
+            .chain(std::iter::once((module_source, &module.items)))
             .flat_map(|(src, module_items)| {
                 module_items
                     .iter()
@@ -1351,7 +1351,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // Third pass: resolve functions
         let _resolve_funcs_span = self.logger.span("elaborate/resolve_funcs");
-        let _ = module_source;
 
         // Pre-populate the generic-function inference caches for every
         // generic function in the current module. This allows same-module
@@ -1804,7 +1803,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         drop(_resolve_funcs_span);
-        let _ = module;
         self.logger.ok_or_bail(())
     }
 

@@ -247,9 +247,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             struct_lit.id,
                             vec![],
                             struct_type,
-                            Some(name.clone()),
+                            Some(name),
                         );
-                        let _ = name;
                         (struct_type, target_type)
                     } else if let Some(coerced) =
                         self.try_coerce_struct_to_map(ast_value, ctx, target_type)
@@ -2151,7 +2150,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .then(|| self.sem.types.overlay_base_lens());
         let mut element_overlays: Vec<super::sem::types::ElementOverlay> = Vec::new();
 
-        for &elem_type in elems.iter() {
+        for &elem_type in elems {
             ctx.enter_scope();
 
             // When iterating through a reference, the element binds by reference

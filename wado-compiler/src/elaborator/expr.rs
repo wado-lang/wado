@@ -118,21 +118,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
             Expr::Index(index) => self.resolve_index(index, ctx),
             Expr::Block(block) => {
-                let tir_block = self.resolve_block(block, ctx, expected_type);
-                // Reuse the shared block-result rule so the block
-                // expression's overall type matches the inference rule
-                // applied everywhere else (function body trailing
-                // expressions, `if` / `match` arm bodies, etc.): a
-                // trailing `if cond { a } else { b }` propagates its
-                // branch-agreed type, not `Unit`. Read from
-                // `expression_types` (AST level) rather than the built
-                // block so this does not depend on the body TIR.
-                let type_id = self.ast_block_result_type(block);
-                // Stage 7-B: reify rebuilds the `Block` from the AST; the
-                // combined walk resolved it for fact recording. Project the
-                // shared block-result type.
-                let _ = tir_block;
-                type_id
+                // Walk the block for its facts; reify rebuilds the `Block`
+                // node. Read the overall type from `expression_types` (AST
+                // level) via the shared block-result rule so a trailing
+                // `if/else` propagates its branch-agreed type, not `Unit`.
+                self.resolve_block(block, ctx, expected_type);
+                self.ast_block_result_type(block)
             }
             Expr::If(if_expr) => self.resolve_if_expr(if_expr, ctx, expected_type),
             Expr::Match(match_expr) => self.resolve_match_expr(match_expr, ctx, expected_type),
@@ -156,7 +147,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ctx.active_labels.push(lb.label.clone());
 
                 ctx.enter_scope();
-                let tir_block = self.resolve_block(&lb.block, ctx, expected_type);
+                self.resolve_block(&lb.block, ctx, expected_type);
                 ctx.exit_scope();
 
                 ctx.active_labels.pop();
@@ -210,7 +201,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // re-running the same break-type unification. The combined walk
                 // resolved the body and ran break-type / null diagnostics for
                 // their side effects; project only the unified result type.
-                let _ = tir_block;
                 result_type
             }
             Expr::Matches(m) => self.desugar_matches_expr(m, ctx, expected_type),
@@ -1840,12 +1830,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_id
             }
             Condition::Expr(expr) => {
-                let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
-                let then_block = self.resolve_block(&if_expr.then_block, ctx, expected_type);
-                let else_block = if_expr
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.resolve_block(b, ctx, expected_type));
+                // Resolve the condition and both blocks for their facts; reify
+                // rebuilds the `If` node. The result type is inferred from the
+                // AST (`ast_block_result_type`) below.
+                self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
+                self.resolve_block(&if_expr.then_block, ctx, expected_type);
+                if let Some(b) = &if_expr.else_block {
+                    self.resolve_block(b, ctx, expected_type);
+                }
 
                 let type_id = if let Some(ty) = expected_type {
                     ty
@@ -1876,7 +1868,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         else_type
                     } else if else_unknown && !then_unknown {
                         then_type
-                    } else if else_block.is_none() {
+                    } else if if_expr.else_block.is_none() {
                         if then_type != TypeTable::UNIT {
                             let type_name = self.tysys.type_table.borrow().type_name(then_type);
                             let _ = self.logger.error(TypeError::TypeMismatch {
@@ -1959,7 +1951,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // their fact-recording side effects and ran branch-agreement /
                 // null diagnostics off the AST (`ast_block_result_type`).
                 // Project only the result type.
-                let _ = (condition, then_block, else_block);
                 type_id
             }
         }
@@ -3396,8 +3387,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let tuple_type = self.tysys.type_table.borrow_mut().make_tuple(elem_types);
-        tuple_type
+        self.tysys.type_table.borrow_mut().make_tuple(elem_types)
     }
 
     /// Resolve the postfix `?` operator.
