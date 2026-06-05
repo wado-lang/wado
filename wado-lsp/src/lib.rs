@@ -459,7 +459,8 @@ async fn build_semantics<H: CompilerHost>(source: &str, filename: &str, host: &H
     )
     .await
     {
-        Ok(loaded) => wado_compiler::semantics_of(loaded, host, LogLevel::default()),
+        // LSP engine: facts only, no TIR (queries never read `tir_modules`).
+        Ok(loaded) => wado_compiler::semantics_of(loaded, host, LogLevel::default(), false),
         Err(e) => {
             host.emit_diagnostic(e.into());
             Semantics::empty()

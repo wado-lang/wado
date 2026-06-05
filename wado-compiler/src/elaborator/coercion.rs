@@ -3,6 +3,7 @@
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use super::util;
+use super::util::placeholder;
 use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexSet;
@@ -10,16 +11,6 @@ use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
 use crate::token::Span;
-
-/// Body-walk placeholder for a successful coercion. The combined walk no
-/// longer builds the coercion's actual TIR (Stage 7-B); reify reads the
-/// recorded `CoercionChoice` + `SequenceCoercionFacts` /
-/// `KeyValueCoercionFacts` and emits the real expansion. The returned
-/// `TirExpr` only needs the right `type_id` + `span` for the caller's
-/// outer typecheck / `expression_types` recording.
-fn placeholder(target_type: TypeId, span: Span) -> TirExpr {
-    TirExpr::new(TirExprKind::Unit, target_type, span)
-}
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Coerce a numeric literal (or negated numeric literal) to the
@@ -305,12 +296,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         ctx: &mut FunctionContext,
         target_type: TypeId,
-    ) -> Option<TirExpr> {
+    ) -> Option<TypeId> {
         // Numeric literal coercion (int, float, i128/u128) — sub-helper
         // records `NumericLiteral` and `expression_types` for the visited
         // AST id (and the inner `-NUM` literal id, when applicable).
         if let Some(coerced) = self.try_coerce_numeric_literal(expr, target_type) {
-            return Some(coerced);
+            return Some(coerced.type_id);
         }
 
         // Null literal → Option<T>
@@ -328,7 +319,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 super::sem::types::CoercionKind::NullToOption,
                 target_type,
             );
-            return Some(placeholder(target_type, lit.span));
+            return Some(target_type);
         }
 
         // String/template literal → String newtype
@@ -356,7 +347,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ) && target_type != base_id;
             if is_string_newtype {
                 // Walk the inner literal / template for fact recording.
-                let _ = self.resolve_expr(expr, ctx, None);
+                self.resolve_expr(expr, ctx, None);
                 self.record_coercion(
                     expr.id(),
                     super::sem::types::CoercionKind::StringNewtype,
@@ -366,7 +357,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // with the unwrapped String type; overwrite with the
                 // outer target newtype so reify reads the newtype here.
                 self.record_expression_type(expr.id(), target_type);
-                return Some(placeholder(target_type, expr.span()));
+                return Some(target_type);
             }
         }
 
@@ -386,7 +377,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if is_fn_newtype {
                 // Walk the closure for fact recording (param types,
                 // captures, body) under the unwrapped fn type.
-                let _ = self.resolve_expr(expr, ctx, Some(base_id));
+                self.resolve_expr(expr, ctx, Some(base_id));
                 self.record_coercion(
                     expr.id(),
                     super::sem::types::CoercionKind::ClosureToFnNewtype,
@@ -395,20 +386,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Same pattern as StringNewtype above: overwrite the
                 // map's base-fn-type write with the outer newtype.
                 self.record_expression_type(expr.id(), target_type);
-                return Some(placeholder(target_type, expr.span()));
+                return Some(target_type);
             }
         }
 
         // Tuple literal → type implementing SequenceLiteralBuilder (List<T> and user types).
         // The sub-helper records `TupleToSequence` and `expression_types`.
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(expr, ctx, target_type) {
-            return Some(coerced);
+            return Some(coerced.type_id);
         }
 
         // Anonymous struct literal → type implementing KeyValueLiteralBuilder.
         // The sub-helper records `StructToMap` and `expression_types`.
         if let Some(coerced) = self.try_coerce_struct_to_map(expr, ctx, target_type) {
-            return Some(coerced);
+            return Some(coerced.type_id);
         }
 
         // If an anonymous struct literal targets a generic instance that doesn't
@@ -522,12 +513,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
 
         let span = expr.span();
-        let string_type = self
-            .tysys
+        // Intern the `String` compiler struct so reify and downstream phases
+        // see the same canonical `TypeId` the elaborator picked. The result is
+        // not otherwise needed here — reify rebuilds the `__kv_lit:` desugar.
+        self.tysys
             .type_table
             .borrow_mut()
             .make_compiler_struct(crate::compiler_item::CompilerItem::String);
-        let i32_type = TypeTable::I32;
 
         // Get type args for monomorphization from builder type
         let builder_base_name = self
@@ -581,7 +573,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 target_type,
                 impl_module_source,
                 builder_base_name,
-                mangled_builder_name,
                 type_arg_ids,
                 type_arg_names,
                 use_new_api,
@@ -593,10 +584,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Reserve the `__b` builder local on the surrounding scope so
         // subsequent local-index accounting in the enclosing function
-        // matches reify's expansion. The `string_type` / `i32_type`
-        // intern calls above stay live so reify and downstream phases
-        // see the same canonical `TypeId`s the elaborator picked.
-        let _ = (string_type, i32_type);
+        // matches reify's expansion.
         ctx.enter_scope();
         let _builder_index = ctx.add_local("__b".to_string(), builder_type, true, None);
 
@@ -615,13 +603,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         for field in &struct_lit.fields {
             let value = self.resolve_expr(&field.value, ctx, Some(value_type));
-            if value.type_id != value_type
-                && value.type_id != TypeTable::UNKNOWN
-                && value.type_id != TypeTable::NEVER
-            {
+            if value != value_type && value != TypeTable::UNKNOWN && value != TypeTable::NEVER {
                 let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: self.tysys.type_table.borrow().type_name(value_type),
-                    found: self.tysys.type_table.borrow().type_name(value.type_id),
+                    found: self.tysys.type_table.borrow().type_name(value),
                     span: field.value.span(),
                 });
             }
@@ -750,7 +735,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 output_type,
                 impl_module_source,
                 builder_base_name,
-                mangled_builder_name,
                 type_arg_ids,
                 type_arg_names,
                 newtype_cast_to: if needs_newtype_cast {
@@ -776,8 +760,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the recorded `SequenceCoercionFacts` + the AST.
         for element in &tuple_lit.elements {
             let elem_expr = self.resolve_expr(element, ctx, Some(element_type));
-            if elem_expr.type_id != element_type
-                && elem_expr.type_id != TypeTable::UNKNOWN
+            if elem_expr != element_type
+                && elem_expr != TypeTable::UNKNOWN
                 && element_type != TypeTable::UNKNOWN
                 && !self
                     .tysys
@@ -792,7 +776,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ),
                     found: format!(
                         "heterogeneous element of type '{}'",
-                        self.tysys.type_table.borrow().type_name(elem_expr.type_id)
+                        self.tysys.type_table.borrow().type_name(elem_expr)
                     ),
                     span: element.span(),
                 });

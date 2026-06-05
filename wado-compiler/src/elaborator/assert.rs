@@ -13,18 +13,14 @@
 use crate::ast::{AssertStmt, AstId, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::tir::{TirExpr, TirExprKind, TirStmt, TypeId};
+use crate::tir::TypeId;
 use crate::unparse::unparse_expr_simple;
 
 use super::Elaborator;
 use super::types::FunctionContext;
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    pub(super) fn desugar_assert(
-        &mut self,
-        assert_stmt: &AssertStmt,
-        ctx: &mut FunctionContext,
-    ) -> Vec<TirStmt> {
+    pub(super) fn desugar_assert(&mut self, assert_stmt: &AssertStmt, ctx: &mut FunctionContext) {
         self.record_desugar(assert_stmt.id, super::sem::types::DesugarKind::Assert);
 
         // Phase 1: read-only AST scan to decide captures.
@@ -47,18 +43,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Walk the condition for fact recording. The hook on `resolve_expr`
         // marks each `Capture::emitted` flag once it sees its slot's `AstId`.
-        let cond_tir = self.resolve_expr(&assert_stmt.condition, ctx, None);
+        let cond_type = self.resolve_expr(&assert_stmt.condition, ctx, None);
 
         // Reserve the outer-scope `__cond` slot so subsequent local-index
         // accounting in the enclosing function (closure capture
         // `outer_index`, recorded `MutCapture::outer_index`, etc.) stays in
         // lockstep with reify's expansion — reify's `reify_assert` also
         // allocates `__cond` at this point in its own walk.
-        let _cond_local_index = ctx.add_local("__cond".to_string(), cond_tir.type_id, false, None);
+        let _cond_local_index = ctx.add_local("__cond".to_string(), cond_type, false, None);
 
         // Walk the assert message for fact recording too.
         if let Some(msg) = &assert_stmt.message {
-            let _ = self.resolve_expr(msg, ctx, None);
+            self.resolve_expr(msg, ctx, None);
         }
 
         let AssertCaptureContext {
@@ -90,16 +86,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
             })
             .collect();
-        let emitted_slot_indices: Vec<u32> = slots
-            .iter()
-            .enumerate()
-            .filter_map(|(i, c)| if c.emitted { Some(i as u32) } else { None })
-            .collect();
         self.record_assert_captures(
             assert_stmt.id,
             super::sem::types::AssertCaptureInfo {
                 slots: stage5_slots,
-                emitted_slot_indices,
             },
         );
 
@@ -108,9 +98,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Bump the per-function assert serial so reify's `__assert_N`
         // label numbering stays in sync with the source order.
         ctx.next_assert_id += 1;
-
-        // Placeholder — reify is the sole TIR source for the assert expansion.
-        Vec::new()
     }
 
     /// Hook the body walk calls when it encounters an `AstId` flagged for
@@ -126,14 +113,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         ctx.assert_capture_ctx
             .as_mut()
             .expect("assert_capture_ctx present (guarded by caller)")
             .in_progress
             .insert(ast_id);
 
-        let resolved = self.resolve_expr(expr, ctx, expected_type);
+        let type_id = self.resolve_expr(expr, ctx, expected_type);
 
         ctx.assert_capture_ctx
             .as_mut()
@@ -141,8 +128,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .in_progress
             .shift_remove(&ast_id);
 
-        let type_id = resolved.type_id;
-        let cap_span = resolved.span;
         let cap_name = ctx
             .assert_capture_ctx
             .as_ref()
@@ -155,13 +140,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // enter `local_symbols` and pollute LSP hover / go-to-def lookups.
         let _local_index = ctx.add_local(cap_name, type_id, false, None);
 
-        let cap_ctx = ctx
-            .assert_capture_ctx
-            .as_mut()
-            .expect("assert_capture_ctx survives recursive resolve");
-        cap_ctx.slots[slot_idx].emitted = true;
-
-        TirExpr::new(TirExprKind::Unit, type_id, cap_span)
+        type_id
     }
 }
 
@@ -171,12 +150,6 @@ struct Capture {
     name: String,
     /// Source text of the original sub-expression, used in the failure message.
     source: String,
-    /// `true` once the elaborator hook has fired for this slot. Slots that
-    /// stay `false` had their AST node evaporate during resolution
-    /// (e.g. reflexive `T::from(T_val)` returns its argument directly, so
-    /// the outer `Call` is never resolved as a node and the capture hook is
-    /// never called on its `AstId`).
-    emitted: bool,
 }
 
 /// Per-assert state carried on [`FunctionContext::assert_capture_ctx`]
@@ -253,11 +226,7 @@ impl CaptureScanner {
     fn add(&mut self, source: String, ast_id: AstId) {
         let idx = self.slots.len();
         let name = format!("__v{idx}");
-        self.slots.push(Capture {
-            name,
-            source,
-            emitted: false,
-        });
+        self.slots.push(Capture { name, source });
         self.ast_id_to_slot.insert(ast_id, idx);
     }
 

@@ -446,25 +446,37 @@ unblocks in parentheses):
       directly (`Number`/`Bool`/`Char` → `Literal` pattern, else
       `ConstantValue`), unblocking `resolve_literal` and `resolve_cast`
       placeholders.
-- [ ] **for-of `TupleZip`** — `resolve_for_of` detects the variadic form by
-      the iterator's `TupleZip` kind. Record the form. (coupled with the
-      `TupleZip` producer)
-- [ ] **if-let-chain / let-chain result type** — the remaining
-      `block_result_type(TIR)` readers, over synthetic chain blocks. Needs
-      the chain's result-type rule expressed on the AST.
-- [ ] **assign target ident classification** — `assign_to_target` still
-      reads `target.kind` to classify an `Ident` / `&mut`-captured-ident
-      target (`Local` / `GlobalVarGet` / deref-capture `Unary { Deref }`).
-      Porting it (name-resolution replication or a recorded place-kind fact)
-      unblocks `resolve_ident`.
+- [x] **for-of `TupleZip`** — `resolve_for_of` no longer reads the resolved
+      `iterable.kind == TupleZip`. `TupleZip` is produced only by the tuple
+      `.zip()` arm, so an AST shape check (a `.zip()` call) plus the existing
+      `type_contains_pack` on the result type is equivalent.
+- [x] **if-let-chain / let-chain result type** — ported to the AST. The
+      `resolve_if_expr` LetChain arm computes its result type as
+      `agree_branch_types(ast_block_result_type(then_block), else_type)
+      .unwrap_or(UNIT)`, which is byte-identical to `block_result_type` over the
+      synthetic chain block (the per-level `unwrap_or(UNIT)` recursion collapses
+      to exactly this for single- and multi-element chains).
+      `resolve_let_chain_stmts` is records-only and no longer builds the chain
+      `Match` / `If` TIR; the `block_result_type(&TirBlock)` helper is deleted.
+- [x] **assign target ident classification** — `resolve_ident` records an
+      `AssignPlace` fact (`Local` / `DerefCapture { through_mut_ref }` /
+      `Global { name, mutable }`) keyed by the ident's `AstId`;
+      `assign_to_target` reads it to validate the l-value and global
+      mutability from the AST + fact instead of the resolved `target.kind`.
+      The address-taken-local marking the unary / method-call readers did is
+      owned by reify (it marks `TirFunction::address_taken_locals` on the TIR
+      it emits), so the combined-walk marking was deleted as dead; the
+      `&mut`-on-immutable-local diagnostic moved to a read-only `ctx.lookup`
+      over the AST target. This unblocked the `resolve_ident` placeholder.
 
 Arms now returning placeholders: range, field-access, index, unary, cast,
-tuple-literal, literal (joining binary / call / method-call / operators /
-coercion / assert / matches / template / item / module / handlers from
-earlier stages). Still building TIR: `resolve_ident`,
-`resolve_struct_literal`, the structural `Block` / `If` / `Match` /
-`LabeledBlock` arms, and `resolve_block` / `resolve_stmt` (the Phase 2
-signature sweep).
+tuple-literal, literal, ident, match, struct-literal, anonymous-struct, `?`
+(option + result), if-expr (both arms), block, labeled-block, with-handler,
+resume (joining binary / call / method-call / operators / coercion / assert /
+matches / template / item / module from earlier stages). Still building TIR:
+`resolve_block` / `resolve_stmt` with the stmt-level builders (the Phase 2
+signature sweep). The combined walk no longer builds any `TirExpr` outside the
+statement-level scaffolding.
 
 `adjust_receiver_for_self_kind` (method-call receiver wrapping) reads
 `ResolvedType`, not a TIR `kind`, and reify does its own adjustment, so
@@ -575,13 +587,38 @@ block-result-type reader.
       reify through a direct construction over `self.sem.types`. The
       TIR walkers (~330 lines in `expr.rs`) and the
       `validate_missing_return(TirBlock)` helper are deleted.
-- [ ] **Stage 7-B** — `annotate` stops building TIR. Each `resolve_*`
-      returns the resolved type + records facts only; the duplicate
-      `TirExpr` / `TirStmt` / `TirItem` halves of expr.rs / stmt.rs /
-      item.rs / call.rs / method_call.rs / operators.rs / coercion.rs /
-      assert.rs / closure.rs / handlers.rs / matches.rs / template.rs /
-      module.rs are deleted, and `build_tir_from_state` becomes a
-      body-walk pass that returns no TIR. LSP then runs `annotate` only.
+- [x] **Stage 7-B — `annotate` builds no TIR; LSP runs `annotate` only.**
+  - [x] Every expression arm returns a placeholder — literal / ident / binary
+        / unary / call / method-call / static-call / field / index / cast /
+        range / tuple-literal / struct + anonymous-struct literal / `match` /
+        `?` (option + result) / if-expr (both arms) / block / labeled-block /
+        `with` / `resume` / template / matches / assert-capture / closure. The
+        `ident` arm was unblocked by the `AssignPlace` fact (`assign_to_target`
+        classifies l-values from it + the AST instead of the resolved kind).
+  - [x] Every statement is records-only: `resolve_block` / `resolve_stmt` and
+        all helpers (let, return, task-return, if, while, C-style for, for-of
+        + tuple/variadic/iterator, loop, break, continue, assert,
+        labeled-block, let-chain) record facts (types, dispatch, desugar tags,
+        `ForOfIteratorInfo`, `tuple_overlays`, local symbols) and build no
+        `TirStmt` / `TirBlock`. The if-let-chain result type is computed on the
+        AST (`agree_branch_types(ast_block_result_type(then), else)`).
+  - [x] `resolve_module` is records-only (returns `Result<(), Bail>`); it
+        walks every item for its facts and assembles no `TirModule`. Synthesis
+        requests flow through `pending_synthesis_requests`, anon structs
+        through `pending_anonymous_structs` — both read by reify.
+  - [x] `build_tir_from_state` gates reify (and stdlib-snapshot `TirModule`
+        rehydration) on a `build_tir` flag. The LSP engine
+        (`wado-lsp::build_semantics` → `semantics_of(.., false)`) runs only the
+        body fact-walk and never builds or reads TIR; the batch path, the
+        general `semantics()` entry, and kiln options extraction pass `true`.
+  - [x] **`resolve_expr -> TypeId`.** Every body-walk resolver returns the
+        resolved `TypeId` (the `placeholder` `TirExpr` sentinels are gone).
+        The TIR builders that reify shares (`build_tir_method_call`,
+        `adjust_receiver_for_self_kind`, `resolve_from_call`, …) keep returning
+        `TirExpr` — they are reify's real producers — and the few combined-walk
+        sites that still call them read `.type_id` (wrapping `placeholder` only
+        where a shared builder needs a `TirExpr` operand). reify (`reify.rs`) is
+        untouched and remains the sole TIR producer.
 
 ### Landing log
 

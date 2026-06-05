@@ -18,13 +18,7 @@ use super::types::{
     IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, SequenceLiteralTraitInfo, TypeError,
 };
 
-/// Body-walk placeholder for the `IndexMut` method-call rewrite. Stage 7-B:
-/// the combined walk records the inner `operator_dispatch`, the outer
-/// `method_dispatch`, and the `IndexMutMethodCall` desugar; reify rebuilds
-/// the full `*recv.index_mut(idx).method(args)` expansion from those facts.
-fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
-    TirExpr::new(TirExprKind::Unit, type_id, span)
-}
+use super::util::placeholder;
 
 /// Lightweight reference to an impl block, avoiding deep clones.
 /// Stores just enough info to re-access the impl block's fields on demand.
@@ -3515,23 +3509,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
         // First, resolve the indexed container to get its type
-        let container_expr = self.resolve_expr(&index_expr.expr, ctx, None);
+        let container_type = self.resolve_expr(&index_expr.expr, ctx, None);
 
         // Check if this is an List type (Arrays use optimized direct access, not traits)
         let is_array = self
             .tysys
             .type_table
             .borrow()
-            .as_list(container_expr.type_id)
+            .as_list(container_type)
             .is_some();
         if is_array {
             return None; // Use normal resolution for arrays
         }
 
         // Get base type (unwrap reference if needed)
-        let base_type_id = match self.tysys.type_table.borrow().get(container_expr.type_id) {
+        let base_type_id = match self.tysys.type_table.borrow().get(container_type) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => container_expr.type_id,
+            _ => container_type,
         };
 
         // Get struct name from base type
@@ -3542,8 +3536,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Check if the type implements IndexMut
-        let index_resolved = self.resolve_expr(&index_expr.index, ctx, None);
-        let index_type = index_resolved.type_id;
+        let index_type = self.resolve_expr(&index_expr.index, ctx, None);
 
         let index_mut_info =
             self.find_index_mut_trait_impl(&struct_name, base_type_id, index_type)?;
@@ -3632,13 +3625,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Generate: container.index_mut(index).method(args)
         // Step 1: Create container.index_mut(index) call
-        let receiver_for_index_mut = self.adjust_receiver_for_self_kind(
-            container_expr,
-            index_mut_info.self_kind,
-            false,
-            index_expr.span,
-        );
-
         let mangled_index_mut_name =
             MethodName::format_local(&struct_name, Some(&index_mut_info.trait_name), "index_mut");
 
@@ -3648,17 +3634,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .make_mut_ref(index_mut_info.output_type);
-
-        let index_mut_func = FunctionRef {
-            module_source: index_mut_info.impl_module_source.clone(),
-            name: mangled_index_mut_name,
-            monomorph_info: None,
-            method_info: Some(LocalMethodName::new(
-                struct_name.clone(),
-                Some(index_mut_info.trait_name.clone()),
-                "index_mut".to_string(),
-            )),
-        };
 
         // Stage 5 / Gap 3 inner-dispatch recording: keyed by the
         // `IndexExpr`'s `AstId`, capture the IndexMut::index_mut
@@ -3670,7 +3645,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.record_operator_dispatch(
             index_expr.id,
             super::sem::types::OperatorDispatch {
-                function_ref: index_mut_func.clone(),
+                function_ref: FunctionRef {
+                    module_source: index_mut_info.impl_module_source.clone(),
+                    name: mangled_index_mut_name,
+                    monomorph_info: None,
+                    method_info: Some(LocalMethodName::new(
+                        struct_name.clone(),
+                        Some(index_mut_info.trait_name.clone()),
+                        "index_mut".to_string(),
+                    )),
+                },
                 self_kind: index_mut_info.self_kind,
                 arg_ref_wraps: vec![false],
                 return_type: mut_ref_output_type,
@@ -3684,19 +3668,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Stage 7-B: reify (`reify_index_mut_method_call`) rebuilds the
         // inner `*expr.index_mut(idx)` from the recorded `operator_dispatch`
         // above; the combined walk only needed the dispatch fact. The
-        // receiver + index were resolved above for their side effects.
-        let _ = (receiver_for_index_mut, index_mut_func, index_resolved);
+        // index was resolved above for its side effects.
 
-        // Step 2: Resolve method args with expected parameter types for literal coercion
-        let args: Vec<TirExpr> = method_call
-            .args
-            .iter()
-            .enumerate()
-            .map(|(i, a)| {
-                let expected = param_types.get(i).copied();
-                self.resolve_expr(a, ctx, expected)
-            })
-            .collect();
+        // Step 2: Resolve method args with expected parameter types for
+        // literal coercion. Reify rebuilds the args; the combined walk only
+        // needs the `resolve_expr` fact-recording side effects.
+        for (i, a) in method_call.args.iter().enumerate() {
+            let expected = param_types.get(i).copied();
+            self.resolve_expr(a, ctx, expected);
+        }
 
         // Step 3: Resolve method type args
         let type_args: Vec<TypeId> = method_call
@@ -3757,9 +3737,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Stage 7-B: reify (`reify_index_mut_method_call`) rebuilds the
         // outer `MethodCall` (and the `__index_mut_val` synthesis) from the
         // recorded `method_dispatch` + `IndexMutMethodCall` desugar; the
-        // combined walk projects only the result type. `args` was resolved
-        // above for its fact-recording side effects.
-        let _ = (args, func);
+        // combined walk projects only the result type. The args were resolved
+        // above for their fact-recording side effects.
         Some(placeholder(return_type, method_call.span))
     }
 

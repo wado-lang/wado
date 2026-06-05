@@ -12,8 +12,8 @@ use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::name::MethodName;
 use crate::tir::{
-    FunctionKind, TirEffect, TirEffectOp, TirFunction, TirGlobal, TirParam, TirResource, TirStruct,
-    TirTest, TirVariantDecl, TypeId, TypeTable,
+    FunctionKind, TirEffect, TirEffectOp, TirFunction, TirParam, TirResource, TirStruct, TirTest,
+    TirVariantDecl, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -550,7 +550,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let type_id = scope.resolve_type(&field.ty);
             if let Some(default_ast) = &field.default {
                 let resolved = scope.resolve_expr(default_ast, &mut field_ctx, Some(type_id));
-                scope.typecheck(resolved.type_id, type_id, default_ast.span());
+                scope.typecheck(resolved, type_id, default_ast.span());
             }
             struct_field_types.push(type_id);
         }
@@ -779,8 +779,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve a global variable declaration
-    pub(super) fn resolve_global(&mut self, global_decl: &GlobalDecl) -> Option<TirGlobal> {
+    /// Resolve a global variable declaration for its fact-recording side
+    /// effects. Reify (`reify_global`) is the sole producer of the `TirGlobal`,
+    /// re-emitting the initializer from the AST + recorded per-`AstId`
+    /// expression types, so the combined walk builds no TIR here.
+    pub(super) fn resolve_global(&mut self, global_decl: &GlobalDecl) {
         // Resolve the type
         let ty = self.resolve_type(&global_decl.ty);
 
@@ -790,33 +793,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut ctx = FunctionContext::new(ty, format!("global:{}", global_decl.name));
 
         // Resolve the initializer expression with expected type for type
-        // inference. The resolved TIR is discarded — its per-`AstId`
-        // expression types are recorded for reify (`reify_global`), which
-        // re-emits the initializer from the AST.
-        let initializer = self.resolve_expr(&global_decl.initializer, &mut ctx, Some(ty));
+        // inference. Its per-`AstId` expression types are recorded for reify.
+        let initializer_type = self.resolve_expr(&global_decl.initializer, &mut ctx, Some(ty));
 
         // Type check: initializer type must match declared type.
-        self.typecheck(initializer.type_id, ty, global_decl.initializer.span());
-
-        // Stage 7-B: reify emits the `TirGlobal`; the combined walk's copy
-        // is discarded, so a minimal shell with the resolved type is enough.
-        Some(TirGlobal {
-            name: global_decl.name.clone(),
-            ty,
-            initializer: crate::tir::TirExpr::new(
-                crate::tir::TirExprKind::Unit,
-                ty,
-                global_decl.initializer.span(),
-            ),
-            mutable: global_decl.mutable,
-            wado_mutable: global_decl.mutable,
-            is_pub: global_decl.is_pub,
-            module_source: self.current_module_source.clone(),
-            span: global_decl.span,
-            is_nullable: false,
-            lazy_init: false,
-            locals: vec![],
-        })
+        self.typecheck(initializer_type, ty, global_decl.initializer.span());
     }
 
     /// Resolve a variant declaration
@@ -1124,7 +1105,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                 }
                 let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(type_id));
-                scope.typecheck(resolved.type_id, type_id, default_ast.span());
+                scope.typecheck(resolved, type_id, default_ast.span());
             }
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
             scope.record_local_symbol(
@@ -1760,7 +1741,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // resolved TIR is discarded (reify re-emits it from the AST).
             if let Some(default_ast) = &param.default {
                 let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(type_id));
-                scope.typecheck(resolved.type_id, type_id, default_ast.span());
+                scope.typecheck(resolved, type_id, default_ast.span());
             }
             let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
             scope.record_local_symbol(

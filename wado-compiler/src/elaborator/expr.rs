@@ -8,8 +8,8 @@ use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
 use crate::tir::{
-    CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirMatchArm,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirField, TirStruct, TirStructField,
+    TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -37,15 +37,25 @@ enum FuncRefInference {
     NotApplicable,
 }
 
-/// Body-walk placeholder for a resolved expression. Stage 7-B: the combined
-/// walk resolves sub-expressions for their side-effect fact recording and
-/// computes the result type, but no longer assembles the expression's TIR —
-/// reify is the sole producer and rebuilds it from the recorded facts
-/// (`expression_types`, `operator_dispatch`, `generic_instantiations`, …).
-/// The returned `TirExpr` only needs the right `type_id` + `span` for the
-/// caller's outer typecheck / `expression_types` recording.
-fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
-    TirExpr::new(TirExprKind::Unit, type_id, span)
+use super::util::placeholder;
+
+/// Shape projection of a match-arm pattern, used solely for exhaustiveness /
+/// overlap analysis on the AST. It captures exactly the pattern shape the
+/// checks read, mirroring the `TirPattern` the combined walk used to build:
+/// catch-all (wildcard / binding / reversed-or-empty range / bad range bound),
+/// enum / variant case names, bool literals, integer ranges and points, an
+/// opaque `Other` (strings, structs, tuples, constant-value patterns), and
+/// `Or` alternatives.
+enum ExhPattern {
+    CatchAll,
+    EnumCase(String),
+    VariantCase(String),
+    BoolLit(bool),
+    /// Inclusive integer range `[lo, hi]`.
+    Range(i128, i128),
+    IntLit(i128),
+    Other,
+    Or(Vec<ExhPattern>),
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -62,11 +72,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         let ast_id = expr.id();
-        let resolved = self.resolve_expr_inner(expr, ctx, expected_type);
-        self.record_expression_type(ast_id, resolved.type_id);
-        resolved
+        let type_id = self.resolve_expr_inner(expr, ctx, expected_type);
+        self.record_expression_type(ast_id, type_id);
+        type_id
     }
 
     fn resolve_expr_inner(
@@ -74,7 +84,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         // Power-assert capture hook. While `desugar_assert` is resolving
         // an assert condition, the scanner-flagged sub-expressions are
         // extracted into `let __vK = <resolved>;` bindings and replaced
@@ -103,7 +113,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Main expression dispatch
         match expr {
-            Expr::Literal(lit) => self.resolve_literal(lit, ctx),
+            Expr::Literal(lit) => self.resolve_literal(lit),
             Expr::Ident(ident) => self.resolve_ident(ident, ctx, expected_type),
             Expr::Binary(binary) => self.resolve_binary(binary, ctx, expected_type),
             Expr::Unary(unary) => self.resolve_unary(unary, ctx, expected_type),
@@ -118,17 +128,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
             Expr::Index(index) => self.resolve_index(index, ctx),
             Expr::Block(block) => {
-                let tir_block = self.resolve_block(block, ctx, expected_type);
-                // Reuse the shared block-result rule so the block
-                // expression's overall type matches the inference rule
-                // applied everywhere else (function body trailing
-                // expressions, `if` / `match` arm bodies, etc.): a
-                // trailing `if cond { a } else { b }` propagates its
-                // branch-agreed type, not `Unit`. Read from
-                // `expression_types` (AST level) rather than the built
-                // block so this does not depend on the body TIR.
-                let type_id = self.ast_block_result_type(block);
-                TirExpr::new(TirExprKind::Block(tir_block), type_id, block.span)
+                // Walk the block for its facts; reify rebuilds the `Block`
+                // node. Read the overall type from `expression_types` (AST
+                // level) via the shared block-result rule so a trailing
+                // `if/else` propagates its branch-agreed type, not `Unit`.
+                self.resolve_block(block, ctx, expected_type);
+                self.ast_block_result_type(block)
             }
             Expr::If(if_expr) => self.resolve_if_expr(if_expr, ctx, expected_type),
             Expr::Match(match_expr) => self.resolve_match_expr(match_expr, ctx, expected_type),
@@ -152,7 +157,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ctx.active_labels.push(lb.label.clone());
 
                 ctx.enter_scope();
-                let tir_block = self.resolve_block(&lb.block, ctx, expected_type);
+                self.resolve_block(&lb.block, ctx, expected_type);
                 ctx.exit_scope();
 
                 ctx.active_labels.pop();
@@ -202,15 +207,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.check_branch_type(break_type, result_type, lb.span);
                 }
 
-                TirExpr::new(
-                    TirExprKind::LabeledBlock {
-                        label: lb.label.clone(),
-                        block: tir_block,
-                        result_type,
-                    },
-                    result_type,
-                    lb.span,
-                )
+                // Stage 7-B: reify rebuilds the `LabeledBlock` from the AST,
+                // re-running the same break-type unification. The combined walk
+                // resolved the body and ran break-type / null diagnostics for
+                // their side effects; project only the unified result type.
+                result_type
             }
             Expr::Matches(m) => self.desugar_matches_expr(m, ctx, expected_type),
             Expr::Spread(..) => {
@@ -222,7 +223,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Resume(r) => self.resolve_resume(r, ctx),
             // Parser error-recovery placeholder: the syntax error was already
             // reported, so resolve to the error type to suppress cascades.
-            Expr::Error(e) => TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, e.span),
+            Expr::Error(_e) => TypeTable::ERROR,
         }
     }
 
@@ -230,129 +231,71 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// This is used for lookups where we need immutable access. It only handles
     /// primitive types and newtypes. For generic types, use `resolve_type` instead.
     /// Resolve a method call
-    pub(super) fn resolve_literal(
-        &mut self,
-        lit: &ast::LiteralExpr,
-        ctx: &FunctionContext,
-    ) -> TirExpr {
+    pub(super) fn resolve_literal(&mut self, lit: &ast::LiteralExpr) -> TypeId {
         // Stage 7-B: reify rebuilds every literal node from the AST; the
         // combined walk only needs the literal's type and its parse / unescape
-        // diagnostics. The `kind` is computed for those diagnostics' sake and
-        // discarded — the returned value is a placeholder.
-        let (_kind, type_id) = match &lit.value {
+        // diagnostics. The returned value is a placeholder, so this projects
+        // only the type while preserving the validation side effects.
+        match &lit.value {
             Literal::Number(repr) => {
                 // Default type: i32 if integer-compatible, f64 if float-only
                 if util::is_float_only_literal(repr) {
                     // Must be float (has decimal point or negative exponent)
-                    match util::parse_float_literal(repr) {
-                        Ok(value) => (
-                            TirExprKind::FloatLiteral {
-                                value,
-                                repr: repr.clone(),
-                            },
-                            TypeTable::F64,
-                        ),
-                        Err(message) => {
-                            let _ = self.logger.error(TypeError::InvalidLiteral {
-                                message,
-                                span: lit.span,
-                            });
-                            (
-                                TirExprKind::FloatLiteral {
-                                    value: 0.0,
-                                    repr: repr.clone(),
-                                },
-                                TypeTable::F64,
-                            )
-                        }
-                    }
-                } else {
-                    // Can be integer (default to i32)
-                    match util::parse_u128_literal(repr) {
-                        Ok(value) => (
-                            TirExprKind::IntLiteral {
-                                value: value as u64,
-                                repr: repr.clone(),
-                            },
-                            TypeTable::I32,
-                        ),
-                        Err(message) => {
-                            let _ = self.logger.error(TypeError::InvalidLiteral {
-                                message,
-                                span: lit.span,
-                            });
-                            (
-                                TirExprKind::IntLiteral {
-                                    value: 0,
-                                    repr: repr.clone(),
-                                },
-                                TypeTable::I32,
-                            )
-                        }
-                    }
-                }
-            }
-            Literal::Bool(b) => (TirExprKind::BoolLiteral(*b), TypeTable::BOOL),
-            Literal::Char(raw) => {
-                let c = match util::unescape_char(raw) {
-                    Ok(c) => c,
-                    Err(message) => {
+                    if let Err(message) = util::parse_float_literal(repr) {
                         let _ = self.logger.error(TypeError::InvalidLiteral {
                             message,
                             span: lit.span,
                         });
-                        '\0'
                     }
-                };
-                (TirExprKind::CharLiteral(c), TypeTable::CHAR)
+                    TypeTable::F64
+                } else {
+                    // Can be integer (default to i32)
+                    if let Err(message) = util::parse_u128_literal(repr) {
+                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                            message,
+                            span: lit.span,
+                        });
+                    }
+                    TypeTable::I32
+                }
+            }
+            Literal::Bool(_) => TypeTable::BOOL,
+            Literal::Char(raw) => {
+                if let Err(message) = util::unescape_char(raw) {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                        message,
+                        span: lit.span,
+                    });
+                }
+                TypeTable::CHAR
             }
             Literal::String(raw) => {
                 let string_type = self.get_string_struct_type();
-                let value = match util::unescape_string(raw) {
-                    Ok(s) => s,
-                    Err(message) => {
-                        let _ = self.logger.error(TypeError::InvalidLiteral {
-                            message,
-                            span: lit.span,
-                        });
-                        String::new()
-                    }
-                };
-                (TirExprKind::StringLiteral(value), string_type)
+                if let Err(message) = util::unescape_string(raw) {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                        message,
+                        span: lit.span,
+                    });
+                }
+                string_type
             }
-            Literal::Null => {
-                let option_unknown = self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_option(TypeTable::UNKNOWN);
-                (TirExprKind::Null, option_unknown)
-            }
-            Literal::Unit => (TirExprKind::Unit, TypeTable::UNIT),
+            Literal::Null => self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .make_option(TypeTable::UNKNOWN),
+            Literal::Unit => TypeTable::UNIT,
             Literal::LocationFile => {
                 // #file - returns the current module source as a string
-                let file_path = self.current_module_source.to_string();
-                let string_type = self.get_string_struct_type();
-                (TirExprKind::StringLiteral(file_path), string_type)
+                self.get_string_struct_type()
             }
             Literal::LocationLine => {
                 // #line - returns the line number (1-indexed)
-                let line = lit.span.line as u64;
-                (
-                    TirExprKind::IntLiteral {
-                        value: line,
-                        repr: line.to_string(),
-                    },
-                    TypeTable::I32,
-                )
+                TypeTable::I32
             }
             Literal::LocationFunction => {
                 // #function - returns the current function name
-                let string_type = self.get_string_struct_type();
-                (
-                    TirExprKind::StringLiteral(ctx.function_name.clone()),
-                    string_type,
-                )
+                self.get_string_struct_type()
             }
             Literal::DataSection => {
                 // #data - returns the __DATA__ section content as a String
@@ -362,53 +305,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .and_then(|m| m.data_section())
                     .map(str::to_owned);
                 let string_type = self.get_string_struct_type();
-                if let Some(content) = data {
-                    (TirExprKind::StringLiteral(content), string_type)
-                } else {
+                if data.is_none() {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
                         message: "`#data` requires a `__DATA__` section in the source file"
                             .to_owned(),
                         span: lit.span,
                     });
-                    (TirExprKind::StringLiteral(String::new()), string_type)
                 }
+                string_type
             }
             Literal::IncludeStr(raw_path) => {
                 let key = [self.current_module_source.to_string(), raw_path.clone()];
                 let string_type = self.get_string_struct_type();
                 if let Some(bytes) = self.tysys.included_files.get(&key) {
-                    if let Ok(s) = std::str::from_utf8(bytes) {
-                        (TirExprKind::StringLiteral(s.to_owned()), string_type)
-                    } else {
+                    if std::str::from_utf8(bytes).is_err() {
                         let _ = self.logger.error(TypeError::InvalidLiteral {
                             message: format!("file is not valid UTF-8: \"{raw_path}\""),
                             span: lit.span,
                         });
-                        (TirExprKind::StringLiteral(String::new()), string_type)
                     }
                 } else {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
                         message: format!("file not found: \"{raw_path}\""),
                         span: lit.span,
                     });
-                    (TirExprKind::StringLiteral(String::new()), string_type)
                 }
+                string_type
             }
             Literal::IncludeBytes(raw_path) => {
                 let key = [self.current_module_source.to_string(), raw_path.clone()];
                 let array_u8_type = self.tysys.type_table.borrow_mut().make_list(TypeTable::U8);
-                if let Some(bytes) = self.tysys.included_files.get(&key) {
-                    (TirExprKind::BytesLiteral(bytes.clone()), array_u8_type)
-                } else {
+                if !self.tysys.included_files.contains_key(&key) {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
                         message: format!("file not found: \"{raw_path}\""),
                         span: lit.span,
                     });
-                    (TirExprKind::BytesLiteral(Vec::new()), array_u8_type)
                 }
+                array_u8_type
             }
-        };
-        placeholder(type_id, lit.span)
+        }
     }
 
     /// Resolve an identifier expression
@@ -417,7 +352,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ident: &ast::IdentExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         // Canonicalize `<ns>::<member>` (single `::`, prefix is a namespace
         // import alias) to the bare `<member>` form. Every lookup table below
         // is keyed by canonical names; the rewritten ident keeps the original
@@ -440,59 +375,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
             match var_ref {
                 VarRef::Local {
-                    index,
+                    index: _,
                     type_id,
                     defining_ast_id,
                 } => {
                     self.record_reference_opt(ident.id, defining_ast_id);
-                    return TirExpr::new(
-                        TirExprKind::Local {
-                            index,
-                            name: ident.name.clone(),
-                        },
-                        type_id,
-                        ident.span,
-                    );
+                    // Stage 7-B: reify rebuilds the `Local` (`reify_ident`);
+                    // record the place so `assign_to_target` can classify an
+                    // ident l-value without the resolved `kind`.
+                    self.record_assign_place(ident.id, super::sem::types::AssignPlace::Local);
+                    return type_id;
                 }
                 VarRef::Capture {
-                    index,
+                    index: _,
                     type_id,
                     defining_ast_id,
                 } => {
                     self.record_reference_opt(ident.id, defining_ast_id);
-                    return TirExpr::new(
-                        TirExprKind::Capture {
-                            index,
-                            name: ident.name.clone(),
-                        },
-                        type_id,
-                        ident.span,
-                    );
+                    // Stage 7-B: reify rebuilds the `Capture`. A by-value
+                    // capture is not an l-value, so no place is recorded.
+                    return type_id;
                 }
                 VarRef::DerefCapture {
-                    index,
+                    index: _,
                     ref_type_id,
                     inner_type_id,
                     defining_ast_id,
                 } => {
                     self.record_reference_opt(ident.id, defining_ast_id);
-                    // Deref capture: `*self.__capture_N` where the field holds `&mut T`
-                    let capture_expr = TirExpr::new(
-                        TirExprKind::Capture {
-                            index,
-                            name: format!("__deref_cap_{index}"),
-                        },
-                        ref_type_id,
-                        ident.span,
+                    // Deref capture: `*self.__capture_N` where the field holds
+                    // `&mut T` (mutable closure capture). Stage 7-B: reify
+                    // rebuilds the `*capture` shape; record the place so the
+                    // assign path can validate it (assignable iff the captured
+                    // reference is `&mut`, not a shared `&`).
+                    let through_mut_ref = !matches!(
+                        self.tysys.type_table.borrow().get(ref_type_id),
+                        ResolvedType::Ref(_)
                     );
-                    return TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Deref,
-                            expr: Box::new(capture_expr),
-                        },
-                        inner_type_id,
-                        ident.span,
+                    self.record_assign_place(
+                        ident.id,
+                        super::sem::types::AssignPlace::DerefCapture { through_mut_ref },
                     );
+                    return inner_type_id;
                 }
             }
         }
@@ -515,9 +439,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .cloned()
         {
             let prev_override = self.ann_module_override.replace(const_module);
-            let resolved = self.resolve_expr(&const_expr, ctx, Some(type_id));
+            // Resolve the constant body for its fact-recording side effects;
+            // reify re-reifies it (`reify_ident`). Not an l-value.
+            self.resolve_expr(&const_expr, ctx, Some(type_id));
             self.ann_module_override = prev_override;
-            return TirExpr::new(resolved.kind, type_id, ident.span);
+            return type_id;
         }
 
         // Check for qualified variant case names like Color::Red (without parentheses)
@@ -527,7 +453,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             if let Some(variant_info) = self.lookup_variant_case(prefix).cloned() {
                 // Find the case by name
-                if let Some((case_index, case_data)) = variant_info
+                if let Some((_case_index, case_data)) = variant_info
                     .cases
                     .iter()
                     .enumerate()
@@ -551,7 +477,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             found: 0,
                             span: ident.span,
                         });
-                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span);
+                        return TypeTable::ERROR;
                     }
 
                     // Infer variant type for generic variants
@@ -579,16 +505,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     self.record_generic_instantiation(ident.id, type_args, variant_type);
 
-                    return TirExpr::new(
-                        TirExprKind::VariantConstruct {
-                            variant_type,
-                            case_index: case_index as u32,
-                            case_name: case_data.name.clone(),
-                            payload: None,
-                        },
-                        variant_type,
-                        ident.span,
-                    );
+                    // Stage 7-B: reify rebuilds the payload-less
+                    // `VariantConstruct` from the AST + recorded generic
+                    // instantiation. Not an l-value.
+                    return variant_type;
                 }
             }
 
@@ -609,15 +529,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow_mut()
                     .make_enum(enum_info.name.clone(), enum_info.module_source);
 
-                return TirExpr::new(
-                    TirExprKind::EnumConstruct {
-                        enum_type,
-                        case_index: case_data.index,
-                        case_name: case_data.name,
-                    },
-                    enum_type,
-                    ident.span,
-                );
+                // Stage 7-B: reify rebuilds the `EnumConstruct`. Not an l-value.
+                return enum_type;
             }
 
             // Check for flags member: PathFlags::SymlinkFollow
@@ -630,14 +543,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .cloned()
             {
                 self.record_qualified_case(ident, prefix, &flags_info.module_source, member.ast_id);
-                return TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: u64::from(member.bitmask),
-                        repr: member.bitmask.to_string(),
-                    },
-                    flags_info.type_id,
-                    ident.span,
-                );
+                // Stage 7-B: reify rebuilds the flags-member `IntLiteral`.
+                return flags_info.type_id;
             }
 
             // Check for namespace import: ns::Type::Case or ns::Enum::Case
@@ -657,7 +564,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .and_then(|m| m.get(type_name))
                     .cloned();
                 if let Some(variant_info) = ns_variant
-                    && let Some((case_index, case_data)) = variant_info
+                    && let Some((_case_index, case_data)) = variant_info
                         .cases
                         .iter()
                         .enumerate()
@@ -679,7 +586,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             found: 0,
                             span: ident.span,
                         });
-                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span);
+                        return TypeTable::ERROR;
                     }
                     let variant_type = if variant_info.type_params.is_empty() {
                         self.tysys.type_table.borrow_mut().make_variant(
@@ -702,16 +609,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         _ => Vec::new(),
                     };
                     self.record_generic_instantiation(ident.id, type_args, variant_type);
-                    return TirExpr::new(
-                        TirExprKind::VariantConstruct {
-                            variant_type,
-                            case_index: case_index as u32,
-                            case_name: case_data.name.clone(),
-                            payload: None,
-                        },
-                        variant_type,
-                        ident.span,
-                    );
+                    // Stage 7-B: reify rebuilds the namespace-qualified
+                    // payload-less `VariantConstruct`. Not an l-value.
+                    return variant_type;
                 }
 
                 // Check enum cases
@@ -730,15 +630,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_table
                         .borrow_mut()
                         .make_enum(enum_info.name.clone(), enum_info.module_source);
-                    return TirExpr::new(
-                        TirExprKind::EnumConstruct {
-                            enum_type,
-                            case_index: case_data.index,
-                            case_name: case_data.name,
-                        },
-                        enum_type,
-                        ident.span,
-                    );
+                    // Stage 7-B: reify rebuilds the namespace-qualified
+                    // `EnumConstruct`. Not an l-value.
+                    return enum_type;
                 }
 
                 // Check flags members
@@ -756,48 +650,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .cloned()
                 {
                     self.record_namespaced_case(ident, &flags_info.module_source, member.ast_id);
-                    return TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: u64::from(member.bitmask),
-                            repr: member.bitmask.to_string(),
-                        },
-                        flags_info.type_id,
-                        ident.span,
-                    );
+                    // Stage 7-B: reify rebuilds the namespace flags-member
+                    // `IntLiteral`.
+                    return flags_info.type_id;
                 }
             }
         }
 
         // Check for global variables in current module
-        if let Some(&(ty, _mutable)) = self.sem.decls.current_module_globals.get(&ident.name) {
+        if let Some(&(ty, mutable)) = self.sem.decls.current_module_globals.get(&ident.name) {
             self.record_item_reference_by_name(ident.id, &ident.name);
-            return TirExpr::new(
-                TirExprKind::GlobalVarGet {
-                    module_source: self.current_module_source.clone(),
+            // Stage 7-B: reify rebuilds the `GlobalVarGet`; record the place so
+            // `assign_to_target` validates global mutability + emits the
+            // `GlobalVarSet` projection without the resolved `kind`.
+            self.record_assign_place(
+                ident.id,
+                super::sem::types::AssignPlace::Global {
                     name: ident.name.clone(),
+                    mutable,
                 },
-                ty,
-                ident.span,
             );
+            return ty;
         }
 
         // Check for imported global variables
-        if let Some((source_module, original_name, ty)) = self
+        if let Some((original_name, ty, mutable)) = self
             .sem
             .decls
             .imported_globals
             .get(&ident.name)
-            .map(|(src, orig, ty, _mut)| (src.clone(), orig.clone(), *ty))
+            .map(|(_src, orig, ty, m)| (orig.clone(), *ty, *m))
         {
             self.record_item_reference_by_name(ident.id, &ident.name);
-            return TirExpr::new(
-                TirExprKind::GlobalVarGet {
-                    module_source: source_module,
+            // Stage 7-B: reify rebuilds the imported `GlobalVarGet` (keyed by
+            // the original name); record the place for the assign path. Keep
+            // the original (source) name for the immutable-global diagnostic,
+            // matching the pre-7-B message that read it off `GlobalVarGet`.
+            self.record_assign_place(
+                ident.id,
+                super::sem::types::AssignPlace::Global {
                     name: original_name,
+                    mutable,
                 },
-                ty,
-                ident.span,
             );
+            return ty;
         }
 
         // Check if it's a known function (function reference)
@@ -814,15 +710,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check if it's a prelude function (panic, unreachable)
         // These are defined in core:internal and re-exported by core:prelude
         if matches!(ident.name.as_str(), "panic" | "unreachable") {
-            return TirExpr::new(
-                TirExprKind::FuncRef {
-                    module_source: ModuleSource::internal(),
-                    name: ident.name.clone(),
-                    type_args: Vec::new(),
-                },
-                TypeTable::UNKNOWN,
-                ident.span,
-            );
+            // Stage 7-B: reify rebuilds the prelude `FuncRef`.
+            return TypeTable::UNKNOWN;
         }
 
         // Fallback: when resolving a default expression, look up the
@@ -831,8 +720,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // definition module's private globals and functions.
         if let Some(fallback) = self.default_scope_module.clone()
             && fallback != self.current_module_source
-            && let Some(result) =
-                self.resolve_ident_in_fallback_module(&ident.name, ident.span, &fallback)
+            && let Some(result) = self.resolve_ident_in_fallback_module(&ident.name, &fallback)
         {
             return result;
         }
@@ -842,7 +730,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             name: ident.name.clone(),
             span: ident.span,
         });
-        TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span)
+        TypeTable::ERROR
     }
 
     /// Look up an identifier in the callee module's global scope during
@@ -850,36 +738,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn resolve_ident_in_fallback_module(
         &mut self,
         name: &str,
-        span: Span,
         fallback: &ModuleSource,
-    ) -> Option<TirExpr> {
+    ) -> Option<TypeId> {
         let module = self.loaded_modules.get(fallback)?;
         for item in &module.items {
             match item {
                 crate::ast::Item::Global(global_decl) if global_decl.name == name => {
                     let ty = self.resolve_type(&global_decl.ty);
-                    return Some(TirExpr::new(
-                        TirExprKind::GlobalVarGet {
-                            module_source: fallback.clone(),
-                            name: name.to_string(),
-                        },
-                        ty,
-                        span,
-                    ));
+                    // Stage 7-B: reify resolves the fallback-module global from
+                    // the same AST items (`reify_ident` branch 3b). Project the
+                    // type only; this default-expr path is never an assignment
+                    // target, so no place is recorded.
+                    return Some(ty);
                 }
                 crate::ast::Item::Function(func) if func.name == name => {
                     let type_id = self
                         .compute_func_ref_type_from_ast(func, fallback)
                         .unwrap_or(TypeTable::UNKNOWN);
-                    return Some(TirExpr::new(
-                        TirExprKind::FuncRef {
-                            module_source: fallback.clone(),
-                            name: name.to_string(),
-                            type_args: Vec::new(),
-                        },
-                        type_id,
-                        span,
-                    ));
+                    // Stage 7-B: reify rebuilds the fallback-module `FuncRef`.
+                    return Some(type_id);
                 }
                 _ => {}
             }
@@ -1012,13 +889,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         ident: &ast::IdentExpr,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         self.record_item_reference_by_name(ident.id, &ident.name);
 
-        let Some((func_ast, def_module, defining_name)) = self.lookup_func_ast_for_ref(&ident.name)
+        let Some((func_ast, def_module, _defining_name)) =
+            self.lookup_func_ast_for_ref(&ident.name)
         else {
             // Fallback: known function but its AST is unreachable (shouldn't
             // normally happen). Emit a stub FuncRef so downstream stays sane.
+<<<<<<< HEAD
             let module_source = if self
                 .sem
                 .decls
@@ -1041,8 +920,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 TypeTable::UNKNOWN,
                 ident.span,
             );
+||||||| bdc129b1
+            let module_source = if self
+                .sem
+                .decls
+                .function_return_types
+                .contains_key(&ident.name)
+            {
+                self.current_module_source.clone()
+            } else {
+                self.symbols
+                    .lookup(&ident.name)
+                    .map(|s| s.module_source().clone())
+                    .unwrap_or_else(|| self.current_module_source.clone())
+            };
+            return TirExpr::new(
+                TirExprKind::FuncRef {
+                    module_source,
+                    name: ident.name.clone(),
+                    type_args: Vec::new(),
+                },
+                TypeTable::UNKNOWN,
+                ident.span,
+            );
+=======
+            // Stage 7-B: reify rebuilds the stub `FuncRef`.
+            return TypeTable::UNKNOWN;
+>>>>>>> origin/main
         };
-        let module_source = def_module.clone();
 
         let real_type_param_count = func_ast
             .type_params
@@ -1062,7 +967,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         found: ident.type_args.len(),
                         span: ident.span,
                     });
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span);
+                return TypeTable::ERROR;
             }
             let resolved_args: Vec<TypeId> = ident
                 .type_args
@@ -1073,15 +978,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .compute_func_ref_type_from_ast_with_args(&func_ast, &def_module, &resolved_args)
                 .unwrap_or(TypeTable::UNKNOWN);
             self.record_func_ref_instantiation(ident.id, &resolved_args, type_id);
-            return TirExpr::new(
-                TirExprKind::FuncRef {
-                    module_source,
-                    name: defining_name,
-                    type_args: resolved_args,
-                },
-                type_id,
-                ident.span,
-            );
+            // Stage 7-B: reify rebuilds the turbofish `FuncRef` from the
+            // recorded instantiation. Project the type only.
+            return type_id;
         }
 
         // Non-generic function: keep the original behaviour.
@@ -1089,15 +988,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let type_id = self
                 .compute_func_ref_type_from_ast(&func_ast, &def_module)
                 .unwrap_or(TypeTable::UNKNOWN);
-            return TirExpr::new(
-                TirExprKind::FuncRef {
-                    module_source,
-                    name: defining_name,
-                    type_args: Vec::new(),
-                },
-                type_id,
-                ident.span,
-            );
+            // Stage 7-B: reify rebuilds the non-generic `FuncRef`.
+            return type_id;
         }
 
         // (b) Generic without turbofish: try to infer from `expected_type`.
@@ -1108,15 +1000,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .compute_func_ref_type_from_ast_with_args(&func_ast, &def_module, &inferred)
                         .unwrap_or(TypeTable::UNKNOWN);
                     self.record_func_ref_instantiation(ident.id, &inferred, type_id);
-                    return TirExpr::new(
-                        TirExprKind::FuncRef {
-                            module_source,
-                            name: defining_name,
-                            type_args: inferred,
-                        },
-                        type_id,
-                        ident.span,
-                    );
+                    // Stage 7-B: reify rebuilds the inferred-generic `FuncRef`
+                    // from the recorded instantiation. Project the type only.
+                    return type_id;
                 }
                 FuncRefInference::ArityMismatch {
                     expected_params,
@@ -1130,7 +1016,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             found_params,
                             span: ident.span,
                         });
-                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span);
+                    return TypeTable::ERROR;
                 }
                 FuncRefInference::NotApplicable => {}
             }
@@ -1141,7 +1027,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             name: ident.name.clone(),
             span: ident.span,
         });
-        TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span)
+        TypeTable::ERROR
     }
 
     /// Record the resolved type arguments and instance type of a generic
@@ -1322,24 +1208,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         field_access: &ast::FieldAccessExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
-        let expr = self.resolve_expr(&field_access.expr, ctx, None);
+    ) -> TypeId {
+        let expr_type = self.resolve_expr(&field_access.expr, ctx, None);
 
         // Record use→def reference for the field name, pointing at the field
         // definition's AstId in the struct declaration.
-        self.record_field_reference(expr.type_id, &field_access.field, field_access.field_id);
+        self.record_field_reference(expr_type, &field_access.field, field_access.field_id);
 
         // Look up field type from struct type (also emits the field-not-found
         // / tuple-index-out-of-bounds diagnostics). Reify re-derives the
         // `field_index` from the receiver type, so only the result type is
         // needed here.
         let (_field_index, field_type) =
-            self.lookup_field_type(expr.type_id, &field_access.field, field_access.span);
+            self.lookup_field_type(expr_type, &field_access.field, field_access.span);
 
         // Check field visibility: non-pub fields cannot be accessed from other modules
-        self.check_field_visibility(expr.type_id, &field_access.field, field_access.span);
+        self.check_field_visibility(expr_type, &field_access.field, field_access.span);
 
-        placeholder(field_type, field_access.span)
+        field_type
     }
 
     /// Record a use→def reference for a struct field access.
@@ -1600,13 +1486,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         index: &ast::IndexExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
-        let expr = self.resolve_expr(&index.expr, ctx, None);
+    ) -> TypeId {
+        let expr_type = self.resolve_expr(&index.expr, ctx, None);
 
         // Get base type (unwrap reference if needed)
-        let base_type_id = match self.tysys.type_table.borrow().get(expr.type_id) {
+        let base_type_id = match self.tysys.type_table.borrow().get(expr_type) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => expr.type_id,
+            _ => expr_type,
         };
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
 
@@ -1628,7 +1514,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 if idx < elements.len() {
                     let field_type = elements[idx];
-                    return placeholder(field_type, index.span);
+                    return field_type;
                 } else {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
                         message: format!(
@@ -1638,7 +1524,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ),
                         span: index.span,
                     });
-                    return placeholder(TypeTable::UNKNOWN, index.span);
+                    return TypeTable::UNKNOWN;
                 }
             }
             // Non-constant index on tuple
@@ -1646,7 +1532,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 message: "tuple index must be a constant integer".to_string(),
                 span: index.span,
             });
-            return placeholder(TypeTable::UNKNOWN, index.span);
+            return TypeTable::UNKNOWN;
         }
 
         // For List and custom types, look for Index or IndexValue trait implementation
@@ -1665,8 +1551,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (lookup_name, lookup_type_id) = self.newtype_base_lookup(&struct_name, base_type_id);
 
         if !struct_name.is_empty() {
-            let index_expr = self.resolve_expr(&index.index, ctx, None);
-            let index_type = index_expr.type_id;
+            let index_type = self.resolve_expr(&index.index, ctx, None);
 
             // Reject &T/&mut T used as index expression (would ICE in codegen)
             let derefed_index_type = match self.tysys.type_table.borrow().get(index_type) {
@@ -1722,7 +1607,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     },
                 );
 
-                return placeholder(trait_info.output_type, index.span);
+                return trait_info.output_type;
             }
 
             // Fallback: try IndexValue trait (returns value by copy)
@@ -1768,25 +1653,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     },
                 );
 
-                return placeholder(trait_info.output_type, index.span);
+                return trait_info.output_type;
             }
         }
 
         // Fallback: report error for unsupported indexing
-        let type_name = self.tysys.type_table.borrow().type_name(expr.type_id);
+        let type_name = self.tysys.type_table.borrow().type_name(expr_type);
         let _ = self.logger.error(TypeError::MissingTraitImpl {
             type_name,
             trait_name: "Index or IndexValue".to_string(),
             span: index.span,
         });
-        placeholder(TypeTable::UNKNOWN, index.span)
-    }
-
-    /// Extract the result type from a block (the type of its last
-    /// expression, or Unit). Thin wrapper around the shared
-    /// [`crate::tir::block_result_type`] free function.
-    pub(super) fn block_result_type(block: &TirBlock) -> TypeId {
-        crate::tir::block_result_type(block)
+        TypeTable::UNKNOWN
     }
 
     /// Resolve an if expression
@@ -1795,37 +1673,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if_expr: &IfExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         match &if_expr.condition {
             Condition::LetChain { elements, .. } => {
                 self.record_desugar(if_expr.id, super::sem::types::DesugarKind::IfLetChain);
-                // Resolve else_block in outer scope (chain bindings not visible there)
-                let else_block = if_expr
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.resolve_block(b, ctx, expected_type));
+                // Resolve else_block in outer scope (chain bindings not visible
+                // there) for its fact-recording side effects; reify rebuilds it.
+                if let Some(b) = &if_expr.else_block {
+                    self.resolve_block(b, ctx, expected_type);
+                }
 
                 // Enter scope for chain elements and then_block
                 ctx.enter_scope();
-                let stmts = self.resolve_let_chain_stmts(
+                self.resolve_let_chain_stmts(
                     elements,
                     &if_expr.then_block,
-                    else_block.as_ref(),
                     ctx,
                     expected_type,
                     if_expr.span,
                 );
                 ctx.exit_scope();
 
-                let chain_block = TirBlock::new(stmts, if_expr.span);
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
-                    // Infer result type from the nested block structure
-                    let chain_type = Self::block_result_type(&chain_block);
-                    let else_type = else_block
+                    // AST mirror of `block_result_type(chain_block)`: the
+                    // normalized chain's result is `agree(then_block_result,
+                    // else_type)` collapsed to `Unit` on mismatch (the
+                    // per-level `unwrap_or(UNIT)` recursion reduces to exactly
+                    // this — equal for single- and multi-element chains). Then
+                    // the same agreement against the else block as before.
+                    let else_type = if_expr
+                        .else_block
                         .as_ref()
-                        .map_or(TypeTable::UNIT, Self::block_result_type);
+                        .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
+                    let chain_type = crate::tir::agree_branch_types(
+                        self.ast_block_result_type(&if_expr.then_block),
+                        else_type,
+                    )
+                    .unwrap_or(TypeTable::UNIT);
                     if chain_type == else_type
                         || chain_type == TypeTable::NEVER
                         || else_type == TypeTable::NEVER
@@ -1883,13 +1769,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // resolved independently, so check it
                     // directly. Missing-else falls back to the
                     // implicit `else { () }` rule below.
-                    if let Some(eb) = &else_block {
-                        let else_type = Self::block_result_type(eb);
-                        self.check_branch_type(
-                            else_type,
-                            type_id,
-                            if_expr.else_block.as_ref().unwrap().span,
-                        );
+                    if let Some(eb) = &if_expr.else_block {
+                        let else_type = self.ast_block_result_type(eb);
+                        self.check_branch_type(else_type, type_id, eb.span);
                     } else {
                         // Missing `else` with a non-Unit expected
                         // type: the implicit `else { () }` cannot
@@ -1903,15 +1785,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
-                TirExpr::new(TirExprKind::Block(chain_block), type_id, if_expr.span)
+                // Stage 7-B: reify rebuilds the if-let-chain (recorded via
+                // `DesugarKind::IfLetChain`) from the AST. The combined walk
+                // ran `resolve_let_chain_stmts` for its fact-recording side
+                // effects (pattern bindings, element resolution) and computed
+                // the result type. Project only the result type.
+                type_id
             }
             Condition::Expr(expr) => {
-                let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
-                let then_block = self.resolve_block(&if_expr.then_block, ctx, expected_type);
-                let else_block = if_expr
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.resolve_block(b, ctx, expected_type));
+                // Resolve the condition and both blocks for their facts; reify
+                // rebuilds the `If` node. The result type is inferred from the
+                // AST (`ast_block_result_type`) below.
+                self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
+                self.resolve_block(&if_expr.then_block, ctx, expected_type);
+                if let Some(b) = &if_expr.else_block {
+                    self.resolve_block(b, ctx, expected_type);
+                }
 
                 let type_id = if let Some(ty) = expected_type {
                     ty
@@ -1942,7 +1831,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         else_type
                     } else if else_unknown && !then_unknown {
                         then_type
-                    } else if else_block.is_none() {
+                    } else if if_expr.else_block.is_none() {
                         if then_type != TypeTable::UNIT {
                             let type_name = self.tysys.type_table.borrow().type_name(then_type);
                             let _ = self.logger.error(TypeError::TypeMismatch {
@@ -2020,15 +1909,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
-                TirExpr::new(
-                    TirExprKind::If {
-                        condition: Box::new(condition),
-                        then_branch: then_block,
-                        else_branch: else_block,
-                    },
-                    type_id,
-                    if_expr.span,
-                )
+                // Stage 7-B: reify rebuilds the `If` node from the AST; the
+                // combined walk resolved the condition and both blocks for
+                // their fact-recording side effects and ran branch-agreement /
+                // null diagnostics off the AST (`ast_block_result_type`).
+                // Project only the result type.
+                type_id
             }
         }
     }
@@ -2176,17 +2062,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match_expr: &ast::MatchExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
-        let scrutinee = self.resolve_expr(&match_expr.expr, ctx, None);
-        let scrutinee_type = scrutinee.type_id;
+    ) -> TypeId {
+        let scrutinee_type = self.resolve_expr(&match_expr.expr, ctx, None);
 
-        let arms: Vec<TirMatchArm> = match_expr
+        // Resolve each arm for its facts (binding + guard + body). Surface only
+        // the arm bodies' `(type_id, span)` — reify rebuilds the match node, so
+        // no `TirMatchArm` is retained.
+        let arm_bodies: Vec<(TypeId, Span)> = match_expr
             .arms
             .iter()
             .map(|arm| self.resolve_match_arm(arm, scrutinee_type, ctx, expected_type))
             .collect();
 
-        self.check_match_exhaustiveness(&arms, scrutinee_type, match_expr.span);
+        self.check_match_exhaustiveness(&match_expr.arms, scrutinee_type, match_expr.span);
 
         let type_id = expected_type.unwrap_or_else(|| {
             // Skip `never`-typed arms: `never` is the bottom type and is compatible
@@ -2198,18 +2086,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // (e.g. `Option::Some(s)` where `s: String`) wins; we then patch the
             // unresolved `null` arm bodies below.
             let tt = self.tysys.type_table.borrow();
-            arms.iter()
-                .map(|a| a.body.type_id)
+            arm_bodies
+                .iter()
+                .map(|(t, _)| *t)
                 .find(|&t| t != TypeTable::NEVER && !tt.contains_unknown(t))
                 .or_else(|| {
-                    arms.iter()
-                        .map(|a| a.body.type_id)
+                    arm_bodies
+                        .iter()
+                        .map(|(t, _)| *t)
                         .find(|&t| t != TypeTable::NEVER)
                 })
                 .unwrap_or_else(|| {
                     // All arms return `never` — the match itself is `never`.
-                    arms.first()
-                        .map(|a| a.body.type_id)
+                    arm_bodies
+                        .first()
+                        .map(|(t, _)| *t)
                         .unwrap_or(TypeTable::UNIT)
                 })
         });
@@ -2243,8 +2134,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // already encodes `NEVER` / `UNKNOWN` / type-param deferrals,
         // so we route through it instead of repeating the rules here.
         if type_id != TypeTable::UNIT {
-            for arm in &arms {
-                let arm_type = arm.body.type_id;
+            for &(arm_type, arm_span) in &arm_bodies {
                 let result = {
                     let tt = self.tysys.type_table.borrow();
                     check_assignable(arm_type, type_id, &tt)
@@ -2255,56 +2145,76 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let _ = self.logger.error(TypeError::TypeMismatch {
                         expected: expected_name,
                         found: found_name,
-                        span: arm.body.span,
+                        span: arm_span,
                     });
                 }
             }
         }
 
-        TirExpr::new(
-            TirExprKind::Match {
-                expr: Box::new(scrutinee),
-                arms,
-            },
-            type_id,
-            match_expr.span,
-        )
+        // Stage 7-B: reify rebuilds the `Match` node from the AST
+        // (`reify_match_expr`); the combined walk resolved the scrutinee and
+        // arms above for their fact-recording side effects and ran
+        // exhaustiveness / null / arm-agreement diagnostics. No analysis reads
+        // the resolved match structure (missing-return walks arms off the AST
+        // in `control_flow.rs`), so project only the result type.
+        type_id
     }
 
+    /// Resolve one match arm for its facts: bind the arm pattern into `ctx`,
+    /// resolve the optional guard, and resolve the body. Returns the body's
+    /// `(type_id, span)` so `resolve_match_expr` can compute the match result
+    /// type and run arm-agreement diagnostics. No `TirMatchArm` / `TirPattern`
+    /// is built — reify rebuilds the match node from the AST, and
+    /// exhaustiveness now reads the AST arms directly.
     pub(super) fn resolve_match_arm(
         &mut self,
         arm: &MatchArm,
         scrutinee_type: TypeId,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirMatchArm {
+    ) -> (TypeId, Span) {
         ctx.enter_scope();
 
-        let pattern = self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
-        let guard = arm
-            .guard
-            .as_ref()
-            .map(|g| self.resolve_expr(g, ctx, Some(TypeTable::BOOL)));
-        let body = self.resolve_expr(&arm.body, ctx, expected_type);
+        self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
+        if let Some(g) = arm.guard.as_ref() {
+            self.resolve_expr(g, ctx, Some(TypeTable::BOOL));
+        }
+        let body_type = self.resolve_expr(&arm.body, ctx, expected_type);
 
         ctx.exit_scope();
 
-        TirMatchArm {
-            pattern,
-            guard,
-            body,
-            span: arm.span,
-        }
+        (body_type, arm.body.span())
     }
 
-    fn check_match_exhaustiveness(&self, arms: &[TirMatchArm], scrutinee_type: TypeId, span: Span) {
-        // Always check for overlapping range patterns first
-        self.check_range_overlaps(arms, span);
+    /// Exhaustiveness runs on the AST: the combined walk no longer materializes
+    /// a `TirMatchArm` / `TirPattern` for each arm. Each arm pattern is
+    /// classified into an [`ExhPattern`] — a shape projection that mirrors
+    /// exactly the `TirPattern` shape the old `resolve_if_pattern_inner` would
+    /// have produced (case-name disambiguation, range bounds, const-vs-literal,
+    /// reversed/empty-range → catch-all) — and the checks read that projection.
+    fn check_match_exhaustiveness(
+        &mut self,
+        arms: &[MatchArm],
+        scrutinee_type: TypeId,
+        span: Span,
+    ) {
+        // Classify each arm pattern once (shape only), pairing it with whether
+        // the arm is guardless (guarded arms never contribute to coverage).
+        let classified: Vec<(bool, ExhPattern)> = arms
+            .iter()
+            .map(|arm| {
+                let guardless = arm.guard.is_none();
+                (guardless, self.exh_pattern(&arm.pattern, scrutinee_type))
+            })
+            .collect();
+
+        // Always check for overlapping range patterns first.
+        self.check_range_overlaps(&classified, span);
 
         // If any arm has a wildcard or binding pattern (without a guard), the match is exhaustive
-        if arms
+        if classified
             .iter()
-            .any(|arm| arm.guard.is_none() && Self::is_catch_all_pattern(&arm.pattern))
+            .any(|(guardless, pat)| *guardless && Self::is_catch_all_pattern(pat))
         {
             return;
         }
@@ -2320,8 +2230,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         enum_info.cases.iter().map(|c| c.name.as_str()).collect();
                     let covered: IndexSet<&str> = {
                         let mut names = Vec::new();
-                        for arm in arms {
-                            Self::collect_enum_case_names(&arm.pattern, &mut names);
+                        for (_, pat) in &classified {
+                            Self::collect_enum_case_names(pat, &mut names);
                         }
                         names.into_iter().collect()
                     };
@@ -2340,20 +2250,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             ResolvedType::Variant { name, .. } => {
-                self.check_variant_exhaustiveness(arms, name, span);
+                self.check_variant_exhaustiveness(&classified, name, span);
             }
             ResolvedType::GenericInstance { name, .. } => {
                 if self.contains_variant(name) {
-                    self.check_variant_exhaustiveness(arms, name, span);
+                    self.check_variant_exhaustiveness(&classified, name, span);
                 }
             }
             ResolvedType::Primitive(crate::tir::PrimitiveType::Bool) => {
-                let has_true = arms
+                let has_true = classified
                     .iter()
-                    .any(|arm| Self::pattern_contains_bool(&arm.pattern, true));
-                let has_false = arms
+                    .any(|(_, pat)| Self::pattern_contains_bool(pat, true));
+                let has_false = classified
                     .iter()
-                    .any(|arm| Self::pattern_contains_bool(&arm.pattern, false));
+                    .any(|(_, pat)| Self::pattern_contains_bool(pat, false));
                 if !has_true || !has_false {
                     let mut missing = Vec::new();
                     if !has_true {
@@ -2373,7 +2283,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             ResolvedType::Primitive(prim) => {
                 if let Some((type_min, type_max)) = Self::primitive_range(*prim) {
-                    self.check_integer_range_exhaustiveness(arms, type_min, type_max, span);
+                    self.check_integer_range_exhaustiveness(&classified, type_min, type_max, span);
                 }
             }
             _ => {
@@ -2382,14 +2292,320 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn check_variant_exhaustiveness(&self, arms: &[TirMatchArm], variant_name: &str, span: Span) {
+    /// Project an AST match-arm pattern onto the shape exhaustiveness reads,
+    /// mirroring `resolve_if_pattern_inner`'s `TirPattern`-shape decisions.
+    /// References are peeled first (as `resolve_if_pattern` does) so case-name
+    /// disambiguation uses the underlying type.
+    fn exh_pattern(&mut self, pattern: &ast::Pattern, scrutinee_type: TypeId) -> ExhPattern {
+        let mut peeled = scrutinee_type;
+        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
+            self.tysys.type_table.borrow().get(peeled).clone()
+        {
+            peeled = inner;
+        }
+        self.exh_pattern_inner(pattern, peeled)
+    }
+
+    fn exh_pattern_inner(&mut self, pattern: &ast::Pattern, scrutinee_type: TypeId) -> ExhPattern {
+        match pattern {
+            ast::Pattern::Wildcard | ast::Pattern::Error(_) => ExhPattern::CatchAll,
+            ast::Pattern::Ident { name, .. } | ast::Pattern::MutIdent { name, .. } => {
+                // A bare identifier is a case when it names one (delegates to the
+                // Variant branch), an opaque constant-value pattern when it names
+                // an immutable global, or otherwise a binding (catch-all).
+                if !matches!(pattern, ast::Pattern::MutIdent { .. })
+                    && self.is_known_case_of_type(scrutinee_type, name, None)
+                {
+                    return self.exh_pattern_inner(
+                        &ast::Pattern::Variant {
+                            variant_name: name.clone(),
+                            variant_qualifier: None,
+                            name_id: None,
+                            name_span: Span::default(),
+                            bindings: vec![],
+                            span: Span::default(),
+                        },
+                        scrutinee_type,
+                    );
+                }
+                if !matches!(pattern, ast::Pattern::MutIdent { .. }) {
+                    if let Some(&(_ty, mutable)) = self.sem.decls.current_module_globals.get(name)
+                        && !mutable
+                    {
+                        return ExhPattern::Other;
+                    }
+                    if let Some((_m, _n, _ty, mutable)) = self.sem.decls.imported_globals.get(name)
+                        && !*mutable
+                    {
+                        return ExhPattern::Other;
+                    }
+                }
+                ExhPattern::CatchAll
+            }
+            ast::Pattern::Literal(lit) => self.exh_literal(lit, scrutinee_type),
+            ast::Pattern::Variant {
+                variant_name,
+                variant_qualifier,
+                bindings,
+                ..
+            } => self.exh_variant(
+                variant_name,
+                variant_qualifier.as_ref(),
+                bindings,
+                scrutinee_type,
+            ),
+            ast::Pattern::Or(alternatives) => ExhPattern::Or(
+                alternatives
+                    .iter()
+                    .map(|alt| self.exh_pattern_inner(alt, scrutinee_type))
+                    .collect(),
+            ),
+            ast::Pattern::Range {
+                start, end, kind, ..
+            } => self.exh_range(start, end, *kind, scrutinee_type),
+            ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => ExhPattern::Other,
+        }
+    }
+
+    /// True when the scrutinee is an unsigned integer type (governs literal
+    /// parsing). Mirrors the `is_unsigned` check in `resolve_if_pattern_inner`.
+    fn exh_is_unsigned(&self, scrutinee_type: TypeId) -> bool {
+        let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
+        matches!(
+            resolved,
+            ResolvedType::Primitive(
+                crate::tir::PrimitiveType::U8
+                    | crate::tir::PrimitiveType::U16
+                    | crate::tir::PrimitiveType::U32
+                    | crate::tir::PrimitiveType::U64
+                    | crate::tir::PrimitiveType::U128
+            )
+        ) || matches!(resolved, ResolvedType::Struct { ref name, .. } if name == "u128")
+    }
+
+    fn exh_literal(&self, lit: &Literal, scrutinee_type: TypeId) -> ExhPattern {
+        match lit {
+            Literal::Number(repr) => {
+                if util::is_float_only_literal(repr) {
+                    // Old path returned `Wildcard` (a catch-all) after emitting
+                    // the float-literal error during binding.
+                    return ExhPattern::CatchAll;
+                }
+                if self.exh_is_unsigned(scrutinee_type) {
+                    match util::parse_u128_literal(repr) {
+                        Ok(v) => ExhPattern::IntLit(v as i128),
+                        Err(_) => ExhPattern::IntLit(0),
+                    }
+                } else {
+                    match util::parse_i128_literal(repr) {
+                        Ok(v) => ExhPattern::IntLit(v),
+                        Err(_) => ExhPattern::IntLit(0),
+                    }
+                }
+            }
+            Literal::Bool(b) => ExhPattern::BoolLit(*b),
+            Literal::Char(raw) => {
+                ExhPattern::IntLit(util::unescape_char(raw).unwrap_or('\0') as i128)
+            }
+            Literal::Null => {
+                // `null` coerces to a `None` variant pattern when the scrutinee
+                // has a `None` case; otherwise it is an opaque `Null` literal.
+                if self.exh_null_none_case(scrutinee_type).is_some() {
+                    ExhPattern::VariantCase(
+                        self.tysys
+                            .type_table
+                            .borrow()
+                            .compiler_items()
+                            .variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
+                            .to_string(),
+                    )
+                } else {
+                    ExhPattern::Other
+                }
+            }
+            _ => ExhPattern::Other,
+        }
+    }
+
+    /// Mirrors `try_null_as_none_pattern`: returns the `None` case name when the
+    /// scrutinee is a variant type that has a `None` case.
+    fn exh_null_none_case(&self, scrutinee_type: TypeId) -> Option<()> {
+        let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
+        let variant_name = match &resolved {
+            ResolvedType::Variant { name, .. } => Some(name.clone()),
+            ResolvedType::GenericInstance { name, .. } if self.contains_variant(name) => {
+                Some(name.clone())
+            }
+            _ => None,
+        }?;
+        let variant_info = self.lookup_variant_case(&variant_name)?;
+        let none_case_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
+            .to_string();
+        variant_info
+            .cases
+            .iter()
+            .any(|c| c.name == none_case_name)
+            .then_some(())
+    }
+
+    fn exh_variant(
+        &mut self,
+        variant_name: &str,
+        variant_qualifier: Option<&ast::Type>,
+        bindings: &[ast::Pattern],
+        scrutinee_type: TypeId,
+    ) -> ExhPattern {
+        let normalized = self
+            .strip_ns_prefix(variant_name)
+            .unwrap_or(variant_name)
+            .to_string();
+
+        // Bare uppercase identifier that is not a known case: an associated
+        // constant resolves to a `Literal` (if the const body is a literal) or
+        // an opaque `ConstantValue`; otherwise it is a binding (catch-all).
+        if bindings.is_empty()
+            && !self.is_known_case_of_type(scrutinee_type, &normalized, variant_qualifier)
+        {
+            let assoc_const_key = Self::exh_assoc_const_key(variant_name, variant_qualifier);
+            if let Some((_m, _type_id, const_expr)) = self
+                .sem
+                .decls
+                .associated_constants
+                .get(&assoc_const_key)
+                .cloned()
+            {
+                if let ast::Expr::Literal(lit) = &const_expr {
+                    match &lit.value {
+                        Literal::Number(repr) if !util::is_float_only_literal(repr) => {
+                            if self.exh_is_unsigned(scrutinee_type) {
+                                if let Ok(v) = util::parse_u128_literal(repr) {
+                                    return ExhPattern::IntLit(v as i128);
+                                }
+                            } else if let Ok(v) = util::parse_i128_literal(repr) {
+                                return ExhPattern::IntLit(v);
+                            }
+                        }
+                        Literal::Bool(v) => return ExhPattern::BoolLit(*v),
+                        Literal::Char(raw) => {
+                            let c = util::unescape_char(raw).unwrap_or('\0');
+                            return ExhPattern::IntLit(c as i128);
+                        }
+                        _ => {}
+                    }
+                }
+                // Opaque constant-value pattern.
+                return ExhPattern::Other;
+            }
+            // Binding (catch-all).
+            return ExhPattern::CatchAll;
+        }
+
+        // Qualifier mismatch → old path returned `Wildcard` (catch-all).
+        if !self.pattern_qualifier_matches_scrutinee(scrutinee_type, variant_qualifier) {
+            return ExhPattern::CatchAll;
+        }
+
+        let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
+        match &resolved {
+            ResolvedType::Enum { name, .. } => {
+                if let Some(enum_info) = self.lookup_enum_case(name)
+                    && enum_info.find_case(&normalized).is_some()
+                {
+                    return ExhPattern::EnumCase(normalized);
+                }
+                // Unknown enum / case → old path returned `Wildcard`.
+                ExhPattern::CatchAll
+            }
+            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
+                ExhPattern::VariantCase(normalized)
+            }
+            _ => ExhPattern::CatchAll,
+        }
+    }
+
+    /// Build the `associated_constants` lookup key. Mirrors
+    /// `Elaborator::format_assoc_const_key`.
+    fn exh_assoc_const_key(variant_name: &str, qualifier: Option<&ast::Type>) -> String {
+        let Some(qualifier) = qualifier else {
+            return variant_name.to_string();
+        };
+        let base = match qualifier {
+            ast::Type::Named(t) => t.name.as_str(),
+            ast::Type::Generic(t) => t.name.as_str(),
+            ast::Type::NamespacedGeneric(t) => t.name.as_str(),
+            _ => return variant_name.to_string(),
+        };
+        format!("{base}::{variant_name}")
+    }
+
+    fn exh_range(
+        &self,
+        start: &ast::Pattern,
+        end: &ast::Pattern,
+        kind: ast::RangeKind,
+        scrutinee_type: TypeId,
+    ) -> ExhPattern {
+        let is_unsigned = self.exh_is_unsigned(scrutinee_type);
+        let (Some(start_val), Some(end_val)) = (
+            self.exh_pattern_to_i128(start, is_unsigned),
+            self.exh_pattern_to_i128(end, is_unsigned),
+        ) else {
+            // Bad bounds → old path returned `Wildcard` (catch-all).
+            return ExhPattern::CatchAll;
+        };
+        let inclusive = matches!(kind, ast::RangeKind::Inclusive);
+        // Reversed / empty ranges → old path returned `Wildcard` (catch-all).
+        if start_val > end_val || (!inclusive && start_val >= end_val) {
+            return ExhPattern::CatchAll;
+        }
+        let hi = if inclusive { end_val } else { end_val - 1 };
+        ExhPattern::Range(start_val, hi)
+    }
+
+    /// Resolve a range-bound AST pattern to its `i128` value. Mirrors
+    /// `Elaborator::pattern_to_i128`.
+    fn exh_pattern_to_i128(&self, pattern: &ast::Pattern, is_unsigned: bool) -> Option<i128> {
+        match pattern {
+            ast::Pattern::Literal(Literal::Number(repr)) => {
+                if is_unsigned {
+                    util::parse_u128_literal(repr).ok().map(|v| v as i128)
+                } else {
+                    util::parse_i128_literal(repr).ok()
+                }
+            }
+            ast::Pattern::Literal(Literal::Char(raw)) => {
+                util::unescape_char(raw).ok().map(|c| c as i128)
+            }
+            ast::Pattern::Variant {
+                variant_name,
+                variant_qualifier,
+                bindings,
+                ..
+            } if bindings.is_empty() => {
+                super::stmt::primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name)
+            }
+            _ => None,
+        }
+    }
+
+    fn check_variant_exhaustiveness(
+        &self,
+        classified: &[(bool, ExhPattern)],
+        variant_name: &str,
+        span: Span,
+    ) {
         if let Some(variant_info) = self.lookup_variant_case(variant_name) {
             let all_cases: IndexSet<&str> =
                 variant_info.cases.iter().map(|c| c.name.as_str()).collect();
             let covered: IndexSet<&str> = {
                 let mut names = Vec::new();
-                for arm in arms {
-                    Self::collect_variant_case_names(&arm.pattern, &mut names);
+                for (_, pat) in classified {
+                    Self::collect_variant_case_names(pat, &mut names);
                 }
                 names.into_iter().collect()
             };
@@ -2407,18 +2623,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn is_catch_all_pattern(pattern: &TirPattern) -> bool {
+    fn is_catch_all_pattern(pattern: &ExhPattern) -> bool {
         match pattern {
-            TirPattern::Wildcard | TirPattern::Binding { .. } => true,
-            TirPattern::Or(alternatives) => alternatives.iter().any(Self::is_catch_all_pattern),
+            ExhPattern::CatchAll => true,
+            ExhPattern::Or(alternatives) => alternatives.iter().any(Self::is_catch_all_pattern),
             _ => false,
         }
     }
 
-    fn collect_enum_case_names<'a>(pattern: &'a TirPattern, out: &mut Vec<&'a str>) {
+    fn collect_enum_case_names<'a>(pattern: &'a ExhPattern, out: &mut Vec<&'a str>) {
         match pattern {
-            TirPattern::Enum { case_name, .. } => out.push(case_name),
-            TirPattern::Or(alternatives) => {
+            ExhPattern::EnumCase(case_name) => out.push(case_name),
+            ExhPattern::Or(alternatives) => {
                 for alt in alternatives {
                     Self::collect_enum_case_names(alt, out);
                 }
@@ -2427,10 +2643,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn collect_variant_case_names<'a>(pattern: &'a TirPattern, out: &mut Vec<&'a str>) {
+    fn collect_variant_case_names<'a>(pattern: &'a ExhPattern, out: &mut Vec<&'a str>) {
         match pattern {
-            TirPattern::Variant { variant_name, .. } => out.push(variant_name),
-            TirPattern::Or(alternatives) => {
+            ExhPattern::VariantCase(variant_name) => out.push(variant_name),
+            ExhPattern::Or(alternatives) => {
                 for alt in alternatives {
                     Self::collect_variant_case_names(alt, out);
                 }
@@ -2439,10 +2655,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn pattern_contains_bool(pattern: &TirPattern, value: bool) -> bool {
+    fn pattern_contains_bool(pattern: &ExhPattern, value: bool) -> bool {
         match pattern {
-            TirPattern::Literal(crate::tir::TirLiteralPattern::Bool(b)) => *b == value,
-            TirPattern::Or(alternatives) => alternatives
+            ExhPattern::BoolLit(b) => *b == value,
+            ExhPattern::Or(alternatives) => alternatives
                 .iter()
                 .any(|p| Self::pattern_contains_bool(p, value)),
             _ => false,
@@ -2480,28 +2696,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn collect_ranges_from_pattern(pattern: &TirPattern) -> Vec<(i128, i128)> {
+    fn collect_ranges_from_pattern(pattern: &ExhPattern) -> Vec<(i128, i128)> {
         match pattern {
-            TirPattern::Range {
-                start,
-                end,
-                inclusive,
-                ..
-            } => {
-                let hi = if *inclusive { *end } else { *end - 1 };
-                vec![(*start, hi)]
-            }
-            TirPattern::Literal(lit) => {
-                let val = match lit {
-                    crate::tir::TirLiteralPattern::I128(v) => *v,
-                    crate::tir::TirLiteralPattern::U128(v) => *v as i128,
-                    crate::tir::TirLiteralPattern::Char(c) => *c as i128,
-                    crate::tir::TirLiteralPattern::Bool(b) => i128::from(*b),
-                    _ => return vec![],
-                };
-                vec![(val, val)]
-            }
-            TirPattern::Or(alts) => {
+            ExhPattern::Range(start, end) => vec![(*start, *end)],
+            ExhPattern::IntLit(v) => vec![(*v, *v)],
+            ExhPattern::BoolLit(b) => vec![(i128::from(*b), i128::from(*b))],
+            ExhPattern::Or(alts) => {
                 let mut result = Vec::new();
                 for alt in alts {
                     result.extend(Self::collect_ranges_from_pattern(alt));
@@ -2514,7 +2714,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     fn check_integer_range_exhaustiveness(
         &self,
-        arms: &[TirMatchArm],
+        classified: &[(bool, ExhPattern)],
         type_min: i128,
         type_max: i128,
         span: Span,
@@ -2523,14 +2723,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut all_ranges: Vec<(i128, i128)> = Vec::new();
         let mut has_catch_all = false;
 
-        for arm in arms {
-            if arm.guard.is_none() && Self::is_catch_all_pattern(&arm.pattern) {
+        for (guardless, pat) in classified {
+            if *guardless && Self::is_catch_all_pattern(pat) {
                 has_catch_all = true;
             }
-            if arm.guard.is_some() {
+            if !*guardless {
                 continue;
             }
-            all_ranges.extend(Self::collect_ranges_from_pattern(&arm.pattern));
+            all_ranges.extend(Self::collect_ranges_from_pattern(pat));
         }
 
         if has_catch_all {
@@ -2572,14 +2772,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn check_range_overlaps(&self, arms: &[TirMatchArm], span: Span) {
+    fn check_range_overlaps(&self, classified: &[(bool, ExhPattern)], span: Span) {
         // Collect ranges per arm (only guardless arms)
         let mut arm_ranges: Vec<Vec<(i128, i128)>> = Vec::new();
-        for arm in arms {
-            if arm.guard.is_some() {
+        for (guardless, pat) in classified {
+            if !*guardless {
                 continue;
             }
-            let ranges = Self::collect_ranges_from_pattern(&arm.pattern);
+            let ranges = Self::collect_ranges_from_pattern(pat);
             if !ranges.is_empty() {
                 arm_ranges.push(ranges);
             }
@@ -2619,19 +2819,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         cast: &ast::CastExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
+    ) -> TypeId {
         let target_type = self.resolve_type(&cast.target_type);
 
         // Special case: tuple literal cast to a type implementing SequenceLiteralBuilder
         // [1, 2, 3] as List<i32>, [1, 2, 3] as SeqVec<i32>
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(&cast.expr, ctx, target_type) {
-            return coerced;
+            return coerced.type_id;
         }
 
         // Special case: struct literal cast to a type implementing KeyValueLiteral
         // { a: 1, b: 2 } as TreeMap<String, i32>
         if let Some(coerced) = self.try_coerce_struct_to_map(&cast.expr, ctx, target_type) {
-            return coerced;
+            return coerced.type_id;
         }
 
         // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
@@ -2664,7 +2864,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             true,
                             target_type,
                             cast.span,
-                        );
+                        )
+                        .type_id;
                     }
                     Err(_) => {
                         let _ = self.logger.error(TypeError::InvalidLiteral {
@@ -2693,7 +2894,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         false,
                         target_type,
                         unary.span,
-                    );
+                    )
+                    .type_id;
                 }
                 let _ = self.logger.error(TypeError::InvalidLiteral {
                     message: format!("invalid i128 literal: -{repr}"),
@@ -2702,8 +2904,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // General expression cast (not a literal)
-            let expr_resolved = self.resolve_expr(&cast.expr, ctx, None);
-            let source_type = expr_resolved.type_id;
+            let source_type = self.resolve_expr(&cast.expr, ctx, None);
 
             // Check if source type is a numeric type we can convert from
             if self.tysys.type_table.borrow().is_integer(source_type)
@@ -2719,7 +2920,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `name::from_u64/from_i64(expr as u64/i64)`.
                 let casted_expr = TirExpr::new(
                     TirExprKind::Cast {
-                        expr: Box::new(expr_resolved),
+                        expr: Box::new(placeholder(source_type, cast.expr.span())),
                         target_type: intermediate_type,
                     },
                     intermediate_type,
@@ -2731,13 +2932,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     casted_expr,
                     target_type,
                     cast.span,
-                );
+                )
+                .type_id;
             }
         }
 
         // Normal cast
-        let expr = self.resolve_expr(&cast.expr, ctx, None);
-        let source_type = expr.type_id;
+        let source_type = self.resolve_expr(&cast.expr, ctx, None);
 
         // Validate char casts: prohibit integer/float -> char (use char::from_u32 instead)
         // Exception: u8 -> char is always valid (0..255 are valid Unicode scalar values)
@@ -2780,7 +2981,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Stage 7-B: reify rebuilds the `Cast` from `cast.expr` + the target
         // type recorded in `expression_types[cast.id]`; the char-cast
         // diagnostics above are the record-only work.
-        placeholder(target_type, cast.span)
+        target_type
     }
 
     /// Resolve a struct literal
@@ -2789,7 +2990,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_lit: &ast::StructLiteralExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         // Handle implicit struct literals (name is None) — anonymous struct inference
         let Some(raw_name) = &struct_lit.name else {
             return self.resolve_anonymous_struct_literal(struct_lit, ctx);
@@ -2945,7 +3146,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
 
                 // Use expected type for literal coercion (e.g., 0 -> u64 when field is u64)
-                let value = self.resolve_expr(&field.value, ctx, effective_expected);
+                let value = placeholder(
+                    self.resolve_expr(&field.value, ctx, effective_expected),
+                    field.value.span(),
+                );
 
                 // Track tuple literals whose coercion was deferred because the field
                 // type had unresolved type parameters. After type inference, we'll
@@ -3018,10 +3222,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let default_ast = struct_field_defaults.get(idx).and_then(Option::clone);
                 if let Some(default_expr) = default_ast {
                     let resolved = self.resolve_expr(&default_expr, ctx, Some(*expected_type_id));
-                    self.typecheck(resolved.type_id, *expected_type_id, struct_lit.span);
+                    self.typecheck(resolved, *expected_type_id, struct_lit.span);
                     fields.push(TirStructField {
                         name: expected_name.clone(),
-                        value: resolved,
+                        value: placeholder(resolved, default_expr.span()),
                         field_index: idx as u32,
                     });
                 } else {
@@ -3055,8 +3259,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Check if this is a generic struct and infer type arguments
-        let (struct_type, mangled_struct_name, fields) = if self
+        // Check if this is a generic struct and infer type arguments.
+        // Stage 7-B: reify rebuilds the mangled name + fields; the combined
+        // walk only needs the substitution / coercion side effects below and
+        // the resulting struct type.
+        let (struct_type, _mangled_struct_name, _fields) = if self
             .sem
             .decls
             .generic_struct_names
@@ -3180,15 +3387,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (struct_type, struct_name, fields)
         };
 
-        TirExpr::new(
-            TirExprKind::StructLiteral {
-                struct_type,
-                struct_name: mangled_struct_name,
-                fields,
-            },
-            struct_type,
-            struct_lit.span,
-        )
+        // Stage 7-B: reify rebuilds the `StructLiteral` (`reify_struct_literal`)
+        // from the AST + the recorded `generic_instantiations` mangled name /
+        // instance type; the combined walk resolved the fields (and applied any
+        // deferred tuple-to-sequence coercion) for their fact-recording side
+        // effects. Project only the struct type.
+        struct_type
     }
 
     /// Resolve an anonymous struct literal `{ x: 1, y: 2 }` by inferring a struct type
@@ -3197,11 +3401,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_lit: &ast::StructLiteralExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
+    ) -> TypeId {
         // Resolve all field expressions first
         let mut resolved_fields: Vec<TirStructField> = Vec::new();
         for (index, field) in struct_lit.fields.iter().enumerate() {
-            let value = self.resolve_expr(&field.value, ctx, None);
+            let value = placeholder(
+                self.resolve_expr(&field.value, ctx, None),
+                field.value.span(),
+            );
             resolved_fields.push(TirStructField {
                 name: field.name.clone(),
                 value,
@@ -3232,17 +3439,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 struct_lit.id,
                 vec![],
                 existing_type,
-                Some(anon_name.clone()),
+                Some(anon_name),
             );
-            return TirExpr::new(
-                TirExprKind::StructLiteral {
-                    struct_type: existing_type,
-                    struct_name: anon_name,
-                    fields: resolved_fields,
-                },
-                existing_type,
-                struct_lit.span,
-            );
+            // Stage 7-B: reify rebuilds the anonymous `StructLiteral`
+            // (`reify_anonymous_struct_literal`); project only the type.
+            return existing_type;
         }
 
         // Register the new anonymous struct type
@@ -3302,18 +3503,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             struct_lit.id,
             vec![],
             struct_type,
-            Some(anon_name.clone()),
+            Some(anon_name),
         );
 
-        TirExpr::new(
-            TirExprKind::StructLiteral {
-                struct_type,
-                struct_name: anon_name,
-                fields: resolved_fields,
-            },
-            struct_type,
-            struct_lit.span,
-        )
+        // Stage 7-B: reify rebuilds the anonymous `StructLiteral`; the combined
+        // walk registered the struct type, field info, and pending TirStruct
+        // above for their side effects. Project only the type.
+        struct_type
     }
 
     /// Infer type arguments for a generic struct from its field values, with
@@ -3404,7 +3600,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         tuple_lit: &ast::TupleLiteralExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         // When the expected type is a concrete tuple of matching arity and the
         // literal has no spread elements, propagate per-element expected types
         // so numeric literals and nested tuples are coerced to the target shape.
@@ -3431,20 +3627,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut elem_types: Vec<TypeId> = Vec::new();
         for (elem_idx, elem) in tuple_lit.elements.iter().enumerate() {
             if let Expr::Spread(inner, _span) = elem {
-                let spread_expr = self.resolve_expr(inner, ctx, None);
-                if self.type_contains_pack(spread_expr.type_id) {
+                let spread_type_id = self.resolve_expr(inner, ctx, None);
+                if self.type_contains_pack(spread_type_id) {
                     // A direct `TypePack` (`[..T::method()]`) or a tuple
                     // containing one (`[..rest]` where `rest: [..T]`): the
                     // spread element keeps the spread's own type; monomorphize
                     // expands it later.
-                    elem_types.push(spread_expr.type_id);
+                    elem_types.push(spread_type_id);
                 } else {
-                    let spread_type = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .get(spread_expr.type_id)
-                        .clone();
+                    let spread_type = self.tysys.type_table.borrow().get(spread_type_id).clone();
                     if let ResolvedType::GenericInstance {
                         name,
                         module_source,
@@ -3463,18 +3654,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 span: elem.span(),
                             },
                         );
-                        elem_types.push(spread_expr.type_id);
+                        elem_types.push(spread_type_id);
                     }
                 }
             } else {
                 let elem_expected = expected_elem_types.as_ref().map(|v| v[elem_idx]);
                 let resolved = self.resolve_expr(elem, ctx, elem_expected);
-                elem_types.push(resolved.type_id);
+                elem_types.push(resolved);
             }
         }
 
-        let tuple_type = self.tysys.type_table.borrow_mut().make_tuple(elem_types);
-        placeholder(tuple_type, tuple_lit.span)
+        self.tysys.type_table.borrow_mut().make_tuple(elem_types)
     }
 
     /// Resolve the postfix `?` operator.
@@ -3491,9 +3681,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         qm: &ast::TryOpExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
-        let inner = self.resolve_expr(&qm.expr, ctx, None);
-        let inner_type = inner.type_id;
+    ) -> TypeId {
+        let inner_type = self.resolve_expr(&qm.expr, ctx, None);
         let tt = self.tysys.type_table.borrow();
         let type_name = tt.type_name(inner_type);
 
@@ -3510,7 +3699,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 message: format!("cannot use ? on type {type_name}"),
                 span: qm.span,
             });
-            return TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
+            return TypeTable::UNIT;
         }
 
         // Check that the enclosing function returns a compatible type
@@ -3528,7 +3717,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 message: "cannot use ? on Option in a function returning Result".to_string(),
                 span: qm.span,
             });
-            return TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
+            return TypeTable::UNIT;
         }
         if is_result && !ret_is_result {
             if ret_is_option {
@@ -3542,111 +3731,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span: qm.span,
                 });
             }
-            return TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
+            return TypeTable::UNIT;
         }
 
         if is_option {
-            self.resolve_question_mark_option(inner, ctx, qm.span)
+            self.resolve_question_mark_option(inner_type, ctx)
         } else {
-            self.resolve_question_mark_result(inner, ctx, qm.span, qm.id)
+            self.resolve_question_mark_result(inner_type, ctx, qm.span, qm.id)
         }
     }
 
     fn resolve_question_mark_option(
         &mut self,
-        inner: TirExpr,
+        inner_type: TypeId,
         ctx: &mut FunctionContext,
-        span: Span,
-    ) -> TirExpr {
-        let inner_type = inner.type_id;
-        let tt = self.tysys.type_table.borrow();
-        let some_type = tt.as_option(inner_type).unwrap();
-        // Look up the `Some` / `None` case names through the
-        // `CompilerItem` registry so a stdlib rename of either case
-        // flows through the `?` lowering for `Option` without touching
-        // this site.
-        let items = tt.compiler_items();
-        let some_name = items
-            .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
-            .to_string();
-        let none_name = items
-            .variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
-            .to_string();
-        drop(tt);
+    ) -> TypeId {
+        let some_type = self
+            .tysys
+            .type_table
+            .borrow()
+            .as_option(inner_type)
+            .unwrap();
 
-        // Allocate a local for the Some payload binding
+        // Allocate a local for the Some payload binding (walk-order parity).
         ctx.enter_scope();
-        let v_local = ctx.add_local("__qm_v".to_string(), some_type, false, None);
-
-        // Arm 0: Some(v) => v
-        let some_arm = TirMatchArm {
-            pattern: TirPattern::Variant {
-                enum_type: inner_type,
-                variant_name: some_name,
-                bindings: vec![TirPattern::Binding {
-                    name: "__qm_v".to_string(),
-                    local_index: v_local,
-                    type_id: some_type,
-                }],
-                payload_type: some_type,
-            },
-            guard: None,
-            body: TirExpr::new(
-                TirExprKind::Local {
-                    index: v_local,
-                    name: "__qm_v".to_string(),
-                },
-                some_type,
-                span,
-            ),
-            span,
-        };
-
-        // Arm 1: None => return null
-        let none_arm = TirMatchArm {
-            pattern: TirPattern::Variant {
-                enum_type: inner_type,
-                variant_name: none_name,
-                bindings: vec![],
-                payload_type: TypeTable::UNIT,
-            },
-            guard: None,
-            body: TirExpr::new(
-                TirExprKind::Block(TirBlock::new(
-                    vec![TirStmt::new(
-                        TirStmtKind::Return {
-                            value: Some(TirExpr::new(TirExprKind::Null, inner_type, span)),
-                        },
-                        span,
-                    )],
-                    span,
-                )),
-                TypeTable::NEVER,
-                span,
-            ),
-            span,
-        };
-
+        let _v_local = ctx.add_local("__qm_v".to_string(), some_type, false, None);
         ctx.exit_scope();
 
-        TirExpr::new(
-            TirExprKind::Match {
-                expr: Box::new(inner),
-                arms: vec![some_arm, none_arm],
-            },
-            some_type,
-            span,
-        )
+        // Stage 7-B: reify rebuilds the `Option` `?` desugar
+        // (`reify_question_mark_option`) from the AST, allocating its own
+        // `__qm_v` local. The combined walk keeps the scope/local allocation
+        // (walk-order parity) and projects the unwrapped `Some` payload type.
+        some_type
     }
 
     fn resolve_question_mark_result(
         &mut self,
-        inner: TirExpr,
+        inner_type: TypeId,
         ctx: &mut FunctionContext,
         span: Span,
         qm_id: AstId,
-    ) -> TirExpr {
-        let inner_type = inner.type_id;
+    ) -> TypeId {
         let return_type = ctx.return_type;
 
         // Extract T, E from inner Result<T, E>
@@ -3665,114 +3790,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         drop(tt);
 
         ctx.enter_scope();
-        let v_local = ctx.add_local("__qm_v".to_string(), ok_type, false, None);
+        // The `__qm_v` local is allocated for walk-order parity; reify rebuilds
+        // the `?` desugar and its own bindings, so the index is not kept here.
+        ctx.add_local("__qm_v".to_string(), ok_type, false, None);
         let e_local = ctx.add_local("__qm_e".to_string(), inner_err_type, false, None);
 
-        // Look up the `Ok` / `Err` case names + indexes through the
-        // `CompilerItem` registry so a stdlib rename of either case
-        // flows through the `?` lowering path without touching this site.
-        let (ok_name, _ok_index, err_name, err_index) = {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            let (_, _, ok_n, ok_i) =
-                items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
-            let (_, _, err_n, err_i) =
-                items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
-            (ok_n.to_string(), ok_i, err_n.to_string(), err_i)
-        };
-
-        // Arm 0: Ok(v) => v
-        let ok_arm = TirMatchArm {
-            pattern: TirPattern::Variant {
-                enum_type: inner_type,
-                variant_name: ok_name,
-                bindings: vec![TirPattern::Binding {
-                    name: "__qm_v".to_string(),
-                    local_index: v_local,
-                    type_id: ok_type,
-                }],
-                payload_type: ok_type,
-            },
-            guard: None,
-            body: TirExpr::new(
+        // Record the `From::from(e)` conversion facts when the inner and outer
+        // error types differ (no-op when they match). `resolve_from_call`
+        // writes `FromCallFacts` keyed by the `?` AstId; reify replays the
+        // conversion from the AST + those facts. The returned `TirExpr` is the
+        // dead `Err(From::from(e))` node, projected away here.
+        if inner_err_type != outer_err_type {
+            let e_expr = TirExpr::new(
                 TirExprKind::Local {
-                    index: v_local,
-                    name: "__qm_v".to_string(),
-                },
-                ok_type,
-                span,
-            ),
-            span,
-        };
-
-        // Build the error conversion expression.
-        // If inner_err_type == outer_err_type, just use the error directly.
-        // Otherwise, call From::from(e) to convert.
-        let e_expr = TirExpr::new(
-            TirExprKind::Local {
-                index: e_local,
-                name: "__qm_e".to_string(),
-            },
-            inner_err_type,
-            span,
-        );
-        let converted_err = if inner_err_type == outer_err_type {
-            e_expr
-        } else {
-            self.resolve_from_call(outer_err_type, inner_err_type, e_expr, span, qm_id)
-        };
-
-        // Build Result::Err(converted_err) with the function's return Result type
-        let err_variant = TirExpr::new(
-            TirExprKind::VariantConstruct {
-                variant_type: return_type,
-                case_index: err_index,
-                case_name: err_name.clone(),
-                payload: Some(Box::new(converted_err)),
-            },
-            return_type,
-            span,
-        );
-
-        // Arm 1: Err(e) => return Result::Err(From::from(e))
-        let err_arm = TirMatchArm {
-            pattern: TirPattern::Variant {
-                enum_type: inner_type,
-                variant_name: err_name,
-                bindings: vec![TirPattern::Binding {
+                    index: e_local,
                     name: "__qm_e".to_string(),
-                    local_index: e_local,
-                    type_id: inner_err_type,
-                }],
-                payload_type: inner_err_type,
-            },
-            guard: None,
-            body: TirExpr::new(
-                TirExprKind::Block(TirBlock::new(
-                    vec![TirStmt::new(
-                        TirStmtKind::Return {
-                            value: Some(err_variant),
-                        },
-                        span,
-                    )],
-                    span,
-                )),
-                TypeTable::NEVER,
+                },
+                inner_err_type,
                 span,
-            ),
-            span,
-        };
+            );
+            let _ = self.resolve_from_call(outer_err_type, inner_err_type, e_expr, span, qm_id);
+        }
 
         ctx.exit_scope();
 
-        TirExpr::new(
-            TirExprKind::Match {
-                expr: Box::new(inner),
-                arms: vec![ok_arm, err_arm],
-            },
-            ok_type,
-            span,
-        )
+        // Stage 7-B: reify rebuilds the `Result` `?` desugar
+        // (`reify_question_mark_result`) from the AST + the recorded
+        // `FromCallFacts`. The combined walk keeps the scope / local allocation
+        // and the `resolve_from_call` fact-recording, and projects the
+        // unwrapped `Ok` payload type.
+        ok_type
     }
 
     /// Generate a call to `From::from(value)` that converts `value` of type
@@ -3973,7 +4020,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         range: &crate::ast::RangeExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
+    ) -> TypeId {
         use crate::ast::RangeKind;
         use crate::module_source::ModuleSource;
 
@@ -3983,22 +4030,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let (start, end) = if start_is_literal && !end_is_literal {
             let end = self.resolve_expr(&range.end, ctx, None);
-            let start = self.resolve_expr(&range.start, ctx, Some(end.type_id));
+            let start = self.resolve_expr(&range.start, ctx, Some(end));
             (start, end)
         } else {
             let start = self.resolve_expr(&range.start, ctx, None);
-            let end = self.resolve_expr(&range.end, ctx, Some(start.type_id));
+            let end = self.resolve_expr(&range.end, ctx, Some(start));
             (start, end)
         };
 
         // Check type mismatch between start and end
-        if start.type_id != end.type_id
-            && start.type_id != TypeTable::ERROR
-            && end.type_id != TypeTable::ERROR
-        {
+        if start != end && start != TypeTable::ERROR && end != TypeTable::ERROR {
             let type_table = self.tysys.type_table.borrow();
-            let start_name = type_table.type_name(start.type_id);
-            let end_name = type_table.type_name(end.type_id);
+            let start_name = type_table.type_name(start);
+            let end_name = type_table.type_name(end);
             if start_name != end_name {
                 let op_str = match range.kind {
                     RangeKind::Exclusive => "..<",
@@ -4011,11 +4055,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ),
                     span: range.span,
                 });
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
+                return TypeTable::ERROR;
             }
         }
 
-        let element_type = start.type_id;
+        let element_type = start;
 
         // Check that the element type implements Ord
         let ord_trait_name = self
@@ -4037,7 +4081,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 reason,
                 span: range.span,
             });
-            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
+            return TypeTable::ERROR;
         }
 
         // Check for reversed range literals (start > end)
@@ -4056,7 +4100,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ),
                     span: range.span,
                 });
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, range.span);
+                return TypeTable::ERROR;
             }
         }
 
@@ -4105,7 +4149,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(mangled_name),
         );
 
-        placeholder(struct_type, range.span)
+        struct_type
     }
 }
 

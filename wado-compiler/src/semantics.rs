@@ -699,7 +699,10 @@ pub async fn semantics<H: CompilerHost>(
     )
     .await
     {
-        Ok(loaded) => semantics_of(loaded, host, LogLevel::default()),
+        // General entry: build TIR so consumers that read `tir_modules`
+        // (kiln options extraction) work. The LSP engine uses its own
+        // annotate-only path (`semantics_of(.., build_tir = false)`).
+        Ok(loaded) => semantics_of(loaded, host, LogLevel::default(), true),
         Err(e) => {
             let logger = Logger::new(host, LogLevel::default());
             if let Some(f) = filename {
@@ -806,17 +809,22 @@ impl Semantics {
 ///
 /// Always returns a [`Semantics`]; on phase bail, downstream fields are
 /// empty and [`Semantics::is_complete`] returns `false`.
+/// Build `Semantics` from an already-loaded module set. `build_tir` controls
+/// whether reify runs: the LSP engine passes `false` (facts only — it never
+/// reads TIR), while the general `semantics()` entry and any consumer that
+/// reads `Semantics::tir_modules` (e.g. kiln options extraction) pass `true`.
 pub fn semantics_of<H: CompilerHost>(
     loaded: loader::LoadResult,
     host: &H,
     log_level: LogLevel,
+    build_tir: bool,
 ) -> Semantics {
     let logger = Logger::new(host, log_level);
     let entry_filename = loaded.entry_module_source.diagnostic_filename();
     if !entry_filename.is_empty() {
         logger.set_file(&entry_filename);
     }
-    semantics_with_logger(loaded, &logger)
+    semantics_with_logger(loaded, &logger, build_tir)
 }
 
 /// Logger-sharing variant. Internal: lets callers that already maintain a
@@ -825,6 +833,7 @@ pub fn semantics_of<H: CompilerHost>(
 pub(crate) fn semantics_with_logger<H: CompilerHost>(
     load_result: loader::LoadResult,
     logger: &Logger<'_, H>,
+    build_tir: bool,
 ) -> Semantics {
     // Wrap the loader's interner in `Rc<RefCell<>>` so analyze and the
     // per-module elaborators can each `borrow_mut()` it from `&self`
@@ -939,6 +948,10 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // On Bail we still drain the partial reference / local maps so the LSP
     // can answer cursor queries against whatever bodies the elaborator did
     // reach before bailing.
+    //
+    // `build_tir == false` (the LSP path) runs only the body fact-walk
+    // (`annotate_bodies`); reify is skipped and `tir_modules` stays empty —
+    // the LSP never reads TIR. The batch path passes `true`.
     let (tir_modules, lower_ok) = {
         let _span = logger.span("elaborate/build_tir");
         match Elaborator::build_tir_from_state(
@@ -948,6 +961,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             load_result.entry_module_source.clone(),
             logger,
             snapshot.as_deref(),
+            build_tir,
         ) {
             Ok(m) => (m, true),
             Err(_) => (IndexMap::default(), false),
