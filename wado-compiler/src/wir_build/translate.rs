@@ -694,6 +694,118 @@ fn build_fn_canonical_dispatch_body(
 }
 
 /// Translate all pending function bodies from TIR to WIR instructions.
+/// True when a branch body contains a `cold_path()` marker. Descends through
+/// transparent grouping (`Block` / `Seq`) but stops at nested control flow
+/// (`If` / `Loop`): a `cold_path()` inside an inner branch belongs to that
+/// branch, not this one.
+fn block_has_cold_path(body: &[WirInstr]) -> bool {
+    body.iter().any(instr_has_cold_path)
+}
+
+fn instr_has_cold_path(i: &WirInstr) -> bool {
+    match i {
+        WirInstr::ColdPath => true,
+        WirInstr::Block { body, .. } | WirInstr::Seq(body) => block_has_cold_path(body),
+        _ => false,
+    }
+}
+
+/// Finalize `builtin::cold_path()` markers into Wasm branch hints.
+///
+/// `cold_path()` lowers to a side-effect-free [`WirInstr::ColdPath`] left in
+/// the branch body. This pass finds the enclosing conditional and wraps its
+/// condition in [`WirInstr::BranchHint`] — the same node `builtin::likely` /
+/// `builtin::unlikely` produce — so the existing emitter records a
+/// `metadata.code.branch_hint` entry. Two shapes are recognized:
+///
+///  - **In-branch**: an `if` whose then/else body carries the marker. A cold
+///    then-branch hints the condition unlikely-true (`likely = false`); a cold
+///    else-branch hints it likely-true (`likely = true`).
+///  - **Fall-through / implicit-else**: an `if cond { <diverges> }` with no
+///    `else` whose fall-through path unconditionally reaches a marker later in
+///    the same block. The condition-false side is cold, so the condition is
+///    hinted likely-true. This covers the guard-clause idiom
+///    `if ok { return v } cold_path(); return err`.
+///
+/// The marker itself stays in place and emits nothing. Runs unconditionally at
+/// WIR finalization, so the hint is independent of the optimization level.
+fn apply_cold_path_hints(instrs: &mut [WirInstr]) {
+    for instr in instrs.iter_mut() {
+        apply_cold_path_hints_instr(instr);
+    }
+
+    // Fall-through pass: walk the block backwards, tracking whether the path
+    // *after* the current statement unconditionally reaches a `cold_path()`
+    // marker before any non-cold divergence (`reaches_cold`). A guard `if cond {
+    // <diverges> }` (no else) sitting in front of such a path has a cold
+    // fall-through, so its taken branch is the hot one.
+    let mut reaches_cold = false;
+    for i in (0..instrs.len()).rev() {
+        if reaches_cold
+            && let WirInstr::If {
+                condition,
+                then_body,
+                else_body: None,
+                ..
+            } = &mut instrs[i]
+            && then_body.iter().any(WirInstr::always_diverges)
+            && !block_has_cold_path(then_body)
+        {
+            wrap_condition_hint(condition, true);
+        }
+        // A bare marker (possibly under transparent `Block`/`Seq`) makes the
+        // path cold; an unconditional non-cold divergence ends it.
+        if instr_has_cold_path(&instrs[i]) {
+            reaches_cold = true;
+        } else if instrs[i].always_diverges() {
+            reaches_cold = false;
+        }
+    }
+}
+
+/// Wrap an `if` condition in a `BranchHint`, unless it already carries an
+/// explicit `likely`/`unlikely` annotation (the programmer's hint wins).
+fn wrap_condition_hint(condition: &mut Box<WirInstr>, likely: bool) {
+    if matches!(condition.as_ref(), WirInstr::BranchHint { .. }) {
+        return;
+    }
+    let cond = std::mem::replace(condition.as_mut(), WirInstr::Nop);
+    **condition = WirInstr::BranchHint {
+        likely,
+        expr: Box::new(cond),
+    };
+}
+
+fn apply_cold_path_hints_instr(instr: &mut WirInstr) {
+    match instr {
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            apply_cold_path_hints_instr(condition);
+            apply_cold_path_hints(then_body);
+            if let Some(else_body) = else_body {
+                apply_cold_path_hints(else_body);
+            }
+            let then_cold = block_has_cold_path(then_body);
+            let else_cold = else_body.as_ref().is_some_and(|b| block_has_cold_path(b));
+            // Only a single cold side yields an unambiguous hint.
+            let likely = match (then_cold, else_cold) {
+                (true, false) => false,
+                (false, true) => true,
+                _ => return,
+            };
+            wrap_condition_hint(condition, likely);
+        }
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            apply_cold_path_hints(body);
+        }
+        other => other.for_each_boxed_child_mut(&mut |c| apply_cold_path_hints_instr(c)),
+    }
+}
+
 pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
     let pending: Vec<_> = std::mem::take(&mut ctx.pending_bodies);
 
@@ -763,7 +875,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
 
             // Translate inside a nested block so the translator (and its reborrow of ctx)
             // is dropped before we write back to ctx.functions below.
-            let wir_body = {
+            let mut wir_body = {
                 let mut translator = FunctionTranslator {
                     ctx: &mut *ctx,
                     type_table: &type_table,
@@ -777,6 +889,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 };
                 translator.translate_block(body)
             };
+            apply_cold_path_hints(&mut wir_body);
             let _ = type_table;
             drop(tir_func);
             ctx.functions[pending_body.wir_func_index].body = Some(wir_body);

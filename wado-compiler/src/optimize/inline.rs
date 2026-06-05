@@ -24,6 +24,79 @@ use crate::token::Span;
 // - Complex statements like `let x = foo() + bar()` have 3+ expressions
 // - Method calls, binary operations, field accesses all contribute
 
+/// Which arm of an `if` a `builtin::likely`/`builtin::unlikely` hint marks as
+/// the cold (rarely executed) path.
+///
+/// `builtin::unlikely(cond)` predicts `cond` is usually false, so the
+/// then-branch is cold; `builtin::likely(cond)` predicts the opposite, so the
+/// else-branch is cold.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ColdBranch {
+    Then,
+    Else,
+}
+
+/// Inspect an `if` condition for a `builtin::likely`/`builtin::unlikely`
+/// branch-hint wrapper and report which arm it marks as cold.
+///
+/// The inline cost heuristic skips the cold arm's body: a small hot function
+/// should stay inlinable even when it guards a large error/abort path behind
+/// `builtin::unlikely(...)`, because that path is by construction not hot.
+///
+/// Inclusion criteria are funnelled through [`FunctionRef::builtin_name`] so
+/// this stays in sync with the WIR builder's `BranchHint` lowering and the
+/// branch-hint peeling in `condition_implication`.
+fn cold_branch(condition: &NirExpr) -> Option<ColdBranch> {
+    let NirExprKind::Call { func, args, .. } = &condition.kind else {
+        return None;
+    };
+    if args.len() != 1 {
+        return None;
+    }
+    match func.builtin_name().as_deref() {
+        Some("builtin::unlikely") => Some(ColdBranch::Then),
+        Some("builtin::likely") => Some(ColdBranch::Else),
+        _ => None,
+    }
+}
+
+/// True when an expression is a `builtin::cold_path()` marker call.
+fn is_cold_path_call(expr: &NirExpr) -> bool {
+    matches!(
+        &expr.kind,
+        NirExprKind::Call { func, .. }
+            if func.builtin_name().as_deref() == Some("builtin::cold_path")
+    )
+}
+
+/// True when a branch block is on a cold path, i.e. it directly contains a
+/// `cold_path()` marker statement. Such a block is excluded from the inline
+/// cost estimate.
+fn block_is_cold(block: &NirBlock) -> bool {
+    block
+        .stmts
+        .iter()
+        .any(|s| matches!(&s.kind, NirStmtKind::Expr(e) if is_cold_path_call(e)))
+}
+
+/// Inline cost of a branch block: zero when the block is cold (see
+/// [`block_is_cold`]), otherwise its expression count.
+fn branch_block_cost(block: &NirBlock) -> usize {
+    if block_is_cold(block) {
+        0
+    } else {
+        count_block_exprs(block)
+    }
+}
+
+/// Inline cost of a `match` arm body: zero when the arm is a cold block.
+fn match_arm_body_cost(arm: &crate::nir::NirMatchArm) -> usize {
+    match &arm.body.kind {
+        NirExprKind::Block(block) if block_is_cold(block) => 0,
+        _ => count_expr(&arm.body),
+    }
+}
+
 /// Count expressions in a NIR expression (recursive)
 fn count_expr(expr: &NirExpr) -> usize {
     1 + match &expr.kind {
@@ -50,15 +123,28 @@ fn count_expr(expr: &NirExpr) -> usize {
             then_branch,
             else_branch,
         } => {
-            count_expr(condition)
-                + count_block_exprs(then_branch)
-                + else_branch.as_ref().map_or(0, count_block_exprs)
+            // A cold branch does not contribute to inline cost: either the
+            // condition is hinted (`builtin::unlikely(..)` ⇒ then,
+            // `builtin::likely(..)` ⇒ else) or the branch body carries a
+            // `cold_path()` marker (handled by `branch_block_cost`).
+            let cold = cold_branch(condition);
+            let then_cost = if cold == Some(ColdBranch::Then) {
+                0
+            } else {
+                branch_block_cost(then_branch)
+            };
+            let else_cost = if cold == Some(ColdBranch::Else) {
+                0
+            } else {
+                else_branch.as_ref().map_or(0, branch_block_cost)
+            };
+            count_expr(condition) + then_cost + else_cost
         }
         NirExprKind::Match { expr, arms } => {
             count_expr(expr)
                 + arms
                     .iter()
-                    .map(|arm| arm.guard.as_ref().map_or(0, count_expr) + count_expr(&arm.body))
+                    .map(|arm| arm.guard.as_ref().map_or(0, count_expr) + match_arm_body_cost(arm))
                     .sum::<usize>()
         }
         NirExprKind::Block(block) => count_block_exprs(block),
@@ -89,8 +175,8 @@ fn count_expr(expr: &NirExpr) -> usize {
             ..
         } => {
             count_expr(scrutinee)
-                + arms.iter().map(count_block_exprs).sum::<usize>()
-                + count_block_exprs(default)
+                + arms.iter().map(branch_block_cost).sum::<usize>()
+                + branch_block_cost(default)
         }
         // Lowered pattern matching nodes - count inner expressions
         NirExprKind::VariantTag { expr }
@@ -116,9 +202,22 @@ fn count_block_exprs(block: &NirBlock) -> usize {
                 else_block,
                 ..
             } => {
-                count_expr(condition)
-                    + count_block_exprs(then_block)
-                    + else_block.as_ref().map_or(0, count_block_exprs)
+                // Skip a cold arm: either the condition carries a
+                // `builtin::likely`/`builtin::unlikely` hint (see `cold_branch`)
+                // or the arm body carries a `cold_path()` marker (handled by
+                // `branch_block_cost`).
+                let cold = cold_branch(condition);
+                let then_cost = if cold == Some(ColdBranch::Then) {
+                    0
+                } else {
+                    branch_block_cost(then_block)
+                };
+                let else_cost = if cold == Some(ColdBranch::Else) {
+                    0
+                } else {
+                    else_block.as_ref().map_or(0, branch_block_cost)
+                };
+                count_expr(condition) + then_cost + else_cost
             }
             NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
                 count_block_exprs(body)

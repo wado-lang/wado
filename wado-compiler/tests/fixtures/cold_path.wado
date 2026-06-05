@@ -1,0 +1,66 @@
+// `builtin::cold_path()` marks the branch that contains it as cold: codegen
+// wraps the enclosing `if` condition in a branch hint (rendered as
+// `builtin::likely` / `builtin::unlikely` in the WIR) and the inliner excludes
+// the branch from its cost estimate. Unlike `likely` / `unlikely`, it needs no
+// boolean condition, so it works inside `if let` / `match` arms — which is the
+// whole point. Mirrors Rust's `std::hint::cold_path`.
+
+variant Cmd {
+    Go,
+    Stop,
+    Crash,
+}
+
+// `if let` else arm: the `Some` (then) branch is the hot path, so codegen
+// hints the condition likely-true.
+fn from_opt(opt: Option<i32>) -> i32 {
+    if let Some(x) = opt {
+        return x + 1;
+    } else {
+        builtin::cold_path();
+        return -1;
+    }
+}
+
+// `match` arm: the cold arm lowers into the tail of the discriminant chain,
+// and the hint lands on the enclosing comparison.
+fn handle(c: Cmd) -> i32 {
+    match c {
+        Cmd::Go => {
+            return 1;
+        }
+        Cmd::Stop => {
+            return 2;
+        }
+        Cmd::Crash => {
+            builtin::cold_path();
+            return -1;
+        }
+    }
+}
+
+// `if`-then arm: the marker is in the taken branch, so the condition is hinted
+// unlikely-true (`builtin::unlikely`). Exercises the opposite hint direction.
+fn guard_then(x: i32) -> i32 {
+    if x < 0 {
+        builtin::cold_path();
+        return -1;
+    }
+    return x;
+}
+
+export fn run() {
+    assert from_opt(Option::Some(7)) == 8;
+    assert from_opt(Option::None) == -1;
+    assert handle(Cmd::Go) == 1;
+    assert handle(Cmd::Stop) == 2;
+    assert handle(Cmd::Crash) == -1;
+    assert guard_then(5) == 5;
+    assert guard_then(-1) == -1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O0": ["cold_path", "builtin::likely(ref.test", "builtin::unlikely(x < 0)"]
+}

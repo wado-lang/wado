@@ -1953,6 +1953,8 @@ impl<'a> WirEmitter<'a> {
             WirInstr::Nop => {
                 f.instruction(&Instruction::Nop);
             }
+            // Pure marker consumed during WIR finalization; emits no code.
+            WirInstr::ColdPath => {}
             WirInstr::Drop(o) => {
                 self.emit_instr(f, o);
                 if !o.always_diverges() {

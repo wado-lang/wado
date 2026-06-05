@@ -462,6 +462,7 @@ impl FunctionTranslator<'_, '_> {
             }
 
             "builtin::unreachable" => Some(WirInstr::Unreachable),
+            "builtin::cold_path" => Some(WirInstr::ColdPath),
             "builtin::likely" | "builtin::unlikely" => {
                 let likely = builtin_name == "builtin::likely";
                 let expr = self.translate_expr(&args[0].expr);

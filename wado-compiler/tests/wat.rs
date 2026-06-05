@@ -109,6 +109,46 @@ fn test_branch_hints_values() {
     );
 }
 
+/// Test that `builtin::cold_path()` markers reach the actual
+/// `metadata.code.branch_hint` custom section — not just the WIR. `cold_path.wado`
+/// places markers in an `if let` else arm and a `match` tail (cold side ⇒ the
+/// condition is hinted likely-true, value 1) and in an `if`-then arm (cold side
+/// ⇒ unlikely-true, value 0), so both hint directions must appear in the decoded
+/// payload. This guards the `ColdPath` → `BranchHint` → emitter path end to end.
+#[test]
+fn test_cold_path_branch_hint_values() {
+    let result = compile_fixture("cold_path.wado");
+    let values = collect_branch_hint_values(&result.wasm);
+
+    assert!(
+        !values.is_empty(),
+        "No branch-hint entries decoded from cold_path.wado; \
+         cold_path() did not reach the metadata.code.branch_hint section"
+    );
+    assert!(
+        values.contains(&1),
+        "Expected a `likely` (1) hint from a cold else/match arm; decoded: {values:?}"
+    );
+    assert!(
+        values.contains(&0),
+        "Expected an `unlikely` (0) hint from a cold if-then arm; decoded: {values:?}"
+    );
+}
+
+/// Test that the guard-clause fall-through hint reaches the branch-hint section:
+/// `cold_path_fallthrough.wado` guards (`if ok { return v }`) whose fall-through
+/// is cold must emit `likely` (1) hints on their conditions.
+#[test]
+fn test_cold_path_fallthrough_branch_hint_values() {
+    let result = compile_fixture("cold_path_fallthrough.wado");
+    let values = collect_branch_hint_values(&result.wasm);
+
+    assert!(
+        values.contains(&1),
+        "Expected `likely` (1) hints for guard-clause fall-through; decoded: {values:?}"
+    );
+}
+
 /// Test that multi-value builtin calls with destructuring do not generate tuple structs.
 /// When `let [lo, hi] = builtin::i64_add128(...)` is used, the codegen should directly
 /// bind stack values to locals without creating a tuple struct (no struct.new after i64.add128).
