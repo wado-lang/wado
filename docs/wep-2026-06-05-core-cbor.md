@@ -68,7 +68,7 @@ pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<ByteList, Serialize
 /// cannot represent; `strict = false` is only meaningful when deserializing
 /// into `core:value`'s `Value`, where unrepresentable items fall to
 /// `Value::Unknown` instead of erroring.
-pub fn from_bytes<T: Deserialize, B: AsSlice<u8>>(input: B, strict: bool = true) -> Result<T, DeserializeError>;
+pub fn from_bytes<T: Deserialize, B: AsByteSlice>(input: B, strict: bool = true) -> Result<T, DeserializeError>;
 ```
 
 There is no `to_bytes_pretty` (CBOR is binary). Diagnostic notation (RFC 8949
@@ -87,35 +87,24 @@ type ByteList  = List<u8>;        // owned, growable
 type ByteSlice = ArraySlice<u8>;  // borrowed view (no copy)
 ```
 
-Letting `from_*` accept any of the three without copying needs a
-slice-conversion trait, and Wado does not have one yet: the prelude provides
-`From<T>`/`TryFrom<T>` but no `Into`, no `AsRef`, and no `AsSlice`. `List<T>` has
-an inherent `as_slice()`, but `Array<T>` only has `slice(start, end)` and
-`ArraySlice<T>` is its own view. Introducing the trait is therefore part of this
-WEP's groundwork (see TODO), with one open choice:
+Letting `from_*` accept any of the three without copying needs a byte-slice
+conversion trait. Introducing it is deliberate: a byte sequence is a first-class
+concept that deserves its own abstraction across the ecosystem, not an
+incidental `List<u8>`. Wado has only `From`/`TryFrom` today (no `Into`, `AsRef`,
+or slice-view trait), so this is part of the WEP's groundwork:
 
 ```wado
-// Option A — a general, reusable slice view (preferred): from_<T, B: AsSlice<u8>>
-pub trait AsSlice<T> {
-    fn as_slice(&self) -> ArraySlice<T>;
-}
-
-// Option B — a byte-specific trait, if a generic AsSlice proves awkward
 pub trait AsByteSlice {
     fn as_byte_slice(&self) -> ByteSlice;
 }
+// impl for ByteArray, ByteList, and ByteSlice (identity) — each a zero-copy view.
 ```
 
-Option A is more broadly useful but collides with `List::as_slice`'s inherent
-method and interacts with newtype method inheritance (`ByteList` inherits
-`List<u8>::as_slice`); Option B sidesteps that at the cost of a single-purpose
-trait. The resolution is deferred to implementation. Either way `from_*` accepts
-`ByteArray`/`ByteList`/`ByteSlice` (and, with Option A, plain `List<u8>`/
-`Array<u8>`).
+`from_*` accepts any `B: AsByteSlice`.
 
 Convention, applied to both `core:cbor` and `core:json`:
 
-- `from_*` accept any of the three byte types via `B: AsSlice<u8>`. `T` is
+- `from_*` accept any of the three byte types via `B: AsByteSlice`. `T` is
   normally inferred from context, so `let v: Foo = from_bytes(bytes)?` needs no
   turbofish.
 - `to_*` always return an owned `ByteList`.
@@ -200,7 +189,7 @@ design papered over disappears.
 pub fn to_bytes<T: Serialize>(value: &T) -> Result<ByteList, SerializeError>;
 pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<ByteList, SerializeError>;   // sorted keys, RFC 8785-style
 pub fn to_bytes_pretty<T: Serialize>(value: &T) -> Result<ByteList, SerializeError>;
-pub fn from_bytes<T: Deserialize, B: AsSlice<u8>>(input: B) -> Result<T, DeserializeError>;
+pub fn from_bytes<T: Deserialize, B: AsByteSlice>(input: B) -> Result<T, DeserializeError>;
 ```
 
 The string-returning entries (`to_string`, `to_string_pretty`, `from_string`)
@@ -432,10 +421,10 @@ already share code.
 ## TODO
 
 - [x] Vendor RFC 8949 at `wado-compiler/ref/rfc8949.txt`
-- [ ] prelude: a slice-conversion trait (`AsSlice<T>` preferred, or
-      `AsByteSlice`) — new, since Wado has only `From`/`TryFrom` today
+- [ ] prelude: `AsByteSlice` trait — new, since Wado has only `From`/`TryFrom`
+      today
 - [ ] prelude: `ByteArray`/`ByteList`/`ByteSlice` newtypes and their
-      `Serialize`/`Deserialize` (+ slice-conversion) impls
+      `AsByteSlice` and `Serialize`/`Deserialize` impls
 - [ ] serde: `serialize_bytes`/`deserialize_bytes`; `visit_i64`/`u64`/`i128`/
       `u128`/`bytes`/`unknown` with defaults; `FieldSchema::lookup(ByteSlice)`
 - [ ] compiler: emit the new `lookup` signature from the struct-deserialize
