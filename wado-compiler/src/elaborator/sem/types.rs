@@ -49,8 +49,8 @@ use crate::tir::{FunctionRef, TypeId};
 /// [`crate::ast::MethodCallExpr`].
 ///
 /// `function_ref` captures the resolved target (module, mangled name,
-/// monomorph info, and method-name metadata) so the future `reify` pass
-/// can emit the [`crate::tir::TirExprKind::MethodCall`] without re-running
+/// monomorph info, and method-name metadata) so `reify` can emit the
+/// [`crate::tir::TirExprKind::MethodCall`] without re-running
 /// trait lookup, blanket-impl selection, or method-name mangling.
 /// `self_kind` carries the receiver-adjustment decision (`self` / `&self`
 /// / `&mut self`) so reify can drive `adjust_receiver_for_self_kind` with
@@ -64,12 +64,7 @@ use crate::tir::{FunctionRef, TypeId};
 /// for-of `.into_iter()` / `.next()` dispatches also skip recording
 /// because they have no source-level `MethodCallExpr` to attach to.
 ///
-/// `#[allow(dead_code)]` on the fields is intentional: nothing reads them
-/// yet because the consumer (`reify`, Stage 5 of the WEP) has not landed.
-/// The Stage 4 contract is "the data is recorded and reachable;" the read
-/// path arrives with reify.
-///
-/// Stage 5 adds [`Self::is_ref_impl`]: receiver adjustment for `&self` /
+/// [`Self::is_ref_impl`]: receiver adjustment for `&self` /
 /// `&mut self` requires not only `self_kind` but also whether the method
 /// was found on a reference-type impl (`impl Trait for &T`), because such
 /// impls take an *extra* layer of `&` on the receiver. The flag is the
@@ -197,10 +192,10 @@ pub(crate) struct TypeAnnotations {
     pub(crate) desugars: IndexMap<SymbolKey, DesugarKind>,
     /// Generic instantiations decided by inference at call / construction
     /// sites (Gap 1 of Stage 5). Keyed by the call expression's, struct
-    /// literal's, or variant-ctor's [`AstId`]. See [`GenericInstantiation`].
-    ///
-    /// `#[allow(dead_code)]` until the call.rs / expr.rs recording call
-    /// sites are wired up in a follow-up of Stage 5.
+    /// literal's, or variant-ctor's [`AstId`]. Recorded by
+    /// `record_generic_instantiation*` (call.rs / expr.rs / stmt.rs); read
+    /// by reify via `ann_generic_instantiations`. See
+    /// [`GenericInstantiation`].
     pub(crate) generic_instantiations: IndexMap<SymbolKey, GenericInstantiation>,
     /// Capture analysis result for each closure expression (Gap 4 of
     /// Stage 5). Keyed by the [`crate::ast::ClosureExpr`]'s [`AstId`].
@@ -240,10 +235,6 @@ pub(crate) struct TypeAnnotations {
     /// the bundled case. Reify reads this to enumerate the
     /// expanded `TirHandlerBinding`s without re-running
     /// `collect_effect_impls_for_type`.
-    ///
-    /// `#[allow(dead_code)]` until `reify_with_handler` reads it
-    /// and the recording sites in `resolve_with_handler` /
-    /// `resolve_handler_binding` are wired through.
     pub(crate) handler_bindings: IndexMap<SymbolKey, HandlerBindingFacts>,
     /// Impl-block resolution facts (Gap 12 of Stage 5). Keyed by
     /// the [`crate::ast::ImplBlock`]'s [`AstId`]. Carries the
@@ -254,11 +245,8 @@ pub(crate) struct TypeAnnotations {
     /// driving `resume` validation, and the ref-type-impl flag
     /// for `&self` synthesis. See [`ImplFacts`].
     ///
-    /// `#[allow(dead_code)]` until the recording sites in the
-    /// `Item::Impl` arm of `elaborator.rs` and the reify consumer
-    /// in `reify_impl` are wired up; the field is introduced with
-    /// the Gap 12 design so the data shape is reviewable
-    /// independently.
+    /// Recorded in the `Item::Impl` arm of `elaborator.rs`; read by reify
+    /// in `reify_impl`.
     pub(crate) impl_facts: IndexMap<SymbolKey, ImplFacts>,
     /// Resolved `with` clause for each function / method declaration
     /// (Gap of Stage 5). Keyed by the [`crate::ast::Function`]'s or
@@ -701,8 +689,6 @@ pub(crate) struct StaticMethodDispatch {
 /// alongside `type_args` so reify can drop straight into the TIR slot
 /// without re-running `make_generic_instance` or mangled-name
 /// construction.
-///
-/// `#[allow(dead_code)]` because reify is the consumer (Stage 5).
 #[derive(Clone)]
 pub(crate) struct GenericInstantiation {
     pub(crate) type_args: Vec<TypeId>,
@@ -794,10 +780,10 @@ pub(crate) struct AssertCaptureInfo {
 
 /// Handler-binding resolution facts recorded once per
 /// [`crate::ast::EffectHandlerBinding`] at annotate time (Gap 13
-/// of Stage 5). Reify reads this entry to enumerate the same
-/// `TirHandlerBinding` list annotate's combined walk produces,
-/// without re-running `collect_effect_impls_for_type` or the
-/// explicit-form `trait_env` validation.
+/// of Stage 5). Reify reads this entry to enumerate the
+/// `TirHandlerBinding`s without re-running
+/// `collect_effect_impls_for_type` or the explicit-form
+/// `trait_env` validation.
 #[derive(Clone)]
 pub(crate) struct HandlerBindingFacts {
     /// One entry per effect this binding installs. For the

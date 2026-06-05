@@ -690,12 +690,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///
     /// Skipped when `type_args` is empty (the site is non-generic) so the
     /// map only carries decisions reify needs.
-    ///
-    /// `#[allow(dead_code)]` while the recording call sites in
-    /// `call.rs` / `expr.rs` are still being wired up — once every
-    /// generic call / struct literal / variant ctor records, drop the
-    /// allow.
-    #[allow(dead_code)]
     pub(super) fn record_generic_instantiation(
         &mut self,
         ast_id: crate::ast::AstId,
@@ -811,15 +805,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Record the handler-binding resolution facts (Gap 13 of
     /// Stage 5) keyed by the
     /// [`crate::ast::EffectHandlerBinding`]'s [`AstId`]. Reify
-    /// reads this entry to enumerate the same `TirHandlerBinding`
-    /// list annotate's combined walk produces, without re-running
-    /// `collect_effect_impls_for_type` or the explicit-form
-    /// `trait_env` validation. See [`sem::types::HandlerBindingFacts`].
-    ///
-    /// `#[allow(dead_code)]` until the recording sites in
-    /// `resolve_explicit_handler_binding` /
-    /// `resolve_bundled_handler_binding` are wired through.
-    #[allow(dead_code)]
+    /// reads this entry to enumerate the `TirHandlerBinding`s
+    /// without re-running `collect_effect_impls_for_type` or the
+    /// explicit-form `trait_env` validation. See
+    /// [`sem::types::HandlerBindingFacts`].
     pub(super) fn record_handler_binding_facts(
         &mut self,
         ast_id: crate::ast::AstId,
@@ -835,11 +824,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// target, the trait reference, the type params, or the
     /// associated types happens inside `reify_impl`.
     /// See [`sem::types::ImplFacts`].
-    ///
-    /// `#[allow(dead_code)]` until the recording site in the
-    /// `Item::Impl` arm of `resolve_module` is wired up and
-    /// `reify_impl` reads the record.
-    #[allow(dead_code)]
     pub(super) fn record_impl_facts(
         &mut self,
         ast_id: crate::ast::AstId,
@@ -853,12 +837,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Stage 5). `reify_module` reads
     /// [`sem::decls::ModuleDecls::pending_synthesis_requests`] and
     /// pushes each onto the emitted [`tir::TirModule::synthesis_requests`].
-    ///
-    /// `#[allow(dead_code)]` until the recording site at the
-    /// elaborator's existing
-    /// `tir_module.synthesis_requests.push(...)` is rerouted
-    /// through here.
-    #[allow(dead_code)]
     pub(super) fn record_pending_synthesis_request(&mut self, req: tir::SynthesisRequest) {
         self.sem.decls.pending_synthesis_requests.push(req);
     }
@@ -1458,13 +1436,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
 
                     // `impl Trait for Type;` — record synthesis request and skip.
-                    // Stage 5 / Gap 12: the synthesis-request push lands both
-                    // on the existing `tir_module.synthesis_requests` (so the
-                    // current combined walk's behaviour is preserved) and on
-                    // `sem.decls.pending_synthesis_requests` (so reify_module
-                    // reads it once the orchestration switch flips). The
-                    // duplication is intentional and goes away when the
-                    // existing push is retired alongside the combined walk.
+                    // The request lands on `sem.decls.pending_synthesis_requests`;
+                    // `reify_module` reads it and emits the
+                    // `tir_module.synthesis_requests`.
                     if impl_block.is_synthesize_request {
                         if let Some(ref trait_type) = impl_block.trait_type {
                             let synth_trait_name = self.get_type_name_full(trait_type);
@@ -1482,7 +1456,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 type_params,
                                 span: impl_block.span,
                             };
-                            // reify_module reads `pending_synthesis_requests`.
                             self.record_pending_synthesis_request(req);
                         }
                         self.trait_ctx = saved_trait_ctx;

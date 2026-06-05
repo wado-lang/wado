@@ -77,14 +77,7 @@ pub(crate) struct ModuleDecls {
     /// `is_synthesize_request` impl block; `reify_module` reads
     /// this list and pushes each onto the emitted
     /// `TirModule::synthesis_requests`. Decouples annotate
-    /// (which records) from reify (which emits) while preserving
-    /// the same per-module output the existing combined walk
-    /// produces.
-    ///
-    /// `#[allow(dead_code)]` until the recording site at the
-    /// elaborator's existing `tir_module.synthesis_requests.push`
-    /// is rerouted through `Elaborator::record_pending_synthesis_request`
-    /// and `reify_module` reads the list.
+    /// (which records) from reify (which emits).
     pub(crate) pending_synthesis_requests: Vec<crate::tir::SynthesisRequest>,
 
     /// Per-module additions to the type tables, consulted by
