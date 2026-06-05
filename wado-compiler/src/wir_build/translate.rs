@@ -7,7 +7,7 @@ use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{
-    NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirFunction, NirParam, NirStmt, NirStmtKind,
+    NirBinaryOp, NirFunction, NirParam, NirStmt, NirStmtKind,
     NirUnaryOp,
 };
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
@@ -15,7 +15,7 @@ use crate::wir::{CanonicalIntrinsic, WirInstr, WirName, WirType, WirTypeDef, Wir
 
 use super::context::WirContext;
 use crate::nir_arena::{
-    ArenaCallArg, ArmData, BlockId, Body, ExprId, ExprKind, PatId, PatKind, StmtId, StmtKind,
+    BlockId, Body, ExprId, ExprKind, StmtId, StmtKind,
 };
 
 /// Recursively collect variable names from Let statements.

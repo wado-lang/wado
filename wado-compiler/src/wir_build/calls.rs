@@ -6,13 +6,12 @@
 //! the struct definition and the primary translation dispatch.
 
 use crate::module_source::ModuleSource;
-use crate::nir::{CallArg, NirExpr, NirExprKind};
 use crate::tir::{TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
 use super::context::WirContext;
 use super::translate::FunctionTranslator;
-use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind};
+use crate::nir_arena::{ArenaCallArg, ExprId, ExprKind};
 
 /// Extract a compile-time constant i32 from a TIR expression (for SIMD lane indices).
 fn extract_i32_const(kind: &ExprKind) -> u8 {

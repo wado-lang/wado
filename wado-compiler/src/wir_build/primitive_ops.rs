@@ -6,12 +6,12 @@
 
 use crate::compiler_item::SeqField;
 use crate::module_source::ModuleSource;
-use crate::nir::{NirBinaryOp, NirExpr, NirExprKind, NirUnaryOp};
+use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
 use super::translate::FunctionTranslator;
-use crate::nir_arena::{Body, ExprId, ExprKind};
+use crate::nir_arena::{ExprId, ExprKind};
 
 /// Classification of a TIR primitive type by the Wasm numeric type family
 /// it is represented as, together with signedness for integer types.

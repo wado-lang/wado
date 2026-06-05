@@ -6,13 +6,13 @@
 //! the struct definition and the primary translation dispatch.
 
 use crate::module_source::ModuleSource;
-use crate::nir::{NirBlock, NirExpr, NirLiteralPattern, NirMatchArm, NirPattern};
+use crate::nir::NirLiteralPattern;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
 use super::translate::{FunctionTranslator, LabelEntry};
 use crate::nir_arena::{
-    ArenaCallArg, ArmData, BlockId, Body, ExprId, ExprKind, PatId, PatKind, StmtId,
+    ArmData, BlockId, Body, ExprId, PatId, PatKind,
 };
 
 /// Case enumeration for a variant or enum scrutinee, used to check whether a
@@ -36,12 +36,13 @@ impl FunctionTranslator<'_, '_> {
     /// Translate switch expression using `br_table`.
     pub(super) fn translate_switch(
         &mut self,
-        scrutinee: &NirExpr,
+        scrutinee: ExprId,
         min_value: i64,
-        arms: &[NirBlock],
-        default: &NirBlock,
+        arms: &[BlockId],
+        default: BlockId,
         result_type: TypeId,
     ) -> WirInstr {
+        let arena = self.body;
         let has_result = result_type != TypeTable::UNIT && result_type != TypeTable::NEVER;
         let result_wir_type = if has_result {
             Some(self.ctx.type_id_to_wir_type(self.type_table, result_type))
@@ -52,7 +53,7 @@ impl FunctionTranslator<'_, '_> {
         // Translate scrutinee and adjust for min_value
         let scrut = self.translate_expr(scrutinee);
         let is_i64 = matches!(
-            self.type_table.get(scrutinee.type_id),
+            self.type_table.get(arena.exprs[scrutinee].type_id),
             ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
         );
 
@@ -104,9 +105,9 @@ impl FunctionTranslator<'_, '_> {
             });
         }
         let default_body = if has_result {
-            self.translate_stmts_as_value(&default.stmts)
+            self.translate_stmts_as_value(&arena.blocks[default].stmts)
         } else {
-            self.translate_stmts(&default.stmts)
+            self.translate_stmts(&arena.blocks[default].stmts)
         };
         for _ in 0..default_block_count {
             self.label_stack.pop();
@@ -126,9 +127,9 @@ impl FunctionTranslator<'_, '_> {
                     });
                 }
                 let body = if has_result {
-                    self.translate_stmts_as_value(&arm.stmts)
+                    self.translate_stmts_as_value(&arena.blocks[*arm].stmts)
                 } else {
-                    self.translate_stmts(&arm.stmts)
+                    self.translate_stmts(&arena.blocks[*arm].stmts)
                 };
                 for _ in 0..block_count {
                     self.label_stack.pop();
@@ -194,14 +195,17 @@ impl FunctionTranslator<'_, '_> {
     /// lower-pass change cannot turn into a hard ICE.
     pub(super) fn translate_let_pattern(
         &mut self,
-        pattern: &NirPattern,
-        value: &NirExpr,
+        pattern: PatId,
+        value: ExprId,
     ) -> Option<WirInstr> {
         let value_instr = self.translate_expr(value);
+        let arena = self.body;
 
-        match pattern {
+        match &arena.pats[pattern].kind {
             PatKind::Tuple(patterns, _) => {
-                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, value.type_id);
+                let wir_type =
+                    self.ctx
+                        .type_id_to_wir_type(self.type_table, arena.exprs[value].type_id);
                 if let WirType::Ref { ref type_id, .. } = wir_type {
                     let mut instrs = Vec::new();
 
@@ -219,7 +223,7 @@ impl FunctionTranslator<'_, '_> {
 
                     // Bind each element
                     for (i, sub_pattern) in patterns.iter().enumerate() {
-                        if let PatKind::Binding { local_index, .. } = sub_pattern {
+                        if let PatKind::Binding { local_index, .. } = &arena.pats[*sub_pattern].kind {
                             let local_name = self.local_name(*local_index);
                             let field_name_str = format!("{i}");
                             let field_result_ty =
@@ -261,8 +265,8 @@ impl FunctionTranslator<'_, '_> {
     /// Translate match expression as nested if-else chain.
     pub(super) fn translate_match(
         &mut self,
-        scrutinee: &NirExpr,
-        arms: &[NirMatchArm],
+        scrutinee: ExprId,
+        arms: &[ArmData],
         result_type: TypeId,
     ) -> WirInstr {
         let has_result = result_type != TypeTable::UNIT && result_type != TypeTable::NEVER;
@@ -279,13 +283,14 @@ impl FunctionTranslator<'_, '_> {
         let scrut_local_name = format!("__match_scrut_{match_id}");
         let scrut_wir_type = self
             .ctx
-            .type_id_to_wir_type(self.type_table, scrutinee.type_id);
+            .type_id_to_wir_type(self.type_table, self.body.exprs[scrutinee].type_id);
 
         // Precompute, per source-order arm, whether it will be lowered as
         // irrefutable (body only, no surrounding `If`). Both the `if_depths`
         // depth counter below and the emission loop that follows consume this
         // slice, so the two views cannot disagree.
-        let emitted_as_irrefutable = self.compute_emitted_as_irrefutable(scrutinee.type_id, arms);
+        let emitted_as_irrefutable =
+            self.compute_emitted_as_irrefutable(self.body.exprs[scrutinee].type_id, arms);
 
         // Build the if-else chain from inside out (last arm first)
         let mut result = WirInstr::Unreachable; // fallback: non-exhaustive
@@ -302,8 +307,10 @@ impl FunctionTranslator<'_, '_> {
                 // When the pattern is trivially true (Binding/Wildcard) and a guard
                 // is present, we fold into a single If instead of nested 2-level If,
                 // so only count 1 depth instead of 2.
-                let pattern_trivially_true =
-                    matches!(arm.pattern, PatKind::Wildcard | PatKind::Binding { .. });
+                let pattern_trivially_true = matches!(
+                    &self.body.pats[arm.pattern].kind,
+                    PatKind::Wildcard | PatKind::Binding { .. }
+                );
                 if !emitted_as_irrefutable[idx] {
                     depth += 1;
                     if arm.guard.is_some() && !pattern_trivially_true {
@@ -339,22 +346,22 @@ impl FunctionTranslator<'_, '_> {
                     });
                 }
                 self.emit_pattern_bindings(
-                    &arm.pattern,
+                    arm.pattern,
                     &scrut_local_name,
-                    scrutinee.type_id,
+                    self.body.exprs[scrutinee].type_id,
                     &mut bindings,
                 );
                 let body = if has_result {
-                    self.translate_expr_as_value(&arm.body)
+                    self.translate_expr_as_value(arm.body)
                 } else {
-                    let instr = self.translate_expr(&arm.body);
+                    let instr = self.translate_expr(arm.body);
                     // If the arm body produces a non-unit value (e.g. after inlining
                     // transforms a Block into a bare call), drop it to avoid leaving
                     // values on the Wasm stack. Guard with `produces_stack_value()` to
                     // avoid emitting `drop` after instructions that produce no value
                     // (e.g. `Block{result: None}` from LabeledBlock fusion).
-                    if arm.body.type_id != TypeTable::UNIT
-                        && arm.body.type_id != TypeTable::NEVER
+                    if self.body.exprs[arm.body].type_id != TypeTable::UNIT
+                        && self.body.exprs[arm.body].type_id != TypeTable::NEVER
                         && instr.produces_stack_value()
                     {
                         WirInstr::Drop(Box::new(instr))
@@ -376,9 +383,9 @@ impl FunctionTranslator<'_, '_> {
                 .collect();
 
             let condition = self.translate_pattern_condition(
-                &arm.pattern,
+                arm.pattern,
                 &scrut_local_name,
-                scrutinee.type_id,
+                self.body.exprs[scrutinee].type_id,
             );
 
             // `emitted_as_irrefutable[source_idx]` already folds in both the
@@ -413,7 +420,7 @@ impl FunctionTranslator<'_, '_> {
                     // (Binding/Wildcard), these bindings are safe to emit unconditionally.
                     // We embed bindings into the condition via Seq so that the If is the
                     // top-level instruction (required for value-producing match expressions).
-                    let guard_expr = self.translate_expr(guard);
+                    let guard_expr = self.translate_expr(*guard);
                     let condition_with_bindings = if bindings.is_empty() {
                         guard_expr
                     } else {
@@ -431,7 +438,7 @@ impl FunctionTranslator<'_, '_> {
                     };
                 } else {
                     let mut inner_then = bindings.clone();
-                    let guard_expr = self.translate_expr(guard);
+                    let guard_expr = self.translate_expr(*guard);
                     // Bindings run once, before the guard, in the
                     // `inner_then` prefix below — the guard may reference
                     // them. The inner-if's `then_body` is the arm body
@@ -496,13 +503,13 @@ impl FunctionTranslator<'_, '_> {
     fn compute_emitted_as_irrefutable(
         &self,
         scrut_type: TypeId,
-        arms: &[NirMatchArm],
+        arms: &[ArmData],
     ) -> Vec<bool> {
         let mut out: Vec<bool> = arms
             .iter()
             .map(|arm| {
                 matches!(
-                    arm.pattern,
+                    &self.body.pats[arm.pattern].kind,
                     PatKind::Wildcard
                         | PatKind::Binding { .. }
                         | PatKind::Struct { .. }
@@ -527,7 +534,7 @@ impl FunctionTranslator<'_, '_> {
     /// `PatKind::Or` whose alternatives are themselves `Variant`/`Enum`
     /// patterns. Anything else (wildcards, literals, ranges, guards, nested
     /// Ors with non-Variant/Enum alternatives) bails out.
-    fn match_is_exhaustive(&self, scrut_type: TypeId, arms: &[NirMatchArm]) -> bool {
+    fn match_is_exhaustive(&self, scrut_type: TypeId, arms: &[ArmData]) -> bool {
         if arms.is_empty() {
             return false;
         }
@@ -543,7 +550,7 @@ impl FunctionTranslator<'_, '_> {
         let mut seen = vec![false; total_cases];
         let mut covered = 0usize;
         for arm in arms {
-            if !self.arm_pattern_covers_cases(&arm.pattern, &index_of, &mut seen, &mut covered) {
+            if !self.arm_pattern_covers_cases(arm.pattern, &index_of, &mut seen, &mut covered) {
                 return false;
             }
         }
@@ -556,12 +563,12 @@ impl FunctionTranslator<'_, '_> {
     /// shape outside the supported set.
     fn arm_pattern_covers_cases(
         &self,
-        pattern: &NirPattern,
+        pattern: PatId,
         index_of: &CaseIndexer,
         seen: &mut [bool],
         covered: &mut usize,
     ) -> bool {
-        match pattern {
+        match &self.body.pats[pattern].kind {
             PatKind::Variant { variant_name, .. } => {
                 let Some(i) = index_of.by_name(variant_name) else {
                     return false;
@@ -572,8 +579,9 @@ impl FunctionTranslator<'_, '_> {
                 self.record_case(*case_index as usize, seen, covered)
             }
             PatKind::Or(alts) => alts
+                .clone()
                 .iter()
-                .all(|alt| self.arm_pattern_covers_cases(alt, index_of, seen, covered)),
+                .all(|alt| self.arm_pattern_covers_cases(*alt, index_of, seen, covered)),
             _ => false,
         }
     }
@@ -650,11 +658,11 @@ impl FunctionTranslator<'_, '_> {
     /// Returns an i32 (0 or 1) indicating whether the pattern matches.
     fn translate_pattern_condition(
         &self,
-        pattern: &NirPattern,
+        pattern: PatId,
         scrut_local: &str,
         scrut_type: TypeId,
     ) -> WirInstr {
-        match pattern {
+        match &self.body.pats[pattern].kind {
             PatKind::Wildcard | PatKind::Binding { .. } => {
                 WirInstr::I32Const(1) // always matches
             }
@@ -838,6 +846,7 @@ impl FunctionTranslator<'_, '_> {
             }
             PatKind::Or(alternatives) => {
                 // Or pattern: combine conditions with logical OR
+                let alternatives = alternatives.clone();
                 let mut result = WirInstr::I32Const(0);
                 for alt in alternatives {
                     let cond = self.translate_pattern_condition(alt, scrut_local, scrut_type);
@@ -915,12 +924,13 @@ impl FunctionTranslator<'_, '_> {
     /// For or-patterns, conditionally extracts bindings from whichever alternative matched.
     fn emit_pattern_bindings(
         &mut self,
-        pattern: &NirPattern,
+        pattern: PatId,
         scrut_local: &str,
         scrut_type: TypeId,
         instrs: &mut Vec<WirInstr>,
     ) {
-        match pattern {
+        let arena = self.body;
+        match &arena.pats[pattern].kind {
             PatKind::Binding { local_index, .. } => {
                 instrs.push(WirInstr::LocalSet {
                     name: self.local_name(*local_index),
@@ -977,7 +987,7 @@ impl FunctionTranslator<'_, '_> {
                         .iter()
                         .filter(|b| {
                             !matches!(
-                                b,
+                                &arena.pats[**b].kind,
                                 PatKind::Wildcard
                                     | PatKind::Literal(_)
                                     | PatKind::Enum { .. }
@@ -1058,7 +1068,7 @@ impl FunctionTranslator<'_, '_> {
                             local_index,
                             type_id,
                             ..
-                        } = binding
+                        } = &arena.pats[*binding].kind
                         {
                             // Check the local's actual type (which may have been
                             // promoted to Box<T> by the address-taken boxing pass)
@@ -1081,7 +1091,7 @@ impl FunctionTranslator<'_, '_> {
                                 instrs,
                             );
                         } else if !matches!(
-                            binding,
+                            &arena.pats[*binding].kind,
                             PatKind::Wildcard
                                 | PatKind::Literal(_)
                                 | PatKind::Enum { .. }
@@ -1105,7 +1115,7 @@ impl FunctionTranslator<'_, '_> {
                                 name: temp_name.clone(),
                                 value: Box::new(payload_get),
                             });
-                            self.emit_pattern_bindings(binding, &temp_name, payload_tid, instrs);
+                            self.emit_pattern_bindings(*binding, &temp_name, payload_tid, instrs);
                         }
                     }
                 } else {
@@ -1115,7 +1125,7 @@ impl FunctionTranslator<'_, '_> {
                             local_index,
                             type_id,
                             ..
-                        } = binding
+                        } = &arena.pats[*binding].kind
                         {
                             let wir = self.ctx.type_id_to_wir_type(self.type_table, *type_id);
                             // Skip unit-typed bindings (no Wasm local exists for unit)
@@ -1155,7 +1165,7 @@ impl FunctionTranslator<'_, '_> {
                             }),
                             result_ty: field_result_ty.clone(),
                         };
-                        match sub_pattern {
+                        match &arena.pats[*sub_pattern].kind {
                             PatKind::Binding { local_index, .. } => {
                                 let local_type_id =
                                     if (*local_index as usize) < self.tir_func.locals.len() {
@@ -1191,7 +1201,7 @@ impl FunctionTranslator<'_, '_> {
                                     value: Box::new(field_get),
                                 });
                                 self.emit_pattern_bindings(
-                                    sub_pattern,
+                                    *sub_pattern,
                                     &temp_name,
                                     elem_type,
                                     instrs,
@@ -1217,7 +1227,7 @@ impl FunctionTranslator<'_, '_> {
                             }),
                             result_ty: field_result_ty,
                         };
-                        match &field.pattern {
+                        match &arena.pats[field.pattern].kind {
                             PatKind::Binding { local_index, .. } => {
                                 instrs.push(WirInstr::LocalSet {
                                     name: self.local_name(*local_index),
@@ -1242,7 +1252,7 @@ impl FunctionTranslator<'_, '_> {
                                     value: Box::new(field_get),
                                 });
                                 self.emit_pattern_bindings(
-                                    &field.pattern,
+                                    field.pattern,
                                     &temp_name,
                                     field_type,
                                     instrs,
@@ -1255,7 +1265,8 @@ impl FunctionTranslator<'_, '_> {
             PatKind::Or(alternatives) => {
                 // Or patterns: emit bindings for each alternative, guarded by its condition.
                 // For alternatives with only wildcards (no real bindings), skip entirely.
-                let has_any_bindings = alternatives.iter().any(pattern_has_bindings);
+                let alternatives = alternatives.clone();
+                let has_any_bindings = alternatives.iter().any(|alt| pattern_has_bindings(arena, *alt));
                 if !has_any_bindings {
                     return;
                 }
@@ -1264,9 +1275,9 @@ impl FunctionTranslator<'_, '_> {
                 // Build a nested if-else chain from the inside out.
                 let mut result: Option<WirInstr> = None;
                 for alt in alternatives.iter().rev() {
-                    let cond = self.translate_pattern_condition(alt, scrut_local, scrut_type);
+                    let cond = self.translate_pattern_condition(*alt, scrut_local, scrut_type);
                     let mut body = Vec::new();
-                    self.emit_pattern_bindings(alt, scrut_local, scrut_type, &mut body);
+                    self.emit_pattern_bindings(*alt, scrut_local, scrut_type, &mut body);
                     let else_body = result.map(|r| vec![r]);
                     result = Some(WirInstr::If {
                         condition: Box::new(cond),
@@ -1397,7 +1408,7 @@ impl FunctionTranslator<'_, '_> {
         variant_type: TypeId,
         case_index: u32,
         case_name: &str,
-        payload: Option<&NirExpr>,
+        payload: Option<ExprId>,
         result_type: TypeId,
     ) -> WirInstr {
         // Get the variant name and module source
@@ -1519,11 +1530,11 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Translate variant test: check if variant is of a specific case.
-    pub(super) fn translate_variant_test(&mut self, inner: &NirExpr, case_index: u32) -> WirInstr {
+    pub(super) fn translate_variant_test(&mut self, inner: ExprId, case_index: u32) -> WirInstr {
         let val = self.translate_expr(inner);
 
         // Look up variant type info
-        let (var_name, var_module) = match self.type_table.get(inner.type_id) {
+        let (var_name, var_module) = match self.type_table.get(self.body.exprs[inner].type_id) {
             ResolvedType::Variant {
                 name,
                 module_source,
@@ -1546,7 +1557,7 @@ impl FunctionTranslator<'_, '_> {
             }
             _ => {
                 // Non-variant: compare discriminant directly
-                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, inner.type_id);
+                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, self.body.exprs[inner].type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     return WirInstr::I32Eq(
                         Box::new(WirInstr::StructGet {
@@ -1572,7 +1583,7 @@ impl FunctionTranslator<'_, '_> {
         {
             if case.payload.is_empty() {
                 // Unit variant: check discriminant
-                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, inner.type_id);
+                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, self.body.exprs[inner].type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     return WirInstr::I32Eq(
                         Box::new(WirInstr::StructGet {
@@ -1598,7 +1609,7 @@ impl FunctionTranslator<'_, '_> {
         }
 
         // Fallback: compare discriminant
-        let wir_type = self.ctx.type_id_to_wir_type(self.type_table, inner.type_id);
+        let wir_type = self.ctx.type_id_to_wir_type(self.type_table, self.body.exprs[inner].type_id);
         if let WirType::Ref { type_id, .. } = wir_type {
             WirInstr::I32Eq(
                 Box::new(WirInstr::StructGet {
@@ -1617,13 +1628,13 @@ impl FunctionTranslator<'_, '_> {
     /// Translate variant payload extraction.
     pub(super) fn translate_variant_payload(
         &mut self,
-        inner: &NirExpr,
+        inner: ExprId,
         case_index: u32,
     ) -> WirInstr {
         let val = self.translate_expr(inner);
 
         // Look up variant type info
-        let (var_name, var_module) = match self.type_table.get(inner.type_id) {
+        let (var_name, var_module) = match self.type_table.get(self.body.exprs[inner].type_id) {
             ResolvedType::Variant {
                 name,
                 module_source,
@@ -1690,17 +1701,21 @@ impl FunctionTranslator<'_, '_> {
     }
 }
 
-fn pattern_has_bindings(pattern: &NirPattern) -> bool {
-    match pattern {
+fn pattern_has_bindings(body: &Body, pattern: PatId) -> bool {
+    match &body.pats[pattern].kind {
         PatKind::Binding { .. } => true,
         PatKind::Wildcard
         | PatKind::Literal(_)
         | PatKind::Enum { .. }
         | PatKind::ConstantValue { .. }
         | PatKind::Range { .. } => false,
-        PatKind::Variant { bindings, .. } => bindings.iter().any(pattern_has_bindings),
-        PatKind::Tuple(subs, _) => subs.iter().any(pattern_has_bindings),
-        PatKind::Struct { fields, .. } => fields.iter().any(|f| pattern_has_bindings(&f.pattern)),
-        PatKind::Or(alts) => alts.iter().any(pattern_has_bindings),
+        PatKind::Variant { bindings, .. } => {
+            bindings.iter().any(|p| pattern_has_bindings(body, *p))
+        }
+        PatKind::Tuple(subs, _) => subs.iter().any(|p| pattern_has_bindings(body, *p)),
+        PatKind::Struct { fields, .. } => {
+            fields.iter().any(|f| pattern_has_bindings(body, f.pattern))
+        }
+        PatKind::Or(alts) => alts.iter().any(|p| pattern_has_bindings(body, *p)),
     }
 }

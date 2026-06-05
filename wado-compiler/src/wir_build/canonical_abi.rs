@@ -6,7 +6,7 @@
 //! the struct definition and the primary translation dispatch.
 
 use crate::module_source::ModuleSource;
-use crate::nir::{CallArg, FunctionRef, NirExpr, NirExprKind};
+use crate::nir::FunctionRef;
 use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId};
 use crate::wir::{
