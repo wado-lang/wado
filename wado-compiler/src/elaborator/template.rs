@@ -8,7 +8,7 @@
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::tir::{TemplateFormatSpec, TirExpr, TirExprKind};
+use crate::tir::{TemplateFormatSpec, TypeId};
 
 use super::Elaborator;
 use super::types::FunctionContext;
@@ -18,7 +18,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         template: &ast::TemplateStringExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
+    ) -> TypeId {
         let string_type = self.get_string_struct_type();
 
         // Walk each interpolation sub-expression so its facts
@@ -28,11 +28,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `TemplateString`) from the AST + these facts.
         for part in &template.parts {
             if let ast::TemplatePart::Interpolation { expr, .. } = part {
-                let _ = self.resolve_expr(expr, ctx, None);
+                self.resolve_expr(expr, ctx, None);
             }
         }
 
-        TirExpr::new(TirExprKind::Unit, string_type, template.span)
+        string_type
     }
 }
 

@@ -38,7 +38,7 @@ fn build_with_invocations(
         )
         .await
         .expect("loader should succeed in this fixture");
-        semantics_of(loaded, host, LogLevel::default())
+        semantics_of(loaded, host, LogLevel::default(), true)
     })
 }
 

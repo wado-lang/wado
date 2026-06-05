@@ -6,26 +6,13 @@ use crate::ast::{self, Expr, Item, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
-use crate::tir::{
-    CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable,
-};
+use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
 use super::infer::InferCtx;
 use super::types::{FunctionContext, TypeError};
-
-/// Body-walk placeholder for a resolved call. Stage 7-B: the combined walk
-/// records the dispatch decision (`static_method_dispatch` /
-/// `generic_instantiations` / `call_param_types` / the variant + `From`
-/// facts) and resolves the arguments for their side-effect fact recording,
-/// but no longer assembles the call's TIR — reify is the sole producer and
-/// rebuilds it from the recorded facts. The returned `TirExpr` only needs
-/// the right `type_id` + `span` for the caller's outer typecheck /
-/// `expression_types` recording.
-fn placeholder(type_id: TypeId, span: crate::token::Span) -> TirExpr {
-    TirExpr::new(TirExprKind::Unit, type_id, span)
-}
+use super::util::placeholder;
 
 /// View of a `ResolvedType::Function` after peeling references and
 /// fn-type newtypes. Returned by [`Elaborator::as_fn_signature`].
@@ -213,35 +200,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         call: &ast::CallExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         // Check if this is a closure call (calling a local variable with function type)
         if let Expr::Ident(ident) = &call.callee
             && !ident.name.contains("::")
             && let Some(local) = ctx.lookup(&ident.name)
             && let Some(sig) = self.as_fn_signature(local.type_id)
         {
-            let local_index = local.index;
-            let local_type_id = local.type_id;
-
             // `fn mut` closures need a `mut` root binding — mirrors
             // Rust's FnMut rule. The check goes through the same helper
             // used by the indirect-call path below so identifier and
             // non-identifier callees share one code path.
             self.check_fn_mut_root_mutability(&call.callee, ctx, sig.is_mut);
 
-            let local_expr = TirExpr::new(
-                TirExprKind::Local {
-                    index: local_index,
-                    name: ident.name.clone(),
-                },
-                local_type_id,
-                ident.span,
-            );
-
             return self.build_indirect_call(
                 call,
                 ctx,
-                local_expr,
                 &sig.params,
                 sig.return_type,
                 /* pad_with_defaults */ true,
@@ -257,9 +231,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `MethodCall`, not as `Call { callee: FieldAccess }`, so this
         // branch never alters method dispatch (Rust policy).
         if !matches!(&call.callee, Expr::Ident(_)) {
-            let callee_expr = self.resolve_expr(&call.callee, ctx, None);
+            let callee_type = self.resolve_expr(&call.callee, ctx, None);
 
-            if let Some(sig) = self.as_fn_signature(callee_expr.type_id) {
+            if let Some(sig) = self.as_fn_signature(callee_type) {
                 // Enforce `fn mut` root-mutability for non-identifier
                 // callees too: `(h.f)()`, `arr[i]()`, `(arr[i].f)()`, …
                 // require the root binding to be `mut`. A temporary root
@@ -268,7 +242,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return self.build_indirect_call(
                     call,
                     ctx,
-                    callee_expr,
                     &sig.params,
                     sig.return_type,
                     /* pad_with_defaults */ false,
@@ -281,18 +254,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // confusing "unknown function" error. Suppress the message
             // when the callee already resolved to the error type so we
             // don't pile a second diagnostic on top of the first.
-            if callee_expr.type_id != TypeTable::ERROR {
-                let type_name = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .type_name(callee_expr.type_id);
+            if callee_type != TypeTable::ERROR {
+                let type_name = self.tysys.type_table.borrow().type_name(callee_type);
                 let _ = self.logger.error(TypeError::CalleeNotCallable {
                     type_name,
                     span: call.callee.span(),
                 });
             }
-            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+            return TypeTable::ERROR;
         }
 
         // After the closure-call and non-Ident-callee fast paths above
@@ -316,7 +285,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ..
         } = &callee_kind
         {
-            let args: Vec<TirExpr> = call
+            let args: Vec<TypeId> = call
                 .args
                 .iter()
                 .map(|a| self.resolve_expr(a, ctx, None))
@@ -392,7 +361,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .enumerate()
             .map(|(i, arg)| {
                 let expected_type = param_types.get(i).copied();
-                self.resolve_expr(arg, ctx, expected_type)
+                placeholder(self.resolve_expr(arg, ctx, expected_type), arg.span())
             })
             .collect();
 
@@ -543,7 +512,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             call.id,
                             super::sem::types::DesugarKind::NewtypeFromCollapse,
                         );
-                        return args[0].clone();
+                        return args[0].type_id;
                     }
 
                     // Newtype→Base: u64::from(UserId_val) where type UserId = u64
@@ -557,7 +526,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         );
                         // Stage 7-B: reify rebuilds the newtype `Cast` from the
                         // recorded `DesugarKind`; project only the result type.
-                        return placeholder(base_id, call.span);
+                        return base_id;
                     }
 
                     // Base→Newtype: UserId::from(u64_val) where type UserId = u64
@@ -576,7 +545,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             );
                             // Stage 7-B: reify rebuilds the newtype `Cast` from
                             // the recorded `DesugarKind`; project only the type.
-                            return placeholder(newtype_type_id, call.span);
+                            return newtype_type_id;
                         }
                     }
                 }
@@ -616,17 +585,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // construction, or monomorph-info shaping — facts reify
                 // cannot reconstruct from the AST alone. It returns only a
                 // typed placeholder.
-                return self.resolve_static_method_call_from_qualified(
-                    prefix,
-                    suffix,
-                    &mangled_name,
-                    &args,
-                    &impl_type_args_inferred,
-                    &method_type_args,
-                    call.id,
-                    call.span,
-                    ctx,
-                );
+                return self
+                    .resolve_static_method_call_from_qualified(
+                        prefix,
+                        suffix,
+                        &mangled_name,
+                        &args,
+                        &impl_type_args_inferred,
+                        &method_type_args,
+                        call.id,
+                        call.span,
+                        ctx,
+                    )
+                    .type_id;
             }
             // Check if this is a flags type method call: Perms::none(), Perms::all()
             else if let Some(flags_info) = self.lookup_flags_case(prefix).cloned()
@@ -638,7 +609,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Stage 7-B: reify rebuilds the flags `none()` / `all()`
                 // constant from the AST + flags info; the combined walk
                 // projects only the result type.
-                return placeholder(flags_info.type_id, call.span);
+                return flags_info.type_id;
             }
             // Check if this is a variant case construction (Color::Red)
             else if let Some(variant_info) = self.lookup_variant_case(prefix) {
@@ -653,7 +624,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let prefix_owned = prefix.to_string();
 
                 // Find the case by name
-                if let Some((case_index, case_data)) = case_match {
+                if let Some((_case_index, case_data)) = case_match {
                     self.record_qualified_case(
                         ident,
                         &prefix_owned,
@@ -674,7 +645,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             found: args.len(),
                             span: call.span,
                         });
-                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+                        return TypeTable::ERROR;
                     }
 
                     let payload = args.into_iter().next().map(Box::new);
@@ -711,8 +682,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // the combined walk projects only the result type. The
                     // payload was resolved above (and fed variant type-arg
                     // inference) for its fact-recording side effects.
-                    let _ = (case_index, payload);
-                    return placeholder(variant_type, call.span);
+                    return variant_type;
                 }
                 // If no matching case, check for From<T> synthesis requests
                 else if suffix == "from" && args.len() == 1 {
@@ -748,26 +718,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     });
                     if matching_impl {
-                        return self.resolve_from_call(
-                            target_type_id,
-                            from_type,
-                            args.into_iter().next().unwrap(),
-                            call.span,
-                            call.id,
-                        );
+                        return self
+                            .resolve_from_call(
+                                target_type_id,
+                                from_type,
+                                args.into_iter().next().unwrap(),
+                                call.span,
+                                call.id,
+                            )
+                            .type_id;
                     }
                     let _ = self.logger.error(TypeError::UnknownFunction {
                         name: format!("{prefix}::{suffix}"),
                         span: call.span,
                     });
-                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+                    return TypeTable::ERROR;
                 } else {
                     // Unknown case name
                     let _ = self.logger.error(TypeError::UnknownFunction {
                         name: format!("{prefix}::{suffix}"),
                         span: call.span,
                     });
-                    return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+                    return TypeTable::ERROR;
                 }
             }
             // If prefix is a known type (struct/enum/newtype/flags) with no matching
@@ -777,7 +749,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: format!("{prefix}::{suffix}"),
                     span: call.span,
                 });
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+                return TypeTable::ERROR;
             }
             // Namespace import: `use ns from "..."` then `ns::Type::method()`
             // or `ns::VariantType::Case(...)`.
@@ -802,7 +774,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .enumerate()
                             .find(|(_, c)| c.name == method_name)
                             .map(|(i, c)| (i, c.clone()));
-                        if let Some((case_index, case_data)) = case_match {
+                        if let Some((_case_index, case_data)) = case_match {
                             self.record_namespaced_case(
                                 ident,
                                 &variant_info.module_source,
@@ -819,11 +791,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     found: args.len(),
                                     span: call.span,
                                 });
-                                return TirExpr::new(
-                                    TirExprKind::Unit,
-                                    TypeTable::ERROR,
-                                    call.span,
-                                );
+                                return TypeTable::ERROR;
                             }
                             let payload = args.into_iter().next().map(Box::new);
                             let variant_type = if variant_info.type_params.is_empty() {
@@ -853,8 +821,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                             // Stage 7-B: reify rebuilds the `VariantConstruct`;
                             // the combined walk projects only the result type.
-                            let _ = (case_index, payload);
-                            return placeholder(variant_type, call.span);
+                            return variant_type;
                         }
                     }
 
@@ -911,11 +878,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     let param_is_mut =
                         self.lookup_static_method_param_is_mut(type_name, method_name);
-                    let call_args: Vec<CallArg> = args
-                        .into_iter()
-                        .zip(param_is_mut.iter().copied().chain(std::iter::repeat(false)))
-                        .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
-                        .collect();
 
                     let func_ref = FunctionRef {
                         module_source: struct_module,
@@ -944,10 +906,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Stage 7-B: reify rebuilds the `Call` from the recorded
                     // `static_method_dispatch`; the combined walk projects
-                    // only the result type. `call_args` (resolved above) is
-                    // discarded.
-                    let _ = call_args;
-                    return placeholder(return_type, call.span);
+                    // only the result type.
+                    return return_type;
                 }
                 (
                     Some(CalleeRef::new(ns_source, suffix)),
@@ -1114,7 +1074,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 found: args.len(),
                 span: call.span,
             });
-            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+            return TypeTable::ERROR;
         }
         // Re-coerce literal-number args to inferred parameter types. This catches
         // calls like `two<T>(1 as u8, 2)` where the literal `2` was first resolved
@@ -1164,10 +1124,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Stage 7-B: reify rebuilds the `Call` TIR from the recorded
         // `static_method_dispatch` + `generic_instantiations` +
         // `call_param_types` and the resolved args; the combined walk
-        // projects only the result type. `args` was resolved above for its
-        // fact-recording side effects and is now discarded.
-        let _ = (args, type_args);
-        placeholder(return_type, call.span)
+        // projects only the result type.
+        return_type
     }
 
     /// Lower `call` into a `TirExprKind::IndirectCall` using `callee_expr`
@@ -1182,18 +1140,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         call: &ast::CallExpr,
         ctx: &mut FunctionContext,
-        callee_expr: TirExpr,
         fn_params: &[TypeId],
         return_type: TypeId,
         pad_with_defaults: bool,
-    ) -> TirExpr {
+    ) -> TypeId {
         let mut args: Vec<TirExpr> = call
             .args
             .iter()
             .enumerate()
             .map(|(i, arg)| {
                 let expected_type = fn_params.get(i).copied();
-                self.resolve_expr(arg, ctx, expected_type)
+                placeholder(self.resolve_expr(arg, ctx, expected_type), arg.span())
             })
             .collect();
 
@@ -1207,7 +1164,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 found: args.len(),
                 span: call.span,
             });
-            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span);
+            return TypeTable::ERROR;
         }
 
         for (i, arg) in args.iter().enumerate() {
@@ -1223,10 +1180,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Stage 7-B: reify (`reify_call`'s indirect-call branch) rebuilds
         // the `IndirectCall` from the AST — resolving the callee, applying
         // `deref_to_value_static`, and reifying the args — so the combined walk
-        // projects only the result type. `callee_expr` and `args` were
-        // resolved / typechecked above for their fact-recording side effects.
-        let _ = (callee_expr, args);
-        placeholder(return_type, call.span)
+        // projects only the result type. The `args` Vec was built above for the
+        // `resolve_expr` / `typecheck` fact-recording side effects.
+        return_type
     }
 
     /// Look up the return type of a function
@@ -1832,7 +1788,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             default_expr.substitute_idents(&subs);
             let expected_type = param_types[i];
             let resolved = self.resolve_expr(&default_expr, ctx, Some(expected_type));
-            if resolved.type_id == TypeTable::UNIT
+            if resolved == TypeTable::UNIT
                 && expected_type != TypeTable::UNIT
                 && expected_type != TypeTable::ERROR
                 && expected_type != TypeTable::UNKNOWN
@@ -1850,7 +1806,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     default_expr.span()
                 );
             }
-            args.push(resolved);
+            args.push(placeholder(resolved, default_expr.span()));
             subs.insert(name, default_expr);
         }
         self.default_scope_module = saved_fallback;
@@ -2668,10 +2624,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_param_name: &str,
         method_name: &str,
         type_param_type_id: TypeId,
-        args: &[TirExpr],
+        args: &[TypeId],
         call: &ast::CallExpr,
         _ctx: &mut FunctionContext,
-    ) -> TirExpr {
+    ) -> TypeId {
         let bounds = self
             .trait_ctx
             .type_param_bounds
@@ -2715,9 +2671,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .enumerate()
                 {
                     if Self::is_literal_number_arg(call.args.get(i)) {
-                        infer.add_deferred(*param_type, arg.type_id);
+                        infer.add_deferred(*param_type, *arg);
                     } else {
-                        infer.add(*param_type, arg.type_id);
+                        infer.add(*param_type, *arg);
                     }
                 }
                 let (inferred, bindings) = infer.solve_with_bindings();
@@ -2793,14 +2749,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Stage 7-B: reify rebuilds the `T::method(...)` `Call` from the
             // recorded `static_method_dispatch`; project only the result type.
-            let _ = args;
-            return placeholder(final_return_type, call.span);
+            return final_return_type;
         }
 
         let _ = self.logger.error(TypeError::UnknownFunction {
             name: format!("{type_param_name}::{method_name}"),
             span: call.span,
         });
-        TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, call.span)
+        TypeTable::ERROR
     }
 }

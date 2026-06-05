@@ -1,30 +1,15 @@
 //! Utility functions for the elaborator phase.
 
-use crate::ast::BinaryOp;
-use crate::tir::{PrimitiveType, ResolvedType, TirBinaryOp, TypeId, TypeTable};
+use crate::tir::{PrimitiveType, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
+use crate::token::Span;
 
-/// Convert AST `BinaryOp` to TIR `BinaryOp`.
-pub(super) fn convert_binary_op(op: BinaryOp) -> TirBinaryOp {
-    match op {
-        BinaryOp::Add => TirBinaryOp::Add,
-        BinaryOp::Sub => TirBinaryOp::Sub,
-        BinaryOp::Mul => TirBinaryOp::Mul,
-        BinaryOp::Div => TirBinaryOp::Div,
-        BinaryOp::Mod => TirBinaryOp::Mod,
-        BinaryOp::Eq => TirBinaryOp::Eq,
-        BinaryOp::NotEq => TirBinaryOp::NotEq,
-        BinaryOp::Lt => TirBinaryOp::Lt,
-        BinaryOp::LtEq => TirBinaryOp::LtEq,
-        BinaryOp::Gt => TirBinaryOp::Gt,
-        BinaryOp::GtEq => TirBinaryOp::GtEq,
-        BinaryOp::And => TirBinaryOp::And,
-        BinaryOp::Or => TirBinaryOp::Or,
-        BinaryOp::BitAnd => TirBinaryOp::BitAnd,
-        BinaryOp::BitOr => TirBinaryOp::BitOr,
-        BinaryOp::BitXor => TirBinaryOp::BitXor,
-        BinaryOp::Shl => TirBinaryOp::Shl,
-        BinaryOp::Shr => TirBinaryOp::Shr,
-    }
+/// Stage 7-B placeholder. The combined walk records facts and returns
+/// `TypeId`; reify is the sole TIR producer. The few combined-walk sites that
+/// hand an already-resolved operand to a reify-shared builder (which still
+/// takes a `TirExpr`) wrap the resolved type with this `Unit` sentinel — only
+/// its `type_id` / `span` are ever read.
+pub(super) fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(TirExprKind::Unit, type_id, span)
 }
 
 /// Check if a positive integer literal value fits in the target integer type.

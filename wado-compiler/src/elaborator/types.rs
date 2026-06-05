@@ -117,14 +117,11 @@ pub(crate) struct FlagsInfo {
 /// Resource info: module source and method names
 /// Note: This infrastructure was added for resource static methods but isn't fully used yet.
 /// Keep it for when wasi:sockets registration is re-enabled.
-#[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) struct ResourceInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
     pub(super) module_source: ModuleSource,
-    /// Method names defined on this resource (both static and instance)
-    pub(super) methods: Vec<String>,
 }
 
 /// Generic newtype definition: `type Foo<T> = Bar<T>`
@@ -1173,11 +1170,10 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
 /// Local variable information during resolution
 #[derive(Debug, Clone)]
 pub(super) struct LocalVar {
-    #[allow(dead_code)] // For debugging
     pub(super) name: String,
     pub(super) type_id: TypeId,
     pub(super) index: u32,
-    #[allow(dead_code)] // For future mutability checking
+
     pub(super) is_mut: bool,
     /// `AstId` of the node that introduced this binding (pattern, parameter,
     /// closure parameter). `None` for elaborator-synthesized temporaries whose
@@ -1257,7 +1253,6 @@ pub(super) struct FunctionContext {
     /// Next local index (Wasm locals are function-wide)
     pub(super) next_local: u32,
     /// Return type of the function (unit for async fns, since they don't Wasm-return a value)
-    #[allow(dead_code)] // For future return type checking
     pub(super) return_type: TypeId,
     /// Whether this is an async function (`export async fn`).
     /// In async fns, `return expr` is forbidden; use `task return expr` instead.
@@ -1614,7 +1609,6 @@ pub(super) struct TraitMethodMatch {
     /// True for blanket ref impls like `impl<T: Inspect> Inspect for &T` where
     /// the inner type is a type parameter. False for specific ref impls like
     /// `impl IntoIterator for &List<T>` where the inner type is a concrete generic.
-    #[allow(dead_code)] // Used when ref-type impl priority is enabled
     pub(super) is_blanket_ref_impl: bool,
 }
 

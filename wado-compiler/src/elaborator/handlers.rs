@@ -28,7 +28,7 @@
 use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::tir::{EffectRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
+use crate::tir::{EffectRef, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
@@ -36,29 +36,19 @@ use super::types::{FunctionContext, TypeError};
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Annotate `with E1 => h1, ... do { body }`. Walks each handler
     /// binding for fact recording + diagnostics, walks the body for
-    /// fact recording, returns a `WithHandler`-shaped `TirExpr` whose
-    /// `bindings` are empty (reify rebuilds them from
-    /// `HandlerBindingFacts`) but whose `body` is the real resolved
-    /// `TirBlock`.
+    /// fact recording, and returns a placeholder.
     ///
-    /// The retained `WithHandler` shape (rather than a bare `Unit`
-    /// placeholder) is a Stage 7-B holdover: the surrounding combined-
-    /// walk TIR is otherwise dead after Stage 5 (the AST-level
-    /// missing-return analysis in `control_flow.rs` doesn't read it),
-    /// so this shape and the inner body could be reduced to a `Unit`
-    /// placeholder. Kept verbatim to keep this `resolve_with_handler`
-    /// slice byte-identical with the pre-7-B output until the
-    /// downstream `expr.rs` / `stmt.rs` leaves also stop emitting TIR
-    /// — at that point the combined walk's TIR is uniformly dead and
-    /// the shape can be flattened in one pass. Reify replaces this
-    /// expression wholesale with its own `WithHandler` built from the
-    /// recorded facts.
+    /// Reify rebuilds the `WithHandler` node — its handler bindings from
+    /// `HandlerBindingFacts` and its body from the AST. The combined walk's
+    /// TIR is dead after Stage 5 (the AST-level missing-return analysis in
+    /// `control_flow.rs` reads `with`/`resume` off the AST, not the resolved
+    /// node), so this arm records facts and projects the body's result type.
     pub(super) fn resolve_with_handler(
         &mut self,
         with_expr: &ast::WithHandlerExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirExpr {
+    ) -> TypeId {
         // Counter feeding `HandlerBindingFacts.bundle_group` for the
         // bundled-handler form. A bundled clause may expand into multiple
         // effect bindings that share one synthesised `__h_<bundle>` local
@@ -76,7 +66,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // so handler-introduced bindings, if any, don't leak — matches how
         // regular block expressions behave.
         ctx.enter_scope();
-        let body = self.resolve_block(&with_expr.body, ctx, expected_type);
+        self.resolve_block(&with_expr.body, ctx, expected_type);
         ctx.exit_scope();
 
         // `with ... do { ... }` is an expression: it evaluates to its body
@@ -89,15 +79,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // level) so it does not depend on the body TIR.
         let result_type = self.ast_block_result_type(&with_expr.body);
 
-        TirExpr::new(
-            TirExprKind::WithHandler {
-                bindings: Vec::new(),
-                body,
-                result_type,
-            },
-            result_type,
-            with_expr.span,
-        )
+        // Stage 7-B: reify rebuilds the `WithHandler` node — its handler
+        // bindings from `sem.types.handler_bindings` (recorded by
+        // `resolve_handler_binding` above) and its body from the AST — so the
+        // combined walk only resolves the body for its fact-recording side
+        // effects and projects the result type. Missing-return analysis reads
+        // `with`/`resume` off the AST via `control_flow.rs`, so nothing
+        // consumes this node's structure.
+        result_type
     }
 
     /// Annotate a single binding inside a `with ... do` clause. `bundle_group`
@@ -179,7 +168,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Resolve the handler value expression in the outer scope.
         let handler = self.resolve_expr(&binding.handler, ctx, None);
-        let handler_type = self.handler_underlying_type(handler.type_id);
+        let handler_type = self.handler_underlying_type(handler);
 
         // Verify the underlying struct type has `impl <Effect> for <Type>`.
         if let Some(EffectRef::Concrete {
@@ -254,7 +243,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         next_bundle_group: &mut u32,
     ) {
         let handler = self.resolve_expr(&binding.handler, ctx, None);
-        let handler_type = self.handler_underlying_type(handler.type_id);
+        let handler_type = self.handler_underlying_type(handler);
 
         let resolved = self.tysys.type_table.borrow().get(handler_type).clone();
         match resolved {
@@ -459,16 +448,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// into `Return { value }`, which is checked against the enclosing
     /// handler method's return type by the existing return-type rules.
     ///
-    /// The returned `TirExpr` keeps the `Resume` shape (with the resolved
-    /// `value` inside) so the combined walk's missing-return validator
-    /// (`expr_always_exits`'s `TirExprKind::Resume` arm) still recognises
-    /// `fn handler_method(&self) -> Mark { resume self.mark }` as a
-    /// definite exit. Reify rebuilds its own `Resume` from the AST.
+    /// Stage 7-B: returns a placeholder. Missing-return analysis recognises
+    /// `fn handler_method(&self) -> Mark { resume self.mark }` as a definite
+    /// exit off the AST (`control_flow::expr_always_exits`'s `Expr::Resume`
+    /// arm), and reify rebuilds the `Resume` node from the AST, so the
+    /// combined walk only resolves the value for its fact-recording and
+    /// type-checking side effects.
     pub(super) fn resolve_resume(
         &mut self,
         resume: &ast::ResumeExpr,
         ctx: &mut FunctionContext,
-    ) -> TirExpr {
+    ) -> TypeId {
         if !ctx.in_handler_method {
             let _ = self
                 .logger
@@ -486,16 +476,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let value = self.resolve_expr(&resume.value, ctx, expected);
 
         if ctx.in_handler_method {
-            self.typecheck(value.type_id, ctx.return_type, resume.span);
+            self.typecheck(value, ctx.return_type, resume.span);
         }
 
-        TirExpr::new(
-            TirExprKind::Resume {
-                value: Box::new(value),
-            },
-            TypeTable::UNIT,
-            resume.span,
-        )
+        TypeTable::UNIT
     }
 }
 
