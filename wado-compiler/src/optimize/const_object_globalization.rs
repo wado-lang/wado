@@ -103,7 +103,9 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         if skip_function(&f) {
             continue;
         }
-        let Some(body) = &f.body_block() else { continue };
+        let Some(body) = &f.body_block() else {
+            continue;
+        };
         collect_candidates(body, &gate, fi, &f.module_source, &mut candidates);
     }
     if candidates.is_empty() {

@@ -1389,7 +1389,8 @@ fn try_inline_call_expr(
     let func_name = func.name.clone();
     let (candidate, inlined_key) =
         find_inline_candidate(candidates, &func.module_source, current_module, &func_name)?;
-    let bb = candidate.body_block(); let body = bb.as_ref()?;
+    let bb = candidate.body_block();
+    let body = bb.as_ref()?;
 
     // Use argument's type_id to match the actual value being assigned
     // (handles monomorphization type variance).
@@ -1444,7 +1445,8 @@ fn try_inline_method_call_expr(
     let func_name = func.name.clone();
     let (candidate, inlined_key) =
         find_inline_candidate(candidates, &func.module_source, current_module, &func_name)?;
-    let bb = candidate.body_block(); let body = bb.as_ref()?;
+    let bb = candidate.body_block();
+    let body = bb.as_ref()?;
 
     let mut bindings: Vec<InlineBinding> = Vec::with_capacity(candidate.params.len());
 

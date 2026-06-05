@@ -15,9 +15,8 @@ use cranelift_entity::{PrimaryMap, entity_impl};
 
 use crate::hashmap::IndexSet;
 use crate::nir::{
-    CallArg, FunctionRef, NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirLocal,
-    NirMatchArm, NirPattern, NirStmt, NirStmtKind, NirStructField, NirStructPatternField,
-    NirUnaryOp,
+    CallArg, FunctionRef, NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirLocal, NirMatchArm,
+    NirPattern, NirStmt, NirStmtKind, NirStructField, NirStructPatternField, NirUnaryOp,
 };
 use crate::tir::TypeId;
 use crate::token::Span;

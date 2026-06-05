@@ -164,7 +164,9 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) {
     let mut invalid: IndexSet<usize> = IndexSet::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        let Some(body) = &func.body_block() else { continue };
+        let Some(body) = &func.body_block() else {
+            continue;
+        };
         validate_uses_in_block(body, &candidate_names, &candidates, &mut invalid);
     }
 
@@ -228,7 +230,8 @@ fn candidate_info(
         return None;
     }
 
-    let bb = func.body_block(); let body = bb.as_ref()?;
+    let bb = func.body_block();
+    let body = bb.as_ref()?;
     let return_type = func.return_type;
 
     // Determine the aggregate shape and per-field info.

@@ -93,7 +93,9 @@ pub fn demote_value_copies(project: &mut NirPackage) {
         if f.value_copy_type().is_some() {
             continue;
         }
-        let Some(body) = &f.body_block() else { continue };
+        let Some(body) = &f.body_block() else {
+            continue;
+        };
         collect_sites(
             body,
             &list_wrapper_copies,
@@ -154,7 +156,13 @@ pub fn demote_value_copies(project: &mut NirPackage) {
     for fi in touched {
         let mut f = project.functions[fi].borrow_mut();
         if let Some(mut owned) = f.body_block() {
-            retarget_block(&mut owned, fi, &site_elig, &list_wrapper_copies, &shallow_name);
+            retarget_block(
+                &mut owned,
+                fi,
+                &site_elig,
+                &list_wrapper_copies,
+                &shallow_name,
+            );
             f.set_body_block(owned);
         }
     }
