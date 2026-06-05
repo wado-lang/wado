@@ -699,7 +699,10 @@ pub async fn semantics<H: CompilerHost>(
     )
     .await
     {
-        Ok(loaded) => semantics_of(loaded, host, LogLevel::default()),
+        // General entry: build TIR so consumers that read `tir_modules`
+        // (kiln options extraction) work. The LSP engine uses its own
+        // annotate-only path (`semantics_of(.., build_tir = false)`).
+        Ok(loaded) => semantics_of(loaded, host, LogLevel::default(), true),
         Err(e) => {
             let logger = Logger::new(host, LogLevel::default());
             if let Some(f) = filename {
@@ -806,18 +809,22 @@ impl Semantics {
 ///
 /// Always returns a [`Semantics`]; on phase bail, downstream fields are
 /// empty and [`Semantics::is_complete`] returns `false`.
+/// Build `Semantics` from an already-loaded module set. `build_tir` controls
+/// whether reify runs: the LSP engine passes `false` (facts only — it never
+/// reads TIR), while the general `semantics()` entry and any consumer that
+/// reads `Semantics::tir_modules` (e.g. kiln options extraction) pass `true`.
 pub fn semantics_of<H: CompilerHost>(
     loaded: loader::LoadResult,
     host: &H,
     log_level: LogLevel,
+    build_tir: bool,
 ) -> Semantics {
     let logger = Logger::new(host, log_level);
     let entry_filename = loaded.entry_module_source.diagnostic_filename();
     if !entry_filename.is_empty() {
         logger.set_file(&entry_filename);
     }
-    // LSP path: facts only, no TIR.
-    semantics_with_logger(loaded, &logger, false)
+    semantics_with_logger(loaded, &logger, build_tir)
 }
 
 /// Logger-sharing variant. Internal: lets callers that already maintain a
