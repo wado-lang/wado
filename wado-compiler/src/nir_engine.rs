@@ -124,11 +124,8 @@ impl<'a> Engine<'a> {
             }
         }
         for id in body.stmts.keys() {
-            match &body.stmts[id].kind {
-                StmtKind::Let { local_index, .. } => {
-                    self.uses.entry(*local_index).or_default().def = Some(id);
-                }
-                _ => {}
+            if let StmtKind::Let { local_index, .. } = &body.stmts[id].kind {
+                self.uses.entry(*local_index).or_default().def = Some(id);
             }
         }
     }
