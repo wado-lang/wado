@@ -1,39 +1,46 @@
 diff --git a/crates/js-component-bindgen/src/function_bindgen.rs b/crates/js-component-bindgen/src/function_bindgen.rs
-index 8bb0dfbc..e5a9fcb8 100644
+index 7a947cff..1cb4b9d8 100644
 --- a/crates/js-component-bindgen/src/function_bindgen.rs
 +++ b/crates/js-component-bindgen/src/function_bindgen.rs
-@@ -1518,11 +1518,24 @@ impl Bindgen for FunctionBindgen<'_> {
-                               taskID: task.id(),
-                               componentIdx: task.componentIdx(),
-                               fn: () => {callee}({args}),
--                          }});
--                          "#,
-+                          }});"#,
-                     callee = self.callee,
-                     args = operands.join(", "),
+@@ -1677,6 +1677,33 @@ impl Bindgen for FunctionBindgen<'_> {
+                     "#,
                  );
-+                // For async exports using task.return, the JSPI Promising wrapper
-+                // returns undefined (void core wasm function). The task's completion
-+                // promise (resolved by task.return) provides the already-lifted result.
-+                if self.is_async && sig_results_length > 0 {
+ 
++                // Wado patch: an async export delivers its result via `task.return`,
++                // so the JSPI-wrapped core export returns `undefined` (a void core
++                // function) once the task has completed synchronously. In that case
++                // the already-lifted result is available on the task's completion
++                // promise; return it directly instead of running the result lift on
++                // `ret` (which would see `undefined` and throw). When `ret` is a real
++                // value the function suspended/blocked and the driver loop below
++                // drives it to completion as usual.
++                if (self.requires_async_porcelain || self.is_async) && sig_results_length > 0 {
 +                    uwriteln!(
 +                        self.src,
 +                        r#"
 +                          if (ret === undefined) {{
-+                              const taskResult = await task.completionPromise();
-+                              if (taskResult !== undefined) {{ return taskResult; }}
++                              let taskResult = await task.completionPromise();
++                              if (taskResult !== undefined) {{
++                                  if (task.getErrHandling() === 'throw-result-err') {{
++                                      if (typeof taskResult !== 'object') {{ return taskResult; }}
++                                      if (taskResult.tag === 'err') {{ throw taskResult.val; }}
++                                      if (taskResult.tag === 'ok') {{ taskResult = taskResult.val; }}
++                                  }}
++                                  return taskResult;
++                              }}
 +                          }}
-+                          "#,
++                        "#,
 +                    );
 +                }
- 
++
                  if self.tracing_enabled {
                      let prefix = self.tracing_prefix;
+                     let to_result_string =
 diff --git a/crates/js-component-bindgen/src/intrinsics/mod.rs b/crates/js-component-bindgen/src/intrinsics/mod.rs
-index db2e9e07..4b45bfe6 100644
+index 52433ec1..41017a92 100644
 --- a/crates/js-component-bindgen/src/intrinsics/mod.rs
 +++ b/crates/js-component-bindgen/src/intrinsics/mod.rs
-@@ -1492,6 +1492,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
+@@ -1540,6 +1540,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
              &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamTableMap),
              &Intrinsic::AsyncStream(AsyncStreamIntrinsic::HostStreamClass),
              &Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass),
@@ -41,10 +48,14 @@ index db2e9e07..4b45bfe6 100644
          ]);
      }
  
-@@ -1509,6 +1510,22 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
+@@ -1593,6 +1594,26 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
          ]);
      }
  
++    // Wado patch: dropping a future end requires the future-end classes, the
++    // global future map and async state lookup to be emitted as well. Upstream
++    // does not pull these in transitively, so a component that only drops future
++    // ends (e.g. the stdout write path) would reference undefined classes.
 +    if args
 +        .intrinsics
 +        .contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureDropReadable))
@@ -64,63 +75,11 @@ index db2e9e07..4b45bfe6 100644
      if args.intrinsics.contains(&Intrinsic::GlobalBufferManager) {
          args.intrinsics.extend([&Intrinsic::BufferManagerClass]);
      }
-diff --git a/crates/js-component-bindgen/src/intrinsics/p3/async_future.rs b/crates/js-component-bindgen/src/intrinsics/p3/async_future.rs
-index 1ec1529b..d1b20b25 100644
---- a/crates/js-component-bindgen/src/intrinsics/p3/async_future.rs
-+++ b/crates/js-component-bindgen/src/intrinsics/p3/async_future.rs
-@@ -496,38 +496,31 @@ impl AsyncFutureIntrinsic {
-             Self::FutureDropReadable | Self::FutureDropWritable => {
-                 let debug_log_fn = Intrinsic::DebugLog.name();
-                 let future_drop_fn = self.name();
--                let is_writable = matches!(self, Self::FutureDropWritable);
-                 let global_future_map = Self::GlobalFutureMap.name();
--                let future_end_class = if is_writable {
--                    Self::FutureWritableEndClass.name()
--                } else {
--                    Self::FutureReadableEndClass.name()
--                };
-                 let get_or_create_async_state_fn =
-                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                 output.push_str(&format!("
-                     function {future_drop_fn}(
--                        futureIdx,
-+                        componentIdx,
-                         futureEndIdx,
-                     ) {{
-                         {debug_log_fn}('[{future_drop_fn}()] args', {{
--                            futureIdx,
-+                            componentIdx,
-                             futureEndIdx,
-                         }});
- 
-                         const state = {get_or_create_async_state_fn}(componentIdx);
-                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
- 
--                        const future = {global_future_map}.remove(futureIdx);
--
--                        const futureEnd = {global_future_map}.remove(futureEndIdx);
--                        if (!(futureEnd instanceof {future_end_class})) {{ throw new Error('invalid future end, expected [{future_end_class}]'); }}
-+                        // futureEndIdx may be 0 when the stream write hook bypassed
-+                        // the future mechanism, in which case we skip the drop.
-+                        if (futureEndIdx === 0) {{ return; }}
- 
--                        if (futureEnd.elementTypeRep() !== future.elementTypeRep()) {{
--                          throw new Error('future type [' + future.elementTypeRep() + '], does not match future end type [' + futureEnd.elementTypeRep() + ']');
-+                        const futureEnd = {global_future_map}.get(futureEndIdx);
-+                        if (futureEnd) {{
-+                            {global_future_map}.remove(futureEndIdx);
-+                            futureEnd.drop();
-                         }}
--
--                        futureEnd.drop();
-                     }}
-                 "));
-             }
 diff --git a/crates/js-component-bindgen/src/intrinsics/p3/async_stream.rs b/crates/js-component-bindgen/src/intrinsics/p3/async_stream.rs
-index daa83c43..7ced1cb9 100644
+index a551aeaa..063ee245 100644
 --- a/crates/js-component-bindgen/src/intrinsics/p3/async_stream.rs
 +++ b/crates/js-component-bindgen/src/intrinsics/p3/async_stream.rs
-@@ -1617,9 +1617,23 @@ impl AsyncStreamIntrinsic {
+@@ -1842,9 +1842,23 @@ impl AsyncStreamIntrinsic {
                              throw new Error(`stream end table idx [${{streamEnd.streamTableIdx()}}] != operation table idx [${{streamTableIdx}}]`);
                          }}
  
@@ -145,39 +104,3 @@ index daa83c43..7ced1cb9 100644
                              ptr,
                              count,
                              eventCode: {event_code},
-diff --git a/crates/js-component-bindgen/src/transpile_bindgen.rs b/crates/js-component-bindgen/src/transpile_bindgen.rs
-index 7fe0cf5d..ccf7fd44 100644
---- a/crates/js-component-bindgen/src/transpile_bindgen.rs
-+++ b/crates/js-component-bindgen/src/transpile_bindgen.rs
-@@ -1730,25 +1730,25 @@ impl<'a> Instantiator<'a, '_> {
-                 );
-             }
- 
--            Trampoline::FutureDropReadable { ty, .. } => {
-+            Trampoline::FutureDropReadable { ty: _, instance, .. } => {
-                 let future_drop_readable_fn = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
-                     AsyncFutureIntrinsic::FutureDropReadable,
-                 ));
-+                let instance_idx = instance.as_u32();
-                 uwriteln!(
-                     self.src.js,
--                    "const trampoline{i} = {future_drop_readable_fn}.bind(null, {future_idx});\n",
--                    future_idx = ty.as_u32(),
-+                    "const trampoline{i} = {future_drop_readable_fn}.bind(null, {instance_idx});\n",
-                 );
-             }
- 
--            Trampoline::FutureDropWritable { ty, .. } => {
-+            Trampoline::FutureDropWritable { ty: _, instance, .. } => {
-                 let future_drop_writable_fn = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
-                     AsyncFutureIntrinsic::FutureDropWritable,
-                 ));
-+                let instance_idx = instance.as_u32();
-                 uwriteln!(
-                     self.src.js,
--                    "const trampoline{i} = {future_drop_writable_fn}.bind(null, {future_idx});\n",
--                    future_idx = ty.as_u32(),
-+                    "const trampoline{i} = {future_drop_writable_fn}.bind(null, {instance_idx});\n",
-                 );
-             }
- 

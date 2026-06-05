@@ -522,15 +522,24 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 cd vendor/jco
-PUPPETEER_SKIP_DOWNLOAD=1 npm install --ignore-scripts 2>&1 | tail -3
+# Apply the Wado patches on top of the pinned upstream checkout (idempotent:
+# skip if they are already applied to the working tree).
+if git apply --reverse --check ../../vendor/jco.patch 2>/dev/null; then
+  echo "jco.patch already applied"
+else
+  git apply ../../vendor/jco.patch
+  echo "applied jco.patch"
+fi
+# Upstream jco uses a pnpm workspace; install only the CLI package and its deps.
+NPM_TOKEN="" PUPPETEER_SKIP_DOWNLOAD=1 pnpm --filter "@bytecodealliance/jco" install 2>&1 | tail -3
 cargo build -p xtask --target x86_64-unknown-linux-gnu
+rm -f packages/jco/obj/js-component-bindgen-component.*
 ./target/x86_64-unknown-linux-gnu/debug/xtask build debug
 echo "jco built successfully at vendor/jco"
 """
 
 [tasks.jco-transpile]
 description = "Transpile a Wado .wasm component to JS via patched jco"
-usage = "jco-transpile <wasm-file> [output-dir]"
 run = """
 #!/usr/bin/env bash
 set -e -o pipefail
@@ -545,7 +554,10 @@ if [ ! -f "vendor/jco/packages/jco/obj/js-component-bindgen-component.js" ]; the
 fi
 
 rm -rf "$OUTPUT_DIR"
+# --no-wasi-shim disables jco's automatic rewrite of WASI imports to the bundled
+# preview2/preview3 shims, so our --map entries to the Wado shims take effect.
 node "$JCO" transpile "$WASM_FILE" -o "$OUTPUT_DIR" \
+  --no-wasi-shim \
   --map "wasi:cli/*=${SHIM_DIR}/cli.js#*" \
   --map "wasi:random/*=${SHIM_DIR}/random.js#*" \
   --map "wasi:clocks/*=${SHIM_DIR}/clocks.js#*"
