@@ -3,7 +3,7 @@ name: wado
 description: Use when writing, editing, or reviewing Wado source code (.wado files). Provides the Wado language cheatsheet.
 ---
 
-@docs/cheatsheet.md
+@../../../docs/cheatsheet.md
 
 For the detailed specification of a specific feature, read the relevant WEP at `docs/wep-*.md`.
 
