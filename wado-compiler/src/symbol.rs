@@ -314,12 +314,7 @@ impl SymbolTable {
     ///
     /// This makes the symbol accessible by its short name (without module
     /// prefix) when resolving names referenced from `importing_module`.
-    pub fn register_import(
-        &mut self,
-        importing_module: &ModuleSource,
-        name: &str,
-        key: SymbolKey,
-    ) {
+    pub fn register_import(&mut self, importing_module: &ModuleSource, name: &str, key: SymbolKey) {
         self.imports
             .entry(importing_module.clone())
             .or_default()

@@ -418,11 +418,8 @@ impl Monomorphizer {
         struct_name: &str,
         trait_name: Option<&str>,
     ) -> (Option<String>, Vec<(String, Option<String>)>) {
-        let own_name = self.newtype_own_struct_name_with_impl(
-            receiver_type_id,
-            type_table,
-            trait_name,
-        );
+        let own_name =
+            self.newtype_own_struct_name_with_impl(receiver_type_id, type_table, trait_name);
         let mut names: Vec<(String, Option<String>)> = Vec::new();
         let mut push_for = |s: &str| {
             names.push((MethodName::format_local(s, None, method_name), None));

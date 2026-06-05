@@ -1186,7 +1186,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name.to_string(),
             ));
         }
-        let symbol = self.symbols.lookup(&self.current_module_source,name)?;
+        let symbol = self.symbols.lookup(&self.current_module_source, name)?;
         let src = symbol.module_source().clone();
         let original = symbol.name.clone();
         let func = Self::lookup_func_in_loaded_module(
@@ -2819,7 +2819,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .is_some()
         {
             (name.clone(), self.current_module_source.clone())
-        } else if let Some(symbol) = self.symbols.lookup(&self.current_module_source,name) {
+        } else if let Some(symbol) = self.symbols.lookup(&self.current_module_source, name) {
             if let crate::symbol::SymbolKind::Struct(_) = &symbol.kind {
                 (symbol.name.clone(), symbol.module_source().clone())
             } else {

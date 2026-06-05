@@ -833,8 +833,11 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                     let key = symbol.defined_at.clone();
                                     let import_name =
                                         func_item.alias.as_ref().unwrap_or(&func_item.name);
-                                    self.symbols
-                                        .register_import(from_module_source, import_name, key);
+                                    self.symbols.register_import(
+                                        from_module_source,
+                                        import_name,
+                                        key,
+                                    );
                                 } else {
                                     self.logger.error(AnalyzeError::ImportNotFound {
                                         module_source: module_source.clone(),
@@ -862,8 +865,11 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                 .map(|s| (s.name.clone(), s.defined_at.clone()))
                                 .collect();
                             for (sym_name, sym_key) in symbols {
-                                self.symbols
-                                    .register_import(from_module_source, &sym_name, sym_key);
+                                self.symbols.register_import(
+                                    from_module_source,
+                                    &sym_name,
+                                    sym_key,
+                                );
                             }
                         }
                     }
