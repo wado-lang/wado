@@ -13,7 +13,7 @@ use crate::hashmap::IndexSet;
 
 use crate::ast::{self};
 use crate::compiler_host::CompilerHost;
-use crate::tir::{ResolvedType, TirStmt, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
@@ -219,8 +219,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         // Placeholder — reify is the sole producer of the closure's TIR shape.
-        let _ = (closure_ctx, body_type);
-        let _: Vec<TirStmt> = Vec::new();
+        drop(closure_ctx);
         func_type
     }
 }

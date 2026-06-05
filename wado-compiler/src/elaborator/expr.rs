@@ -8,8 +8,8 @@ use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
 use crate::tir::{
-    CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirMatchArm,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirField, TirMatchArm, TirPattern,
+    TirStruct, TirStructField, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -3458,7 +3458,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if is_option {
-            self.resolve_question_mark_option(inner_type, ctx, qm.span)
+            self.resolve_question_mark_option(inner_type, ctx)
         } else {
             self.resolve_question_mark_result(inner_type, ctx, qm.span, qm.id)
         }
@@ -3468,83 +3468,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         inner_type: TypeId,
         ctx: &mut FunctionContext,
-        span: Span,
     ) -> TypeId {
-        let tt = self.tysys.type_table.borrow();
-        let some_type = tt.as_option(inner_type).unwrap();
-        // Look up the `Some` / `None` case names through the
-        // `CompilerItem` registry so a stdlib rename of either case
-        // flows through the `?` lowering for `Option` without touching
-        // this site.
-        let items = tt.compiler_items();
-        let some_name = items
-            .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
-            .to_string();
-        let none_name = items
-            .variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
-            .to_string();
-        drop(tt);
+        let some_type = self.tysys.type_table.borrow().as_option(inner_type).unwrap();
 
-        // Allocate a local for the Some payload binding
+        // Allocate a local for the Some payload binding (walk-order parity).
         ctx.enter_scope();
-        let v_local = ctx.add_local("__qm_v".to_string(), some_type, false, None);
-
-        // Arm 0: Some(v) => v
-        let some_arm = TirMatchArm {
-            pattern: TirPattern::Variant {
-                enum_type: inner_type,
-                variant_name: some_name,
-                bindings: vec![TirPattern::Binding {
-                    name: "__qm_v".to_string(),
-                    local_index: v_local,
-                    type_id: some_type,
-                }],
-                payload_type: some_type,
-            },
-            guard: None,
-            body: TirExpr::new(
-                TirExprKind::Local {
-                    index: v_local,
-                    name: "__qm_v".to_string(),
-                },
-                some_type,
-                span,
-            ),
-            span,
-        };
-
-        // Arm 1: None => return null
-        let none_arm = TirMatchArm {
-            pattern: TirPattern::Variant {
-                enum_type: inner_type,
-                variant_name: none_name,
-                bindings: vec![],
-                payload_type: TypeTable::UNIT,
-            },
-            guard: None,
-            body: TirExpr::new(
-                TirExprKind::Block(TirBlock::new(
-                    vec![TirStmt::new(
-                        TirStmtKind::Return {
-                            value: Some(TirExpr::new(TirExprKind::Null, inner_type, span)),
-                        },
-                        span,
-                    )],
-                    span,
-                )),
-                TypeTable::NEVER,
-                span,
-            ),
-            span,
-        };
-
+        let _v_local = ctx.add_local("__qm_v".to_string(), some_type, false, None);
         ctx.exit_scope();
 
         // Stage 7-B: reify rebuilds the `Option` `?` desugar
         // (`reify_question_mark_option`) from the AST, allocating its own
         // `__qm_v` local. The combined walk keeps the scope/local allocation
         // (walk-order parity) and projects the unwrapped `Some` payload type.
-        let _ = (some_arm, none_arm);
         some_type
     }
 
@@ -3576,110 +3511,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let v_local = ctx.add_local("__qm_v".to_string(), ok_type, false, None);
         let e_local = ctx.add_local("__qm_e".to_string(), inner_err_type, false, None);
 
-        // Look up the `Ok` / `Err` case names + indexes through the
-        // `CompilerItem` registry so a stdlib rename of either case
-        // flows through the `?` lowering path without touching this site.
-        let (ok_name, _ok_index, err_name, err_index) = {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            let (_, _, ok_n, ok_i) =
-                items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
-            let (_, _, err_n, err_i) =
-                items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
-            (ok_n.to_string(), ok_i, err_n.to_string(), err_i)
-        };
-
-        // Arm 0: Ok(v) => v
-        let ok_arm = TirMatchArm {
-            pattern: TirPattern::Variant {
-                enum_type: inner_type,
-                variant_name: ok_name,
-                bindings: vec![TirPattern::Binding {
-                    name: "__qm_v".to_string(),
-                    local_index: v_local,
-                    type_id: ok_type,
-                }],
-                payload_type: ok_type,
-            },
-            guard: None,
-            body: TirExpr::new(
+        // Record the `From::from(e)` conversion facts when the inner and outer
+        // error types differ (no-op when they match). `resolve_from_call`
+        // writes `FromCallFacts` keyed by the `?` AstId; reify replays the
+        // conversion from the AST + those facts. The returned `TirExpr` is the
+        // dead `Err(From::from(e))` node, projected away here.
+        if inner_err_type != outer_err_type {
+            let e_expr = TirExpr::new(
                 TirExprKind::Local {
-                    index: v_local,
-                    name: "__qm_v".to_string(),
-                },
-                ok_type,
-                span,
-            ),
-            span,
-        };
-
-        // Build the error conversion expression.
-        // If inner_err_type == outer_err_type, just use the error directly.
-        // Otherwise, call From::from(e) to convert.
-        let e_expr = TirExpr::new(
-            TirExprKind::Local {
-                index: e_local,
-                name: "__qm_e".to_string(),
-            },
-            inner_err_type,
-            span,
-        );
-        let converted_err = if inner_err_type == outer_err_type {
-            e_expr
-        } else {
-            self.resolve_from_call(outer_err_type, inner_err_type, e_expr, span, qm_id)
-        };
-
-        // Build Result::Err(converted_err) with the function's return Result type
-        let err_variant = TirExpr::new(
-            TirExprKind::VariantConstruct {
-                variant_type: return_type,
-                case_index: err_index,
-                case_name: err_name.clone(),
-                payload: Some(Box::new(converted_err)),
-            },
-            return_type,
-            span,
-        );
-
-        // Arm 1: Err(e) => return Result::Err(From::from(e))
-        let err_arm = TirMatchArm {
-            pattern: TirPattern::Variant {
-                enum_type: inner_type,
-                variant_name: err_name,
-                bindings: vec![TirPattern::Binding {
+                    index: e_local,
                     name: "__qm_e".to_string(),
-                    local_index: e_local,
-                    type_id: inner_err_type,
-                }],
-                payload_type: inner_err_type,
-            },
-            guard: None,
-            body: TirExpr::new(
-                TirExprKind::Block(TirBlock::new(
-                    vec![TirStmt::new(
-                        TirStmtKind::Return {
-                            value: Some(err_variant),
-                        },
-                        span,
-                    )],
-                    span,
-                )),
-                TypeTable::NEVER,
+                },
+                inner_err_type,
                 span,
-            ),
-            span,
-        };
+            );
+            let _ = self.resolve_from_call(outer_err_type, inner_err_type, e_expr, span, qm_id);
+        }
 
         ctx.exit_scope();
 
         // Stage 7-B: reify rebuilds the `Result` `?` desugar
         // (`reify_question_mark_result`) from the AST + the recorded
-        // `FromCallFacts` (written by `resolve_from_call` above when the inner
-        // and outer error types differ). The combined walk keeps the scope /
-        // local allocation and the `resolve_from_call` fact-recording, and
-        // projects the unwrapped `Ok` payload type.
-        let _ = (ok_arm, err_arm);
+        // `FromCallFacts`. The combined walk keeps the scope / local allocation
+        // and the `resolve_from_call` fact-recording, and projects the
+        // unwrapped `Ok` payload type.
+        let _ = v_local;
         ok_type
     }
 
