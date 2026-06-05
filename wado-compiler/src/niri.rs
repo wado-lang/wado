@@ -358,30 +358,6 @@ pub const DEFAULT_STEP_BUDGET: u32 = 1000;
 // Field knowledge
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Per-function alias / aliasing-trackability annotations consumed by
-/// the interpreter's field-knowledge bookkeeping.
-///
-/// These three sets are computed once per function by the driving
-/// visitor (typically from the function's stable
-/// `address_taken_locals` / `stores_aliased_locals` plus a body walk
-/// that catches transient inlined-in copies), then handed to the
-/// interpreter via [`Interpreter::set_alias_info`].
-///
-/// - `aliased`: locals reachable through some other handle (`&x`,
-///   `&mut x`, captured by a closure, struct-field-stored, etc.).
-///   Field knowledge IS recorded for these locals; the flow-sensitive
-///   walk drops their entries at every side-effect boundary (call,
-///   dereferenced write, …) where an unseen alias could have mutated
-///   the storage.
-/// - `untrackable`: locals whose aliasing escapes our analysis (e.g.
-///   stashed across a `stores`-annotated callee). Field knowledge is
-///   **never** recorded for these; that matches the conservatism the
-///   OLD WIR-level `const_forward` had for stores-passed args.
-/// - `alias_groups`: union-find groups of locals connected by
-///   reference-typed `let dst = src` copies (`Box<T>`, `List<T>`,
-///   `&T`, `&mut T`). Used to widen field-assignment invalidation:
-///   writing `dst.field = …` must drop the same field on every
-///   alias.
 /// A dense set of local indices, backed by a bitset indexed by the local
 /// index itself.
 ///
@@ -435,11 +411,37 @@ impl LocalSet {
     /// Iterate members in ascending index order.
     pub fn iter(&self) -> impl Iterator<Item = u32> + '_ {
         self.words.iter().enumerate().flat_map(|(wi, &word)| {
-            (0..64u32).filter_map(move |b| (word & (1u64 << b) != 0).then(|| wi as u32 * 64 + b))
+            (0..64u32)
+                .filter(move |&b| word & (1u64 << b) != 0)
+                .map(move |b| wi as u32 * 64 + b)
         })
     }
 }
 
+/// Per-function alias / aliasing-trackability annotations consumed by
+/// the interpreter's field-knowledge bookkeeping.
+///
+/// These three sets are computed once per function by the driving
+/// visitor (typically from the function's stable
+/// `address_taken_locals` / `stores_aliased_locals` plus a body walk
+/// that catches transient inlined-in copies), then handed to the
+/// interpreter via [`Interpreter::set_alias_info`].
+///
+/// - `aliased`: locals reachable through some other handle (`&x`,
+///   `&mut x`, captured by a closure, struct-field-stored, etc.).
+///   Field knowledge IS recorded for these locals; the flow-sensitive
+///   walk drops their entries at every side-effect boundary (call,
+///   dereferenced write, …) where an unseen alias could have mutated
+///   the storage.
+/// - `untrackable`: locals whose aliasing escapes our analysis (e.g.
+///   stashed across a `stores`-annotated callee). Field knowledge is
+///   **never** recorded for these; that matches the conservatism the
+///   OLD WIR-level `const_forward` had for stores-passed args.
+/// - `alias_groups`: union-find groups of locals connected by
+///   reference-typed `let dst = src` copies (`Box<T>`, `List<T>`,
+///   `&T`, `&mut T`). Used to widen field-assignment invalidation:
+///   writing `dst.field = …` must drop the same field on every
+///   alias.
 #[derive(Default, Clone, Debug)]
 pub struct AliasInfo {
     pub aliased: LocalSet,
