@@ -39,9 +39,11 @@ test "smoke" {
 
 export fn run() with Stdout, MonotonicClock {
     let n = 1000000;
-    let mut b = Benchmark { name: `fts: {n} f64 conversions (%.6f)` };
-    b.work_per_iter = Option::Some(n as f64);
-    b.unit = "conversions";
+    let mut b = Benchmark {
+        name: `fts: {n} f64 conversions (%.6f)`,
+        work_per_iter: Option::Some(n as f64),
+        unit: "conversions",
+    };
     let r = b.run("", || fts_run(n));
     b.println(`total bytes = {r.total_bytes}, byte sum = {r.byte_sum}`);
 }

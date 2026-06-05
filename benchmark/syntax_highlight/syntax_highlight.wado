@@ -43,8 +43,10 @@ test "smoke" {
 
 export fn run() with Stdout, MonotonicClock, Preopens {
     let sql = read_file("sqlite_parse/queries.sql");
-    let mut b = Benchmark { name: "syntax-highlight (Gale)" };
-    b.input_size = Option::Some(sql.len());
+    let mut b = Benchmark {
+        name: "syntax-highlight (Gale)",
+        input_size: Option::Some(sql.len()),
+    };
 
     let last_len = b.run("", || sqlite::highlight(&sql).len());
     assert last_len > 0;
