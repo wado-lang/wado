@@ -369,59 +369,32 @@ impl Monomorphizer {
                     if let Some(struct_name) =
                         self.get_struct_name_from_type(receiver.type_id, type_table)
                     {
-                        // Try both inherent method and trait method formats
+                        // Try both inherent method and trait method formats.
+                        // A newtype's OWN impl is tried before its base, so the
+                        // queued instantiation matches the call the rewrite
+                        // emitted (`ByteList^serialize`, not `List^serialize`).
                         let trait_name_opt = method_func
                             .method_info
                             .clone()
                             .and_then(|info| info.trait_name);
-                        // Try a newtype's OWN impl before its base, so the
-                        // queued instantiation matches the call the rewrite
-                        // emitted (`ByteList^serialize`, not `List^serialize`).
-                        // Returns `None` for newtypes without their own impl.
-                        let own_name = self.newtype_own_struct_name_with_impl(
+                        let (own_name, names_to_try) = self.newtype_aware_method_names(
                             receiver.type_id,
                             type_table,
+                            &method_name,
+                            &struct_name,
                             trait_name_opt.as_deref(),
                         );
-                        let mut names_to_try: Vec<(String, Option<String>)> = Vec::new();
-                        if let Some(ref own) = own_name {
-                            names_to_try
-                                .push((MethodName::format_local(own, None, &method_name), None));
-                            if let Some(ref tn) = trait_name_opt {
-                                names_to_try.push((
-                                    MethodName::format_local(own, Some(tn), &method_name),
-                                    Some(tn.clone()),
-                                ));
-                            }
-                        }
-                        names_to_try.push((
-                            MethodName::format_local(&struct_name, None, &method_name),
-                            None,
-                        ));
-                        if let Some(ref tn) = trait_name_opt {
-                            names_to_try.push((
-                                MethodName::format_local(&struct_name, Some(tn), &method_name),
-                                Some(tn.clone()),
-                            ));
-                        }
 
                         let mut found = false;
                         for (full_method_name, tn) in &names_to_try {
                             let receiver_module =
                                 receiver_module_hint(type_table, receiver.type_id);
                             let info_ref = method_func.method_info.as_ref();
-                            let candidates: Vec<&str> = {
-                                let mut c: Vec<&str> = Vec::new();
-                                if let Some(ref own) = own_name {
-                                    c.push(own.as_str());
-                                }
-                                if let Some(info) = info_ref {
-                                    c.push(&info.base_struct_name);
-                                    c.push(&info.struct_name);
-                                }
-                                c.push(&struct_name);
-                                c
-                            };
+                            let candidates = self.newtype_aware_candidates(
+                                own_name.as_deref(),
+                                info_ref,
+                                &struct_name,
+                            );
                             if let Some(gf) = lookup_template_with_trait_fallback(
                                 generic_functions,
                                 &self.functions.trait_env,

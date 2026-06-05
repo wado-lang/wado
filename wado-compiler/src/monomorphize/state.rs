@@ -400,6 +400,68 @@ impl Monomorphizer {
         }
     }
 
+    /// Build the ordered list of `(mangled_method_name, trait_name)` formats to
+    /// probe when resolving a generic method call on `receiver_type_id`.
+    ///
+    /// A newtype's OWN impl is tried before its base so the resolution lands on
+    /// the newtype's own instantiation (`ByteList^serialize`) rather than the
+    /// inherited base (`List^serialize`). For each candidate struct name both
+    /// the inherent (`None`) and trait-qualified formats are emitted. Returns
+    /// the newtype's own name alongside the list so callers can also seed their
+    /// candidate set with it. Shared by the collect (`func_inst.rs`) and rewrite
+    /// (`call_rewrite.rs`) paths so the two stay in lockstep.
+    pub fn newtype_aware_method_names(
+        &self,
+        receiver_type_id: TypeId,
+        type_table: &TypeTable,
+        method_name: &str,
+        struct_name: &str,
+        trait_name: Option<&str>,
+    ) -> (Option<String>, Vec<(String, Option<String>)>) {
+        let own_name = self.newtype_own_struct_name_with_impl(
+            receiver_type_id,
+            type_table,
+            trait_name,
+        );
+        let mut names: Vec<(String, Option<String>)> = Vec::new();
+        let mut push_for = |s: &str| {
+            names.push((MethodName::format_local(s, None, method_name), None));
+            if let Some(tn) = trait_name {
+                names.push((
+                    MethodName::format_local(s, Some(tn), method_name),
+                    Some(tn.to_string()),
+                ));
+            }
+        };
+        if let Some(ref own) = own_name {
+            push_for(own);
+        }
+        push_for(struct_name);
+        (own_name, names)
+    }
+
+    /// Build the candidate struct-name set for trait-fallback template lookup,
+    /// ordered newtype-own first, then the method's base/impl struct names, then
+    /// the receiver's struct name. Mirrors the ordering of the name list from
+    /// [`Self::newtype_aware_method_names`].
+    pub fn newtype_aware_candidates<'a>(
+        &self,
+        own_name: Option<&'a str>,
+        info: Option<&'a LocalMethodName>,
+        struct_name: &'a str,
+    ) -> Vec<&'a str> {
+        let mut c: Vec<&'a str> = Vec::new();
+        if let Some(own) = own_name {
+            c.push(own);
+        }
+        if let Some(info) = info {
+            c.push(info.base_struct_name.as_str());
+            c.push(info.struct_name.as_str());
+        }
+        c.push(struct_name);
+        c
+    }
+
     /// Get the base struct name and type args from a `type_id`, unwrapping references if needed
     /// Returns (`base_name`, `type_args`) for `GenericInstance`, (name, []) for Struct
     pub fn get_struct_info_from_type(

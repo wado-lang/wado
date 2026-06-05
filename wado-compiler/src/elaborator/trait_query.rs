@@ -48,6 +48,16 @@ pub(crate) fn canonical_decl_key_with(
             .unwrap_or_else(|| src.clone());
         return (canonical, name.to_string());
     }
+    // A declaration in the current module shadows a same-named `pub` item in
+    // another module, so prefer it before the global symbol lookup. Scoped to
+    // items actually *defined* here (`defined_at.module == current`) so it never
+    // affects imported names. Without this, a local trait `Visitor` lost to
+    // `core:serde::Visitor` (issue #1298).
+    if let Some(sym) = symbols.lookup_in_module(current_module_source, name)
+        && &sym.defined_at.module == current_module_source
+    {
+        return (current_module_source.clone(), name.to_string());
+    }
     if let Some(sym) = symbols.lookup(name) {
         return (sym.defined_at.module.clone(), name.to_string());
     }
@@ -77,20 +87,9 @@ pub(crate) fn find_trait_decl_methods_with_module_with(
     trait_env: &super::trait_env::TraitEnv,
     loaded_modules: &IndexMap<ModuleSource, ast::Module>,
 ) -> Option<(Vec<ast::Function>, ModuleSource)> {
-    // A trait defined in the current module shadows any imported or global
-    // trait of the same name, so resolve against the local module first. The
-    // canonical key below falls back to a global `symbols.lookup(name)`, which
-    // would otherwise pick up an unrelated `pub` trait of the same name in
-    // another module (e.g. `core:serde::Visitor` when this module defines its
-    // own parse-tree `Visitor`) and synthesise that trait's default methods
-    // into the local trait's impls. See issue #1298.
-    for item in current_module_items {
-        if let Item::Trait(trait_decl) = item
-            && trait_decl.name == trait_name
-        {
-            return Some((trait_decl.methods.clone(), current_module_source.clone()));
-        }
-    }
+    // `canonical_decl_key_with` resolves the trait local-first (a local trait
+    // shadows a same-named one in another module — issue #1298), so this picks
+    // the right `Visitor` even when an unrelated `core:serde::Visitor` exists.
     let canonical_key = canonical_decl_key_with(
         trait_name,
         current_module_source,
@@ -103,6 +102,13 @@ pub(crate) fn find_trait_decl_methods_with_module_with(
         && let Some(Item::Trait(trait_decl)) = module.items.get(*item_idx)
     {
         return Some((trait_decl.methods.clone(), module_src.clone()));
+    }
+    for item in current_module_items {
+        if let Item::Trait(trait_decl) = item
+            && trait_decl.name == trait_name
+        {
+            return Some((trait_decl.methods.clone(), current_module_source.clone()));
+        }
     }
     None
 }
@@ -141,21 +147,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         trait_name: &str,
     ) -> Option<Vec<ast::GenericParam>> {
-        // Local-first, mirroring `find_trait_decl_methods_with_module_with`: the
-        // type-param list and the default-method bodies must resolve to the same
-        // trait, so a local trait shadows an imported/global same-named one here
-        // too (see issue #1298).
-        for item in self.current_module_items {
-            if let Item::Trait(trait_decl) = item
-                && trait_decl.name == trait_name
-            {
-                return Some(trait_decl.type_params.clone());
-            }
-        }
+        // `canonical_decl_key` is local-first (issue #1298), so the type-param
+        // list and the default-method bodies resolve to the same trait.
         let canonical_key = self.canonical_decl_key(trait_name);
         if let Some((module_src, item_idx)) = self.tysys.trait_env.decl_index.get(&canonical_key) {
             let module = &self.loaded_modules[module_src];
             if let Item::Trait(trait_decl) = &module.items[*item_idx] {
+                return Some(trait_decl.type_params.clone());
+            }
+        }
+        for item in self.current_module_items {
+            if let Item::Trait(trait_decl) = item
+                && trait_decl.name == trait_name
+            {
                 return Some(trait_decl.type_params.clone());
             }
         }
