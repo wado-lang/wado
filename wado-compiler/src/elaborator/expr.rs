@@ -128,7 +128,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `expression_types` (AST level) rather than the built
                 // block so this does not depend on the body TIR.
                 let type_id = self.ast_block_result_type(block);
-                TirExpr::new(TirExprKind::Block(tir_block), type_id, block.span)
+                // Stage 7-B: reify rebuilds the `Block` from the AST; the
+                // combined walk resolved it for fact recording. Project the
+                // shared block-result type.
+                let _ = tir_block;
+                placeholder(type_id, block.span)
             }
             Expr::If(if_expr) => self.resolve_if_expr(if_expr, ctx, expected_type),
             Expr::Match(match_expr) => self.resolve_match_expr(match_expr, ctx, expected_type),
@@ -202,15 +206,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.check_branch_type(break_type, result_type, lb.span);
                 }
 
-                TirExpr::new(
-                    TirExprKind::LabeledBlock {
-                        label: lb.label.clone(),
-                        block: tir_block,
-                        result_type,
-                    },
-                    result_type,
-                    lb.span,
-                )
+                // Stage 7-B: reify rebuilds the `LabeledBlock` from the AST,
+                // re-running the same break-type unification. The combined walk
+                // resolved the body and ran break-type / null diagnostics for
+                // their side effects; project only the unified result type.
+                let _ = tir_block;
+                placeholder(result_type, lb.span)
             }
             Expr::Matches(m) => self.desugar_matches_expr(m, ctx, expected_type),
             Expr::Spread(..) => {
@@ -1903,7 +1904,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
-                TirExpr::new(TirExprKind::Block(chain_block), type_id, if_expr.span)
+                // Stage 7-B: reify rebuilds the if-let-chain (recorded via
+                // `DesugarKind::IfLetChain`) from the AST. The combined walk
+                // ran `resolve_let_chain_stmts` for its fact-recording side
+                // effects (pattern bindings, element resolution) and computed
+                // the result type; the synthetic `chain_block` it built is
+                // discarded. Project only the result type.
+                let _ = chain_block;
+                placeholder(type_id, if_expr.span)
             }
             Condition::Expr(expr) => {
                 let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
@@ -2020,15 +2028,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
-                TirExpr::new(
-                    TirExprKind::If {
-                        condition: Box::new(condition),
-                        then_branch: then_block,
-                        else_branch: else_block,
-                    },
-                    type_id,
-                    if_expr.span,
-                )
+                // Stage 7-B: reify rebuilds the `If` node from the AST; the
+                // combined walk resolved the condition and both blocks for
+                // their fact-recording side effects and ran branch-agreement /
+                // null diagnostics off the AST (`ast_block_result_type`).
+                // Project only the result type.
+                let _ = (condition, then_block, else_block);
+                placeholder(type_id, if_expr.span)
             }
         }
     }
@@ -2261,14 +2267,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        TirExpr::new(
-            TirExprKind::Match {
-                expr: Box::new(scrutinee),
-                arms,
-            },
-            type_id,
-            match_expr.span,
-        )
+        // Stage 7-B: reify rebuilds the `Match` node from the AST
+        // (`reify_match_expr`); the combined walk resolved the scrutinee and
+        // arms above for their fact-recording side effects and ran
+        // exhaustiveness / null / arm-agreement diagnostics. No analysis reads
+        // the resolved match structure (missing-return walks arms off the AST
+        // in `control_flow.rs`), so project only the result type.
+        let _ = (scrutinee, arms);
+        placeholder(type_id, match_expr.span)
     }
 
     pub(super) fn resolve_match_arm(
@@ -3180,15 +3186,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (struct_type, struct_name, fields)
         };
 
-        TirExpr::new(
-            TirExprKind::StructLiteral {
-                struct_type,
-                struct_name: mangled_struct_name,
-                fields,
-            },
-            struct_type,
-            struct_lit.span,
-        )
+        // Stage 7-B: reify rebuilds the `StructLiteral` (`reify_struct_literal`)
+        // from the AST + the recorded `generic_instantiations` mangled name /
+        // instance type; the combined walk resolved the fields (and applied any
+        // deferred tuple-to-sequence coercion) for their fact-recording side
+        // effects. Project only the struct type.
+        let _ = (mangled_struct_name, fields);
+        placeholder(struct_type, struct_lit.span)
     }
 
     /// Resolve an anonymous struct literal `{ x: 1, y: 2 }` by inferring a struct type
@@ -3234,15 +3238,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 existing_type,
                 Some(anon_name.clone()),
             );
-            return TirExpr::new(
-                TirExprKind::StructLiteral {
-                    struct_type: existing_type,
-                    struct_name: anon_name,
-                    fields: resolved_fields,
-                },
-                existing_type,
-                struct_lit.span,
-            );
+            // Stage 7-B: reify rebuilds the anonymous `StructLiteral`
+            // (`reify_anonymous_struct_literal`); project only the type.
+            let _ = (anon_name, resolved_fields);
+            return placeholder(existing_type, struct_lit.span);
         }
 
         // Register the new anonymous struct type
@@ -3305,15 +3304,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(anon_name.clone()),
         );
 
-        TirExpr::new(
-            TirExprKind::StructLiteral {
-                struct_type,
-                struct_name: anon_name,
-                fields: resolved_fields,
-            },
-            struct_type,
-            struct_lit.span,
-        )
+        // Stage 7-B: reify rebuilds the anonymous `StructLiteral`; the combined
+        // walk registered the struct type, field info, and pending TirStruct
+        // above for their side effects. Project only the type.
+        let _ = (anon_name, resolved_fields);
+        placeholder(struct_type, struct_lit.span)
     }
 
     /// Infer type arguments for a generic struct from its field values, with
@@ -3629,14 +3624,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         ctx.exit_scope();
 
-        TirExpr::new(
-            TirExprKind::Match {
-                expr: Box::new(inner),
-                arms: vec![some_arm, none_arm],
-            },
-            some_type,
-            span,
-        )
+        // Stage 7-B: reify rebuilds the `Option` `?` desugar
+        // (`reify_question_mark_option`) from the AST, allocating its own
+        // `__qm_v` local. The combined walk keeps the scope/local allocation
+        // (walk-order parity) and projects the unwrapped `Some` payload type.
+        let _ = (inner, some_arm, none_arm);
+        placeholder(some_type, span)
     }
 
     fn resolve_question_mark_result(
@@ -3765,14 +3758,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         ctx.exit_scope();
 
-        TirExpr::new(
-            TirExprKind::Match {
-                expr: Box::new(inner),
-                arms: vec![ok_arm, err_arm],
-            },
-            ok_type,
-            span,
-        )
+        // Stage 7-B: reify rebuilds the `Result` `?` desugar
+        // (`reify_question_mark_result`) from the AST + the recorded
+        // `FromCallFacts` (written by `resolve_from_call` above when the inner
+        // and outer error types differ). The combined walk keeps the scope /
+        // local allocation and the `resolve_from_call` fact-recording, and
+        // projects the unwrapped `Ok` payload type.
+        let _ = (inner, ok_arm, err_arm);
+        placeholder(ok_type, span)
     }
 
     /// Generate a call to `From::from(value)` that converts `value` of type

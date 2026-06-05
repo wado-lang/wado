@@ -446,12 +446,16 @@ unblocks in parentheses):
       directly (`Number`/`Bool`/`Char` → `Literal` pattern, else
       `ConstantValue`), unblocking `resolve_literal` and `resolve_cast`
       placeholders.
-- [ ] **for-of `TupleZip`** — `resolve_for_of` detects the variadic form by
-      the iterator's `TupleZip` kind. Record the form. (coupled with the
-      `TupleZip` producer)
+- [x] **for-of `TupleZip`** — `resolve_for_of` no longer reads the resolved
+      `iterable.kind == TupleZip`. `TupleZip` is produced only by the tuple
+      `.zip()` arm, so an AST shape check (a `.zip()` call) plus the existing
+      `type_contains_pack` on the result type is equivalent.
 - [ ] **if-let-chain / let-chain result type** — the remaining
-      `block_result_type(TIR)` readers, over synthetic chain blocks. Needs
-      the chain's result-type rule expressed on the AST.
+      `block_result_type(TIR)` readers, over synthetic chain blocks. The
+      `resolve_if_expr` LetChain arm is now a placeholder but still computes
+      its result type from the synthetic `chain_block` (still built because
+      `resolve_block` still builds TIR); the AST result-type rule is only
+      needed when `resolve_block` is converted in the Phase 2 signature sweep.
 - [ ] **assign target ident classification** — `assign_to_target` still
       reads `target.kind` to classify an `Ident` / `&mut`-captured-ident
       target (`Local` / `GlobalVarGet` / deref-capture `Unary { Deref }`).
@@ -459,11 +463,12 @@ unblocks in parentheses):
       unblocks `resolve_ident`.
 
 Arms now returning placeholders: range, field-access, index, unary, cast,
-tuple-literal, literal (joining binary / call / method-call / operators /
-coercion / assert / matches / template / item / module / handlers from
-earlier stages). Still building TIR: `resolve_ident`,
-`resolve_struct_literal`, the structural `Block` / `If` / `Match` /
-`LabeledBlock` arms, and `resolve_block` / `resolve_stmt` (the Phase 2
+tuple-literal, literal, match, struct-literal, anonymous-struct, `?`
+(option + result), if-expr (both arms), block, labeled-block, with-handler,
+resume (joining binary / call / method-call / operators / coercion / assert /
+matches / template / item / module from earlier stages). Still building TIR:
+`resolve_ident` (blocked on the assign target ident classification above) and
+`resolve_block` / `resolve_stmt` with the stmt-level builders (the Phase 2
 signature sweep).
 
 `adjust_receiver_for_self_kind` (method-call receiver wrapping) reads
@@ -582,6 +587,13 @@ block-result-type reader.
       assert.rs / closure.rs / handlers.rs / matches.rs / template.rs /
       module.rs are deleted, and `build_tir_from_state` becomes a
       body-walk pass that returns no TIR. LSP then runs `annotate` only.
+      Progress: every structural expression arm now returns a placeholder —
+      `match`, struct / anonymous-struct literals, `?` (option + result),
+      if-expr (both arms), block, labeled-block, `with` / `resume` — joining
+      the earlier-stage leaves. The two remaining real-TIR producers are
+      `resolve_ident` (blocked on the assign target ident classification) and
+      the `resolve_block` / `resolve_stmt` family (the signature sweep), both
+      tracked under Phase 1 / Phase 2 above.
 
 ### Landing log
 
