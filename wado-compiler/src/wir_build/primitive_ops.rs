@@ -585,11 +585,7 @@ impl FunctionTranslator<'_, '_> {
         }
     }
     /// Translate array index read: `arr[i]`
-    pub(super) fn translate_index(
-        &mut self,
-        array_expr: ExprId,
-        index_expr: ExprId,
-    ) -> WirInstr {
+    pub(super) fn translate_index(&mut self, array_expr: ExprId, index_expr: ExprId) -> WirInstr {
         let arr = self.translate_expr(array_expr);
         let idx = self.translate_expr(index_expr);
 

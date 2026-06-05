@@ -167,32 +167,26 @@ must not regress" requirement.
       first would instead need an `arena → tree` step at its exit (overhead) because
       `optimize` still reads the tree.
 
-- [ ] Phase 2 — port `wir_build` to read `Body`, built by a `tree → arena`
-      converter at its entry. `lower` and `optimize` are untouched; the tree
-      stays canonical through them. Green check: WIR / Wasm output unchanged
-      across the e2e and golden suites.
-      - In progress (WIP, non-compiling). The port is one atomic unit: the
-        `FunctionTranslator` body-translation call graph is mutually recursive
-        across `translate.rs`, `pattern_match.rs`, `calls.rs`,
-        `primitive_ops.rs`, and the body-shape helpers in `canonical_abi.rs`,
-        with `translate_expr` the chokepoint — so there is no green checkpoint
-        until every signature flips from `&NirExpr` / `&NirStmt` / `&NirBlock` /
-        `&NirPattern` to `ExprId` / `StmtId` / `BlockId` / `PatId`.
-      - Technique: `FunctionTranslator` gains `body: &'a Body` (built once per
-        function at the entry via `Body::from_block`). Each method takes ids and
-        reads nodes via `let arena = self.body; let node = &arena.<map>[id];`
-        (copying the `&'a Body` out so it does not borrow `&mut self`). Match
-        arms already renamed (`NirExprKind` → `ExprKind`, etc., identical
-        variant/field names); child fields are now `ExprId` (Copy), so
-        recursion is `self.translate_expr(*child)`. `functions.rs`'s global-init
-        path (`translate_global_init`) stays on the tree — globals are not part
-        of the `FunctionTranslator` cluster.
-      - Done so far: entry wired (arena built, threaded, `translate_block(root)`);
-        enum renames + arena imports in the cluster files; `translate_block`,
-        `declare_locals_from_stmts`, `translate_stmts` ported.
-      - Remaining: `translate_stmt`, `translate_expr*`, the value-position
-        helpers, all of `pattern_match.rs`, and the `calls.rs` /
-        `primitive_ops.rs` / `canonical_abi.rs` arg / shape helpers.
+- [x] Phase 2 — `wir_build` reads `Body`, built by a `tree → arena` converter
+      at its entry; `lower` and `optimize` are untouched and the tree stays
+      canonical through them. Green check: WIR / Wasm output bit-identical —
+      the full e2e suite passes (2786 passed, 0 failed at O0/O2), clippy clean.
+      - The whole `FunctionTranslator` body-translation cluster was ported in
+      one atomic change (no green checkpoint mid-way, because the call graph
+      is mutually recursive across `translate.rs`, `pattern_match.rs`,
+      `calls.rs`, `primitive_ops.rs`, and `canonical_abi.rs`'s shape helpers,
+      with `translate_expr` the chokepoint): every signature flipped from
+      `&NirExpr` / `&NirStmt` / `&NirBlock` / `&NirPattern` to `ExprId` /
+      `StmtId` / `BlockId` / `PatId`.
+      - Technique: `FunctionTranslator` carries `body: &'a Body` (built once per
+      function at the entry via `Body::from_block`). Each method takes ids and
+      reads nodes via `let arena = self.body; let node = &arena.<map>[id];`
+      — copying the `&'a Body` out so it does not borrow `&mut self`, which is
+      what lets a node read coexist with the `&mut self` recursion. The
+      `WirContext` tuple-element helpers were re-keyed from `&[NirExpr]` to
+      `&[TypeId]`. `functions.rs`'s global-init path (`translate_global_init`)
+      stays on the tree — globals are not part of the `FunctionTranslator`
+      cluster.
 - [ ] Phase 3 — port `lower` to emit `Body` directly; `optimize` is ported
       alongside / before so the arena flows lower → optimize → wir_build with
       no converter. The arena is now the only post-lower body form.

@@ -6,17 +6,12 @@
 use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{
-    NirBinaryOp, NirFunction, NirParam, NirStmt, NirStmtKind,
-    NirUnaryOp,
-};
+use crate::nir::{NirBinaryOp, NirFunction, NirParam, NirStmt, NirStmtKind, NirUnaryOp};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{CanonicalIntrinsic, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
 use super::context::WirContext;
-use crate::nir_arena::{
-    BlockId, Body, ExprId, ExprKind, StmtId, StmtKind,
-};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
 
 /// Recursively collect variable names from Let statements.
 ///
@@ -1103,8 +1098,10 @@ impl FunctionTranslator<'_, '_> {
         tuple_type_id: crate::tir::TypeId,
         elements: &[ExprId],
     ) -> (WirTypeId, Vec<WirInstr>) {
-        let elem_type_ids: Vec<crate::tir::TypeId> =
-            elements.iter().map(|e| self.body.exprs[*e].type_id).collect();
+        let elem_type_ids: Vec<crate::tir::TypeId> = elements
+            .iter()
+            .map(|e| self.body.exprs[*e].type_id)
+            .collect();
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, tuple_type_id);
         let wir_type_id = match &wir_type {
             WirType::Ref { type_id, .. } => Some(type_id.clone()),
@@ -1403,7 +1400,8 @@ impl FunctionTranslator<'_, '_> {
                             is_loop_break: false,
                             is_loop_continue: false,
                         });
-                        let then_body = self.translate_stmts_as_value(&arena.blocks[then_block].stmts);
+                        let then_body =
+                            self.translate_stmts_as_value(&arena.blocks[then_block].stmts);
                         let else_body =
                             Some(self.translate_stmts_as_value(&arena.blocks[else_block].stmts));
                         self.label_stack.pop();
@@ -1483,8 +1481,8 @@ impl FunctionTranslator<'_, '_> {
                         is_loop_continue: false,
                     });
                     let then_body = self.translate_stmts_as_value(&arena.blocks[then_branch].stmts);
-                    let else_body = else_branch
-                        .map(|b| self.translate_stmts_as_value(&arena.blocks[b].stmts));
+                    let else_body =
+                        else_branch.map(|b| self.translate_stmts_as_value(&arena.blocks[b].stmts));
                     self.label_stack.pop();
                     return WirInstr::If {
                         condition: Box::new(cond),

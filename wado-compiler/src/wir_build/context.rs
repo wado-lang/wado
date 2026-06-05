@@ -1056,7 +1056,8 @@ impl<'a> WirContext<'a> {
             .copied()
             .filter(|tid| !matches!(self.type_id_to_wir_type(type_table, *tid), WirType::Unit))
             .collect();
-        self.tuple_type_map.insert(filtered_type_ids, type_id.clone());
+        self.tuple_type_map
+            .insert(filtered_type_ids, type_id.clone());
         Some(type_id)
     }
 

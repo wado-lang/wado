@@ -11,9 +11,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
 use super::translate::{FunctionTranslator, LabelEntry};
-use crate::nir_arena::{
-    ArmData, BlockId, Body, ExprId, PatId, PatKind,
-};
+use crate::nir_arena::{ArmData, BlockId, Body, ExprId, PatId, PatKind};
 
 /// Case enumeration for a variant or enum scrutinee, used to check whether a
 /// set of match arms exhaustively covers every case.
@@ -203,9 +201,9 @@ impl FunctionTranslator<'_, '_> {
 
         match &arena.pats[pattern].kind {
             PatKind::Tuple(patterns, _) => {
-                let wir_type =
-                    self.ctx
-                        .type_id_to_wir_type(self.type_table, arena.exprs[value].type_id);
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, arena.exprs[value].type_id);
                 if let WirType::Ref { ref type_id, .. } = wir_type {
                     let mut instrs = Vec::new();
 
@@ -223,7 +221,8 @@ impl FunctionTranslator<'_, '_> {
 
                     // Bind each element
                     for (i, sub_pattern) in patterns.iter().enumerate() {
-                        if let PatKind::Binding { local_index, .. } = &arena.pats[*sub_pattern].kind {
+                        if let PatKind::Binding { local_index, .. } = &arena.pats[*sub_pattern].kind
+                        {
                             let local_name = self.local_name(*local_index);
                             let field_name_str = format!("{i}");
                             let field_result_ty =
@@ -500,11 +499,7 @@ impl FunctionTranslator<'_, '_> {
     ///
     /// The caller uses the resulting `Vec<bool>` both for depth accounting
     /// and for emission, so the two stages cannot drift.
-    fn compute_emitted_as_irrefutable(
-        &self,
-        scrut_type: TypeId,
-        arms: &[ArmData],
-    ) -> Vec<bool> {
+    fn compute_emitted_as_irrefutable(&self, scrut_type: TypeId, arms: &[ArmData]) -> Vec<bool> {
         let mut out: Vec<bool> = arms
             .iter()
             .map(|arm| {
@@ -1266,7 +1261,9 @@ impl FunctionTranslator<'_, '_> {
                 // Or patterns: emit bindings for each alternative, guarded by its condition.
                 // For alternatives with only wildcards (no real bindings), skip entirely.
                 let alternatives = alternatives.clone();
-                let has_any_bindings = alternatives.iter().any(|alt| pattern_has_bindings(arena, *alt));
+                let has_any_bindings = alternatives
+                    .iter()
+                    .any(|alt| pattern_has_bindings(arena, *alt));
                 if !has_any_bindings {
                     return;
                 }
@@ -1557,7 +1554,9 @@ impl FunctionTranslator<'_, '_> {
             }
             _ => {
                 // Non-variant: compare discriminant directly
-                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, self.body.exprs[inner].type_id);
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, self.body.exprs[inner].type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     return WirInstr::I32Eq(
                         Box::new(WirInstr::StructGet {
@@ -1583,7 +1582,9 @@ impl FunctionTranslator<'_, '_> {
         {
             if case.payload.is_empty() {
                 // Unit variant: check discriminant
-                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, self.body.exprs[inner].type_id);
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, self.body.exprs[inner].type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     return WirInstr::I32Eq(
                         Box::new(WirInstr::StructGet {
@@ -1609,7 +1610,9 @@ impl FunctionTranslator<'_, '_> {
         }
 
         // Fallback: compare discriminant
-        let wir_type = self.ctx.type_id_to_wir_type(self.type_table, self.body.exprs[inner].type_id);
+        let wir_type = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, self.body.exprs[inner].type_id);
         if let WirType::Ref { type_id, .. } = wir_type {
             WirInstr::I32Eq(
                 Box::new(WirInstr::StructGet {
@@ -1626,11 +1629,7 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Translate variant payload extraction.
-    pub(super) fn translate_variant_payload(
-        &mut self,
-        inner: ExprId,
-        case_index: u32,
-    ) -> WirInstr {
+    pub(super) fn translate_variant_payload(&mut self, inner: ExprId, case_index: u32) -> WirInstr {
         let val = self.translate_expr(inner);
 
         // Look up variant type info

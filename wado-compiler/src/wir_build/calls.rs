@@ -386,7 +386,8 @@ impl FunctionTranslator<'_, '_> {
                     .ctx
                     .type_id_to_wir_type(self.type_table, self.body.exprs[src_expr].type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
-                    let element_copy_func = self.array_element_copy_func(self.body.exprs[src_expr].type_id);
+                    let element_copy_func =
+                        self.array_element_copy_func(self.body.exprs[src_expr].type_id);
                     Some(WirInstr::ArrayClone {
                         type_id,
                         src: Box::new(src),
