@@ -26,6 +26,11 @@ jobs:
           fetch-depth: 0
           token: "${{ steps.app-token.outputs.token }}"
 
+      # postVersionCommand (cargo update, see .tagpr) needs the vendored
+      # wasmtime path dependency, or Cargo.lock is left stale on the release PR.
+      - name: Check out the vendored wasmtime fork (path dependency)
+        run: git submodule update --init --depth 1 vendor/wasmtime
+
       - uses: Songmu/tagpr@v1
         env:
           GITHUB_TOKEN: "${{ steps.app-token.outputs.token }}"
