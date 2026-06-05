@@ -1,9 +1,11 @@
 //! Tests for `render_dump(Grammar, LoweredGrammar, GenContext) -> String`.
 //!
-//! Each test builds a minimal `Grammar` via struct-literal syntax (no
-//! g4 parser), lowers it with `lower`, and asserts on substrings of the
-//! rendered report. The point is the report's MECE structure, not exact
-//! byte layout — substring checks keep the tests robust to spacing.
+//! Most tests build a minimal `Grammar` via struct-literal syntax (no
+//! g4 parser), lower it, and assert on substrings of the rendered
+//! report. The point is the report's MECE structure, not exact byte
+//! layout — substring checks keep the tests robust to spacing. A few
+//! tests that need LR / follow-variant shapes (awkward to hand-build)
+//! go through the g4 front-end via `dump_source`.
 
 use {
     Grammar,
@@ -14,16 +16,35 @@ use {
     RuleRefElement,
     TokenRefElement,
     Visibility,
+    merge_grammars,
+    synthesize_implicit_tokens,
+    normalize_caches,
 } from "./ir.wado";
-use { LitToken } from "./lexer_gen.wado";
-use { lower } from "./lower.wado";
+use { LitToken, collect_literal_tokens } from "./lexer_gen.wado";
+use { lower_with_ctx } from "./lower.wado";
 use { GenContext } from "./gen_context.wado";
 use { render_dump } from "./dump.wado";
+use { parse } from "./g4/parser.wado";
+
+/// Run the full front-end (parse → merge → synth → lower) and render,
+/// mirroring `cmd_dump`. Used by tests whose grammar shape (left
+/// recursion, K-prefix follow-variants) is impractical to hand-build.
+fn dump_source(input: &String) -> String {
+    let mut merged = merge_grammars([parse(*input).unwrap()]);
+    synthesize_implicit_tokens(&mut merged);
+    normalize_caches(&mut merged);
+    let lit = collect_literal_tokens(&merged.parser_rules);
+    let mut ctx = GenContext::new(&merged.parser_rules, &lit);
+    let lowered = lower_with_ctx(&merged, &lit, &mut ctx);
+    return render_dump(&merged, &lowered, &mut ctx);
+}
 
 fn dump_grammar(g: &Grammar) -> String {
     let lit_tokens = no_lit_tokens();
-    let lowered = lower(g, &lit_tokens);
+    // Lower through the render ctx (mirrors cmd_dump) so the
+    // follow-variant registry is populated for the dump.
     let mut ctx = GenContext::new(&g.parser_rules, &lit_tokens);
+    let lowered = lower_with_ctx(g, &lit_tokens, &mut ctx);
     return render_dump(g, &lowered, &mut ctx);
 }
 
@@ -278,4 +299,45 @@ test "render_dump annotates an Ambiguous leaf with its halt reason" {
     assert str_contains(&report, &"opaque rule-ref prefix"), report;
     // `expr`'s `ID` vs `ID PLUS ID` is an at-end-vs-branch conflict.
     assert str_contains(&report, &"at-end vs branch conflict"), report;
+}
+
+test "render_dump shows LR loop-entry dispatch with conflict-min" {
+    // `e : e '.' ID | e '.' ID '(' ')' | ID ;` — both LR suffixes start
+    // with '.', so the precedence loop's entry decision is NOT token-led:
+    // it falls back to precedence + second-token disambiguation. The dump
+    // must surface each alt's conflict-min and flag the overlapping
+    // loop-entry group (the "drop loop entry branch" ATN-class territory).
+    let g = "grammar L;
+e : e '.' ID | e '.' ID '(' ')' | ID ;
+ID : [a-z]+ ;";
+    let report = dump_source(&g);
+
+    // Per-LR-alt precedence loop-entry bound.
+    assert str_contains(&report, &"conflict-min="), report;
+    // The loop-entry section itself.
+    assert str_contains(&report, &"loop-entry:"), report;
+    // Both '.'-led suffixes land in one overlap group, flagged as
+    // precedence-disambiguated (not token-led).
+    assert str_contains(&report, &"overlapping suffix first-sets"), report;
+}
+
+test "render_dump shows the K-prefix mask on a follow-variant" {
+    // `prog : item X Y ; item : (X Y)* ;` — `item`'s tail repeat has a
+    // multi-token inner `(X Y)`, so the 1-token follow mask is empty
+    // (soundness invariant 1) and the call site is gated by a K-prefix
+    // mask instead: peek [X, Y] at the iter entry and yield the trailing
+    // pair to `prog`. The dump must surface that per-depth mask, not just
+    // the empty 1-token mask.
+    let g = "grammar K;
+prog : item X Y ;
+item : (X Y)* ;
+X : 'x' ;
+Y : 'y' ;";
+    let report = dump_source(&g);
+
+    assert str_contains(&report, &"follow-variants:"), report;
+    // 1-token mask is empty ...
+    assert str_contains(&report, &"mask=[]"), report;
+    // ... and the per-depth K-prefix mask is rendered instead.
+    assert str_contains(&report, &"k-prefix=[@0=[TK_X] @1=[TK_Y]]"), report;
 }
