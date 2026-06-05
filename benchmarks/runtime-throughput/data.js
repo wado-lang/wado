@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780671693234,
+  "lastUpdate": 1780673361965,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -6803,6 +6803,195 @@ window.BENCHMARK_DATA = {
           {
             "name": "syntax_highlight (-O3)",
             "value": 2.63,
+            "unit": "MB/s"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b3ed65540004a77bd260b4b9689bc9c354a40179",
+          "message": "Merge pull request #1303 from wado-lang/claude/benchmark-workflow-html-Yf8ip\n\nImprove benchmark dashboard HTML and workflow",
+          "timestamp": "2026-06-06T00:20:48+09:00",
+          "tree_id": "74a9b60c6f326ed7bd50d6901194351632b95619",
+          "url": "https://github.com/wado-lang/wado/commit/b3ed65540004a77bd260b4b9689bc9c354a40179"
+        },
+        "date": 1780673361408,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "count_prime (-O1)",
+            "value": 7.64,
+            "unit": "M numbers/s"
+          },
+          {
+            "name": "mandelbrot (-O1)",
+            "value": 5.27,
+            "unit": "M px/s"
+          },
+          {
+            "name": "sieve (-O1)",
+            "value": 37.66,
+            "unit": "M numbers/s"
+          },
+          {
+            "name": "fts (-O1)",
+            "value": 6.8,
+            "unit": "M conversions/s"
+          },
+          {
+            "name": "zlib/compress (-O1)",
+            "value": 17.83,
+            "unit": "MB/s"
+          },
+          {
+            "name": "zlib/decompress (-O1)",
+            "value": 53.82,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/twitter (-O1)",
+            "value": 171.27,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/canada (-O1)",
+            "value": 73.59,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/catalog (-O1)",
+            "value": 119.45,
+            "unit": "MB/s"
+          },
+          {
+            "name": "sqlite_parse (-O1)",
+            "value": 5.53,
+            "unit": "MB/s"
+          },
+          {
+            "name": "syntax_highlight (-O1)",
+            "value": 2.51,
+            "unit": "MB/s"
+          },
+          {
+            "name": "count_prime (-O2)",
+            "value": 7.66,
+            "unit": "M numbers/s"
+          },
+          {
+            "name": "mandelbrot (-O2)",
+            "value": 5.28,
+            "unit": "M px/s"
+          },
+          {
+            "name": "sieve (-O2)",
+            "value": 139.95,
+            "unit": "M numbers/s"
+          },
+          {
+            "name": "fts (-O2)",
+            "value": 9.55,
+            "unit": "M conversions/s"
+          },
+          {
+            "name": "zlib/compress (-O2)",
+            "value": 40.07,
+            "unit": "MB/s"
+          },
+          {
+            "name": "zlib/decompress (-O2)",
+            "value": 99.91,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/twitter (-O2)",
+            "value": 245.04,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/canada (-O2)",
+            "value": 86.32,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/catalog (-O2)",
+            "value": 143.48,
+            "unit": "MB/s"
+          },
+          {
+            "name": "sqlite_parse (-O2)",
+            "value": 6.88,
+            "unit": "MB/s"
+          },
+          {
+            "name": "syntax_highlight (-O2)",
+            "value": 3.12,
+            "unit": "MB/s"
+          },
+          {
+            "name": "count_prime (-O3)",
+            "value": 7.69,
+            "unit": "M numbers/s"
+          },
+          {
+            "name": "mandelbrot (-O3)",
+            "value": 5.29,
+            "unit": "M px/s"
+          },
+          {
+            "name": "sieve (-O3)",
+            "value": 140.24,
+            "unit": "M numbers/s"
+          },
+          {
+            "name": "fts (-O3)",
+            "value": 9.83,
+            "unit": "M conversions/s"
+          },
+          {
+            "name": "zlib/compress (-O3)",
+            "value": 40.77,
+            "unit": "MB/s"
+          },
+          {
+            "name": "zlib/decompress (-O3)",
+            "value": 102.06,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/twitter (-O3)",
+            "value": 242.46,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/canada (-O3)",
+            "value": 94.57,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/catalog (-O3)",
+            "value": 146.5,
+            "unit": "MB/s"
+          },
+          {
+            "name": "sqlite_parse (-O3)",
+            "value": 5.09,
+            "unit": "MB/s"
+          },
+          {
+            "name": "syntax_highlight (-O3)",
+            "value": 2.69,
             "unit": "MB/s"
           }
         ]
