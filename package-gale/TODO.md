@@ -54,7 +54,7 @@ Two complementary directions, neither scoped yet:
 - **Runtime ATN simulator** in Gale. Large investment; matches ANTLR4 one-for-one. Must stay clean-room (do not read ANTLR4's `ParserATNSimulator.java` etc.).
 - **Lean on the Stage B′ JVM oracle as the measurement axis.** Already landed (see below); each ATN-class fix flips its pinned `[stage_b_oracle_todo]` test green.
 
-`gale dump` renders the overlap-group prediction tree (the same `build_prediction` tree `gen_multi_alt_body_bt` emits), so ATN-class edges surface as `Ambiguous([alt N, alt M])` leaves under the relevant rule — e.g. `DropLoopEntryBranchInLRRule_4`'s `stat` resolves to `Ambiguous([alt 0, alt 1])` at depth 0 (`expr ';'` and `expr '.'` share their entire `expr` prefix). Before scoping a concrete fix, add the still-missing halt-reason / LR loop-entry / K-prefix per-site fields to the dump (Phase 1 deferred them).
+`gale dump` renders the overlap-group prediction tree (the same `build_prediction` tree `gen_multi_alt_body_bt` emits), so ATN-class edges surface as `Ambiguous([alt N, alt M]) — <reason>` leaves under the relevant rule, where `<reason>` (the `AmbiguityReason` enum in `prediction.wado`) names why the static path halted — e.g. `DropLoopEntryBranchInLRRule_4`'s `stat` resolves to `Ambiguous([alt 0, alt 1]) — opaque rule-ref prefix` at depth 0 (`expr ';'` and `expr '.'` share their entire `expr` prefix). Still deferred (Phase 1): the per-site LR loop-entry and K-prefix fields — add them when a concrete fix needs the LR / follow-variant context alongside the halt reason.
 
 ## Stage A gaps — Gale bugs surfaced by descriptor drivers
 

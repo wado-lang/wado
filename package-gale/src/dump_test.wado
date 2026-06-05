@@ -226,3 +226,56 @@ test "render_dump shows prediction tree for LR atom overlap" {
     assert str_contains(&report, &"TK_INT"), report;
     assert str_contains(&report, &"TK_STRING"), report;
 }
+
+test "render_dump annotates an Ambiguous leaf with its halt reason" {
+    // `r : expr SEMI | expr DOT ; expr : ID | ID PLUS ID ;`
+    //
+    // Both alts of `r` start with the multi-token rule `expr`, so the
+    // disambiguating SEMI / DOT sits behind a shared sub-rule the static
+    // simulator cannot expand — an opaque-rule-ref halt. `expr` itself is
+    // an at-end-vs-branch conflict: `ID` returns while `ID PLUS ID`
+    // continues. The dump must name *why* each Ambiguous leaf appeared,
+    // not just that it did.
+    let mut g = empty_grammar(&"T");
+    g.parser_rules = [
+        ParserRule::new(
+            "r",
+            Visibility::Default,
+            [],
+            [
+                alt_of([
+                    Element::RuleRef(RuleRefElement::new("expr")),
+                    Element::TokenRef(TokenRefElement::new("SEMI")),
+                ]),
+                alt_of([
+                    Element::RuleRef(RuleRefElement::new("expr")),
+                    Element::TokenRef(TokenRefElement::new("DOT")),
+                ]),
+            ],
+        ),
+        ParserRule::new(
+            "expr",
+            Visibility::Default,
+            [],
+            [
+                alt_of([Element::TokenRef(TokenRefElement::new("ID"))]),
+                alt_of([
+                    Element::TokenRef(TokenRefElement::new("ID")),
+                    Element::TokenRef(TokenRefElement::new("PLUS")),
+                    Element::TokenRef(TokenRefElement::new("ID")),
+                ]),
+            ],
+        ),
+    ];
+
+    let report = dump_grammar(&g);
+
+    // The Ambiguous leaf still lists its alts ...
+    assert str_contains(&report, &"Ambiguous(["), report;
+    // ... and now carries a halt reason after the em dash.
+    assert str_contains(&report, &"Ambiguous([alt 0, alt 1]) — "), report;
+    // `r`'s shared `expr` prefix is an opaque-rule-ref halt.
+    assert str_contains(&report, &"opaque rule-ref prefix"), report;
+    // `expr`'s `ID` vs `ID PLUS ID` is an at-end-vs-branch conflict.
+    assert str_contains(&report, &"at-end vs branch conflict"), report;
+}

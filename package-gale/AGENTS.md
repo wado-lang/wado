@@ -101,9 +101,13 @@ Leaf / Ambiguous, mirroring `build_prediction` in `parser_gen.wado`),
 repeat strategies, follow-variants, and inlined prediction warnings —
 followed by a summary of every warning. It reflects what the emitter
 sees, not the raw surface IR. ATN-class decisions where static
-prediction cannot disambiguate surface as `Ambiguous([alt N, alt M])`
-under the relevant rule's `prediction:` section. There are no options;
-multiple files are merged the same as `gale gen`.
+prediction cannot disambiguate surface as `Ambiguous([alt N, alt M]) —
+<reason>` under the relevant rule's `prediction:` section, where
+`<reason>` names *why* the static path halted (`opaque rule-ref
+prefix`, `at-end vs branch conflict`, `lookahead exhausted (k=5)`,
+`config-set explosion`, `multiple alts end together`) — see
+`AmbiguityReason` in `prediction.wado`. There are no options; multiple
+files are merged the same as `gale gen`.
 
 (note: each `wado` command is actually `cargo run --bin wado`)
 

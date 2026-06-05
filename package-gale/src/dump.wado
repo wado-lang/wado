@@ -47,6 +47,8 @@ use {
     PredictionDispatch,
     PredictionBranch,
     ConsumeNode,
+    AmbiguousNode,
+    AmbiguityReason,
     build_prediction,
 } from "./prediction.wado";
 use {
@@ -290,15 +292,17 @@ fn render_prediction_node(out: &mut String, node: &PredictionNode, indent: i32) 
         Leaf(idx) => {
             out.push_str(&`Leaf(alt {*idx})\n`);
         },
-        Ambiguous(alts) => {
+        Ambiguous(a) => {
             out.push_str(&"Ambiguous([");
-            for let mut i = 0; i < alts.len(); i += 1 {
+            for let mut i = 0; i < a.alts.len(); i += 1 {
                 if i > 0 {
                     out.push_str(&", ");
                 }
-                out.push_str(&`alt {alts[i]}`);
+                out.push_str(&`alt {a.alts[i]}`);
             }
-            out.push_str(&"])\n");
+            out.push_str(&"]) — ");
+            out.push_str(&ambiguity_reason_label(&a.reason));
+            out.push('\n');
         },
         Consume(c) => {
             out.push_str(&"Consume(");
@@ -326,6 +330,20 @@ fn prediction_element_label(elem: &Element) -> String {
         TokenRef(t) => `TK_{t.name}`,
         Literal(l) => literal_const_name(&l.text),
         _ => "?",
+    };
+}
+
+/// Human-readable halt reason for an `Ambiguous` leaf — why static
+/// prediction could not isolate one alt here. Cross-references the
+/// `AmbiguityReason` doc comments in prediction.wado.
+fn ambiguity_reason_label(reason: &AmbiguityReason) -> String {
+    return match *reason {
+        MaxDepth => "lookahead exhausted (k=5): needs unbounded lookahead",
+        ConfigExplosion => "config-set explosion (>200)",
+        OpaqueRuleRef => "opaque rule-ref prefix: shared sub-rule hides the disambiguating tokens",
+        AtEndConflict => "at-end vs branch conflict: an alt returns while another continues (adaptive prediction)",
+        MultiAtEnd => "multiple alts end together: true ambiguity",
+        NoViableAlt => "no viable alt",
     };
 }
 
