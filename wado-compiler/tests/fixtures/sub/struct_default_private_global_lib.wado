@@ -1,0 +1,16 @@
+// Helper module for `struct_default_foreign_private_global`.
+//
+// `Config.threshold` is defaulted to an expression that references this
+// module's *private* `global SEED`. Another module may construct `Config`
+// by omitting `threshold`; the default is evaluated in THIS module's scope,
+// so the private `SEED` stays an implementation detail.
+global SEED: i32 = 100;
+
+pub struct Config {
+    pub name: String,
+    threshold: i32 = SEED + 23,
+}
+
+pub fn config_threshold(c: Config) -> i32 {
+    return c.threshold;
+}

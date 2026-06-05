@@ -1,7 +1,7 @@
 use { Benchmark, format_rate } from "core:benchmark";
 
-test "Benchmark::new defaults" {
-    let b = Benchmark::new("smoke");
+test "Benchmark literal defaults" {
+    let b = Benchmark { name: "smoke" };
     assert b.iterations == 0;
     assert b.target_ms == 1000;
     assert b.warmup == -1;
@@ -36,7 +36,7 @@ test "format_rate guards against zero elapsed" {
 }
 
 test "run returns the closure's value" {
-    let mut b = Benchmark::new("returns-value");
+    let mut b = Benchmark { name: "returns-value" };
     b.target_ms = 0;  // one calibration iteration, keeps the test fast
     let answer = b.run("", || 42);
     assert answer == 42;
@@ -44,7 +44,7 @@ test "run returns the closure's value" {
 
 test "auto mode runs a warmup plus at least one measured iteration" {
     let mut calls = 0;
-    let mut b = Benchmark::new("auto");
+    let mut b = Benchmark { name: "auto" };
     b.target_ms = 0;  // exactly one measured iteration after warmup
     let last = b.run("", || {
         calls += 1;
@@ -59,7 +59,7 @@ test "negative target_ms is clamped to a single iteration" {
     // A stray negative budget must not wrap to a huge u64 and spin the loop;
     // it is clamped to 0, behaving like a single measured iteration.
     let mut calls = 0;
-    let mut b = Benchmark::new("neg-budget");
+    let mut b = Benchmark { name: "neg-budget" };
     b.target_ms = -100;
     let last = b.run("", || {
         calls += 1;
@@ -70,14 +70,14 @@ test "negative target_ms is clamped to a single iteration" {
 }
 
 test "iterations runs the closure N times and returns the last value" {
-    let mut b = Benchmark::new("iter-last");
+    let mut b = Benchmark { name: "iter-last" };
     b.iterations = 5;
     let last = b.run("", || 7 * 3);
     assert last == 21;
 }
 
 test "phase labels are accepted and value flows through" {
-    let mut b = Benchmark::new("phases");
+    let mut b = Benchmark { name: "phases" };
     b.iterations = 2;
     let a = b.run("first", || 1);
     let c = b.run("second", || 2);
@@ -86,7 +86,7 @@ test "phase labels are accepted and value flows through" {
 }
 
 test "input_size and explicit warmup do not affect the return value" {
-    let mut b = Benchmark::new("with-config");
+    let mut b = Benchmark { name: "with-config" };
     b.iterations = 3;
     b.warmup = 1;
     b.input_size = Option::Some(1024);
@@ -95,7 +95,7 @@ test "input_size and explicit warmup do not affect the return value" {
 }
 
 test "println does not affect benchmark state" {
-    let mut b = Benchmark::new("with-note");
+    let mut b = Benchmark { name: "with-note" };
     b.target_ms = 0;
     b.println("note before run");
     let v = b.run("", || 99);
@@ -104,7 +104,7 @@ test "println does not affect benchmark state" {
 }
 
 test "warmup auto-derives to 0 for fixed single iteration" {
-    let mut b = Benchmark::new("auto-warmup-single");
+    let mut b = Benchmark { name: "auto-warmup-single" };
     b.iterations = 1;  // fixed mode, single iteration
     // warmup=-1 (auto) → effective warmup is 0 because iterations < 2;
     // surface this through the field invariants the API guarantees.

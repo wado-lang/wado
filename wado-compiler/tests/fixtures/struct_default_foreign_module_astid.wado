@@ -1,0 +1,47 @@
+// Regression: a struct literal that omits a defaulted field whose default
+// expression lives in another module must resolve that default in its owning
+// module. Previously it was resolved under the construction site's id space,
+// so the default's per-AstId type facts collided with same-numbered nodes in
+// this module and corrupted an unrelated local's type — here `is_prime`'s
+// `let mut d = 2` (an i32) was mis-recorded as `Option` (the type of
+// `core:benchmark`'s `input_size: Option = null` default), producing
+// invalid Wasm.
+use { Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+use { Benchmark } from "core:benchmark";
+
+fn is_prime(n: i32) -> bool {
+    if n < 2 {
+        return false;
+    }
+    let mut d = 2;
+    while d * d <= n {
+        if n % d == 0 {
+            return false;
+        }
+        d += 1;
+    }
+    return true;
+}
+
+fn count_primes(limit: i32) -> i32 {
+    let mut count = 0;
+    let mut n = 2;
+    while n <= limit {
+        if is_prime(n) {
+            count += 1;
+        }
+        n += 1;
+    }
+    return count;
+}
+
+export fn run() with Stdout, MonotonicClock {
+    let mut b = Benchmark { name: "primes", work_per_iter: Option::Some(100.0), unit: "n" };
+    b.iterations = 1;  // fixed: skip ~1s auto-calibration in the test
+    let count = b.run("", || count_primes(100));
+    assert count == 25;  // π(100) = 25, proving `d` stayed an i32
+}
+
+__DATA__
+{ "stdout_contains": ["primes", "n/s", "1 iter"] }
