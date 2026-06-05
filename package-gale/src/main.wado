@@ -3,7 +3,7 @@ use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } fr
 use { parse } from "./g4/parser.wado";
 use { Grammar, merge_grammars, check_references, synthesize_implicit_tokens, normalize_caches } from "./ir.wado";
 use { generate, GenerateOptions } from "./codegen.wado";
-use { lower } from "./lower.wado";
+use { lower_with_ctx } from "./lower.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
 use { GenContext } from "./gen_context.wado";
 use { render_dump } from "./dump.wado";
@@ -157,8 +157,11 @@ fn cmd_dump(paths: List<String>) with Stdout, Stderr, Preopens {
     // actual prediction decisions (not the raw surface IR).
     normalize_caches(&mut merged);
     let lit_tokens = collect_literal_tokens(&merged.parser_rules);
-    let lowered = lower(&merged, &lit_tokens);
+    // Lower through the same ctx render_dump renders with, so the
+    // follow-variant registry (with K-prefix masks) is populated and the
+    // dump reflects the literal ctx that lowered the grammar.
     let mut ctx = GenContext::new(&merged.parser_rules, &lit_tokens);
+    let lowered = lower_with_ctx(&merged, &lit_tokens, &mut ctx);
     print(render_dump(&merged, &lowered, &mut ctx));
 }
 

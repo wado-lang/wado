@@ -1238,15 +1238,14 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
                     continue l143;
                 };
             };
+            __hfs_pos_50 = self.pos;
             chunk_len = __hfs_pos_50 - chunk_start;
             if chunk_len > 0 {
                 "core:prelude/string.wado/String::push_str_range_unchecked"(result_7, self.input, chunk_start, __hfs_pos_50);
             }
             if builtin::unlikely(__hfs_pos_50 >= self.input.used) {
                 cold_path;
-                __hfs_call_51 = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(offset_33 = builtin::i64_extend_i32_s(__hfs_pos_50); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_33 }) };
-                self.pos = __hfs_pos_50;
-                return __hfs_call_51;
+                return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(offset_33 = builtin::i64_extend_i32_s(__hfs_pos_50); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_33 }) };
             }
             index_35 = __hfs_pos_50;
             b_11 = builtin::array_get_u8(self.input.repr, index_35);
@@ -1566,116 +1565,119 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
             }) {
                 result = (result * 10) + (b - 48);
                 __hfs_pos_54 = __hfs_pos_54 + 1;
-            } else if (if (if b == 46 -> i32 {
-                1;
             } else {
-                b == 101;
-            }) -> i32 {
-                1;
-            } else {
-                b == 69;
-            }) {
-                d = builtin::i64_extend_i32_s(result);
-                frac = 0;
-                if b == 46 {
-                    __hfs_pos_54 = __hfs_pos_54 + 1;
-                    __hfs_pos_52 = __hfs_pos_54;
-                    self.pos = __hfs_pos_54;
-                    b206: block {
-                        l207: loop {
-                            if __hfs_pos_52 >= _licm_used_50 {
-                                break b206;
-                            }
-                            index_34 = __hfs_pos_52;
-                            b2 = builtin::array_get_u8(_licm_repr_51, index_34);
-                            if (if 48 <= b2 -> i32 {
-                                b2 <= 57;
-                            } else {
-                                0;
-                            }) {
-                                d = (d * 10_i64) + builtin::i64_extend_i32_s(b2 - 48);
-                                frac = frac + 1;
-                                __hfs_pos_52 = __hfs_pos_52 + 1;
-                            } else {
-                                break b206;
-                            }
-                            __hfs_pos_54 = __hfs_pos_52;
-                            self.pos = __hfs_pos_54;
-                            continue l207;
-                        };
-                    };
+                if (if (if b == 46 -> i32 {
+                    1;
                 } else {
-                }
-                exp = 0;
-                if __hfs_pos_54 < _licm_used_50 {
-                    index_37 = __hfs_pos_54;
-                    eb = builtin::array_get_u8(_licm_repr_51, index_37);
-                    if (if eb == 101 -> i32 {
-                        1;
-                    } else {
-                        eb == 69;
-                    }) {
+                    b == 101;
+                }) -> i32 {
+                    1;
+                } else {
+                    b == 69;
+                }) {
+                    d = builtin::i64_extend_i32_s(result);
+                    frac = 0;
+                    if b == 46 {
                         __hfs_pos_54 = __hfs_pos_54 + 1;
-                        exp_neg = 0;
-                        if __hfs_pos_54 < _licm_used_50 {
-                            index_40 = __hfs_pos_54;
-                            sb = builtin::array_get_u8(_licm_repr_51, index_40);
-                            if sb == 45 {
-                                exp_neg = 1;
-                                __hfs_pos_54 = __hfs_pos_54 + 1;
-                            } else {
-                                __hfs_pos_54 = __hfs_pos_54 + (sb == 43);
-                            }
-                        }
-                        __hfs_pos_53 = __hfs_pos_54;
+                        __hfs_pos_52 = __hfs_pos_54;
                         self.pos = __hfs_pos_54;
-                        b216: block {
-                            l217: loop {
-                                if __hfs_pos_53 >= _licm_used_50 {
-                                    break b216;
+                        b206: block {
+                            l207: loop {
+                                if __hfs_pos_52 >= _licm_used_50 {
+                                    break b206;
                                 }
-                                index_43 = __hfs_pos_53;
-                                b3 = builtin::array_get_u8(_licm_repr_51, index_43);
-                                if (if 48 <= b3 -> i32 {
-                                    b3 <= 57;
+                                index_34 = __hfs_pos_52;
+                                b2 = builtin::array_get_u8(_licm_repr_51, index_34);
+                                if (if 48 <= b2 -> i32 {
+                                    b2 <= 57;
                                 } else {
                                     0;
                                 }) {
-                                    exp = (exp * 10) + (b3 - 48);
-                                    __hfs_pos_53 = __hfs_pos_53 + 1;
+                                    d = (d * 10_i64) + builtin::i64_extend_i32_s(b2 - 48);
+                                    frac = frac + 1;
+                                    __hfs_pos_52 = __hfs_pos_52 + 1;
                                 } else {
-                                    break b216;
+                                    break b206;
                                 }
-                                __hfs_pos_54 = __hfs_pos_53;
+                                __hfs_pos_54 = __hfs_pos_52;
                                 self.pos = __hfs_pos_54;
-                                continue l217;
+                                continue l207;
                             };
                         };
-                        if exp_neg {
-                            exp = 0 - exp;
-                        }
+                    } else {
                     }
-                }
-                v = "core:prelude/fpfmt.wado/parse"(d, exp - frac);
-                v_signed = select f64(neg, builtin::f64_neg(v), v);
-                if builtin::unlikely(v_signed != builtin::f64_floor(v_signed)) {
-                    cold_path;
-                    self.pos = __hfs_pos_54;
-                    return 1, 0, ref.as_non_null(msg_45 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer, got float"), used: 27 }; struct.new "core:serde//DeserializeError" { kind: 0, message: msg_45, offset: start });
-                }
-                if builtin::unlikely((if v_signed < -2147483648 -> i32 {
-                    1;
+                    exp = 0;
+                    __hfs_pos_54 = self.pos;
+                    if __hfs_pos_54 < _licm_used_50 {
+                        index_37 = __hfs_pos_54;
+                        eb = builtin::array_get_u8(_licm_repr_51, index_37);
+                        if (if eb == 101 -> i32 {
+                            1;
+                        } else {
+                            eb == 69;
+                        }) {
+                            __hfs_pos_54 = __hfs_pos_54 + 1;
+                            exp_neg = 0;
+                            if __hfs_pos_54 < _licm_used_50 {
+                                index_40 = __hfs_pos_54;
+                                sb = builtin::array_get_u8(_licm_repr_51, index_40);
+                                if sb == 45 {
+                                    exp_neg = 1;
+                                    __hfs_pos_54 = __hfs_pos_54 + 1;
+                                } else {
+                                    __hfs_pos_54 = __hfs_pos_54 + (sb == 43);
+                                }
+                            }
+                            __hfs_pos_53 = __hfs_pos_54;
+                            self.pos = __hfs_pos_54;
+                            b216: block {
+                                l217: loop {
+                                    if __hfs_pos_53 >= _licm_used_50 {
+                                        break b216;
+                                    }
+                                    index_43 = __hfs_pos_53;
+                                    b3 = builtin::array_get_u8(_licm_repr_51, index_43);
+                                    if (if 48 <= b3 -> i32 {
+                                        b3 <= 57;
+                                    } else {
+                                        0;
+                                    }) {
+                                        exp = (exp * 10) + (b3 - 48);
+                                        __hfs_pos_53 = __hfs_pos_53 + 1;
+                                    } else {
+                                        break b216;
+                                    }
+                                    __hfs_pos_54 = __hfs_pos_53;
+                                    self.pos = __hfs_pos_54;
+                                    continue l217;
+                                };
+                            };
+                            if exp_neg {
+                                exp = 0 - exp;
+                            }
+                        } else {
+                        }
+                    } else {
+                    }
+                    v = "core:prelude/fpfmt.wado/parse"(d, exp - frac);
+                    v_signed = select f64(neg, builtin::f64_neg(v), v);
+                    if builtin::unlikely(v_signed != builtin::f64_floor(v_signed)) {
+                        cold_path;
+                        return 1, 0, ref.as_non_null(msg_45 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer, got float"), used: 27 }; struct.new "core:serde//DeserializeError" { kind: 0, message: msg_45, offset: start });
+                    }
+                    if builtin::unlikely((if v_signed < -2147483648 -> i32 {
+                        1;
+                    } else {
+                        v_signed > 2147483647;
+                    })) {
+                        cold_path;
+                        return 1, 0, ref.as_non_null(msg_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i32"), used: 26 }; struct.new "core:serde//DeserializeError" { kind: 5, message: msg_47, offset: start });
+                    }
+                    return 0, builtin::i32_trunc_f64_s(v_signed), ref.null none;
                 } else {
-                    v_signed > 2147483647;
-                })) {
-                    cold_path;
-                    self.pos = __hfs_pos_54;
-                    return 1, 0, ref.as_non_null(msg_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i32"), used: 26 }; struct.new "core:serde//DeserializeError" { kind: 5, message: msg_47, offset: start });
+                    break b197;
                 }
-                self.pos = __hfs_pos_54;
-                return 0, builtin::i32_trunc_f64_s(v_signed), ref.null none;
-            } else {
-                break b197;
+                __hfs_pos_54 = self.pos;
             }
             self.pos = __hfs_pos_54;
             continue l198;

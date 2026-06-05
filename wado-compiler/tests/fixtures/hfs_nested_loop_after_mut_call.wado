@@ -1,0 +1,59 @@
+// Regression: Hot-Field Scalarization must not leave a nested loop in
+// `ScalarOnly` when the field is canonical on every real exit.
+//
+// In the outer loop `s.a` is scalarized into `__hfs_a`. Each iteration:
+//   1. reads `s.a` (scalar),
+//   2. an opaque `#[inline(never)]` `&mut self` call (`touch`) mutates
+//      `s.a` — post-call state is `FieldOnly` (field current, scalar stale),
+//   3. a NESTED loop whose body writes `s.a` (so the body's exit state is
+//      `ScalarOnly`) but which runs ZERO iterations here (`o - o == 0`),
+//   4. reads `s.a` again.
+//
+// The buggy `walk_nested_loop` joined entry=`FieldOnly` with the body's
+// `ScalarOnly` via the branch-join heuristic (`{ScalarOnly,FieldOnly} ->
+// ScalarOnly`). That is unsound for a loop: the zero-iteration path exits
+// at `entry` (field canonical, scalar stale), so claiming `ScalarOnly`
+// let step 4 trust a stale `__hfs_a` and a later write-back clobbered
+// `touch`'s mutation. The fix demotes a loop's post-state `ScalarOnly`
+// to `FieldOnly`, forcing a re-read. Reproduces only at high inline
+// thresholds (-O3), where `touch`'s caller context inlines into the
+// scalarized loop.
+//
+// Per iteration (nested loop never runs): read a; a+=1; touch a+=100; read a; a+=2.
+//   o=0: sink+=0;   a=1;  a=101; sink+=101(=101); a=103
+//   o=1: sink+=103(=204); a=104; a=204; sink+=204(=408); a=206
+//   o=2: sink+=206(=614); a=207; a=307; sink+=307(=921); a=309
+// => s.a == 309, sink == 921.
+
+struct S {
+    a: i32,
+    b: i32,
+}
+
+#[inline(never)]
+fn touch(s: &mut S) {
+    s.a = s.a + 100;
+}
+
+export fn run() {
+    let mut s = S { a: 0, b: 0 };
+    let mut sink = 0;
+    for let mut o = 0; o < 3; o += 1 {
+        sink = sink + s.a;
+        s.a = s.a + 1;
+        touch(&mut s);
+        // Deliberately zero-iteration inner loop whose body writes `s.a`.
+        for let mut k = 0; k < o - o; k += 1 {
+            s.a = s.a + 9;
+        }
+        sink = sink + s.a;
+        s.a = s.a + 2;
+    }
+    assert s.a == 309, `s.a corrupted: {s.a} (want 309)`;
+    assert sink == 921, `sink corrupted: {sink} (want 921)`;
+}
+
+__DATA__
+{
+    "stdout": ""
+}
