@@ -585,168 +585,187 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // searching loaded modules and trait methods.
         }
 
-        // Try looking up in loaded modules (for imported structs)
-        // Only check inherent impls (not trait impls) - trait impls are handled separately
+        // Try looking up in loaded modules (for imported structs).
+        // Only inherent impls here; trait impls are handled separately.
         if let Some(ref module_source) = struct_module_source {
-            // Build the source module's import context once so that type names
-            // in the method's signature resolve in that module's perspective.
-            let (target_imports, target_originals) = self
-                .loaded_modules
-                .get(module_source)
-                .map(|m| {
-                    Self::build_imported_type_sources(
-                        &mut self.interner.borrow_mut(),
-                        m,
-                        module_source,
-                        Some(&self.entry_module_source),
-                        &self.invocations,
-                    )
-                })
-                .unwrap_or_default();
-            // Fetch only the inherent impls registered for this type name in
-            // the struct's own module, instead of scanning every item.
-            let entries: Vec<usize> = self
+            // A user-owned type may receive inherent methods from any
+            // same-package module, not just its declaring one (coherence
+            // permits it), so search every module that hosts an
+            // `impl <struct_name>` — disambiguated by type identity below so
+            // a same-named type declared in a different module is not matched.
+            let entries: Vec<(ModuleSource, usize)> = self
                 .tysys
                 .trait_env
                 .inherent_impl_index
                 .get(&struct_name)
-                .map(|v| {
-                    v.iter()
-                        .filter(|(ms, _)| ms == module_source)
-                        .map(|(_, idx)| *idx)
-                        .collect()
-                })
+                .cloned()
                 .unwrap_or_default();
-            for item_idx in entries {
-                let Item::Impl(impl_block) = &self.loaded_modules[module_source].items[item_idx]
+            for (impl_module, item_idx) in &entries {
+                let Item::Impl(impl_block) = &self.loaded_modules[impl_module].items[*item_idx]
                 else {
                     continue;
                 };
-                let impl_struct_name = self.get_type_name(&impl_block.ty);
-                if impl_struct_name == struct_name
-                    && self.inherent_impl_type_args_match(
-                        &impl_block.ty,
-                        &impl_block.type_params,
-                        receiver_type_args.as_deref(),
-                        module_source,
-                    )
-                    && self.check_impl_block_bounds(impl_block, receiver_type_args.as_deref())
+                if self.get_type_name(&impl_block.ty) != struct_name {
+                    continue;
+                }
+                // Skip impls that don't define the requested method before
+                // doing any perspective work.
+                let Some(method) = impl_block.methods.iter().find(|m| m.name == method_name) else {
+                    continue;
+                };
+                // Build the impl's *own* module import context: type names in
+                // the method's signature resolve in that module's perspective
+                // (the impl may live in a different module than the receiver
+                // type's declaration), and it reveals which declaration the
+                // impl's bare target name refers to.
+                let (target_imports, target_originals) = self
+                    .loaded_modules
+                    .get(impl_module)
+                    .map(|m| {
+                        Self::build_imported_type_sources(
+                            &mut self.interner.borrow_mut(),
+                            m,
+                            impl_module,
+                            Some(&self.entry_module_source),
+                            &self.invocations,
+                        )
+                    })
+                    .unwrap_or_default();
+                // Identity guard: the impl's target type must be the receiver's
+                // own declaration. An impl in the receiver's home module
+                // declares it; otherwise the impl must import that same
+                // declaration (its bare target name resolves to `module_source`),
+                // so a same-named type in another module is never matched.
+                let targets_receiver = impl_module == module_source
+                    || target_imports
+                        .get(&struct_name)
+                        .is_some_and(|m| m == module_source);
+                if !targets_receiver {
+                    continue;
+                }
+                if !(self.inherent_impl_type_args_match(
+                    &impl_block.ty,
+                    &impl_block.type_params,
+                    receiver_type_args.as_deref(),
+                    impl_module,
+                ) && self.check_impl_block_bounds(impl_block, receiver_type_args.as_deref()))
                 {
-                    for method in &impl_block.methods {
-                        if method.name == method_name {
-                            // Set up type params for generic impls (e.g., impl List<T>).
-                            // Inherited scope; only `type_params` is replaced.
-                            let mut scope = self.enter_inherited_type_param_scope();
-                            scope.trait_ctx.type_params.clear();
-                            let mut impl_offset = 0u32;
-                            if let Some(ref type_args) = receiver_type_args
-                                && let Type::Generic(generic) = &impl_block.ty
-                            {
-                                impl_offset = type_args.len() as u32;
-                                for (i, arg) in generic.args.iter().enumerate() {
-                                    if let Type::Named(named) = arg
-                                        && i < type_args.len()
-                                    {
-                                        scope
-                                            .trait_ctx
-                                            .type_params
-                                            .insert(named.name.clone(), (i as u32, type_args[i]));
-                                    }
-                                }
-                            }
+                    continue;
+                }
 
-                            // Set up method-level type params (e.g., Acc in fold<Acc>)
-                            // These get TypeParam types that will be substituted at call sites
-                            for (i, type_param) in method.type_params.iter().enumerate() {
-                                let index = impl_offset + i as u32;
-                                let type_param_id = scope.tysys.type_table.borrow_mut().intern(
-                                    ResolvedType::TypeParam {
-                                        name: type_param.name.clone(),
-                                        index,
-                                    },
-                                );
-                                scope
-                                    .trait_ctx
-                                    .type_params
-                                    .insert(type_param.name.clone(), (index, type_param_id));
-                            }
-
-                            // Resolve return / param types in the source module's
-                            // perspective so same-named types from different modules
-                            // don't get confused. The perspective swap keeps existing
-                            // local additions out of the way and restores them on exit.
-                            let (
-                                return_type,
-                                self_kind,
-                                param_types,
-                                param_is_mut,
-                                param_defaults,
-                                param_names,
-                            ) = scope.with_module_perspective(
-                                module_source.clone(),
-                                target_imports,
-                                target_originals,
-                                |s| {
-                                    let return_type = method
-                                        .return_type
-                                        .as_ref()
-                                        .map(|t| s.resolve_type(t))
-                                        .unwrap_or(TypeTable::UNIT);
-                                    let self_kind = method
-                                        .params
-                                        .first()
-                                        .map(|p| p.self_kind)
-                                        .unwrap_or(ast::SelfKind::None);
-                                    let param_types = s.extract_param_types(&method.params);
-                                    let param_is_mut: Vec<bool> = method
-                                        .params
-                                        .iter()
-                                        .filter(|p| p.name != "self")
-                                        .map(|p| p.is_mut)
-                                        .collect();
-                                    let param_defaults: Vec<Option<ast::Expr>> = method
-                                        .params
-                                        .iter()
-                                        .filter(|p| p.name != "self")
-                                        .map(|p| p.default.clone())
-                                        .collect();
-                                    let param_names: Vec<String> = method
-                                        .params
-                                        .iter()
-                                        .filter(|p| p.name != "self")
-                                        .map(|p| p.name.clone())
-                                        .collect();
-                                    (
-                                        return_type,
-                                        self_kind,
-                                        param_types,
-                                        param_is_mut,
-                                        param_defaults,
-                                        param_names,
-                                    )
-                                },
-                            );
-                            drop(scope);
-
-                            let from_concrete_impl =
-                                self.impl_is_concrete_instantiation(impl_block, module_source);
-                            return Some(MethodInfo {
-                                return_type,
-                                self_kind,
-                                param_types,
-                                param_is_mut,
-                                inherited_from_base: None,
-                                cm_name: None,
-                                is_ref_impl: false,
-                                method_type_param_ids: vec![],
-                                impl_module: Some(module_source.clone()),
-                                from_concrete_impl,
-                                param_defaults,
-                                param_names,
-                            });
+                // Set up type params for generic impls (e.g., impl List<T>).
+                // Inherited scope; only `type_params` is replaced.
+                let mut scope = self.enter_inherited_type_param_scope();
+                scope.trait_ctx.type_params.clear();
+                let mut impl_offset = 0u32;
+                if let Some(ref type_args) = receiver_type_args
+                    && let Type::Generic(generic) = &impl_block.ty
+                {
+                    impl_offset = type_args.len() as u32;
+                    for (i, arg) in generic.args.iter().enumerate() {
+                        if let Type::Named(named) = arg
+                            && i < type_args.len()
+                        {
+                            scope
+                                .trait_ctx
+                                .type_params
+                                .insert(named.name.clone(), (i as u32, type_args[i]));
                         }
                     }
                 }
+
+                // Set up method-level type params (e.g., Acc in fold<Acc>)
+                // These get TypeParam types that will be substituted at call sites
+                for (i, type_param) in method.type_params.iter().enumerate() {
+                    let index = impl_offset + i as u32;
+                    let type_param_id =
+                        scope
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .intern(ResolvedType::TypeParam {
+                                name: type_param.name.clone(),
+                                index,
+                            });
+                    scope
+                        .trait_ctx
+                        .type_params
+                        .insert(type_param.name.clone(), (index, type_param_id));
+                }
+
+                // Resolve return / param types in the impl module's
+                // perspective so same-named types from different modules
+                // don't get confused. The perspective swap keeps existing
+                // local additions out of the way and restores them on exit.
+                let (
+                    return_type,
+                    self_kind,
+                    param_types,
+                    param_is_mut,
+                    param_defaults,
+                    param_names,
+                ) = scope.with_module_perspective(
+                    impl_module.clone(),
+                    target_imports,
+                    target_originals,
+                    |s| {
+                        let return_type = method
+                            .return_type
+                            .as_ref()
+                            .map(|t| s.resolve_type(t))
+                            .unwrap_or(TypeTable::UNIT);
+                        let self_kind = method
+                            .params
+                            .first()
+                            .map(|p| p.self_kind)
+                            .unwrap_or(ast::SelfKind::None);
+                        let param_types = s.extract_param_types(&method.params);
+                        let param_is_mut: Vec<bool> = method
+                            .params
+                            .iter()
+                            .filter(|p| p.name != "self")
+                            .map(|p| p.is_mut)
+                            .collect();
+                        let param_defaults: Vec<Option<ast::Expr>> = method
+                            .params
+                            .iter()
+                            .filter(|p| p.name != "self")
+                            .map(|p| p.default.clone())
+                            .collect();
+                        let param_names: Vec<String> = method
+                            .params
+                            .iter()
+                            .filter(|p| p.name != "self")
+                            .map(|p| p.name.clone())
+                            .collect();
+                        (
+                            return_type,
+                            self_kind,
+                            param_types,
+                            param_is_mut,
+                            param_defaults,
+                            param_names,
+                        )
+                    },
+                );
+                drop(scope);
+
+                let from_concrete_impl =
+                    self.impl_is_concrete_instantiation(impl_block, impl_module);
+                return Some(MethodInfo {
+                    return_type,
+                    self_kind,
+                    param_types,
+                    param_is_mut,
+                    inherited_from_base: None,
+                    cm_name: None,
+                    is_ref_impl: false,
+                    method_type_param_ids: vec![],
+                    impl_module: Some(impl_module.clone()),
+                    from_concrete_impl,
+                    param_defaults,
+                    param_names,
+                });
             }
         }
 
