@@ -6,9 +6,7 @@ use crate::ast::{self, Expr, Item, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
-use crate::tir::{
-    FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TypeId, TypeTable,
-};
+use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TirExpr, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};

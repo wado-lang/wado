@@ -720,8 +720,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // definition module's private globals and functions.
         if let Some(fallback) = self.default_scope_module.clone()
             && fallback != self.current_module_source
-            && let Some(result) =
-                self.resolve_ident_in_fallback_module(&ident.name, &fallback)
+            && let Some(result) = self.resolve_ident_in_fallback_module(&ident.name, &fallback)
         {
             return result;
         }
@@ -2236,12 +2235,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             ResolvedType::Primitive(prim) => {
                 if let Some((type_min, type_max)) = Self::primitive_range(*prim) {
-                    self.check_integer_range_exhaustiveness(
-                        &classified,
-                        type_min,
-                        type_max,
-                        span,
-                    );
+                    self.check_integer_range_exhaustiveness(&classified, type_min, type_max, span);
                 }
             }
             _ => {
@@ -2306,16 +2300,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 variant_qualifier,
                 bindings,
                 ..
-            } => self.exh_variant(variant_name, variant_qualifier.as_ref(), bindings, scrutinee_type),
+            } => self.exh_variant(
+                variant_name,
+                variant_qualifier.as_ref(),
+                bindings,
+                scrutinee_type,
+            ),
             ast::Pattern::Or(alternatives) => ExhPattern::Or(
                 alternatives
                     .iter()
                     .map(|alt| self.exh_pattern_inner(alt, scrutinee_type))
                     .collect(),
             ),
-            ast::Pattern::Range { start, end, kind, .. } => {
-                self.exh_range(start, end, *kind, scrutinee_type)
-            }
+            ast::Pattern::Range {
+                start, end, kind, ..
+            } => self.exh_range(start, end, *kind, scrutinee_type),
             ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => ExhPattern::Other,
         }
     }
@@ -2539,10 +2538,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 variant_qualifier,
                 bindings,
                 ..
-            } if bindings.is_empty() => super::stmt::primitive_assoc_const_to_i128(
-                variant_qualifier.as_ref(),
-                variant_name,
-            ),
+            } if bindings.is_empty() => {
+                super::stmt::primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name)
+            }
             _ => None,
         }
     }

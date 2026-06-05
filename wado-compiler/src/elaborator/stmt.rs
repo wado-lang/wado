@@ -1465,8 +1465,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(first_alt) = alternatives.first() else {
                     return Vec::new();
                 };
-                let mut first_bindings =
-                    self.resolve_if_pattern_inner(first_alt, scrutinee_type, ctx, span, ref_binding);
+                let mut first_bindings = self.resolve_if_pattern_inner(
+                    first_alt,
+                    scrutinee_type,
+                    ctx,
+                    span,
+                    ref_binding,
+                );
                 // Match the old `collect_pattern_bindings_with_index` ordering
                 // (sorted by name) so or-pattern validation compares stable
                 // name lists across alternatives.
