@@ -12,6 +12,7 @@ use crate::wir::{WirInstr, WirType};
 
 use super::context::WirContext;
 use super::translate::FunctionTranslator;
+use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind};
 
 /// Extract a compile-time constant i32 from a TIR expression (for SIMD lane indices).
 fn extract_i32_const(expr: &NirExpr) -> u8 {

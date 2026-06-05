@@ -11,6 +11,9 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
 use super::translate::{FunctionTranslator, LabelEntry};
+use crate::nir_arena::{
+    ArenaCallArg, ArmData, BlockId, Body, ExprId, ExprKind, PatId, PatKind, StmtId,
+};
 
 /// Case enumeration for a variant or enum scrutinee, used to check whether a
 /// set of match arms exhaustively covers every case.
@@ -197,7 +200,7 @@ impl FunctionTranslator<'_, '_> {
         let value_instr = self.translate_expr(value);
 
         match pattern {
-            NirPattern::Tuple(patterns, _) => {
+            PatKind::Tuple(patterns, _) => {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, value.type_id);
                 if let WirType::Ref { ref type_id, .. } = wir_type {
                     let mut instrs = Vec::new();
@@ -216,7 +219,7 @@ impl FunctionTranslator<'_, '_> {
 
                     // Bind each element
                     for (i, sub_pattern) in patterns.iter().enumerate() {
-                        if let NirPattern::Binding { local_index, .. } = sub_pattern {
+                        if let PatKind::Binding { local_index, .. } = sub_pattern {
                             let local_name = self.local_name(*local_index);
                             let field_name_str = format!("{i}");
                             let field_result_ty =
@@ -243,7 +246,7 @@ impl FunctionTranslator<'_, '_> {
                     None
                 }
             }
-            NirPattern::Binding { local_index, .. } => {
+            PatKind::Binding { local_index, .. } => {
                 // Simple binding (not a tuple destructure)
                 let local_name = self.local_name(*local_index);
                 Some(WirInstr::LocalSet {
@@ -299,10 +302,8 @@ impl FunctionTranslator<'_, '_> {
                 // When the pattern is trivially true (Binding/Wildcard) and a guard
                 // is present, we fold into a single If instead of nested 2-level If,
                 // so only count 1 depth instead of 2.
-                let pattern_trivially_true = matches!(
-                    arm.pattern,
-                    NirPattern::Wildcard | NirPattern::Binding { .. }
-                );
+                let pattern_trivially_true =
+                    matches!(arm.pattern, PatKind::Wildcard | PatKind::Binding { .. });
                 if !emitted_as_irrefutable[idx] {
                     depth += 1;
                     if arm.guard.is_some() && !pattern_trivially_true {
@@ -502,10 +503,10 @@ impl FunctionTranslator<'_, '_> {
             .map(|arm| {
                 matches!(
                     arm.pattern,
-                    NirPattern::Wildcard
-                        | NirPattern::Binding { .. }
-                        | NirPattern::Struct { .. }
-                        | NirPattern::Tuple(_, _)
+                    PatKind::Wildcard
+                        | PatKind::Binding { .. }
+                        | PatKind::Struct { .. }
+                        | PatKind::Tuple(_, _)
                 ) && arm.guard.is_none()
             })
             .collect();
@@ -522,8 +523,8 @@ impl FunctionTranslator<'_, '_> {
     /// Returns true when `arms` exhaustively cover every case of the
     /// scrutinee's variant or enum type using distinct, unguarded patterns.
     ///
-    /// Accepts `NirPattern::Variant`, `NirPattern::Enum`, and one level of
-    /// `NirPattern::Or` whose alternatives are themselves `Variant`/`Enum`
+    /// Accepts `PatKind::Variant`, `PatKind::Enum`, and one level of
+    /// `PatKind::Or` whose alternatives are themselves `Variant`/`Enum`
     /// patterns. Anything else (wildcards, literals, ranges, guards, nested
     /// Ors with non-Variant/Enum alternatives) bails out.
     fn match_is_exhaustive(&self, scrut_type: TypeId, arms: &[NirMatchArm]) -> bool {
@@ -561,16 +562,16 @@ impl FunctionTranslator<'_, '_> {
         covered: &mut usize,
     ) -> bool {
         match pattern {
-            NirPattern::Variant { variant_name, .. } => {
+            PatKind::Variant { variant_name, .. } => {
                 let Some(i) = index_of.by_name(variant_name) else {
                     return false;
                 };
                 self.record_case(i, seen, covered)
             }
-            NirPattern::Enum { case_index, .. } => {
+            PatKind::Enum { case_index, .. } => {
                 self.record_case(*case_index as usize, seen, covered)
             }
-            NirPattern::Or(alts) => alts
+            PatKind::Or(alts) => alts
                 .iter()
                 .all(|alt| self.arm_pattern_covers_cases(alt, index_of, seen, covered)),
             _ => false,
@@ -654,17 +655,17 @@ impl FunctionTranslator<'_, '_> {
         scrut_type: TypeId,
     ) -> WirInstr {
         match pattern {
-            NirPattern::Wildcard | NirPattern::Binding { .. } => {
+            PatKind::Wildcard | PatKind::Binding { .. } => {
                 WirInstr::I32Const(1) // always matches
             }
-            NirPattern::Literal(lit) => {
+            PatKind::Literal(lit) => {
                 let scrut_get = WirInstr::LocalGet {
                     name: scrut_local.to_string(),
                     result_ty: self.wir_type(scrut_type),
                 };
                 self.translate_literal_pattern_condition(lit, scrut_get, scrut_type)
             }
-            NirPattern::Enum { case_index, .. } => {
+            PatKind::Enum { case_index, .. } => {
                 // Enum: compare i32 discriminant
                 let scrut_get = WirInstr::LocalGet {
                     name: scrut_local.to_string(),
@@ -675,7 +676,7 @@ impl FunctionTranslator<'_, '_> {
                     Box::new(WirInstr::I32Const(*case_index as i32)),
                 )
             }
-            NirPattern::Variant {
+            PatKind::Variant {
                 variant_name,
                 bindings,
                 ..
@@ -775,7 +776,7 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::I32Const(0)
                 }
             }
-            NirPattern::Range {
+            PatKind::Range {
                 start,
                 end,
                 inclusive,
@@ -831,11 +832,11 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::I32And(Box::new(ge), Box::new(upper))
                 }
             }
-            NirPattern::Tuple(_, _) | NirPattern::Struct { .. } => {
+            PatKind::Tuple(_, _) | PatKind::Struct { .. } => {
                 // Tuple/struct patterns: always irrefutable
                 WirInstr::I32Const(1)
             }
-            NirPattern::Or(alternatives) => {
+            PatKind::Or(alternatives) => {
                 // Or pattern: combine conditions with logical OR
                 let mut result = WirInstr::I32Const(0);
                 for alt in alternatives {
@@ -844,7 +845,7 @@ impl FunctionTranslator<'_, '_> {
                 }
                 result
             }
-            NirPattern::ConstantValue { .. } => {
+            PatKind::ConstantValue { .. } => {
                 panic!(
                     "ConstantValue pattern should have been lowered to binding + guard before WIR translation"
                 );
@@ -920,7 +921,7 @@ impl FunctionTranslator<'_, '_> {
         instrs: &mut Vec<WirInstr>,
     ) {
         match pattern {
-            NirPattern::Binding { local_index, .. } => {
+            PatKind::Binding { local_index, .. } => {
                 instrs.push(WirInstr::LocalSet {
                     name: self.local_name(*local_index),
                     value: Box::new(WirInstr::LocalGet {
@@ -929,7 +930,7 @@ impl FunctionTranslator<'_, '_> {
                     }),
                 });
             }
-            NirPattern::Variant {
+            PatKind::Variant {
                 variant_name,
                 bindings,
                 enum_type,
@@ -977,11 +978,11 @@ impl FunctionTranslator<'_, '_> {
                         .filter(|b| {
                             !matches!(
                                 b,
-                                NirPattern::Wildcard
-                                    | NirPattern::Literal(_)
-                                    | NirPattern::Enum { .. }
-                                    | NirPattern::ConstantValue { .. }
-                                    | NirPattern::Range { .. }
+                                PatKind::Wildcard
+                                    | PatKind::Literal(_)
+                                    | PatKind::Enum { .. }
+                                    | PatKind::ConstantValue { .. }
+                                    | PatKind::Range { .. }
                             )
                         })
                         .count();
@@ -1053,7 +1054,7 @@ impl FunctionTranslator<'_, '_> {
                             expr: Box::new(cast_source(self)),
                             result_ty: payload_result_ty,
                         };
-                        if let NirPattern::Binding {
+                        if let PatKind::Binding {
                             local_index,
                             type_id,
                             ..
@@ -1081,11 +1082,11 @@ impl FunctionTranslator<'_, '_> {
                             );
                         } else if !matches!(
                             binding,
-                            NirPattern::Wildcard
-                                | NirPattern::Literal(_)
-                                | NirPattern::Enum { .. }
-                                | NirPattern::ConstantValue { .. }
-                                | NirPattern::Range { .. }
+                            PatKind::Wildcard
+                                | PatKind::Literal(_)
+                                | PatKind::Enum { .. }
+                                | PatKind::ConstantValue { .. }
+                                | PatKind::Range { .. }
                         ) {
                             // Compound sub-pattern (Tuple, Struct, Variant, Or):
                             // extract the payload into a temp local and recurse into
@@ -1110,7 +1111,7 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     // Fallback: just copy the scrutinee (won't be type-correct for payload)
                     for binding in bindings {
-                        if let NirPattern::Binding {
+                        if let PatKind::Binding {
                             local_index,
                             type_id,
                             ..
@@ -1131,14 +1132,14 @@ impl FunctionTranslator<'_, '_> {
                     }
                 }
             }
-            NirPattern::Wildcard
-            | NirPattern::Literal(_)
-            | NirPattern::Enum { .. }
-            | NirPattern::ConstantValue { .. }
-            | NirPattern::Range { .. } => {
+            PatKind::Wildcard
+            | PatKind::Literal(_)
+            | PatKind::Enum { .. }
+            | PatKind::ConstantValue { .. }
+            | PatKind::Range { .. } => {
                 // No bindings needed
             }
-            NirPattern::Tuple(sub_patterns, _) => {
+            PatKind::Tuple(sub_patterns, _) => {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, scrut_type);
                 if let WirType::Ref { ref type_id, .. } = wir_type {
                     let element_types = self.type_table.as_tuple(scrut_type).unwrap_or_default();
@@ -1155,7 +1156,7 @@ impl FunctionTranslator<'_, '_> {
                             result_ty: field_result_ty.clone(),
                         };
                         match sub_pattern {
-                            NirPattern::Binding { local_index, .. } => {
+                            PatKind::Binding { local_index, .. } => {
                                 let local_type_id =
                                     if (*local_index as usize) < self.tir_func.locals.len() {
                                         self.tir_func.locals[*local_index as usize].type_id
@@ -1172,7 +1173,7 @@ impl FunctionTranslator<'_, '_> {
                                     instrs,
                                 );
                             }
-                            NirPattern::Wildcard => {}
+                            PatKind::Wildcard => {}
                             _ => {
                                 // Nested pattern: store in temp and recurse
                                 self.local_counter += 1;
@@ -1200,7 +1201,7 @@ impl FunctionTranslator<'_, '_> {
                     }
                 }
             }
-            NirPattern::Struct { fields, .. } => {
+            PatKind::Struct { fields, .. } => {
                 // Emit field bindings for struct patterns in match arms
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, scrut_type);
                 if let WirType::Ref { ref type_id, .. } = wir_type {
@@ -1217,13 +1218,13 @@ impl FunctionTranslator<'_, '_> {
                             result_ty: field_result_ty,
                         };
                         match &field.pattern {
-                            NirPattern::Binding { local_index, .. } => {
+                            PatKind::Binding { local_index, .. } => {
                                 instrs.push(WirInstr::LocalSet {
                                     name: self.local_name(*local_index),
                                     value: Box::new(field_get),
                                 });
                             }
-                            NirPattern::Wildcard => {}
+                            PatKind::Wildcard => {}
                             _ => {
                                 // For nested patterns, store in a temp and recurse
                                 self.local_counter += 1;
@@ -1251,7 +1252,7 @@ impl FunctionTranslator<'_, '_> {
                     }
                 }
             }
-            NirPattern::Or(alternatives) => {
+            PatKind::Or(alternatives) => {
                 // Or patterns: emit bindings for each alternative, guarded by its condition.
                 // For alternatives with only wildcards (no real bindings), skip entirely.
                 let has_any_bindings = alternatives.iter().any(pattern_has_bindings);
@@ -1691,17 +1692,15 @@ impl FunctionTranslator<'_, '_> {
 
 fn pattern_has_bindings(pattern: &NirPattern) -> bool {
     match pattern {
-        NirPattern::Binding { .. } => true,
-        NirPattern::Wildcard
-        | NirPattern::Literal(_)
-        | NirPattern::Enum { .. }
-        | NirPattern::ConstantValue { .. }
-        | NirPattern::Range { .. } => false,
-        NirPattern::Variant { bindings, .. } => bindings.iter().any(pattern_has_bindings),
-        NirPattern::Tuple(subs, _) => subs.iter().any(pattern_has_bindings),
-        NirPattern::Struct { fields, .. } => {
-            fields.iter().any(|f| pattern_has_bindings(&f.pattern))
-        }
-        NirPattern::Or(alts) => alts.iter().any(pattern_has_bindings),
+        PatKind::Binding { .. } => true,
+        PatKind::Wildcard
+        | PatKind::Literal(_)
+        | PatKind::Enum { .. }
+        | PatKind::ConstantValue { .. }
+        | PatKind::Range { .. } => false,
+        PatKind::Variant { bindings, .. } => bindings.iter().any(pattern_has_bindings),
+        PatKind::Tuple(subs, _) => subs.iter().any(pattern_has_bindings),
+        PatKind::Struct { fields, .. } => fields.iter().any(|f| pattern_has_bindings(&f.pattern)),
+        PatKind::Or(alts) => alts.iter().any(pattern_has_bindings),
     }
 }
