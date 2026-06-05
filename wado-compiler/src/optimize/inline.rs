@@ -490,8 +490,9 @@ fn find_recursive_functions(functions: &[Rc<RefCell<NirFunction>>]) -> IndexSet<
     // `tir_function_full_name` / `func_ref_inline_key`, both of which hash
     // `(module_source, func.name)`.  See `function_inline_key`'s docstring
     // for why we deliberately ignore `MethodInfo::to_mangled_name()` here.
-    let mut name_to_idx: IndexMap<String, usize> = IndexMap::default();
-    let mut idx_to_name: Vec<String> = Vec::new();
+    let mut name_to_idx: IndexMap<String, usize> =
+        IndexMap::with_capacity_and_hasher(functions.len(), rustc_hash::FxBuildHasher);
+    let mut idx_to_name: Vec<String> = Vec::with_capacity(functions.len());
 
     for func_rc in functions {
         let func = func_rc.borrow();
