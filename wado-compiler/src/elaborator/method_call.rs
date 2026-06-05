@@ -536,28 +536,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type = self.substitute_newtype_in_type(return_type, base_type_id, newtype_id);
         }
 
-        // Track implicit `&mut self` borrowing for primitive local receivers.
-        // Primitive values are copied by default in Wasm GC, so `x.bump()`
-        // must mark `x` as address-taken to preserve mutation semantics.
-        let needs_implicit_mut_borrow_on_primitive_local = !is_ref_impl
-            && matches!(self_kind, ast::SelfKind::MutRef)
-            && !matches!(
-                self.tysys.type_table.borrow().get(receiver.type_id),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            )
-            && matches!(
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .get(self.get_base_type(receiver.type_id)),
-                ResolvedType::Primitive(_)
-            );
         // Address-taken tracking for an implicit `&mut self` borrow on a
         // primitive local receiver is owned by reify (`reify.rs` method-call
         // arm marks `address_taken_locals` on the TIR it emits); the combined
-        // walk's marking was dead now that `resolve_ident` returns a
+        // walk no longer computes it now that `resolve_ident` returns a
         // placeholder.
-        let _ = needs_implicit_mut_borrow_on_primitive_local;
 
         // Adjust receiver based on what the method expects (self_kind)
         receiver = self.adjust_receiver_for_self_kind(receiver, self_kind, is_ref_impl, span);
@@ -909,7 +892,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `pending_method_dispatch`) and the resolved receiver / args; the
         // combined walk projects only the result type. `receiver` and
         // `args` were resolved above for their fact-recording side effects.
-        let _ = (receiver, args);
         placeholder(return_type, span)
     }
 
@@ -1133,7 +1115,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Look up the variant case info
             if let Some(variant_info) = self.lookup_variant_case(&name) {
                 // Find the case by name
-                if let Some((case_index, case_data)) = variant_info
+                if let Some((_case_index, case_data)) = variant_info
                     .cases
                     .iter()
                     .enumerate()
@@ -1158,7 +1140,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Stage 7-B: reify rebuilds the `VariantConstruct` from
                     // the AST + variant info; the combined walk projects only
                     // the result type.
-                    let _ = case_index;
                     return target_type_id;
                 }
                 // If no matching case, fall through to general method lookup
@@ -1180,7 +1161,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(variant_info) = self.lookup_variant_case(&name).cloned() {
                 // This is a generic variant like Result<T, E>
                 // Find the case by name
-                if let Some((case_index, case_data)) = variant_info
+                if let Some((_case_index, case_data)) = variant_info
                     .cases
                     .iter()
                     .enumerate()
@@ -1217,7 +1198,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // the AST + variant info; the combined walk projects only
                     // the result type. The payload was already resolved (and
                     // typechecked) above for its fact-recording side effects.
-                    let _ = case_index;
                     return target_type_id;
                 }
                 // If no matching case, fall through to general method lookup
@@ -1557,8 +1537,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Stage 7-B: reify rebuilds the static-method `Call` TIR from the
         // recorded `static_method_dispatch` + resolved args; the combined
         // walk projects only the result type. `args` was resolved above for
-        // its fact-recording side effects and is now discarded.
-        let _ = args;
+        // its fact-recording side effects.
         return_type
     }
 

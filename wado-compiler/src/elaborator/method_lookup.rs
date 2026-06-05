@@ -3625,13 +3625,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Generate: container.index_mut(index).method(args)
         // Step 1: Create container.index_mut(index) call
-        let receiver_for_index_mut = self.adjust_receiver_for_self_kind(
-            placeholder(container_type, index_expr.expr.span()),
-            index_mut_info.self_kind,
-            false,
-            index_expr.span,
-        );
-
         let mangled_index_mut_name =
             MethodName::format_local(&struct_name, Some(&index_mut_info.trait_name), "index_mut");
 
@@ -3641,17 +3634,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .make_mut_ref(index_mut_info.output_type);
-
-        let index_mut_func = FunctionRef {
-            module_source: index_mut_info.impl_module_source.clone(),
-            name: mangled_index_mut_name,
-            monomorph_info: None,
-            method_info: Some(LocalMethodName::new(
-                struct_name.clone(),
-                Some(index_mut_info.trait_name.clone()),
-                "index_mut".to_string(),
-            )),
-        };
 
         // Stage 5 / Gap 3 inner-dispatch recording: keyed by the
         // `IndexExpr`'s `AstId`, capture the IndexMut::index_mut
@@ -3663,7 +3645,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.record_operator_dispatch(
             index_expr.id,
             super::sem::types::OperatorDispatch {
-                function_ref: index_mut_func.clone(),
+                function_ref: FunctionRef {
+                    module_source: index_mut_info.impl_module_source.clone(),
+                    name: mangled_index_mut_name,
+                    monomorph_info: None,
+                    method_info: Some(LocalMethodName::new(
+                        struct_name.clone(),
+                        Some(index_mut_info.trait_name.clone()),
+                        "index_mut".to_string(),
+                    )),
+                },
                 self_kind: index_mut_info.self_kind,
                 arg_ref_wraps: vec![false],
                 return_type: mut_ref_output_type,
@@ -3677,19 +3668,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Stage 7-B: reify (`reify_index_mut_method_call`) rebuilds the
         // inner `*expr.index_mut(idx)` from the recorded `operator_dispatch`
         // above; the combined walk only needed the dispatch fact. The
-        // receiver + index were resolved above for their side effects.
-        let _ = (receiver_for_index_mut, index_mut_func, index_type);
+        // index was resolved above for its side effects.
 
-        // Step 2: Resolve method args with expected parameter types for literal coercion
-        let args: Vec<TirExpr> = method_call
-            .args
-            .iter()
-            .enumerate()
-            .map(|(i, a)| {
-                let expected = param_types.get(i).copied();
-                placeholder(self.resolve_expr(a, ctx, expected), a.span())
-            })
-            .collect();
+        // Step 2: Resolve method args with expected parameter types for
+        // literal coercion. Reify rebuilds the args; the combined walk only
+        // needs the `resolve_expr` fact-recording side effects.
+        for (i, a) in method_call.args.iter().enumerate() {
+            let expected = param_types.get(i).copied();
+            self.resolve_expr(a, ctx, expected);
+        }
 
         // Step 3: Resolve method type args
         let type_args: Vec<TypeId> = method_call
@@ -3750,9 +3737,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Stage 7-B: reify (`reify_index_mut_method_call`) rebuilds the
         // outer `MethodCall` (and the `__index_mut_val` synthesis) from the
         // recorded `method_dispatch` + `IndexMutMethodCall` desugar; the
-        // combined walk projects only the result type. `args` was resolved
-        // above for its fact-recording side effects.
-        let _ = (args, func);
+        // combined walk projects only the result type. The args were resolved
+        // above for their fact-recording side effects.
         Some(placeholder(return_type, method_call.span))
     }
 
