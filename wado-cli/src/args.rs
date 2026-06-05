@@ -170,14 +170,14 @@ pub const ALLOCATOR_SPEC: OptSpec = OptSpec {
 };
 
 /// Shared spec: `-f <flag>` — generic codegen feature flag forwarded to the
-/// compiler. Repeatable. Currently recognized: `array-copy` (lower
-/// `builtin::array_copy` to the native Wasm `array.copy` instruction instead
-/// of the default open-coded loop). Prefix a flag with `no-` to disable it.
+/// compiler. Repeatable. Prefix a flag with `no-` to disable it. Currently
+/// recognized: `array-copy` (lower `builtin::array_copy` to the native Wasm
+/// `array.copy` instruction; on by default, disable with `no-array-copy`).
 pub const FEATURE_SPEC: OptSpec = OptSpec {
     long: None,
     short: Some('f'),
     value: Some("<flag>"),
-    desc: "Enable a codegen feature flag (repeatable):\narray-copy  use native Wasm array.copy instead of a loop",
+    desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\narray-copy  native Wasm array.copy instead of a loop (default: on)",
 };
 
 /// Shared spec: `--collector <mode>`

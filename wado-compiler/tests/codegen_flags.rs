@@ -2,9 +2,10 @@
 //! [`CompilerOptions::codegen_flags`].
 //!
 //! The only flag so far is `array-copy`, which switches the
-//! `builtin::array_copy` lowering from the default open-coded loop to the
-//! native Wasm `array.copy` instruction. We assert on the disassembled WAT so
-//! the test pins the actual codegen difference rather than an internal detail.
+//! `builtin::array_copy` lowering between the native Wasm `array.copy`
+//! instruction (the default) and an open-coded loop (`-f no-array-copy`). We
+//! assert on the disassembled WAT so the test pins the actual codegen
+//! difference rather than an internal detail.
 
 mod common;
 
@@ -44,30 +45,39 @@ fn compile_to_wat(codegen_flags: Vec<String>) -> String {
 }
 
 #[test]
-fn default_lowers_array_copy_to_a_loop() {
+fn default_emits_native_array_copy() {
     let wat = compile_to_wat(Vec::new());
     assert!(
-        !wat.contains("array.copy"),
-        "default codegen must lower builtin::array_copy to a loop, not the native instruction"
+        wat.contains("array.copy"),
+        "default codegen must emit the native Wasm array.copy instruction"
     );
 }
 
 #[test]
-fn array_copy_flag_emits_native_instruction() {
+fn no_array_copy_flag_lowers_to_a_loop() {
+    let wat = compile_to_wat(vec!["no-array-copy".to_string()]);
+    assert!(
+        !wat.contains("array.copy"),
+        "`-f no-array-copy` must lower builtin::array_copy to a loop, not the native instruction"
+    );
+}
+
+#[test]
+fn explicit_array_copy_flag_is_redundant_but_valid() {
     let wat = compile_to_wat(vec!["array-copy".to_string()]);
     assert!(
         wat.contains("array.copy"),
-        "`-f array-copy` must emit the native Wasm array.copy instruction"
+        "`-f array-copy` must keep the native Wasm array.copy instruction"
     );
 }
 
 #[test]
-fn no_prefix_disables_the_flag() {
-    // `no-array-copy` after `array-copy` cancels it, reproducing the default.
-    let wat = compile_to_wat(vec!["array-copy".to_string(), "no-array-copy".to_string()]);
+fn last_flag_wins() {
+    // `array-copy` after `no-array-copy` re-enables the native instruction.
+    let wat = compile_to_wat(vec!["no-array-copy".to_string(), "array-copy".to_string()]);
     assert!(
-        !wat.contains("array.copy"),
-        "`-f no-array-copy` must override an earlier `-f array-copy`"
+        wat.contains("array.copy"),
+        "a trailing `-f array-copy` must override an earlier `-f no-array-copy`"
     );
 }
 

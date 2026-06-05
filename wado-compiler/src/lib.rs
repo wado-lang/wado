@@ -462,7 +462,10 @@ fn compile_after_load<H: CompilerHost>(
             let _ = logger.error(compiler_host::Diagnostic {
                 severity: compiler_host::Severity::Error,
                 code: compiler_host::Code::UnsupportedFeature,
-                message: format!("unknown codegen flag: `-f {flag}` (supported: `array-copy`)"),
+                message: format!(
+                    "unknown codegen flag: `-f {flag}` \
+                     (supported: `array-copy`, optionally prefixed with `no-`)"
+                ),
                 span: None,
             });
             return Err(Bail);

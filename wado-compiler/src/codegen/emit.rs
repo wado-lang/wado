@@ -944,8 +944,9 @@ impl<'a> WirEmitter<'a> {
                 self.collect_declared_locals_instr(src, locals);
                 self.collect_declared_locals_instr(src_offset, locals);
                 self.collect_declared_locals_instr(len, locals);
-                // The native `array.copy` lowering (`-f array-copy`) needs no
-                // scratch locals, so skip the loop's slot declarations.
+                // The native `array.copy` lowering (the default) needs no
+                // scratch locals, so skip the loop's slot declarations. They
+                // are only emitted for the `-f no-array-copy` loop path.
                 if self.codegen_flags.array_copy {
                     return;
                 }
@@ -2220,13 +2221,13 @@ impl<'a> WirEmitter<'a> {
                 src_offset,
                 len,
             } if self.codegen_flags.array_copy => {
-                // Native lowering: emit the Wasm `array.copy` instruction
-                // directly. This is gated behind `-f array-copy`; the default
-                // (the arm below) open-codes a loop because wasmtime's
-                // `array.copy` runtime path was historically much slower for
-                // the short copies that dominate Wado workloads. The flag lets
-                // us re-measure the native path against the loop under the
-                // benchmark suite as the runtime improves.
+                // Native lowering (the default): emit the Wasm `array.copy`
+                // instruction directly. Benchmarking showed it wins big on
+                // copy-heavy workloads (zlib decompress ~+41%, syntax-highlight
+                // ~+10%) and is neutral elsewhere, so it is the default; the
+                // arm below open-codes a loop instead and is selected with
+                // `-f no-array-copy` (kept so we can keep re-measuring as the
+                // wasmtime runtime evolves).
                 //
                 // Stack/immediate shape: `array.copy $dst $src` consumes
                 // `dst_ref, dst_offset, src_ref, src_offset, len`. It accepts
@@ -2253,13 +2254,13 @@ impl<'a> WirEmitter<'a> {
                 src_offset,
                 len,
             } => {
-                // Lower `array.copy` to an inline Wasm loop. wasmtime's
-                // `array.copy` runtime path has a known performance bug
-                // that makes it much slower than an open-coded loop for
-                // short copies (≲ a few hundred elements). Open-coding
+                // Lower `array.copy` to an inline Wasm loop. This is the
+                // `-f no-array-copy` path, kept because wasmtime's `array.copy`
+                // runtime path was historically much slower than an open-coded
+                // loop for short copies (≲ a few hundred elements); open-coding
                 // also lets Cranelift inline the bounds checks and the
-                // per-element get/set. The native instruction can be
-                // selected instead with `-f array-copy` (the arm above).
+                // per-element get/set. The native instruction (the arm above,
+                // now the default) is selected when `array_copy` is set.
                 let dst_wasm_idx = self.resolve_type_index(dest_type_id.index());
                 let src_wasm_idx = self.resolve_type_index(src_type_id.index());
                 let dst_name = format!(
