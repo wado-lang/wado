@@ -510,7 +510,7 @@ fn repeat_strategy_label(strategy: &RepeatStrategy) -> String {
 /// caller (the multi-token-inner Repeat path; soundness invariant 1).
 /// That mask lives on the `FollowVariantEntry` registry, not on the GIR
 /// `FollowVariant`, so it is looked up from `ctx` (the same ctx that
-/// lowered the grammar) and rendered per depth as `@d={…}`.
+/// lowered the grammar) and rendered per depth as `@d=[…]`.
 fn render_follow_variants(out: &mut String, rule_name: &String, lowered: &LoweredGrammar, ctx: &GenContext) {
     let entries = ctx.follow_variants();
     let mut printed_header = false;
@@ -537,7 +537,7 @@ fn render_follow_variants(out: &mut String, rule_name: &String, lowered: &Lowere
 }
 
 /// Append the K-prefix mask for variant `id` from the registry, if it
-/// carries one. Rendered as `k-prefix=[@0={…} @1={…} …]`, one set per
+/// carries one. Rendered as `k-prefix=[@0=[…] @1=[…] …]`, one set per
 /// input depth — the multi-token generalisation of the 1-token `mask`.
 fn render_variant_k_prefix(out: &mut String, id: i32, entries: &List<FollowVariantEntry>) {
     for let e of entries {
