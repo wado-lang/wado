@@ -490,7 +490,7 @@ impl ResolvedType {
 /// punches holes rather than renumbering, so surviving `TypeId`s keep
 /// their indices.
 #[derive(Debug, Clone)]
-struct TypeMap<V> {
+pub(crate) struct TypeMap<V> {
     slots: Vec<Option<V>>,
 }
 
@@ -503,33 +503,33 @@ impl<V> Default for TypeMap<V> {
 impl<V> TypeMap<V> {
     /// Number of slots allocated (including erased holes). Because the map
     /// is dense, this is also the `TypeId` space currently in use.
-    fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.slots.len()
     }
 
     /// The `TypeId` the next [`Self::push`] will occupy.
-    fn next_id(&self) -> TypeId {
+    pub(crate) fn next_id(&self) -> TypeId {
         TypeId(self.slots.len() as u32)
     }
 
     /// Live value at `id`, or `None` if absent, erased, or out of range.
-    fn get(&self, id: TypeId) -> Option<&V> {
+    pub(crate) fn get(&self, id: TypeId) -> Option<&V> {
         self.slots.get(id.0 as usize).and_then(Option::as_ref)
     }
 
     /// Append a value at the next dense `TypeId` (== [`Self::next_id`]).
-    fn push(&mut self, value: V) {
+    pub(crate) fn push(&mut self, value: V) {
         self.slots.push(Some(value));
     }
 
     /// Set `id`'s value in place; `id` must already be in range.
-    fn replace(&mut self, id: TypeId, value: V) {
+    pub(crate) fn replace(&mut self, id: TypeId, value: V) {
         self.slots[id.0 as usize] = Some(value);
     }
 
     /// Set `id`'s value, growing the backing storage with empty slots as
     /// needed. Used for sparse maps such as erasure redirects.
-    fn set_growing(&mut self, id: TypeId, value: V) {
+    pub(crate) fn set_growing(&mut self, id: TypeId, value: V) {
         let idx = id.0 as usize;
         if idx >= self.slots.len() {
             self.slots.resize_with(idx + 1, || None);
@@ -538,7 +538,7 @@ impl<V> TypeMap<V> {
     }
 
     /// Drop every live slot for which `keep(id, &value)` returns false.
-    fn retain(&mut self, mut keep: impl FnMut(TypeId, &V) -> bool) {
+    pub(crate) fn retain(&mut self, mut keep: impl FnMut(TypeId, &V) -> bool) {
         for (i, slot) in self.slots.iter_mut().enumerate() {
             if let Some(value) = slot
                 && !keep(TypeId(i as u32), value)
@@ -549,7 +549,7 @@ impl<V> TypeMap<V> {
     }
 
     /// Iterate live `(TypeId, &value)` pairs, skipping erased holes.
-    fn iter(&self) -> impl Iterator<Item = (TypeId, &V)> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (TypeId, &V)> {
         self.slots
             .iter()
             .enumerate()
@@ -557,7 +557,7 @@ impl<V> TypeMap<V> {
     }
 
     /// Iterate the `TypeId`s of every live slot.
-    fn ids(&self) -> impl Iterator<Item = TypeId> + '_ {
+    pub(crate) fn ids(&self) -> impl Iterator<Item = TypeId> + '_ {
         self.slots
             .iter()
             .enumerate()
