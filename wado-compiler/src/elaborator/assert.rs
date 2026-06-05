@@ -13,18 +13,14 @@
 use crate::ast::{AssertStmt, AstId, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::tir::{TirExpr, TirExprKind, TirStmt, TypeId};
+use crate::tir::{TirExpr, TirExprKind, TypeId};
 use crate::unparse::unparse_expr_simple;
 
 use super::Elaborator;
 use super::types::FunctionContext;
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    pub(super) fn desugar_assert(
-        &mut self,
-        assert_stmt: &AssertStmt,
-        ctx: &mut FunctionContext,
-    ) -> Vec<TirStmt> {
+    pub(super) fn desugar_assert(&mut self, assert_stmt: &AssertStmt, ctx: &mut FunctionContext) {
         self.record_desugar(assert_stmt.id, super::sem::types::DesugarKind::Assert);
 
         // Phase 1: read-only AST scan to decide captures.
@@ -108,9 +104,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Bump the per-function assert serial so reify's `__assert_N`
         // label numbering stays in sync with the source order.
         ctx.next_assert_id += 1;
-
-        // Placeholder — reify is the sole TIR source for the assert expansion.
-        Vec::new()
     }
 
     /// Hook the body walk calls when it encounters an `AstId` flagged for

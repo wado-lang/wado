@@ -1713,13 +1713,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         placeholder(TypeTable::UNKNOWN, index.span)
     }
 
-    /// Extract the result type from a block (the type of its last
-    /// expression, or Unit). Thin wrapper around the shared
-    /// [`crate::tir::block_result_type`] free function.
-    pub(super) fn block_result_type(block: &TirBlock) -> TypeId {
-        crate::tir::block_result_type(block)
-    }
-
     /// Resolve an if expression
     pub(super) fn resolve_if_expr(
         &mut self,
@@ -1730,33 +1723,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match &if_expr.condition {
             Condition::LetChain { elements, .. } => {
                 self.record_desugar(if_expr.id, super::sem::types::DesugarKind::IfLetChain);
-                // Resolve else_block in outer scope (chain bindings not visible there)
-                let else_block = if_expr
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.resolve_block(b, ctx, expected_type));
+                // Resolve else_block in outer scope (chain bindings not visible
+                // there) for its fact-recording side effects; reify rebuilds it.
+                if let Some(b) = &if_expr.else_block {
+                    self.resolve_block(b, ctx, expected_type);
+                }
 
                 // Enter scope for chain elements and then_block
                 ctx.enter_scope();
-                let stmts = self.resolve_let_chain_stmts(
+                self.resolve_let_chain_stmts(
                     elements,
                     &if_expr.then_block,
-                    else_block.as_ref(),
                     ctx,
                     expected_type,
                     if_expr.span,
                 );
                 ctx.exit_scope();
 
-                let chain_block = TirBlock::new(stmts, if_expr.span);
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
-                    // Infer result type from the nested block structure
-                    let chain_type = Self::block_result_type(&chain_block);
-                    let else_type = else_block
+                    // AST mirror of `block_result_type(chain_block)`: the
+                    // normalized chain's result is `agree(then_block_result,
+                    // else_type)` collapsed to `Unit` on mismatch (the
+                    // per-level `unwrap_or(UNIT)` recursion reduces to exactly
+                    // this — equal for single- and multi-element chains). Then
+                    // the same agreement against the else block as before.
+                    let else_type = if_expr
+                        .else_block
                         .as_ref()
-                        .map_or(TypeTable::UNIT, Self::block_result_type);
+                        .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
+                    let chain_type = crate::tir::agree_branch_types(
+                        self.ast_block_result_type(&if_expr.then_block),
+                        else_type,
+                    )
+                    .unwrap_or(TypeTable::UNIT);
                     if chain_type == else_type
                         || chain_type == TypeTable::NEVER
                         || else_type == TypeTable::NEVER
@@ -1814,13 +1815,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // resolved independently, so check it
                     // directly. Missing-else falls back to the
                     // implicit `else { () }` rule below.
-                    if let Some(eb) = &else_block {
-                        let else_type = Self::block_result_type(eb);
-                        self.check_branch_type(
-                            else_type,
-                            type_id,
-                            if_expr.else_block.as_ref().unwrap().span,
-                        );
+                    if let Some(eb) = &if_expr.else_block {
+                        let else_type = self.ast_block_result_type(eb);
+                        self.check_branch_type(else_type, type_id, eb.span);
                     } else {
                         // Missing `else` with a non-Unit expected
                         // type: the implicit `else { () }` cannot
@@ -1838,9 +1835,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `DesugarKind::IfLetChain`) from the AST. The combined walk
                 // ran `resolve_let_chain_stmts` for its fact-recording side
                 // effects (pattern bindings, element resolution) and computed
-                // the result type; the synthetic `chain_block` it built is
-                // discarded. Project only the result type.
-                let _ = chain_block;
+                // the result type. Project only the result type.
                 placeholder(type_id, if_expr.span)
             }
             Condition::Expr(expr) => {

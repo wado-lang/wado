@@ -7,9 +7,8 @@ use crate::ast::{
 };
 use crate::compiler_host::CompilerHost;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirLiteralPattern, TirMatchArm,
-    TirPattern, TirStmt, TirStmtKind, TirStructField, TirStructPatternField, TirUnaryOp, TypeId,
-    TypeTable,
+    PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirLiteralPattern, TirPattern,
+    TirStructField, TirStructPatternField, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -28,105 +27,89 @@ enum RefBinding {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
+    /// Walk a block for its fact-recording side effects (Stage 7-B:
+    /// records-only). reify rebuilds the `TirBlock` from the AST; this walk
+    /// resolves each statement (recording types / dispatch / desugar facts and
+    /// emitting diagnostics) and manages the lexical scope. `expected_type` is
+    /// still propagated to the trailing statement so the coercion fact lands.
     pub(super) fn resolve_block(
         &mut self,
         block: &Block,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirBlock {
+    ) {
         ctx.enter_scope();
         let len = block.stmts.len();
-        let mut stmts = Vec::new();
         for (i, s) in block.stmts.iter().enumerate() {
             // Propagate expected type to the last expression/statement for coercion
             if expected_type.is_some() && i == len - 1 {
                 if let Stmt::Expr(expr_stmt) = s {
-                    let expr = self.resolve_expr(&expr_stmt.expr, ctx, expected_type);
-                    stmts.push(TirStmt::new(TirStmtKind::Expr(expr), expr_stmt.span));
+                    self.resolve_expr(&expr_stmt.expr, ctx, expected_type);
                     continue;
                 }
                 if let Stmt::If(if_stmt) = s {
-                    stmts.extend(self.resolve_if_stmt_with_expected(if_stmt, ctx, expected_type));
+                    self.resolve_if_stmt_with_expected(if_stmt, ctx, expected_type);
                     continue;
                 }
                 if let Stmt::Match(match_expr) = s {
-                    let tir = self.resolve_match_expr(match_expr, ctx, expected_type);
+                    let ty = self.resolve_match_expr(match_expr, ctx, expected_type);
                     // `resolve_match_expr` does not go through the
                     // `resolve_expr` wrapper; record the type explicitly (as
                     // the stmt-position arm does) so `ast_block_result_type`
                     // can read a trailing match's value type.
-                    self.record_expression_type(match_expr.id, tir.type_id);
-                    stmts.push(TirStmt::new(TirStmtKind::Expr(tir), match_expr.span));
+                    self.record_expression_type(match_expr.id, ty.type_id);
                     continue;
                 }
                 if let Stmt::LabeledBlock(labeled_block) = s {
-                    stmts.push(self.resolve_labeled_block_with_expected(
-                        labeled_block,
-                        ctx,
-                        expected_type,
-                    ));
+                    self.resolve_labeled_block_with_expected(labeled_block, ctx, expected_type);
                     continue;
                 }
             }
-            stmts.extend(self.resolve_stmt(s, ctx));
+            self.resolve_stmt(s, ctx);
         }
         ctx.exit_scope();
-        TirBlock::new(stmts, block.span)
     }
 
-    /// Resolve a statement (may return multiple statements for desugared constructs)
-    pub(super) fn resolve_stmt(&mut self, stmt: &Stmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
+    /// Resolve a statement for its facts (Stage 7-B: records-only). reify
+    /// rebuilds the `TirStmt`(s) from the AST; desugared constructs that expand
+    /// to multiple statements record their `DesugarKind` tag here.
+    pub(super) fn resolve_stmt(&mut self, stmt: &Stmt, ctx: &mut FunctionContext) {
         match stmt {
-            Stmt::Let(let_stmt) => vec![self.resolve_let(let_stmt, ctx)],
-            Stmt::Expr(expr_stmt) => vec![self.resolve_expr_stmt(expr_stmt, ctx)],
-            Stmt::Return(ret_stmt) => vec![self.resolve_return(ret_stmt, ctx)],
-            Stmt::TaskReturn(tr_stmt) => vec![self.resolve_task_return(tr_stmt, ctx)],
+            Stmt::Let(let_stmt) => self.resolve_let(let_stmt, ctx),
+            Stmt::Expr(expr_stmt) => self.resolve_expr_stmt(expr_stmt, ctx),
+            Stmt::Return(ret_stmt) => self.resolve_return(ret_stmt, ctx),
+            Stmt::TaskReturn(tr_stmt) => self.resolve_task_return(tr_stmt, ctx),
             Stmt::If(if_stmt) => self.resolve_if_stmt(if_stmt, ctx),
             Stmt::While(while_stmt) => self.resolve_while(while_stmt, ctx),
             Stmt::For(for_stmt) => self.resolve_for(for_stmt, ctx),
             Stmt::ForOf(for_of) => self.resolve_for_of(for_of, ctx),
-            Stmt::Loop(loop_stmt) => vec![self.resolve_loop(loop_stmt, ctx)],
+            Stmt::Loop(loop_stmt) => self.resolve_loop(loop_stmt, ctx),
             Stmt::Match(match_expr) => {
-                // A `match` in statement position discards its result, so
-                // pin the expected type to `Unit`. With `expected_type =
-                // Some(Unit)`, `resolve_match_expr` sets the match's
-                // overall `type_id` to `Unit` regardless of what the arms
-                // produce. The WIR builder then sees `has_result = false`
-                // in `translate_match` and wraps each non-unit arm body in
-                // `WirInstr::Drop`, so arms whose blocks evaluate to
-                // different non-unit types (a separator `;` is not a
-                // discard marker in Wado, so `{ helper(); }` evaluates to
-                // `helper()`'s return type) do not leave a stray value on
-                // the Wasm stack at the join point.
-                let tir = self.resolve_match_expr(match_expr, ctx, Some(TypeTable::UNIT));
-                // `resolve_match_expr` does not go through the
-                // `resolve_expr` wrapper, so the per-AstId expression
-                // type would be missing for stmt-position matches.
-                // Record it explicitly here so LSP hover on the `match`
-                // keyword and Stage 5 reify both see the resolved type
-                // (Unit at stmt position).
-                self.record_expression_type(match_expr.id, tir.type_id);
-                vec![TirStmt::new(TirStmtKind::Expr(tir), match_expr.span)]
+                // A `match` in statement position discards its result, so pin
+                // the expected type to `Unit` (the WIR builder drops each arm
+                // body's value). Record the resolved type explicitly because
+                // `resolve_match_expr` does not go through the `resolve_expr`
+                // wrapper.
+                let ty = self.resolve_match_expr(match_expr, ctx, Some(TypeTable::UNIT));
+                self.record_expression_type(match_expr.id, ty.type_id);
             }
-            Stmt::Break(break_stmt) => vec![self.resolve_break(break_stmt, ctx)],
-            Stmt::Continue(continue_stmt) => vec![self.resolve_continue(continue_stmt, ctx)],
+            Stmt::Break(break_stmt) => self.resolve_break(break_stmt, ctx),
+            Stmt::Continue(continue_stmt) => self.resolve_continue(continue_stmt, ctx),
             Stmt::Assert(a) => self.desugar_assert(a, ctx),
-            Stmt::LabeledBlock(labeled_block) => {
-                vec![self.resolve_labeled_block(labeled_block, ctx)]
-            }
+            Stmt::LabeledBlock(labeled_block) => self.resolve_labeled_block(labeled_block, ctx),
             // Parser error-recovery placeholder: the syntax error was already
-            // reported, so emit nothing.
-            Stmt::Error(_) => Vec::new(),
+            // reported, so there is nothing to record.
+            Stmt::Error(_) => {}
         }
     }
 
-    /// Resolve a labeled block statement
+    /// Resolve a labeled block statement (Stage 7-B: records-only).
     pub(super) fn resolve_labeled_block(
         &mut self,
         labeled_block: &ast::LabeledBlockStmt,
         ctx: &mut FunctionContext,
-    ) -> TirStmt {
-        self.resolve_labeled_block_with_expected(labeled_block, ctx, None)
+    ) {
+        self.resolve_labeled_block_with_expected(labeled_block, ctx, None);
     }
 
     fn resolve_labeled_block_with_expected(
@@ -134,26 +117,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         labeled_block: &ast::LabeledBlockStmt,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> TirStmt {
+    ) {
         ctx.active_labels.push(labeled_block.label.clone());
         // resolve_block already handles scope entry/exit
-        let block = self.resolve_block(&labeled_block.block, ctx, expected_type);
+        self.resolve_block(&labeled_block.block, ctx, expected_type);
         ctx.active_labels.pop();
-
-        TirStmt::new(
-            TirStmtKind::LabeledBlock {
-                label: labeled_block.label.clone(),
-                block,
-            },
-            labeled_block.span,
-        )
     }
 
-    /// Resolve a let statement
-    pub(super) fn resolve_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) -> TirStmt {
+    /// Resolve a let statement (Stage 7-B: records-only).
+    pub(super) fn resolve_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
         // Handle uninitialized declaration: `let x: T;` (no initializer)
         if let_stmt.value.is_none() {
-            return self.resolve_uninit_let(let_stmt, ctx);
+            self.resolve_uninit_let(let_stmt, ctx);
+            return;
         }
 
         // From here on `value` is guaranteed to be Some.
@@ -397,7 +373,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Handle different pattern types
+        // Stage 7-B: records-only. reify rebuilds the `Let` / `LetDestructure`
+        // stmt from the AST + recorded facts (`let_annotated_types`,
+        // `local_types`, the binding symbols). This walk binds the pattern into
+        // `ctx`, records the local symbols, registers closure defaults, and
+        // runs the type-mismatch diagnostic above; the resolved `value` is kept
+        // only for that diagnostic and then discarded.
+        let _ = &value;
         match &let_stmt.pattern {
             ast::Pattern::Ident {
                 id,
@@ -411,93 +393,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 let is_mut =
                     let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
-                let local_index = ctx.add_local(name.clone(), type_id, is_mut, Some(*id));
+                ctx.add_local(name.clone(), type_id, is_mut, Some(*id));
                 self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
-                {
-                    let mut closure_candidate = ast_value;
-                    while let ast::Expr::Unary(u) = closure_candidate {
-                        closure_candidate = &u.expr;
-                    }
-                    if let ast::Expr::Closure(closure) = closure_candidate {
-                        let defaults: Vec<(String, Option<ast::Expr>)> = closure
-                            .params
-                            .iter()
-                            .map(|p| (p.name.clone(), p.default.clone()))
-                            .collect();
-                        if defaults.iter().any(|(_, d)| d.is_some()) {
-                            ctx.closure_defaults.insert(name.clone(), defaults);
-                        }
+                let mut closure_candidate = ast_value;
+                while let ast::Expr::Unary(u) = closure_candidate {
+                    closure_candidate = &u.expr;
+                }
+                if let ast::Expr::Closure(closure) = closure_candidate {
+                    let defaults: Vec<(String, Option<ast::Expr>)> = closure
+                        .params
+                        .iter()
+                        .map(|p| (p.name.clone(), p.default.clone()))
+                        .collect();
+                    if defaults.iter().any(|(_, d)| d.is_some()) {
+                        ctx.closure_defaults.insert(name.clone(), defaults);
                     }
                 }
-                TirStmt::new(
-                    TirStmtKind::Let {
-                        name: name.clone(),
-                        local_index,
-                        is_mut,
-                        is_reactive: let_stmt.is_reactive,
-                        type_id,
-                        value,
-                        skip_value_copy: false,
-                    },
-                    let_stmt.span,
-                )
             }
-            ast::Pattern::Tuple(_, _) => {
-                // Tuple destructuring: let [a, b] = tuple_expr;
-                let tir_pattern = self.resolve_let_pattern(
+            ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => {
+                // Tuple / struct destructuring: binds the sub-patterns into
+                // `ctx` and records their local symbols.
+                self.resolve_let_pattern(
                     &let_stmt.pattern,
                     type_id,
                     let_stmt.is_mut,
                     let_stmt.span,
                     ctx,
                 );
-                TirStmt::new(
-                    TirStmtKind::LetDestructure {
-                        pattern: tir_pattern,
-                        is_mut: let_stmt.is_mut,
-                        value,
-                    },
-                    let_stmt.span,
-                )
-            }
-            ast::Pattern::Struct { .. } => {
-                // Struct destructuring: let { x, y } = struct_expr;
-                let tir_pattern = self.resolve_let_pattern(
-                    &let_stmt.pattern,
-                    type_id,
-                    let_stmt.is_mut,
-                    let_stmt.span,
-                    ctx,
-                );
-                TirStmt::new(
-                    TirStmtKind::LetDestructure {
-                        pattern: tir_pattern,
-                        is_mut: let_stmt.is_mut,
-                        value,
-                    },
-                    let_stmt.span,
-                )
             }
             ast::Pattern::Wildcard => {
-                // `let _ = expr;` — evaluate the value for side effects, then
-                // discard the result. Lower to LetDestructure with a Wildcard
-                // pattern (rather than a bare `TirStmtKind::Expr(value)`) so
-                // that the surrounding block's type inference does not treat
-                // the discarded expression as a trailing block-value
-                // (`Expr::Block` elaborator picks up trailing `TirStmtKind::Expr`
-                // as the block's type).
-                TirStmt::new(
-                    TirStmtKind::LetDestructure {
-                        pattern: TirPattern::Wildcard,
-                        is_mut: let_stmt.is_mut,
-                        value,
-                    },
-                    let_stmt.span,
-                )
+                // `let _ = expr;` — value evaluated for side effects, result
+                // discarded; nothing to bind.
             }
             _ => {
                 self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span);
-                TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
             }
         }
     }
@@ -508,7 +437,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the local is pre-allocated (Wasm zero-initializes locals) without
     /// emitting a `LocalSet`.  The bind phase has already verified that the
     /// variable is assigned before any use.
-    fn resolve_uninit_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) -> TirStmt {
+    fn resolve_uninit_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
         // Type annotation is guaranteed by the parser when there is no initializer.
         let type_id = self.resolve_type(
             let_stmt
@@ -517,6 +446,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .expect("parser ensures type annotation for uninit let"),
         );
 
+        // Stage 7-B: records-only. reify rebuilds the pre-declared `Let` (with
+        // its unit placeholder value) from the AST; this walk only binds the
+        // local and records its symbol.
         match &let_stmt.pattern {
             ast::Pattern::Ident {
                 id,
@@ -530,34 +462,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 let is_mut =
                     let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
-                let local_index = ctx.add_local(name.clone(), type_id, is_mut, Some(*id));
+                ctx.add_local(name.clone(), type_id, is_mut, Some(*id));
                 self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
-                // Unit placeholder: WIR builder sees unit type → skips LocalSet.
-                // The local is pre-declared and Wasm zero-initializes it.
-                let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
-                TirStmt::new(
-                    TirStmtKind::Let {
-                        name: name.clone(),
-                        local_index,
-                        is_mut,
-                        is_reactive: let_stmt.is_reactive,
-                        type_id,
-                        value: placeholder,
-                        skip_value_copy: false,
-                    },
-                    let_stmt.span,
-                )
             }
             _ => {
                 self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span);
-                TirStmt::new(
-                    TirStmtKind::Expr(TirExpr::new(
-                        TirExprKind::Unit,
-                        TypeTable::UNIT,
-                        let_stmt.span,
-                    )),
-                    let_stmt.span,
-                )
             }
         }
     }
@@ -965,21 +874,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve an expression statement
-    pub(super) fn resolve_expr_stmt(
-        &mut self,
-        expr_stmt: &ExprStmt,
-        ctx: &mut FunctionContext,
-    ) -> TirStmt {
-        let expr = self.resolve_expr(&expr_stmt.expr, ctx, None);
-        TirStmt::new(TirStmtKind::Expr(expr), expr_stmt.span)
+    pub(super) fn resolve_expr_stmt(&mut self, expr_stmt: &ExprStmt, ctx: &mut FunctionContext) {
+        // Stage 7-B: records-only; reify rebuilds the `Expr` stmt.
+        self.resolve_expr(&expr_stmt.expr, ctx, None);
     }
 
-    /// Resolve a return statement
-    pub(super) fn resolve_return(
-        &mut self,
-        ret_stmt: &ReturnStmt,
-        ctx: &mut FunctionContext,
-    ) -> TirStmt {
+    /// Resolve a return statement (Stage 7-B: records-only).
+    pub(super) fn resolve_return(&mut self, ret_stmt: &ReturnStmt, ctx: &mut FunctionContext) {
         // In async functions, `return expr` (with a value) is forbidden; use `task return expr`
         if ctx.is_async && ret_stmt.value.is_some() {
             let _ = self.logger.error(TypeError::InvalidLiteral {
@@ -990,25 +891,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let return_type = ctx.return_type;
-        let value = ret_stmt.value.as_ref().map(|expr| {
-            // Use expected type for coercion (numeric literals, tuple to array, etc.)
-            self.resolve_expr(expr, ctx, Some(return_type))
-        });
-
-        // Check return value type matches function return type
-        if let Some(value) = &value {
+        // Use expected type for coercion (numeric literals, tuple to array,
+        // etc.) and check the value type against the function return type.
+        if let Some(expr) = ret_stmt.value.as_ref() {
+            let value = self.resolve_expr(expr, ctx, Some(return_type));
             self.typecheck_return(value.type_id, return_type, ret_stmt.span);
         }
-
-        TirStmt::new(TirStmtKind::Return { value }, ret_stmt.span)
     }
 
-    /// Resolve a `task return` statement
+    /// Resolve a `task return` statement (Stage 7-B: records-only).
     pub(super) fn resolve_task_return(
         &mut self,
         tr_stmt: &TaskReturnStmt,
         ctx: &mut FunctionContext,
-    ) -> TirStmt {
+    ) {
         if !ctx.is_async {
             let _ = self.logger.error(TypeError::InvalidLiteral {
                 message: "`task return` is only valid inside `export async fn`".to_string(),
@@ -1016,104 +912,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let expected = ctx.task_return_type;
-        let value = self.resolve_expr(&tr_stmt.value, ctx, expected);
-        TirStmt::new(TirStmtKind::TaskReturn { value }, tr_stmt.span)
+        self.resolve_expr(&tr_stmt.value, ctx, expected);
     }
 
-    /// Resolve an if statement
-    /// Returns Vec<TirStmt> to handle if-let-init scoping: let binding + if statement
-    pub(super) fn resolve_if_stmt(
-        &mut self,
-        if_stmt: &IfStmt,
-        ctx: &mut FunctionContext,
-    ) -> Vec<TirStmt> {
-        match &if_stmt.condition {
-            ast::Condition::Expr(expr) => {
-                let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
-                let then_block = self.resolve_block(&if_stmt.then_block, ctx, None);
-                let else_block = if_stmt
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.resolve_block(b, ctx, None));
-                vec![TirStmt::new(
-                    TirStmtKind::If {
-                        condition,
-                        then_block,
-                        else_block,
-                    },
-                    if_stmt.span,
-                )]
-            }
-            ast::Condition::LetChain { elements, .. } => {
-                self.record_desugar(if_stmt.id, super::sem::types::DesugarKind::IfLetChain);
-                // Resolve else_block in outer scope (chain bindings are not visible there)
-                let else_block = if_stmt
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.resolve_block(b, ctx, None));
-
-                // Enter scope for chain element bindings and then_block
-                ctx.enter_scope();
-                let stmts = self.resolve_let_chain_stmts(
-                    elements,
-                    &if_stmt.then_block,
-                    else_block.as_ref(),
-                    ctx,
-                    None,
-                    if_stmt.span,
-                );
-                ctx.exit_scope();
-
-                stmts
-            }
-        }
+    /// Resolve an if statement (Stage 7-B: records-only). reify rebuilds the
+    /// `If` / if-let-chain TIR from the AST + the `DesugarKind::IfLetChain`
+    /// tag; this walk only resolves the condition and blocks for their facts.
+    pub(super) fn resolve_if_stmt(&mut self, if_stmt: &IfStmt, ctx: &mut FunctionContext) {
+        self.resolve_if_stmt_with_expected(if_stmt, ctx, None);
     }
 
-    /// Like `resolve_if_stmt` but propagates `expected_type` to blocks for coercion.
-    /// Used when an if statement is the last statement in a block that needs type coercion
-    /// (e.g., match arm returning List<T> from an if-else with tuple literals).
+    /// Like `resolve_if_stmt` but propagates `expected_type` to blocks for
+    /// coercion. Used when an if statement is the last statement in a block
+    /// that needs type coercion (e.g., a match arm returning `List<T>` from an
+    /// if-else with tuple literals). Stage 7-B: records-only.
     fn resolve_if_stmt_with_expected(
         &mut self,
         if_stmt: &IfStmt,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
-    ) -> Vec<TirStmt> {
+    ) {
         match &if_stmt.condition {
             ast::Condition::Expr(expr) => {
-                let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
-                let then_block = self.resolve_block(&if_stmt.then_block, ctx, expected_type);
-                let else_block = if_stmt
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.resolve_block(b, ctx, expected_type));
-                vec![TirStmt::new(
-                    TirStmtKind::If {
-                        condition,
-                        then_block,
-                        else_block,
-                    },
-                    if_stmt.span,
-                )]
+                self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
+                self.resolve_block(&if_stmt.then_block, ctx, expected_type);
+                if let Some(b) = &if_stmt.else_block {
+                    self.resolve_block(b, ctx, expected_type);
+                }
             }
             ast::Condition::LetChain { elements, .. } => {
                 self.record_desugar(if_stmt.id, super::sem::types::DesugarKind::IfLetChain);
-                let else_block = if_stmt
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.resolve_block(b, ctx, expected_type));
+                // Resolve else_block in the outer scope (chain bindings are not
+                // visible there) for its facts.
+                if let Some(b) = &if_stmt.else_block {
+                    self.resolve_block(b, ctx, expected_type);
+                }
 
+                // Enter scope for chain element bindings and then_block.
                 ctx.enter_scope();
-                let stmts = self.resolve_let_chain_stmts(
+                self.resolve_let_chain_stmts(
                     elements,
                     &if_stmt.then_block,
-                    else_block.as_ref(),
                     ctx,
                     expected_type,
                     if_stmt.span,
                 );
                 ctx.exit_scope();
-
-                stmts
             }
         }
     }
@@ -1129,20 +973,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// The `else_block` TIR is cloned for each failure path. This duplicates else-block code
     /// in the output, but is typically small (e.g., `None` or a single `panic` call).
+    ///
+    /// Stage 7-B: records-only. The combined walk no longer builds the
+    /// normalized `Match` / `If` chain TIR (reify rebuilds it from the
+    /// `DesugarKind::IfLetChain` tag + the AST); this walk only resolves the
+    /// scrutinees / conditions for their facts, binds the patterns into `ctx`,
+    /// and recurses into the then-block. The else-block is resolved once by
+    /// the caller (in the outer scope), so it is not threaded here.
     pub(super) fn resolve_let_chain_stmts(
         &mut self,
         elements: &[ConditionElement],
         then_block_ast: &ast::Block,
-        else_block: Option<&TirBlock>,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
         span: Span,
-    ) -> Vec<TirStmt> {
+    ) {
         if elements.is_empty() {
-            return self.resolve_block(then_block_ast, ctx, expected_type).stmts;
+            self.resolve_block(then_block_ast, ctx, expected_type);
+            return;
         }
-        // Process the current element first so its bindings are visible when resolving
-        // subsequent elements and the then_block (via recursive calls below).
+        // Process the current element first so its bindings are visible when
+        // resolving subsequent elements and the then_block (via the recursion
+        // below).
         match &elements[0] {
             ConditionElement::Let {
                 pattern,
@@ -1151,92 +1003,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 let scrutinee = self.resolve_expr(expr, ctx, None);
                 let scrutinee_type = scrutinee.type_id;
-                // Adds pattern bindings to ctx — subsequent elements can see them
-                let tir_pattern = self.resolve_if_pattern(pattern, scrutinee_type, ctx, *elem_span);
-                let inner_block = TirBlock::new(
-                    self.resolve_let_chain_stmts(
-                        &elements[1..],
-                        then_block_ast,
-                        else_block,
-                        ctx,
-                        expected_type,
-                        span,
-                    ),
+                // Adds pattern bindings to ctx — subsequent elements can see them.
+                self.resolve_if_pattern(pattern, scrutinee_type, ctx, *elem_span);
+                self.resolve_let_chain_stmts(
+                    &elements[1..],
+                    then_block_ast,
+                    ctx,
+                    expected_type,
                     span,
                 );
-                // `if let` is normalized to a two-arm `Match` — NIR's
-                // canonical pattern-matching form. The scrutinee stays
-                // inline: `translate::pattern` hoists it into a temp
-                // local later, after `resource_cleanup` has run, so the
-                // resource-flow analysis sees the same shape it saw for
-                // the old `IfLet` node.
-                let then_type = Self::block_result_type(&inner_block);
-                let else_tir = else_block.cloned();
-                let else_type = else_tir
-                    .as_ref()
-                    .map_or(TypeTable::UNIT, Self::block_result_type);
-                let else_arm_span = else_tir.as_ref().map_or(span, |b| b.span);
-                // Equal types agree; a `Never` arm defers to the other;
-                // an outright mismatch (statement-position `if let` whose
-                // then-block ends in a non-Unit call) falls back to
-                // `Unit`, letting both arm values be dropped.
-                let match_type =
-                    crate::tir::agree_branch_types(then_type, else_type).unwrap_or(TypeTable::UNIT);
-                let then_body = TirExpr::new(TirExprKind::Block(inner_block), then_type, span);
-                let else_body = match else_tir {
-                    Some(b) => {
-                        let b_span = b.span;
-                        TirExpr::new(TirExprKind::Block(b), else_type, b_span)
-                    }
-                    None => TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
-                };
-                let arms = vec![
-                    TirMatchArm {
-                        pattern: tir_pattern,
-                        guard: None,
-                        body: then_body,
-                        span: *elem_span,
-                    },
-                    TirMatchArm {
-                        pattern: TirPattern::Wildcard,
-                        guard: None,
-                        body: else_body,
-                        span: else_arm_span,
-                    },
-                ];
-                vec![TirStmt::new(
-                    TirStmtKind::Expr(TirExpr::new(
-                        TirExprKind::Match {
-                            expr: Box::new(scrutinee),
-                            arms,
-                        },
-                        match_type,
-                        span,
-                    )),
-                    span,
-                )]
             }
             ConditionElement::Expr(expr) => {
-                let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
-                let inner_block = TirBlock::new(
-                    self.resolve_let_chain_stmts(
-                        &elements[1..],
-                        then_block_ast,
-                        else_block,
-                        ctx,
-                        expected_type,
-                        span,
-                    ),
+                self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
+                self.resolve_let_chain_stmts(
+                    &elements[1..],
+                    then_block_ast,
+                    ctx,
+                    expected_type,
                     span,
                 );
-                vec![TirStmt::new(
-                    TirStmtKind::If {
-                        condition,
-                        then_block: inner_block,
-                        else_block: else_block.cloned(),
-                    },
-                    span,
-                )]
             }
         }
     }
@@ -2108,26 +1893,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// continue-retarget label is still on the stack. Take + restore
     /// `for_continue_labels` around body resolution so the inner
     /// `resolve_continue` sees an empty stack and lowers naturally.
-    pub(super) fn resolve_loop(
-        &mut self,
-        loop_stmt: &LoopStmt,
-        ctx: &mut FunctionContext,
-    ) -> TirStmt {
+    pub(super) fn resolve_loop(&mut self, loop_stmt: &LoopStmt, ctx: &mut FunctionContext) {
+        // Stage 7-B: records-only; reify rebuilds the `Loop` stmt.
         let saved = std::mem::take(&mut ctx.for_continue_labels);
-        let body = self.resolve_block(&loop_stmt.body, ctx, None);
+        self.resolve_block(&loop_stmt.body, ctx, None);
         ctx.for_continue_labels = saved;
-        TirStmt::new(TirStmtKind::Loop { body }, loop_stmt.span)
     }
 
     /// Resolve a for-of loop.
     ///
     /// For tuples: compile-time expansion (one copy of the body per element).
     /// For non-tuples: iterator pattern via `into_iter()` + `next()`.
-    pub(super) fn resolve_for_of(
-        &mut self,
-        for_of: &ForOfStmt,
-        ctx: &mut FunctionContext,
-    ) -> Vec<TirStmt> {
+    pub(super) fn resolve_for_of(&mut self, for_of: &ForOfStmt, ctx: &mut FunctionContext) {
         let _ = for_of.span;
         // Naked `continue` inside this for-of's body targets *this* loop,
         // not an enclosing C-style `for` body label. The iterable itself
@@ -2184,17 +1961,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::MethodCall(mc) if mc.method == "zip" && mc.args.is_empty()
         ) && self.type_contains_pack(iterable_type_id);
 
-        let result = if let Some((elems, has_type_pack, by_ref)) = tuple_info {
+        if let Some((elems, has_type_pack, by_ref)) = tuple_info {
             if has_type_pack || is_zip_variadic {
                 assert!(
                     !is_enumerate,
                     "variadic for-of with .enumerate() is not yet supported"
                 );
                 self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfVariadic);
-                self.resolve_variadic_for_of(for_of, iterable, by_ref, ctx)
+                self.resolve_variadic_for_of(for_of, iterable, by_ref, ctx);
             } else {
                 self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfTuple);
-                self.resolve_tuple_for_of(for_of, iterable, &elems, is_enumerate, by_ref, ctx)
+                self.resolve_tuple_for_of(for_of, iterable, &elems, is_enumerate, by_ref, ctx);
             }
         } else {
             // Check that the iterable type implements IntoIterator
@@ -2225,11 +2002,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if implements_into_iter {
                 self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfIterator);
             }
-            self.resolve_iterator_for_of(for_of, ctx)
-        };
+            self.resolve_iterator_for_of(for_of, ctx);
+        }
 
         ctx.for_continue_labels = saved_continue;
-        result
     }
 
     /// Expand `for let v of tuple { body }` by unrolling the body once per element.
@@ -2255,9 +2031,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         iterable: TirExpr,
         by_ref: bool,
         ctx: &mut FunctionContext,
-    ) -> Vec<TirStmt> {
-        let span = for_of.span;
-
+    ) {
         // Validate: no break/continue/return in variadic for-of
         if let Some((kind, bad_span)) = Self::find_control_flow_in_block(&for_of.body) {
             let _ = self.logger.error(TypeError::InvalidPattern {
@@ -2266,7 +2040,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ),
                 span: bad_span,
             });
-            return vec![TirStmt::new(TirStmtKind::Expr(iterable), span)];
+            return;
         }
 
         let unique_id = ctx.next_local;
@@ -2317,14 +2091,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let is_destructured = matches!(&for_of.binding, crate::ast::Pattern::Tuple(..));
 
         ctx.enter_scope();
-        let binding_local = ctx.add_local(binding_name.clone(), binding_type, is_mut, binding_id);
+        ctx.add_local(binding_name.clone(), binding_type, is_mut, binding_id);
         if let (Some(id), Some(name_span)) = (binding_id, binding_name_span) {
             self.record_local_symbol(id, &binding_name, name_span, is_mut, binding_type);
         }
 
-        // For destructured bindings (e.g., [a, b]), add the sub-bindings and
-        // prepend destructuring assignments to the body.
-        let mut destruct_stmts = Vec::new();
+        // Stage 7-B: records-only. reify rebuilds the `VariadicForOf` node
+        // (including the destructuring sub-bindings) from the AST + the
+        // `DesugarKind::ForOfVariadic` tag. This walk binds the loop variable
+        // and any destructured sub-bindings into `ctx` (recording their
+        // symbols) and walks the body for its facts.
         if is_destructured && let crate::ast::Pattern::Tuple(tp, _) = &for_of.binding {
             let inner_elems = self
                 .tysys
@@ -2341,60 +2117,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     let elem_type: TypeId =
                         inner_elems.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                    let local_idx = ctx.add_local(name.clone(), elem_type, is_mut, Some(*id));
+                    ctx.add_local(name.clone(), elem_type, is_mut, Some(*id));
                     self.record_local_symbol(*id, name, *name_span, is_mut, elem_type);
-                    let field_access = TirExpr::new(
-                        TirExprKind::FieldAccess {
-                            expr: Box::new(TirExpr::new(
-                                TirExprKind::Local {
-                                    index: binding_local,
-                                    name: binding_name.clone(),
-                                },
-                                binding_type,
-                                span,
-                            )),
-                            field_index: i as u32,
-                            field_name: i.to_string(),
-                        },
-                        elem_type,
-                        span,
-                    );
-                    destruct_stmts.push(TirStmt::new(
-                        TirStmtKind::Let {
-                            name: name.clone(),
-                            local_index: local_idx,
-                            is_mut,
-                            is_reactive: false,
-                            type_id: elem_type,
-                            value: field_access,
-                            skip_value_copy: false,
-                        },
-                        span,
-                    ));
                 }
             }
         }
 
-        let mut body_stmts = destruct_stmts;
         for stmt in &for_of.body.stmts {
-            body_stmts.extend(self.resolve_stmt(stmt, ctx));
+            self.resolve_stmt(stmt, ctx);
         }
         ctx.exit_scope();
 
-        let body = TirBlock::new(body_stmts, span);
-
-        vec![TirStmt::new(
-            TirStmtKind::VariadicForOf {
-                iterable,
-                binding_name,
-                binding_local,
-                is_mut,
-                body,
-                unique_id,
-                by_ref,
-            },
-            span,
-        )]
+        let _ = (iterable, unique_id, by_ref);
     }
 
     fn resolve_tuple_for_of(
@@ -2405,7 +2139,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         is_enumerate: bool,
         by_ref: bool,
         ctx: &mut FunctionContext,
-    ) -> Vec<TirStmt> {
+    ) {
         let span = for_of.span;
 
         // Validate: break, continue, and return are not allowed inside tuple for-of
@@ -2417,118 +2151,63 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ),
                 span: bad_span,
             });
-            return vec![TirStmt::new(TirStmtKind::Expr(iterable), span)];
+            return;
         }
         let unique_id = ctx.next_local;
 
-        // Store iterable in a temp variable to avoid re-evaluation
+        // Store iterable in a temp variable to avoid re-evaluation (reify
+        // rebuilds the `__tuple_N` binding; we reserve its local slot here so
+        // the walk-order local indices stay in sync with reify).
         let tuple_type_id = iterable.type_id;
         let temp_name = format!("__tuple_{unique_id}");
-        let temp_local = ctx.add_local(temp_name.clone(), tuple_type_id, false, None);
-        let temp_let = TirStmt::new(
-            TirStmtKind::Let {
-                name: temp_name.clone(),
-                local_index: temp_local,
-                is_mut: false,
-                is_reactive: false,
-                type_id: tuple_type_id,
-                value: iterable,
-                skip_value_copy: false,
-            },
-            span,
-        );
+        ctx.add_local(temp_name, tuple_type_id, false, None);
+        let _ = iterable;
 
-        let mut outer_stmts = vec![temp_let];
-
-        // Stage 5: when reify will consume the annotations, capture each
-        // unrolled element's body facts separately. The body is a single
-        // source sub-tree resolved once per element here; without
-        // per-element capture every `AstId`-keyed map would be overwritten
-        // so only the last element's facts survive (reify would then
-        // dispatch every element to the last element's methods). Snapshot
-        // the maps' pre-loop lengths; after each element, peel off and
-        // truncate the freshly recorded tail. See `ElementOverlay`.
+        // Stage 5: capture each unrolled element's body facts separately. The
+        // body is a single source sub-tree resolved once per element here;
+        // without per-element capture every `AstId`-keyed map would be
+        // overwritten so only the last element's facts survive (reify would
+        // then dispatch every element to the last element's methods). Snapshot
+        // the maps' pre-loop lengths; after each element, peel off and truncate
+        // the freshly recorded tail. See `ElementOverlay`.
         let overlay_base = self
             .capture_tuple_overlays
             .then(|| self.sem.types.overlay_base_lens());
         let mut element_overlays: Vec<super::sem::types::ElementOverlay> = Vec::new();
 
-        for (i, &elem_type) in elems.iter().enumerate() {
+        for &elem_type in elems.iter() {
             ctx.enter_scope();
 
-            // Create field access: __tuple_N.i
-            let temp_ref = TirExpr::new(
-                TirExprKind::Local {
-                    index: temp_local,
-                    name: temp_name.clone(),
-                },
-                tuple_type_id,
-                span,
-            );
-            let field_access = TirExpr::new(
-                TirExprKind::FieldAccess {
-                    expr: Box::new(temp_ref),
-                    field_index: i as u32,
-                    field_name: i.to_string(),
-                },
-                elem_type,
-                span,
-            );
+            // When iterating through a reference, the element binds by reference
+            // (`&T_k`); otherwise by value. Mirrors `tuple_element_binding`.
+            let bind_elem_type = if by_ref {
+                self.tysys.type_table.borrow_mut().make_ref(elem_type)
+            } else {
+                elem_type
+            };
 
-            // When iterating through a reference, bind each element by
-            // reference (`&T_k`) — a reference to a fresh copy of the field,
-            // matching `for v of &list` refiter semantics.
-            let (bind_elem_type, bind_value) = self
-                .tysys
-                .type_table
-                .borrow_mut()
-                .tuple_element_binding(field_access, elem_type, by_ref, span);
-
-            let mut block_stmts = Vec::new();
-
+            // Stage 7-B: records-only. reify rebuilds the per-element block (the
+            // `__tuple_N.i` field access + binding + body) from the AST + the
+            // `DesugarKind::ForOfTuple` tag and per-element overlays. This walk
+            // binds the loop variable(s) into `ctx` and walks the body so every
+            // element's facts are captured.
             if is_enumerate {
-                // For enumerate: binding is typically [idx, val]
-                // Create a synthetic tuple [i32_literal, element] and destructure
+                // For enumerate the binding is `[idx, val]`; resolve the pattern
+                // against the synthetic `[i32, elem_type]` tuple type.
                 let i32_type = TypeTable::I32;
-                let index_literal = TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: i as u64,
-                        repr: i.to_string(),
-                    },
-                    i32_type,
-                    span,
-                );
                 let enum_tuple_type = self
                     .tysys
                     .type_table
                     .borrow_mut()
                     .make_tuple(vec![i32_type, bind_elem_type]);
-                let enum_tuple = TirExpr::new(
-                    TirExprKind::TupleLiteral {
-                        elements: vec![index_literal, bind_value],
-                    },
-                    enum_tuple_type,
-                    span,
-                );
-
-                // Resolve the binding pattern against this [i32, elem_type] tuple
-                let tir_pattern = self.resolve_let_pattern(
+                self.resolve_let_pattern(
                     &for_of.binding,
                     enum_tuple_type,
                     for_of.is_mut,
                     span,
                     ctx,
                 );
-                block_stmts.push(TirStmt::new(
-                    TirStmtKind::LetDestructure {
-                        pattern: tir_pattern,
-                        is_mut: for_of.is_mut,
-                        value: enum_tuple,
-                    },
-                    span,
-                ));
             } else {
-                // Simple case: bind element to the pattern
                 match &for_of.binding {
                     Pattern::Ident {
                         id,
@@ -2542,42 +2221,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } => {
                         let is_mut =
                             for_of.is_mut || matches!(&for_of.binding, Pattern::MutIdent { .. });
-                        let local_index =
-                            ctx.add_local(name.clone(), bind_elem_type, is_mut, Some(*id));
+                        ctx.add_local(name.clone(), bind_elem_type, is_mut, Some(*id));
                         self.record_local_symbol(*id, name, *name_span, is_mut, bind_elem_type);
-                        block_stmts.push(TirStmt::new(
-                            TirStmtKind::Let {
-                                name: name.clone(),
-                                local_index,
-                                is_mut,
-                                is_reactive: false,
-                                type_id: bind_elem_type,
-                                value: bind_value,
-                                skip_value_copy: false,
-                            },
-                            span,
-                        ));
                     }
                     Pattern::Tuple(_, _) | Pattern::Struct { .. } => {
-                        let tir_pattern = self.resolve_let_pattern(
+                        self.resolve_let_pattern(
                             &for_of.binding,
                             bind_elem_type,
                             for_of.is_mut,
                             span,
                             ctx,
                         );
-                        block_stmts.push(TirStmt::new(
-                            TirStmtKind::LetDestructure {
-                                pattern: tir_pattern,
-                                is_mut: for_of.is_mut,
-                                value: bind_value,
-                            },
-                            span,
-                        ));
                     }
                     Pattern::Wildcard => {
-                        // Discard the element
-                        block_stmts.push(TirStmt::new(TirStmtKind::Expr(bind_value), span));
+                        // Discard the element; nothing to bind.
                     }
                     _ => {
                         let _ = self.logger.error(TypeError::InvalidPattern {
@@ -2588,32 +2245,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            // Resolve the body AST (each expansion gets its own resolution with different types)
-            let body = self.resolve_block(&for_of.body, ctx, None);
-            block_stmts.extend(body.stmts);
+            // Resolve the body AST (each expansion gets its own resolution with
+            // different element types) for its facts.
+            self.resolve_block(&for_of.body, ctx, None);
 
-            // Capture this element's body annotations and reset the maps
-            // back to their pre-loop state so the next element records from
-            // a clean slate (Stage 5; reify-only).
+            // Capture this element's body annotations and reset the maps back to
+            // their pre-loop state so the next element records from a clean
+            // slate (Stage 5; reify-only).
             if let Some(base) = overlay_base {
                 element_overlays.push(self.sem.types.split_off_overlay(base));
             }
 
             ctx.exit_scope();
-
-            outer_stmts.push(TirStmt::new(
-                TirStmtKind::LabeledBlock {
-                    label: format!("__tuple_iter_{unique_id}_{i}"),
-                    block: TirBlock::new(block_stmts, span),
-                },
-                span,
-            ));
         }
 
-        // Record this for-of's per-element overlays as one instantiation
-        // (in deterministic walk order). A nested inner for-of resolves
-        // once per outer element, appending one entry per outer element;
-        // reify's visit counter pairs them up in the same order.
+        // Record this for-of's per-element overlays as one instantiation (in
+        // deterministic walk order). A nested inner for-of resolves once per
+        // outer element, appending one entry per outer element; reify's visit
+        // counter pairs them up in the same order.
         if overlay_base.is_some() {
             let for_of_key = self.ann_key(for_of.id);
             self.sem
@@ -2623,19 +2272,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .or_default()
                 .push(element_overlays);
         }
-
-        // Wrap everything in a labeled block for break support
-        let label = format!("__tuple_for_of_{unique_id}");
-        ctx.active_labels.push(label.clone());
-        let result = vec![TirStmt::new(
-            TirStmtKind::LabeledBlock {
-                label,
-                block: TirBlock::new(outer_stmts, span),
-            },
-            span,
-        )];
-        ctx.active_labels.pop();
-        result
     }
 
     /// Lower `for let v of iterable { body }` directly into TIR for non-tuple
@@ -2672,11 +2308,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `IterEnumerate<IterEnumerate<…>>` and ICE-ing at codegen with
     /// "unsubstituted `AssocTypeProjection` `Item` reached codegen" — see
     /// `tests/fixtures/for_of_iterator_enumerate.wado`.)
-    fn resolve_iterator_for_of(
-        &mut self,
-        for_of: &ForOfStmt,
-        ctx: &mut FunctionContext,
-    ) -> Vec<TirStmt> {
+    fn resolve_iterator_for_of(&mut self, for_of: &ForOfStmt, ctx: &mut FunctionContext) {
         use super::method_call::MethodCallInput;
 
         let span = for_of.span;
@@ -2731,21 +2363,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // `let mut __iter_N = …;` — `defining_ast_id: None` keeps this
-        // synthetic local out of `local_symbols`.
+        // synthetic local out of `local_symbols`. Stage 7-B: reify rebuilds the
+        // `let`; we reserve the local slot here for walk-order parity.
         let iter_local_index =
             ctx.add_local(iter_var.clone(), iter_type, /* is_mut */ true, None);
-        let iter_let = TirStmt::new(
-            TirStmtKind::Let {
-                name: iter_var.clone(),
-                local_index: iter_local_index,
-                is_mut: true,
-                is_reactive: false,
-                type_id: iter_type,
-                value: into_iter_call,
-                skip_value_copy: false,
-            },
-            span,
-        );
+        let _ = into_iter_call;
 
         // Make `__for_of_N` visible to a body-level `break __for_of_N`
         // (no existing user does this, but the validation in `resolve_break`
@@ -2840,74 +2462,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
+        // Stage 7-B: records-only. reify rebuilds the
+        // `__for_of_N: { let mut __iter = …; loop { match __iter.next() { … } } }`
+        // shape from the AST + the recorded `ForOfIteratorInfo`. This walk binds
+        // the loop variable (`resolve_if_pattern_inner`, preserving the
+        // binding's real `AstId`) and walks the body for its facts.
         ctx.enter_scope();
-        let binding_pattern =
-            self.resolve_if_pattern_inner(&for_of.binding, item_type, ctx, span, RefBinding::None);
-        let body_block = self.resolve_block(&for_of.body, ctx, None);
+        self.resolve_if_pattern_inner(&for_of.binding, item_type, ctx, span, RefBinding::None);
+        self.resolve_block(&for_of.body, ctx, None);
         ctx.exit_scope();
 
-        let some_pattern = TirPattern::Variant {
-            enum_type: option_type,
-            variant_name: some_case_name,
-            bindings: vec![binding_pattern],
-            payload_type: item_type,
-        };
-
-        let body_type = self.ast_block_result_type(&for_of.body);
-        let some_body = TirExpr::new(TirExprKind::Block(body_block), body_type, span);
-
-        // `_ => break;` — Wildcard arm body is a block holding a single
-        // `Break`, mirroring how `while let` lowers its fall-through arm
-        // (see `resolve_while`'s `Condition::LetChain` path).
-        let break_stmt = TirStmt::new(
-            TirStmtKind::Break {
-                label: None,
-                value: None,
-            },
-            span,
+        let _ = (
+            next_call,
+            option_type,
+            some_case_name,
+            iter_local_index,
+            label,
         );
-        let break_block = TirBlock::new(vec![break_stmt], span);
-        let break_body = TirExpr::new(TirExprKind::Block(break_block), TypeTable::UNIT, span);
-
-        let match_type =
-            crate::tir::agree_branch_types(body_type, TypeTable::UNIT).unwrap_or(TypeTable::UNIT);
-        let arms = vec![
-            TirMatchArm {
-                pattern: some_pattern,
-                guard: None,
-                body: some_body,
-                span,
-            },
-            TirMatchArm {
-                pattern: TirPattern::Wildcard,
-                guard: None,
-                body: break_body,
-                span,
-            },
-        ];
-        let match_expr = TirExpr::new(
-            TirExprKind::Match {
-                expr: Box::new(next_call),
-                arms,
-            },
-            match_type,
-            span,
-        );
-        let loop_body = TirBlock::new(
-            vec![TirStmt::new(TirStmtKind::Expr(match_expr), span)],
-            span,
-        );
-        let loop_tir = TirStmt::new(TirStmtKind::Loop { body: loop_body }, span);
-
-        let result = vec![TirStmt::new(
-            TirStmtKind::LabeledBlock {
-                label,
-                block: TirBlock::new(vec![iter_let, loop_tir], span),
-            },
-            span,
-        )];
         ctx.active_labels.pop();
-        result
     }
 
     /// Check if a block contains `break`, `continue`, or `return` at the top level
@@ -2945,12 +2517,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve a break statement
-    pub(super) fn resolve_break(
-        &mut self,
-        break_stmt: &BreakStmt,
-        ctx: &mut FunctionContext,
-    ) -> TirStmt {
+    /// Resolve a break statement (Stage 7-B: records-only).
+    pub(super) fn resolve_break(&mut self, break_stmt: &BreakStmt, ctx: &mut FunctionContext) {
         // Resolve the break value against the target block's expected type
         // so that literals coerce correctly (e.g. `break label: 10` when the
         // block is used as `let x: i64 = label: { ... }`).
@@ -2990,39 +2558,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        TirStmt::new(
-            TirStmtKind::Break {
-                label: break_stmt.label.clone(),
-                value,
-            },
-            break_stmt.span,
-        )
+        // Stage 7-B: records-only; reify rebuilds the `Break` stmt.
     }
 
-    /// Resolve a continue statement.
-    ///
-    /// Inside a C-style `for` body the loop's `update` expression must run
-    /// before the next iteration, so we re-target naked `continue` to break
-    /// out of the labeled body block instead of jumping to the top of the
-    /// loop. `ctx.for_continue_labels` holds the body labels stacked by
-    /// [`Self::resolve_for`]; empty outside a for body, in which case
-    /// continue lowers naturally.
+    /// Resolve a continue statement (Stage 7-B: records-only). `continue`
+    /// carries no facts; reify rebuilds the `Continue` (or the
+    /// `break <for-body-label>` retarget) from the AST and
+    /// `ctx.for_continue_labels`.
     pub(super) fn resolve_continue(
         &mut self,
-        continue_stmt: &ContinueStmt,
-        ctx: &FunctionContext,
-    ) -> TirStmt {
-        if let Some(label) = ctx.for_continue_labels.last() {
-            TirStmt::new(
-                TirStmtKind::Break {
-                    label: Some(label.clone()),
-                    value: None,
-                },
-                continue_stmt.span,
-            )
-        } else {
-            TirStmt::new(TirStmtKind::Continue, continue_stmt.span)
-        }
+        _continue_stmt: &ContinueStmt,
+        _ctx: &FunctionContext,
+    ) {
     }
 
     /// Resolve a `while` or `while let` loop directly into TIR.
@@ -3047,87 +2594,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Naked `break` / `continue` inside `B` target the synthesised
     /// `loop`, which is the correct semantics — no label re-targeting is
     /// required (unlike C-style `for`).
-    pub(super) fn resolve_while(
-        &mut self,
-        w: &WhileStmt,
-        ctx: &mut FunctionContext,
-    ) -> Vec<TirStmt> {
-        let span = w.span;
+    pub(super) fn resolve_while(&mut self, w: &WhileStmt, ctx: &mut FunctionContext) {
         // Naked `continue` inside this while's body targets *this* loop,
         // not an enclosing C-style `for` body label.
         let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
-        let stmts = match &w.condition {
+        // Stage 7-B: records-only. reify rebuilds the `loop { if !cond { break }
+        // B }` (or `loop { match e { pat => B, _ => break } }`) shape from the
+        // `DesugarKind::While` / `WhileLetChain` tag + the AST. This walk
+        // resolves the condition / scrutinees and walks the body for facts.
+        match &w.condition {
             Condition::Expr(cond_expr) => {
                 self.record_desugar(w.id, super::sem::types::DesugarKind::While);
-                let cond_tir = self.resolve_expr(cond_expr, ctx, Some(TypeTable::BOOL));
-                let cond_span = cond_expr.span();
-                let neg_cond = TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Not,
-                        expr: Box::new(cond_tir),
-                    },
-                    TypeTable::BOOL,
-                    cond_span,
-                );
-                let break_stmt = TirStmt::new(
-                    TirStmtKind::Break {
-                        label: None,
-                        value: None,
-                    },
-                    span,
-                );
-                let if_break = TirStmt::new(
-                    TirStmtKind::If {
-                        condition: neg_cond,
-                        then_block: TirBlock::new(vec![break_stmt], span),
-                        else_block: None,
-                    },
-                    span,
-                );
-                let body_block = self.resolve_block(&w.body, ctx, None);
-                let mut stmts = Vec::with_capacity(1 + body_block.stmts.len());
-                stmts.push(if_break);
-                stmts.extend(body_block.stmts);
-                stmts
+                self.resolve_expr(cond_expr, ctx, Some(TypeTable::BOOL));
+                self.resolve_block(&w.body, ctx, None);
             }
             Condition::LetChain {
                 elements,
                 span: cond_span,
             } => {
                 self.record_desugar(w.id, super::sem::types::DesugarKind::WhileLetChain);
-                // The else-branch unconditionally terminates the loop. Build it as a
-                // TirBlock holding a single `Break` so `resolve_let_chain_stmts`
-                // (shared with `if let` resolution) can splice it in as the
-                // wildcard arm of the synthesised match.
-                let break_stmt = TirStmt::new(
-                    TirStmtKind::Break {
-                        label: None,
-                        value: None,
-                    },
-                    span,
-                );
-                let else_block = TirBlock::new(vec![break_stmt], *cond_span);
+                // The else-branch (an unconditional `break`) is rebuilt by reify;
+                // the combined walk only binds the chain patterns and walks the
+                // then-body for facts.
                 ctx.enter_scope();
-                let body_stmts = self.resolve_let_chain_stmts(
-                    elements,
-                    &w.body,
-                    Some(&else_block),
-                    ctx,
-                    None,
-                    *cond_span,
-                );
+                self.resolve_let_chain_stmts(elements, &w.body, ctx, None, *cond_span);
                 ctx.exit_scope();
-                body_stmts
             }
-        };
+        }
 
         ctx.for_continue_labels = saved_continue;
-        vec![TirStmt::new(
-            TirStmtKind::Loop {
-                body: TirBlock::new(stmts, span),
-            },
-            span,
-        )]
     }
 
     /// Resolve a C-style `for init; cond; update { B }` loop directly into TIR.
@@ -3169,7 +2664,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///     }
     /// }
     /// ```
-    pub(super) fn resolve_for(&mut self, f: &ForStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
+    pub(super) fn resolve_for(&mut self, f: &ForStmt, ctx: &mut FunctionContext) {
         self.record_desugar(f.id, super::sem::types::DesugarKind::CStyleFor);
         let span = f.span;
         let loop_id = ctx.next_loop_id;
@@ -3190,53 +2685,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // them while the surrounding function cannot.
         ctx.enter_scope();
 
-        let mut outer_stmts: Vec<TirStmt> = Vec::new();
+        // Stage 7-B: records-only. reify rebuilds the C-style-for desugar
+        // (`{ init; loop { if !cond { break } __for_N_body: { B } update } }`,
+        // or the `while let` form) from the `DesugarKind::CStyleFor` tag + the
+        // AST. This walk resolves `init` / `cond` / scrutinee, binds the
+        // for-header let pattern, and walks the body + update for their facts.
+        // Body and update are resolved here (not up-front) because in the
+        // let-chain form the pattern's bindings must be in scope for both — see
+        // `lib/core/prelude/string.wado::String::find_char`.
+        let _ = span;
         if let Some(init) = &f.init {
-            outer_stmts.extend(self.resolve_stmt(init, ctx));
+            self.resolve_stmt(init, ctx);
         }
-
-        // Build the per-iteration sequence. Body and update are resolved
-        // here (rather than up-front) because in the let-chain form the
-        // pattern's bindings must be in scope for both — see
-        // `lib/core/prelude/string.wado::String::find_char` for a real
-        // case where `update` references a pattern-bound name.
-        let iter_stmts: Vec<TirStmt> = match &f.condition {
+        match &f.condition {
             None => {
-                let labeled_body = self.resolve_for_labeled_body(&body_label, &f.body, ctx);
-                let mut s = vec![labeled_body];
-                s.extend(self.resolve_for_update(f.update.as_ref(), ctx));
-                s
+                self.resolve_for_labeled_body(&body_label, &f.body, ctx);
+                self.resolve_for_update(f.update.as_ref(), ctx);
             }
             Some(Condition::Expr(cond_expr)) => {
-                let cond_tir = self.resolve_expr(cond_expr, ctx, Some(TypeTable::BOOL));
-                let cond_span = cond_expr.span();
-                let neg_cond = TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Not,
-                        expr: Box::new(cond_tir),
-                    },
-                    TypeTable::BOOL,
-                    cond_span,
-                );
-                let break_stmt = TirStmt::new(
-                    TirStmtKind::Break {
-                        label: None,
-                        value: None,
-                    },
-                    span,
-                );
-                let if_break = TirStmt::new(
-                    TirStmtKind::If {
-                        condition: neg_cond,
-                        then_block: TirBlock::new(vec![break_stmt], span),
-                        else_block: None,
-                    },
-                    span,
-                );
-                let labeled_body = self.resolve_for_labeled_body(&body_label, &f.body, ctx);
-                let mut s = vec![if_break, labeled_body];
-                s.extend(self.resolve_for_update(f.update.as_ref(), ctx));
-                s
+                self.resolve_expr(cond_expr, ctx, Some(TypeTable::BOOL));
+                self.resolve_for_labeled_body(&body_label, &f.body, ctx);
+                self.resolve_for_update(f.update.as_ref(), ctx);
             }
             Some(Condition::LetChain {
                 elements,
@@ -3268,86 +2737,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                     ctx.exit_scope();
                     ctx.for_continue_labels = saved_continue;
-                    return vec![];
+                    return;
                 };
 
                 let scrutinee = self.resolve_expr(expr, ctx, None);
                 let scrutinee_type = scrutinee.type_id;
                 ctx.enter_scope();
-                let tir_pattern = self.resolve_if_pattern(pattern, scrutinee_type, ctx, elem_span);
-                // Body and update both run inside the pattern scope so
-                // they can name the bindings introduced by `pat`.
-                let labeled_body = self.resolve_for_labeled_body(&body_label, &f.body, ctx);
-                let update_stmts = self.resolve_for_update(f.update.as_ref(), ctx);
+                self.resolve_if_pattern(pattern, scrutinee_type, ctx, elem_span);
+                // Body and update both run inside the pattern scope so they can
+                // name the bindings introduced by `pat`.
+                self.resolve_for_labeled_body(&body_label, &f.body, ctx);
+                self.resolve_for_update(f.update.as_ref(), ctx);
                 ctx.exit_scope();
-
-                let mut then_stmts = vec![labeled_body];
-                then_stmts.extend(update_stmts);
-                // The match sits in statement position, so its overall type
-                // is Unit. The then-block ends without a value-producing
-                // trailing expression (labeled_body is a stmt and update
-                // is a Unit-typed Expr-stmt), so its block_result_type is
-                // Unit. The else-block holds only a `Break`, which makes
-                // it Never; mark it as such rather than lying with Unit
-                // so any downstream analysis that consults arm body
-                // types sees the truth.
-                let then_body = TirExpr::new(
-                    TirExprKind::Block(TirBlock::new(then_stmts, *cond_span)),
-                    TypeTable::UNIT,
-                    *cond_span,
-                );
-                let else_body = TirExpr::new(
-                    TirExprKind::Block(TirBlock::new(
-                        vec![TirStmt::new(
-                            TirStmtKind::Break {
-                                label: None,
-                                value: None,
-                            },
-                            span,
-                        )],
-                        *cond_span,
-                    )),
-                    TypeTable::NEVER,
-                    *cond_span,
-                );
-                let arms = vec![
-                    TirMatchArm {
-                        pattern: tir_pattern,
-                        guard: None,
-                        body: then_body,
-                        span: elem_span,
-                    },
-                    TirMatchArm {
-                        pattern: TirPattern::Wildcard,
-                        guard: None,
-                        body: else_body,
-                        span: *cond_span,
-                    },
-                ];
-                vec![TirStmt::new(
-                    TirStmtKind::Expr(TirExpr::new(
-                        TirExprKind::Match {
-                            expr: Box::new(scrutinee),
-                            arms,
-                        },
-                        TypeTable::UNIT,
-                        *cond_span,
-                    )),
-                    *cond_span,
-                )]
             }
-        };
-
-        outer_stmts.push(TirStmt::new(
-            TirStmtKind::Loop {
-                body: TirBlock::new(iter_stmts, span),
-            },
-            span,
-        ));
+        }
 
         ctx.exit_scope();
         ctx.for_continue_labels = saved_continue;
-        outer_stmts
     }
 
     /// Resolve a for loop's body wrapped in its continue-retarget label.
@@ -3359,34 +2765,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         body_label: &str,
         body: &Block,
         ctx: &mut FunctionContext,
-    ) -> TirStmt {
+    ) {
+        // Stage 7-B: records-only; reify rebuilds the labeled body block.
         ctx.for_continue_labels.push(body_label.to_string());
         ctx.active_labels.push(body_label.to_string());
-        let body_block = self.resolve_block(body, ctx, None);
+        self.resolve_block(body, ctx, None);
         ctx.active_labels.pop();
         ctx.for_continue_labels.pop();
-        TirStmt::new(
-            TirStmtKind::LabeledBlock {
-                label: body_label.to_string(),
-                block: body_block,
-            },
-            body.span,
-        )
     }
 
-    /// Resolve a for loop's optional update expression as a single
-    /// statement, or no statements if absent.
-    fn resolve_for_update(
-        &mut self,
-        update: Option<&Expr>,
-        ctx: &mut FunctionContext,
-    ) -> Vec<TirStmt> {
-        update
-            .map(|u| {
-                let tir = self.resolve_expr(u, ctx, None);
-                vec![TirStmt::new(TirStmtKind::Expr(tir), u.span())]
-            })
-            .unwrap_or_default()
+    /// Resolve a for loop's optional update expression for its facts
+    /// (Stage 7-B: records-only).
+    fn resolve_for_update(&mut self, update: Option<&Expr>, ctx: &mut FunctionContext) {
+        if let Some(u) = update {
+            self.resolve_expr(u, ctx, None);
+        }
     }
 }
 
