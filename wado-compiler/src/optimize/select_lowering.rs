@@ -1,137 +1,157 @@
-//! Select lowering optimization for Wado NIR
+//! Select lowering optimization for Wado NIR.
 //!
-//! Post-optimization rewrite that converts simple `if cond { a } else { b }` expressions
-//! to `builtin::select(cond, a, b)`, which emits the branchless Wasm `select` instruction.
-//! Both branches must be pure (no side effects, no traps) since `select` evaluates both
-//! operands eagerly.
-
-use std::cell::RefCell;
-use std::rc::Rc;
+//! Post-optimization rewrite that converts simple `if cond { a } else { b }`
+//! expressions to `builtin::select(cond, a, b)`, which emits the branchless
+//! Wasm `select` instruction. Both branches must be pure (no side effects, no
+//! traps) since `select` evaluates both operands eagerly.
+//!
+//! This is the first peephole pass ported to the worklist rewrite engine
+//! (Phase 4 stage C; see `docs/wep-2026-06-05-nir-rewrite-engine-design.md`):
+//! it runs as a [`Rule`] over each function's arena `Body` directly, with no
+//! `Body ↔ tree` bridge. The `select` Call reuses the existing condition / arm
+//! expression ids, so the rewrite is a single `replace_expr_kind` with no node
+//! allocation. The rule is confluent — a `select` arm must be leaf-pure, so an
+//! arm can never itself be an `If` / `Call`, and the worklist's bottom-up order
+//! produces the same result the old top-down visitor did.
 
 use crate::module_source::ModuleSource;
-use crate::nir::{
-    CallArg, FunctionRef, MonomorphInfo, NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirStmtKind,
-    NirUnaryOp,
-};
+use crate::nir::{FunctionRef, MonomorphInfo, NirBinaryOp, NirUnaryOp};
+use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, StmtKind};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
-use crate::nir_visitor::{NirOptVisitor, opt_walk_expr};
-
-/// Run select lowering on all functions.
+/// Run select lowering on all functions, driven by the rewrite engine.
 pub fn select_lowering(project: &mut NirPackage) {
-    let mut visitor = SelectLoweringVisitor {
-        type_table: Rc::clone(&project.type_table),
+    let type_table = project.type_table.borrow();
+    let rule = SelectLoweringRule {
+        type_table: &type_table,
     };
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        if let Some(mut body) = func.body_block() {
-            visitor.visit_block(&mut body);
-            func.set_body_block(body);
+        if let Some(body) = func.body.as_mut() {
+            let mut engine = Engine::new(body);
+            engine.run(&[&rule]);
         }
     }
 }
 
-struct SelectLoweringVisitor {
-    type_table: Rc<RefCell<TypeTable>>,
+struct SelectLoweringRule<'t> {
+    type_table: &'t TypeTable,
 }
 
-impl NirOptVisitor for SelectLoweringVisitor {
-    fn visit_expr(&mut self, expr: &mut NirExpr) -> bool {
-        let mut changed = false;
-        if let NirExprKind::If {
+impl Rule for SelectLoweringRule<'_> {
+    fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
+        let ExprKind::If {
             condition,
             then_branch,
             else_branch,
-        } = &mut expr.kind
-        {
-            // Scope the TypeTable borrow tightly so the recursive
-            // `self.visit_expr` call below can re-borrow `self`.
-            let select_call = {
-                let type_table = self.type_table.borrow();
-                try_lower_to_select(
-                    condition,
-                    then_branch,
-                    else_branch,
-                    expr.type_id,
-                    expr.span,
-                    &type_table,
-                )
-            };
-            if let Some(select_call) = select_call {
-                *expr = select_call;
-                changed = true;
-                changed |= self.visit_expr(expr);
-                return changed;
-            }
+        } = &engine.body.exprs[id].kind
+        else {
+            return false;
+        };
+        let condition = *condition;
+        let then_branch = *then_branch;
+        let Some(else_branch) = *else_branch else {
+            return false;
+        };
+        let result_type = engine.body.exprs[id].type_id;
+        if result_type == TypeTable::UNIT {
+            return false;
         }
-        changed |= opt_walk_expr(self, expr);
-        changed
+        let Some(true_val) = arm_select_value(engine.body, then_branch, self.type_table) else {
+            return false;
+        };
+        let Some(false_val) = arm_select_value(engine.body, else_branch, self.type_table) else {
+            return false;
+        };
+
+        let func = FunctionRef {
+            module_source: ModuleSource::builtin(),
+            name: "select".to_string(),
+            monomorph_info: Some(MonomorphInfo {
+                generic_name: "select".to_string(),
+                impl_type_args: vec![result_type],
+                method_type_args: vec![],
+                is_blanket: false,
+            }),
+            method_info: None,
+        };
+        engine.replace_expr_kind(
+            id,
+            ExprKind::Call {
+                func,
+                type_args: vec![result_type],
+                args: vec![
+                    ArenaCallArg {
+                        expr: condition,
+                        is_mut: false,
+                    },
+                    ArenaCallArg {
+                        expr: true_val,
+                        is_mut: false,
+                    },
+                    ArenaCallArg {
+                        expr: false_val,
+                        is_mut: false,
+                    },
+                ],
+            },
+        );
+        true
     }
 }
 
-/// True when `expr` is eligible to appear as a `builtin::select` arm.
-///
-/// `select` evaluates both arms unconditionally, so each arm must be:
-///
-/// - **Side-effect free** — no `Call` / `Assign` / mutation that an
-///   omitted branch evaluation would have skipped.
-/// - **Non-trapping** — no `Div` / `Mod` (integer divide-by-zero
-///   traps), no `Deref` (null-deref traps), no float→int `Cast`
-///   (Wasm `i*.trunc_f*_s/u` traps on NaN / infinity / out of range).
-///   Floating-point arithmetic never traps in Wasm, so float `Div`
-///   would actually be safe — but the integer-shape rule excludes it
-///   uniformly because we don't peek at operand types here.
-/// - **Cheap to compute redundantly** — the speculation cost on the
-///   not-taken branch should be small. Restrict the shape to
-///   duplicable leaves (`Local`, literals) plus a single layer of
-///   pure leaf operators (`Unary` over a leaf-pure operand, `Binary`
-///   over two leaf-pure operands, `Cast` of a leaf-pure value whose
-///   source/target combination cannot trap). The recursion bottoms
-///   out at leaves; nested operator trees over leaf-pure
-///   subexpressions are allowed but in practice rarely reach beyond
-///   depth 2-3 from source.
-///
-/// The Wado runtime never traps on `Ref` / `MutRef` (taking a local's
-/// address is harmless), but reference-taking inside a `select` arm
-/// is a code-smell shape that we keep out of scope.
-fn is_select_eligible_expr(expr: &NirExpr, type_table: &TypeTable) -> bool {
-    match &expr.kind {
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::Local { .. } => true,
-        NirExprKind::Unary { op, expr: inner } => {
+/// A branch is select-able when it is a single `Expr` statement whose value is
+/// select-eligible; returns that value's id.
+fn arm_select_value(body: &Body, block: BlockId, type_table: &TypeTable) -> Option<ExprId> {
+    let stmts = &body.blocks[block].stmts;
+    if stmts.len() != 1 {
+        return None;
+    }
+    if let StmtKind::Expr(e) = &body.stmts[stmts[0]].kind {
+        let e = *e;
+        if is_select_eligible(body, e, type_table) {
+            return Some(e);
+        }
+    }
+    None
+}
+
+/// True when `id` is eligible to appear as a `builtin::select` arm: a
+/// duplicable leaf (`Local`, literal) or a single layer of pure leaf
+/// operators over leaf-pure operands, none of which traps. See the original
+/// pass doc for the full rationale.
+fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
+    match &body.exprs[id].kind {
+        ExprKind::IntLiteral { .. }
+        | ExprKind::FloatLiteral { .. }
+        | ExprKind::BoolLiteral(_)
+        | ExprKind::CharLiteral(_)
+        | ExprKind::Local { .. } => true,
+        ExprKind::Unary { op, expr: inner } => {
             matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
-                && is_select_eligible_expr(inner, type_table)
+                && is_select_eligible(body, *inner, type_table)
         }
-        NirExprKind::Binary { op, left, right } => {
+        ExprKind::Binary { op, left, right } => {
             !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
-                && is_select_eligible_expr(left, type_table)
-                && is_select_eligible_expr(right, type_table)
+                && is_select_eligible(body, *left, type_table)
+                && is_select_eligible(body, *right, type_table)
         }
-        NirExprKind::Cast {
+        ExprKind::Cast {
             expr: inner,
             target_type,
         } => {
-            !is_trapping_cast(inner.type_id, *target_type, type_table)
-                && is_select_eligible_expr(inner, type_table)
+            !is_trapping_cast(body.exprs[*inner].type_id, *target_type, type_table)
+                && is_select_eligible(body, *inner, type_table)
         }
         _ => false,
     }
 }
 
-/// True when an `as` cast from `src` to `dst` lowers to a Wasm
-/// instruction that traps at runtime.
-///
-/// The trapping shapes are exactly `f32`/`f64` → integer: WIR build
-/// emits `i32.trunc_f64_s` / `i64.trunc_f32_u` and friends
-/// (`wir_build/primitive_ops.rs::translate_cast`), all of which trap on
-/// NaN, infinity, or values outside the target integer's range. Every
-/// other Wado cast lowers to a wrap / extend / convert / promote /
-/// demote instruction that has no trap semantics, or to an
-/// identity-at-WIR pass-through (struct casts).
+/// True when an `as` cast from `src` to `dst` lowers to a trapping Wasm
+/// instruction (only `f32`/`f64` → integer traps; everything else is a
+/// wrap / extend / convert / identity).
 fn is_trapping_cast(src: TypeId, dst: TypeId, type_table: &TypeTable) -> bool {
     matches!(
         (type_table.get(src), type_table.get(dst)),
@@ -149,60 +169,4 @@ fn is_trapping_cast(src: TypeId, dst: TypeId, type_table: &TypeTable) -> bool {
             ),
         )
     )
-}
-
-fn try_select_value<'a>(block: &'a NirBlock, type_table: &TypeTable) -> Option<&'a NirExpr> {
-    if block.stmts.len() != 1 {
-        return None;
-    }
-    if let NirStmtKind::Expr(expr) = &block.stmts[0].kind
-        && is_select_eligible_expr(expr, type_table)
-    {
-        return Some(expr);
-    }
-    None
-}
-
-fn try_lower_to_select(
-    condition: &NirExpr,
-    then_branch: &NirBlock,
-    else_branch: &Option<NirBlock>,
-    result_type: TypeId,
-    span: crate::token::Span,
-    type_table: &TypeTable,
-) -> Option<NirExpr> {
-    let else_block = else_branch.as_ref()?;
-
-    if result_type == TypeTable::UNIT {
-        return None;
-    }
-
-    let true_val = try_select_value(then_branch, type_table)?;
-    let false_val = try_select_value(else_block, type_table)?;
-
-    let func_ref = FunctionRef {
-        module_source: ModuleSource::builtin(),
-        name: "select".to_string(),
-        monomorph_info: Some(MonomorphInfo {
-            generic_name: "select".to_string(),
-            impl_type_args: vec![result_type],
-            method_type_args: vec![],
-            is_blanket: false,
-        }),
-        method_info: None,
-    };
-
-    Some(NirExpr::new(
-        NirExprKind::Call {
-            func: func_ref,
-            type_args: vec![result_type],
-            args: vec![
-                CallArg::new(condition.clone(), false),
-                CallArg::new(true_val.clone(), false),
-                CallArg::new(false_val.clone(), false),
-            ],
-        },
-        result_type,
-        span,
-    ))
 }
