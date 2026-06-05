@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780620976875,
+  "lastUpdate": 1780640608722,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29933,6 +29933,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/02dfcc5b9c151809f7790b00539aeb40de215362"
         },
         "date": 1780620976687,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9659,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17191,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460509,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e3d41c49efdc109625696a177b633ca165114c19",
+          "message": "Merge pull request #1295 from wado-lang/claude/wizardly-darwin-lW1Rt\n\nrevert(ci): drop the tagpr CHANGELOG-format workaround",
+          "timestamp": "2026-06-05T15:14:52+09:00",
+          "tree_id": "6d3bce449fccab1fc86cb1d7b8aeb80288ff8807",
+          "url": "https://github.com/wado-lang/wado/commit/e3d41c49efdc109625696a177b633ca165114c19"
+        },
+        "date": 1780640608380,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
