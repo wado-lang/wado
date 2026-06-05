@@ -105,10 +105,20 @@
         height: 2px;
         margin-right: 6px;
       }
+      .benchmark-chart-wrap {
+        position: relative;
+        width: 100%;
+      }
       .benchmark-scroller {
         width: 100%;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
+      }
+      .benchmark-axis-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        pointer-events: none;
       }
       .benchmark-canvas-box {
         min-width: 100%;
@@ -242,11 +252,17 @@
           legend.className = 'benchmark-graph-legend';
           graph.appendChild(legend);
 
+          // Wrapper that the fixed y-axis overlay is positioned against. It must
+          // sit outside the scroller so the overlay does not scroll with it.
+          const chartWrap = document.createElement('div');
+          chartWrap.className = 'benchmark-chart-wrap';
+          graph.appendChild(chartWrap);
+
           // Scroll container: keeps the chart within the page width but lets
           // the user scroll horizontally when there are many commits.
           const scroller = document.createElement('div');
           scroller.className = 'benchmark-scroller';
-          graph.appendChild(scroller);
+          chartWrap.appendChild(scroller);
 
           const canvasBox = document.createElement('div');
           canvasBox.className = 'benchmark-canvas-box';
@@ -255,6 +271,13 @@
           const canvas = document.createElement('canvas');
           canvas.className = 'benchmark-chart';
           canvasBox.appendChild(canvas);
+
+          // Fixed y-axis: an overlay canvas pinned to the left of the wrapper.
+          // After the chart renders we copy its y-axis strip here, so the axis
+          // (labels, ticks, title) stays visible while the chart scrolls.
+          const axisOverlay = document.createElement('canvas');
+          axisOverlay.className = 'benchmark-axis-overlay';
+          chartWrap.appendChild(axisOverlay);
 
           // Find all unique commit IDs across all optimization levels, preserving order
           const commitIds = [];
@@ -318,7 +341,7 @@
             return '';
           })();
 
-          new Chart(canvas, {
+          const chart = new Chart(canvas, {
             type: 'line',
             data: {
               labels: commitIds.map(id => {
@@ -331,6 +354,9 @@
             options: {
               responsive: true,
               maintainAspectRatio: false,
+              animation: {
+                onComplete: () => syncAxis(),
+              },
               title: {
                 display: false,
               },
@@ -372,6 +398,35 @@
               },
             },
           });
+
+          // Copy the chart's y-axis strip into the fixed overlay so the axis
+          // stays put while the chart scrolls. Runs after every (re)render via
+          // animation.onComplete, and on viewport resize (the canvas height
+          // changes at the mobile breakpoint).
+          function syncAxis() {
+            const area = chart.chartArea;
+            if (!area) return;
+            const dpr = window.devicePixelRatio || 1;
+            const axisW = Math.ceil(area.left);   // y-axis strip width, CSS px
+            const cssH = canvasBox.clientHeight;  // chart height, CSS px
+            if (axisW <= 0 || cssH <= 0) return;
+            axisOverlay.style.width = axisW + 'px';
+            axisOverlay.style.height = cssH + 'px';
+            axisOverlay.width = Math.round(axisW * dpr);
+            axisOverlay.height = Math.round(cssH * dpr);
+            const ctx = axisOverlay.getContext('2d');
+            // Opaque background so scrolled chart content cannot show through.
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, axisOverlay.width, axisOverlay.height);
+            // Source and destination share device-pixel dimensions, so copy 1:1.
+            ctx.drawImage(
+              canvas,
+              0, 0, axisOverlay.width, axisOverlay.height,
+              0, 0, axisOverlay.width, axisOverlay.height,
+            );
+          }
+
+          window.addEventListener('resize', () => setTimeout(syncAxis, 250));
 
           // Start scrolled to the most recent commits (the right edge).
           scroller.scrollLeft = scroller.scrollWidth;
