@@ -339,10 +339,32 @@ impl Monomorphizer {
                 .method_info
                 .clone()
                 .and_then(|info| info.trait_name);
-            let mut names_to_try = vec![(
+            // A newtype with its OWN impl of this trait is tried before its
+            // base, so the rewrite lands on the newtype's own queued
+            // instantiation (`ByteList^Serialize::serialize<...>`) rather than
+            // the inherited base (`List<u8>^Serialize::serialize<...>`). This
+            // mirrors the collect path in `func_inst.rs`. Newtypes without
+            // their own impl yield `None` here and resolve through the base
+            // exactly as before.
+            let own_name = self.newtype_own_struct_name_with_impl(
+                receiver.type_id,
+                type_table,
+                trait_name_opt.as_deref(),
+            );
+            let mut names_to_try: Vec<(String, Option<String>)> = Vec::new();
+            if let Some(ref own) = own_name {
+                names_to_try.push((MethodName::format_local(own, None, &method_name), None));
+                if let Some(ref tn) = trait_name_opt {
+                    names_to_try.push((
+                        MethodName::format_local(own, Some(tn), &method_name),
+                        Some(tn.clone()),
+                    ));
+                }
+            }
+            names_to_try.push((
                 MethodName::format_local(&struct_name, None, &method_name),
                 None::<String>,
-            )];
+            ));
             if let Some(ref tn) = trait_name_opt {
                 names_to_try.push((
                     MethodName::format_local(&struct_name, Some(tn), &method_name),
@@ -351,10 +373,17 @@ impl Monomorphizer {
             }
 
             let info_ref = method_func.method_info.as_ref();
-            let candidates: Vec<&str> = if let Some(info) = info_ref {
-                vec![&info.base_struct_name, &info.struct_name, &struct_name]
-            } else {
-                vec![&struct_name]
+            let candidates: Vec<&str> = {
+                let mut c: Vec<&str> = Vec::new();
+                if let Some(ref own) = own_name {
+                    c.push(own.as_str());
+                }
+                if let Some(info) = info_ref {
+                    c.push(&info.base_struct_name);
+                    c.push(&info.struct_name);
+                }
+                c.push(&struct_name);
+                c
             };
             let receiver_module = receiver_module_hint(type_table, receiver.type_id);
             let mut rewritten = false;

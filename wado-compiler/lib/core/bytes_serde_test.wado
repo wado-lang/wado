@@ -15,20 +15,16 @@ fn ser(b: &ByteList) -> String {
     };
 }
 
-// These tests are RED pending the compiler fix that lets a newtype's own
-// trait impl override the one inherited from its base type. Today the explicit
-// `impl Serialize/Deserialize for ByteList` is shadowed by the inherited
-// `impl<T> Serialize for List<T>`, so a `ByteList` still serializes as an int
-// array. Remove the `#[TODO]` markers once newtype-impl override lands.
+// The explicit `impl Serialize/Deserialize for ByteList` overrides the impl
+// `ByteList` would otherwise inherit from its base `List<u8>`, so a `ByteList`
+// serializes as a byte string (base64 in JSON), not an int array.
 
-#[TODO]
 test "ByteList serializes as a base64url string, not an int array" {
     let b: ByteList = [1, 2, 3];
     // base64url(no-pad) of [0x01,0x02,0x03] is "AQID"; as a JSON string: "AQID".
     assert ser(&b) == `"AQID"`;
 }
 
-#[TODO]
 test "ByteList round-trips through JSON" {
     let b: ByteList = [255, 0, 128, 64];
     let s = ser(&b);
@@ -45,7 +41,6 @@ test "ByteList round-trips through JSON" {
     assert back[3] == 64;
 }
 
-#[TODO]
 test "empty ByteList serializes as an empty JSON string" {
     let b: ByteList = [];
     assert ser(&b) == `""`;

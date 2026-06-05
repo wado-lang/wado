@@ -357,6 +357,42 @@ impl Monomorphizer {
         }
     }
 
+    /// If `type_id` (peeling references) is a newtype that has its OWN
+    /// non-blanket impl of `trait_name`, return the newtype's own mangled name
+    /// (e.g. `"ByteList"`); otherwise `None`.
+    ///
+    /// Unlike [`Self::get_struct_name_from_type`], which makes newtypes
+    /// transparent by peeling to the base, this preserves the newtype's
+    /// identity — but only when the newtype actually overrides the trait. The
+    /// collect path tries this name first so the queued instantiation
+    /// (`ByteList^Trait::method`) matches the call the rewrite emits, instead of
+    /// the inherited base instantiation (`List^Trait::method`). Newtypes without
+    /// their own impl (e.g. `Meters`, simd `v128` lanes) return `None` and keep
+    /// peeling to the base, so their dispatch is unchanged.
+    pub fn newtype_own_struct_name_with_impl(
+        &self,
+        type_id: TypeId,
+        type_table: &TypeTable,
+        trait_name: Option<&str>,
+    ) -> Option<String> {
+        let trait_name = trait_name?;
+        let mut tid = type_id;
+        loop {
+            match type_table.get(tid) {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => tid = *inner,
+                ResolvedType::Newtype { .. } => {
+                    let own = type_table.mangle_type_name(tid);
+                    return self
+                        .functions
+                        .trait_env
+                        .impl_module_for(&own, trait_name, None)
+                        .map(|_| own);
+                }
+                _ => return None,
+            }
+        }
+    }
+
     /// Get the base struct name and type args from a `type_id`, unwrapping references if needed
     /// Returns (`base_name`, `type_args`) for `GenericInstance`, (name, []) for Struct
     pub fn get_struct_info_from_type(
