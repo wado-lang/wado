@@ -7,6 +7,7 @@
 
 use crate::module_source::ModuleSource;
 use crate::nir::{CallArg, FunctionRef, NirExpr, NirExprKind};
+use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId};
 use crate::wir::{
     CanonicalIntrinsic, CmFuturePayload, CmScalarType, CmStreamPayload, WirFuncId, WirInstr,
@@ -174,9 +175,9 @@ impl FunctionTranslator<'_, '_> {
     /// require payload-parameterized canonical imports.
     pub(super) fn try_translate_canonical_method(
         &mut self,
-        receiver: &NirExpr,
+        receiver: ExprId,
         func: &FunctionRef,
-        args: &[CallArg],
+        args: &[ArenaCallArg],
         result_type_id: TypeId,
     ) -> Option<WirInstr> {
         let cm_name = func.method_info.clone()?.cm_name.as_ref()?.clone();
@@ -184,20 +185,20 @@ impl FunctionTranslator<'_, '_> {
         match cm_name.as_str() {
             // Future operations: payload-parameterized canonical imports
             "future-read" => {
-                let payload = self.cm_future_payload(receiver.type_id);
+                let payload = self.cm_future_payload(self.body.exprs[receiver].type_id);
                 Some(self.emit_future_read(handle, result_type_id, payload))
             }
             "future-write" => {
-                let value_expr = &args[0].expr;
-                let value_type_id = value_expr.type_id;
-                let payload = self.cm_future_payload(receiver.type_id);
+                let value_expr = args[0].expr;
+                let value_type_id = self.body.exprs[value_expr].type_id;
+                let payload = self.cm_future_payload(self.body.exprs[receiver].type_id);
                 // Variant-shaped futures (used for trailers): pattern-match on
                 // TIR because general variant→CM lowering is not yet implemented.
-                if let Some(resource_expr) = match_ok_some_resource(value_expr) {
+                if let Some(resource_expr) = match_ok_some_resource(self.body, value_expr) {
                     let resource_handle = self.translate_expr(resource_expr);
                     return Some(self.emit_future_write_ok_some_resource(handle, resource_handle));
                 }
-                if match_ok_none(value_expr) {
+                if match_ok_none(self.body, value_expr) {
                     return Some(self.emit_future_write_ok_none(handle));
                 }
                 // Scalar primitives are evaluated and lowered generically.
@@ -205,19 +206,19 @@ impl FunctionTranslator<'_, '_> {
                 Some(self.emit_future_write(handle, value_arg, value_type_id, payload))
             }
             "future-cancel-read" => {
-                let payload = self.cm_future_payload(receiver.type_id);
+                let payload = self.cm_future_payload(self.body.exprs[receiver].type_id);
                 Some(self.emit_drop_handle(CanonicalIntrinsic::FutureCancelRead(payload), handle))
             }
             "future-cancel-write" => {
-                let payload = self.cm_future_payload(receiver.type_id);
+                let payload = self.cm_future_payload(self.body.exprs[receiver].type_id);
                 Some(self.emit_drop_handle(CanonicalIntrinsic::FutureCancelWrite(payload), handle))
             }
             "future-drop-readable" => {
-                let payload = self.cm_future_payload(receiver.type_id);
+                let payload = self.cm_future_payload(self.body.exprs[receiver].type_id);
                 Some(self.emit_drop_handle(CanonicalIntrinsic::FutureDropReadable(payload), handle))
             }
             "future-drop-writable" => {
-                let payload = self.cm_future_payload(receiver.type_id);
+                let payload = self.cm_future_payload(self.body.exprs[receiver].type_id);
                 Some(self.emit_drop_handle(CanonicalIntrinsic::FutureDropWritable(payload), handle))
             }
 
@@ -234,7 +235,7 @@ impl FunctionTranslator<'_, '_> {
         &mut self,
         canonical: &str,
         func: &FunctionRef,
-        _args: &[CallArg],
+        _args: &[ArenaCallArg],
         result_type_id: TypeId,
     ) -> Option<WirInstr> {
         match canonical {
@@ -1432,49 +1433,49 @@ impl FunctionTranslator<'_, '_> {
 /// Used to special-case future writes that deliver a single resource handle
 /// (e.g. trailers) via the `Result<Option<own<R>>, _>` shape, since general
 /// variant→CM-buffer lowering is not yet implemented.
-fn match_ok_some_resource(expr: &NirExpr) -> Option<&NirExpr> {
-    let NirExprKind::VariantConstruct {
+fn match_ok_some_resource(body: &Body, expr_id: ExprId) -> Option<ExprId> {
+    let ExprKind::VariantConstruct {
         case_name: outer,
         payload: Some(outer_payload),
         ..
-    } = &expr.kind
+    } = &body.exprs[expr_id].kind
     else {
         return None;
     };
     if outer != "Ok" {
         return None;
     }
-    let NirExprKind::VariantConstruct {
+    let ExprKind::VariantConstruct {
         case_name: inner,
         payload: Some(inner_payload),
         ..
-    } = &outer_payload.kind
+    } = &body.exprs[*outer_payload].kind
     else {
         return None;
     };
     if inner != "Some" {
         return None;
     }
-    Some(inner_payload)
+    Some(*inner_payload)
 }
 
 /// Detect `Result::Ok(Option::None)` or `Result::Ok(null)` at TIR level.
-/// `null` stays as `NirExprKind::Null` in TIR (coerced to `Option::None` later).
-fn match_ok_none(expr: &NirExpr) -> bool {
-    let NirExprKind::VariantConstruct {
+/// `null` stays as `ExprKind::Null` in TIR (coerced to `Option::None` later).
+fn match_ok_none(body: &Body, expr_id: ExprId) -> bool {
+    let ExprKind::VariantConstruct {
         case_name: outer,
         payload: Some(outer_payload),
         ..
-    } = &expr.kind
+    } = &body.exprs[expr_id].kind
     else {
         return false;
     };
     if outer != "Ok" {
         return false;
     }
-    match &outer_payload.kind {
-        NirExprKind::Null => true,
-        NirExprKind::VariantConstruct {
+    match &body.exprs[*outer_payload].kind {
+        ExprKind::Null => true,
+        ExprKind::VariantConstruct {
             case_name: inner,
             payload,
             ..

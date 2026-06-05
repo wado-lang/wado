@@ -28,15 +28,15 @@ use crate::nir_arena::{
 fn collect_let_names(names: &mut IndexMap<u32, String>, stmts: &[NirStmt]) {
     for stmt in stmts {
         match &stmt.kind {
-            StmtKind::Let {
+            NirStmtKind::Let {
                 name, local_index, ..
             } => {
                 names.insert(*local_index, name.clone());
             }
-            StmtKind::Loop { body } => {
+            NirStmtKind::Loop { body } => {
                 collect_let_names(names, &body.stmts);
             }
-            StmtKind::If {
+            NirStmtKind::If {
                 then_block,
                 else_block,
                 ..
@@ -46,7 +46,7 @@ fn collect_let_names(names: &mut IndexMap<u32, String>, stmts: &[NirStmt]) {
                     collect_let_names(names, &eb.stmts);
                 }
             }
-            StmtKind::LabeledBlock { block, .. } => {
+            NirStmtKind::LabeledBlock { block, .. } => {
                 collect_let_names(names, &block.stmts);
             }
             _ => {}
@@ -1101,8 +1101,10 @@ impl FunctionTranslator<'_, '_> {
     fn tuple_constructor_args(
         &mut self,
         tuple_type_id: crate::tir::TypeId,
-        elements: &[NirExpr],
+        elements: &[ExprId],
     ) -> (WirTypeId, Vec<WirInstr>) {
+        let elem_type_ids: Vec<crate::tir::TypeId> =
+            elements.iter().map(|e| self.body.exprs[*e].type_id).collect();
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, tuple_type_id);
         let wir_type_id = match &wir_type {
             WirType::Ref { type_id, .. } => Some(type_id.clone()),
@@ -1112,10 +1114,10 @@ impl FunctionTranslator<'_, '_> {
                 // `type_id_to_wir_type` to return I32 or AbstractRef instead
                 // of Ref. Fall back to matching by element WIR types.
                 self.ctx
-                    .find_tuple_type_for_elements(self.type_table, elements)
+                    .find_tuple_type_for_elements(self.type_table, &elem_type_ids)
                     .or_else(|| {
                         self.ctx
-                            .define_tuple_struct_for_elements(self.type_table, elements)
+                            .define_tuple_struct_for_elements(self.type_table, &elem_type_ids)
                     })
             }
             _ => None,
@@ -1129,11 +1131,13 @@ impl FunctionTranslator<'_, '_> {
         // Filter out unit-typed elements before borrowing self mutably to
         // translate them; chaining the filter into the iterator below would
         // double-borrow self.
-        let non_unit: Vec<&NirExpr> = elements
+        let non_unit: Vec<ExprId> = elements
             .iter()
+            .copied()
             .filter(|e| {
                 !matches!(
-                    self.ctx.type_id_to_wir_type(self.type_table, e.type_id),
+                    self.ctx
+                        .type_id_to_wir_type(self.type_table, self.body.exprs[*e].type_id),
                     WirType::Unit
                 )
             })
@@ -1159,7 +1163,7 @@ impl FunctionTranslator<'_, '_> {
     fn build_array_literal(
         &mut self,
         array_type_id: crate::tir::TypeId,
-        elements: &[NirExpr],
+        elements: &[ExprId],
     ) -> WirInstr {
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, array_type_id);
         let WirType::Ref { type_id, .. } = wir_type else {
@@ -1176,7 +1180,7 @@ impl FunctionTranslator<'_, '_> {
             panic!("[WIR] ArrayLiteral: List<T> struct {type_id:?} has no `repr` array field");
         };
         let element_instrs: Vec<WirInstr> =
-            elements.iter().map(|e| self.translate_expr(e)).collect();
+            elements.iter().map(|e| self.translate_expr(*e)).collect();
         let used = i32::try_from(element_instrs.len())
             .unwrap_or_else(|_| panic!("[WIR] array literal has more than i32::MAX elements"));
         self.struct_new(
