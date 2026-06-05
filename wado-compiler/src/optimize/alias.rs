@@ -34,7 +34,7 @@ use crate::module_source::ModuleSource;
 use crate::nir::{NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind, NirUnaryOp};
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::NirRefVisitor;
-use crate::niri::AliasInfo;
+use crate::niri::{AliasInfo, LocalSet};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Build the `(module_source, func_name) → struct type id` map of
@@ -83,11 +83,19 @@ pub(super) fn build_alias_info(
     stores_aliased_locals: &IndexSet<u32>,
     type_table: &TypeTable,
 ) -> AliasInfo {
-    let mut aliased = address_taken_locals.clone();
-    for idx in stores_aliased_locals {
-        aliased.insert(*idx);
+    // Seed dense bitsets sized to the function's local count; local indices
+    // are dense (`0..locals.len()`), so membership stays hash-free.
+    let mut aliased = LocalSet::with_capacity(locals.len());
+    for &idx in address_taken_locals {
+        aliased.insert(idx);
     }
-    let untrackable = stores_aliased_locals.clone();
+    for &idx in stores_aliased_locals {
+        aliased.insert(idx);
+    }
+    let mut untrackable = LocalSet::with_capacity(locals.len());
+    for &idx in stores_aliased_locals {
+        untrackable.insert(idx);
+    }
     {
         let mut collector = AliasCollector { out: &mut aliased };
         collector.visit_block(body);
@@ -320,7 +328,7 @@ impl NirRefVisitor for AliasEdgeCollector<'_> {
 /// markers. Conservative — false positives only cost missed
 /// optimizations.
 struct AliasCollector<'a> {
-    out: &'a mut IndexSet<u32>,
+    out: &'a mut LocalSet,
 }
 
 impl NirRefVisitor for AliasCollector<'_> {

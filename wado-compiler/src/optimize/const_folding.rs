@@ -968,14 +968,14 @@ fn is_field_env_pure_call(func: &FunctionRef) -> bool {
 /// `field_forward` pass used inline; kept here so the const-fold
 /// visitor doesn't reach back into `optimize::alias`'s private
 /// module surface.
-fn value_captures_aliased_local(expr: &NirExpr, aliased: &IndexSet<u32>) -> bool {
+fn value_captures_aliased_local(expr: &NirExpr, aliased: &crate::niri::LocalSet) -> bool {
     match &expr.kind {
         NirExprKind::Unary { op, expr: inner } => {
             (matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
                 && matches!(inner.kind, NirExprKind::Local { .. }))
                 || value_captures_aliased_local(inner, aliased)
         }
-        NirExprKind::Local { index, .. } => aliased.contains(index),
+        NirExprKind::Local { index, .. } => aliased.contains(*index),
         NirExprKind::FieldAccess { expr: inner, .. } | NirExprKind::Cast { expr: inner, .. } => {
             value_captures_aliased_local(inner, aliased)
         }
