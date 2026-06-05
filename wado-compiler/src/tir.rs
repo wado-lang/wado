@@ -978,9 +978,8 @@ impl TypeTable {
         // surviving entries keep their indices.
         self.types.retain(|id, _| effective_keep.contains(&id));
         // A redirect entry is meaningful only when both endpoints survive.
-        self.redirects.retain(|id, &target| {
-            effective_keep.contains(&id) && effective_keep.contains(&target)
-        });
+        self.redirects
+            .retain(|id, &target| effective_keep.contains(&id) && effective_keep.contains(&target));
         // Retain SymbolKey indices to surviving TypeIds only.
         self.symbol_by_type
             .retain(|id, _| effective_keep.contains(&id));
@@ -1942,7 +1941,11 @@ impl TypeTable {
             {
                 ResolvedType::Newtype { base_type, .. } => {
                     // Use redirect if already computed; otherwise follow the raw chain.
-                    current = self.redirects.get(*base_type).copied().unwrap_or(*base_type);
+                    current = self
+                        .redirects
+                        .get(*base_type)
+                        .copied()
+                        .unwrap_or(*base_type);
                 }
                 ResolvedType::Flags { .. } => return TypeTable::U32,
                 _ => return current,
@@ -2124,7 +2127,11 @@ impl TypeTable {
                 .unwrap_or_else(|| panic!("TypeId {current:?} not found in TypeTable"))
             {
                 ResolvedType::Newtype { base_type, .. } => {
-                    current = self.redirects.get(*base_type).copied().unwrap_or(*base_type);
+                    current = self
+                        .redirects
+                        .get(*base_type)
+                        .copied()
+                        .unwrap_or(*base_type);
                 }
                 ResolvedType::Flags { .. } => return TypeTable::U32,
                 _ => return current,
