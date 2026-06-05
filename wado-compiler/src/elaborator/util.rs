@@ -1,31 +1,6 @@
 //! Utility functions for the elaborator phase.
 
-use crate::ast::BinaryOp;
-use crate::tir::{PrimitiveType, ResolvedType, TirBinaryOp, TypeId, TypeTable};
-
-/// Convert AST `BinaryOp` to TIR `BinaryOp`.
-pub(super) fn convert_binary_op(op: BinaryOp) -> TirBinaryOp {
-    match op {
-        BinaryOp::Add => TirBinaryOp::Add,
-        BinaryOp::Sub => TirBinaryOp::Sub,
-        BinaryOp::Mul => TirBinaryOp::Mul,
-        BinaryOp::Div => TirBinaryOp::Div,
-        BinaryOp::Mod => TirBinaryOp::Mod,
-        BinaryOp::Eq => TirBinaryOp::Eq,
-        BinaryOp::NotEq => TirBinaryOp::NotEq,
-        BinaryOp::Lt => TirBinaryOp::Lt,
-        BinaryOp::LtEq => TirBinaryOp::LtEq,
-        BinaryOp::Gt => TirBinaryOp::Gt,
-        BinaryOp::GtEq => TirBinaryOp::GtEq,
-        BinaryOp::And => TirBinaryOp::And,
-        BinaryOp::Or => TirBinaryOp::Or,
-        BinaryOp::BitAnd => TirBinaryOp::BitAnd,
-        BinaryOp::BitOr => TirBinaryOp::BitOr,
-        BinaryOp::BitXor => TirBinaryOp::BitXor,
-        BinaryOp::Shl => TirBinaryOp::Shl,
-        BinaryOp::Shr => TirBinaryOp::Shr,
-    }
-}
+use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// Check if a positive integer literal value fits in the target integer type.
 /// Returns `Some(error_message)` if out of range, `None` if OK.

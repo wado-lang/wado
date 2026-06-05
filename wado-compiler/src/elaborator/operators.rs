@@ -5,14 +5,12 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{
-    FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp,
-    TypeId, TypeTable,
+    FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TypeId, TypeTable,
 };
 use crate::token::Span;
 
 use super::Elaborator;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
-use super::util;
 
 /// Body-walk placeholder for an operator / assignment expression. Stage
 /// 7-B: the combined walk typechecks the operands and records any dispatch
@@ -29,24 +27,22 @@ fn placeholder(type_id: TypeId, span: Span) -> TirExpr {
 /// The right-hand side of an assignment passed to
 /// [`Elaborator::assign_to_target`]. Either an AST expression (the
 /// regular [`Elaborator::resolve_assign`] path) or an already-resolved
-/// TIR value (the [`Elaborator::resolve_compound_assign`] path, where the
-/// RHS is `target op rhs` computed via
+/// type (the [`Elaborator::resolve_compound_assign`] path, where the RHS
+/// is `target op rhs` whose result type is computed via
 /// [`Elaborator::build_binary_op_tir`]).
 ///
-/// The `Resolved` payload is boxed because `TirExpr` is ~460 bytes; an
-/// unboxed variant would balloon every `AssignValue<'_>` (including
-/// the `Ast(&expr)` form that fits in 8 bytes) to that size and waste
-/// stack space on every compound-assign visit.
+/// The combined walk only needs the resolved type and span: reify rebuilds
+/// the actual compound-assign TIR from the AST.
 pub(super) enum AssignValue<'a> {
     Ast(&'a ast::Expr),
-    Resolved(Box<TirExpr>),
+    Resolved { type_id: TypeId, span: Span },
 }
 
 impl AssignValue<'_> {
     fn span(&self) -> Span {
         match self {
             Self::Ast(expr) => expr.span(),
-            Self::Resolved(tir) => tir.span,
+            Self::Resolved { span, .. } => *span,
         }
     }
 }
@@ -76,7 +72,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.pending_operator_ast_id = Some(binary.id);
         let result = self.build_binary_op_tir(left, binary.op, right, binary.span);
         self.pending_operator_ast_id = None;
-        result.type_id
+        result
     }
 
     /// Resolve both operands of a binary op, applying the standard
@@ -210,7 +206,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         op: BinaryOp,
         right: TirExpr,
         span: Span,
-    ) -> TirExpr {
+    ) -> TypeId {
         // Check if this is a comparison operation on a non-primitive type
         // Non-primitives use Eq/Ord traits instead of direct Wasm instructions
         let left_type = self.tysys.type_table.borrow().get(left.type_id).clone();
@@ -243,7 +239,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 // Stage 7-B: reify rebuilds the reference `==` / `!=`
                 // (`RefEq` / `RefNotEq`) from the AST; project only the type.
-                return placeholder(TypeTable::BOOL, span);
+                return TypeTable::BOOL;
             } else if both_refs {
                 // All operators other than == and != are invalid on reference types
                 let type_name = self.tysys.type_table.borrow().type_name(left.type_id);
@@ -272,7 +268,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     note: None,
                     span,
                 });
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
+                return TypeTable::ERROR;
             }
             // If left is a reference but right is not (e.g., &i32 == i32),
             // fall through to the normal type mismatch error below.
@@ -340,7 +336,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             note: Some("type does not implement `Eq`".to_string()),
                             span,
                         });
-                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
+                        return TypeTable::ERROR;
                     };
                     let call = self.build_trait_op_method_call_on_resolved(
                         left,
@@ -349,16 +345,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         span,
                     );
                     if op == BinaryOp::NotEq && call.type_id == TypeTable::BOOL {
-                        return TirExpr::new(
-                            TirExprKind::Unary {
-                                op: TirUnaryOp::Not,
-                                expr: Box::new(call),
-                            },
-                            TypeTable::BOOL,
-                            span,
-                        );
+                        // reify rebuilds the `!` wrapper for `!=`; project BOOL.
+                        return TypeTable::BOOL;
                     }
-                    return call;
+                    return call.type_id;
                 }
 
                 // Handle Ord trait (<, >, <=, >=)
@@ -394,7 +384,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             note: Some("type does not implement `Ord`".to_string()),
                             span,
                         });
-                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
+                        return TypeTable::ERROR;
                     };
                     let cmp_call = self.build_trait_op_method_call_on_resolved(
                         left,
@@ -403,9 +393,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         span,
                     );
                     if cmp_call.type_id == TypeTable::ERROR {
-                        return cmp_call;
+                        return TypeTable::ERROR;
                     }
-                    return self.ord_bool_from_cmp(cmp_call, op, span);
+                    return self.ord_bool_from_cmp(cmp_call, op, span).type_id;
                 }
             }
 
@@ -449,16 +439,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         span,
                     );
                     if op == BinaryOp::NotEq && call.type_id == TypeTable::BOOL {
-                        return TirExpr::new(
-                            TirExprKind::Unary {
-                                op: TirUnaryOp::Not,
-                                expr: Box::new(call),
-                            },
-                            TypeTable::BOOL,
-                            span,
-                        );
+                        // reify rebuilds the `!` wrapper for `!=`; project BOOL.
+                        return TypeTable::BOOL;
                     }
-                    return call;
+                    return call.type_id;
                 }
                 if matches!(
                     op,
@@ -489,9 +473,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         span,
                     );
                     if cmp_call.type_id == TypeTable::ERROR {
-                        return cmp_call;
+                        return TypeTable::ERROR;
                     }
-                    return self.ord_bool_from_cmp(cmp_call, op, span);
+                    return self.ord_bool_from_cmp(cmp_call, op, span).type_id;
                 }
             }
         }
@@ -562,12 +546,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         param_types: trait_info.rhs_type.map(|t| vec![t]).unwrap_or_default(),
                         is_type_param_receiver: false,
                     };
-                    return self.build_trait_op_method_call_on_resolved(
-                        left,
-                        vec![right],
-                        &resolved,
-                        span,
-                    );
+                    return self
+                        .build_trait_op_method_call_on_resolved(left, vec![right], &resolved, span)
+                        .type_id;
                 }
             }
 
@@ -604,12 +585,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         param_types: info.param_types,
                         is_type_param_receiver: true,
                     };
-                    return self.build_trait_op_method_call_on_resolved(
-                        left,
-                        vec![right],
-                        &resolved,
-                        span,
-                    );
+                    return self
+                        .build_trait_op_method_call_on_resolved(left, vec![right], &resolved, span)
+                        .type_id;
                 }
             }
         }
@@ -667,12 +645,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         param_types: trait_info.rhs_type.map(|t| vec![t]).unwrap_or_default(),
                         is_type_param_receiver: false,
                     };
-                    return self.build_trait_op_method_call_on_resolved(
-                        left,
-                        vec![right],
-                        &resolved,
-                        span,
-                    );
+                    return self
+                        .build_trait_op_method_call_on_resolved(left, vec![right], &resolved, span)
+                        .type_id;
                 }
             }
         }
@@ -702,7 +677,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ),
                     span,
                 });
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
+                return TypeTable::ERROR;
             }
         }
 
@@ -726,7 +701,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     note: Some(format!("use `{type_name}::fmod(a, b)` instead")),
                     span,
                 });
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
+                return TypeTable::ERROR;
             }
         }
 
@@ -817,11 +792,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         span,
                     });
                 }
-                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
+                return TypeTable::ERROR;
             }
         }
-
-        let tir_op = util::convert_binary_op(op);
 
         // Type check: both operands of a binary operation must have the same type.
         // This applies to primitives, newtypes, and all non-overloaded binary ops.
@@ -865,8 +838,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // recorded operand `expression_types`; the combined walk projects
         // only the result type. `left` / `right` were resolved by the
         // caller and typechecked above for their side effects.
-        let _ = (tir_op, left, right);
-        placeholder(type_id, span)
+        let _ = (left, right);
+        type_id
     }
 
     /// Resolve a unary expression
@@ -1215,7 +1188,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             AssignValue::Ast(expr) => {
                                 self.resolve_expr(expr, ctx, Some(trait_info.input_type))
                             }
-                            AssignValue::Resolved(tir) => tir.type_id,
+                            AssignValue::Resolved { type_id, .. } => type_id,
                         };
 
                         // Check: reject &T/&mut T assigned where non-ref expected
@@ -1282,7 +1255,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let value_span = value.span();
         let value_type = match value {
             AssignValue::Ast(expr) => self.resolve_expr(expr, ctx, Some(target_type)),
-            AssignValue::Resolved(tir) => tir.type_id,
+            AssignValue::Resolved { type_id, .. } => type_id,
         };
 
         // Reject &T assigned where non-ref T expected
@@ -1428,7 +1401,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.pending_operator_ast_id = None;
         self.assign_to_target(
             &compound.target,
-            AssignValue::Resolved(Box::new(combined)),
+            AssignValue::Resolved {
+                type_id: combined,
+                span: compound.span,
+            },
             compound.span,
             ctx,
         )
@@ -1445,8 +1421,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         chain: &ast::ComparisonChainExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        use crate::tir::TirStmt;
-
         if chain.comparisons.is_empty() {
             // Degenerate parse — no chain expansion fires, so this is not
             // a desugar site. Do not record `ComparisonChain` here.
@@ -1474,7 +1448,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.pending_operator_ast_id = Some(chain.id);
             let result = self.build_binary_op_tir(left_tir, cmp.op, right_tir, cmp.op_span);
             self.pending_operator_ast_id = None;
-            return result.type_id;
+            return result;
         }
 
         // Multi-comparison: actual chain expansion. Tag the node so the
@@ -1485,7 +1459,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Enter a fresh scope for the `__mK` bindings so they don't leak
         // into the surrounding function's local namespace.
         ctx.enter_scope();
-        let mut stmts: Vec<TirStmt> = Vec::new();
 
         // First comparison: resolve `chain.first` and `cmp[0].right` with
         // the same bidirectional coercion `resolve_binary` would apply.
@@ -1499,9 +1472,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         // Bind `right0` to `__m0` — it is reused by the next comparison.
-        let m0_ref = self.bind_chain_middle(0, right0_tir, chain.span, &mut stmts, ctx);
-        let mut acc_tir =
-            self.build_binary_op_tir(first_tir, cmp0.op, m0_ref.clone(), cmp0.op_span);
+        let m0_ref = self.bind_chain_middle(0, right0_tir, ctx);
+        let acc_tir = self.build_binary_op_tir(first_tir, cmp0.op, m0_ref.clone(), cmp0.op_span);
+        let mut acc_tir = placeholder(acc_tir, chain.span);
         let mut prev_tir = m0_ref;
 
         let last_idx = chain.comparisons.len() - 1;
@@ -1516,11 +1489,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Tail operand: only one use, no binding needed.
                 raw_right
             } else {
-                self.bind_chain_middle(idx, raw_right, chain.span, &mut stmts, ctx)
+                self.bind_chain_middle(idx, raw_right, ctx)
             };
             let next_prev = right_tir.clone();
             let cmp_tir = self.build_binary_op_tir(prev_tir, cmp.op, right_tir, cmp.op_span);
-            acc_tir = self.build_binary_op_tir(acc_tir, BinaryOp::And, cmp_tir, chain.span);
+            let cmp_tir = placeholder(cmp_tir, cmp.op_span);
+            let acc_type = self.build_binary_op_tir(acc_tir, BinaryOp::And, cmp_tir, chain.span);
+            acc_tir = placeholder(acc_type, chain.span);
             prev_tir = next_prev;
         }
 
@@ -1532,45 +1507,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // result type. The operand resolutions, middle-binding local
         // allocations, and per-comparison dispatch above ran for their
         // fact-recording side effects.
-        let _ = (stmts, acc_tir);
+        let _ = acc_tir;
         TypeTable::BOOL
     }
 
-    /// Helper: bind a comparison-chain middle term to a `__mK` local and
-    /// return a `TirExpr::Local` handle that callers can splice into the
-    /// surrounding comparisons.
+    /// Helper: allocate a `__mK` local for a comparison-chain middle term and
+    /// return a `TirExpr::Local` handle that callers splice into the
+    /// surrounding comparisons. The `Let` binding itself is rebuilt by reify;
+    /// the combined walk only needs the `add_local` side effect (walk-order
+    /// parity) and the local handle's type.
     fn bind_chain_middle(
         &mut self,
         idx: usize,
         value: TirExpr,
-        span: Span,
-        stmts: &mut Vec<crate::tir::TirStmt>,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        use crate::tir::{TirStmt, TirStmtKind};
         let type_id = value.type_id;
+        let span = value.span;
         let name = format!("__m{idx}");
-        let local_index = ctx.add_local(name.clone(), type_id, false, None);
-        stmts.push(TirStmt::new(
-            TirStmtKind::Let {
-                name: name.clone(),
-                local_index,
-                is_mut: false,
-                is_reactive: false,
-                type_id,
-                value,
-                skip_value_copy: false,
-            },
-            span,
-        ));
-        TirExpr::new(
-            TirExprKind::Local {
-                index: local_index,
-                name,
-            },
-            type_id,
-            span,
-        )
+        let _local_index = ctx.add_local(name, type_id, false, None);
+        placeholder(type_id, span)
     }
 
     /// Single TIR-level builder for every operator that dispatches to a
