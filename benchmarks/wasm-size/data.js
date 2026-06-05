@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780640608722,
+  "lastUpdate": 1780654421335,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -29977,6 +29977,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e3d41c49efdc109625696a177b633ca165114c19"
         },
         "date": 1780640608380,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1891,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 9659,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 17191,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 460509,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4f8d2c2b5865da1ba321ff14ed0a95a34bbac8e4",
+          "message": "Merge pull request #1297 from wado-lang/claude/wado-syntax-highlight-perf-auJuj\n\nperf(compiler): speed up debug-build compilation (~20% on wado_syntax_highlight)",
+          "timestamp": "2026-06-05T19:04:57+09:00",
+          "tree_id": "e9f3090ae51d39424c4eb1a9148c4fa77e0e6ae0",
+          "url": "https://github.com/wado-lang/wado/commit/4f8d2c2b5865da1ba321ff14ed0a95a34bbac8e4"
+        },
+        "date": 1780654420934,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
