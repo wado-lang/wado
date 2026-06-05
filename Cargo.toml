@@ -85,6 +85,21 @@ dprint-plugin-markdown = { version = "0.22" }
 debug = "line-tables-only"
 split-debuginfo = "unpacked"
 
+# Drop `debug_assert!`s and integer-overflow checks in *all third-party
+# dependencies* for dev/test builds. The `"*"` glob applies to every
+# dependency but never to our own workspace members, so the wado-* crates
+# keep their assertions (a compiler bug is always P0 — we want those
+# checks during development). The vendored runtime/codegen stack —
+# wasmtime, cranelift, regalloc2, wasmparser, … — runs with these checks
+# off in release anyway, and they dominate the dev-build cost of
+# `wado test`/`run`: wasmtime's copying GC and the cranelift JIT are
+# riddled with bounds/precondition `debug_assert!`s. Measured on
+# `wado test --no-cache example/wado_syntax_highlight.wado` this cut the
+# guest-execution (test) phase by ~45% with no change to our own code.
+[profile.dev.package."*"]
+debug-assertions = false
+overflow-checks = false
+
 [profile.dev.package.wado-compiler]
 opt-level = 1
 
@@ -108,8 +123,12 @@ debug-assertions = false
 
 # Optimize Cranelift in dev/test builds for faster E2E tests.
 # Cranelift compiles Wasm→native for every test; without this it runs in debug mode.
+# A package with its own override does not inherit the `"*"` glob above, so the
+# debug-assertions/overflow-checks opt-outs are repeated here explicitly.
 [profile.dev.package.cranelift-codegen]
 opt-level = 2
+debug-assertions = false
+overflow-checks = false
 
 # `release` is the profile for distributed `wado` binaries. `thin` LTO
 # captures most of fat LTO's size/perf benefit at a fraction of the

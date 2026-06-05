@@ -7,12 +7,22 @@ description: Debug and patch jco (JS Component Tooling) for Wado wasm transpilat
 
 jco (`vendor/jco`) is bytecodealliance's tool for transpiling Wasm Components to JavaScript. Wado uses a patched fork because upstream jco has incomplete support for P3 async stream delivery and JSPI integration.
 
+The pinned submodule points at a clean upstream commit; the Wado patches live
+in `vendor/jco.patch` and are applied to the working tree before building.
+
+> **Node 24+ required.** The runtime uses JSPI (`WebAssembly.Suspending`). Node
+> 22 ships an older JSPI where `WebAssembly.Suspending` is not a constructor and
+> fails. The repo pins Node 24 via `mise.toml`; make sure `node` resolves to it
+> (paths outside the repo, e.g. `/tmp`, may pick up a system Node 22).
+
 ## Setup
 
 ```sh
 git submodule update --init vendor/jco
 cd vendor/jco
-PUPPETEER_SKIP_DOWNLOAD=1 npm install --ignore-scripts
+git apply ../../vendor/jco.patch                     # apply the Wado patches
+# Upstream jco is a pnpm workspace; install the CLI package + its deps:
+NPM_TOKEN="" PUPPETEER_SKIP_DOWNLOAD=1 pnpm --filter "@bytecodealliance/jco" install
 ```
 
 ## Build Cycle
@@ -33,8 +43,11 @@ rm -f packages/jco/obj/js-component-bindgen-component.*
 cd /home/user/wado
 cargo run --bin wado -- compile -o /tmp/hello.wasm example/hello.wado
 rm -rf /tmp/hello-jco
+# --no-wasi-shim disables jco's automatic WASI->preview3-shim rewrite, so the
+# --map entries to the Wado shims in example/jco-shim/ take effect.
 node vendor/jco/packages/jco/src/jco.js transpile /tmp/hello.wasm \
   -o /tmp/hello-jco \
+  --no-wasi-shim \
   --map "wasi:cli/*=$(pwd)/example/jco-shim/cli.js#*"
 echo '{"type": "module"}' > /tmp/hello-jco/package.json
 node --experimental-wasm-jspi -e "
@@ -115,23 +128,26 @@ JCO_DEBUG=1 node --experimental-wasm-jspi run.mjs
 
 ## Saving Patches
 
-After making changes in `vendor/jco`, save the patch relative to upstream:
+The submodule stays pinned at a clean upstream commit (currently `b1f93c27`);
+the patches are never committed into the submodule, only saved to
+`vendor/jco.patch`. After editing the jco Rust source, regenerate the patch
+from the submodule's `HEAD` (the pinned upstream commit):
 
 ```sh
 cd vendor/jco
-# Find upstream base (the commit before our patches)
-git log --oneline | head -5
-# Save patch from upstream base
-git diff <upstream-commit> -- . > /home/user/wado/vendor/jco.patch
+git diff HEAD -- crates/js-component-bindgen/src/ > /home/user/wado/vendor/jco.patch
 ```
 
-Then commit both the submodule ref update and the patch file:
+Then commit the patch file (and, when bumping upstream, the submodule ref):
 
 ```sh
 cd /home/user/wado
-git add vendor/jco vendor/jco.patch
+git add vendor/jco.patch     # + `git add vendor/jco` only when bumping the pin
 git commit -m "Update jco patches: <description>"
 ```
+
+To bump the pinned upstream commit, `git checkout <commit>` inside `vendor/jco`,
+`git add vendor/jco` in the parent, then re-apply/regenerate the patch.
 
 ## Key Source Locations in jco
 
@@ -156,11 +172,19 @@ git commit -m "Update jco patches: <description>"
 - `random.js` — `wasi:random` via Node.js crypto
 - `clocks.js` — `wasi:clocks` via `process.hrtime` / `Date.now`
 
-The `--map` flag maps WASI interfaces to shim files during transpilation.
+The `--map` flag maps WASI interfaces to shim files during transpilation (with
+`--no-wasi-shim` so the maps win over jco's built-in shims).
+
+`cli.js`'s `writeViaStream` returns a `Promise` because `write-via-stream` is an
+async WASI function: jco lowers its result as a future and expects the host to
+return a Promise/Thenable (a sync return triggers `unrecognized future object`).
 
 ## Current Patches (on top of upstream main)
 
+Saved in `vendor/jco.patch`, applied to the working tree before building. The
+pinned upstream commit already provides a table-based `FutureDropReadable/Writable`
+implementation, so only these three patches remain:
+
 1. **Stream write hook** (`async_stream.rs`): `globalThis._jcoStreamWriteHook` delivers stream data directly from linear memory, bypassing the rendezvous mechanism.
-2. **Missing intrinsic dependencies** (`mod.rs`): `StreamNewFromLift` → `SymbolResourceRep`; `FutureDropReadable/Writable` → `GlobalFutureMap`, `FutureEndClass`, etc.
-3. **futureDropReadable/Writable** (`async_future.rs`, `transpile_bindgen.rs`): Pass `componentIdx` as bound parameter; accept single `futureEndIdx` from wasm; tolerate handle 0 (stream hook bypass).
-4. **Async export void return** (`function_bindgen.rs`): Fall back to `task.completionPromise()` when JSPI returns `undefined`.
+2. **Missing intrinsic dependencies** (`mod.rs`): `StreamNewFromLift` → `SymbolResourceRep`; `FutureDropReadable/Writable` → `GlobalFutureMap`, `FutureEndClass`, `FutureReadableEndClass`, `FutureWritableEndClass`, `GetOrCreateAsyncState` (otherwise the stdout write path references undefined future-end classes, e.g. `FutureReadableEnd is not defined`).
+3. **Async export void return** (`function_bindgen.rs`): when a JSPI-wrapped async export returns `undefined` (result delivered via `task.return`), fall back to `task.completionPromise()` instead of lifting `undefined` (which throws `invalid variant discriminant for expected`).
