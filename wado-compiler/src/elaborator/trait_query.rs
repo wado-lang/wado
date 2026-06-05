@@ -541,26 +541,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Also check current module items (not covered by the index).
-        for item in self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && let Some(trait_type) = &impl_block.trait_type
-                && Self::get_type_name_static(&impl_block.ty) == type_name
-            {
-                let impl_trait_name = self.get_type_name(trait_type);
-                if impl_trait_name == trait_name
-                    && self.inherent_impl_type_args_match(
-                        &impl_block.ty,
-                        &impl_block.type_params,
-                        type_args,
-                        &self.current_module_source,
-                    )
-                    && self.check_impl_block_bounds(impl_block, type_args)
-                {
-                    return true;
-                }
-            }
-        }
+        // The current module's trait impls are already covered by
+        // `impl_index` above (the index is built from every loaded module,
+        // including this one), so no separate current-module scan is needed.
 
         // Blanket impl fallback: check `impl<T: Bound> Trait for T` where the
         // concrete type satisfies the bound.

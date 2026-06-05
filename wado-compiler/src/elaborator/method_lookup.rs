@@ -25,8 +25,6 @@ use super::util::placeholder;
 enum ImplBlockRef {
     /// From `loaded_modules[module_source].items[item_idx]`
     Loaded(ModuleSource, usize),
-    /// From `current_module_items[item_idx]`, with the current module source
-    CurrentModule(usize),
 }
 
 /// Inputs for [`Elaborator::infer_method_type_args`].
@@ -76,10 +74,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => unreachable!("ImplBlockRef::Loaded points to non-impl item"),
                 }
             }
-            ImplBlockRef::CurrentModule(item_idx) => match &self.current_module_items[*item_idx] {
-                Item::Impl(impl_block) => impl_block,
-                _ => unreachable!("ImplBlockRef::CurrentModule points to non-impl item"),
-            },
         }
     }
 
@@ -87,7 +81,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn impl_block_module_source(&self, r: &ImplBlockRef) -> ModuleSource {
         match r {
             ImplBlockRef::Loaded(module_src, _) => module_src.clone(),
-            ImplBlockRef::CurrentModule(_) => self.current_module_source.clone(),
         }
     }
 
@@ -105,14 +98,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
         }
-        for (idx, item) in self.current_module_items.iter().enumerate() {
-            if let Item::Impl(impl_block) = item
-                && impl_block.trait_type.is_some()
-                && Self::get_type_name_static(&impl_block.ty) == type_name
-            {
-                refs.push(ImplBlockRef::CurrentModule(idx));
-            }
-        }
         refs
     }
 
@@ -128,16 +113,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     {
                         refs.push(ImplBlockRef::Loaded(module_src.clone(), *item_idx));
                     }
-                }
-            }
-        }
-        for (idx, item) in self.current_module_items.iter().enumerate() {
-            if let Item::Impl(impl_block) = item
-                && impl_block.trait_type.is_some()
-            {
-                let impl_struct_name = Self::get_type_name_static(&impl_block.ty);
-                if type_names.contains(&impl_struct_name) {
-                    refs.push(ImplBlockRef::CurrentModule(idx));
                 }
             }
         }
@@ -1162,12 +1137,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             bool,
         )> = None;
 
-        for item in self.current_module_items {
-            if let Item::Impl(impl_block) = item {
-                // Skip trait impls
-                if impl_block.trait_type.is_some() {
-                    continue;
-                }
+        // Fetch only the current module's inherent impls for this type name
+        // from the index. The invariant `current_module_items ==
+        // loaded_modules[current_module_source].items` holds at every swap
+        // site, so filtering the index by the current module source is
+        // equivalent to scanning `current_module_items` directly.
+        let entries: Vec<usize> = self
+            .tysys
+            .trait_env
+            .inherent_impl_index
+            .get(struct_name)
+            .map(|v| {
+                v.iter()
+                    .filter(|(ms, _)| *ms == self.current_module_source)
+                    .map(|(_, idx)| *idx)
+                    .collect()
+            })
+            .unwrap_or_default();
+        for item_idx in entries {
+            let Item::Impl(impl_block) =
+                &self.loaded_modules[&self.current_module_source].items[item_idx]
+            else {
+                continue;
+            };
                 let impl_struct_name = self.get_type_name(&impl_block.ty);
                 if impl_struct_name == struct_name
                     && self.inherent_impl_type_args_match(
@@ -1214,7 +1206,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     }
                 }
-            }
             if found_method.is_some() {
                 break;
             }
@@ -2145,7 +2136,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !skip_filter {
                     let impl_module = match impl_ref {
                         ImplBlockRef::Loaded(m, _) => m.clone(),
-                        ImplBlockRef::CurrentModule(_) => self.current_module_source.clone(),
                     };
                     let (imports, originals) = self
                         .loaded_modules
