@@ -3243,7 +3243,10 @@ fn make_pure_fn(
         task_return_type: None,
         effects: Vec::new(),
         stores: Vec::new(),
-        body: Some(wado_compiler::nir_arena::Body::from_block(&NirBlock::new(vec![NirStmt::new(body_stmt, span)], span))),
+        body: Some(wado_compiler::nir_arena::Body::from_block(&NirBlock::new(
+            vec![NirStmt::new(body_stmt, span)],
+            span,
+        ))),
         span,
         local_count,
         locals,

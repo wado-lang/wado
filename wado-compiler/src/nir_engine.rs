@@ -367,11 +367,9 @@ mod tests {
         let sp = Span::default();
         let ty = TypeTable::UNIT;
         let mk = |k| NirExpr::new(k, ty, sp);
-        let lit = |n: u64| {
-            NirExprKind::IntLiteral {
-                value: n,
-                repr: n.to_string(),
-            }
+        let lit = |n: u64| NirExprKind::IntLiteral {
+            value: n,
+            repr: n.to_string(),
         };
         let inner = mk(NirExprKind::Binary {
             left: Box::new(mk(lit(1))),

@@ -123,23 +123,34 @@ terminates.
 
 The old fixed-point loop and the engine co-exist during the port.
 
-- [ ] A. Substrate — `Engine` session: `parent` + `uses` builders, the edit
-      API, the worklist. Additive; lands green with unit tests, not yet wired
-      into the production loop.
-- [ ] B. Engine core — the driver (`run`), the `Rule` trait, the registry.
-      First rule: `const_fold` (niri's `reduce_local` is already a single-node
-      rewrite, so it ports almost directly). Wire the engine into the optimize
-      loop as one step that runs the migrated rules; the old `const_fold` pass
-      is removed in the same change. Green check: e2e bit-identical.
-- [ ] C. Rule migration — move the peephole passes onto rules one at a time
-      (`copy_prop`, `branch_prune`, `ref_elim`, `select_lowering`,
-      `array_literal`, `string_push`, `match_to_switch`, `value_copy_*`,
-      `elide_*`, `labeled_block_fusion`, `condition_implication`, `sroa`,
-      `cse`, …), removing each pass's `body_block()` bridge as it ports. Each
-      step keeps e2e green. When the last bridge is gone the per-pass
-      `Body ↔ tree` conversions vanish and the arena flows lower → optimize →
-      wir_build with no converter — completing Phase 3's goal. Measure the
-      speed win here.
+- [x] A. Substrate — `Engine` session (`nir_engine.rs`): `parent` + `uses`
+      builders, the dedup worklist seeded post-order, `NodeRef` +
+      `Body::for_each_child`. Additive, not wired into the loop; unit tests
+      cover the use index, parent links, and worklist seeding.
+- [x] B. Engine core — `replace_expr_kind` (in-place edit keeping the use
+      index coherent, re-parenting new children, re-enqueuing parent + new
+      children), the `Rule` trait, and `run()` (worklist to a local fixed
+      point with per-node rule retry). A demo `FoldAddMulConst` rule + unit
+      test drives the full loop bottom-up (`(1+2)*4 → 12`). Still additive.
+      - Correction: `const_fold` is a poor _first production_ rule. The
+      `const_folding` pass is not a pure peephole — it threads a per-function
+      `env` of constant locals and field knowledge through a flow-sensitive
+      walk (`niri::reduce_local` is the single-node part, but the pass does
+      more). Replacing it with a `reduce_local`-only rule would fold _less_
+      and break golden / `wir_expect` fixtures. So the env-driven part stays a
+      flow-sensitive pass; the first production rule in C is a genuinely-local
+      one (`select_lowering` or `match_to_switch`).
+- [ ] C. Wire the engine into the optimize loop and migrate the _genuinely
+      local_ peephole passes onto rules one at a time — starting with
+      `select_lowering` / `match_to_switch`, then `string_push`,
+      `array_literal`, the `elide_*` / `ref_elim` shapes, etc. — removing each
+      pass's `body_block()` bridge as it ports, e2e green at every step. Passes
+      that are flow-sensitive (`const_folding`'s env walk, `copy_prop`, `licm`,
+      `field_scalarize`, `cse`, `store_load_forward`, `value_copy_demote`) keep
+      their own walkers but read the arena. When the last _local_ bridge is
+      gone the per-pass `Body ↔ tree` conversions on the engine's path vanish
+      and the arena flows lower → optimize → wir_build with no converter —
+      completing Phase 3's goal. Measure the speed win here.
 
 ## Out of scope
 
