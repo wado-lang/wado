@@ -48,6 +48,10 @@ pub struct Package {
     pub used_wasi_functions: IndexSet<String>,
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
+    /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
+    /// Threaded unchanged through to the WIR emitter, which consults them to
+    /// pick alternative lowerings (e.g. native `array.copy`).
+    pub codegen_flags: crate::codegen_flags::CodegenFlags,
     /// When true, skip Wasm validation after code generation.
     /// Returns raw bytes even if invalid — useful for debugging codegen.
     pub skip_validation: bool,
@@ -146,6 +150,7 @@ impl Package {
             used_wasi_functions: IndexSet::default(),
             // Codegen options
             strip_names: false,
+            codegen_flags: crate::codegen_flags::CodegenFlags::default(),
             skip_validation: false,
             target_world: "wasi:cli/command".to_string(),
             test_name_filters: Vec::new(),

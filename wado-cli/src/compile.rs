@@ -80,6 +80,7 @@ pub struct CompileOptions {
     pub allocator: Option<String>,
     pub lib: bool,
     pub no_cache: bool,
+    pub codegen_flags: Vec<String>,
 }
 
 /// Compile-time options shared by `compile`/`run`/`serve`/`test`.
@@ -105,6 +106,10 @@ pub struct CompileFlags {
     /// `--test-name` substring filters for the test world (empty elsewhere).
     /// Forwarded to `CompilerOptions::test_name_filters`.
     pub test_name_filters: Vec<String>,
+    /// Generic codegen feature flags from `-f <flag>` (e.g. `["array-copy"]`).
+    /// Forwarded verbatim to `CompilerOptions::codegen_flags`; the compiler
+    /// validates them.
+    pub codegen_flags: Vec<String>,
 }
 
 impl CompileOptions {
@@ -120,6 +125,7 @@ impl CompileOptions {
             allocator: self.allocator.clone(),
             no_cache: self.no_cache,
             test_name_filters: Vec::new(),
+            codegen_flags: self.codegen_flags.clone(),
         }
     }
 }
@@ -137,6 +143,7 @@ enum Opt {
     NoValidate,
     NoCache,
     Allocator,
+    Feature,
     Lib,
     Help,
 }
@@ -154,6 +161,7 @@ impl Opt {
         Self::NoValidate,
         Self::NoCache,
         Self::Allocator,
+        Self::Feature,
         Self::Lib,
         Self::Help,
     ];
@@ -186,6 +194,7 @@ impl Opt {
             Self::NoValidate => args::NO_VALIDATE_SPEC,
             Self::NoCache => args::NO_CACHE_SPEC,
             Self::Allocator => args::ALLOCATOR_SPEC,
+            Self::Feature => args::FEATURE_SPEC,
             Self::Lib => args::OptSpec {
                 long: Some("lib"),
                 short: None,
@@ -225,6 +234,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
     let mut allocator: Option<String> = None;
+    let mut codegen_flags: Vec<String> = Vec::new();
     let mut lib = false;
     let mut no_cache = false;
     while let Some(arg) = args::next_arg(&mut parser)? {
@@ -258,6 +268,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                 Opt::Allocator => {
                     allocator = Some(args::require_string(&mut parser)?);
                 }
+                Opt::Feature => codegen_flags.push(args::require_string(&mut parser)?),
                 Opt::Lib => lib = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
@@ -289,6 +300,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         allocator,
         lib,
         no_cache,
+        codegen_flags,
     })
 }
 
@@ -367,6 +379,7 @@ pub async fn try_compile(
         allocator: flags.allocator.clone(),
         invocations: pipeline_outcome.invocations,
         test_name_filters: flags.test_name_filters.clone(),
+        codegen_flags: flags.codegen_flags.clone(),
         ..Default::default()
     };
 

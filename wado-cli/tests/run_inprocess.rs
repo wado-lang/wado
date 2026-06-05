@@ -102,6 +102,7 @@ fn hello_compile_opts(output_path: &Path, format: Option<OutputFormat>) -> Compi
         allocator: None,
         lib: false,
         no_cache: false,
+        codegen_flags: Vec::new(),
     }
 }
 

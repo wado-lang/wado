@@ -19,8 +19,12 @@ use wasm_encoder::{
 };
 
 /// Emit a core Wasm module from a `WirPackage`.
-pub fn emit_core_module(wir: &WirPackage, strip_names: bool) -> Vec<u8> {
-    let mut emitter = WirEmitter::new(wir, strip_names);
+pub fn emit_core_module(
+    wir: &WirPackage,
+    strip_names: bool,
+    codegen_flags: crate::codegen_flags::CodegenFlags,
+) -> Vec<u8> {
+    let mut emitter = WirEmitter::new(wir, strip_names, codegen_flags);
     emitter.emit()
 }
 
@@ -67,10 +71,16 @@ struct WirEmitter<'a> {
     all_branch_hints: Vec<(u32, Vec<(u32, bool)>)>,
     /// When true, strip debug name sections for smaller binary size (-Os).
     strip_names: bool,
+    /// Fine-grained codegen feature flags (from the CLI's `-f <flag>` option).
+    codegen_flags: crate::codegen_flags::CodegenFlags,
 }
 
 impl<'a> WirEmitter<'a> {
-    fn new(wir: &'a WirPackage, strip_names: bool) -> Self {
+    fn new(
+        wir: &'a WirPackage,
+        strip_names: bool,
+        codegen_flags: crate::codegen_flags::CodegenFlags,
+    ) -> Self {
         Self {
             wir,
             type_index_map: IndexMap::default(),
@@ -88,6 +98,7 @@ impl<'a> WirEmitter<'a> {
             current_branch_hints: Vec::new(),
             all_branch_hints: Vec::new(),
             strip_names,
+            codegen_flags,
         }
     }
 
@@ -933,6 +944,12 @@ impl<'a> WirEmitter<'a> {
                 self.collect_declared_locals_instr(src, locals);
                 self.collect_declared_locals_instr(src_offset, locals);
                 self.collect_declared_locals_instr(len, locals);
+                // The native `array.copy` lowering (the default) needs no
+                // scratch locals, so skip the loop's slot declarations. They
+                // are only emitted for the `-f no-array-copy` loop path.
+                if self.codegen_flags.array_copy {
+                    return;
+                }
                 // Pre-declare scratch locals for the inlined copy loop.
                 // We lower `array.copy` to a Wasm loop because wasmtime's
                 // `array.copy` implementation has a known performance bug
@@ -2203,13 +2220,47 @@ impl<'a> WirEmitter<'a> {
                 src,
                 src_offset,
                 len,
+            } if self.codegen_flags.array_copy => {
+                // Native lowering (the default): emit the Wasm `array.copy`
+                // instruction directly. Benchmarking showed it wins big on
+                // copy-heavy workloads (zlib decompress ~+41%, syntax-highlight
+                // ~+10%) and is neutral elsewhere, so it is the default; the
+                // arm below open-codes a loop instead and is selected with
+                // `-f no-array-copy` (kept so we can keep re-measuring as the
+                // wasmtime runtime evolves).
+                //
+                // Stack/immediate shape: `array.copy $dst $src` consumes
+                // `dst_ref, dst_offset, src_ref, src_offset, len`. It accepts
+                // nullable refs, so unlike the loop path no `ref.as_non_null`
+                // narrowing is needed.
+                let dst_wasm_idx = self.resolve_type_index(dest_type_id.index());
+                let src_wasm_idx = self.resolve_type_index(src_type_id.index());
+                self.emit_instr(f, dest);
+                self.emit_instr(f, dest_offset);
+                self.emit_instr(f, src);
+                self.emit_instr(f, src_offset);
+                self.emit_instr(f, len);
+                f.instruction(&Instruction::ArrayCopy {
+                    array_type_index_dst: dst_wasm_idx,
+                    array_type_index_src: src_wasm_idx,
+                });
+            }
+            WirInstr::ArrayCopy {
+                dest_type_id,
+                src_type_id,
+                dest,
+                dest_offset,
+                src,
+                src_offset,
+                len,
             } => {
-                // Lower `array.copy` to an inline Wasm loop. wasmtime's
-                // `array.copy` runtime path has a known performance bug
-                // that makes it much slower than an open-coded loop for
-                // short copies (≲ a few hundred elements). Open-coding
+                // Lower `array.copy` to an inline Wasm loop. This is the
+                // `-f no-array-copy` path, kept because wasmtime's `array.copy`
+                // runtime path was historically much slower than an open-coded
+                // loop for short copies (≲ a few hundred elements); open-coding
                 // also lets Cranelift inline the bounds checks and the
-                // per-element get/set.
+                // per-element get/set. The native instruction (the arm above,
+                // now the default) is selected when `array_copy` is set.
                 let dst_wasm_idx = self.resolve_type_index(dest_type_id.index());
                 let src_wasm_idx = self.resolve_type_index(src_type_id.index());
                 let dst_name = format!(
@@ -3020,7 +3071,7 @@ mod tests {
         pkg.types.push(WirTypeDef::Struct(struct_ty));
         pkg.globals.push(global);
 
-        let bytes = emit_core_module(&pkg, false);
+        let bytes = emit_core_module(&pkg, false, crate::codegen_flags::CodegenFlags::default());
         validate(&bytes).expect("const struct global init should validate as Wasm");
     }
 }

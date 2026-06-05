@@ -78,6 +78,9 @@ pub struct NirPackage {
     pub used_wasi_functions: IndexSet<String>,
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
+    /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
+    /// Consulted by the WIR emitter to select alternative lowerings.
+    pub codegen_flags: crate::codegen_flags::CodegenFlags,
     /// Maximum UTF-8 byte length for a string literal to get a constant
     /// `array.new_fixed<u8>` repr (which lets a constant string global promote
     /// to an eager Wasm constant). Longer strings keep the compact

@@ -854,7 +854,13 @@ fn build_memory_module(
         wir.dead_type_indices.insert(i);
     }
     crate::wir_optimize::compact_dead_items(&mut wir);
-    super::emit::emit_core_module(&wir, strip_names)
+    // The memory/allocator module is hand-built and contains no `array.copy`,
+    // so codegen feature flags do not apply here.
+    super::emit::emit_core_module(
+        &wir,
+        strip_names,
+        crate::codegen_flags::CodegenFlags::default(),
+    )
 }
 
 /// Sanitise a wasm namespace string (e.g. `"wasm:core:libm.wat"`) into a

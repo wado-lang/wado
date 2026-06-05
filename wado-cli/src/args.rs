@@ -169,6 +169,17 @@ pub const ALLOCATOR_SPEC: OptSpec = OptSpec {
     desc: "Allocator mode (default depends on target world):\nbump (CLI), freelist (HTTP), debug (test; no-reuse + 0xFF poison)",
 };
 
+/// Shared spec: `-f <flag>` — generic codegen feature flag forwarded to the
+/// compiler. Repeatable. Prefix a flag with `no-` to disable it. Currently
+/// recognized: `array-copy` (lower `builtin::array_copy` to the native Wasm
+/// `array.copy` instruction; on by default, disable with `no-array-copy`).
+pub const FEATURE_SPEC: OptSpec = OptSpec {
+    long: None,
+    short: Some('f'),
+    value: Some("<flag>"),
+    desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\narray-copy  native Wasm array.copy instead of a loop (default: on)",
+};
+
 /// Shared spec: `--collector <mode>`
 pub const COLLECTOR_SPEC: OptSpec = OptSpec {
     long: Some("collector"),
