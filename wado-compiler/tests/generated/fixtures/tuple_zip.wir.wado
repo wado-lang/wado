@@ -37,32 +37,32 @@ struct tuple//[i32, i32, i32] {  // TypeId(5)
     mut 2: i32,
 }
 
-struct tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>] {  // TypeId(6)
+struct tuple//[core:prelude/types.wado/Tuple<i32,i32,i32>, core:prelude/types.wado/Tuple<i32,i32,i32>] {  // TypeId(6)
     mut 0: ref "tuple//[i32, i32, i32]",
     mut 1: ref "tuple//[i32, i32, i32]",
 }
 
-struct tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>] {  // TypeId(7)
+struct tuple//[core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>] {  // TypeId(7)
     mut 0: ref "tuple//[i32, i32]",
     mut 1: ref "tuple//[i32, i32]",
     mut 2: ref "tuple//[i32, i32]",
 }
 
-struct tuple//[i32, String] {  // TypeId(8)
+struct tuple//[i32, core:prelude/string.wado/String] {  // TypeId(8)
     mut 0: i32,
     mut 1: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[Tuple<i32,String>, Tuple<i32,String>] {  // TypeId(9)
-    mut 0: ref "tuple//[i32, String]",
-    mut 1: ref "tuple//[i32, String]",
+struct tuple//[core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>, core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>] {  // TypeId(9)
+    mut 0: ref "tuple//[i32, core:prelude/string.wado/String]",
+    mut 1: ref "tuple//[i32, core:prelude/string.wado/String]",
 }
 
 struct tuple//[i32] {  // TypeId(10)
     mut 0: i32,
 }
 
-struct tuple//[Tuple<i32>, Tuple<i32>] {  // TypeId(11)
+struct tuple//[core:prelude/types.wado/Tuple<i32>, core:prelude/types.wado/Tuple<i32>] {  // TypeId(11)
     mut 0: ref "tuple//[i32]",
     mut 1: ref "tuple//[i32]",
 }
@@ -179,12 +179,12 @@ fn "wado-compiler/tests/fixtures/tuple_zip.wado/__test_0_zip_homogeneous"() {
     a = struct.new "tuple//[i32, i32, i32]" { 0: 1, 1: 2, 2: 3 };
     b = struct.new "tuple//[i32, i32, i32]" { 0: 4, 1: 5, 2: 6 };
     sum = 0;
-    __sroa___sroa___tuple_3_0_0 = struct.new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.0;
-    __sroa___sroa___tuple_3_0_1 = struct.new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.0;
-    __sroa___sroa___tuple_3_1_0 = struct.new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.1;
-    __sroa___sroa___tuple_3_1_1 = struct.new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.1;
-    __sroa___sroa___tuple_3_2_0 = struct.new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.2;
-    __sroa___sroa___tuple_3_2_1 = struct.new "tuple//[Tuple<i32,i32,i32>, Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.2;
+    __sroa___sroa___tuple_3_0_0 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32,i32>, core:prelude/types.wado/Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.0;
+    __sroa___sroa___tuple_3_0_1 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32,i32>, core:prelude/types.wado/Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.0;
+    __sroa___sroa___tuple_3_1_0 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32,i32>, core:prelude/types.wado/Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.1;
+    __sroa___sroa___tuple_3_1_1 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32,i32>, core:prelude/types.wado/Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.1;
+    __sroa___sroa___tuple_3_2_0 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32,i32>, core:prelude/types.wado/Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.2;
+    __sroa___sroa___tuple_3_2_1 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32,i32>, core:prelude/types.wado/Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.2;
     sum = (0 + __sroa___sroa___tuple_3_0_0) + __sroa___sroa___tuple_3_0_1;
     sum = (sum + __sroa___sroa___tuple_3_1_0) + __sroa___sroa___tuple_3_1_1;
     sum = (sum + __sroa___sroa___tuple_3_2_0) + __sroa___sroa___tuple_3_2_1;
@@ -199,8 +199,8 @@ condition: sum == 21
 }
 
 fn "wado-compiler/tests/fixtures/tuple_zip.wado/__test_1_zip_heterogeneous"() {
-    let a: ref "tuple//[i32, String]";
-    let b: ref "tuple//[i32, String]";
+    let a: ref "tuple//[i32, core:prelude/string.wado/String]";
+    let b: ref "tuple//[i32, core:prelude/string.wado/String]";
     let __cond_4: bool;
     let __cond_6: bool;
     let __cond_8: bool;
@@ -223,12 +223,12 @@ fn "wado-compiler/tests/fixtures/tuple_zip.wado/__test_1_zip_heterogeneous"() {
     let __sroa___sroa_zipped_0_1: i32;
     let __sroa___sroa_zipped_1_0: ref "core:prelude/string.wado//String";
     let __sroa___sroa_zipped_1_1: ref "core:prelude/string.wado//String";
-    a = struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
-    b = struct.new "tuple//[i32, String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
-    __sroa___sroa_zipped_0_0 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: a, 1: b }.0.0;
-    __sroa___sroa_zipped_0_1 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: a, 1: b }.1.0;
-    __sroa___sroa_zipped_1_0 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: a, 1: b }.0.1;
-    __sroa___sroa_zipped_1_1 = struct.new "tuple//[Tuple<i32,String>, Tuple<i32,String>]" { 0: a, 1: b }.1.1;
+    a = struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
+    b = struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
+    __sroa___sroa_zipped_0_0 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>, core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>]" { 0: a, 1: b }.0.0;
+    __sroa___sroa_zipped_0_1 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>, core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>]" { 0: a, 1: b }.1.0;
+    __sroa___sroa_zipped_1_0 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>, core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>]" { 0: a, 1: b }.0.1;
+    __sroa___sroa_zipped_1_1 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>, core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>]" { 0: a, 1: b }.1.1;
     __cond_4 = __sroa___sroa_zipped_0_0 == 1;
     if __cond_4 == 0 {
         "core:internal/panic"(__local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(130), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_zip_heterogeneous"), used: 26 }); "core:prelude/string.wado/String::push"(__local_11, 32); "core:prelude/string.wado/String::push"(__local_11, 97); "core:prelude/string.wado/String::push"(__local_11, 116); "core:prelude/string.wado/String::push"(__local_11, 32); "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/tuple_zip.wado"), used: 43 }); "core:prelude/string.wado/String::push"(__local_11, 58); __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_11 }; f_22 = __local_12; "core:prelude/primitive.wado/i32::fmt_decimal"(16, f_22); "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -280,12 +280,12 @@ fn "wado-compiler/tests/fixtures/tuple_zip.wado/__test_2_zip_three_tuples"() {
     b = struct.new "tuple//[i32, i32]" { 0: 3, 1: 4 };
     c = struct.new "tuple//[i32, i32]" { 0: 5, 1: 6 };
     sum = 0;
-    __sroa___sroa___tuple_4_0_0 = struct.new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.0.0;
-    __sroa___sroa___tuple_4_0_1 = struct.new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.1.0;
-    __sroa___sroa___tuple_4_0_2 = struct.new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.2.0;
-    __sroa___sroa___tuple_4_1_0 = struct.new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.0.1;
-    __sroa___sroa___tuple_4_1_1 = struct.new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.1.1;
-    __sroa___sroa___tuple_4_1_2 = struct.new "tuple//[Tuple<i32,i32>, Tuple<i32,i32>, Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.2.1;
+    __sroa___sroa___tuple_4_0_0 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.0.0;
+    __sroa___sroa___tuple_4_0_1 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.1.0;
+    __sroa___sroa___tuple_4_0_2 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.2.0;
+    __sroa___sroa___tuple_4_1_0 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.0.1;
+    __sroa___sroa___tuple_4_1_1 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.1.1;
+    __sroa___sroa___tuple_4_1_2 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.2.1;
     sum = ((0 + __sroa___sroa___tuple_4_0_0) + __sroa___sroa___tuple_4_0_1) + __sroa___sroa___tuple_4_0_2;
     sum = ((sum + __sroa___sroa___tuple_4_1_0) + __sroa___sroa___tuple_4_1_1) + __sroa___sroa___tuple_4_1_2;
     __v0 = sum;
@@ -315,8 +315,8 @@ fn "wado-compiler/tests/fixtures/tuple_zip.wado/__test_3_zip_single_element"() {
     let __sroa___sroa___tuple_2_0_1: i32;
     a = struct.new "tuple//[i32]" { 0: 42 };
     b = struct.new "tuple//[i32]" { 0: 99 };
-    __sroa___sroa___tuple_2_0_0 = struct.new "tuple//[Tuple<i32>, Tuple<i32>]" { 0: a, 1: b }.0.0;
-    __sroa___sroa___tuple_2_0_1 = struct.new "tuple//[Tuple<i32>, Tuple<i32>]" { 0: a, 1: b }.1.0;
+    __sroa___sroa___tuple_2_0_0 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32>, core:prelude/types.wado/Tuple<i32>]" { 0: a, 1: b }.0.0;
+    __sroa___sroa___tuple_2_0_1 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32>, core:prelude/types.wado/Tuple<i32>]" { 0: a, 1: b }.1.0;
     __cond_6 = __sroa___sroa___tuple_2_0_0 == 42;
     if __cond_6 == 0 {
         "core:internal/panic"(__local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(113), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_3_zip_single_element"), used: 27 }); "core:prelude/string.wado/String::push"(__local_9, 32); "core:prelude/string.wado/String::push"(__local_9, 97); "core:prelude/string.wado/String::push"(__local_9, 116); "core:prelude/string.wado/String::push"(__local_9, 32); "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/tuple_zip.wado"), used: 43 }); "core:prelude/string.wado/String::push"(__local_9, 58); __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 }; f_17 = __local_10; "core:prelude/primitive.wado/i32::fmt_decimal"(37, f_17); "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("

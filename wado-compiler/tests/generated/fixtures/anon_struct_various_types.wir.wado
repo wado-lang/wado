@@ -34,7 +34,7 @@ struct core:prelude/int128.wado//u128 {  // TypeId(5)
     mut high: u64,
 }
 
-struct tuple//[i32, bool, String] {  // TypeId(6)
+struct tuple//[i32, bool, core:prelude/string.wado/String] {  // TypeId(6)
     mut 0: i32,
     mut 1: bool,
     mut 2: ref "core:prelude/string.wado//String",
@@ -153,7 +153,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/anon_struct_various_types.wado/run"() with Stdout {
     let e: ref "core:prelude/int128.wado//i128";
     let f_5: ref "core:prelude/string.wado//String";
-    let g: ref "tuple//[i32, bool, String]";
+    let g: ref "tuple//[i32, bool, core:prelude/string.wado/String]";
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
     let __local_10: ref "core:prelude/string.wado//String";
@@ -172,7 +172,7 @@ fn "wado-compiler/tests/fixtures/anon_struct_various_types.wado/run"() with Stdo
     let __sroa_self_value_71: bool;
     e = struct.new "core:prelude/int128.wado//i128" { low: 999_i64, high: 0_i64 };
     f_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    g = struct.new "tuple//[i32, bool, String]" { 0: 1, 1: 1, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
+    g = struct.new "tuple//[i32, bool, core:prelude/string.wado/String]" { 0: 1, 1: 1, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
     "core:cli/println"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; "core:prelude/primitive.wado/i32::fmt_decimal"(1, __local_9); __local_8);
     "core:cli/println"(__local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; "core:prelude/primitive.wado/i32::fmt_decimal"(2, __local_11); __local_10);
     "core:cli/println"(__local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_12 }; "core:prelude/primitive.wado/char^Display::fmt"(struct.new "core:prelude/types.wado//Box<char>" { value: 65 }, __local_13); __local_12);

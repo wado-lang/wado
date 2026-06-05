@@ -182,7 +182,7 @@ struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(26)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct tuple//[Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(27)
+struct tuple//[wasi:http/types.wado/Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(27)
     mut 0: i32,
     mut 1: i32,
 }
@@ -192,7 +192,7 @@ struct tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<core:prelude/ty
     mut 1: i32,
 }
 
-struct tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(29)
+struct tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(29)
     mut 0: i32,
     mut 1: i32,
 }
@@ -383,7 +383,7 @@ type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_bind
 
 type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_append" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(84)
 
-type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>") -> ref "tuple//[Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(85)
+type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>") -> ref "tuple//[wasi:http/types.wado/Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(85)
 
 type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Request_set_scheme" = fn(i32, ref null "wasi:http/types.wado//Scheme") -> ref "core:prelude/types.wado//Result<(),()>";  // TypeId(86)
 
@@ -403,7 +403,7 @@ type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_bind
 
 type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_get" = fn(i32, ref "core:prelude/string.wado//String") -> ref "core:prelude//List<core:prelude/list.wado/List<u8>>";  // TypeId(94)
 
-type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(95)
+type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(95)
 
 type "functype//wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_lift__Client_send" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(96)
 
@@ -532,7 +532,7 @@ fn "wado-compiler/tests/fixtures/http_client_advanced.wado/send_request"(path) w
     let out_req: i32;
     let result: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let r: i32;
-    let __pattern_temp_1: ref "tuple//[Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_1: ref "tuple//[wasi:http/types.wado/Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let self: ref "core:prelude/string.wado//String";
     headers = "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_new"();
     drop("wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-request-id"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("req-123"), used: 7 }; struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self.repr, used: self.used, index: 0 })));
@@ -777,7 +777,7 @@ fn "wado-compiler/tests/fixtures/http_client_advanced.wado/handle"(request) with
     let __local_187: i64;
     let __local_188: i32;
     let __local_189: i32;
-    let __pattern_temp_2: ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_2: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let f_197: ref "core:prelude/format.wado//Formatter";
     let f_202: ref "core:prelude/format.wado//Formatter";
     let s_208: ref "core:prelude/string.wado//String";
@@ -1279,7 +1279,7 @@ fn "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Request
     __lifted_result_13 = builtin::load_i32(__outptr + 0);
     __lifted_result_14 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_13, 1: __lifted_result_14 };
+    return struct.new "tuple//[wasi:http/types.wado/Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_13, 1: __lifted_result_14 };
 }
 
 fn "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Request_set_scheme"(self, scheme) with Request {
@@ -1490,7 +1490,7 @@ fn "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_binding__Respons
     __lifted_result_8 = builtin::load_i32(__outptr + 0);
     __lifted_result_9 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_8, 1: __lifted_result_9 };
+    return struct.new "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_8, 1: __lifted_result_9 };
 }
 
 fn "wado-compiler/tests/fixtures/http_client_advanced.wado/__cm_lift__Client_send"(__outptr) {

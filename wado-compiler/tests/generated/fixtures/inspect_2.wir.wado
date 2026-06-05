@@ -50,7 +50,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(9)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[i32, String] {  // TypeId(10)
+struct tuple//[i32, core:prelude/string.wado/String] {  // TypeId(10)
     mut 0: i32,
     mut 1: ref "core:prelude/string.wado//String",
 }
@@ -94,7 +94,7 @@ array Array<core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>> (mut 
 
 array Array<core:prelude/list.wado/List<core:prelude/string.wado/String>> (mut ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(22)
 
-array Array<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>> (mut ref "tuple//[i32, String]");  // TypeId(23)
+array Array<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>> (mut ref "tuple//[i32, core:prelude/string.wado/String]");  // TypeId(23)
 
 variant core:prelude/types.wado//Option<i32> {  // TypeId(24)
     Some(i32),
@@ -337,7 +337,7 @@ type "functype//wado-compiler/tests/fixtures/inspect_2.wado/InspBox<i32>^Inspect
 
 type "functype//core:prelude/types.wado/Option<core:prelude/string.wado/String>^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<Option<core:prelude/string.wado/String>>", ref "core:prelude/format.wado//Formatter");  // TypeId(120)
 
-type "functype//core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String>^Inspect::inspect" = fn(ref "tuple//[i32, String]", ref "core:prelude/format.wado//Formatter");  // TypeId(121)
+type "functype//core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String>^Inspect::inspect" = fn(ref "tuple//[i32, core:prelude/string.wado/String]", ref "core:prelude/format.wado//Formatter");  // TypeId(121)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(122)
 
@@ -846,7 +846,7 @@ fn "wado-compiler/tests/fixtures/inspect_2.wado/__test_13_nested_array_tuple"() 
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let limit: i32;
-    __b = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>" { repr: array.new_fixed<ref "tuple//[i32, String]">(struct.new "tuple//[i32, String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 110, 101), used: 3 } }, struct.new "tuple//[i32, String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 119, 111), used: 3 } }), used: 2 };
+    __b = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>" { repr: array.new_fixed<ref "tuple//[i32, core:prelude/string.wado/String]">(struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 110, 101), used: 3 } }, struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 119, 111), used: 3 } }), used: 2 };
     __cond = "core:prelude/string.wado/String^Eq::eq"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }; limit = (if __local_4.precision == -2 -> i32 {
         256;
     } else {
@@ -1513,7 +1513,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<core:p
                 s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
                 "core:prelude/string.wado/String::push_str"(f.buf, s_11);
             }
-            "core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String>^Inspect::inspect"(builtin::array_get<ref "tuple//[i32, String]">(_licm_repr_21, i), f);
+            "core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String>^Inspect::inspect"(builtin::array_get<ref "tuple//[i32, core:prelude/string.wado/String]">(_licm_repr_21, i), f);
             shown = shown + 1;
             i = i + 1;
             continue l113;

@@ -634,11 +634,19 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                     }
                 }
 
-                // Use resolved (base) names for tuple display/fq to ensure
-                // newtypes map to the same WIR type as their base types.
+                // A tuple is a generic instance, so its elements are type
+                // arguments: mangle them with the module-qualified form so a
+                // monomorphized `Struct` element and the equivalent
+                // `GenericInstance` element (the substitution-boundary flip)
+                // produce the *same* fq. Using the short form here let the same
+                // logical tuple (e.g. `[String, TreeMap<String,i32>]`) register
+                // twice — once qualified, once not — yielding two distinct WIR
+                // struct types and a `ref`/`ref null` validation mismatch when
+                // they meet (e.g. iterating a `TreeMap`-valued map's entries).
+                // Newtypes still resolve to their base so they share the type.
                 let elem_names: Vec<String> = elements
                     .iter()
-                    .map(|&e| type_table.mangle_type_name_resolving_newtypes(e))
+                    .map(|&e| type_table.mangle_type_arg_for_generic_resolving_newtypes(e))
                     .collect();
                 let tuple_display = format!("[{}]", elem_names.join(", "));
                 // TODO: should include module_source like other types: "{module_source}//[...]"

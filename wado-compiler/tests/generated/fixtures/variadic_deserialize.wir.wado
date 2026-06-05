@@ -46,7 +46,7 @@ struct core:json//JsonSeqAccess {  // TypeId(7)
     mut first: bool,
 }
 
-struct tuple//[i32, String] {  // TypeId(8)
+struct tuple//[i32, core:prelude/string.wado/String] {  // TypeId(8)
     mut 0: i32,
     mut 1: ref "core:prelude/string.wado//String",
 }
@@ -62,13 +62,13 @@ struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(10)
 }
 
 variant core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>,core:serde/DeserializeError> {  // TypeId(11)
-    Ok(ref "tuple//[i32, String]"),
+    Ok(ref "tuple//[i32, core:prelude/string.wado/String]"),
     Err(ref "core:serde//DeserializeError"),
 }
 
 struct core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>,core:serde/DeserializeError>::Ok {  // TypeId(12)
     discriminant: i32,
-    payload_0: ref "tuple//[i32, String]",
+    payload_0: ref "tuple//[i32, core:prelude/string.wado/String]",
 }
 
 struct core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>,core:serde/DeserializeError>::Err {  // TypeId(13)
@@ -188,7 +188,7 @@ type "functype//wado-compiler/tests/fixtures/variadic_deserialize.wado/__test_0_
 
 type "functype//wado-compiler/tests/fixtures/variadic_deserialize.wado/__cm_export____test_0_tuple_deserialize_via_variadic_impl" = fn();  // TypeId(42)
 
-type "functype//wado-compiler/tests/fixtures/variadic_deserialize.wado/$value_copy$T65" = fn(ref "core:json//JsonSeqAccess") -> ref "core:json//JsonSeqAccess";  // TypeId(43)
+type "functype//wado-compiler/tests/fixtures/variadic_deserialize.wado/$value_copy$T67" = fn(ref "core:json//JsonSeqAccess") -> ref "core:json//JsonSeqAccess";  // TypeId(43)
 
 type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(44)
 
@@ -276,7 +276,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(85)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(86)
 
-type "functype//core:json/core/json/from_string<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>" = fn(ref "core:prelude/string.wado//String") -> [i32, ref null "tuple//[i32, String]", ref null "core:serde//DeserializeError"];  // TypeId(87)
+type "functype//core:json/core/json/from_string<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>" = fn(ref "core:prelude/string.wado//String") -> [i32, ref null "tuple//[i32, core:prelude/string.wado/String]", ref null "core:serde//DeserializeError"];  // TypeId(87)
 
 type "functype//core:prelude/primitive.wado/char::from_u32" = fn(u32) -> [i32, char];  // TypeId(88)
 
@@ -299,7 +299,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/variadic_deserialize.wado/__test_0_tuple_deserialize_via_variadic_impl"() {
     let json: ref "core:prelude/string.wado//String";
-    let t: ref "tuple//[i32, String]";
+    let t: ref "tuple//[i32, core:prelude/string.wado/String]";
     let __v0_3: i32;
     let __cond_4: bool;
     let __v0_5: ref "core:prelude/string.wado//String";
@@ -313,7 +313,7 @@ fn "wado-compiler/tests/fixtures/variadic_deserialize.wado/__test_0_tuple_deseri
     let f_25: ref "core:prelude/format.wado//Formatter";
     json = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("[42,\"hello\"]"), used: 12 };
     let __sroa_parsed_discriminant: i32;
-    let __sroa_parsed_case0_payload_0: ref null "tuple//[i32, String]";
+    let __sroa_parsed_case0_payload_0: ref null "tuple//[i32, core:prelude/string.wado/String]";
     let __sroa_parsed_case1_payload_0: ref null "core:serde//DeserializeError";
     multivalue_bind [__sroa_parsed_discriminant, __sroa_parsed_case0_payload_0, __sroa_parsed_case1_payload_0] = "core:json/core/json/from_string<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>"(json);
     if __sroa_parsed_discriminant == 0 {
@@ -345,7 +345,7 @@ fn "wado-compiler/tests/fixtures/variadic_deserialize.wado/__cm_export____test_0
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/variadic_deserialize.wado/$value_copy$T65"(v) {
+fn "wado-compiler/tests/fixtures/variadic_deserialize.wado/$value_copy$T67"(v) {
     return struct.new "core:json//JsonSeqAccess" { de: v.de, first: v.first };
 }
 
@@ -799,14 +799,14 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
 
 fn "core:json/core/json/from_string<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>>"(input) {
     let de: ref "core:json//JsonDeserializer";
-    let __qm_v: ref "tuple//[i32, String]";
+    let __qm_v: ref "tuple//[i32, core:prelude/string.wado/String]";
     let __qm_e: ref "core:serde//DeserializeError";
-    let v: ref "tuple//[i32, String]";
+    let v: ref "tuple//[i32, core:prelude/string.wado/String]";
     let offset: i64;
     de = struct.new "core:json//JsonDeserializer" { input: input, pos: 0 };
     let __match_scrut_0: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>,core:serde/DeserializeError>";
     __match_scrut_0 = "core:serde/Tuple<i32,core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>"(de);
-    v = (if ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>,core:serde/DeserializeError>::Ok"(__match_scrut_0) -> ref "tuple//[i32, String]" {
+    v = (if ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>,core:serde/DeserializeError>::Ok"(__match_scrut_0) -> ref "tuple//[i32, core:prelude/string.wado/String]" {
         __qm_v = ref.cast "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>,core:serde/DeserializeError>::Ok"(__match_scrut_0).payload_0;
         __qm_v;
     } else {
@@ -1748,14 +1748,14 @@ fn "core:serde/Tuple<i32,core:prelude/string.wado/String>^Deserialize::deseriali
     let seq: ref "core:json//JsonSeqAccess";
     let __qm_v_4: i32;
     let __qm_e_5: ref "core:serde//DeserializeError";
-    let tuple: ref "tuple//[i32, String]";
+    let tuple: ref "tuple//[i32, core:prelude/string.wado/String]";
     let __qm_e_8: ref "core:serde//DeserializeError";
     let __local_9: ref "core:prelude/string.wado//String";
     let __local_10: ref "core:serde//DeserializeError";
     let __match_11: ref null "core:serde//DeserializeError";
     let __qm_e_15: ref "core:serde//DeserializeError";
     let __local_3: ref null "core:serde//DeserializeError";
-    seq = "wado-compiler/tests/fixtures/variadic_deserialize.wado/$value_copy$T65"(let __match_scrut_1: ref "core:prelude/types.wado//Result<core:json/JsonSeqAccess,core:serde/DeserializeError>"; __match_scrut_1 = __inline_JsonDeserializer_Deserializer__begin_seq_0: block -> ref "core:prelude/types.wado//Result<core:json/JsonSeqAccess,core:serde/DeserializeError>" {
+    seq = "wado-compiler/tests/fixtures/variadic_deserialize.wado/$value_copy$T67"(let __match_scrut_1: ref "core:prelude/types.wado//Result<core:json/JsonSeqAccess,core:serde/DeserializeError>"; __match_scrut_1 = __inline_JsonDeserializer_Deserializer__begin_seq_0: block -> ref "core:prelude/types.wado//Result<core:json/JsonSeqAccess,core:serde/DeserializeError>" {
         __local_3 = "core:json/JsonDeserializer::expect_char"(d, 91);
         if ref.is_null(__local_3) {
         } else {
@@ -1770,7 +1770,7 @@ fn "core:serde/Tuple<i32,core:prelude/string.wado/String>^Deserialize::deseriali
         __qm_e_2 = ref.cast "core:prelude/types.wado//Result<core:json/JsonSeqAccess,core:serde/DeserializeError>::Err"(__match_scrut_1).payload_0;
         return struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: __qm_e_2 };
     }));
-    tuple = struct.new "tuple//[i32, String]" { 0: let __match_scrut_2: ref "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>"; __match_scrut_2 = "core:serde/i32^Deserialize::deserialize_next_element_from_seq<core:json/JsonSeqAccess>"(seq); (if ref.test "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Ok"(__match_scrut_2) -> i32 {
+    tuple = struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: let __match_scrut_2: ref "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>"; __match_scrut_2 = "core:serde/i32^Deserialize::deserialize_next_element_from_seq<core:json/JsonSeqAccess>"(seq); (if ref.test "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Ok"(__match_scrut_2) -> i32 {
         __qm_v_4 = ref.cast "core:prelude/types.wado//Result<i32,core:serde/DeserializeError>::Ok"(__match_scrut_2).payload_0;
         __qm_v_4;
     } else {

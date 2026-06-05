@@ -20,7 +20,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[i32, String] {  // TypeId(3)
+struct tuple//[i32, core:prelude/string.wado/String] {  // TypeId(3)
     mut 0: i32,
     mut 1: ref "core:prelude/string.wado//String",
 }
@@ -99,7 +99,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/cross_module_generic_import.wado/run"() with Stdout {
-    let pair: ref "tuple//[i32, String]";
+    let pair: ref "tuple//[i32, core:prelude/string.wado/String]";
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
     let __local_5: ref "core:prelude/string.wado//String";
@@ -112,7 +112,7 @@ fn "wado-compiler/tests/fixtures/cross_module_generic_import.wado/run"() with St
     value_16 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(42), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("identity<String>(hello) = "), used: 26 }); "core:prelude/string.wado/String::push_str"(__local_5, value_16); __local_5);
     second = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
-    pair = struct.new "tuple//[i32, String]" { 0: 10, 1: second };
+    pair = struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: 10, 1: second };
     "core:cli/println"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(48), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("make_pair = ("), used: 13 }); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; __sroa_self_value_27 = pair.0; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_27, __local_7); "core:prelude/string.wado/String::push"(__local_6, 44); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, pair.1); "core:prelude/string.wado/String::push"(__local_6, 41); __local_6);
 }
 

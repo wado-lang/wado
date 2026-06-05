@@ -171,7 +171,7 @@ struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(25)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct tuple//[Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(26)
+struct tuple//[wasi:http/types.wado/Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(26)
     mut 0: i32,
     mut 1: i32,
 }
@@ -312,7 +312,7 @@ type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__c
 
 type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Fields_append" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(64)
 
-type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>") -> ref "tuple//[Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(65)
+type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Request_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32, ref "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>") -> ref "tuple//[wasi:http/types.wado/Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(65)
 
 type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Request_set_scheme" = fn(i32, ref null "wasi:http/types.wado//Scheme") -> ref "core:prelude/types.wado//Result<(),()>";  // TypeId(66)
 
@@ -522,7 +522,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/handle"(request
     let __local_158: i64;
     let __local_159: i32;
     let __local_160: i32;
-    let __pattern_temp_2: ref "tuple//[Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_2: ref "tuple//[wasi:http/types.wado/Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let self_165: ref "core:prelude/string.wado//String";
     let self_166: ref "core:prelude/string.wado//String";
     let __pair_temp_1: i64;
@@ -962,7 +962,7 @@ fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__R
     __lifted_result_13 = builtin::load_i32(__outptr + 0);
     __lifted_result_14 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_13, 1: __lifted_result_14 };
+    return struct.new "tuple//[wasi:http/types.wado/Request, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_13, 1: __lifted_result_14 };
 }
 
 fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_binding__Request_set_scheme"(self, scheme) with Request {

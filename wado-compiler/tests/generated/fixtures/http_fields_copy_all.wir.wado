@@ -165,17 +165,17 @@ struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(23)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct tuple//[String, List<u8>] {  // TypeId(24)
+struct tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>] {  // TypeId(24)
     mut 0: ref "core:prelude/string.wado//String",
     mut 1: ref "core:prelude//List<u8>",
 }
 
-struct tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(25)
+struct tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(25)
     mut 0: i32,
     mut 1: i32,
 }
 
-array Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>> (mut ref "tuple//[String, List<u8>]");  // TypeId(26)
+array Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>> (mut ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]");  // TypeId(26)
 
 variant core:prelude/types.wado//Option<u16> {  // TypeId(27)
     Some(u16),
@@ -286,7 +286,7 @@ type "functype//wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_bind
 
 type "functype//wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_binding__Fields_copy_all" = fn(i32) -> ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>";  // TypeId(58)
 
-type "functype//wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(59)
+type "functype//wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(59)
 
 type "functype//wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_export__handle" = fn(i32);  // TypeId(60)
 
@@ -326,7 +326,7 @@ type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core
 
 type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(78)
 
-type "functype//core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>::push" = fn(ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>", ref "tuple//[String, List<u8>]");  // TypeId(79)
+type "functype//core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>::push" = fn(ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>", ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]");  // TypeId(79)
 
 type "functype//core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(80)
 
@@ -510,7 +510,7 @@ fn "wado-compiler/tests/fixtures/http_fields_copy_all.wado/handle"(request) {
     let __local_163: i64;
     let __local_164: i32;
     let __local_165: i32;
-    let __pattern_temp_1: ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let f_183: ref "core:prelude/format.wado//Formatter";
     let f_188: ref "core:prelude/format.wado//Formatter";
     fields = "wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_binding__Fields_new"();
@@ -942,7 +942,7 @@ fn "wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_binding__Fields_
     "wasi/wasi:http/Fields::copy_all"(self, __outptr);
     __base_2 = builtin::load_i32(__outptr);
     __count_3 = builtin::load_i32(__outptr + 4);
-    __result_4 = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>" { repr: builtin::array_new<ref "tuple//[String, List<u8>]">(__count_3), used: 0 };
+    __result_4 = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(__count_3), used: 0 };
     __i_5 = 0;
     b69: block {
         l70: loop {
@@ -972,7 +972,7 @@ fn "wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_binding__Fields_
             if __count_9 > 0 {
                 drop("mem/realloc"(__base_8, __count_9 * 1, 1, 0));
             }
-            "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>::push"(__result_4, struct.new "tuple//[String, List<u8>]" { 0: __lifted_result_7, 1: __result_10 });
+            "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>::push"(__result_4, struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: __lifted_result_7, 1: __result_10 });
             drop("mem/realloc"(builtin::load_i32(__elem_addr_6 + 0), builtin::load_i32((__elem_addr_6 + 0) + 4), 1, 0));
             __i_5 = __i_5 + 1;
             continue l70;
@@ -1004,7 +1004,7 @@ fn "wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_binding__Respons
     __lifted_result_8 = builtin::load_i32(__outptr + 0);
     __lifted_result_9 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_8, 1: __lifted_result_9 };
+    return struct.new "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_8, 1: __lifted_result_9 };
 }
 
 fn "wado-compiler/tests/fixtures/http_fields_copy_all.wado/__cm_export__handle"(request) {
@@ -1354,7 +1354,7 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/strin
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>::grow"(self);
     }
-    builtin::array_set<ref "tuple//[String, List<u8>]">(self.repr, used, value);
+    builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(self.repr, used, value);
     self.used = used + 1;
 }
 
@@ -1389,8 +1389,8 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/strin
     capacity = builtin::array_len(self.repr);
     a = capacity * 2;
     new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "tuple//[String, List<u8>]">(new_capacity);
-    builtin::array_copy<ref "tuple//[String, List<u8>]">(new_repr, 0, self.repr, 0, self.used);
+    new_repr = builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(new_capacity);
+    builtin::array_copy<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
