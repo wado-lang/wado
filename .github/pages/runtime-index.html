@@ -99,6 +99,13 @@
         display: flex;
         align-items: center;
         font-size: 0.75rem;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      .benchmark-legend-item.is-hidden {
+        opacity: 0.4;
+        text-decoration: line-through;
       }
       .benchmark-legend-swatch {
         width: 24px;
@@ -304,7 +311,10 @@
           const sortedOpts = [...optLevelMap.keys()].sort();
 
           // Build the HTML legend now that the optimization levels are known.
-          for (const opt of sortedOpts) {
+          // Legend order matches the dataset order below, so the item index is
+          // the dataset index. Clicking an item toggles that dataset's
+          // visibility, mirroring Chart.js's built-in legend behaviour.
+          sortedOpts.forEach((opt, index) => {
             const color = OPT_COLORS[opt] || FALLBACK_COLOR;
             const item = document.createElement('div');
             item.className = 'benchmark-legend-item';
@@ -313,8 +323,14 @@
             swatch.style.backgroundColor = color;
             item.appendChild(swatch);
             item.appendChild(document.createTextNode(opt));
+            item.addEventListener('click', () => {
+              const meta = chart.getDatasetMeta(index);
+              meta.hidden = meta.hidden === null ? !chart.data.datasets[index].hidden : null;
+              item.classList.toggle('is-hidden', meta.hidden === true);
+              chart.update();
+            });
             legend.appendChild(item);
-          }
+          });
 
           // Build datasets: one line per optimization level
           const datasets = sortedOpts.map(opt => {
