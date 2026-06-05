@@ -43,6 +43,7 @@ pub const CORE_PRELUDE_FPFMT: &str = include_str!("../lib/core/prelude/fpfmt.wad
 pub const CORE_PRELUDE_INTPARSE: &str = include_str!("../lib/core/prelude/intparse.wado");
 pub const CORE_PRELUDE_TUPLE: &str = include_str!("../lib/core/prelude/tuple.wado");
 pub const CORE_PRELUDE_RANGE: &str = include_str!("../lib/core/prelude/range.wado");
+pub const CORE_PRELUDE_BYTES: &str = include_str!("../lib/core/prelude/bytes.wado");
 pub const CORE_COLLECTIONS: &str = include_str!("../lib/core/collections.wado");
 pub const CORE_ZLIB: &str = include_str!("../lib/core/zlib.wado");
 pub const CORE_BASE64: &str = include_str!("../lib/core/base64.wado");
@@ -138,6 +139,7 @@ pub const ALL_CORE_MODULES: &[(&str, &str)] = &[
     ("core:prelude/intparse.wado", CORE_PRELUDE_INTPARSE),
     ("core:prelude/primitive.wado", CORE_PRELUDE_PRIMITIVE),
     ("core:prelude/range.wado", CORE_PRELUDE_RANGE),
+    ("core:prelude/bytes.wado", CORE_PRELUDE_BYTES),
     ("core:prelude/string.wado", CORE_PRELUDE_STRING),
     ("core:prelude/traits.wado", CORE_PRELUDE_TRAITS),
     ("core:prelude/tuple.wado", CORE_PRELUDE_TUPLE),

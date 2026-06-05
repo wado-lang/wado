@@ -1,0 +1,36 @@
+//! Tests for the `core:prelude` byte-buffer newtypes and `AsByteSlice`.
+
+test "ByteList literal coercion and as_byte_slice view" {
+    let b: ByteList = [1, 2, 3];
+    assert b.len() == 3;
+    let s = b.as_byte_slice();
+    assert s.len() == 3;
+    assert s[0] == 1;
+    assert s[2] == 3;
+}
+
+test "ByteSlice as_byte_slice is identity" {
+    let b: ByteList = [10, 20, 30, 40];
+    let s = b.as_byte_slice();
+    let s2 = s.as_byte_slice();
+    assert s2.len() == 4;
+    assert s2[1] == 20;
+    assert s2[3] == 40;
+}
+
+// NOTE: `ByteArray` (a newtype of the compiler-item `Array<u8>`) is defined in
+// the prelude, but calling an inherited method on such a value currently hits a
+// codegen bug (`wir_build` does not push `self` for methods dispatched through a
+// newtype whose ultimate base is `BuiltinArray`), producing invalid Wasm. A
+// `ByteArray` method-call test is intentionally omitted until that bug is fixed.
+// `ByteList`/`ByteSlice` (newtypes of the `List`/`ArraySlice` structs) are
+// unaffected.
+
+test "ByteList inherits List<u8> mutation" {
+    let mut b: ByteList = [];
+    b.push(1);
+    b.push(2);
+    assert b.len() == 2;
+    assert b[0] == 1;
+    assert b.as_byte_slice().len() == 2;
+}

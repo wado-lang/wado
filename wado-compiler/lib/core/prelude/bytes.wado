@@ -1,0 +1,49 @@
+#![no_prelude]
+#![stdlib("core:prelude/bytes.wado")]
+//! Byte-buffer newtypes and the `AsByteSlice` conversion.
+//!
+//! A byte sequence is a first-class concept across the ecosystem, not an
+//! incidental `List<u8>`. These newtypes give the serde data model a real
+//! byte-string type (`core:cbor` byte strings; `core:json` base64) and let
+//! byte-reading APIs accept any owned or borrowed byte buffer without copying.
+
+
+use { Array } from "core:prelude/array.wado";
+use { List } from "core:prelude/list.wado";
+use { ArraySlice } from "core:prelude/slice.wado";
+
+/// An owned, fixed-length byte buffer.
+pub type ByteArray = Array<u8>;
+
+/// An owned, growable byte buffer.
+pub type ByteList = List<u8>;
+
+/// A borrowed, zero-copy view over a byte buffer.
+pub type ByteSlice = ArraySlice<u8>;
+
+/// Zero-copy conversion to a `ByteSlice`.
+///
+/// Implemented by `ByteArray`, `ByteList`, and `ByteSlice`, so byte-reading
+/// APIs (e.g. `core:cbor` / `core:json` `from_bytes`) accept any of them
+/// without copying.
+pub trait AsByteSlice {
+    fn as_byte_slice(&self) -> ByteSlice with stores[self];
+}
+
+impl AsByteSlice for ByteSlice {
+    fn as_byte_slice(&self) -> ByteSlice with stores[self] {
+        return *self;
+    }
+}
+
+impl AsByteSlice for ByteList {
+    fn as_byte_slice(&self) -> ByteSlice with stores[self] {
+        return self.as_slice() as ByteSlice;
+    }
+}
+
+impl AsByteSlice for ByteArray {
+    fn as_byte_slice(&self) -> ByteSlice with stores[self] {
+        return self.slice(0, self.len()) as ByteSlice;
+    }
+}
