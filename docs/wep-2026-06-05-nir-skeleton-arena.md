@@ -155,10 +155,25 @@ must not regress" requirement.
       is built on the side. Green check: a `tree → arena → tree` round-trip at
       the optimize entry (`WADO_TRACE=arena_roundtrip`) keeps the full e2e
       suite bit-identical — 2786 passed, 0 failed at O0/O2.
-- [ ] Phase 2 — port `lower` to emit `Body` directly; drop the tree → arena
-      converter.
-- [ ] Phase 3 — port `wir_build` to read `Body`; drop the arena → tree
-      converter. The arena is now the only post-lower body form.
+      Phase 2 and Phase 3 were reordered (wir_build before lower) after Phase 1.
+      `NirFunction.body` is a single-typed field, so the arena becomes the _canonical_
+      body only once its largest mutator — `optimize` — is ported (Phase 4). Until
+      then the arena must be bracketed by a converter, and the cleanest place to put
+      that converter is at the entry of a read-only consumer. `wir_build` is exactly
+      that: porting it first (a `tree → arena` build at its entry, then arena reads
+      throughout) needs no change to `lower` or `optimize` and leaves the tree
+      canonical, while validating that the arena losslessly carries everything codegen
+      needs — the strongest possible check on the representation. Porting `lower`
+      first would instead need an `arena → tree` step at its exit (overhead) because
+      `optimize` still reads the tree.
+
+- [ ] Phase 2 — port `wir_build` to read `Body`, built by a `tree → arena`
+      converter at its entry. `lower` and `optimize` are untouched; the tree
+      stays canonical through them. Green check: WIR / Wasm output unchanged
+      across the e2e and golden suites.
+- [ ] Phase 3 — port `lower` to emit `Body` directly; `optimize` is ported
+      alongside / before so the arena flows lower → optimize → wir_build with
+      no converter. The arena is now the only post-lower body form.
 - [ ] Phase 4 — port the peephole passes onto the edit API. This is where the
       engine WEP begins. Flow-sensitive passes (`field_scalarize`, `licm`,
       `tmpl_hoist`, `value_copy_demote`, `store_load_forward`) keep their own
