@@ -917,6 +917,19 @@ pub enum InlineHint {
 }
 
 impl NirFunction {
+    /// Phase 3 bridge: read the function body as an owned tree (`Body` →
+    /// `NirBlock`). Tree-based optimization passes use this until they are
+    /// ported to arena traversal; it is removed pass-by-pass.
+    pub fn body_block(&self) -> Option<NirBlock> {
+        self.body.as_ref().map(crate::nir_arena::Body::to_block)
+    }
+
+    /// Phase 3 bridge: set the function body from a tree (`NirBlock` →
+    /// `Body`). Counterpart of [`Self::body_block`].
+    pub fn set_body_block(&mut self, block: NirBlock) {
+        self.body = Some(crate::nir_arena::Body::from_block(&block));
+    }
+
     /// Returns true if this is a method (belongs to a struct)
     #[inline]
     pub fn is_method(&self) -> bool {
