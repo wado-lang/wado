@@ -70,7 +70,6 @@ First full-corpus run has landed: 78 Stage B′ tests across `FullContextParsing
 
 Remaining:
 
-- **`wado-compiler` codegen panic — P0 blocker.** Running multiple Stage B′ tests in one `wado test` invocation triggered `wado-compiler/src/codegen.rs:45` ("WIR pipeline generated invalid core Wasm module") on at least some ParserExec descriptors. The individual Stage A `*_parse_test.wado` for the same descriptors compile fine, so the trigger is in the Gale-emitted-from-Stage-B′ output specifically OR in the parallel-test compile pool. A compiler bug is P0: needs a minimal repro before triaging (likely a separate WEP — a wado-compiler concern, not Gale's).
 - **Extend coverage to the remaining parser categories** (`ParseTrees`, `Listeners`) and re-triage `[stage_b_oracle_skip]` / `[stage_b_oracle_todo]` after each re-extract. A small set fail the oracle even after action stripping because they carry StringTemplate directives outside action bodies (e.g. `ParserExec/ReservedWordsEscaping`'s `returns [<IntArg("")> return_]`); record those in `[stage_b_oracle_skip]` with the javac error.
 
 ## Composite (slave-grammar) descriptors
