@@ -2205,12 +2205,269 @@ impl Deserializer for JsonDeserializer {
     }
 }
 
+// Canonical (sorted-key) JSON serializer.
+//
+// Produces deterministic output: object / struct keys are emitted in ascending
+// bytewise order of their encoded (quoted) form, while arrays keep their order.
+// Scalars match the compact `JsonSerializer`. RFC 8785-style; used by
+// `to_bytes_canonical` for signing / diffing where byte-exact reproducibility
+// matters.
+pub struct CanonicalJsonSerializer {
+    buf: &mut String,
+}
+
+struct CanonicalSeqSerializer {
+    buf: &mut String,
+    count: i32,
+}
+
+struct CanonicalMapSerializer {
+    buf: &mut String,
+    entries: List<[String, String]>,
+    pending_key: String,
+}
+
+struct CanonicalStructSerializer {
+    buf: &mut String,
+    entries: List<[String, String]>,
+}
+
+struct CanonicalVariantSerializer {
+    buf: &mut String,
+}
+
+/// Serialize a value canonically into a fresh `String` buffer (used to buffer
+/// map / struct values before their keys are sorted).
+fn canonical_encode<T: Serialize>(value: &T) -> Result<String, SerializeError> {
+    let mut buf = String::with_capacity(16);
+    let mut ser = CanonicalJsonSerializer { buf: &mut buf };
+    value.serialize::<CanonicalJsonSerializer>(&mut ser)?;
+    return Result::Ok(buf);
+}
+
+/// Emit `entries` (encoded-key, encoded-value pairs) into `buf` as a JSON
+/// object with keys in ascending bytewise order of the encoded key.
+fn emit_sorted_object(buf: &mut String, entries: &mut List<[String, String]>) {
+    entries.sort_by(|a: &[String, String], b: &[String, String]| a.0.cmp(&b.0));
+    buf.push('{');
+    for let mut i = 0; i < entries.len(); i += 1 {
+        if i > 0 {
+            buf.push(',');
+        }
+        buf.push_str(&entries[i].0);
+        buf.push(':');
+        buf.push_str(&entries[i].1);
+    }
+    buf.push('}');
+}
+
+impl SerializeSeq for CanonicalSeqSerializer {
+    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        if self.count > 0 {
+            self.buf.push(',');
+        }
+        let mut ser = CanonicalJsonSerializer { buf: self.buf };
+        let r = value.serialize::<CanonicalJsonSerializer>(&mut ser);
+        self.buf = ser.buf;
+        self.count += 1;
+        return r;
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        self.buf.push(']');
+        return Result::Ok(());
+    }
+}
+
+impl SerializeMap for CanonicalMapSerializer {
+    fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
+        let mut kbuf = String::with_capacity(16);
+        let mut ser = JsonSerializer { buf: &mut kbuf };
+        key.serialize::<JsonSerializer>(&mut ser)?;
+        self.pending_key = kbuf;
+        return Result::Ok(());
+    }
+
+    fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        let vbuf = canonical_encode::<T>(value)?;
+        self.entries.push([self.pending_key, vbuf]);
+        return Result::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        emit_sorted_object(self.buf, &mut self.entries);
+        return Result::Ok(());
+    }
+}
+
+impl SerializeStruct for CanonicalStructSerializer {
+    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
+        let mut kbuf = String::with_capacity(name.len() + 2);
+        write_escaped_string(&mut kbuf, name);
+        let vbuf = canonical_encode::<T>(value)?;
+        self.entries.push([kbuf, vbuf]);
+        return Result::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        emit_sorted_object(self.buf, &mut self.entries);
+        return Result::Ok(());
+    }
+}
+
+impl SerializeVariant for CanonicalVariantSerializer {
+    fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        let mut ser = CanonicalJsonSerializer { buf: self.buf };
+        let r = value.serialize::<CanonicalJsonSerializer>(&mut ser);
+        self.buf = ser.buf;
+        return r;
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        self.buf.push('}');
+        return Result::Ok(());
+    }
+}
+
+impl Serializer for CanonicalJsonSerializer {
+    type SeqSerializer = CanonicalSeqSerializer;
+    type MapSerializer = CanonicalMapSerializer;
+    type StructSerializer = CanonicalStructSerializer;
+    type VariantSerializer = CanonicalVariantSerializer;
+
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
+        let mut j = JsonSerializer { buf: self.buf };
+        let r = j.serialize_i32(v);
+        self.buf = j.buf;
+        return r;
+    }
+
+    fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
+        let mut j = JsonSerializer { buf: self.buf };
+        let r = j.serialize_i64(v);
+        self.buf = j.buf;
+        return r;
+    }
+
+    fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
+        let mut j = JsonSerializer { buf: self.buf };
+        let r = j.serialize_u32(v);
+        self.buf = j.buf;
+        return r;
+    }
+
+    fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
+        let mut j = JsonSerializer { buf: self.buf };
+        let r = j.serialize_u64(v);
+        self.buf = j.buf;
+        return r;
+    }
+
+    fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
+        let mut j = JsonSerializer { buf: self.buf };
+        let r = j.serialize_i128(v);
+        self.buf = j.buf;
+        return r;
+    }
+
+    fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
+        let mut j = JsonSerializer { buf: self.buf };
+        let r = j.serialize_u128(v);
+        self.buf = j.buf;
+        return r;
+    }
+
+    fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
+        let mut j = JsonSerializer { buf: self.buf };
+        let r = j.serialize_f32(v);
+        self.buf = j.buf;
+        return r;
+    }
+
+    fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
+        let mut j = JsonSerializer { buf: self.buf };
+        let r = j.serialize_f64(v);
+        self.buf = j.buf;
+        return r;
+    }
+
+    fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
+        let mut j = JsonSerializer { buf: self.buf };
+        let r = j.serialize_bool(v);
+        self.buf = j.buf;
+        return r;
+    }
+
+    fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
+        let mut j = JsonSerializer { buf: self.buf };
+        let r = j.serialize_char(v);
+        self.buf = j.buf;
+        return r;
+    }
+
+    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
+        let mut j = JsonSerializer { buf: self.buf };
+        let r = j.serialize_string(v);
+        self.buf = j.buf;
+        return r;
+    }
+
+    fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError> {
+        let mut j = JsonSerializer { buf: self.buf };
+        let r = j.serialize_bytes(v);
+        self.buf = j.buf;
+        return r;
+    }
+
+    fn serialize_null(&mut self) -> Result<(), SerializeError> {
+        let mut j = JsonSerializer { buf: self.buf };
+        let r = j.serialize_null();
+        self.buf = j.buf;
+        return r;
+    }
+
+    fn begin_seq(&mut self, len: i32) -> Result<CanonicalSeqSerializer, SerializeError> {
+        self.buf.push('[');
+        return Result::Ok(CanonicalSeqSerializer {
+            buf: self.buf,
+            count: 0,
+        });
+    }
+
+    fn begin_map(&mut self, len: i32) -> Result<CanonicalMapSerializer, SerializeError> {
+        return Result::Ok(CanonicalMapSerializer {
+            buf: self.buf,
+            entries: [],
+            pending_key: "",
+        });
+    }
+
+    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<CanonicalStructSerializer, SerializeError> {
+        return Result::Ok(CanonicalStructSerializer {
+            buf: self.buf,
+            entries: [],
+        });
+    }
+
+    fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError> {
+        write_escaped_string(self.buf, variant_name);
+        return Result::Ok(());
+    }
+
+    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<CanonicalVariantSerializer, SerializeError> {
+        self.buf.push('{');
+        write_escaped_string(self.buf, variant_name);
+        self.buf.push(':');
+        return Result::Ok(CanonicalVariantSerializer {
+            buf: self.buf,
+        });
+    }
+}
+
 /// Initial serialization buffer capacity, in bytes. Most JSON values
 /// fit without a reallocation; larger outputs still grow amortized.
 /// Matches `serde_json`'s `to_vec` pre-sizing.
-global SERIALIZE_BUFFER_CAPACITY: i32 = 128;
-
-/// Serializes a value to a JSON string.
+global SERIALIZE_BUFFER_CAPACITY: i32 = 128;/// Serializes a value to a JSON string.
 pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError> {
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = JsonSerializer { buf: &mut buf };
@@ -2255,4 +2512,54 @@ pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError>
         return Result::Err(DeserializeError::trailing(de.pos as i64));
     }
     return Result::Ok(v);
+}
+
+/// Deserializes a value from UTF-8 JSON bytes — the primary entry point.
+///
+/// Accepts any byte source via `AsByteSlice`: a `ByteList`, `ByteArray`,
+/// `ByteSlice`, or a `String` (its UTF-8 bytes). The input is validated as
+/// UTF-8 (JSON text must be UTF-8, RFC 8259 §8.1); invalid bytes are reported
+/// as `MalformedInput`.
+pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S) -> Result<T, DeserializeError> {
+    let s = match String::from_utf8(input.as_byte_slice()) {
+        Ok(valid) => valid,
+        Err(_) => {
+            builtin::cold_path();
+            return Result::Err(DeserializeError::malformed("input is not valid UTF-8", 0));
+        },
+    };
+    let mut de = JsonDeserializer { input: s, pos: 0 };
+    let v = T::deserialize::<JsonDeserializer>(&mut de)?;
+    de.skip_whitespace();
+    if de.pos < de.input.len() {
+        builtin::cold_path();
+        return Result::Err(DeserializeError::trailing(de.pos as i64));
+    }
+    return Result::Ok(v);
+}
+
+/// Serializes a value to canonical (deterministic) UTF-8 JSON bytes.
+///
+/// Object / struct keys are emitted in ascending bytewise order of their
+/// encoded form (RFC 8785-style); equal values produce byte-identical output
+/// regardless of map insertion order. Use this for signing or content
+/// addressing; use `to_bytes` for the faster insertion-order form.
+pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError> {
+    let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
+    let mut ser = CanonicalJsonSerializer { buf: &mut buf };
+    value.serialize::<CanonicalJsonSerializer>(&mut ser)?;
+    return Result::Ok(List::<u8>::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
+}
+
+/// Serializes a value to pretty-printed UTF-8 JSON bytes.
+pub fn to_bytes_pretty<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError> {
+    let indent = "  ";
+    let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
+    let mut ser = PrettyJsonSerializer {
+        buf: &mut buf,
+        indent: &indent,
+        depth: 0,
+    };
+    value.serialize::<PrettyJsonSerializer>(&mut ser)?;
+    return Result::Ok(List::<u8>::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
 }

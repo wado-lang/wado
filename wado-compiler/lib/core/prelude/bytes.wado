@@ -24,9 +24,9 @@ pub type ByteSlice = ArraySlice<u8>;
 
 /// Zero-copy conversion to a `ByteSlice`.
 ///
-/// Implemented by `ByteArray`, `ByteList`, and `ByteSlice`, so byte-reading
-/// APIs (e.g. `core:cbor` / `core:json` `from_bytes`) accept any of them
-/// without copying.
+/// Implemented by `ByteArray`, `ByteList`, and `ByteSlice` (and `String`, whose
+/// UTF-8 bytes view directly), so byte-reading APIs (e.g. `core:cbor` /
+/// `core:json` `from_bytes`) accept any of them without copying.
 pub trait AsByteSlice {
     fn as_byte_slice(&self) -> ByteSlice with stores[self];
 }
