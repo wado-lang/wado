@@ -37,6 +37,16 @@ entity_impl!(BlockId, "block");
 pub struct PatId(u32);
 entity_impl!(PatId, "pat");
 
+/// A uniform handle to any arena node, used by the rewrite engine's worklist
+/// and parent map. See `docs/wep-2026-06-05-nir-rewrite-engine-design.md`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum NodeRef {
+    Expr(ExprId),
+    Stmt(StmtId),
+    Block(BlockId),
+    Pat(PatId),
+}
+
 /// An expression node: the arena counterpart of [`NirExpr`].
 #[derive(Debug, Clone)]
 pub struct ExprNode {
@@ -1142,6 +1152,182 @@ impl Body {
                 end: *end,
                 inclusive: *inclusive,
                 is_unsigned: *is_unsigned,
+            },
+        }
+    }
+}
+
+/// Structural navigation used by the rewrite engine (parent map + worklist).
+impl Body {
+    /// Invoke `f` on every id-bearing child of `node`, in source order.
+    /// Arms / fields / call args are transparent (their inline child ids are
+    /// visited directly). Leaf nodes invoke `f` zero times.
+    pub fn for_each_child(&self, node: NodeRef, mut f: impl FnMut(NodeRef)) {
+        match node {
+            NodeRef::Block(b) => {
+                for s in &self.blocks[b].stmts {
+                    f(NodeRef::Stmt(*s));
+                }
+            }
+            NodeRef::Stmt(s) => match &self.stmts[s].kind {
+                StmtKind::Let { value, .. } => f(NodeRef::Expr(*value)),
+                StmtKind::Expr(e) => f(NodeRef::Expr(*e)),
+                StmtKind::Return { value } => {
+                    if let Some(e) = value {
+                        f(NodeRef::Expr(*e));
+                    }
+                }
+                StmtKind::If {
+                    condition,
+                    then_block,
+                    else_block,
+                } => {
+                    f(NodeRef::Expr(*condition));
+                    f(NodeRef::Block(*then_block));
+                    if let Some(b) = else_block {
+                        f(NodeRef::Block(*b));
+                    }
+                }
+                StmtKind::Loop { body } => f(NodeRef::Block(*body)),
+                StmtKind::Break { value, .. } => {
+                    if let Some(e) = value {
+                        f(NodeRef::Expr(*e));
+                    }
+                }
+                StmtKind::Continue => {}
+                StmtKind::LabeledBlock { block, .. } => f(NodeRef::Block(*block)),
+                StmtKind::LetDestructure { pattern, value, .. } => {
+                    f(NodeRef::Pat(*pattern));
+                    f(NodeRef::Expr(*value));
+                }
+            },
+            NodeRef::Pat(p) => match &self.pats[p].kind {
+                PatKind::Wildcard
+                | PatKind::Binding { .. }
+                | PatKind::Literal(_)
+                | PatKind::Enum { .. }
+                | PatKind::Range { .. } => {}
+                PatKind::Tuple(ps, _) | PatKind::Or(ps) => {
+                    for p in ps {
+                        f(NodeRef::Pat(*p));
+                    }
+                }
+                PatKind::Variant { bindings, .. } => {
+                    for p in bindings {
+                        f(NodeRef::Pat(*p));
+                    }
+                }
+                PatKind::Struct { fields, .. } => {
+                    for fld in fields {
+                        f(NodeRef::Pat(fld.pattern));
+                    }
+                }
+                PatKind::ConstantValue { expr } => f(NodeRef::Expr(*expr)),
+            },
+            NodeRef::Expr(e) => match &self.exprs[e].kind {
+                ExprKind::IntLiteral { .. }
+                | ExprKind::FloatLiteral { .. }
+                | ExprKind::BoolLiteral(_)
+                | ExprKind::CharLiteral(_)
+                | ExprKind::StringLiteral(_)
+                | ExprKind::BytesLiteral(_)
+                | ExprKind::Null
+                | ExprKind::Unit
+                | ExprKind::Local { .. }
+                | ExprKind::GlobalVarGet { .. }
+                | ExprKind::EnumConstruct { .. } => {}
+                ExprKind::GlobalVarSet { value, .. } => f(NodeRef::Expr(*value)),
+                ExprKind::Binary { left, right, .. } => {
+                    f(NodeRef::Expr(*left));
+                    f(NodeRef::Expr(*right));
+                }
+                ExprKind::Unary { expr, .. }
+                | ExprKind::Cast { expr, .. }
+                | ExprKind::FieldAccess { expr, .. }
+                | ExprKind::VariantTag { expr }
+                | ExprKind::VariantTest { expr, .. }
+                | ExprKind::VariantPayload { expr, .. } => f(NodeRef::Expr(*expr)),
+                ExprKind::Assign { target, value } => {
+                    f(NodeRef::Expr(*target));
+                    f(NodeRef::Expr(*value));
+                }
+                ExprKind::Index { expr, index } => {
+                    f(NodeRef::Expr(*expr));
+                    f(NodeRef::Expr(*index));
+                }
+                ExprKind::Call { args, .. } => {
+                    for a in args {
+                        f(NodeRef::Expr(a.expr));
+                    }
+                }
+                ExprKind::CmRawCall { args, .. } => {
+                    for a in args {
+                        f(NodeRef::Expr(*a));
+                    }
+                }
+                ExprKind::MethodCall { receiver, args, .. } => {
+                    f(NodeRef::Expr(*receiver));
+                    for a in args {
+                        f(NodeRef::Expr(a.expr));
+                    }
+                }
+                ExprKind::Block(b) => f(NodeRef::Block(*b)),
+                ExprKind::If {
+                    condition,
+                    then_branch,
+                    else_branch,
+                } => {
+                    f(NodeRef::Expr(*condition));
+                    f(NodeRef::Block(*then_branch));
+                    if let Some(b) = else_branch {
+                        f(NodeRef::Block(*b));
+                    }
+                }
+                ExprKind::Match { expr, arms } => {
+                    f(NodeRef::Expr(*expr));
+                    for arm in arms {
+                        f(NodeRef::Pat(arm.pattern));
+                        if let Some(g) = arm.guard {
+                            f(NodeRef::Expr(g));
+                        }
+                        f(NodeRef::Expr(arm.body));
+                    }
+                }
+                ExprKind::StructLiteral { fields, .. } => {
+                    for fld in fields {
+                        f(NodeRef::Expr(fld.value));
+                    }
+                }
+                ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                    for el in elements {
+                        f(NodeRef::Expr(*el));
+                    }
+                }
+                ExprKind::IndirectCall { callee, args } => {
+                    f(NodeRef::Expr(*callee));
+                    for a in args {
+                        f(NodeRef::Expr(*a));
+                    }
+                }
+                ExprKind::ClosureToCanonical { functor, .. } => f(NodeRef::Expr(*functor)),
+                ExprKind::VariantConstruct { payload, .. } => {
+                    if let Some(p) = payload {
+                        f(NodeRef::Expr(*p));
+                    }
+                }
+                ExprKind::LabeledBlock { block, .. } => f(NodeRef::Block(*block)),
+                ExprKind::Switch {
+                    scrutinee,
+                    arms,
+                    default,
+                    ..
+                } => {
+                    f(NodeRef::Expr(*scrutinee));
+                    for a in arms {
+                        f(NodeRef::Block(*a));
+                    }
+                    f(NodeRef::Block(*default));
+                }
             },
         }
     }
