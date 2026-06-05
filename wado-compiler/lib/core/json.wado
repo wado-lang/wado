@@ -639,7 +639,7 @@ impl Serializer for PrettyJsonSerializer {
 }
 
 pub struct JsonDeserializer {
-    pub input: String,
+    pub input: ByteSlice,
     pub pos: i32,
 }
 
@@ -648,7 +648,7 @@ impl JsonDeserializer {
         if self.pos >= self.input.len() {
             return -1;
         }
-        return self.input.get_byte_unchecked(self.pos) as i32;
+        return self.input.get_unchecked(self.pos) as i32;
     }
 
     pub fn advance(&mut self) {
@@ -661,7 +661,7 @@ impl JsonDeserializer {
         // comparison `b > 32` is enough to reject non-whitespace without
         // checking each character individually.
         while self.pos < self.input.len() {
-            let b = self.input.get_byte_unchecked(self.pos) as i32;
+            let b = self.input.get_unchecked(self.pos) as i32;
             if b > 32 {
                 return;
             }
@@ -679,7 +679,7 @@ impl JsonDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        let b = self.input.get_byte_unchecked(self.pos) as i32;
+        let b = self.input.get_unchecked(self.pos) as i32;
         if b != c {
             builtin::cold_path();
             return Result::Err(DeserializeError::malformed(
@@ -699,7 +699,7 @@ impl JsonDeserializer {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         for let mut i = 0; i < lit_len; i += 1 {
-            if self.input.get_byte_unchecked(self.pos + i) != lit.get_byte_unchecked(i) {
+            if self.input.get_unchecked(self.pos + i) != lit.get_byte_unchecked(i) {
                 builtin::cold_path();
                 return Result::Err(DeserializeError::malformed(
                     `expected '{lit}'`,
@@ -718,7 +718,7 @@ impl JsonDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        if self.input.get_byte_unchecked(self.pos) as i32 != '"' as i32 {
+        if self.input.get_unchecked(self.pos) as i32 != '"' as i32 {
             builtin::cold_path();
             return Result::Err(DeserializeError::unexpected_type(
                 "expected string",
@@ -732,7 +732,7 @@ impl JsonDeserializer {
         let prefix_start = self.pos;
         let mut scan_pos = self.pos;
         while scan_pos < input_len {
-            let sb = self.input.get_byte_unchecked(scan_pos) as i32;
+            let sb = self.input.get_unchecked(scan_pos) as i32;
             if sb == '"' as i32 || sb == '\\' as i32 {
                 break;
             }
@@ -740,18 +740,36 @@ impl JsonDeserializer {
         }
         let prefix_len = scan_pos - prefix_start;
 
-        // Fast path: no escapes — allocate exactly the right size and copy raw bytes.
-        if scan_pos < input_len && self.input.get_byte_unchecked(scan_pos) as i32 == '"' as i32 {
-            let mut result = String::with_capacity(prefix_len);
-            result.push_str_range_unchecked(self.input, prefix_start, prefix_start + prefix_len);
+        // Fast path: no escapes. The token is `input[prefix_start..scan_pos)`;
+        // build it with checked UTF-8 construction (only string *content* can be
+        // multi-byte; JSON structure is ASCII). Invalid UTF-8 is `MalformedInput`.
+        if scan_pos < input_len && self.input.get_unchecked(scan_pos) as i32 == '"' as i32 {
+            let result = match String::from_utf8(self.input.slice(prefix_start, prefix_start + prefix_len)) {
+                Ok(s) => s,
+                Err(_) => {
+                    builtin::cold_path();
+                    return Result::Err(DeserializeError::malformed(
+                        "invalid UTF-8 in string",
+                        prefix_start as i64,
+                    ));
+                },
+            };
             self.pos = scan_pos + 1;
             return Result::Ok(result);
         }
 
-        // Slow path: has escape sequences (or hit EOF).
-        // Pre-copy the escape-free prefix with a well-sized allocation, then handle escapes.
-        let mut result = String::with_capacity(prefix_len + 32);
-        result.push_str_range_unchecked(self.input, prefix_start, prefix_start + prefix_len);
+        // Slow path: has escape sequences (or hit EOF). Build the escape-free
+        // prefix with checked UTF-8 construction, then handle escapes.
+        let mut result = match String::from_utf8(self.input.slice(prefix_start, prefix_start + prefix_len)) {
+            Ok(s) => s,
+            Err(_) => {
+                builtin::cold_path();
+                return Result::Err(DeserializeError::malformed(
+                    "invalid UTF-8 in string",
+                    prefix_start as i64,
+                ));
+            },
+        };
         self.pos = scan_pos;
 
         loop {
@@ -760,7 +778,7 @@ impl JsonDeserializer {
             // without per-byte UTF-8 decoding.
             let chunk_start = self.pos;
             while self.pos < self.input.len() {
-                let b = self.input.get_byte_unchecked(self.pos) as i32;
+                let b = self.input.get_unchecked(self.pos) as i32;
                 if b == '"' as i32 || b == '\\' as i32 {
                     break;
                 }
@@ -768,14 +786,26 @@ impl JsonDeserializer {
             }
             let chunk_len = self.pos - chunk_start;
             if chunk_len > 0 {
-                result.push_str_range_unchecked(self.input, chunk_start, self.pos);
+                // A multi-byte UTF-8 sequence never spans an escape boundary (the
+                // delimiters `"` / `\` are ASCII), so validating each chunk in
+                // isolation is correct.
+                match String::from_utf8(self.input.slice(chunk_start, self.pos)) {
+                    Ok(s) => result.push_str(&s),
+                    Err(_) => {
+                        builtin::cold_path();
+                        return Result::Err(DeserializeError::malformed(
+                            "invalid UTF-8 in string",
+                            chunk_start as i64,
+                        ));
+                    },
+                }
             }
 
             if self.pos >= self.input.len() {
                 builtin::cold_path();
                 return Result::Err(DeserializeError::eof(self.pos as i64));
             }
-            let b = self.input.get_byte_unchecked(self.pos) as i32;
+            let b = self.input.get_unchecked(self.pos) as i32;
             if b == '"' as i32 {
                 self.pos += 1;
                 return Result::Ok(result);
@@ -786,7 +816,7 @@ impl JsonDeserializer {
                 builtin::cold_path();
                 return Result::Err(DeserializeError::eof(self.pos as i64));
             }
-            let esc = self.input.get_byte_unchecked(self.pos) as u8 as char;
+            let esc = self.input.get_unchecked(self.pos) as u8 as char;
             match esc {
                 '"' => result.push('"'),
                 '\\' => result.push('\\'),
@@ -818,7 +848,7 @@ impl JsonDeserializer {
         }
         let mut code: u32 = 0;
         for let mut i = 0; i < 4; i += 1 {
-            let c = self.input.get_byte_unchecked(self.pos + i) as u8 as char;
+            let c = self.input.get_unchecked(self.pos + i) as u8 as char;
             if !c.is_hexdigit() {
                 builtin::cold_path();
                 return Result::Err(DeserializeError::malformed(
@@ -848,14 +878,14 @@ impl JsonDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        if self.input.get_byte_unchecked(self.pos) as i32 == '-' as i32 {
+        if self.input.get_unchecked(self.pos) as i32 == '-' as i32 {
             self.pos += 1;
         }
         if self.pos >= self.input.len() {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        let first = self.input.get_byte_unchecked(self.pos) as i32;
+        let first = self.input.get_unchecked(self.pos) as i32;
         if first < '0' as i32 || first > '9' as i32 {
             builtin::cold_path();
             return Result::Err(DeserializeError::unexpected_type(
@@ -864,17 +894,17 @@ impl JsonDeserializer {
             ));
         }
         while self.pos < self.input.len() {
-            let b = self.input.get_byte_unchecked(self.pos) as i32;
+            let b = self.input.get_unchecked(self.pos) as i32;
             if '0' as i32 <= b <= '9' as i32 {
                 self.pos += 1;
             } else {
                 break;
             }
         }
-        if self.pos < self.input.len() && self.input.get_byte_unchecked(self.pos) as i32 == '.' as i32 {
+        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '.' as i32 {
             self.pos += 1;
             while self.pos < self.input.len() {
-                let b = self.input.get_byte_unchecked(self.pos) as i32;
+                let b = self.input.get_unchecked(self.pos) as i32;
                 if '0' as i32 <= b <= '9' as i32 {
                     self.pos += 1;
                 } else {
@@ -883,17 +913,17 @@ impl JsonDeserializer {
             }
         }
         if self.pos < self.input.len() {
-            let b = self.input.get_byte_unchecked(self.pos) as i32;
+            let b = self.input.get_unchecked(self.pos) as i32;
             if b == 'e' as i32 || b == 'E' as i32 {
                 self.pos += 1;
                 if self.pos < self.input.len() {
-                    let sign = self.input.get_byte_unchecked(self.pos) as i32;
+                    let sign = self.input.get_unchecked(self.pos) as i32;
                     if sign == '+' as i32 || sign == '-' as i32 {
                         self.pos += 1;
                     }
                 }
                 while self.pos < self.input.len() {
-                    let b2 = self.input.get_byte_unchecked(self.pos) as i32;
+                    let b2 = self.input.get_unchecked(self.pos) as i32;
                     if '0' as i32 <= b2 <= '9' as i32 {
                         self.pos += 1;
                     } else {
@@ -904,7 +934,7 @@ impl JsonDeserializer {
         }
         let mut raw = String::with_capacity(self.pos - start);
         for let mut i = start; i < self.pos; i += 1 {
-            raw.push(self.input.get_byte_unchecked(i) as char);
+            raw.push(self.input.get_unchecked(i) as char);
         }
         return Result::Ok(raw);
     }
@@ -1039,21 +1069,21 @@ impl JsonDeserializer {
 
     /// Advances past a JSON number in `self.input` without allocating a String.
     pub fn skip_number(&mut self) {
-        if self.pos < self.input.len() && self.input.get_byte_unchecked(self.pos) as i32 == '-' as i32 {
+        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '-' as i32 {
             self.pos += 1;
         }
         while self.pos < self.input.len() {
-            let b = self.input.get_byte_unchecked(self.pos) as i32;
+            let b = self.input.get_unchecked(self.pos) as i32;
             if '0' as i32 <= b <= '9' as i32 {
                 self.pos += 1;
             } else {
                 break;
             }
         }
-        if self.pos < self.input.len() && self.input.get_byte_unchecked(self.pos) as i32 == '.' as i32 {
+        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '.' as i32 {
             self.pos += 1;
             while self.pos < self.input.len() {
-                let b = self.input.get_byte_unchecked(self.pos) as i32;
+                let b = self.input.get_unchecked(self.pos) as i32;
                 if '0' as i32 <= b <= '9' as i32 {
                     self.pos += 1;
                 } else {
@@ -1062,17 +1092,17 @@ impl JsonDeserializer {
             }
         }
         if self.pos < self.input.len() {
-            let b = self.input.get_byte_unchecked(self.pos) as i32;
+            let b = self.input.get_unchecked(self.pos) as i32;
             if b == 'e' as i32 || b == 'E' as i32 {
                 self.pos += 1;
                 if self.pos < self.input.len() {
-                    let sign = self.input.get_byte_unchecked(self.pos) as i32;
+                    let sign = self.input.get_unchecked(self.pos) as i32;
                     if sign == '+' as i32 || sign == '-' as i32 {
                         self.pos += 1;
                     }
                 }
                 while self.pos < self.input.len() {
-                    let b2 = self.input.get_byte_unchecked(self.pos) as i32;
+                    let b2 = self.input.get_unchecked(self.pos) as i32;
                     if '0' as i32 <= b2 <= '9' as i32 {
                         self.pos += 1;
                     } else {
@@ -1093,7 +1123,7 @@ impl JsonDeserializer {
             return Result::Err(DeserializeError::eof(start));
         }
         let mut neg = false;
-        if self.input.get_byte_unchecked(self.pos) as i32 == '-' as i32 {
+        if self.input.get_unchecked(self.pos) as i32 == '-' as i32 {
             neg = true;
             self.pos += 1;
         }
@@ -1101,7 +1131,7 @@ impl JsonDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        let first = self.input.get_byte_unchecked(self.pos) as i32;
+        let first = self.input.get_unchecked(self.pos) as i32;
         if first < '0' as i32 || first > '9' as i32 {
             builtin::cold_path();
             return Result::Err(DeserializeError::unexpected_type(
@@ -1112,7 +1142,7 @@ impl JsonDeserializer {
         let mut result = first - '0' as i32;
         self.pos += 1;
         while self.pos < self.input.len() {
-            let b = self.input.get_byte_unchecked(self.pos) as i32;
+            let b = self.input.get_unchecked(self.pos) as i32;
             if '0' as i32 <= b <= '9' as i32 {
                 result = result * 10 + (b - '0' as i32);
                 self.pos += 1;
@@ -1124,7 +1154,7 @@ impl JsonDeserializer {
                 if b == '.' as i32 {
                     self.pos += 1;
                     while self.pos < self.input.len() {
-                        let b2 = self.input.get_byte_unchecked(self.pos) as i32;
+                        let b2 = self.input.get_unchecked(self.pos) as i32;
                         if '0' as i32 <= b2 <= '9' as i32 {
                             d = d * 10 + (b2 - '0' as i32) as u64;
                             frac += 1;
@@ -1136,12 +1166,12 @@ impl JsonDeserializer {
                 }
                 let mut exp = 0;
                 if self.pos < self.input.len() {
-                    let eb = self.input.get_byte_unchecked(self.pos) as i32;
+                    let eb = self.input.get_unchecked(self.pos) as i32;
                     if eb == 'e' as i32 || eb == 'E' as i32 {
                         self.pos += 1;
                         let mut exp_neg = false;
                         if self.pos < self.input.len() {
-                            let sb = self.input.get_byte_unchecked(self.pos) as i32;
+                            let sb = self.input.get_unchecked(self.pos) as i32;
                             if sb == '-' as i32 {
                                 exp_neg = true;
                                 self.pos += 1;
@@ -1150,7 +1180,7 @@ impl JsonDeserializer {
                             }
                         }
                         while self.pos < self.input.len() {
-                            let b3 = self.input.get_byte_unchecked(self.pos) as i32;
+                            let b3 = self.input.get_unchecked(self.pos) as i32;
                             if '0' as i32 <= b3 <= '9' as i32 {
                                 exp = exp * 10 + (b3 - '0' as i32);
                                 self.pos += 1;
@@ -1199,7 +1229,7 @@ impl JsonDeserializer {
             return Result::Err(DeserializeError::eof(start));
         }
         let mut neg = false;
-        if self.input.get_byte_unchecked(self.pos) as i32 == '-' as i32 {
+        if self.input.get_unchecked(self.pos) as i32 == '-' as i32 {
             neg = true;
             self.pos += 1;
         }
@@ -1207,7 +1237,7 @@ impl JsonDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        let first = self.input.get_byte_unchecked(self.pos) as i32;
+        let first = self.input.get_unchecked(self.pos) as i32;
         if first < '0' as i32 || first > '9' as i32 {
             builtin::cold_path();
             return Result::Err(DeserializeError::unexpected_type(
@@ -1218,7 +1248,7 @@ impl JsonDeserializer {
         let mut result: i64 = (first - '0' as i32) as i64;
         self.pos += 1;
         while self.pos < self.input.len() {
-            let b = self.input.get_byte_unchecked(self.pos) as i32;
+            let b = self.input.get_unchecked(self.pos) as i32;
             if '0' as i32 <= b <= '9' as i32 {
                 result = result * 10 + (b - '0' as i32) as i64;
                 self.pos += 1;
@@ -1228,7 +1258,7 @@ impl JsonDeserializer {
                 if b == '.' as i32 {
                     self.pos += 1;
                     while self.pos < self.input.len() {
-                        let b2 = self.input.get_byte_unchecked(self.pos) as i32;
+                        let b2 = self.input.get_unchecked(self.pos) as i32;
                         if '0' as i32 <= b2 <= '9' as i32 {
                             d = d * 10 + (b2 - '0' as i32) as u64;
                             frac += 1;
@@ -1240,12 +1270,12 @@ impl JsonDeserializer {
                 }
                 let mut exp = 0;
                 if self.pos < self.input.len() {
-                    let eb = self.input.get_byte_unchecked(self.pos) as i32;
+                    let eb = self.input.get_unchecked(self.pos) as i32;
                     if eb == 'e' as i32 || eb == 'E' as i32 {
                         self.pos += 1;
                         let mut exp_neg = false;
                         if self.pos < self.input.len() {
-                            let sb = self.input.get_byte_unchecked(self.pos) as i32;
+                            let sb = self.input.get_unchecked(self.pos) as i32;
                             if sb == '-' as i32 {
                                 exp_neg = true;
                                 self.pos += 1;
@@ -1254,7 +1284,7 @@ impl JsonDeserializer {
                             }
                         }
                         while self.pos < self.input.len() {
-                            let b3 = self.input.get_byte_unchecked(self.pos) as i32;
+                            let b3 = self.input.get_unchecked(self.pos) as i32;
                             if '0' as i32 <= b3 <= '9' as i32 {
                                 exp = exp * 10 + (b3 - '0' as i32);
                                 self.pos += 1;
@@ -1295,11 +1325,11 @@ impl JsonDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(start));
         }
-        if self.input.get_byte_unchecked(self.pos) as i32 == '-' as i32 {
+        if self.input.get_unchecked(self.pos) as i32 == '-' as i32 {
             builtin::cold_path();
             return Result::Err(DeserializeError::overflow("negative value for u64", start));
         }
-        let first = self.input.get_byte_unchecked(self.pos) as i32;
+        let first = self.input.get_unchecked(self.pos) as i32;
         if first < '0' as i32 || first > '9' as i32 {
             builtin::cold_path();
             return Result::Err(DeserializeError::unexpected_type(
@@ -1310,7 +1340,7 @@ impl JsonDeserializer {
         let mut result: u64 = (first - '0' as i32) as u64;
         self.pos += 1;
         while self.pos < self.input.len() {
-            let b = self.input.get_byte_unchecked(self.pos) as i32;
+            let b = self.input.get_unchecked(self.pos) as i32;
             if '0' as i32 <= b <= '9' as i32 {
                 result = result * 10 + (b - '0' as i32) as u64;
                 self.pos += 1;
@@ -1320,7 +1350,7 @@ impl JsonDeserializer {
                 if b == '.' as i32 {
                     self.pos += 1;
                     while self.pos < self.input.len() {
-                        let b2 = self.input.get_byte_unchecked(self.pos) as i32;
+                        let b2 = self.input.get_unchecked(self.pos) as i32;
                         if '0' as i32 <= b2 <= '9' as i32 {
                             d = d * 10 + (b2 - '0' as i32) as u64;
                             frac += 1;
@@ -1332,12 +1362,12 @@ impl JsonDeserializer {
                 }
                 let mut exp = 0;
                 if self.pos < self.input.len() {
-                    let eb = self.input.get_byte_unchecked(self.pos) as i32;
+                    let eb = self.input.get_unchecked(self.pos) as i32;
                     if eb == 'e' as i32 || eb == 'E' as i32 {
                         self.pos += 1;
                         let mut exp_neg = false;
                         if self.pos < self.input.len() {
-                            let sb = self.input.get_byte_unchecked(self.pos) as i32;
+                            let sb = self.input.get_unchecked(self.pos) as i32;
                             if sb == '-' as i32 {
                                 exp_neg = true;
                                 self.pos += 1;
@@ -1346,7 +1376,7 @@ impl JsonDeserializer {
                             }
                         }
                         while self.pos < self.input.len() {
-                            let b3 = self.input.get_byte_unchecked(self.pos) as i32;
+                            let b3 = self.input.get_unchecked(self.pos) as i32;
                             if '0' as i32 <= b3 <= '9' as i32 {
                                 exp = exp * 10 + (b3 - '0' as i32);
                                 self.pos += 1;
@@ -1392,7 +1422,7 @@ impl JsonDeserializer {
             return Result::Err(DeserializeError::eof(start));
         }
         let mut neg = false;
-        if self.input.get_byte_unchecked(self.pos) as i32 == '-' as i32 {
+        if self.input.get_unchecked(self.pos) as i32 == '-' as i32 {
             neg = true;
             self.pos += 1;
         }
@@ -1400,7 +1430,7 @@ impl JsonDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        let first = self.input.get_byte_unchecked(self.pos) as i32;
+        let first = self.input.get_unchecked(self.pos) as i32;
         if first < '0' as i32 || first > '9' as i32 {
             builtin::cold_path();
             return Result::Err(DeserializeError::unexpected_type(
@@ -1412,7 +1442,7 @@ impl JsonDeserializer {
         let mut total_digits = 1;
         self.pos += 1;
         while self.pos < self.input.len() {
-            let b = self.input.get_byte_unchecked(self.pos) as i32;
+            let b = self.input.get_unchecked(self.pos) as i32;
             if '0' as i32 <= b <= '9' as i32 {
                 if total_digits < 19 {
                     d = d * 10 + (b - '0' as i32) as u64;
@@ -1424,10 +1454,10 @@ impl JsonDeserializer {
             }
         }
         let mut frac = 0;
-        if self.pos < self.input.len() && self.input.get_byte_unchecked(self.pos) as i32 == '.' as i32 {
+        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '.' as i32 {
             self.pos += 1;
             while self.pos < self.input.len() {
-                let b = self.input.get_byte_unchecked(self.pos) as i32;
+                let b = self.input.get_unchecked(self.pos) as i32;
                 if '0' as i32 <= b <= '9' as i32 {
                     if total_digits < 19 {
                         d = d * 10 + (b - '0' as i32) as u64;
@@ -1442,12 +1472,12 @@ impl JsonDeserializer {
         }
         let mut exp = 0;
         if self.pos < self.input.len() {
-            let eb = self.input.get_byte_unchecked(self.pos) as i32;
+            let eb = self.input.get_unchecked(self.pos) as i32;
             if eb == 'e' as i32 || eb == 'E' as i32 {
                 self.pos += 1;
                 let mut exp_neg = false;
                 if self.pos < self.input.len() {
-                    let sb = self.input.get_byte_unchecked(self.pos) as i32;
+                    let sb = self.input.get_unchecked(self.pos) as i32;
                     if sb == '-' as i32 {
                         exp_neg = true;
                         self.pos += 1;
@@ -1456,7 +1486,7 @@ impl JsonDeserializer {
                     }
                 }
                 while self.pos < self.input.len() {
-                    let b3 = self.input.get_byte_unchecked(self.pos) as i32;
+                    let b3 = self.input.get_unchecked(self.pos) as i32;
                     if '0' as i32 <= b3 <= '9' as i32 {
                         exp = exp * 10 + (b3 - '0' as i32);
                         self.pos += 1;
@@ -1496,7 +1526,7 @@ impl JsonDeserializer {
         // Assumes pos is at the opening '"'
         self.pos += 1;
         while self.pos < self.input.len() {
-            let b = self.input.get_byte_unchecked(self.pos) as i32;
+            let b = self.input.get_unchecked(self.pos) as i32;
             if b == '"' as i32 {
                 self.pos += 1;
                 return Result::Ok(());
@@ -1507,7 +1537,7 @@ impl JsonDeserializer {
                     builtin::cold_path();
                     return Result::Err(DeserializeError::eof(self.pos as i64));
                 }
-                let esc = self.input.get_byte_unchecked(self.pos) as i32;
+                let esc = self.input.get_unchecked(self.pos) as i32;
                 if esc == 'u' as i32 {
                     // \uXXXX — skip 4 hex digits
                     self.pos += 4;
@@ -1522,9 +1552,9 @@ impl JsonDeserializer {
     /// Returns Ok if the literal matches and advances pos past it.
     fn expect_true(&mut self) -> Result<(), DeserializeError> {
         if self.pos + 4 <= self.input.len()
-            && self.input.get_byte_unchecked(self.pos + 1) as i32 == 'r' as i32
-            && self.input.get_byte_unchecked(self.pos + 2) as i32 == 'u' as i32
-            && self.input.get_byte_unchecked(self.pos + 3) as i32 == 'e' as i32 {
+            && self.input.get_unchecked(self.pos + 1) as i32 == 'r' as i32
+            && self.input.get_unchecked(self.pos + 2) as i32 == 'u' as i32
+            && self.input.get_unchecked(self.pos + 3) as i32 == 'e' as i32 {
             self.pos += 4;
             return Result::Ok(());
         }
@@ -1533,10 +1563,10 @@ impl JsonDeserializer {
 
     fn expect_false(&mut self) -> Result<(), DeserializeError> {
         if self.pos + 5 <= self.input.len()
-            && self.input.get_byte_unchecked(self.pos + 1) as i32 == 'a' as i32
-            && self.input.get_byte_unchecked(self.pos + 2) as i32 == 'l' as i32
-            && self.input.get_byte_unchecked(self.pos + 3) as i32 == 's' as i32
-            && self.input.get_byte_unchecked(self.pos + 4) as i32 == 'e' as i32 {
+            && self.input.get_unchecked(self.pos + 1) as i32 == 'a' as i32
+            && self.input.get_unchecked(self.pos + 2) as i32 == 'l' as i32
+            && self.input.get_unchecked(self.pos + 3) as i32 == 's' as i32
+            && self.input.get_unchecked(self.pos + 4) as i32 == 'e' as i32 {
             self.pos += 5;
             return Result::Ok(());
         }
@@ -1545,9 +1575,9 @@ impl JsonDeserializer {
 
     fn expect_null(&mut self) -> Result<(), DeserializeError> {
         if self.pos + 4 <= self.input.len()
-            && self.input.get_byte_unchecked(self.pos + 1) as i32 == 'u' as i32
-            && self.input.get_byte_unchecked(self.pos + 2) as i32 == 'l' as i32
-            && self.input.get_byte_unchecked(self.pos + 3) as i32 == 'l' as i32 {
+            && self.input.get_unchecked(self.pos + 1) as i32 == 'u' as i32
+            && self.input.get_unchecked(self.pos + 2) as i32 == 'l' as i32
+            && self.input.get_unchecked(self.pos + 3) as i32 == 'l' as i32 {
             self.pos += 4;
             return Result::Ok(());
         }
@@ -1561,7 +1591,7 @@ impl JsonDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        let b = self.input.get_byte_unchecked(self.pos) as u8 as char;
+        let b = self.input.get_unchecked(self.pos) as u8 as char;
         match b {
             '"' => {
                 return self.skip_string();
@@ -1578,7 +1608,7 @@ impl JsonDeserializer {
             '[' => {
                 self.pos += 1;
                 self.skip_whitespace();
-                if self.pos < self.input.len() && self.input.get_byte_unchecked(self.pos) as i32 == ']' as i32 {
+                if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == ']' as i32 {
                     self.pos += 1;
                     return Result::Ok(());
                 }
@@ -1589,7 +1619,7 @@ impl JsonDeserializer {
                         builtin::cold_path();
                         return Result::Err(DeserializeError::eof(self.pos as i64));
                     }
-                    let c = self.input.get_byte_unchecked(self.pos) as i32;
+                    let c = self.input.get_unchecked(self.pos) as i32;
                     if c == ']' as i32 {
                         self.pos += 1;
                         return Result::Ok(());
@@ -1608,13 +1638,13 @@ impl JsonDeserializer {
             '{' => {
                 self.pos += 1;
                 self.skip_whitespace();
-                if self.pos < self.input.len() && self.input.get_byte_unchecked(self.pos) as i32 == '}' as i32 {
+                if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '}' as i32 {
                     self.pos += 1;
                     return Result::Ok(());
                 }
                 loop {
                     self.skip_whitespace();
-                    if self.pos >= self.input.len() || self.input.get_byte_unchecked(self.pos) as i32 != '"' as i32 {
+                    if self.pos >= self.input.len() || self.input.get_unchecked(self.pos) as i32 != '"' as i32 {
                         builtin::cold_path();
                         return Result::Err(DeserializeError::malformed(
                             "expected string key",
@@ -1629,7 +1659,7 @@ impl JsonDeserializer {
                         builtin::cold_path();
                         return Result::Err(DeserializeError::eof(self.pos as i64));
                     }
-                    let c = self.input.get_byte_unchecked(self.pos) as i32;
+                    let c = self.input.get_unchecked(self.pos) as i32;
                     if c == '}' as i32 {
                         self.pos += 1;
                         return Result::Ok(());
@@ -1701,7 +1731,7 @@ impl DeserializeSeq for JsonSeqAccess {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
         }
-        if self.de.input.get_byte_unchecked(self.de.pos) as i32 == ']' as i32 {
+        if self.de.input.get_unchecked(self.de.pos) as i32 == ']' as i32 {
             return Result::Ok(null);
         }
         if !self.first {
@@ -1729,7 +1759,7 @@ impl DeserializeMap for JsonMapAccess {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
         }
-        if self.de.input.get_byte_unchecked(self.de.pos) as i32 == '}' as i32 {
+        if self.de.input.get_unchecked(self.de.pos) as i32 == '}' as i32 {
             return Result::Ok(null);
         }
         if !self.first {
@@ -1737,7 +1767,7 @@ impl DeserializeMap for JsonMapAccess {
         }
         self.first = false;
         let key = self.de.read_json_string()?;
-        if self.de.pos < self.de.input.len() && self.de.input.get_byte_unchecked(self.de.pos) as i32 == ':' as i32 {
+        if self.de.pos < self.de.input.len() && self.de.input.get_unchecked(self.de.pos) as i32 == ':' as i32 {
             self.de.pos += 1;
         } else {
             self.de.expect_char(':' as i32)?;
@@ -1761,7 +1791,7 @@ impl DeserializeStruct for JsonStructAccess {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
         }
-        let b = self.de.input.get_byte_unchecked(self.de.pos) as i32;
+        let b = self.de.input.get_unchecked(self.de.pos) as i32;
         if b == '}' as i32 {
             return Result::Ok(null);
         }
@@ -1782,7 +1812,7 @@ impl DeserializeStruct for JsonStructAccess {
         // For unescaped keys (the common case), we pass the byte range
         // directly to S::lookup, avoiding String allocation entirely.
         if self.de.pos >= self.de.input.len()
-            || self.de.input.get_byte_unchecked(self.de.pos) as i32 != '"' as i32 {
+            || self.de.input.get_unchecked(self.de.pos) as i32 != '"' as i32 {
             builtin::cold_path();
             return Result::Err(DeserializeError::unexpected_type(
                 "expected string key",
@@ -1793,7 +1823,7 @@ impl DeserializeStruct for JsonStructAccess {
         let key_start = self.de.pos;
         let mut has_escape = false;
         while self.de.pos < self.de.input.len() {
-            let b = self.de.input.get_byte_unchecked(self.de.pos) as i32;
+            let b = self.de.input.get_unchecked(self.de.pos) as i32;
             if b == '"' as i32 {
                 break;
             }
@@ -1808,12 +1838,12 @@ impl DeserializeStruct for JsonStructAccess {
             // Fast path: key has no escapes, compare directly from input buffer
             let key_end = self.de.pos;
             self.de.pos += 1;  // skip closing '"'
-            if self.de.pos < self.de.input.len() && self.de.input.get_byte_unchecked(self.de.pos) as i32 == ':' as i32 {
+            if self.de.pos < self.de.input.len() && self.de.input.get_unchecked(self.de.pos) as i32 == ':' as i32 {
                 self.de.pos += 1;
             } else {
                 self.de.expect_char(':' as i32)?;
             }
-            let idx = match S::lookup(self.de.input.as_bytes().slice(key_start, key_end)) {
+            let idx = match S::lookup(self.de.input.slice(key_start, key_end)) {
                 Some(i) => i,
                 None => -1,
             };
@@ -1889,7 +1919,7 @@ impl Deserializer for JsonDeserializer {
         self.skip_whitespace();
         let start = self.pos as i64;
         // Accept string-encoded integers (for large values serialized as strings)
-        if self.pos < self.input.len() && self.input.get_byte_unchecked(self.pos) as i32 == '"' as i32 {
+        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '"' as i32 {
             let s = self.read_json_string()?;
             return self.parse_i64_from(&s, start);
         }
@@ -1913,7 +1943,7 @@ impl Deserializer for JsonDeserializer {
         self.skip_whitespace();
         let start = self.pos as i64;
         // Accept string-encoded integers (for large values serialized as strings)
-        if self.pos < self.input.len() && self.input.get_byte_unchecked(self.pos) as i32 == '"' as i32 {
+        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '"' as i32 {
             let s = self.read_json_string()?;
             return self.parse_u64_from(&s, start);
         }
@@ -1924,7 +1954,7 @@ impl Deserializer for JsonDeserializer {
         self.skip_whitespace();
         let start = self.pos as i64;
         // String-encoded path for large values
-        if self.pos < self.input.len() && self.input.get_byte_unchecked(self.pos) as i32 == '"' as i32 {
+        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '"' as i32 {
             let raw = self.read_json_string()?;
             let mut neg = false;
             let mut idx = 0;
@@ -1953,13 +1983,13 @@ impl Deserializer for JsonDeserializer {
         }
         // Direct parsing from input
         let mut neg = false;
-        if self.pos < self.input.len() && self.input.get_byte_unchecked(self.pos) as i32 == '-' as i32 {
+        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '-' as i32 {
             neg = true;
             self.pos += 1;
         }
         let mut result: i128 = 0;
         while self.pos < self.input.len() {
-            let b = self.input.get_byte_unchecked(self.pos) as i32;
+            let b = self.input.get_unchecked(self.pos) as i32;
             if '0' as i32 <= b <= '9' as i32 {
                 result = result * 10 + (b - '0' as i32) as i128;
                 self.pos += 1;
@@ -1977,7 +2007,7 @@ impl Deserializer for JsonDeserializer {
         self.skip_whitespace();
         let start = self.pos as i64;
         // String-encoded path
-        if self.pos < self.input.len() && self.input.get_byte_unchecked(self.pos) as i32 == '"' as i32 {
+        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '"' as i32 {
             let raw = self.read_json_string()?;
             let len = raw.len();
             if len > 0 && raw.get_byte_unchecked(0) as i32 == '-' as i32 {
@@ -2004,13 +2034,13 @@ impl Deserializer for JsonDeserializer {
             return Result::Ok(result);
         }
         // Direct parsing from input
-        if self.pos < self.input.len() && self.input.get_byte_unchecked(self.pos) as i32 == '-' as i32 {
+        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '-' as i32 {
             builtin::cold_path();
             return Result::Err(DeserializeError::overflow("negative value for u128", start));
         }
         let mut result: u128 = 0;
         while self.pos < self.input.len() {
-            let b = self.input.get_byte_unchecked(self.pos) as i32;
+            let b = self.input.get_unchecked(self.pos) as i32;
             if '0' as i32 <= b <= '9' as i32 {
                 result = result * 10 + (b - '0' as i32) as u128;
                 self.pos += 1;
@@ -2036,7 +2066,7 @@ impl Deserializer for JsonDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        let b = self.input.get_byte_unchecked(self.pos) as i32;
+        let b = self.input.get_unchecked(self.pos) as i32;
         if b == 't' as i32 {
             self.expect_true()?;
             return Result::Ok(true);
@@ -2092,10 +2122,10 @@ impl Deserializer for JsonDeserializer {
     fn is_null(&mut self) -> Result<bool, DeserializeError> {
         self.skip_whitespace();
         if self.pos + 4 <= self.input.len() {
-            if self.input.get_byte_unchecked(self.pos) as i32 == 'n' as i32
-                && self.input.get_byte_unchecked(self.pos + 1) as i32 == 'u' as i32
-                && self.input.get_byte_unchecked(self.pos + 2) as i32 == 'l' as i32
-                && self.input.get_byte_unchecked(self.pos + 3) as i32 == 'l' as i32 {
+            if self.input.get_unchecked(self.pos) as i32 == 'n' as i32
+                && self.input.get_unchecked(self.pos + 1) as i32 == 'u' as i32
+                && self.input.get_unchecked(self.pos + 2) as i32 == 'l' as i32
+                && self.input.get_unchecked(self.pos + 3) as i32 == 'l' as i32 {
                 self.pos += 4;
                 return Result::Ok(true);
             }
@@ -2133,7 +2163,7 @@ impl Deserializer for JsonDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        let b = self.input.get_byte_unchecked(self.pos) as u8 as char;
+        let b = self.input.get_unchecked(self.pos) as u8 as char;
         match b {
             '"' => {
                 let name = self.read_json_string()?;
@@ -2169,7 +2199,7 @@ impl Deserializer for JsonDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        let b = self.input.get_byte_unchecked(self.pos) as u8 as char;
+        let b = self.input.get_unchecked(self.pos) as u8 as char;
         match b {
             'n' => {
                 self.is_null()?;
@@ -2504,31 +2534,20 @@ pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, SerializeErro
 
 /// Deserializes a value from a JSON string.
 pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError> {
-    let mut de = JsonDeserializer { input, pos: 0 };
-    let v = T::deserialize::<JsonDeserializer>(&mut de)?;
-    de.skip_whitespace();
-    if de.pos < de.input.len() {
-        builtin::cold_path();
-        return Result::Err(DeserializeError::trailing(de.pos as i64));
-    }
-    return Result::Ok(v);
+    return from_bytes::<T, String>(input);
 }
 
 /// Deserializes a value from UTF-8 JSON bytes — the primary entry point.
 ///
 /// Accepts any byte source via `AsByteSlice`: a `ByteList`, `ByteArray`,
-/// `ByteSlice`, or a `String` (its UTF-8 bytes). The input is validated as
-/// UTF-8 (JSON text must be UTF-8, RFC 8259 §8.1); invalid bytes are reported
-/// as `MalformedInput`.
+/// `ByteSlice`, or a `String` (its UTF-8 bytes). The deserializer scans the
+/// borrowed bytes directly (zero-copy); UTF-8 is validated where string content
+/// is materialized (RFC 8259 §8.1), reporting invalid bytes as `MalformedInput`.
 pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S) -> Result<T, DeserializeError> {
-    let s = match String::from_utf8(input.as_byte_slice()) {
-        Ok(valid) => valid,
-        Err(_) => {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::malformed("input is not valid UTF-8", 0));
-        },
+    let mut de = JsonDeserializer {
+        input: input.as_byte_slice(),
+        pos: 0,
     };
-    let mut de = JsonDeserializer { input: s, pos: 0 };
     let v = T::deserialize::<JsonDeserializer>(&mut de)?;
     de.skip_whitespace();
     if de.pos < de.input.len() {

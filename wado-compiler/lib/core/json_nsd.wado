@@ -317,7 +317,7 @@ impl DeserializeSeq for NsdSeqAccess {
         if self.de.pos >= self.de.input.len() {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
         }
-        if self.de.input.get_byte_unchecked(self.de.pos) as i32 == ']' as i32 {
+        if self.de.input.get_unchecked(self.de.pos) as i32 == ']' as i32 {
             return Result::Ok(null);
         }
         if !self.first {
@@ -348,7 +348,7 @@ impl DeserializeMap for NsdMapAccess {
         if self.de.pos >= self.de.input.len() {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
         }
-        if self.de.input.get_byte_unchecked(self.de.pos) as i32 == '}' as i32 {
+        if self.de.input.get_unchecked(self.de.pos) as i32 == '}' as i32 {
             return Result::Ok(null);
         }
         if !self.first {
@@ -390,7 +390,7 @@ impl DeserializeStruct for NsdStructAccess {
         if self.de.pos >= self.de.input.len() {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
         }
-        if self.de.input.get_byte_unchecked(self.de.pos) as i32 == ']' as i32 {
+        if self.de.input.get_unchecked(self.de.pos) as i32 == ']' as i32 {
             return Result::Ok(null);
         }
         if !self.first {
@@ -547,7 +547,7 @@ impl Deserializer for NsdDeserializer {
         if self.de.pos >= self.de.input.len() {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
         }
-        let b = self.de.input.get_byte_unchecked(self.de.pos) as i32;
+        let b = self.de.input.get_unchecked(self.de.pos) as i32;
         if b == '[' as i32 {
             // Payload variant: [disc, payload]
             self.de.pos += 1;
@@ -601,7 +601,16 @@ pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError> {
 
 /// Deserializes a value from a JSON NSD string.
 pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError> {
-    let mut de = JsonDeserializer { input, pos: 0 };
+    return from_bytes::<T, String>(input);
+}
+
+/// Deserializes a value from UTF-8 JSON NSD bytes — the primary entry point.
+/// Accepts any byte source via `AsByteSlice` (including a `String`).
+pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S) -> Result<T, DeserializeError> {
+    let mut de = JsonDeserializer {
+        input: input.as_byte_slice(),
+        pos: 0,
+    };
     let mut nsd = NsdDeserializer { de: &mut de };
     let r = T::deserialize(&mut nsd);
     if let Ok(v) = r {
