@@ -1,0 +1,14 @@
+// Entry module: constructs `Gadget` (home: …_type.wado) and calls `doubled`,
+// whose inherent `impl Gadget` lives in …_impl.wado — a module that is neither
+// the type's home nor this caller. Method resolution must search every module
+// that hosts an inherent impl for the type, not just the type's home module.
+use { Gadget } from "./sub/cross_module_inherent_third_type.wado";
+use { make } from "./sub/cross_module_inherent_third_impl.wado";
+
+test {
+    let g: Gadget = make(21);
+    assert g.doubled() == 42;
+}
+
+__DATA__
+{"test": {}}
