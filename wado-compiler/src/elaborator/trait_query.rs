@@ -48,6 +48,7 @@ pub(crate) fn canonical_decl_key_with(
             .unwrap_or_else(|| src.clone());
         return (canonical, name.to_string());
     }
+<<<<<<< HEAD
     // A declaration in the current module shadows a same-named item reached via
     // the global symbol lookup below, which is a program-wide, last-writer-wins
     // import map (`SymbolTable::imports` is never cleared per module). Without
@@ -59,6 +60,18 @@ pub(crate) fn canonical_decl_key_with(
         return (current_module_source.clone(), name.to_string());
     }
     if let Some(sym) = symbols.lookup(name) {
+||||||| bdc129b1
+    if let Some(sym) = symbols.lookup(name) {
+=======
+    // A name defined in the current module resolves to it, ahead of the global
+    // decl-index fallbacks below (which are by-name and can pick a same-named
+    // declaration in another module). Without this a locally defined
+    // `trait Visitor` lost to `core:serde::Visitor` (issue #1298).
+    if symbols.is_defined_in_module(current_module_source, name) {
+        return (current_module_source.clone(), name.to_string());
+    }
+    if let Some(sym) = symbols.lookup(current_module_source, name) {
+>>>>>>> origin/claude/per-module-import-scope
         return (sym.defined_at.module.clone(), name.to_string());
     }
     if let Some(key) = trait_env.find_trait_decl_key(name) {

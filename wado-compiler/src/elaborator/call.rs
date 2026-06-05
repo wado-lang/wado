@@ -1012,7 +1012,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // and the `CalleeRef` come from the same resolution — this is
         // the single place the alias→defining-name translation happens.
         else if self.sem.decls.imported_functions.contains(effective_name) {
-            if let Some(symbol) = self.symbols.lookup(effective_name) {
+            if let Some(symbol) = self.symbols.lookup(&self.current_module_source,effective_name) {
                 self.record_reference_to_key(ident.id, symbol.defined_at.clone());
                 (
                     Some(CalleeRef::from_imported_symbol(symbol)),
@@ -1747,7 +1747,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check imported functions — resolve param types using
         // the definition module's newtypes to avoid same-name collisions
-        if let Some(symbol) = self.symbols.lookup(name) {
+        if let Some(symbol) = self.symbols.lookup(&self.current_module_source,name) {
             let src = symbol.module_source().clone();
             let sym_name = symbol.name.clone();
             let params = Self::lookup_func_in_loaded_module(
@@ -1891,7 +1891,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(self.current_module_source.clone()),
             );
         }
-        if let Some(symbol) = self.symbols.lookup(&ident.name) {
+        if let Some(symbol) = self.symbols.lookup(&self.current_module_source,&ident.name) {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             if let Some(func) = Self::lookup_func_in_loaded_module(
@@ -1936,7 +1936,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Imported function
-        if let Some(symbol) = self.symbols.lookup(&ident.name) {
+        if let Some(symbol) = self.symbols.lookup(&self.current_module_source,&ident.name) {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             if let Some(func) = Self::lookup_func_in_loaded_module(
@@ -2527,7 +2527,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             self.lookup_current_func(&ident.name)
                 .map(|func| (func.type_params.clone(), func.params.clone()))
-        } else if let Some(symbol) = self.symbols.lookup(&ident.name) {
+        } else if let Some(symbol) = self.symbols.lookup(&self.current_module_source,&ident.name) {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             Self::lookup_func_in_loaded_module(

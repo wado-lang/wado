@@ -382,7 +382,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 } else {
                     let canonical = self
                         .symbols
-                        .lookup(name)
+                        .lookup(&self.current_module_source, name)
                         .map(|sym| sym.defined_at.module.clone())
                         .unwrap_or_else(|| self.current_module_source.clone());
                     crate::tir::EffectRef::Concrete {

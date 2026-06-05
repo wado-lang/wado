@@ -416,7 +416,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let Some(sym) = self
             .symbols
             .lookup_in_module(&self.current_module_source, name)
-            .or_else(|| self.symbols.lookup(name))
+            .or_else(|| self.symbols.lookup(&self.current_module_source, name))
         else {
             return;
         };
@@ -1125,7 +1125,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // only when no symbol exists (genuinely-local declaration).
                     let canonical = self
                         .symbols
-                        .lookup(name)
+                        .lookup(&self.current_module_source, name)
                         .map(|sym| {
                             if let Some(use_id) = use_id {
                                 self.record_reference_to_key(use_id, sym.defined_at.clone());
