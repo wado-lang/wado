@@ -12,7 +12,7 @@
       }
       body {
         color: #4a4a4a;
-        margin: 8px;
+        margin: 16px;
         font-size: 1em;
         font-weight: 400;
       }
@@ -43,7 +43,6 @@
       }
       button:hover {
         background-color: #2793da;
-        flex: none;
       }
       .spacer {
         flex: auto;
@@ -56,9 +55,6 @@
         display: flex;
         align-items: center;
       }
-      .header-label {
-        margin-right: 4px;
-      }
       .benchmark-set {
         margin: 8px 0;
         width: 100%;
@@ -66,7 +62,7 @@
         flex-direction: column;
       }
       .benchmark-title {
-        font-size: 3rem;
+        font-size: 2rem;
         font-weight: 600;
         word-break: break-word;
         text-align: center;
@@ -79,22 +75,93 @@
         flex-wrap: wrap;
         width: 100%;
       }
+      .benchmark-graph {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+      .benchmark-graph-title {
+        font-size: 18px;
+        font-weight: 600;
+        text-align: center;
+        margin: 8px 0;
+        word-break: break-word;
+      }
+      .benchmark-graph-legend {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 4px 16px;
+        margin-bottom: 8px;
+      }
+      .benchmark-legend-item {
+        display: flex;
+        align-items: center;
+        font-size: 0.75rem;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      .benchmark-legend-item.is-hidden {
+        opacity: 0.4;
+        text-decoration: line-through;
+      }
+      .benchmark-legend-swatch {
+        width: 24px;
+        height: 2px;
+        margin-right: 6px;
+      }
+      .benchmark-chart-wrap {
+        position: relative;
+        width: 100%;
+      }
+      .benchmark-scroller {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .benchmark-axis-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        pointer-events: none;
+      }
+      .benchmark-canvas-box {
+        min-width: 100%;
+        height: 400px;
+      }
       .benchmark-chart {
-        max-width: 1000px;
+        display: block;
+      }
+      @media (max-width: 600px) {
+        body {
+          margin: 8px;
+        }
+        .benchmark-canvas-box {
+          height: 300px;
+        }
+        .benchmark-title {
+          font-size: 1.5rem;
+        }
       }
     </style>
-    <title>Benchmarks</title>
+    <title>Wasm Size Benchmarks (Combined)</title>
   </head>
 
   <body>
     <header id="header">
       <div class="header-item">
-        <strong class="header-label">Last Update:</strong>
+        <strong>Last Update:</strong>
         <span id="last-update"></span>
       </div>
       <div class="header-item">
-        <strong class="header-label">Repository:</strong>
+        <strong>Repository:</strong>
         <a id="repository-link" rel="noopener"></a>
+      </div>
+      <div class="header-item">
+        <strong>Note:</strong>
+        <span>The graphs show wasm binary size, so smaller is better.</span>
       </div>
     </header>
     <main id="main"></main>
@@ -106,53 +173,26 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.2/dist/Chart.min.js"></script>
     <script src="data.js"></script>
-    <script id="main-script">
+    <script>
       'use strict';
       (function() {
-        // Colors from https://github.com/github/linguist/blob/master/lib/linguist/languages.yml
-        const toolColors = {
-          cargo: '#dea584',
-          go: '#00add8',
-          benchmarkjs: '#f1e05a',
-          benchmarkluau: '#000080',
-          pytest: '#3572a5',
-          googlecpp: '#f34b7d',
-          catch2: '#f34b7d',
-          julia: '#a270ba',
-          jmh: '#b07219',
-          benchmarkdotnet: '#178600',
-          customBiggerIsBetter: '#38ff38',
-          customSmallerIsBetter: '#ff3838',
-          _: '#333333'
+        const OPT_COLORS = {
+          '-O1': '#3273dc',
+          '-O2': '#23d160',
+          '-O3': '#ff3860',
         };
+        const FALLBACK_COLOR = '#ffdd57';
+
+        const OPT_PATTERN = / \((-O\d)\)$/;
 
         function init() {
-          function collectBenchesPerTestCase(entries) {
-            const map = new Map();
-            for (const entry of entries) {
-              const {commit, date, tool, benches} = entry;
-              for (const bench of benches) {
-                const result = { commit, date, tool, bench };
-                const arr = map.get(bench.name);
-                if (arr === undefined) {
-                  map.set(bench.name, [result]);
-                } else {
-                  arr.push(result);
-                }
-              }
-            }
-            return map;
-          }
-
           const data = window.BENCHMARK_DATA;
 
-          // Render header
           document.getElementById('last-update').textContent = new Date(data.lastUpdate).toString();
           const repoLink = document.getElementById('repository-link');
           repoLink.href = data.repoUrl;
           repoLink.textContent = data.repoUrl;
 
-          // Render footer
           document.getElementById('dl-button').onclick = () => {
             const dataUrl = 'data:,' + JSON.stringify(data, null, 2);
             const a = document.createElement('a');
@@ -161,120 +201,269 @@
             a.click();
           };
 
-          // Prepare data points for charts
-          return Object.keys(data.entries).map(name => ({
-            name,
-            dataSet: collectBenchesPerTestCase(data.entries[name]),
-          }));
+          // Collect all bench results per benchmark name
+          const benchesByName = new Map();
+          for (const entries of Object.values(data.entries)) {
+            for (const entry of entries) {
+              const {commit, date, tool, benches} = entry;
+              for (const bench of benches) {
+                const result = { commit, date, tool, bench };
+                if (!benchesByName.has(bench.name)) {
+                  benchesByName.set(bench.name, []);
+                }
+                benchesByName.get(bench.name).push(result);
+              }
+            }
+          }
+
+          // Group by base name (strip optimization level suffix)
+          const groups = new Map();
+          for (const [name, results] of benchesByName) {
+            const match = name.match(OPT_PATTERN);
+            if (match) {
+              const baseName = name.replace(OPT_PATTERN, '');
+              const optLevel = match[1];
+              if (!groups.has(baseName)) {
+                groups.set(baseName, new Map());
+              }
+              groups.get(baseName).set(optLevel, results);
+            }
+            // Skip entries without optimization level suffix (legacy data)
+          }
+
+          return groups;
         }
 
-        function renderAllChars(dataSets) {
+        // Every commit gets a fixed horizontal slot, so the chart grows as wide
+        // as it needs and the container scrolls horizontally. How many points
+        // are visible at once therefore depends on the viewport width.
+        const PX_PER_POINT = 16;
 
-          function renderGraph(parent, name, dataset) {
-            const canvas = document.createElement('canvas');
-            canvas.className = 'benchmark-chart';
-            parent.appendChild(canvas);
+        function renderCombinedGraph(parent, baseName, optLevelMap) {
+          // Column wrapper so the fixed title sits above the scrollable chart.
+          const graph = document.createElement('div');
+          graph.className = 'benchmark-graph';
+          parent.appendChild(graph);
 
-            const color = toolColors[dataset.length > 0 ? dataset[0].tool : '_'];
-            const data = {
-              labels: dataset.map(d => d.commit.id.slice(0, 7)),
-              datasets: [
-                {
-                  label: name,
-                  data: dataset.map(d => d.bench.value),
-                  borderColor: color,
-                  backgroundColor: color + '60', // Add alpha for #rrggbbaa
-                }
-              ],
+          // Title lives outside the scroller, so it stays fixed while only the
+          // chart area scrolls horizontally.
+          const title = document.createElement('div');
+          title.className = 'benchmark-graph-title';
+          title.textContent = baseName;
+          graph.appendChild(title);
+
+          // Legend lives outside the scroller too, so it stays fixed while the
+          // chart scrolls. Populated below once the optimization levels and
+          // their colors are known.
+          const legend = document.createElement('div');
+          legend.className = 'benchmark-graph-legend';
+          graph.appendChild(legend);
+
+          // Wrapper that the fixed y-axis overlay is positioned against. It must
+          // sit outside the scroller so the overlay does not scroll with it.
+          const chartWrap = document.createElement('div');
+          chartWrap.className = 'benchmark-chart-wrap';
+          graph.appendChild(chartWrap);
+
+          // Scroll container: keeps the chart within the page width but lets
+          // the user scroll horizontally when there are many commits.
+          const scroller = document.createElement('div');
+          scroller.className = 'benchmark-scroller';
+          chartWrap.appendChild(scroller);
+
+          const canvasBox = document.createElement('div');
+          canvasBox.className = 'benchmark-canvas-box';
+          scroller.appendChild(canvasBox);
+
+          const canvas = document.createElement('canvas');
+          canvas.className = 'benchmark-chart';
+          canvasBox.appendChild(canvas);
+
+          // Fixed y-axis: an overlay canvas pinned to the left of the wrapper.
+          // After the chart renders we copy its y-axis strip here, so the axis
+          // (labels, ticks, title) stays visible while the chart scrolls.
+          const axisOverlay = document.createElement('canvas');
+          axisOverlay.className = 'benchmark-axis-overlay';
+          chartWrap.appendChild(axisOverlay);
+
+          // Find all unique commit IDs across all optimization levels, preserving order
+          const commitIds = [];
+          const commitSet = new Set();
+          const commitMeta = new Map();
+          for (const results of optLevelMap.values()) {
+            for (const r of results) {
+              const id = r.commit.id;
+              if (!commitSet.has(id)) {
+                commitSet.add(id);
+                commitIds.push(id);
+                commitMeta.set(id, r);
+              }
+            }
+          }
+
+          // Give every commit PX_PER_POINT of width. CSS min-width keeps the box
+          // filling the viewport when there are only a few points, so the chart
+          // never looks cramped on the left; once it grows past the viewport the
+          // container scrolls instead.
+          canvasBox.style.width = (commitIds.length * PX_PER_POINT) + 'px';
+
+          // Sort optimization levels
+          const sortedOpts = [...optLevelMap.keys()].sort();
+
+          // Build the HTML legend now that the optimization levels are known.
+          // Legend order matches the dataset order below, so the item index is
+          // the dataset index. Clicking an item toggles that dataset's
+          // visibility, mirroring Chart.js's built-in legend behaviour.
+          sortedOpts.forEach((opt, index) => {
+            const color = OPT_COLORS[opt] || FALLBACK_COLOR;
+            const item = document.createElement('div');
+            item.className = 'benchmark-legend-item';
+            const swatch = document.createElement('span');
+            swatch.className = 'benchmark-legend-swatch';
+            swatch.style.backgroundColor = color;
+            item.appendChild(swatch);
+            item.appendChild(document.createTextNode(opt));
+            item.addEventListener('click', () => {
+              const meta = chart.getDatasetMeta(index);
+              meta.hidden = meta.hidden === null ? !chart.data.datasets[index].hidden : null;
+              item.classList.toggle('is-hidden', meta.hidden === true);
+              chart.update();
+            });
+            legend.appendChild(item);
+          });
+
+          // Build datasets: one line per optimization level
+          const datasets = sortedOpts.map(opt => {
+            const results = optLevelMap.get(opt);
+            const valueByCommit = new Map();
+            for (const r of results) {
+              valueByCommit.set(r.commit.id, r.bench.value);
+            }
+            const color = OPT_COLORS[opt] || FALLBACK_COLOR;
+            return {
+              label: opt,
+              data: commitIds.map(id => valueByCommit.has(id) ? valueByCommit.get(id) : null),
+              borderColor: color,
+              backgroundColor: color + '40',
+              fill: false,
+              spanGaps: true,
             };
-            const options = {
+          });
+
+          const unit = (() => {
+            for (const results of optLevelMap.values()) {
+              if (results.length > 0) return results[0].bench.unit;
+            }
+            return '';
+          })();
+
+          const chart = new Chart(canvas, {
+            type: 'line',
+            data: {
+              labels: commitIds.map(id => {
+                const meta = commitMeta.get(id);
+                const ymd = new Date(meta.commit.timestamp).toISOString().slice(0, 10);
+                return ymd + ' ' + id.slice(0, 7);
+              }),
+              datasets,
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              animation: {
+                onComplete: () => syncAxis(),
+              },
+              title: {
+                display: false,
+              },
+              legend: {
+                display: false,
+              },
               scales: {
-                xAxes: [
-                  {
-                    scaleLabel: {
-                      display: true,
-                      labelString: 'commit',
-                    },
-                  }
-                ],
-                yAxes: [
-                  {
-                    scaleLabel: {
-                      display: true,
-                      labelString: dataset.length > 0 ? dataset[0].bench.unit : '',
-                    },
-                    ticks: {
-                      beginAtZero: true,
-                    }
-                  }
-                ],
+                xAxes: [{
+                  scaleLabel: { display: true, labelString: 'commit' },
+                }],
+                yAxes: [{
+                  scaleLabel: { display: true, labelString: unit },
+                  ticks: { beginAtZero: true },
+                }],
               },
               tooltips: {
+                mode: 'index',
+                intersect: false,
                 callbacks: {
                   afterTitle: items => {
                     const {index} = items[0];
-                    const data = dataset[index];
-                    return '\n' + data.commit.message + '\n\n' + data.commit.timestamp + ' committed by @' + data.commit.committer.username + '\n';
+                    const id = commitIds[index];
+                    const meta = commitMeta.get(id);
+                    if (!meta) return '';
+                    return '\n' + meta.commit.message + '\n\n' + meta.commit.timestamp + ' by @' + meta.commit.committer.username + '\n';
                   },
                   label: item => {
-                    let label = item.value;
-                    const { range, unit } = dataset[item.index].bench;
-                    label += ' ' + unit;
-                    if (range) {
-                      label += ' (' + range + ')';
-                    }
-                    return label;
+                    if (item.value === null || item.value === undefined) return null;
+                    return item.dataset.label + ': ' + item.value + ' ' + unit;
                   },
-                  afterLabel: item => {
-                    const { extra } = dataset[item.index].bench;
-                    return extra ? '\n' + extra : '';
-                  }
-                }
+                },
               },
               onClick: (_mouseEvent, activeElems) => {
-                if (activeElems.length === 0) {
-                  return;
-                }
-                // XXX: Undocumented. How can we know the index?
+                if (activeElems.length === 0) return;
                 const index = activeElems[0]._index;
-                const url = dataset[index].commit.url;
-                window.open(url, '_blank');
+                const id = commitIds[index];
+                const meta = commitMeta.get(id);
+                if (meta) window.open(meta.commit.url, '_blank');
               },
-            };
+            },
+          });
 
-            new Chart(canvas, {
-              type: 'line',
-              data,
-              options,
-            });
+          // Copy the chart's y-axis strip into the fixed overlay so the axis
+          // stays put while the chart scrolls. Runs after every (re)render via
+          // animation.onComplete, and on viewport resize (the canvas height
+          // changes at the mobile breakpoint).
+          function syncAxis() {
+            const area = chart.chartArea;
+            if (!area) return;
+            const dpr = window.devicePixelRatio || 1;
+            const axisW = Math.ceil(area.left);   // y-axis strip width, CSS px
+            const cssH = canvasBox.clientHeight;  // chart height, CSS px
+            if (axisW <= 0 || cssH <= 0) return;
+            axisOverlay.style.width = axisW + 'px';
+            axisOverlay.style.height = cssH + 'px';
+            axisOverlay.width = Math.round(axisW * dpr);
+            axisOverlay.height = Math.round(cssH * dpr);
+            const ctx = axisOverlay.getContext('2d');
+            // Opaque background so scrolled chart content cannot show through.
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, axisOverlay.width, axisOverlay.height);
+            // Source and destination share device-pixel dimensions, so copy 1:1.
+            ctx.drawImage(
+              canvas,
+              0, 0, axisOverlay.width, axisOverlay.height,
+              0, 0, axisOverlay.width, axisOverlay.height,
+            );
           }
 
-          function renderBenchSet(name, benchSet, main) {
+          window.addEventListener('resize', () => setTimeout(syncAxis, 250));
+
+          // Start scrolled to the most recent commits (the right edge).
+          scroller.scrollLeft = scroller.scrollWidth;
+        }
+
+        function render(groups) {
+          const main = document.getElementById('main');
+          for (const [baseName, optLevelMap] of groups) {
             const setElem = document.createElement('div');
             setElem.className = 'benchmark-set';
             main.appendChild(setElem);
-
-            const nameElem = document.createElement('h1');
-            nameElem.className = 'benchmark-title';
-            nameElem.textContent = name;
-            setElem.appendChild(nameElem);
 
             const graphsElem = document.createElement('div');
             graphsElem.className = 'benchmark-graphs';
             setElem.appendChild(graphsElem);
 
-            for (const [benchName, benches] of benchSet.entries()) {
-              renderGraph(graphsElem, benchName, benches)
-            }
-          }
-
-          const main = document.getElementById('main');
-          for (const {name, dataSet} of dataSets) {
-            renderBenchSet(name, dataSet, main);
+            renderCombinedGraph(graphsElem, baseName, optLevelMap);
           }
         }
 
-        renderAllChars(init()); // Start
+        render(init());
       })();
     </script>
   </body>
