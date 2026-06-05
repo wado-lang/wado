@@ -75,8 +75,16 @@
         flex-wrap: wrap;
         width: 100%;
       }
-      .benchmark-chart {
+      .benchmark-scroller {
+        width: 100%;
         max-width: 1000px;
+        overflow-x: auto;
+      }
+      .benchmark-canvas-box {
+        height: 400px;
+      }
+      .benchmark-chart {
+        display: block;
       }
     </style>
     <title>Runtime Benchmarks (Combined)</title>
@@ -167,10 +175,26 @@
           return groups;
         }
 
+        // Show only the most recent commits; older data stays in data.js but
+        // is not plotted. The chart is horizontally scrollable when crowded.
+        const MAX_POINTS = 100;
+        const PX_PER_POINT = 14;
+        const MIN_CHART_WIDTH = 1000;
+
         function renderCombinedGraph(parent, baseName, optLevelMap) {
+          // Scroll container: keeps the chart within the page width but lets
+          // the user scroll horizontally when there are many commits.
+          const scroller = document.createElement('div');
+          scroller.className = 'benchmark-scroller';
+          parent.appendChild(scroller);
+
+          const canvasBox = document.createElement('div');
+          canvasBox.className = 'benchmark-canvas-box';
+          scroller.appendChild(canvasBox);
+
           const canvas = document.createElement('canvas');
           canvas.className = 'benchmark-chart';
-          parent.appendChild(canvas);
+          canvasBox.appendChild(canvas);
 
           // Find all unique commit IDs across all optimization levels, preserving order
           const commitIds = [];
@@ -186,6 +210,15 @@
               }
             }
           }
+
+          // Keep only the most recent MAX_POINTS commits.
+          if (commitIds.length > MAX_POINTS) {
+            commitIds.splice(0, commitIds.length - MAX_POINTS);
+          }
+
+          // Widen the canvas box so each point gets enough room; this is what
+          // makes the scroller scroll.
+          canvasBox.style.width = Math.max(MIN_CHART_WIDTH, commitIds.length * PX_PER_POINT) + 'px';
 
           // Sort optimization levels
           const sortedOpts = [...optLevelMap.keys()].sort();
@@ -226,6 +259,8 @@
               datasets,
             },
             options: {
+              responsive: true,
+              maintainAspectRatio: false,
               title: {
                 display: true,
                 text: baseName,
