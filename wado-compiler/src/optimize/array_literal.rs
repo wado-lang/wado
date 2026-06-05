@@ -58,11 +58,12 @@ pub fn collapse_array_literals(project: &mut NirPackage) -> bool {
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        if let Some(body) = &mut func.body {
+        if let Some(mut body) = func.body_block() {
             let mut visitor = Collapser {
                 push_names: &push_names,
             };
-            changed |= visitor.visit_block(body);
+            changed |= visitor.visit_block(&mut body);
+            func.set_body_block(body);
         }
     }
     changed

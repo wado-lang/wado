@@ -173,7 +173,7 @@ fn collect_and_validate(project: &NirPackage) -> IndexMap<(FnKey, usize), SroaIn
             };
             let func = func_rc.borrow();
             let local_index = func.params[*pi].local_index;
-            let body = func.body.as_ref().unwrap();
+            let body = &func.body_block().unwrap();
             if !body_uses_param_safely(body, local_index, &candidates) {
                 invalid.insert((key.clone(), *pi));
             }
@@ -458,11 +458,12 @@ fn rewrite_callees(project: &mut NirPackage, candidates: &IndexMap<(FnKey, usize
         if affected.is_empty() {
             continue;
         }
-        if let Some(body) = func.body.as_mut() {
+        if let Some(mut owned) = func.body_block() {
             let mut rewriter = ParamReadRewriter {
                 affected: &affected,
             };
-            rewriter.visit_block(body);
+            rewriter.visit_block(&mut owned);
+            func.set_body_block(owned);
         }
     }
 }
@@ -541,14 +542,15 @@ fn rewrite_call_sites(project: &mut NirPackage, candidates: &IndexMap<(FnKey, us
                 scalar_param_struct.insert(param.local_index, info.struct_key.clone());
             }
         }
-        if let Some(body) = func.body.as_mut() {
+        if let Some(mut owned) = func.body_block() {
             let type_table = type_table_rc.borrow();
             let mut rewriter = CallArgRewriter {
                 sroa_positions: &sroa_positions,
                 scalar_param_struct: &scalar_param_struct,
                 type_table: &type_table,
             };
-            rewriter.visit_block(body);
+            rewriter.visit_block(&mut owned);
+            func.set_body_block(owned);
         }
     }
     for global in &mut project.globals {

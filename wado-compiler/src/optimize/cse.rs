@@ -41,11 +41,13 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage) -> bool {
 }
 
 fn cse_function(func: &mut NirFunction) -> bool {
-    let Some(body) = &mut func.body else {
+    let Some(mut owned) = func.body_block() else {
         return false;
     };
+    let body = &mut owned;
     let mut changed = false;
     cse_in_block(body, &mut func.local_count, &mut func.locals, &mut changed);
+    func.set_body_block(owned);
     changed
 }
 

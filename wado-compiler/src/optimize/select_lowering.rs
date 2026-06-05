@@ -25,8 +25,9 @@ pub fn select_lowering(project: &mut NirPackage) {
     };
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        if let Some(ref mut body) = func.body {
-            visitor.visit_block(body);
+        if let Some(mut body) = func.body_block() {
+            visitor.visit_block(&mut body);
+            func.set_body_block(body);
         }
     }
 }

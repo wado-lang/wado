@@ -57,7 +57,7 @@ pub fn demote_value_copies(project: &mut NirPackage) {
     for f in &project.functions {
         let f = f.borrow();
         if f.value_copy_type().is_some()
-            && let Some(body) = &f.body
+            && let Some(body) = &f.body_block()
             && body_is_list_wrapper_copy(body)
         {
             list_wrapper_copies.insert((f.module_source.clone(), f.name.clone()));
@@ -93,7 +93,7 @@ pub fn demote_value_copies(project: &mut NirPackage) {
         if f.value_copy_type().is_some() {
             continue;
         }
-        let Some(body) = &f.body else { continue };
+        let Some(body) = &f.body_block() else { continue };
         collect_sites(
             body,
             &list_wrapper_copies,

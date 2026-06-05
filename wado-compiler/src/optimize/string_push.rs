@@ -45,8 +45,9 @@ pub fn simplify_short_push_str(project: &mut NirPackage) -> bool {
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        if let Some(body) = &mut func.body {
-            changed |= visitor.visit_block(body);
+        if let Some(mut body) = func.body_block() {
+            changed |= visitor.visit_block(&mut body);
+            func.set_body_block(body);
         }
     }
     changed

@@ -53,17 +53,18 @@ pub fn fuse_labeled_blocks(project: &mut NirPackage) -> bool {
 }
 
 fn fuse_in_function(func: &mut NirFunction) -> bool {
-    let Some(body) = &mut func.body else {
+    let Some(mut owned) = func.body_block() else {
         return false;
     };
-    // Function body is a statement-level block: any value of the trailing
-    // statement is dropped (functions returning a value use explicit `return`).
-    fuse_in_block(
+    let body = &mut owned;
+    let r = fuse_in_block(
         body,
         /* yields_value */ false,
         &mut func.local_count,
         &mut func.locals,
-    )
+    );
+    func.set_body_block(owned);
+    r
 }
 
 /// `yields_value` is `true` when the value of `block`'s terminal statement is

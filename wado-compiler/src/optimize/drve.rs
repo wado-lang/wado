@@ -119,7 +119,7 @@ fn is_heap_alloc_return(type_id: crate::tir::TypeId, type_table: &TypeTable) -> 
 }
 
 fn has_only_pure_returns_with_explicit_tail(func: &NirFunction) -> bool {
-    let body = func.body.as_ref().unwrap();
+    let body = &func.body_block().unwrap();
     // The last stmt must be `Return { value: Some(_) }` so we never have to
     // think about an implicit trailing-value return path.
     let Some(last) = body.stmts.last() else {
@@ -172,7 +172,7 @@ fn validate_call_sites(project: &NirPackage, mut candidates: IndexSet<FnKey>) ->
     };
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if let Some(body) = &func.body {
+        if let Some(body) = &func.body_block() {
             validator.visit_block(body);
         }
     }
@@ -311,8 +311,9 @@ fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) {
             continue;
         }
         func.return_type = TypeTable::UNIT;
-        if let Some(body) = func.body.as_mut() {
-            return_rewriter.visit_block(body);
+        if let Some(mut owned) = func.body_block() {
+            return_rewriter.visit_block(&mut owned);
+            func.set_body_block(owned);
         }
     }
 
@@ -325,8 +326,9 @@ fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) {
     let funcs = project.functions.clone();
     for func_rc in &funcs {
         let mut func = func_rc.borrow_mut();
-        if let Some(body) = func.body.as_mut() {
-            retyper.visit_block(body);
+        if let Some(mut owned) = func.body_block() {
+            retyper.visit_block(&mut owned);
+            func.set_body_block(owned);
         }
     }
     for global in &mut project.globals {

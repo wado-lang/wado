@@ -2087,7 +2087,7 @@ impl<'a> Interpreter<'a> {
 /// Break / Return without value, …) reports `None`. The caller treats
 /// `None` as "do not fold this call", preserving the runtime call.
 fn single_tail_expression(func: &NirFunction) -> Option<&NirExpr> {
-    let body = func.body.as_ref()?;
+    let bb = func.body_block(); let body = bb.as_ref()?;
     let [single] = body.stmts.as_slice() else {
         return None;
     };

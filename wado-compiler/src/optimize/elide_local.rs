@@ -56,7 +56,7 @@ fn elide_in_function(func: &mut NirFunction) -> bool {
         kept.insert(i);
     }
     let mut collector = ReadCollector { kept: &mut kept };
-    collector.visit_block(func.body.as_ref().unwrap());
+    collector.visit_block(&func.body_block().unwrap());
 
     let body = func.body.as_mut().unwrap();
     let mut elider = Elider {

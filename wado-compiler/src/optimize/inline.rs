@@ -437,7 +437,7 @@ fn is_inline_eligible(
     }
 
     // Must have a body
-    let Some(body) = &func.body else {
+    let Some(body) = &func.body_block() else {
         return false;
     };
 
@@ -513,7 +513,7 @@ fn find_recursive_functions(functions: &[Rc<RefCell<NirFunction>>]) -> IndexSet<
         let full_name = tir_function_full_name(&func);
         if let Some(caller_idx) = name_to_idx.get(&full_name) {
             let mut callee_names: IndexSet<String> = IndexSet::default();
-            if let Some(body) = &func.body {
+            if let Some(body) = &func.body_block() {
                 collect_callees_from_block(body, &mut callee_names);
             }
             let callees: Vec<usize> = callee_names
@@ -1388,7 +1388,7 @@ fn try_inline_call_expr(
     let func_name = func.name.clone();
     let (candidate, inlined_key) =
         find_inline_candidate(candidates, &func.module_source, current_module, &func_name)?;
-    let body = candidate.body.as_ref()?;
+    let bb = candidate.body_block(); let body = bb.as_ref()?;
 
     // Use argument's type_id to match the actual value being assigned
     // (handles monomorphization type variance).
@@ -1443,7 +1443,7 @@ fn try_inline_method_call_expr(
     let func_name = func.name.clone();
     let (candidate, inlined_key) =
         find_inline_candidate(candidates, &func.module_source, current_module, &func_name)?;
-    let body = candidate.body.as_ref()?;
+    let bb = candidate.body_block(); let body = bb.as_ref()?;
 
     let mut bindings: Vec<InlineBinding> = Vec::with_capacity(candidate.params.len());
 

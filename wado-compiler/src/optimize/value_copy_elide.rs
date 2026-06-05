@@ -35,15 +35,17 @@ pub fn elide_synthesized_value_copies(project: &mut NirPackage) {
         if func.is_value_copy() {
             continue;
         }
-        let Some(body) = func.body.as_mut() else {
+        let Some(mut owned) = func.body_block() else {
             continue;
         };
+        let body = &mut owned;
         let usage = analyze_usage(body, &type_table.borrow());
         let mut stripper = WrapperStripper {
             value_copy_set: &value_copy_set,
             usage: &usage,
         };
         stripper.visit_block(body);
+        func.set_body_block(owned);
     }
 }
 

@@ -643,7 +643,7 @@ pub fn forward_stores_to_loads(project: &mut NirPackage) -> bool {
 }
 
 fn forward_in_function(func: &mut NirFunction, type_table: &TypeTable) -> bool {
-    let Some(body) = func.body.as_ref() else {
+    let Some(body) = &func.body_block() else {
         return false;
     };
 

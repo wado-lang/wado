@@ -224,7 +224,7 @@ fn find_dead_params(func: &NirFunction) -> Vec<bool> {
         return Vec::new();
     }
 
-    let body = func.body.as_ref().unwrap();
+    let body = &func.body_block().unwrap();
     let mut reads: IndexSet<u32> = IndexSet::default();
     super::elide_local::collect_reads_in_block(body, &mut reads);
     let kept_locals = &func.address_taken_locals;
@@ -268,7 +268,7 @@ fn validate_call_sites(
     };
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if let Some(body) = &func.body {
+        if let Some(body) = &func.body_block() {
             validator.visit_block(body);
         }
     }
@@ -375,8 +375,9 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) {
     let funcs = project.functions.clone();
     for func_rc in &funcs {
         let mut func = func_rc.borrow_mut();
-        if let Some(body) = func.body.as_mut() {
-            rewriter.visit_block(body);
+        if let Some(mut owned) = func.body_block() {
+            rewriter.visit_block(&mut owned);
+            func.set_body_block(owned);
         }
     }
     for global in &mut project.globals {
@@ -522,8 +523,9 @@ fn shrink_params_and_renumber(func: &mut NirFunction, dead: &[bool]) {
     // local indices. The `Closure` arm explicitly stops the walk before
     // entering the closure body — closure-locals live in a separate index
     // namespace and the outer remap must not touch them.
-    if let Some(body) = func.body.as_mut() {
-        LocalRemap { remap: &remap }.visit_block(body);
+    if let Some(mut owned) = func.body_block() {
+        LocalRemap { remap: &remap }.visit_block(&mut owned);
+        func.set_body_block(owned);
     }
 }
 

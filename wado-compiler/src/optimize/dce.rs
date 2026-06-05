@@ -253,7 +253,7 @@ fn extend_reachable_for_optimizer_passes(
             if !reachable.contains(&func_id) {
                 continue;
             }
-            if let Some(body) = &func.body {
+            if let Some(body) = &func.body_block() {
                 let mut needed: IndexSet<crate::tir::TypeId> = IndexSet::default();
                 collect_array_clone_element_types(body, &mut needed);
                 for type_id in needed {
@@ -493,7 +493,7 @@ pub fn filter_bytes_literals(project: &mut NirPackage) {
 
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if let Some(body) = &func.body {
+        if let Some(body) = &func.body_block() {
             collect_bytes_literals_block(body, &mut used_bytes);
         }
     }
@@ -839,7 +839,7 @@ fn collect_inspectable_signatures_from_reachable(
         if !reachable.contains(&func_id) {
             continue;
         }
-        if let Some(body) = &func.body {
+        if let Some(body) = &func.body_block() {
             scan_inspect_signatures_block(body, type_table, &mut sigs);
         }
     }
@@ -969,7 +969,7 @@ impl<'a> DceWalker<'a> {
                 self.analysis.used_types.insert(ta);
             }
         }
-        if let Some(body) = &func.body {
+        if let Some(body) = &func.body_block() {
             self.visit_block(body);
         }
     }

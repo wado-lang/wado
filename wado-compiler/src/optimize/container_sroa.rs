@@ -373,7 +373,7 @@ fn scalarize_in_function(
     // Step 1: collect candidates. Immutable borrow of type_table.
     let candidates = {
         let type_table = type_table_rc.borrow();
-        let body = func.body.as_ref().expect("checked in caller");
+        let body = &func.body_block().expect("checked in caller");
         collect_candidates(body, &type_table, struct_index, sig_kinds)
     };
     if candidates.is_empty() {
@@ -384,7 +384,7 @@ fn scalarize_in_function(
     // Also track which `ListMethodKind`s were observed on each whitelisted use,
     // so step 3 can demand only the monomorphizations that will actually be
     // emitted per field (rather than unconditionally requiring all four kinds).
-    let body_ref = func.body.as_ref().expect("checked in caller");
+    let body_ref = &func.body_block().expect("checked in caller");
     let (safe_indices, used_kinds_map) = compute_safe_set(body_ref, &candidates, sig_kinds);
     if safe_indices.is_empty() {
         return false;
@@ -454,7 +454,8 @@ fn scalarize_in_function(
         .collect();
 
     // Step 5: rewrite the body.
-    let body = func.body.as_mut().expect("checked in caller");
+    let mut owned = func.body_block().expect("checked in caller");
+    let body = &mut owned;
     let ctx = RewriteCtx {
         decomposed: &decomposed,
         field_local_map: &field_local_map,
@@ -464,6 +465,7 @@ fn scalarize_in_function(
         sig_kinds,
     };
     Rewriter { ctx: &ctx }.visit_block(body);
+    func.set_body_block(owned);
 
     true
 }
