@@ -3173,7 +3173,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let default_ast = struct_field_defaults.get(idx).and_then(Option::clone);
                 if let Some(default_expr) = default_ast {
-                    let resolved = self.resolve_expr(&default_expr, ctx, Some(*expected_type_id));
+                    // The default expression is *foreign* AST owned by the
+                    // struct's declaring module: its nodes carry that module's
+                    // dense `AstId`s. Recording their per-`AstId` facts under
+                    // the construction module would collide with this module's
+                    // same-numbered nodes and overwrite an unrelated local's
+                    // type. Key the facts under the struct's module via
+                    // `ann_module_override` (mirroring the associated-constant
+                    // path in `resolve_ident`); reify reads them back under the
+                    // same key after `with_const_module_perspective` swaps to
+                    // that module. The override changes only the fact *key* —
+                    // name resolution and the `null → None` coercion still run
+                    // against the explicit `expected_type_id` here.
+                    let resolved = if struct_module_source == self.current_module_source {
+                        self.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
+                    } else {
+                        let prev = self
+                            .ann_module_override
+                            .replace(struct_module_source.clone());
+                        let resolved =
+                            self.resolve_expr(&default_expr, ctx, Some(*expected_type_id));
+                        self.ann_module_override = prev;
+                        resolved
+                    };
                     self.typecheck(resolved, *expected_type_id, struct_lit.span);
                     fields.push(TirStructField {
                         name: expected_name.clone(),
