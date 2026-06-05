@@ -118,7 +118,7 @@ options; multiple files are merged the same as `gale gen`.
 (note: each `wado` command is actually `cargo run --bin wado`)
 
 ```sh
-wado run package-gale -- dump path/to/Grammar.g4
+wado run package-gale dump path/to/Grammar.g4
 ```
 
 ## Tracing a parse with the `trace` option
