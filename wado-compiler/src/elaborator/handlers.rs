@@ -33,26 +33,22 @@ use crate::tir::{EffectRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTabl
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 
+/// Stage 7-B placeholder: the combined walk no longer builds real TIR for
+/// `with`/`resume`; reify is the sole producer. See `expr.rs::placeholder`.
+fn placeholder(type_id: TypeId, span: crate::token::Span) -> TirExpr {
+    TirExpr::new(TirExprKind::Unit, type_id, span)
+}
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Annotate `with E1 => h1, ... do { body }`. Walks each handler
     /// binding for fact recording + diagnostics, walks the body for
-    /// fact recording, returns a `WithHandler`-shaped `TirExpr` whose
-    /// `bindings` are empty (reify rebuilds them from
-    /// `HandlerBindingFacts`) but whose `body` is the real resolved
-    /// `TirBlock`.
+    /// fact recording, and returns a placeholder.
     ///
-    /// The retained `WithHandler` shape (rather than a bare `Unit`
-    /// placeholder) is a Stage 7-B holdover: the surrounding combined-
-    /// walk TIR is otherwise dead after Stage 5 (the AST-level
-    /// missing-return analysis in `control_flow.rs` doesn't read it),
-    /// so this shape and the inner body could be reduced to a `Unit`
-    /// placeholder. Kept verbatim to keep this `resolve_with_handler`
-    /// slice byte-identical with the pre-7-B output until the
-    /// downstream `expr.rs` / `stmt.rs` leaves also stop emitting TIR
-    /// — at that point the combined walk's TIR is uniformly dead and
-    /// the shape can be flattened in one pass. Reify replaces this
-    /// expression wholesale with its own `WithHandler` built from the
-    /// recorded facts.
+    /// Reify rebuilds the `WithHandler` node — its handler bindings from
+    /// `HandlerBindingFacts` and its body from the AST. The combined walk's
+    /// TIR is dead after Stage 5 (the AST-level missing-return analysis in
+    /// `control_flow.rs` reads `with`/`resume` off the AST, not the resolved
+    /// node), so this arm records facts and projects the body's result type.
     pub(super) fn resolve_with_handler(
         &mut self,
         with_expr: &ast::WithHandlerExpr,
@@ -89,15 +85,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // level) so it does not depend on the body TIR.
         let result_type = self.ast_block_result_type(&with_expr.body);
 
-        TirExpr::new(
-            TirExprKind::WithHandler {
-                bindings: Vec::new(),
-                body,
-                result_type,
-            },
-            result_type,
-            with_expr.span,
-        )
+        // Stage 7-B: reify rebuilds the `WithHandler` node — its handler
+        // bindings from `sem.types.handler_bindings` (recorded by
+        // `resolve_handler_binding` above) and its body from the AST — so the
+        // combined walk only resolves the body for its fact-recording side
+        // effects and projects the result type. Missing-return analysis reads
+        // `with`/`resume` off the AST via `control_flow.rs`, so nothing
+        // consumes this node's structure.
+        let _ = body;
+        placeholder(result_type, with_expr.span)
     }
 
     /// Annotate a single binding inside a `with ... do` clause. `bundle_group`
@@ -459,11 +455,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// into `Return { value }`, which is checked against the enclosing
     /// handler method's return type by the existing return-type rules.
     ///
-    /// The returned `TirExpr` keeps the `Resume` shape (with the resolved
-    /// `value` inside) so the combined walk's missing-return validator
-    /// (`expr_always_exits`'s `TirExprKind::Resume` arm) still recognises
-    /// `fn handler_method(&self) -> Mark { resume self.mark }` as a
-    /// definite exit. Reify rebuilds its own `Resume` from the AST.
+    /// Stage 7-B: returns a placeholder. Missing-return analysis recognises
+    /// `fn handler_method(&self) -> Mark { resume self.mark }` as a definite
+    /// exit off the AST (`control_flow::expr_always_exits`'s `Expr::Resume`
+    /// arm), and reify rebuilds the `Resume` node from the AST, so the
+    /// combined walk only resolves the value for its fact-recording and
+    /// type-checking side effects.
     pub(super) fn resolve_resume(
         &mut self,
         resume: &ast::ResumeExpr,
@@ -489,13 +486,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.typecheck(value.type_id, ctx.return_type, resume.span);
         }
 
-        TirExpr::new(
-            TirExprKind::Resume {
-                value: Box::new(value),
-            },
-            TypeTable::UNIT,
-            resume.span,
-        )
+        let _ = value;
+        placeholder(TypeTable::UNIT, resume.span)
     }
 }
 

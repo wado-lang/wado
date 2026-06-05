@@ -2173,8 +2173,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // TupleZip with nested TypePacks: treat as variadic so expansion
         // is deferred to monomorphization when concrete types are known.
-        let is_zip_variadic = matches!(&iterable.kind, TirExprKind::TupleZip { .. })
-            && self.type_contains_pack(iterable_type_id);
+        // `TirExprKind::TupleZip` is produced only by the `<tuple>.zip()`
+        // method arm when the receiver tuple contains a `TypePack`
+        // (`method_call.rs`); a concrete-tuple `.zip()` expands inline and a
+        // non-tuple receiver never yields a pack-containing result. So the AST
+        // shape (a `.zip()` call) plus a pack-containing result type detect the
+        // deferred form without reading the resolved `iterable.kind`.
+        let is_zip_variadic = matches!(
+            actual_iterable,
+            Expr::MethodCall(mc) if mc.method == "zip" && mc.args.is_empty()
+        ) && self.type_contains_pack(iterable_type_id);
 
         let result = if let Some((elems, has_type_pack, by_ref)) = tuple_info {
             if has_type_pack || is_zip_variadic {
