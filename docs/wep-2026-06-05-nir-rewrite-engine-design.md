@@ -251,8 +251,29 @@ The old fixed-point loop and the engine co-exist during the port.
     `copy_prop`, `licm`, `field_scalarize`, `store_load_forward`.
   - The last bridge is gone: the per-pass `Body ↔ tree` round-trips
     (`body_block()` mutate `set_body_block()`) have vanished and the arena
-    flows lower → optimize → wir_build with no converter — completing
-    Phase 3's goal. Measure the speed win here.
+    flows lower → optimize → wir_build with no converter (`wir_build` reads
+    `body.exprs` directly) — completing Phase 3's goal. The single remaining
+    tree→arena conversion is the one-time `from_block` at the lower boundary
+    (`lower::translate` still builds a tree, then converts once); making
+    `lower` emit the arena directly is a separate future cleanup.
+  - Measured speed win (A/B: peak-bridge `05b532fc` — every optimizer pass on
+    `body_block`/`set_body_block` — vs the arena-direct HEAD; byte-identical
+    input since the target sources and the `include_str!`-embedded `lib/`
+    stdlib are unchanged between the two commits; median of 9 runs, dev
+    profile). The isolated NIR optimize phase:
+
+    | module          | bridge  | arena   | speedup |
+    | --------------- | ------- | ------- | ------- |
+    | zlib            | 75 ms   | 67 ms   | 1.12×   |
+    | fts             | 327 ms  | 220 ms  | 1.49×   |
+    | json_catalog_v2 | 909 ms  | 593 ms  | 1.53×   |
+    | sqlite_parse    | 7455 ms | 4469 ms | 1.67×   |
+
+    The win scales with optimizer load: the bridge cost (a `to_block` +
+    `from_block` per pass per fixpoint iteration) grows with body size and
+    iteration count, so a small module (zlib, 67 ms) sees ~11 % while a
+    heavy one (sqlite_parse) is cut 40 % — a 3 s saving that flows through
+    to a 24 % shorter total compile for that module.
 
 ## Out of scope
 
