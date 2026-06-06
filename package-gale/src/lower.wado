@@ -1394,6 +1394,8 @@ fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_idx: i32, ctx: &mut GenContex
             variant_mask,
             variant_k_prefix_mask,
             &empty_k_prefix(),
+            FollowArg::NoFollow,
+            false,
         ));
     }
     return ScanBody { elements };
@@ -1861,6 +1863,8 @@ fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext, variant_mask: &List<
             variant_mask,
             variant_k_prefix_mask,
             &empty_k_prefix(),
+            FollowArg::NoFollow,
+            false,
         ));
     }
     return ScanBody { elements };
@@ -1935,6 +1939,8 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<
                 variant_mask,
                 variant_k_prefix_mask,
                 &empty_k_prefix(),
+                FollowArg::NoFollow,
+                false,
             );
         }
         // Single-alt (scan side) — nested elements allowed; each
@@ -1948,6 +1954,8 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<
                 variant_mask,
                 variant_k_prefix_mask,
                 &empty_k_prefix(),
+                FollowArg::NoFollow,
+                false,
             ));
         }
         let mut visiting: List<String> = [];
@@ -1981,6 +1989,8 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<
                         variant_mask,
                         variant_k_prefix_mask,
                         &empty_k_prefix(),
+                        FollowArg::NoFollow,
+                        false,
                     ),
                 ],
             });
@@ -2018,6 +2028,8 @@ fn lower_general_scan_group(alts: &List<Alternative>, ctx: &mut GenContext, oute
                 variant_mask,
                 variant_k_prefix_mask,
                 &empty_k_prefix(),
+                FollowArg::NoFollow,
+                false,
             ));
         }
         bodies.push(ScanBody { elements });
@@ -2294,6 +2306,8 @@ fn lower_scan_shape_body(shape: &List<i32>, elements: &List<Element>, ctx: &mut 
                             variant_mask,
                             variant_k_prefix_mask,
                             &empty_k_prefix(),
+                            FollowArg::NoFollow,
+                            false,
                         ),
                     );
                 }
@@ -2308,6 +2322,8 @@ fn lower_scan_shape_body(shape: &List<i32>, elements: &List<Element>, ctx: &mut 
             variant_mask,
             variant_k_prefix_mask,
             &empty_k_prefix(),
+            FollowArg::NoFollow,
+            false,
         ));
     }
     return ScanBody { elements: body_elems };
@@ -2741,6 +2757,8 @@ fn lower_transparent_group(inner: &Element, name_counts: &mut List<[String, i32]
                 variant_mask,
                 variant_k_prefix_mask,
                 &empty_k_prefix(),
+                FollowArg::NoFollow,
+                false,
             ),
         ],
     };
@@ -2835,6 +2853,8 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut List<[String, i32
             variant_mask,
             variant_k_prefix_mask,
             &empty_k_prefix(),
+            elem_follow_arg,
+            elem_gate,
         );
         // Gate `basic_follow` on either side actually being a Repeat —
         // `first_of_elements_from` walks the suffix and isn't free.
@@ -2930,6 +2950,8 @@ fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
                     variant_mask,
                     variant_k_prefix_mask,
                     &empty_k_prefix(),
+                    FollowArg::NoFollow,
+                    false,
                 ),
             ],
         });
@@ -3023,6 +3045,8 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
                     variant_mask,
                     variant_k_prefix_mask,
                     &empty_k_prefix(),
+                    FollowArg::NoFollow,
+                    false,
                 ),
             ],
         });
@@ -3073,6 +3097,8 @@ fn lower_simple_cst_scan_group(alts: &List<Alternative>, ctx: &mut GenContext, o
                     variant_mask,
                     variant_k_prefix_mask,
                     &empty_k_prefix(),
+                    FollowArg::NoFollow,
+                    false,
                 ),
             ],
         });
@@ -3202,6 +3228,8 @@ fn lower_general_group(alts: &List<Alternative>, name_counts: &mut List<[String,
                 variant_mask,
                 variant_k_prefix_mask,
                 &empty_k_prefix(),
+                elem_follow_arg,
+                elem_gate,
             );
             let op_is_repeat = op matches { Repeat(_) };
             let se_is_repeat = se matches { Repeat(_) };
@@ -3428,6 +3456,8 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut List<[String, i32]>, r
         variant_mask,
         variant_k_prefix_mask,
         &empty_k_prefix(),
+        FollowArg::NoFollow,
+        false,
     );
     let body_is_single_alt_group = if let Group(g) = &rep.element {
         g.alternatives.len() == 1;
