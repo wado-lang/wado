@@ -372,8 +372,11 @@ mapEntry
 
 // Expression-position path, supporting interspersed turbofish segments:
 // `Stream::<u8>::new`, `Future::<Result<(), E>>::new`, `JsonValue::Bool`.
+// A `::` segment may be any `memberName` (not just `IDENTIFIER`) so that a
+// keyword method name resolves there, e.g. `Instant::from(x)` — mirroring how
+// `.from` is already accepted after `.`.
 exprPath
-    : IDENTIFIER ('::' IDENTIFIER | '::' typeArgs)*
+    : IDENTIFIER ('::' memberName | '::' typeArgs)*
     ;
 
 // Compile-time literals and macros: `#file`, `#include_str("...")`.

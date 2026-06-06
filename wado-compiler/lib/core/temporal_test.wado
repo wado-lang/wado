@@ -1,4 +1,5 @@
 use { Instant, ZonedDateTime } from "core:temporal";
+use { Instant as ClockInstant } from "wasi:clocks";
 use { to_string, from_string } from "core:json";
 
 test "Instant construction and field access" {
@@ -403,4 +404,23 @@ test "Instant deserializes from any offset, normalizing to the instant" {
 
 test "Deserializing a malformed timestamp surfaces a DeserializeError" {
     assert from_string::<Instant>(`"2023-13-01T00:00:00Z"`) matches { Err(_) };
+}
+
+test "Instant converts to and from the wasi:clocks instant" {
+    // wasi:clocks reading -> core:temporal Instant (field-for-field copy).
+    let t = Instant::from(ClockInstant { seconds: 1_700_000_000, nanoseconds: 123_456_789 });
+    assert t == Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+
+    // core:temporal Instant -> wasi:clocks reading; round-trips exactly.
+    // Checked field-wise rather than with `==`: instantiating the clock
+    // record's auto-derived equality alongside this module's same-named
+    // `Instant` equality currently hits a codegen collision (a separate
+    // same-name issue), and the conversion itself does not need it.
+    let back = ClockInstant::from(t);
+    assert back.seconds == 1_700_000_000;
+    assert back.nanoseconds == 123_456_789;
+
+    // The pre-epoch boundary copies field-for-field too.
+    let before = Instant::from(ClockInstant { seconds: -1, nanoseconds: 999_999_999 });
+    assert before == Instant { seconds: -1, nanoseconds: 999_999_999 };
 }

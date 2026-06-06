@@ -27,9 +27,9 @@ use { Instant, ZonedDateTime } from "core:temporal";
 export fn run() with Stdout, SystemClock, Timezone {
     let now: ClockInstant = SystemClock::now();
 
-    // The two `Instant` types share their field layout deliberately, so the
-    // bridge between them is a field-for-field copy.
-    let instant = Instant { seconds: now.seconds, nanoseconds: now.nanoseconds };
+    // `core:temporal` bridges the two `Instant` types with `From`, so a
+    // `wasi:clocks` reading converts directly.
+    let instant = Instant::from(now);
 
     if let Some(name) = Timezone::iana_id() {
         println(`IANA:  {name}`);

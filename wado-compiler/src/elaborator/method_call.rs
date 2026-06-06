@@ -1737,12 +1737,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 // `resolve_named_type` reads `Self` off
                                 // `trait_ctx.self_type` rather than the now-gone
                                 // impl context.
-                                scope.trait_ctx.self_type = Some(
-                                    scope.resolve_return_type_in_module(
+                                scope.trait_ctx.self_type =
+                                    Some(scope.resolve_return_type_in_module(
                                         struct_module,
                                         Some(&impl_block.ty),
-                                    ),
-                                );
+                                    ));
                                 let result = scope.resolve_return_type_in_module(
                                     struct_module,
                                     method.return_type.as_ref(),

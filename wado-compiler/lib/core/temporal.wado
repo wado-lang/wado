@@ -15,11 +15,14 @@
 //! record (`{ seconds, nanoseconds }`) for the system clock. That type is a
 //! Component Model binding — pinned to a specific WASI version and regenerated
 //! by `wado-from-idl` — whereas `core:temporal`'s `Instant` is a plain,
-//! version-independent Wado type that will grow methods. They share a name and
-//! field layout deliberately: it is "the same concept, a different type", so a
-//! future host bridge between them is a field-for-field copy. `core:temporal`
-//! keeps no dependency on `wasi:clocks`, so it (and `core:cbor` on top of it)
-//! stays usable without pulling in a WASI import.
+//! version-independent Wado type that grows methods. They share a name and
+//! field layout deliberately: it is "the same concept, a different type". To
+//! bridge them without making either depend on the other's representation,
+//! `core:temporal` provides `From` impls both ways (a field-for-field copy), so
+//! a clock reading converts with `Instant::from(SystemClock::now())` and back
+//! with `ClockInstant::from`. Merely naming the `wasi:clocks` record in these
+//! impls is not a runtime use of the clock, so it pulls in no WASI import for a
+//! component that never calls one.
 //!
 //! Both types are ISO 8601 only and so store no calendar.
 //!
@@ -31,6 +34,7 @@
 //! ```
 
 use { Serialize, Serializer, SerializeError, Deserialize, Deserializer, DeserializeError } from "core:serde";
+use { Instant as ClockInstant } from "wasi:clocks";
 
 /// An exact point on the timeline, as the offset from the Unix epoch
 /// (1970-01-01T00:00:00Z). Time-zone- and calendar-independent.
@@ -714,5 +718,22 @@ impl Deserialize for ZonedDateTime {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<ZonedDateTime, DeserializeError> {
         let text = d.deserialize_string()?;
         return ZonedDateTime::parse_rfc3339(text);
+    }
+}
+
+// `wasi:clocks` bridge — `Instant` and the clock's `instant` record share a
+// field layout, so the conversion is a field-for-field copy. Both `From` impls
+// live here because `Instant` (this module's type) is the local type that lets
+// each direction satisfy the orphan rule.
+
+impl From<ClockInstant> for Instant {
+    fn from(value: ClockInstant) -> Instant {
+        return Instant { seconds: value.seconds, nanoseconds: value.nanoseconds };
+    }
+}
+
+impl From<Instant> for ClockInstant {
+    fn from(value: Instant) -> ClockInstant {
+        return ClockInstant { seconds: value.seconds, nanoseconds: value.nanoseconds };
     }
 }
