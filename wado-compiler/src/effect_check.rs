@@ -1624,6 +1624,10 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
         }
     }
 
+    // Effect / resource propagation closure: holding effect `E` admits the
+    // resources `E`'s operations reference (e.g. `Stdout` → `Stream`).
+    let closure = build_propagation_closure_sem(sem, state);
+
     for (src, module) in &sem.modules {
         if !crate::elaborator::liveness::is_user_authored(src) {
             continue;
@@ -1637,6 +1641,7 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
                     &fn_effects,
                     &mangled_index,
                     &resource_names,
+                    &closure,
                     &mut out,
                 ),
                 Item::Impl(impl_block) => {
@@ -1648,6 +1653,7 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
                             &fn_effects,
                             &mangled_index,
                             &resource_names,
+                            &closure,
                             &mut out,
                         );
                     }
@@ -1661,6 +1667,7 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
                             &fn_effects,
                             &mangled_index,
                             &resource_names,
+                            &closure,
                             &mut out,
                         );
                     }
@@ -1672,6 +1679,7 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
     out
 }
 
+#[allow(clippy::too_many_arguments)]
 fn check_function_effects_sem(
     sem: &Semantics,
     module: &ModuleSource,
@@ -1679,6 +1687,7 @@ fn check_function_effects_sem(
     fn_effects: &IndexMap<SymbolKey, Vec<EffectRef>>,
     mangled_index: &IndexMap<(ModuleSource, String), Vec<EffectRef>>,
     resource_names: &IndexSet<(ModuleSource, String)>,
+    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
     out: &mut Vec<EffectError>,
 ) {
     let Some(body) = &func.body else {
@@ -1712,6 +1721,9 @@ fn check_function_effects_sem(
     if let Some(ann) = annotations {
         add_signature_resources(ann, &caller_key, &sem.types, &mut current);
     }
+    // Expand through the propagation closure: a function holding `Stdout` may
+    // call operations that internally need `Stream`, etc.
+    let current = expand_through_closure(&current, closure);
 
     let mut walker = SemEffectWalker {
         module,
@@ -1724,6 +1736,121 @@ fn check_function_effects_sem(
         out,
     };
     ast::walk_block(&mut walker, body);
+}
+
+/// Build the effect / resource propagation closure from `Semantics`: for each
+/// effect or resource declaration, the resources its operations' parameter and
+/// return types reference, transitively closed. Mirrors the TIR-based
+/// `build_propagation_closure`, reading the resolved operation signatures from
+/// the `effect_ops` facts. Resources nested in struct fields / variant payloads
+/// of an operation's types are a documented follow-up (empty maps below).
+fn build_propagation_closure_sem(
+    sem: &Semantics,
+    state: &crate::elaborator::orchestration::AnnotateState,
+) -> IndexMap<EffectRef, IndexSet<EffectRef>> {
+    let type_table = &sem.types;
+    let empty_struct: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
+    let empty_variant: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
+    let mut direct: IndexMap<EffectRef, IndexSet<EffectRef>> = IndexMap::default();
+
+    for (src, module) in &sem.modules {
+        let Some(annotations) = state.module_semantics.get(src).map(|m| &m.types) else {
+            continue;
+        };
+        for item in &module.items {
+            let (decl_id, decl_name, is_resource) = match item {
+                Item::Interface(decl) => (decl.id, &decl.name, false),
+                Item::Resource(decl) => (decl.id, &decl.name, true),
+                _ => continue,
+            };
+            let Some(ops) = annotations
+                .effect_ops
+                .get(&SymbolKey::new(src.clone(), decl_id))
+            else {
+                continue;
+            };
+            let mut refs: IndexSet<EffectRef> = IndexSet::default();
+            for op in ops {
+                for param in &op.params {
+                    collect_resource_refs(
+                        param.type_id,
+                        type_table,
+                        &empty_struct,
+                        &empty_variant,
+                        &mut refs,
+                        &mut TypeSet::default(),
+                    );
+                }
+                collect_resource_refs(
+                    op.return_type,
+                    type_table,
+                    &empty_struct,
+                    &empty_variant,
+                    &mut refs,
+                    &mut TypeSet::default(),
+                );
+            }
+            let key = EffectRef::Concrete {
+                name: decl_name.clone(),
+                module_source: src.clone(),
+            };
+            if is_resource {
+                // Holding `with R` already implies `R` — drop the self-reference.
+                refs.shift_remove(&key);
+            }
+            let entry = direct.entry(key).or_default();
+            for r in refs {
+                entry.insert(r);
+            }
+        }
+    }
+
+    // Transitive closure to a fixpoint.
+    loop {
+        let mut changed = false;
+        let keys: Vec<EffectRef> = direct.keys().cloned().collect();
+        for key in &keys {
+            let cur = direct.get(key).cloned().unwrap_or_default();
+            let mut merged = cur.clone();
+            for eff in &cur {
+                if matches!(eff, EffectRef::Concrete { .. })
+                    && let Some(child) = direct.get(eff).cloned()
+                {
+                    for e in &child {
+                        if merged.insert(e.clone()) {
+                            changed = true;
+                        }
+                    }
+                }
+            }
+            if merged.len() != cur.len() {
+                direct.insert(key.clone(), merged);
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    direct
+}
+
+/// Expand an effect set through the propagation closure.
+fn expand_through_closure(
+    effects: &IndexSet<EffectRef>,
+    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
+) -> IndexSet<EffectRef> {
+    let mut out: IndexSet<EffectRef> = IndexSet::default();
+    for effect in effects {
+        out.insert(effect.clone());
+        if matches!(effect, EffectRef::Concrete { .. })
+            && let Some(extra) = closure.get(effect)
+        {
+            for e in extra {
+                out.insert(e.clone());
+            }
+        }
+    }
+    out
 }
 
 /// Union into `out` the resources that appear in a function's signature —
