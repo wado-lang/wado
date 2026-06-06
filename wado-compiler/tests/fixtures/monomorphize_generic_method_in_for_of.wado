@@ -1,0 +1,72 @@
+// A method-level generic method (`add<T: Foo>`) called on an accumulator
+// inside a variadic for-of body. Inside such a body the elaborator leaves the
+// call's `type_args` empty (T is a TypePack element, only concrete after
+// expansion), so monomorphization must fill them in. This test pins that the
+// fill-in is correct regardless of the syntactic position of the call —
+// direct, inside `if`, inside `while`, inside a `match` arm, and as a
+// sub-expression of a binary operator.
+
+trait Foo { fn val(&self) -> i32; }
+impl Foo for i32 { fn val(&self) -> i32 { return *self; } }
+impl Foo for String { fn val(&self) -> i32 { return 100; } }
+impl Foo for bool { fn val(&self) -> i32 { return 1; } }
+
+struct Acc { total: i32 }
+impl Acc {
+    fn add<T: Foo>(&mut self, value: &T) -> i32 {
+        self.total = self.total + value.val();
+        return self.total;
+    }
+}
+
+fn sum_direct<..T: Foo>(items: [..T]) -> i32 {
+    let mut acc = Acc { total: 0 };
+    for let v of items { acc.add(&v); }
+    return acc.total;
+}
+
+fn sum_in_if<..T: Foo>(items: [..T]) -> i32 {
+    let mut acc = Acc { total: 0 };
+    for let v of items {
+        if true { acc.add(&v); }
+    }
+    return acc.total;
+}
+
+fn sum_in_while<..T: Foo>(items: [..T]) -> i32 {
+    let mut acc = Acc { total: 0 };
+    for let v of items {
+        let mut once = true;
+        while once { acc.add(&v); once = false; }
+    }
+    return acc.total;
+}
+
+fn sum_in_match<..T: Foo>(items: [..T]) -> i32 {
+    let mut acc = Acc { total: 0 };
+    for let v of items {
+        let n = 1;
+        match n { 1 => { acc.add(&v); } _ => {} }
+    }
+    return acc.total;
+}
+
+fn sum_in_binary<..T: Foo>(items: [..T]) -> i32 {
+    let mut acc = Acc { total: 0 };
+    for let v of items {
+        let _s = acc.add(&v) + 0;
+    }
+    return acc.total;
+}
+
+test "generic method in variadic for-of monomorphizes in every position" {
+    let t = [10, "x", true, 20];   // 10 + 100 + 1 + 20 = 131
+    assert sum_direct(t) == 131;
+    assert sum_in_if(t) == 131;
+    assert sum_in_while(t) == 131;
+    assert sum_in_match(t) == 131;
+    assert sum_in_binary(t) == 131;
+}
+
+__DATA__
+{"test": {}}

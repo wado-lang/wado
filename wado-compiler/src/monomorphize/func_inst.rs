@@ -185,10 +185,27 @@ struct LocalIndexRewriter {
 
 impl TirMutVisitor for LocalIndexRewriter {
     fn visit_expr(&mut self, expr: &mut TirExpr) {
-        if let TirExprKind::Local { index, .. } = &mut expr.kind
-            && *index == self.old_idx
-        {
-            *index = self.new_idx;
+        match &mut expr.kind {
+            TirExprKind::Local { index, .. } if *index == self.old_idx => {
+                *index = self.new_idx;
+            }
+            TirExprKind::Closure { captures, .. } => {
+                // A capture's `outer_index` lives in the *parent* frame, so it
+                // is rewritten like any other parent-local reference (this is
+                // what makes a for-of binding captured by a closure follow the
+                // per-iteration rename). The closure *body*, by contrast, uses
+                // its own local-index namespace and reaches the parent only
+                // through these captures, so it must NOT be descended into —
+                // doing so would rewrite a closure-scoped local that happens to
+                // share `old_idx`.
+                for cap in captures {
+                    if cap.outer_index == self.old_idx {
+                        cap.outer_index = self.new_idx;
+                    }
+                }
+                return;
+            }
+            _ => {}
         }
         self.walk_expr(expr);
     }
@@ -209,6 +226,180 @@ impl TirMutVisitor for LocalIndexRewriter {
             *local_index = self.new_idx;
         }
         self.walk_pattern(pattern);
+    }
+}
+
+/// Collects every local index introduced by a `let` statement or a pattern
+/// binding in the *current function's* local frame. Used by variadic for-of
+/// expansion to find the body locals that must be retyped / reallocated for
+/// each cloned iteration.
+///
+/// Rides the shared `TirRefVisitor` walk so no in-frame node kind can silently
+/// drop a local, but deliberately stops at `Closure` boundaries: closure bodies
+/// allocate their locals in a *separate* index namespace (`new_closure`'s
+/// `FunctionContext`), so collecting them here would let the reallocation loop
+/// corrupt unrelated closure-scoped slots.
+struct LocalCollector {
+    locals: Vec<u32>,
+}
+
+impl TirRefVisitor for LocalCollector {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if matches!(&expr.kind, TirExprKind::Closure { .. }) {
+            return;
+        }
+        self.walk_expr(expr);
+    }
+
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if let TirStmtKind::Let { local_index, .. } = &stmt.kind {
+            self.locals.push(*local_index);
+        }
+        self.walk_stmt(stmt);
+    }
+
+    fn visit_pattern(&mut self, pattern: &TirPattern) {
+        if let TirPattern::Binding { local_index, .. } = pattern {
+            self.locals.push(*local_index);
+        }
+        self.walk_pattern(pattern);
+    }
+}
+
+/// Finds the declared type of a specific local index by scanning the `let`
+/// statement or pattern binding that introduces it. A local is defined exactly
+/// once, so the first match is the answer. Stops at `Closure` boundaries for
+/// the same reason as [`LocalCollector`] — a closure-scoped local could share a
+/// numeric index with the current frame's local and return the wrong type.
+struct LocalTypeFinder {
+    target: u32,
+    found: Option<TypeId>,
+}
+
+impl TirRefVisitor for LocalTypeFinder {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if self.found.is_some() || matches!(&expr.kind, TirExprKind::Closure { .. }) {
+            return;
+        }
+        self.walk_expr(expr);
+    }
+
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if let TirStmtKind::Let {
+            local_index,
+            type_id,
+            ..
+        } = &stmt.kind
+            && *local_index == self.target
+            && self.found.is_none()
+        {
+            self.found = Some(*type_id);
+        }
+        self.walk_stmt(stmt);
+    }
+
+    fn visit_pattern(&mut self, pattern: &TirPattern) {
+        if let TirPattern::Binding {
+            local_index,
+            type_id,
+            ..
+        } = pattern
+            && *local_index == self.target
+            && self.found.is_none()
+        {
+            self.found = Some(*type_id);
+        }
+        self.walk_pattern(pattern);
+    }
+}
+
+/// Fills in inferred method-level `type_args` on `MethodCall` nodes whose type
+/// arguments were left empty (T inferred from a `TypePack` element at resolution
+/// time, only concrete after variadic expansion). Rides the shared mutable walk
+/// so the inference reaches method calls in every in-frame position, not just
+/// the hand-enumerated few. Stops at `Closure` boundaries: a closure body is
+/// monomorphized as its own function, so its calls are inferred there, and
+/// (matching the original walker) this pass leaves them alone.
+struct MethodTypeArgInferer<'a> {
+    type_table: &'a TypeTable,
+}
+
+impl TirMutVisitor for MethodTypeArgInferer<'_> {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        if matches!(&expr.kind, TirExprKind::Closure { .. }) {
+            return;
+        }
+        // Recurse first so nested calls are handled bottom-up, matching the
+        // original walk order.
+        self.walk_expr(expr);
+        let TirExprKind::MethodCall {
+            receiver,
+            func,
+            type_args,
+            args,
+            ..
+        } = &mut expr.kind
+        else {
+            return;
+        };
+        // Only methods with empty `type_args` and an empty `method_type_args`
+        // need inference (the latter signals method-level type params inferred
+        // from arguments rather than pinned by turbofish).
+        if !type_args.is_empty() {
+            return;
+        }
+        let Some(info) = &func.method_info else {
+            return;
+        };
+        if !info.method_type_args.is_empty() {
+            return;
+        }
+        let Some(first_arg) = args.first() else {
+            return;
+        };
+        // Infer T from the first non-self argument's inner type. For
+        // `element<T: Serialize>(&mut self, value: &T)` the first arg is `&T`,
+        // so unwrap references (and an auto-boxed `Box<T>`) to reach T.
+        let mut arg_type = first_arg.expr.type_id;
+        while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
+            self.type_table.get(arg_type).clone()
+        {
+            arg_type = t;
+        }
+        if let ResolvedType::GenericInstance {
+            name,
+            type_args: ta,
+            ..
+        } = self.type_table.get(arg_type)
+            && name == "Box"
+            && ta.len() == 1
+        {
+            arg_type = ta[0];
+        }
+        // Only set if `arg_type` is concrete (not a type param) and is not
+        // already an impl-level type arg of the receiver (e.g. `List<String>`'s
+        // `String`), which would double-count during instantiation.
+        let is_concrete = !matches!(
+            self.type_table.get(arg_type),
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } | ResolvedType::Unknown
+        );
+        let receiver_impl_type_args = {
+            let mut base = receiver.type_id;
+            while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
+                self.type_table.get(base).clone()
+            {
+                base = t;
+            }
+            match self.type_table.get(base) {
+                ResolvedType::GenericInstance { type_args: ta, .. } => ta.clone(),
+                ResolvedType::BuiltinArray(elem) => vec![*elem],
+                _ => vec![],
+            }
+        };
+        let is_impl_type_arg = receiver_impl_type_args.contains(&arg_type);
+        if is_concrete && !is_impl_type_arg {
+            type_args.push(arg_type);
+        }
     }
 }
 
@@ -2848,27 +3039,63 @@ impl Monomorphizer {
                 Self::rewrite_local_index_in_stmt(s, binding_local_idx, iter_binding);
             }
 
-            // Reallocate body locals that conflict with previous iterations.
-            // This handles temporaries from `?` expansion (__qm_v, __qm_e) and other
-            // locals that share the same index across cloned iteration bodies.
+            // Reconcile body-local types and reallocate collisions across the
+            // cloned per-iteration bodies.
+            //
+            // A `let` inside the for-of body is typed once, in the generic
+            // template, as the type-pack / tuple element type. After cloning
+            // and substituting each iteration, the *statement* type is the
+            // concrete per-element type, but the shared `locals` table entry
+            // still carries the stale generic type. Two things must happen:
+            //
+            //  1. The first iteration keeps the original local index, so its
+            //     `locals` entry must be retyped to the concrete element type —
+            //     otherwise codegen declares the slot with the generic (often
+            //     reference-shaped) type while the body stores a different
+            //     concrete value, producing an invalid Wasm local. This bites
+            //     whenever the local survives optimization, e.g. inside a
+            //     `match` arm where copy-propagation cannot fold it away.
+            //  2. Later iterations reuse the same index, so they must be
+            //     reallocated to a fresh local (also typed concretely) to avoid
+            //     sharing one slot across heterogeneous element types. This also
+            //     covers `?`-expansion temporaries (`__qm_v`, `__qm_e`).
+            //
+            // The retype in (1) must happen HERE, after reallocation, because
+            // every cloned iteration substitutes against the same shared
+            // `locals` table: retyping a slot before later iterations are moved
+            // off it (step 2) would let a later element's type clobber the type
+            // the earlier iteration still depends on. Ordinary instantiation is
+            // immune — `instantiate_function` substitutes a fresh per-function
+            // `locals` table up front, so iterations never share a slot.
             let mut body_locals: Vec<u32> = Vec::new();
             Self::collect_locals_in_block(&elem_body, &mut body_locals);
+            // A single local can be collected more than once (an or-pattern
+            // binds the same slot in each alternative); dedup so the
+            // first-seen / collision bookkeeping below treats it once.
+            body_locals.sort_unstable();
+            body_locals.dedup();
             for body_local in body_locals {
+                let concrete_type = Self::find_local_type_in_block(&elem_body, body_local);
                 if !seen_locals.insert(body_local) {
-                    // This local was already used by a previous iteration — reallocate
+                    // Collision with a previous iteration — reallocate.
                     let new_idx = *local_count;
                     *local_count += 1;
-                    let body_local_type = Self::find_local_type_in_block(&elem_body, body_local)
-                        .unwrap_or(
-                            locals
-                                .get(body_local as usize)
-                                .map(|l| l.type_id)
-                                .unwrap_or(TypeTable::UNIT),
-                        );
+                    let body_local_type = concrete_type.unwrap_or_else(|| {
+                        locals
+                            .get(body_local as usize)
+                            .map(|l| l.type_id)
+                            .unwrap_or(TypeTable::UNIT)
+                    });
                     locals.push(TirLocal::synth(new_idx, body_local_type, false));
                     for s in &mut elem_body.stmts {
                         Self::rewrite_local_index_in_stmt(s, body_local, new_idx);
                     }
+                } else if let Some(ty) = concrete_type
+                    && let Some(slot) = locals.get_mut(body_local as usize)
+                {
+                    // First iteration keeps this index — retype its slot to the
+                    // concrete per-element type.
+                    slot.type_id = ty;
                 }
             }
 
@@ -2897,134 +3124,11 @@ impl Monomorphizer {
     /// After variadic for-of expansion, method calls that had inferred type params
     /// (empty `type_args`) need their `type_args` populated from the concrete argument types.
     /// e.g., `seq.element(&v)` where element<T: Serialize> — infer T from the arg type.
+    /// Populate inferred method-level `type_args` on every `MethodCall` in a
+    /// (post variadic-for-of-expansion) block. Delegates to
+    /// [`MethodTypeArgInferer`] so the traversal is exhaustive.
     fn infer_method_call_type_args(block: &mut TirBlock, type_table: &TypeTable) {
-        for stmt in &mut block.stmts {
-            match &mut stmt.kind {
-                TirStmtKind::Expr(expr) => {
-                    Self::infer_method_call_type_args_in_expr(expr, type_table);
-                }
-                TirStmtKind::Let { value, .. } => {
-                    Self::infer_method_call_type_args_in_expr(value, type_table);
-                }
-                TirStmtKind::LabeledBlock { block, .. } => {
-                    Self::infer_method_call_type_args(block, type_table);
-                }
-                TirStmtKind::If {
-                    condition,
-                    then_block,
-                    else_block,
-                    ..
-                } => {
-                    Self::infer_method_call_type_args_in_expr(condition, type_table);
-                    Self::infer_method_call_type_args(then_block, type_table);
-                    if let Some(eb) = else_block {
-                        Self::infer_method_call_type_args(eb, type_table);
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
-    fn infer_method_call_type_args_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
-        match &mut expr.kind {
-            TirExprKind::MethodCall {
-                receiver,
-                func,
-                type_args,
-                args,
-                ..
-            } => {
-                Self::infer_method_call_type_args_in_expr(receiver, type_table);
-                for arg in args.iter_mut() {
-                    Self::infer_method_call_type_args_in_expr(&mut arg.expr, type_table);
-                }
-                // If type_args is empty and the method has monomorph_info or method_info
-                // suggesting it's generic, infer type_args from argument types.
-                if type_args.is_empty()
-                    && let Some(ref info) = func.method_info
-                {
-                    // Check if method_type_args is empty (meaning inferred type args)
-                    if info.method_type_args.is_empty() {
-                        // Try to infer from first non-self arg's inner type.
-                        // For element<T: Serialize>(&mut self, value: &T), the first
-                        // arg is &T, so T is the inner type of the first arg.
-                        if let Some(first_arg) = args.first() {
-                            let mut arg_type = first_arg.expr.type_id;
-                            // Unwrap references
-                            while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
-                                type_table.get(arg_type).clone()
-                            {
-                                arg_type = t;
-                            }
-                            // Unwrap Box<T> (auto-boxed primitive ref)
-                            if let ResolvedType::GenericInstance {
-                                name,
-                                type_args: ta,
-                                ..
-                            } = type_table.get(arg_type)
-                                && name == "Box"
-                                && ta.len() == 1
-                            {
-                                arg_type = ta[0];
-                            }
-                            // Only set if arg_type is concrete (not a type param)
-                            // AND not already present in monomorph_info.type_args.
-                            // If it's already there, it's an impl type arg (e.g.,
-                            // List<String>::push where T=String comes from the
-                            // impl, not a method-level type param). Adding it again
-                            // would cause double-counting in instantiation.
-                            let is_concrete = !matches!(
-                                type_table.get(arg_type),
-                                ResolvedType::TypeParam { .. }
-                                    | ResolvedType::TypePack { .. }
-                                    | ResolvedType::Unknown
-                            );
-                            // Check if the inferred type is already an impl type arg
-                            // of the receiver's struct. If so, it's not a method-level
-                            // type arg and should not be added (to avoid double-counting
-                            // in instantiation). e.g., List<String>::push infers
-                            // String from the arg, but String is the impl type arg.
-                            let receiver_impl_type_args = {
-                                let mut base = receiver.type_id;
-                                while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
-                                    type_table.get(base).clone()
-                                {
-                                    base = t;
-                                }
-                                match type_table.get(base) {
-                                    ResolvedType::GenericInstance { type_args: ta, .. } => {
-                                        ta.clone()
-                                    }
-                                    ResolvedType::BuiltinArray(elem) => vec![*elem],
-                                    _ => vec![],
-                                }
-                            };
-                            let is_impl_type_arg = receiver_impl_type_args.contains(&arg_type);
-                            if is_concrete && !is_impl_type_arg {
-                                type_args.push(arg_type);
-                            }
-                        }
-                    }
-                }
-            }
-            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-                Self::infer_method_call_type_args(block, type_table);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-                ..
-            } => {
-                Self::infer_method_call_type_args_in_expr(condition, type_table);
-                Self::infer_method_call_type_args(then_branch, type_table);
-                if let Some(eb) = else_branch {
-                    Self::infer_method_call_type_args(eb, type_table);
-                }
-            }
-            _ => {}
-        }
+        MethodTypeArgInferer { type_table }.visit_block(block);
     }
 
     /// Rewrite types in the body of a variadic for-of iteration.
@@ -3375,277 +3479,40 @@ impl Monomorphizer {
     }
 
     /// Collect all local indices that are defined (via Let or pattern binding) inside an expression.
+    /// Append every local index introduced inside `expr` to `locals`.
     fn collect_locals_in_expr(expr: &TirExpr, locals: &mut Vec<u32>) {
-        match &expr.kind {
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                Self::collect_locals_in_expr(scrutinee, locals);
-                for arm in arms {
-                    Self::collect_locals_in_pattern(&arm.pattern, locals);
-                    if let Some(guard) = &arm.guard {
-                        Self::collect_locals_in_expr(guard, locals);
-                    }
-                    Self::collect_locals_in_expr(&arm.body, locals);
-                }
-            }
-            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-                Self::collect_locals_in_block(block, locals);
-            }
-            TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
-                for arg in args {
-                    Self::collect_locals_in_expr(&arg.expr, locals);
-                }
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                for elem in elements {
-                    Self::collect_locals_in_expr(elem, locals);
-                }
-            }
-            TirExprKind::VariantConstruct {
-                payload: Some(p), ..
-            }
-            | TirExprKind::FieldAccess { expr: p, .. }
-            | TirExprKind::Cast { expr: p, .. }
-            | TirExprKind::Unary { expr: p, .. } => {
-                Self::collect_locals_in_expr(p, locals);
-            }
-            TirExprKind::Binary { left, right, .. }
-            | TirExprKind::Assign {
-                target: left,
-                value: right,
-            } => {
-                Self::collect_locals_in_expr(left, locals);
-                Self::collect_locals_in_expr(right, locals);
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for f in fields {
-                    Self::collect_locals_in_expr(&f.value, locals);
-                }
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-                ..
-            } => {
-                Self::collect_locals_in_expr(condition, locals);
-                Self::collect_locals_in_block(then_branch, locals);
-                if let Some(eb) = else_branch {
-                    Self::collect_locals_in_block(eb, locals);
-                }
-            }
-            TirExprKind::Index { expr: array, index } => {
-                Self::collect_locals_in_expr(array, locals);
-                Self::collect_locals_in_expr(index, locals);
-            }
-            _ => {}
-        }
+        let mut collector = LocalCollector { locals: Vec::new() };
+        collector.visit_expr(expr);
+        locals.append(&mut collector.locals);
     }
 
+    /// Append every local index introduced inside `block` to `locals`.
     fn collect_locals_in_block(block: &TirBlock, locals: &mut Vec<u32>) {
-        for stmt in &block.stmts {
-            match &stmt.kind {
-                TirStmtKind::Let { local_index, .. } => {
-                    locals.push(*local_index);
-                }
-                TirStmtKind::Expr(expr) => Self::collect_locals_in_expr(expr, locals),
-                TirStmtKind::Return { value: Some(v) } => Self::collect_locals_in_expr(v, locals),
-                TirStmtKind::If {
-                    condition,
-                    then_block,
-                    else_block,
-                } => {
-                    Self::collect_locals_in_expr(condition, locals);
-                    Self::collect_locals_in_block(then_block, locals);
-                    if let Some(eb) = else_block {
-                        Self::collect_locals_in_block(eb, locals);
-                    }
-                }
-                TirStmtKind::LabeledBlock { block, .. } | TirStmtKind::Loop { body: block } => {
-                    Self::collect_locals_in_block(block, locals);
-                }
-                _ => {}
-            }
-        }
+        let mut collector = LocalCollector { locals: Vec::new() };
+        collector.visit_block(block);
+        locals.append(&mut collector.locals);
     }
 
-    fn collect_locals_in_pattern(pattern: &TirPattern, locals: &mut Vec<u32>) {
-        match pattern {
-            TirPattern::Binding { local_index, .. } => {
-                locals.push(*local_index);
-            }
-            TirPattern::Variant { bindings, .. } => {
-                for b in bindings {
-                    Self::collect_locals_in_pattern(b, locals);
-                }
-            }
-            TirPattern::Tuple(patterns, _) => {
-                for p in patterns {
-                    Self::collect_locals_in_pattern(p, locals);
-                }
-            }
-            TirPattern::Struct { fields, .. } => {
-                for f in fields {
-                    Self::collect_locals_in_pattern(&f.pattern, locals);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    /// Find the type of a local variable definition inside an expression.
+    /// Find the declared type of the local `local_idx` by locating the `let`
+    /// statement or pattern binding that introduces it inside `expr`.
     fn find_local_type_in_expr(expr: &TirExpr, local_idx: u32) -> Option<TypeId> {
-        match &expr.kind {
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                if let Some(t) = Self::find_local_type_in_expr(scrutinee, local_idx) {
-                    return Some(t);
-                }
-                for arm in arms {
-                    if let Some(t) = Self::find_local_type_in_pattern(&arm.pattern, local_idx) {
-                        return Some(t);
-                    }
-                    if let Some(t) = Self::find_local_type_in_expr(&arm.body, local_idx) {
-                        return Some(t);
-                    }
-                }
-                None
-            }
-            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-                Self::find_local_type_in_block(block, local_idx)
-            }
-            TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
-                for arg in args {
-                    if let Some(t) = Self::find_local_type_in_expr(&arg.expr, local_idx) {
-                        return Some(t);
-                    }
-                }
-                None
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                for elem in elements {
-                    if let Some(t) = Self::find_local_type_in_expr(elem, local_idx) {
-                        return Some(t);
-                    }
-                }
-                None
-            }
-            TirExprKind::VariantConstruct {
-                payload: Some(p), ..
-            }
-            | TirExprKind::FieldAccess { expr: p, .. }
-            | TirExprKind::Cast { expr: p, .. }
-            | TirExprKind::Unary { expr: p, .. } => Self::find_local_type_in_expr(p, local_idx),
-            TirExprKind::Binary { left, right, .. }
-            | TirExprKind::Assign {
-                target: left,
-                value: right,
-            } => Self::find_local_type_in_expr(left, local_idx)
-                .or_else(|| Self::find_local_type_in_expr(right, local_idx)),
-            TirExprKind::StructLiteral { fields, .. } => {
-                for f in fields {
-                    if let Some(t) = Self::find_local_type_in_expr(&f.value, local_idx) {
-                        return Some(t);
-                    }
-                }
-                None
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-                ..
-            } => {
-                if let Some(t) = Self::find_local_type_in_expr(condition, local_idx) {
-                    return Some(t);
-                }
-                if let Some(t) = Self::find_local_type_in_block(then_branch, local_idx) {
-                    return Some(t);
-                }
-                if let Some(eb) = else_branch {
-                    return Self::find_local_type_in_block(eb, local_idx);
-                }
-                None
-            }
-            _ => None,
-        }
+        let mut finder = LocalTypeFinder {
+            target: local_idx,
+            found: None,
+        };
+        finder.visit_expr(expr);
+        finder.found
     }
 
+    /// Find the declared type of the local `local_idx` by locating the `let`
+    /// statement or pattern binding that introduces it inside `block`.
     fn find_local_type_in_block(block: &TirBlock, local_idx: u32) -> Option<TypeId> {
-        for stmt in &block.stmts {
-            match &stmt.kind {
-                TirStmtKind::Let {
-                    local_index,
-                    type_id,
-                    ..
-                } if *local_index == local_idx => return Some(*type_id),
-                TirStmtKind::Expr(expr) | TirStmtKind::Return { value: Some(expr) } => {
-                    if let Some(t) = Self::find_local_type_in_expr(expr, local_idx) {
-                        return Some(t);
-                    }
-                }
-                TirStmtKind::If {
-                    then_block,
-                    else_block,
-                    ..
-                } => {
-                    if let Some(t) = Self::find_local_type_in_block(then_block, local_idx) {
-                        return Some(t);
-                    }
-                    if let Some(eb) = else_block
-                        && let Some(t) = Self::find_local_type_in_block(eb, local_idx)
-                    {
-                        return Some(t);
-                    }
-                }
-                TirStmtKind::LabeledBlock { block, .. } | TirStmtKind::Loop { body: block } => {
-                    if let Some(t) = Self::find_local_type_in_block(block, local_idx) {
-                        return Some(t);
-                    }
-                }
-                _ => {}
-            }
-        }
-        None
-    }
-
-    fn find_local_type_in_pattern(pattern: &TirPattern, local_idx: u32) -> Option<TypeId> {
-        match pattern {
-            TirPattern::Binding {
-                local_index,
-                type_id,
-                ..
-            } if *local_index == local_idx => Some(*type_id),
-            TirPattern::Variant { bindings, .. } => {
-                for b in bindings {
-                    if let Some(t) = Self::find_local_type_in_pattern(b, local_idx) {
-                        return Some(t);
-                    }
-                }
-                None
-            }
-            TirPattern::Tuple(patterns, _) => {
-                for p in patterns {
-                    if let Some(t) = Self::find_local_type_in_pattern(p, local_idx) {
-                        return Some(t);
-                    }
-                }
-                None
-            }
-            TirPattern::Struct { fields, .. } => {
-                for f in fields {
-                    if let Some(t) = Self::find_local_type_in_pattern(&f.pattern, local_idx) {
-                        return Some(t);
-                    }
-                }
-                None
-            }
-            _ => None,
-        }
+        let mut finder = LocalTypeFinder {
+            target: local_idx,
+            found: None,
+        };
+        finder.visit_block(block);
+        finder.found
     }
 
     /// Collect all unique `type_ids` from Return statement values in an expression.

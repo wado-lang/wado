@@ -151,13 +151,6 @@ pub enum TypeError {
     /// Unknown variable
     UnknownIdentifier { name: String, span: Span },
 
-    /// Field not found on struct
-    FieldNotFound {
-        struct_name: String,
-        field_name: String,
-        span: Span,
-    },
-
     /// Wrong number of arguments
     ArgumentCountMismatch {
         expected: usize,
@@ -174,9 +167,6 @@ pub enum TypeError {
     /// A type could not be inferred and needs an explicit annotation
     /// (e.g. a bare `null` whose `Option<...>` inner is undetermined).
     CannotInferType { message: String, span: Span },
-
-    /// Feature not yet implemented
-    NotYetImplemented { feature: String, span: Span },
 
     /// Invalid assignment target (not a valid l-value)
     CannotAssign { message: String, span: Span },
@@ -442,393 +432,21 @@ pub(super) fn format_operator_not_applicable(
 
 impl std::fmt::Display for TypeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TypeError::TypeMismatch {
-                expected,
-                found,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: type mismatch: expected '{}', found '{}'",
-                    span.line, span.column, expected, found
-                )
-            }
-            TypeError::UnknownType { name, span } => {
-                write!(f, "{}:{}: unknown type '{}'", span.line, span.column, name)
-            }
-            TypeError::UnknownFunction { name, span } => {
-                write!(
-                    f,
-                    "{}:{}: unknown function '{}'",
-                    span.line, span.column, name
-                )
-            }
-            TypeError::UnknownIdentifier { name, span } => {
-                write!(
-                    f,
-                    "{}:{}: unknown identifier '{}'",
-                    span.line, span.column, name
-                )
-            }
-            TypeError::FieldNotFound {
-                struct_name,
-                field_name,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: field '{}' not found on struct '{}'",
-                    span.line, span.column, field_name, struct_name
-                )
-            }
-            TypeError::ArgumentCountMismatch {
-                expected,
-                found,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: expected {} arguments, found {}",
-                    span.line, span.column, expected, found
-                )
-            }
-            TypeError::CalleeNotCallable { type_name, span } => {
-                write!(
-                    f,
-                    "{}:{}: expression is not callable: type '{}' is not a function",
-                    span.line, span.column, type_name
-                )
-            }
-            TypeError::InvalidLiteral { message, span } => {
-                write!(f, "{}:{}: {}", span.line, span.column, message)
-            }
-            TypeError::CannotInferType { message, span } => {
-                write!(f, "{}:{}: {}", span.line, span.column, message)
-            }
-            TypeError::NotYetImplemented { feature, span } => {
-                write!(
-                    f,
-                    "{}:{}: {} is not yet implemented",
-                    span.line, span.column, feature
-                )
-            }
-            TypeError::CannotAssign { message, span } => {
-                write!(
-                    f,
-                    "{}:{}: cannot assign: {}",
-                    span.line, span.column, message
-                )
-            }
-            TypeError::TraitBoundNotSatisfied {
-                type_name,
-                trait_name,
-                param_name,
-                reason,
-                span,
-            } => {
-                let headline = format!(
-                    "{}:{}: type '{}' does not implement trait '{}' required by bound on '{}'",
-                    span.line, span.column, type_name, trait_name, param_name
-                );
-                write!(f, "{}", append_reason_chain(headline, reason))
-            }
-            TypeError::InvalidPattern { message, span } => {
-                write!(
-                    f,
-                    "{}:{}: invalid pattern: {}",
-                    span.line, span.column, message
-                )
-            }
-            TypeError::OperatorNotApplicable {
-                op,
-                operands,
-                note,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: {}",
-                    span.line,
-                    span.column,
-                    format_operator_not_applicable(op, operands, note.as_deref())
-                )
-            }
-            TypeError::InvalidCast {
-                from,
-                to,
-                hint,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: cannot cast '{}' to '{}': {}",
-                    span.line, span.column, from, to, hint
-                )
-            }
-            TypeError::MissingField {
-                struct_name,
-                field_name,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: missing field '{}' in struct literal '{}'",
-                    span.line, span.column, field_name, struct_name
-                )
-            }
-            TypeError::ExtraField {
-                struct_name,
-                field_name,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: struct '{}' has no field '{}'",
-                    span.line, span.column, struct_name, field_name
-                )
-            }
-            TypeError::DuplicateField { name, span } => {
-                write!(
-                    f,
-                    "{}:{}: duplicate field '{}'",
-                    span.line, span.column, name
-                )
-            }
-            TypeError::MissingReturn { return_type, span } => {
-                write!(
-                    f,
-                    "{}:{}: function with return type '{}' must use explicit `return`",
-                    span.line, span.column, return_type
-                )
-            }
-            TypeError::OrphanViolation {
-                trait_name,
-                self_type_name,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: orphan rule violation: cannot implement foreign trait `{}` for foreign type `{}`",
-                    span.line, span.column, trait_name, self_type_name
-                )
-            }
-            TypeError::InherentImplOnForeignType {
-                self_type_name,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: coherence violation: cannot define an inherent `impl` on foreign type `{}` (defined in another package); use a trait to extend it",
-                    span.line, span.column, self_type_name
-                )
-            }
-            TypeError::InvalidStores { message, span } => {
-                write!(f, "{}:{}: {}", span.line, span.column, message)
-            }
-            TypeError::PrivateFieldAccess {
-                struct_name,
-                field_name,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: field `{}` of struct `{}` is private",
-                    span.line, span.column, field_name, struct_name
-                )
-            }
-            TypeError::MethodNotFound {
-                type_name,
-                method_name,
-                hint,
-                span,
-            } => {
-                if hint.is_empty() {
-                    write!(
-                        f,
-                        "{}:{}: no method '{}' found on type '{}'",
-                        span.line, span.column, method_name, type_name
-                    )
-                } else {
-                    write!(
-                        f,
-                        "{}:{}: no method '{}' found on type '{}'; {}",
-                        span.line, span.column, method_name, type_name, hint
-                    )
-                }
-            }
-            TypeError::InvalidQuestionMark { message, span } => {
-                write!(f, "{}:{}: {}", span.line, span.column, message)
-            }
-            TypeError::MissingTraitImpl {
-                type_name,
-                trait_name,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: type '{}' does not implement {}",
-                    span.line, span.column, type_name, trait_name
-                )
-            }
-            TypeError::PatternTypeMismatch {
-                expected,
-                found,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: pattern mismatch: expected '{}', found '{}'",
-                    span.line, span.column, expected, found
-                )
-            }
-            TypeError::DefaultInTraitImpl {
-                method,
-                param,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: default value for parameter '{}' in method '{}' is not allowed; defaults belong to the trait declaration",
-                    span.line, span.column, param, method
-                )
-            }
-            TypeError::DefaultInClosure { param, span } => {
-                write!(
-                    f,
-                    "{}:{}: default value for parameter '{}' is not allowed in closure; closures erase defaults when assigned to a function type",
-                    span.line, span.column, param
-                )
-            }
-            TypeError::ClosureMutBindingRequired { name, span } => {
-                write!(
-                    f,
-                    "{}:{}: cannot call `fn mut` closure '{}' through a non-`mut` binding; use `let mut {}`",
-                    span.line, span.column, name, name
-                )
-            }
-            TypeError::ClosureAtCmBoundary {
-                function,
-                position,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: closure type in {} of `{}` is not allowed: closures cannot cross the Component Model boundary",
-                    span.line, span.column, position, function
-                )
-            }
-            TypeError::DefaultInExportFn {
-                function,
-                param,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: default value for parameter '{}' in export fn '{}' is not allowed; the Component Model ABI requires every parameter at the boundary",
-                    span.line, span.column, param, function
-                )
-            }
-            TypeError::ResumeOutsideHandler { span } => {
-                write!(
-                    f,
-                    "{}:{}: `resume` is only valid inside an effect handler method body",
-                    span.line, span.column
-                )
-            }
-            TypeError::HandlerEffectNotImplemented {
-                type_name,
-                interface_name,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: handler value of type '{}' does not implement interface '{}'",
-                    span.line, span.column, type_name, interface_name
-                )
-            }
-            TypeError::BundledHandlerImplementsNoEffect { type_name, span } => {
-                write!(
-                    f,
-                    "{}:{}: handler value of type '{}' does not implement any effect; use `with E => h do` instead",
-                    span.line, span.column, type_name
-                )
-            }
-            TypeError::BundledHandlerUnsupportedHandlerType {
-                type_name,
-                type_kind,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: bundled effect handler `with h do` is not supported for handler type '{}' ({}); use the explicit form `with E => h do` instead",
-                    span.line, span.column, type_name, type_kind
-                )
-            }
-            TypeError::NotAnEffect { name, span } => {
-                write!(
-                    f,
-                    "{}:{}: '{}' is not an effect or resource; only effect and resource names are valid in `with E => h do` clauses",
-                    span.line, span.column, name
-                )
-            }
-            TypeError::GenericEffectParamNotInstallable { name, span } => {
-                write!(
-                    f,
-                    "{}:{}: cannot install a handler for generic effect parameter '{}'; abstract effect parameters are propagation-only — use a concrete effect name in `with`",
-                    span.line, span.column, name
-                )
-            }
-            TypeError::CompilerItemAttr { message, span } => {
-                write!(f, "{}:{}: {}", span.line, span.column, message)
-            }
-            TypeError::BareGenericFunctionRef { name, span } => {
-                write!(
-                    f,
-                    "{}:{}: cannot reference generic function '{}' bare; supply type arguments via turbofish (e.g., `{}::<…>`) or wrap in a closure (e.g., `|x| {}(x)`)",
-                    span.line, span.column, name, name, name
-                )
-            }
-            TypeError::GenericFunctionRefArgCountMismatch {
-                name,
-                expected,
-                found,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: wrong number of type arguments for generic function '{}': expected {}, found {}",
-                    span.line, span.column, name, expected, found
-                )
-            }
-            TypeError::GenericFunctionRefArityMismatch {
-                name,
-                expected_params,
-                found_params,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: cannot reference generic function '{}' here: expected {} parameter{}, but '{}' takes {}",
-                    span.line,
-                    span.column,
-                    name,
-                    expected_params,
-                    if *expected_params == 1 { "" } else { "s" },
-                    name,
-                    found_params,
-                )
-            }
-        }
+        let (_, message, span) = self.render();
+        write!(f, "{}:{}: {}", span.line, span.column, message)
     }
 }
 
 impl std::error::Error for TypeError {}
 
-impl From<TypeError> for crate::compiler_host::Diagnostic {
-    fn from(e: TypeError) -> Self {
-        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
-        let (code, message, span) = match &e {
+impl TypeError {
+    /// Render this error into its `(code, message, span)` triple — the single
+    /// source of truth shared by [`std::fmt::Display`] and the
+    /// `From<TypeError> for Diagnostic` conversion, so both surfaces phrase
+    /// every variant identically.
+    pub(super) fn render(&self) -> (crate::compiler_host::Code, String, Span) {
+        use crate::compiler_host::Code;
+        match self {
             TypeError::TypeMismatch {
                 expected,
                 found,
@@ -851,15 +469,7 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 format!("unknown identifier '{name}'"),
                 *span,
             ),
-            TypeError::FieldNotFound {
-                struct_name,
-                field_name,
-                span,
-            } => (
-                Code::TypeMismatch,
-                format!("field '{field_name}' not found on struct '{struct_name}'"),
-                *span,
-            ),
+
             TypeError::ArgumentCountMismatch {
                 expected,
                 found,
@@ -880,11 +490,7 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
             TypeError::CannotInferType { message, span } => {
                 (Code::TypeMismatch, message.clone(), *span)
             }
-            TypeError::NotYetImplemented { feature, span } => (
-                Code::UnsupportedFeature,
-                format!("{feature} is not yet implemented"),
-                *span,
-            ),
+
             TypeError::CannotAssign { message, span } => (
                 Code::ImmutableAssignment,
                 format!("cannot assign: {message}"),
@@ -1157,7 +763,14 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
                 ),
                 *span,
             ),
-        };
+        }
+    }
+}
+
+impl From<TypeError> for crate::compiler_host::Diagnostic {
+    fn from(e: TypeError) -> Self {
+        use crate::compiler_host::{DiagnosticSpan, Severity};
+        let (code, message, span) = e.render();
         crate::compiler_host::Diagnostic {
             severity: Severity::Error,
             code,
@@ -1862,4 +1475,45 @@ pub(super) struct SequenceLiteralTraitInfo {
     pub(super) trait_name: String,
     /// The module where the `SequenceLiteralBuilder` impl is defined.
     pub(super) impl_module_source: ModuleSource,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::compiler_host::Diagnostic;
+    use crate::token::Span;
+
+    fn span() -> Span {
+        Span::new(0, 1, 7, 3)
+    }
+
+    #[test]
+    fn display_prefixes_span_and_matches_diagnostic_message() {
+        let err = TypeError::UnknownType {
+            name: "Frobnicate".to_string(),
+            span: span(),
+        };
+
+        // `Display` prefixes `line:column:` and reuses the canonical message.
+        assert_eq!(err.to_string(), "7:3: unknown type 'Frobnicate'");
+
+        // `Display` and the `Diagnostic` conversion are a single source of
+        // truth: the rendered message body is byte-for-byte identical.
+        let diag: Diagnostic = err.into();
+        assert_eq!(diag.message, "unknown type 'Frobnicate'");
+    }
+
+    #[test]
+    fn render_carries_diagnostic_code_and_span() {
+        let (code, message, sp) = TypeError::ResumeOutsideHandler { span: span() }.render();
+        assert!(matches!(
+            code,
+            crate::compiler_host::Code::UnsupportedFeature
+        ));
+        assert_eq!(
+            message,
+            "`resume` is only valid inside an effect handler method body"
+        );
+        assert_eq!((sp.line, sp.column), (7, 3));
+    }
 }
