@@ -106,14 +106,15 @@ prediction cannot disambiguate surface as `Ambiguous([alt N, alt M]) —
 `<reason>` names _why_ the static path halted (`opaque rule-ref
 prefix`, `at-end vs branch conflict`, `lookahead exhausted (k=5)`,
 `config-set explosion`, `multiple alts end together`) — see
-`AmbiguityReason` in `prediction.wado`. Two more per-site fields aid
-ATN-class triage: left-recursive rules print a `loop-entry:` section
-(per-alt `conflict-min` precedence plus the suffix-first overlap groups,
-flagging the precedence-disambiguated — not token-led — loop entry that
-goes ATN-class in `DropLoopEntryBranchInLRRule_4`), and a follow-variant
-gated by a multi-token `(X Y)*`-style Repeat prints its `k-prefix=[@0=…
-@1=…]` per-depth mask beside the (empty) 1-token `mask`. There are no
-options; multiple files are merged the same as `gale gen`.
+`AmbiguityReason` in `prediction.wado`. Left-recursive rules also print
+a `loop-entry:` section (per-alt `conflict-min` precedence plus the
+suffix-first overlap groups, flagging the precedence-disambiguated — not
+token-led — loop entry that goes ATN-class in
+`DropLoopEntryBranchInLRRule_4`). (The retired follow-variant section —
+which printed per-(rule, mask) `__follow_<id>` clones and their
+`k-prefix=` masks — is gone now that the FOLLOW repair is threaded at
+runtime; a per-call-site `FollowArg` dump view is a possible follow-up.)
+There are no options; multiple files are merged the same as `gale gen`.
 
 (note: each `wado` command is actually `cargo run --bin wado`)
 
@@ -301,50 +302,83 @@ The upstream `runtime-testsuite/` is extracted into per-category Wado tests as a
 
 ## LL Prediction
 
-Gale's parser-side prediction is a static FOLLOW-based repair on top
-of SLL: when a `RuleRef R` call site's caller-local FOLLOW set
-intersects `R`'s tail-greedy first set, Gale emits a
-`scan_R__follow_<id>` / `parse_R__follow_<id>` variant whose body
-suppresses the colliding tail-greedy iterations. Variants are emitted
-through the same `gen_parse_fn_named` / `gen_scan_function_named` paths
-the regular rules go through, so multi-alt and left-recursive rules
-get variant emit "for free" under the unified naming scheme
-`__follow_<id>{,_atom,_lr_N,_bt_N}`.
+Gale's parser-side prediction is a static FOLLOW-based repair on top of
+SLL: a tail-greedy `Repeat` at a rule's tail can over-consume tokens
+that belong to the caller's continuation. The repair gates that loop on
+the caller's deterministic FOLLOW continuation, **threaded as a runtime
+argument** rather than baked into a specialised callee.
 
-Two complementary mask shapes:
+When the grammar has at least one such gate, every generated `parse_*`
+/ `scan_*` function takes a defaulted `follow: &List<List<i32>>`
+argument (`follow[d]` is the set of token kinds valid at
+caller-continuation depth `d`; `&EMPTY_FOLLOW` for the common
+non-repair case). At a tail-greedy `Repeat` the loop yields to the
+caller — break `*`/`+`, skip `?` — exactly when
+`follow_yields(tokens, pos, follow, TK_EOF)` is true, i.e. the next
+tokens match the caller's continuation at every depth. The same
+`follow_yields` serves both the parse side (`&p.tokens`, `p.pos`) and
+the scan side (raw `tokens`/`pos`), keeping the longest-match tournament
+in lockstep. `follow` precedes `min_prec` in every signature, so a
+non-precedence call site emits `parse_X(p, follow)` uniformly for LR and
+non-LR targets.
 
-- **1-token mask** (`List<String>`) — the canonical intersection
-  `tail_greedy_first(rule) ∩ caller_follow`. The variant body's iter
-  dispatch subtracts the mask from `body_first_set`.
-- **K-prefix mask** (`List<List<String>>`) — `mask[d]` is the set of
-  caller tokens at input depth `d`. At iter entry, the variant body
-  checks `peek_at(d) ∈ mask[d]` for every depth; on full match it
-  yields to the caller. Admits multi-token-inner `Repeat`s (`(X Y)+`,
-  `(X Y)?`, …) that the 1-token analysis rejects under soundness
-  invariant 1 below. Registered only when the 1-token mask is empty
-  (so the K-prefix path doesn't duplicate variants the 1-token path
-  already covers).
+The `follow` parameter is **pruned entirely** when the grammar has no
+caller-FOLLOW gate at all (`GenContext::emit_follow` — set by lowering
+whenever it constructs a gated `Repeat`). Threading a parameter that no
+function ever reads is not just dead weight: it enlarges every
+recursive scan frame, and on a deep-recursion grammar
+(`Performance/ExpressionGrammar_2`) the extra stack slot per frame
+overflowed the wasm stack at `-O2`/`-O3` while `-O1` still fit. So every
+`add_follow_param` / call-argument / `FOLLOW_MASK_<id>` emit site is
+gated on `emit_follow`; grammars with a real gate are byte-identical to
+uniform threading, gate-free grammars carry no `follow` at all.
+
+This single runtime gate subsumes what used to be two baked mask shapes
+(a 1-token `tail_greedy_first ∩ caller_follow` subtraction and a
+multi-depth K-prefix break): K=1 is the degenerate case, and gating on
+the full caller continuation is equivalent to the old subtraction
+because the loop only iterates on `peek ∈ body_first` anyway.
+
+At each `RuleRef` call site lower computes a `FollowArg` — the runtime
+continuation to pass:
+
+- `NoFollow` → the callee has no reachable tail-greedy conflict; pass
+  `&EMPTY_FOLLOW`.
+- `Mask(id)` → the local suffix is non-nullable and statically known;
+  pass `&FOLLOW_MASK_<id>` (a `global` emitted once per distinct mask).
+- `Forward` → the callee sits at this rule's tail; forward the current
+  function's own `follow`.
+- `Combined(id)` → a nullable local prefix precedes the tail; pass
+  `&follow_prepend(&FOLLOW_MASK_<id>, follow)`.
+
+Because the mask is data threaded at runtime, each rule is emitted
+**exactly once** — there are no per-(rule, mask) `__follow_<id>` clones.
+This collapsed the generated-parser growth the old variant mechanism
+caused (TypeScript shed ~17% / all 508 `__follow_` functions; Rust ~20%).
 
 Implementation references:
 
-- `package-gale/src/follow_env.wado` — pure analysis. `FollowEnv`
-  carries the per-rule `tail_greedy` snapshot and the call-graph
-  fixed-point `rule_follow`. No codegen state; consumed read-only.
+- `package-gale/src/runtime.wado` — `follow_yields`, `follow_prepend`,
+  `EMPTY_FOLLOW` (inlined into every generated parser).
 - `package-gale/src/gen_context.wado` —
-  `tail_greedy_first_of_rule` / `tail_greedy_k_prefix_of_rule`,
-  `element_is_first_exact`, `deep_suffix_is_first_exact`,
-  `deep_position_first_sets_from`,
-  `compute_call_site_follow_and_mask` /
-  `compute_call_site_k_prefix_mask`,
-  `compute_k_prefix_position_mask`,
-  `intern_follow_variant`, `FollowVariantEntry`.
-- `package-gale/src/parser_gen.wado` — `emit_follow_variant` (single
-  dispatcher behind the fixed-point variant emit loop),
-  `gen_parse_fn_named` / `gen_scan_function_named` (mask-aware
-  body emitters), the LR helpers (`gen_lr_*` / `gen_scan_lr_*`)
-  parameterised by `fn_name`, `ll_match_length`,
-  `k_prefix_match_expr` / `k_prefix_match_expr_scan`,
-  `emit_k_prefix_yield_gate`.
+  `tail_greedy_first_of_rule`, `deep_position_first_sets_from`,
+  `compute_call_site_follow` (handles the first-exact deep-nullable
+  suffix, soundness invariant 2), `intern_follow_mask` /
+  `FollowMaskEntry`.
+- `package-gale/src/lower.wado` — `compute_follow_arg` (the
+  per-call-site `FollowArg`) and `compute_gate_caller_follow` (the
+  per-Repeat tail-position gate), threaded through `lower_op` /
+  `lower_scan_element` and set on `RuleCallOp.follow_arg` /
+  `RepeatOp.gate_caller_follow`.
+- `package-gale/src/parser_gen.wado` — `add_follow_param`,
+  `emit_caller_follow_gate` (+ scan mirror), `follow_arg_expr`,
+  `gen_follow_mask_globals`, the optional-gate hook in
+  `gen_op_repeat_optional_{leaf,rulecall}`.
+- `package-gale/src/follow_env.wado` — pure analysis (`FollowEnv`'s
+  `tail_greedy` snapshot and the call-graph `rule_follow` fixed-point).
+- `package-gale/src/gir.wado` — `FollowArg`, `RuleCallOp.follow_arg`,
+  `RepeatOp.gate_caller_follow` (+ `ScanRuleCallElem`/`ScanRepeatElem`
+  mirrors).
 
 ### Soundness invariants
 
@@ -353,33 +387,30 @@ Violating them broke real grammars in the past, and the corresponding
 guards are present as inline conservatism with explicit comments at
 each site.
 
-1. **Single-token tail-greedy inner.** Only `Repeat`s whose inner
-   consumes exactly one token per iteration contribute to a rule's
-   1-token `tail_greedy_first` set. Multi-token-inner Repeats can
-   re-enter on the same first token at a deeper position (HTMLParser's
-   `htmlContent` is the canonical example: `((htmlElement | CDATA |
-   htmlComment) htmlChardata?)*` re-enters on TAG_OPEN), so
-   suppressing them by a 1-token follow mask would break legitimate
-   parses. The K-prefix path admits these Repeats because its
-   per-depth gate distinguishes the closing-tag prefix
-   `[TAG_OPEN, '/', TagName]` from the iter prefix
-   `[TAG_OPEN, TagName, …]` structurally.
+1. **Single-token tail-greedy inner (the multi-token re-entry hazard).**
+   A multi-token-inner Repeat can legitimately re-enter on its own
+   first token at a deeper position (HTMLParser's `htmlContent`:
+   `((htmlElement | CDATA | htmlComment) htmlChardata?)*` re-enters on
+   TAG_OPEN), so a 1-token follow check would break legitimate parses.
+   The runtime gate is safe here because `follow_yields` checks the
+   caller's continuation at EVERY depth: it distinguishes the closing
+   prefix `[TAG_OPEN, '/', TagName]` from the iter prefix
+   `[TAG_OPEN, TagName, …]` structurally, yielding only on the former.
 
 2. **First-exact deep-nullable suffix.** When a `RuleRef` site's
-   suffix is deep-nullable, its first set may be unioned into the
-   site's caller-follow only if every walked element is
-   `element_is_first_exact` (single-token derived). Multi-element
-   alts (CSS3's `(combinator simpleSelectorSequence ws)*` Star
-   group) over-count: `combinator`'s first includes Space, but
-   suppressing Space at the preceding `ws` strands the runtime on a
-   lone Space.
+   suffix is deep-nullable (e.g. `a b?`), the local mask may include
+   the suffix's first set only if every walked element is
+   `element_is_first_exact` (single-token derived); `compute_call_site_follow`
+   enforces this, and `compute_follow_arg` builds the `FollowArg` mask
+   from it. Multi-element alts (CSS3's `(combinator
+   simpleSelectorSequence ws)*` Star group) over-count: `combinator`'s
+   first includes Space, but yielding Space at the preceding `ws`
+   strands the runtime on a lone Space.
 
-3. **Variant emit reproduces the callee body faithfully.** All
-   variant emit paths route through `gen_parse_fn_named` /
-   `gen_scan_function_named` with `fn_name` set to
-   `parse_<rule>__follow_<id>` (and analogous helper-name
-   templates). No shrunken-duplicate body emitters; whatever shape
-   the regular path can emit, the variant path emits as well.
+3. _(Retired.)_ The old "variant emit reproduces the callee body
+   faithfully" invariant is moot under the runtime-FOLLOW design: each
+   rule is emitted exactly once, so there is no second body shape to
+   keep in sync. The runtime `follow` argument carries the repair.
 
 4. **Wildcard alts collapse the overlap group and sort last.**
    `first_of_element(Wildcard)` returns `[]` because we cannot

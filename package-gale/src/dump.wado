@@ -5,14 +5,14 @@
 //! The output is plain text and stable across runs: every collection
 //! is iterated in its stored (deterministic) order. Each rule appears
 //! once, with non-overlapping sections (shape, alts, prediction tree,
-//! repeats, follow-variants, diagnostics). The trailing summary lists
+//! repeats, diagnostics). The trailing summary lists
 //! every diagnostic — including the group-scoped ones whose label
 //! carries no quoted rule name and so are not inlined under a rule
 //! (see `render_rule_diagnostics`; a structured owner id would let
 //! them inline, tracked in TODO.md).
 //!
 //! GIR carries the lowered shape decisions (Direct vs Tournament,
-//! repeat strategy, follow variants). The prediction-tree section is
+//! repeat strategy, per-call-site FOLLOW args). The prediction-tree section is
 //! re-built from the surface grammar + `GenContext` so it mirrors the
 //! same `build_prediction` call the parser emitter performs — that
 //! tree is computed at emit time, not stored on GIR, so reproducing
@@ -37,11 +37,10 @@ use {
     MultiAltDispatch,
     DirectDispatch,
     TournamentDispatch,
-    FollowVariant,
     rule_header,
 } from "./gir.wado";
 use { Grammar, ParserRule, Alternative, Element, RepeatKind } from "./ir.wado";
-use { GenContext, FollowVariantEntry } from "./gen_context.wado";
+use { GenContext } from "./gen_context.wado";
 use {
     PredictionNode,
     PredictionDispatch,
@@ -103,7 +102,6 @@ fn render_rule(out: &mut String, rule: &Rule, grammar: &Grammar, lowered: &Lower
 
     render_prediction(out, rule, grammar, ctx);
     render_repeats(out, rule);
-    render_follow_variants(out, &header.name, lowered, ctx);
     render_rule_diagnostics(out, &header.name, lowered);
 }
 
@@ -487,81 +485,11 @@ fn repeat_kind_label(kind: &RepeatKind) -> String {
 fn repeat_strategy_label(strategy: &RepeatStrategy) -> String {
     return match strategy {
         Plain => "Plain",
-        WithFollowSubtraction(_) => "WithFollowSubtraction",
         NonGreedy(_) => "NonGreedy",
         OptionalLookahead(_) => "OptionalLookahead",
         OptionalShapeLookahead(_) => "OptionalShapeLookahead",
         OptionalScanGuard => "OptionalScanGuard",
-        Suppressed => "Suppressed",
     };
-}
-
-// ==========================================================================
-// Follow-variants
-// ==========================================================================
-
-/// List the follow-aware variants registered for this rule. A variant
-/// is owned by `rule_name` when its header name matches OR its
-/// `variant_of` names the rule.
-///
-/// Each variant carries the 1-token `mask` it subtracts. When that mask
-/// is empty the variant is instead gated by a K-prefix mask — the
-/// per-depth token sets the iter site peeks before yielding to the
-/// caller (the multi-token-inner Repeat path; soundness invariant 1).
-/// That mask lives on the `FollowVariantEntry` registry, not on the GIR
-/// `FollowVariant`, so it is looked up from `ctx` (the same ctx that
-/// lowered the grammar) and rendered per depth as `@d=[…]`.
-fn render_follow_variants(out: &mut String, rule_name: &String, lowered: &LoweredGrammar, ctx: &GenContext) {
-    let entries = ctx.follow_variants();
-    let mut printed_header = false;
-    for let vrule of &lowered.variant_rules {
-        let vheader = rule_header(vrule);
-        let owns = vheader.name == *rule_name || variant_of_matches(&vheader.variant_of, rule_name);
-        if !owns {
-            continue;
-        }
-        if !printed_header {
-            out.push_str(&"  follow-variants:\n");
-            printed_header = true;
-        }
-        out.push_str(&"    variant");
-        if let Some(v) = &vheader.variant_of {
-            out.push_str(&" #");
-            out.push_str(&`{v.id}`);
-            out.push_str(&" mask=");
-            push_token_set(out, &v.mask);
-            render_variant_k_prefix(out, v.id, &entries);
-        }
-        out.push('\n');
-    }
-}
-
-/// Append the K-prefix mask for variant `id` from the registry, if it
-/// carries one. Rendered as `k-prefix=[@0=[…] @1=[…] …]`, one set per
-/// input depth — the multi-token generalisation of the 1-token `mask`.
-fn render_variant_k_prefix(out: &mut String, id: i32, entries: &List<FollowVariantEntry>) {
-    for let e of entries {
-        if e.id != id || e.k_prefix_mask.is_empty() {
-            continue;
-        }
-        out.push_str(&" k-prefix=[");
-        for let mut d = 0; d < e.k_prefix_mask.len(); d += 1 {
-            if d > 0 {
-                out.push(' ');
-            }
-            out.push_str(&`@{d}=`);
-            push_token_set(out, &e.k_prefix_mask[d]);
-        }
-        out.push(']');
-        return;
-    }
-}
-
-fn variant_of_matches(variant_of: &Option<FollowVariant>, rule_name: &String) -> bool {
-    if let Some(v) = variant_of {
-        return v.rule_name == *rule_name;
-    }
-    return false;
 }
 
 // ==========================================================================

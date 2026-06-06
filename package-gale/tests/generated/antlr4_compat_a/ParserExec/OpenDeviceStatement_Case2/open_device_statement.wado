@@ -145,6 +145,75 @@ impl Token {
 // with reference-containing fields triggers a compiler bug
 // (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
 
+/// Runtime FOLLOW-continuation gate for tail-greedy loops.
+///
+/// `follow` is the caller's deterministic K-prefix continuation:
+/// `follow[d]` is the set of token kinds that may appear at input depth
+/// `d` if control belongs to the caller rather than to another iteration
+/// of the loop. An empty `follow` (the common, non-repair case) disables
+/// the gate. The loop yields to the caller — breaking `*`/`+` or skipping
+/// `?` — exactly when EVERY non-empty depth-set matches the upcoming
+/// input, i.e. when the next tokens are unambiguously the caller's
+/// continuation.
+///
+/// Threaded as a defaulted `&EMPTY_FOLLOW` argument through the generated
+/// `parse_*` / `scan_*` functions; repair call sites pass a `FOLLOW_MASK_*`
+/// constant (or forward their own `follow`). This replaces the previous
+/// per-(rule, mask) cloned `__follow_<id>` variants: the mask is data
+/// carried at runtime, not code baked into a specialised function.
+///
+/// `eof_kind` is the token kind reported past the end of the stream, so a
+/// caller continuation ending in EOF gates correctly. Used by both the
+/// parse side (`tokens = &p.tokens`, `pos = p.pos`) and the scan side
+/// (raw `tokens` / `pos`), keeping the longest-match tournament's view in
+/// lockstep with parse.
+pub global EMPTY_FOLLOW: List<List<i32>> = [];
+
+/// Prepend a static local prefix to an inherited FOLLOW continuation.
+/// Used for the `FollowArg::Combined` case: a callee at the current
+/// rule's tail whose preceding local suffix is nullable, so its
+/// continuation is `prefix` (the optional local elements' per-depth
+/// first sets) followed by the caller's own `follow`. Bounded by
+/// `FOLLOW_MASK_MAX_K` so the result stays small; the only
+/// allocating point on a repaired path (the common Static/Forward
+/// cases pass a reference directly).
+pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
+    let mut combined: List<List<i32>> = [];
+    for let depth of prefix {
+        combined.push(*depth);
+    }
+    for let depth of follow {
+        combined.push(*depth);
+    }
+    return combined;
+}
+
+pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+    if follow.is_empty() {
+        return false;
+    }
+    for let mut d = 0; d < follow.len(); d += 1 {
+        let set = &follow[d];
+        if set.is_empty() {
+            // No constraint at this depth — a vacuous match, keep going.
+            continue;
+        }
+        let idx = pos + d;
+        let kind = if idx < tokens.len() { tokens[idx].kind } else { eof_kind };
+        let mut hit = false;
+        for let t of set {
+            if kind == *t {
+                hit = true;
+                break;
+            }
+        }
+        if !hit {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// ParseError represents a parse failure with location and expected tokens.
 ///
 /// `message` is the local "expected X, got Y" description, kept free of
@@ -1061,13 +1130,13 @@ impl Parser {
     }
 }
 
-fn scan_program(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_program(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_statement(tokens, pos, 0);
+    pos = scan_statement(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_LIT_OPEN {
         let sp = pos;
-        pos = scan_statement(tokens, pos, 0);
+        pos = scan_statement(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -1076,7 +1145,7 @@ fn scan_program(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_statement(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_statement(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_OPEN { return -1; }
     pos += 1;
@@ -1084,7 +1153,7 @@ fn scan_statement(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         sg_0: {
             if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DEVICE { break sg_0; }
             pos += 1;
-            if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+            if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                 let sp = pos;
                 let gp_1 = pos;
                 sg_1: {
@@ -1114,13 +1183,13 @@ fn scan_statement(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         }
         return -1;
     }
-    while pos < tokens.len() && tokens[pos].kind == TK_LIT_DEVICE {
+    while pos < tokens.len() && tokens[pos].kind == TK_LIT_DEVICE && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_2_done: {
             sg_2: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DEVICE { break sg_2; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+                if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     let gp_3 = pos;
                     sg_3: {
@@ -1156,7 +1225,7 @@ fn scan_statement(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn _parse_program__inner(p: &mut Parser) -> Result<ProgramNode, ParseError> {
+fn _parse_program__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ProgramNode, ParseError> {
     let start = p.peek().span.start;
     let mut statement_list: List<StatementNode> = [];
     let mut _plus_first = true;
@@ -1166,7 +1235,7 @@ fn _parse_program__inner(p: &mut Parser) -> Result<ProgramNode, ParseError> {
             rep_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                pos = scan_statement(tokens, pos, 0);
+                pos = scan_statement(tokens, pos, &EMPTY_FOLLOW, 0);
                 if pos < 0 { break rep_scan; }
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
@@ -1174,14 +1243,14 @@ fn _parse_program__inner(p: &mut Parser) -> Result<ProgramNode, ParseError> {
             if rep_scan_pos < 0 {
                 if p.peek_kind() == TK_LIT_OPEN {
                     let _rec_pos = p.pos;
-                    if let Err(_rec_e) = _parse_statement(p) { p.record_deeper(_rec_e); }
+                    if let Err(_rec_e) = _parse_statement(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
                     p.pos = _rec_pos;
                 }
                 break;
             }
         }
         _plus_first = false;
-        let statement = _parse_statement(p)?;
+        let statement = _parse_statement(p, &EMPTY_FOLLOW)?;
         statement_list.push(statement);
     }
     let dot = p.expect(TK_LIT_DOT)?;
@@ -1192,8 +1261,8 @@ fn _parse_program__inner(p: &mut Parser) -> Result<ProgramNode, ParseError> {
     });
 }
 
-fn _parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
-    let r = _parse_program__inner(p);
+fn _parse_program(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ProgramNode, ParseError> {
+    let r = _parse_program__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("program");
         return Result::<ProgramNode, ParseError>::Err(e);
@@ -1201,13 +1270,14 @@ fn _parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
     return r;
 }
 
-fn _parse_statement__inner(p: &mut Parser) -> Result<StatementNode, ParseError> {
+fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StatementNode, ParseError> {
     let start = p.peek().span.start;
     let lit_open = p.expect(TK_LIT_OPEN)?;
     let mut lit_device_item_list: List<LitDeviceItemOptItem> = [];
     let mut _plus_first = true;
     loop {
         if !_plus_first {
+            if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.tokens;
@@ -1216,7 +1286,7 @@ fn _parse_statement__inner(p: &mut Parser) -> Result<StatementNode, ParseError> 
                     sg_4: {
                         if pos >= tokens.len() || tokens[pos].kind != TK_LIT_DEVICE { break sg_4; }
                         pos += 1;
-                        if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+                        if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                             let sp = pos;
                             let gp_5 = pos;
                             sg_5: {
@@ -1281,7 +1351,7 @@ fn _parse_statement__inner(p: &mut Parser) -> Result<StatementNode, ParseError> 
             }
             opt_scan_pos = pos;
         }
-        let group_0: Option<StatementGroup0> = if opt_scan_pos >= 0 {
+        let group_0: Option<StatementGroup0> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
             let group_0: StatementGroup0 = if p.peek_kind() == TK_OPT1 {
                 let opt1 = p.expect(TK_OPT1)?;
                 StatementGroup0::Alt0(StatementGroup0Alt0 {
@@ -1314,8 +1384,8 @@ fn _parse_statement__inner(p: &mut Parser) -> Result<StatementNode, ParseError> 
     });
 }
 
-fn _parse_statement(p: &mut Parser) -> Result<StatementNode, ParseError> {
-    let r = _parse_statement__inner(p);
+fn _parse_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StatementNode, ParseError> {
+    let r = _parse_statement__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("statement");
         return Result::<StatementNode, ParseError>::Err(e);
@@ -1398,4 +1468,8 @@ pub fn to_tree(node: &ProgramNode) -> CstNode {
 fn _gale_kind_set_0(k: i32) -> bool {
     return k matches { TK_OPT1 | TK_OPT2 | TK_OPT3 };
 }
+
+global FOLLOW_MASK_0: List<List<i32>> = [[TK_LIT_DOT]];
+global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_DEVICE]];
+global FOLLOW_MASK_2: List<List<i32>> = [[TK_OPT1, TK_OPT2, TK_OPT3]];
 

@@ -39,10 +39,6 @@ The K-prefix follow-mask path closes the multi-token tail-greedy gap at the oute
 
 The K-prefix caller-side mask analysis halts at a multi-alt `RuleRef` because the per-depth union of multi-alt prefixes would over-yield by matching cross-alt sequences no real alt admits. A per-alt sequence representation (`List<List<List<String>>>`) could extend the walk safely — useful when a caller's continuation passes through a multi-alt rule like `expr : literal | name`.
 
-### Multi-alt variant dispatcher — K-prefix cascade relaxation
-
-`tail_greedy_k_prefix_of_element`'s `RuleRef` arm still halts the K-prefix cascade through multi-alt rules out of conservatism. Now that the dispatcher in `parse_<rule>__follow_<id>` routes correctly to the variant's own `_bt_<n>` / `_scan_<n>` helpers (covered by `tests/grammars/ll_multi_alt_overlap.g4`), the `RuleRef` recursion gate can be relaxed so K-prefix flows through multi-alt rules cleanly. Requires its own regression fixture before the guard is loosened.
-
 ### ATN-class grammars
 
 Grammars whose alt selection needs arbitrary-length lookahead through ambiguous prefixes cannot be decided by static FOLLOW + K-prefix. ANTLR4 handles them with a runtime ATN simulator (closure / predict / DFA cache; out of scope to inspect — see License hygiene in `AGENTS.md`). Gale's static path will always have edges.
