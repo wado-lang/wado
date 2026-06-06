@@ -120,18 +120,29 @@ impl<'a> Engine<'a> {
     }
 
     /// Record, per local index, the defining statement and every reading
-    /// `Local` expression node.
+    /// `Local` expression node. Walks the live tree from the root rather than
+    /// iterating every arena slot, so dead nodes left by an earlier in-place
+    /// pass (which never compacts `func.body`) are not counted — the use index
+    /// reflects only what is reachable, matching a tree walk.
     fn build_uses(&mut self) {
-        let body = &*self.body;
-        for id in body.exprs.keys() {
-            if let ExprKind::Local { index, .. } = &body.exprs[id].kind {
-                self.uses.entry(*index).or_default().reads.push(id);
+        let mut stack = vec![NodeRef::Block(self.body.root)];
+        while let Some(node) = stack.pop() {
+            match node {
+                NodeRef::Expr(id) => {
+                    if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
+                        let index = *index;
+                        self.uses.entry(index).or_default().reads.push(id);
+                    }
+                }
+                NodeRef::Stmt(id) => {
+                    if let StmtKind::Let { local_index, .. } = &self.body.stmts[id].kind {
+                        let index = *local_index;
+                        self.uses.entry(index).or_default().def = Some(id);
+                    }
+                }
+                NodeRef::Block(_) | NodeRef::Pat(_) => {}
             }
-        }
-        for id in body.stmts.keys() {
-            if let StmtKind::Let { local_index, .. } = &body.stmts[id].kind {
-                self.uses.entry(*local_index).or_default().def = Some(id);
-            }
+            self.body.for_each_child(node, |c| stack.push(c));
         }
     }
 
