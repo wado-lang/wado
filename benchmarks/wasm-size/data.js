@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780719719746,
+  "lastUpdate": 1780720988685,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30481,6 +30481,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 456413,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d8e41d62270549438f1f6728e659e104579a419e",
+          "message": "Merge pull request #1311 from wado-lang/claude/wir-optimize-peephole-wlpej\n\nfeat(wir-optimize): Wasm-instruction-level peephole rewrites",
+          "timestamp": "2026-06-06T13:34:24+09:00",
+          "tree_id": "e6014c71b5dadb760cf32e892f4d544311bbde26",
+          "url": "https://github.com/wado-lang/wado/commit/d8e41d62270549438f1f6728e659e104579a419e"
+        },
+        "date": 1780720988151,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8780,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16583,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 456150,
             "unit": "bytes"
           }
         ]
