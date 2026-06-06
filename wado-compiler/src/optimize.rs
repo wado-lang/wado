@@ -42,6 +42,7 @@
 //! `value_copy_elide` (full strip) and `value_copy_demote` (deep → shallow).
 
 mod alias;
+mod arena_query;
 mod array_literal;
 mod condition_implication;
 mod const_branch_prune;
