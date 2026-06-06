@@ -74,8 +74,15 @@ macro_rules! keyword_registry {
 
 /// Generate the operator registry and the `TokenKind` → text/category
 /// mappings from one table.
+///
+/// The trailing `: bool` flag records whether the operator should render as an
+/// `operator` semantic token in the LSP. It is `false` for tokens that double
+/// as punctuation (`&` / `|` for references and unions/closures; `::` / `?` /
+/// `..` / `...` for paths, try, and ranges), which look wrong tinted as
+/// operators. Keeping the flag in the registry means it cannot drift from the
+/// category list.
 macro_rules! operator_registry {
-    ( $( $text:literal => $variant:ident : $cat:ident ),+ $(,)? ) => {
+    ( $( $text:literal => $variant:ident : $cat:ident : $highlight:literal ),+ $(,)? ) => {
         /// Every operator/punctuation token paired with its category. The
         /// lexer's maximal-munch scanner produces these tokens; a test pins
         /// that each spelling lexes back to the listed variant.
@@ -99,6 +106,17 @@ macro_rules! operator_registry {
                 match self {
                     $( TokenKind::$variant => Some(OperatorCategory::$cat), )+
                     _ => None,
+                }
+            }
+
+            /// Whether this token should be highlighted as an `operator`
+            /// semantic token. See the macro docs for why this is narrower
+            /// than "has an operator category".
+            #[must_use]
+            pub fn is_highlight_operator(&self) -> bool {
+                match self {
+                    $( TokenKind::$variant => $highlight, )+
+                    _ => false,
                 }
             }
         }
@@ -159,50 +177,52 @@ keyword_registry! {
 
 operator_registry! {
     // Comparison.
-    "==" => EqEq : Comparison,
-    "!=" => NotEq : Comparison,
-    "<=" => LtEq : Comparison,
-    ">=" => GtEq : Comparison,
-    "<" => Lt : Comparison,
-    ">" => Gt : Comparison,
+    "==" => EqEq : Comparison : true,
+    "!=" => NotEq : Comparison : true,
+    "<=" => LtEq : Comparison : true,
+    ">=" => GtEq : Comparison : true,
+    "<" => Lt : Comparison : true,
+    ">" => Gt : Comparison : true,
     // Logical.
-    "&&" => And : Logical,
-    "||" => Or : Logical,
-    "!" => Not : Logical,
+    "&&" => And : Logical : true,
+    "||" => Or : Logical : true,
+    "!" => Not : Logical : true,
     // Arithmetic.
-    "+" => Plus : Arithmetic,
-    "-" => Minus : Arithmetic,
-    "*" => Star : Arithmetic,
-    "/" => Slash : Arithmetic,
-    "%" => Percent : Arithmetic,
-    // Bitwise.
-    "&" => Ampersand : Bitwise,
-    "|" => Pipe : Bitwise,
-    "^" => Caret : Bitwise,
-    "~" => Tilde : Bitwise,
-    "<<" => LtLt : Bitwise,
-    ">>" => GtGt : Bitwise,
+    "+" => Plus : Arithmetic : true,
+    "-" => Minus : Arithmetic : true,
+    "*" => Star : Arithmetic : true,
+    "/" => Slash : Arithmetic : true,
+    "%" => Percent : Arithmetic : true,
+    // Bitwise. `&` and `|` double as reference and union/closure punctuation,
+    // so they are not highlighted as operators.
+    "&" => Ampersand : Bitwise : false,
+    "|" => Pipe : Bitwise : false,
+    "^" => Caret : Bitwise : true,
+    "~" => Tilde : Bitwise : true,
+    "<<" => LtLt : Bitwise : true,
+    ">>" => GtGt : Bitwise : true,
     // Assignment.
-    "+=" => PlusEq : Assignment,
-    "-=" => MinusEq : Assignment,
-    "*=" => StarEq : Assignment,
-    "/=" => SlashEq : Assignment,
-    "%=" => PercentEq : Assignment,
-    "&=" => AmpEq : Assignment,
-    "|=" => PipeEq : Assignment,
-    "^=" => CaretEq : Assignment,
-    "<<=" => ShlEq : Assignment,
-    ">>=" => ShrEq : Assignment,
-    "=" => Eq : Assignment,
-    // Other.
-    "->" => Arrow : Other,
-    "=>" => FatArrow : Other,
-    "::" => ColonColon : Other,
-    "?" => Question : Other,
-    "..<" => DotDotLt : Other,
-    "..=" => DotDotEq : Other,
-    ".." => DotDot : Other,
-    "..." => DotDotDot : Other,
+    "+=" => PlusEq : Assignment : true,
+    "-=" => MinusEq : Assignment : true,
+    "*=" => StarEq : Assignment : true,
+    "/=" => SlashEq : Assignment : true,
+    "%=" => PercentEq : Assignment : true,
+    "&=" => AmpEq : Assignment : true,
+    "|=" => PipeEq : Assignment : true,
+    "^=" => CaretEq : Assignment : true,
+    "<<=" => ShlEq : Assignment : true,
+    ">>=" => ShrEq : Assignment : true,
+    "=" => Eq : Assignment : true,
+    // Other. Arrows and bounded ranges highlight; paths/try/unbounded ranges
+    // (`::`, `?`, `..`, `...`) are punctuation and do not.
+    "->" => Arrow : Other : true,
+    "=>" => FatArrow : Other : true,
+    "::" => ColonColon : Other : false,
+    "?" => Question : Other : false,
+    "..<" => DotDotLt : Other : true,
+    "..=" => DotDotEq : Other : true,
+    ".." => DotDot : Other : false,
+    "..." => DotDotDot : Other : false,
 }
 
 /// Contextual keywords: lexed as identifiers (the parser recognises them in
@@ -448,6 +468,40 @@ mod tests {
                 kind.operator_category(),
                 Some(*cat),
                 "'{text}' operator_category mismatch"
+            );
+        }
+    }
+
+    /// Pin the exact set of operators that highlight as `operator` semantic
+    /// tokens. Punctuation-like tokens (`&` / `|` references & unions; `::` /
+    /// `?` / `..` / `...` paths/try/ranges) must stay excluded.
+    #[test]
+    fn highlight_operator_set_is_pinned() {
+        let highlighted: Vec<&str> = OPERATORS
+            .iter()
+            .filter(|(text, _)| {
+                crate::lexer::lex(text).tokens[0]
+                    .kind
+                    .is_highlight_operator()
+            })
+            .map(|(text, _)| *text)
+            .collect();
+        let mut expected = vec![
+            "==", "!=", "<=", ">=", "<", ">", // comparison
+            "&&", "||", "!", // logical
+            "+", "-", "*", "/", "%", // arithmetic
+            "^", "~", "<<", ">>", // bitwise (excludes `&` and `|`)
+            "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", "=", // assignment
+            "->", "=>", "..<", "..=", // other (excludes `::`, `?`, `..`, `...`)
+        ];
+        let mut got = highlighted.clone();
+        got.sort_unstable();
+        expected.sort_unstable();
+        assert_eq!(got, expected, "highlight operator set drifted");
+        for excluded in ["&", "|", "::", "?", "..", "..."] {
+            assert!(
+                !highlighted.contains(&excluded),
+                "'{excluded}' must not be a highlight operator"
             );
         }
     }

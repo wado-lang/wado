@@ -1,9 +1,9 @@
 use indexmap::{IndexMap, IndexSet};
 use wado_compiler::ast::{self, AstId, Expr, Item, Stmt, Type};
 use wado_compiler::lexer::lex;
+use wado_compiler::module_source::ModuleSource;
 use wado_compiler::semantics::Semantics;
-use wado_compiler::symbol::SymbolKind;
-use wado_compiler::syntax::OperatorCategory;
+use wado_compiler::symbol::{Symbol, SymbolKey, SymbolKind};
 use wado_compiler::token::{Token, TokenKind};
 
 use crate::text::{PositionEncoding, codepoints_to_code_units, line_without_terminator};
@@ -97,21 +97,32 @@ pub fn compute(source: &str, sem: Option<&Semantics>) -> Vec<SemanticToken> {
     let tokens = lex_result.tokens;
     let comments = lex_result.comments;
 
-    // 2. Parse (best-effort — resilient, always produces an AST). The AST
-    // drives the heuristic fallback (type-position spans) and the set of
-    // parameter-binding ids used to split `Variable` symbols into
-    // `parameter` vs `variable`.
-    let ast_types = collect_type_spans(&wado_compiler::parse(source).ast);
+    // 2. Obtain the AST that drives the heuristic fallback (type-position
+    // spans) and the parameter-id set. Reuse the snapshot's already-parsed
+    // entry module when available; only parse ourselves when there is no
+    // snapshot (loader failure), so the common path does not re-parse.
+    let snapshot_ast = sem.and_then(|s| s.modules.get(&s.entry_module_source));
+    let owned_parse = snapshot_ast.is_none().then(|| wado_compiler::parse(source));
+    let ast = snapshot_ast
+        .or_else(|| owned_parse.as_ref().map(|p| &p.ast))
+        .expect("snapshot AST or freshly parsed AST is present");
+    let ast_types = collect_type_spans(ast);
 
-    // 3. Classify lexer tokens
+    // 3. Precompute the resolved-symbol classification map (byte start →
+    // (token type, modifiers)) in one linear pass over the semantics. This
+    // makes per-token identifier classification an O(1) lookup instead of a
+    // positional AST search (`cursor_at`/`ast_id_at`) per token.
+    let sem_classes = sem.map(|s| build_semantic_classes(s, &ast_types));
+
+    // 4. Classify lexer tokens
     let mut result = Vec::new();
     for i in 0..tokens.len() {
-        if let Some(st) = classify_token(source, &tokens, i, &ast_types, sem) {
+        if let Some(st) = classify_token(source, &tokens, i, &ast_types, sem_classes.as_ref()) {
             result.push(st);
         }
     }
 
-    // 4. Add comments
+    // 5. Add comments
     //
     // LSP semantic tokens MUST NOT span lines. Block comments / doc
     // comments that cross a newline are skipped here — the editor's
@@ -137,7 +148,7 @@ pub fn compute(source: &str, sem: Option<&Semantics>) -> Vec<SemanticToken> {
         });
     }
 
-    // 5. Sort by position
+    // 6. Sort by position
     result.sort_by(|a, b| a.line.cmp(&b.line).then(a.start_char.cmp(&b.start_char)));
     result
 }
@@ -585,7 +596,7 @@ fn classify_token(
     tokens: &[Token],
     index: usize,
     ast_types: &TypeSpans,
-    sem: Option<&Semantics>,
+    sem_classes: Option<&IndexMap<usize, (u32, u32)>>,
 ) -> Option<SemanticToken> {
     let token = &tokens[index];
     if token.kind == TokenKind::Eof {
@@ -613,10 +624,11 @@ fn classify_token(
         // Keywords
         k if k.as_keyword_str().is_some() => (token_type::KEYWORD, 0),
 
-        // Identifiers: prefer the resolved symbol kind when semantics are
-        // available, otherwise fall back to the lexer/AST heuristics.
-        TokenKind::Ident(_) => sem
-            .and_then(|sem| classify_ident_semantic(sem, ast_types, token))
+        // Identifiers: prefer the resolved symbol classification (precomputed
+        // in `sem_classes`, keyed by byte start) when available, otherwise
+        // fall back to the lexer/AST heuristics.
+        TokenKind::Ident(_) => sem_classes
+            .and_then(|classes| classes.get(&token.span.start).copied())
             .unwrap_or_else(|| classify_ident(tokens, index, ast_types)),
 
         // Literals
@@ -625,8 +637,9 @@ fn classify_token(
             (token_type::STRING, 0)
         }
 
-        // Operators (the highlightable subset; see `is_operator`).
-        k if is_operator(k) => (token_type::OPERATOR, 0),
+        // Operators (the highlightable subset; the registry's
+        // `is_highlight_operator` flag excludes punctuation-like tokens).
+        k if k.is_highlight_operator() => (token_type::OPERATOR, 0),
 
         // Punctuation — skip (don't emit semantic tokens for brackets, commas, etc.)
         _ => return None,
@@ -641,48 +654,59 @@ fn classify_token(
     })
 }
 
-/// Whether a token should be highlighted as an operator semantic token.
+/// Build the `byte start → (token type, modifiers)` classification map for
+/// every identifier the semantics can resolve, in one linear pass.
 ///
-/// Derived from the shared [`OperatorCategory`] registry rather than a
-/// hand-maintained list, but narrower than "every operator": `&` / `|`
-/// (also reference and union/closure punctuation) and the path/range/try
-/// punctuation in the `Other` category (`::`, `?`, `..`, `...`) are skipped,
-/// since colouring them as operators tends to look wrong. Arrows and bounded
-/// ranges (`->`, `=>`, `..<`, `..=`) are kept.
-fn is_operator(kind: &TokenKind) -> bool {
-    match kind.operator_category() {
-        Some(
-            OperatorCategory::Comparison
-            | OperatorCategory::Logical
-            | OperatorCategory::Arithmetic
-            | OperatorCategory::Assignment,
-        ) => true,
-        Some(OperatorCategory::Bitwise) => !matches!(kind, TokenKind::Ampersand | TokenKind::Pipe),
-        Some(OperatorCategory::Other) => matches!(
-            kind,
-            TokenKind::Arrow | TokenKind::FatArrow | TokenKind::DotDotLt | TokenKind::DotDotEq
-        ),
-        None => false,
+/// Declarations come from [`Semantics::iter_symbols`] (tagged
+/// `declaration`/`definition`); use sites come from
+/// [`Semantics::iter_references`] (classified by the symbol they point at).
+/// Both key on the byte start of the name span, which equals the lexer
+/// token's `span.start`, so [`classify_token`] resolves identifiers with a
+/// single map lookup. Tokens absent from the map (field access, unresolved
+/// method receivers, …) fall back to the heuristic classifier.
+fn build_semantic_classes(sem: &Semantics, ast_types: &TypeSpans) -> IndexMap<usize, (u32, u32)> {
+    let entry = &sem.entry_module_source;
+    let mut classes: IndexMap<usize, (u32, u32)> = IndexMap::default();
+
+    // Declaration sites: the binding's own name span.
+    for (key, symbol) in sem.iter_symbols() {
+        if key.module != *entry {
+            continue;
+        }
+        let Some(span) = sem.name_span_of(key) else {
+            continue;
+        };
+        let (token_type, mut modifiers) = classify_symbol(symbol, key, ast_types, entry);
+        modifiers |= token_modifier::DECLARATION | token_modifier::DEFINITION;
+        classes.insert(span.start, (token_type, modifiers));
     }
+
+    // Use sites: every recorded use→def edge, classified by the def symbol.
+    for (use_key, def_key) in sem.iter_references() {
+        if use_key.module != *entry {
+            continue;
+        }
+        let (Some(symbol), Some(span)) = (sem.symbol_at(def_key), sem.span_of_key(use_key)) else {
+            continue;
+        };
+        classes.insert(
+            span.start,
+            classify_symbol(symbol, def_key, ast_types, entry),
+        );
+    }
+
+    classes
 }
 
-/// Classify an identifier by its resolved symbol kind.
-///
-/// Resolves the token's position to a [`Cursor`](wado_compiler::Cursor) over
-/// the entry module and follows the use→def edge to the defining symbol.
-/// Returns `None` when the cursor lands on no recognised name (e.g. a field
-/// access, an unresolved method receiver, or any identifier the elaborator
-/// recorded no edge for) so the caller can fall back to the heuristics.
-fn classify_ident_semantic(
-    sem: &Semantics,
+/// Map a resolved symbol to its LSP token type and the modifiers implied by
+/// the symbol itself (e.g. `readonly` for an immutable binding). The
+/// `declaration` modifier is added by the caller for declaration sites.
+fn classify_symbol(
+    symbol: &Symbol,
+    def_key: &SymbolKey,
     ast_types: &TypeSpans,
-    token: &Token,
-) -> Option<(u32, u32)> {
-    let entry = &sem.entry_module_source;
-    let cursor = sem.cursor_at(entry, token.span.line, token.span.column)?;
-    let def_key = cursor.def_key()?;
-    let symbol = sem.symbol_at(&def_key)?;
-
+    entry: &ModuleSource,
+) -> (u32, u32) {
     let mut modifiers = 0;
     let token_type = match &symbol.kind {
         SymbolKind::Function(_) => token_type::FUNCTION,
@@ -695,9 +719,8 @@ fn classify_ident_semantic(
             if !v.is_mut {
                 modifiers |= token_modifier::READONLY;
             }
-            // Parameters live in the entry module (the cursor resolves there),
-            // so a same-module id in the parameter set distinguishes them from
-            // ordinary locals.
+            // The symbol table records no parameter/local distinction, so a
+            // same-module definition id in the parameter set marks parameters.
             if def_key.module == *entry && ast_types.is_param(def_key.ast_id) {
                 token_type::PARAMETER
             } else {
@@ -711,13 +734,7 @@ fn classify_ident_semantic(
             token_type::VARIABLE
         }
     };
-
-    // No use→def edge means the cursor sits on the binding's own declaration.
-    if def_key == *cursor.key() {
-        modifiers |= token_modifier::DECLARATION | token_modifier::DEFINITION;
-    }
-
-    Some((token_type, modifiers))
+    (token_type, modifiers)
 }
 
 /// Classify an identifier using AST type spans + lexer context heuristics.
