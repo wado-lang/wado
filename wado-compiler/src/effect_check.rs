@@ -1690,20 +1690,28 @@ fn check_function_effects_sem(
         return;
     }
     let caller_key = SymbolKey::new(module.clone(), func.id);
-    let current: IndexSet<EffectRef> = fn_effects
-        .get(&caller_key)
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
 
-    // Per-module annotations carry the dispatch facts that have no flattened
-    // `Semantics` mirror (static-method / operator / `?` / for-of).
+    // Per-module annotations carry the dispatch facts and signature types that
+    // have no flattened `Semantics` mirror (static-method dispatch,
+    // param / return type ids).
     let annotations = sem
         .state
         .as_ref()
         .and_then(|state| state.module_semantics.get(module))
         .map(|module_sem| &module_sem.types);
+
+    // Declared effects, plus resources that appear in the signature so a
+    // `fn f(s: Stream<u8>)` need not repeat `with Stream` — matching the
+    // TIR-based checker's `signature_resources`.
+    let mut current: IndexSet<EffectRef> = fn_effects
+        .get(&caller_key)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+    if let Some(ann) = annotations {
+        add_signature_resources(ann, &caller_key, &sem.types, &mut current);
+    }
 
     let mut walker = SemEffectWalker {
         module,
@@ -1716,6 +1724,55 @@ fn check_function_effects_sem(
         out,
     };
     ast::walk_block(&mut walker, body);
+}
+
+/// Union into `out` the resources that appear in a function's signature —
+/// parameter types, the return type, and the async task-return type — so a
+/// signature that already exposes a resource does not also require an explicit
+/// `with R`. Mirrors the TIR-based `signature_resources`.
+///
+/// Resources nested inside struct fields / variant payloads are not yet
+/// followed here (the empty field/payload maps below); direct and
+/// container-nested resources (`Option<R>`, `List<R>`, `&R`, `fn() -> R`) are.
+fn add_signature_resources(
+    annotations: &crate::elaborator::sem::types::TypeAnnotations,
+    fn_key: &SymbolKey,
+    type_table: &TypeTable,
+    out: &mut IndexSet<EffectRef>,
+) {
+    let empty_struct: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
+    let empty_variant: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
+    let mut visited = TypeSet::default();
+    for &type_id in annotations.fn_param_types.get(fn_key).into_iter().flatten() {
+        collect_resource_refs(
+            type_id,
+            type_table,
+            &empty_struct,
+            &empty_variant,
+            out,
+            &mut visited,
+        );
+    }
+    if let Some(&return_type) = annotations.fn_return_types.get(fn_key) {
+        collect_resource_refs(
+            return_type,
+            type_table,
+            &empty_struct,
+            &empty_variant,
+            out,
+            &mut visited,
+        );
+    }
+    if let Some(&task_return) = annotations.function_task_returns.get(fn_key) {
+        collect_resource_refs(
+            task_return,
+            type_table,
+            &empty_struct,
+            &empty_variant,
+            out,
+            &mut visited,
+        );
+    }
 }
 
 /// Best-effort display name for a call's callee, for the diagnostic message.

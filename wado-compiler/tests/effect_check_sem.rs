@@ -99,6 +99,29 @@ export fn run() with Stdout {
 }
 
 #[test]
+fn signature_resource_is_not_required_again() {
+    // `use_counter` takes `&Counter` and calls a Counter method. Because the
+    // resource already appears in the signature, no explicit `with Counter` is
+    // needed — `signature_resources` must admit it.
+    let source = r#"
+pub resource Counter {
+    fn bump(&self);
+}
+
+fn use_counter(c: &Counter) {
+    c.bump();
+}
+
+export fn run() {}
+"#;
+    assert!(
+        violations(source).is_empty(),
+        "Counter is in the signature, so the call is covered: {:?}",
+        violations(source)
+    );
+}
+
+#[test]
 fn effect_free_program_has_no_violations() {
     let source = r#"
 fn add(a: i32, b: i32) -> i32 {
