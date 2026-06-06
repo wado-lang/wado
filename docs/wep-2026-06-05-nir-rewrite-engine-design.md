@@ -181,17 +181,19 @@ The old fixed-point loop and the engine co-exist during the port.
   - [x] `copy_prop` — arena binding/usage analysis + substitute-and-remove.
   - [x] `store_load_forward` — arena flow-sensitive forwarding; modified-locals
         cache keyed by `BlockId`.
-  - Remaining: `value_copy_demote`, `tmpl_hoist`, `condition_implication`,
-    `container_sroa`, `licm`, `dce`, `labeled_block_fusion`, `inline`,
-    `field_scalarize`.
+  - [x] `value_copy_demote` — arena element-immutability proof
+        (`ElementClean` / `ElementImmutable` recurse via `for_each_child`);
+        callee bodies cloned per `verify`; shallow sibling synthesized by
+        cloning the function and renaming `array_clone` in its arena body.
+  - Remaining: `tmpl_hoist`, `condition_implication`, `container_sroa`,
+    `licm`, `dce`, `labeled_block_fusion`, `inline`, `field_scalarize`.
   - Deferred: `const_folding` — unlike the others it drives the whole `niri`
     interpreter (tree-shaped) over the body with flow-sensitive env threading,
     so it stays on the bridge until `niri` itself is ported to the arena
     (a dedicated effort). The subtree-materialization trick does not apply (the
     interpreter consumes the _whole_ body, not a small leaf subtree).
   - Flow-sensitive (keep walkers, read arena): `const_folding`'s env walk,
-    `copy_prop`, `licm`, `field_scalarize`, `store_load_forward`,
-    `value_copy_demote`, `tmpl_hoist`.
+    `copy_prop`, `licm`, `field_scalarize`, `store_load_forward`, `tmpl_hoist`.
   - When the last bridge is gone the per-pass `Body ↔ tree` conversions
     vanish and the arena flows lower → optimize → wir_build with no
     converter — completing Phase 3's goal. Measure the speed win here.
