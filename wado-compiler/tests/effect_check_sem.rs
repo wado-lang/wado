@@ -122,6 +122,35 @@ export fn run() {}
 }
 
 #[test]
+fn effect_param_resolves_from_closure_argument() {
+    // `wrapper<effect E>(f: fn() with E) with E` is called from an effect-free
+    // function with a closure that needs Stdout, so E resolves to Stdout and
+    // the missing effect must be reported.
+    let source = r#"
+use { println, Stdout } from "core:cli";
+
+fn wrapper<effect E>(f: fn() with E) with E {
+    f();
+}
+
+fn bad() {
+    wrapper(|| {
+        println("needs stdout");
+    });
+}
+
+export fn run() with Stdout {
+    println("ok");
+}
+"#;
+    let v = violations(source);
+    assert!(
+        v.iter().any(|s| s.contains("Stdout")),
+        "E should resolve to Stdout from the closure, got {v:?}"
+    );
+}
+
+#[test]
 fn effect_free_program_has_no_violations() {
     let source = r#"
 fn add(a: i32, b: i32) -> i32 {

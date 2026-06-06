@@ -1603,14 +1603,23 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
     // key (free calls resolve through `references`) and by `(module, mangled
     // name)` (method dispatch carries a `FunctionRef`).
     let mut fn_effects: IndexMap<SymbolKey, Vec<EffectRef>> = IndexMap::default();
+    let mut fn_params: IndexMap<SymbolKey, Vec<TypeId>> = IndexMap::default();
     let mut mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>> = IndexMap::default();
+    let mut mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
     for (src, module_sem) in &state.module_semantics {
-        for (key, effects) in &module_sem.types.function_effects {
+        let types = &module_sem.types;
+        for (key, effects) in &types.function_effects {
             fn_effects.insert(key.clone(), effects.clone());
         }
-        for (key, names) in &module_sem.types.method_names {
-            if let Some(effects) = module_sem.types.function_effects.get(key) {
+        for (key, params) in &types.fn_param_types {
+            fn_params.insert(key.clone(), params.clone());
+        }
+        for (key, names) in &types.method_names {
+            if let Some(effects) = types.function_effects.get(key) {
                 mangled_index.insert((src.clone(), names.mangled.clone()), effects.clone());
+            }
+            if let Some(params) = types.fn_param_types.get(key) {
+                mangled_params.insert((src.clone(), names.mangled.clone()), params.clone());
             }
         }
     }
@@ -1628,48 +1637,32 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
     // resources `E`'s operations reference (e.g. `Stdout` → `Stream`).
     let closure = build_propagation_closure_sem(sem, state);
 
+    let index = EffectIndex {
+        fn_effects: &fn_effects,
+        fn_params: &fn_params,
+        mangled_index: &mangled_index,
+        mangled_params: &mangled_params,
+        resource_names: &resource_names,
+        closure: &closure,
+    };
+
     for (src, module) in &sem.modules {
         if !crate::elaborator::liveness::is_user_authored(src) {
             continue;
         }
         for item in &module.items {
             match item {
-                Item::Function(func) => check_function_effects_sem(
-                    sem,
-                    src,
-                    func,
-                    &fn_effects,
-                    &mangled_index,
-                    &resource_names,
-                    &closure,
-                    &mut out,
-                ),
+                Item::Function(func) => {
+                    check_function_effects_sem(sem, src, func, &index, &mut out);
+                }
                 Item::Impl(impl_block) => {
                     for method in &impl_block.methods {
-                        check_function_effects_sem(
-                            sem,
-                            src,
-                            method,
-                            &fn_effects,
-                            &mangled_index,
-                            &resource_names,
-                            &closure,
-                            &mut out,
-                        );
+                        check_function_effects_sem(sem, src, method, &index, &mut out);
                     }
                 }
                 Item::Trait(trait_decl) => {
                     for method in &trait_decl.methods {
-                        check_function_effects_sem(
-                            sem,
-                            src,
-                            method,
-                            &fn_effects,
-                            &mangled_index,
-                            &resource_names,
-                            &closure,
-                            &mut out,
-                        );
+                        check_function_effects_sem(sem, src, method, &index, &mut out);
                     }
                 }
                 _ => {}
@@ -1679,15 +1672,27 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
     out
 }
 
-#[allow(clippy::too_many_arguments)]
+/// The cross-module effect data the body walk consults, assembled once.
+struct EffectIndex<'a> {
+    /// Declaration key → resolved effects (free calls resolve via `references`).
+    fn_effects: &'a IndexMap<SymbolKey, Vec<EffectRef>>,
+    /// Declaration key → parameter type ids (for effect-parameter resolution).
+    fn_params: &'a IndexMap<SymbolKey, Vec<TypeId>>,
+    /// `(module, mangled name)` → effects (method / static dispatch).
+    mangled_index: &'a IndexMap<(ModuleSource, String), Vec<EffectRef>>,
+    /// `(module, mangled name)` → parameter type ids.
+    mangled_params: &'a IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    /// Declared resources, for resource injection and effect classification.
+    resource_names: &'a IndexSet<(ModuleSource, String)>,
+    /// Effect → implied resources propagation closure.
+    closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
+}
+
 fn check_function_effects_sem(
     sem: &Semantics,
     module: &ModuleSource,
     func: &Function,
-    fn_effects: &IndexMap<SymbolKey, Vec<EffectRef>>,
-    mangled_index: &IndexMap<(ModuleSource, String), Vec<EffectRef>>,
-    resource_names: &IndexSet<(ModuleSource, String)>,
-    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
+    index: &EffectIndex,
     out: &mut Vec<EffectError>,
 ) {
     let Some(body) = &func.body else {
@@ -1712,7 +1717,8 @@ fn check_function_effects_sem(
     // Declared effects, plus resources that appear in the signature so a
     // `fn f(s: Stream<u8>)` need not repeat `with Stream` — matching the
     // TIR-based checker's `signature_resources`.
-    let mut current: IndexSet<EffectRef> = fn_effects
+    let mut current: IndexSet<EffectRef> = index
+        .fn_effects
         .get(&caller_key)
         .cloned()
         .unwrap_or_default()
@@ -1723,15 +1729,13 @@ fn check_function_effects_sem(
     }
     // Expand through the propagation closure: a function holding `Stdout` may
     // call operations that internally need `Stream`, etc.
-    let current = expand_through_closure(&current, closure);
+    let current = expand_through_closure(&current, index.closure);
 
     let mut walker = SemEffectWalker {
         module,
         sem,
         annotations,
-        fn_effects,
-        mangled_index,
-        resource_names,
+        index,
         current: &current,
         out,
     };
@@ -1915,9 +1919,7 @@ struct SemEffectWalker<'a> {
     module: &'a ModuleSource,
     sem: &'a Semantics,
     annotations: Option<&'a crate::elaborator::sem::types::TypeAnnotations>,
-    fn_effects: &'a IndexMap<SymbolKey, Vec<EffectRef>>,
-    mangled_index: &'a IndexMap<(ModuleSource, String), Vec<EffectRef>>,
-    resource_names: &'a IndexSet<(ModuleSource, String)>,
+    index: &'a EffectIndex<'a>,
     current: &'a IndexSet<EffectRef>,
     out: &'a mut Vec<EffectError>,
 }
@@ -1927,6 +1929,7 @@ impl SemEffectWalker<'_> {
     /// for a direct (non-trait) method on a `resource`, the resource effect.
     fn method_effects(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
         let mut effects = self
+            .index
             .mangled_index
             .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
             .cloned()
@@ -1938,7 +1941,7 @@ impl SemEffectWalker<'_> {
                 func_ref.module_source.clone(),
                 method_info.base_struct_name.clone(),
             );
-            if self.resource_names.contains(&resource_key) {
+            if self.index.resource_names.contains(&resource_key) {
                 let resource_effect = EffectRef::Concrete {
                     name: method_info.base_struct_name.clone(),
                     module_source: func_ref.module_source.clone(),
@@ -1951,11 +1954,90 @@ impl SemEffectWalker<'_> {
         effects
     }
 
+    /// Resolve `EffectRef::Param` effects to concrete effects by matching the
+    /// callee's function-typed parameters against the actual argument types.
+    /// Mirrors the TIR-based `resolve_effect_params`. `is_method` drops the
+    /// leading `self` parameter so params line up with `args`.
+    fn resolve_effect_params(
+        &self,
+        callee_effects: &[EffectRef],
+        param_types: &[TypeId],
+        is_method: bool,
+        args: &[Expr],
+    ) -> Vec<EffectRef> {
+        let param_names: IndexSet<String> = callee_effects
+            .iter()
+            .filter_map(|e| match e {
+                EffectRef::Param { name } => Some(name.clone()),
+                EffectRef::Concrete { .. } => None,
+            })
+            .collect();
+        if param_names.is_empty() {
+            return callee_effects.to_vec();
+        }
+        let mut concrete: IndexMap<String, IndexSet<EffectRef>> = param_names
+            .iter()
+            .map(|n| (n.clone(), IndexSet::default()))
+            .collect();
+        let type_table = &self.sem.types;
+        let skip = usize::from(is_method && !param_types.is_empty());
+        for (param_type, arg) in param_types.iter().skip(skip).zip(args.iter()) {
+            let ResolvedType::Function {
+                effects: formal, ..
+            } = type_table.get(*param_type)
+            else {
+                continue;
+            };
+            if !formal
+                .iter()
+                .any(|e| e.is_param() && param_names.contains(e.name()))
+            {
+                continue;
+            }
+            let Some(arg_type) = self
+                .sem
+                .expression_types
+                .get(&SymbolKey::new(self.module.clone(), arg.id()))
+                .copied()
+            else {
+                continue;
+            };
+            let ResolvedType::Function {
+                effects: actual, ..
+            } = type_table.get(arg_type)
+            else {
+                continue;
+            };
+            for formal_effect in formal {
+                if let EffectRef::Param { name } = formal_effect
+                    && let Some(set) = concrete.get_mut(name)
+                {
+                    for a in actual {
+                        set.insert(a.clone());
+                    }
+                }
+            }
+        }
+        let mut resolved = Vec::new();
+        for effect in callee_effects {
+            match effect {
+                EffectRef::Param { name } => {
+                    if let Some(set) = concrete.get(name) {
+                        for c in expand_through_closure(set, self.index.closure) {
+                            resolved.push(c);
+                        }
+                    }
+                }
+                EffectRef::Concrete { .. } => resolved.push(effect.clone()),
+            }
+        }
+        resolved
+    }
+
     fn report_missing(&mut self, effects: &[EffectRef], callee: &str, span: Span) {
         for effect in effects {
-            // Effect parameters are resolved at call sites via function-typed
-            // arguments — that resolution is a follow-up, so skip them here
-            // rather than report a spurious miss.
+            // Any `Param` left after resolution did not bind to a concrete
+            // effect; skip it rather than report a spurious miss.
             if effect.is_param() || self.current.contains(effect) {
                 continue;
             }
@@ -1964,6 +2046,7 @@ impl SemEffectWalker<'_> {
                     name,
                     module_source,
                 } if self
+                    .index
                     .resource_names
                     .contains(&(module_source.clone(), name.clone())) =>
                 {
@@ -1996,13 +2079,19 @@ impl AstVisitor for SemEffectWalker<'_> {
                     self.sem
                         .references
                         .get(&SymbolKey::new(self.module.clone(), ident.id))
-                        .and_then(|def| self.fn_effects.get(def))
-                        .map(|effects| (effects.clone(), ident.name.clone()))
+                        .and_then(|def| {
+                            self.index
+                                .fn_effects
+                                .get(def)
+                                .map(|effects| (def.clone(), effects.clone(), ident.name.clone()))
+                        })
                 } else {
                     None
                 };
-                if let Some((effects, name)) = free {
-                    self.report_missing(&effects, &name, call.span);
+                if let Some((def, effects, name)) = free {
+                    let params = self.index.fn_params.get(&def).cloned().unwrap_or_default();
+                    let resolved = self.resolve_effect_params(&effects, &params, false, &call.args);
+                    self.report_missing(&resolved, &name, call.span);
                 } else if let Some(func_ref) = self
                     .annotations
                     .and_then(|ann| {
@@ -2012,7 +2101,11 @@ impl AstVisitor for SemEffectWalker<'_> {
                     .map(|dispatch| dispatch.function_ref.clone())
                 {
                     let effects = self.method_effects(&func_ref);
-                    self.report_missing(&effects, callee_name(&call.callee), call.span);
+                    let params = self.method_param_types(&func_ref);
+                    let is_method = func_ref.method_info.is_some();
+                    let resolved =
+                        self.resolve_effect_params(&effects, &params, is_method, &call.args);
+                    self.report_missing(&resolved, callee_name(&call.callee), call.span);
                 }
             }
             Expr::MethodCall(method_call) => {
@@ -2020,7 +2113,10 @@ impl AstVisitor for SemEffectWalker<'_> {
                 if let Some(dispatch) = self.sem.method_dispatch.get(&call_key) {
                     let func_ref = dispatch.function_ref.clone();
                     let effects = self.method_effects(&func_ref);
-                    self.report_missing(&effects, &method_call.method, method_call.span);
+                    let params = self.method_param_types(&func_ref);
+                    let resolved =
+                        self.resolve_effect_params(&effects, &params, true, &method_call.args);
+                    self.report_missing(&resolved, &method_call.method, method_call.span);
                 }
             }
             Expr::StaticMethodCall(static_call) => {
@@ -2031,11 +2127,25 @@ impl AstVisitor for SemEffectWalker<'_> {
                     .map(|dispatch| dispatch.function_ref.clone())
                 {
                     let effects = self.method_effects(&func_ref);
-                    self.report_missing(&effects, &static_call.method, static_call.span);
+                    let params = self.method_param_types(&func_ref);
+                    let is_method = func_ref.method_info.is_some();
+                    let resolved =
+                        self.resolve_effect_params(&effects, &params, is_method, &static_call.args);
+                    self.report_missing(&resolved, &static_call.method, static_call.span);
                 }
             }
             _ => {}
         }
         ast::walk_expr(self, expr);
+    }
+}
+
+impl SemEffectWalker<'_> {
+    fn method_param_types(&self, func_ref: &FunctionRef) -> Vec<TypeId> {
+        self.index
+            .mangled_params
+            .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
+            .cloned()
+            .unwrap_or_default()
     }
 }
