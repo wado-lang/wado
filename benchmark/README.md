@@ -67,19 +67,19 @@ zlib compression of twitter.json (631514 bytes).
 
 | Implementation         |  Throughput |   ms/iter | vs best |
 | ---------------------- | ----------: | --------: | ------: |
-| Rust (zlib-rs)         | 157.67 MB/s |  4.005 ms |   1.00x |
-| JavaScript (node:zlib) | 133.42 MB/s |  4.733 ms |   1.18x |
-| **Wado** (core:zlib)   |  23.21 MB/s | 27.203 ms |   6.79x |
+| Rust (zlib-rs)         | 158.49 MB/s |  3.985 ms |   1.00x |
+| JavaScript (node:zlib) | 132.86 MB/s |  4.753 ms |   1.19x |
+| **Wado** (core:zlib)   |  23.57 MB/s | 26.788 ms |   6.72x |
 
 ## Compression: decompress
 
 zlib decompression of twitter.json (631514 bytes).
 
-| Implementation         |  Throughput |   ms/iter | vs best |
-| ---------------------- | ----------: | --------: | ------: |
-| Rust (zlib-rs)         |   1.38 GB/s |  0.457 ms |   1.00x |
-| JavaScript (node:zlib) | 746.19 MB/s |  0.846 ms |   1.85x |
-| **Wado** (core:zlib)   |  55.79 MB/s | 11.319 ms |  24.74x |
+| Implementation         |  Throughput |  ms/iter | vs best |
+| ---------------------- | ----------: | -------: | ------: |
+| Rust (zlib-rs)         |   1.40 GB/s | 0.450 ms |   1.00x |
+| JavaScript (node:zlib) | 787.15 MB/s | 0.802 ms |   1.78x |
+| **Wado** (core:zlib)   | 119.52 MB/s | 5.283 ms |  11.74x |
 
 ## JSON: twitter
 

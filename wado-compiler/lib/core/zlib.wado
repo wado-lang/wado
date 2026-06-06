@@ -395,9 +395,7 @@ global MAXBITS: i32 = 15;
 global LENGTH_BASE: List<i32> = [
     3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258,
 ];
-global LENGTH_EXTRA: List<i32> = [
-    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0,
-];
+global LENGTH_EXTRA: List<i32> = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
 global DIST_BASE: List<i32> = [
     1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145,
     8193, 12289, 16385, 24577,
@@ -409,7 +407,16 @@ global DIST_EXTRA: List<i32> = [
 // Build a set of tables to decode the provided canonical Huffman code.
 // Returns [result, root_bits, table_offset_after]
 // result: 0=success, -1=invalid code, 1=not enough space
-fn inflate_table(codetype: i32, lens: &List<u16>, lens_offset: i32, codes_count: i32, table: &mut List<Code>, table_start: i32, bits_in: i32, work: &mut List<u16>) -> [i32, i32, i32] {
+fn inflate_table(
+    codetype: i32,
+    lens: &List<u16>,
+    lens_offset: i32,
+    codes_count: i32,
+    table: &mut List<Code>,
+    table_start: i32,
+    bits_in: i32,
+    work: &mut List<u16>,
+) -> [i32, i32, i32] {
     // Length codes 257..285 base
     let lbase: List<u16> = [
         3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227,
@@ -673,13 +680,6 @@ struct InflateState {
     last_block: bool,
     wrap: i32,  // 0=raw, 1=zlib
 
-    // window
-    wbits: i32,
-    wsize: i32,
-    whave: i32,
-    wnext: i32,
-    window: List<u8>,
-
     // bit buffer
     hold: u32,
     bits: i32,
@@ -716,16 +716,10 @@ struct InflateState {
 
 impl InflateState {
     fn new(raw: bool) -> InflateState {
-        let wbits = 15;
         return InflateState {
             mode: if raw { InflateMode::TypeDo } else { InflateMode::Head },
             last_block: false,
             wrap: if raw { 0 } else { 1 },
-            wbits,
-            wsize: 0,
-            whave: 0,
-            wnext: 0,
-            window: List::filled(1 << wbits, 0),
             hold: 0,
             bits: 0,
             length: 0,
@@ -786,52 +780,6 @@ impl InflateState {
         let result2 = inflate_table(DISTS_TYPE, &self.lens, 0, 32, &mut self.codes, dist_start, 5, &mut self.work);
         self.distcode_off = dist_start;
         self.distbits = result2.1;
-    }
-
-    // Update sliding window
-    fn update_window(&mut self, output: &List<u8>, out_end: i32, copy_len: i32) {
-        if self.wsize == 0 {
-            self.wsize = 1 << self.wbits;
-            self.wnext = 0;
-            self.whave = 0;
-        }
-
-        let mut remaining = copy_len;
-        if remaining >= self.wsize {
-            // copy last wsize bytes
-            let src_start = out_end - self.wsize;
-            for let mut i = 0; i < self.wsize; i += 1 {
-                self.window[i] = output[src_start + i];
-            }
-            self.wnext = 0;
-            self.whave = self.wsize;
-        } else {
-            let dist = self.wsize - self.wnext;
-            let mut copy_now = remaining;
-            if copy_now > dist {
-                copy_now = dist;
-            }
-            let src_start = out_end - remaining;
-            for let mut i = 0; i < copy_now; i += 1 {
-                self.window[self.wnext + i] = output[src_start + i];
-            }
-            remaining -= copy_now;
-            if remaining > 0 {
-                for let mut i = 0; i < remaining; i += 1 {
-                    self.window[i] = output[src_start + copy_now + i];
-                }
-                self.wnext = remaining;
-                self.whave = self.wsize;
-            } else {
-                self.wnext += copy_now;
-                if self.wnext == self.wsize {
-                    self.wnext = 0;
-                }
-                if self.whave < self.wsize {
-                    self.whave += copy_now;
-                }
-            }
-        }
     }
 }
 
@@ -1371,56 +1319,24 @@ fn inflate_raw_ex(input: &List<u8>, input_offset: i32, input_length: i32) -> [Li
             },
             Match => {
                 // Copy a <length, distance> back-reference (RFC 1951 section
-                // 3.2.5). The source may overlap the current position, so bytes
-                // are copied one at a time when they come from recent output.
+                // 3.2.5). The entire decoded stream is retained in `output`, so
+                // every back-reference is satisfied directly from it; no separate
+                // sliding window is needed. `copy_within_append` handles the
+                // run-length case where source and destination overlap. A
+                // distance that points before the start of the output is invalid
+                // (RFC 1951 section 3.2.3: "a distance cannot refer past the
+                // beginning of the output stream").
                 let out_pos = output.len();
-                let mut copy = state.length;
                 if state.offset > out_pos {
-                    // The distance reaches into the sliding window. A distance
-                    // that points before the start of the output is invalid
-                    // (RFC 1951 section 3.2.3: "a distance cannot refer past the
-                    // beginning of the output stream").
-                    let mut win_copy = state.offset - out_pos;
-                    if win_copy > state.whave {
-                        state.mode = InflateMode::Bad;
-                    } else {
-                        let mut from_win = 0;
-                        if state.wnext >= win_copy {
-                            from_win = state.wnext - win_copy;
-                        } else {
-                            from_win = state.wsize - (win_copy - state.wnext);
-                        }
-                        if win_copy > copy {
-                            win_copy = copy;
-                        }
-                        for let mut i = 0; i < win_copy; i += 1 {
-                            output.push(state.window[(from_win + i) % state.wsize]);
-                        }
-                        copy -= win_copy;
-                        // rest from output
-                        if copy > 0 {
-                            let src_start = output.len() - state.offset;
-                            output.copy_within_append(src_start, copy);
-                        }
-                    }
+                    state.mode = InflateMode::Bad;
                 } else {
-                    // copy from output
                     let src_start = out_pos - state.offset;
-                    output.copy_within_append(src_start, copy);
-                }
-                if state.mode != InflateMode::Bad {
-                    // update window
-                    state.update_window(&output, output.len(), state.length);
+                    output.copy_within_append(src_start, state.length);
                     state.mode = InflateMode::Len;
                 }
             },
             Lit => {
                 output.push(state.length as u8);
-                // update window periodically
-                if output.len() % 32768 == 0 {
-                    let wlen = if output.len() > 32768 { 32768 } else { output.len() };
-                    state.update_window(&output, output.len(), wlen);
-                }
                 state.mode = InflateMode::Len;
             },
             Check => {
@@ -1456,12 +1372,6 @@ fn inflate_raw_ex(input: &List<u8>, input_offset: i32, input_length: i32) -> [Li
                 leave = true;
             },
         }
-    }
-
-    // final window update
-    if output.len() > 0 {
-        let wlen = if output.len() > 32768 { 32768 } else { output.len() };
-        state.update_window(&output, output.len(), wlen);
     }
 
     // Return bytes consumed from input. The decode succeeded only if it ran to
@@ -2190,7 +2100,15 @@ fn gen_huffman_codes(lengths: &List<u8>, max_sym: i32, max_bits: i32) -> List<En
 }
 
 // Write a dynamic Huffman block
-fn write_dynamic_block(bw: &mut BitWriter, symbols: &List<i32>, distances: &List<i32>, sym_count: i32, is_last: bool, length_codes_table: &List<u8>, dist_codes_table: &List<u8>) {
+fn write_dynamic_block(
+    bw: &mut BitWriter,
+    symbols: &List<i32>,
+    distances: &List<i32>,
+    sym_count: i32,
+    is_last: bool,
+    length_codes_table: &List<u8>,
+    dist_codes_table: &List<u8>,
+) {
     // 0..255=literal, 256=EOB, 257+=length
     // distance for each length symbol (0 for literals)
 
@@ -2399,7 +2317,17 @@ fn write_dynamic_block(bw: &mut BitWriter, symbols: &List<i32>, distances: &List
 }
 
 // Write a fixed Huffman block from symbol buffer
-fn write_fixed_block(bw: &mut BitWriter, symbols: &List<i32>, distances: &List<i32>, sym_count: i32, is_last: bool, ltree: &List<EncCode>, dtree: &List<EncCode>, length_codes_table: &List<u8>, dist_codes_table: &List<u8>) {
+fn write_fixed_block(
+    bw: &mut BitWriter,
+    symbols: &List<i32>,
+    distances: &List<i32>,
+    sym_count: i32,
+    is_last: bool,
+    ltree: &List<EncCode>,
+    dtree: &List<EncCode>,
+    length_codes_table: &List<u8>,
+    dist_codes_table: &List<u8>,
+) {
     if is_last {
         bw.write_bits(1, 1);  // BFINAL
     } else {
@@ -3080,7 +3008,11 @@ fn zlib_wrap(input: &List<u8>, deflated: &List<u8>, level: i32) -> List<u8> {
 ///
 /// `level` defaults to `Z_DEFAULT_COMPRESSION` and `strategy` defaults to
 /// `Z_DEFAULT_STRATEGY`.
-pub fn zlib_compress(input: &List<u8>, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> List<u8> {
+pub fn zlib_compress(
+    input: &List<u8>,
+    level: i32 = Z_DEFAULT_COMPRESSION,
+    strategy: i32 = Z_DEFAULT_STRATEGY,
+) -> List<u8> {
     let deflated = deflate_with_level(input, level, strategy);
     return zlib_wrap(input, &deflated, level);
 }
@@ -3229,7 +3161,11 @@ pub fn inflate_gzip(input: &List<u8>) -> Result<List<u8>, ZlibError> {
 /// `level` defaults to `Z_DEFAULT_COMPRESSION` and `strategy` defaults to
 /// `Z_DEFAULT_STRATEGY`. Use `gzip_compress_with_header` to set MTIME, file
 /// name, comment, and other gzip header fields.
-pub fn gzip_compress(input: &List<u8>, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> List<u8> {
+pub fn gzip_compress(
+    input: &List<u8>,
+    level: i32 = Z_DEFAULT_COMPRESSION,
+    strategy: i32 = Z_DEFAULT_STRATEGY,
+) -> List<u8> {
     let deflated = deflate_with_level(input, level, strategy);
     let mut output: List<u8> = List::with_capacity(deflated.len() + 18);
 

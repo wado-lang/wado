@@ -224,12 +224,18 @@ impl List<T> {
             self.repr = new_repr;
         }
         let base = self.used;
-        // Forward element-by-element copy intentionally propagates just-written
-        // values for DEFLATE-style run-length back-references (src < dst, overlap).
-        // `builtin::array_copy` uses copy-as-if-buffered semantics, so it cannot
-        // replace this loop.
-        for let mut i = 0; i < count; i += 1 {
-            builtin::array_set(&mut self.repr, base + i, builtin::array_get(&self.repr, src_start + i));
+        if src_start + count <= base {
+            // Non-overlapping source and destination: a single bulk copy is
+            // safe and much faster than element-by-element.
+            builtin::array_copy(&mut self.repr, base, &self.repr, src_start, count);
+        } else {
+            // Overlapping (DEFLATE-style run-length back-reference, src < dst):
+            // forward element-by-element copy intentionally propagates
+            // just-written values. `builtin::array_copy` uses copy-as-if-buffered
+            // semantics, so it cannot replace this loop.
+            for let mut i = 0; i < count; i += 1 {
+                builtin::array_set(&mut self.repr, base + i, builtin::array_get(&self.repr, src_start + i));
+            }
         }
         self.used = new_used;
     }
