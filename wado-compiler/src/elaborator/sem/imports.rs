@@ -40,3 +40,44 @@ pub(crate) struct ModuleImports {
     /// effect references in `with` clauses.
     pub(crate) effect_sources: IndexMap<String, ModuleSource>,
 }
+
+impl ModuleImports {
+    /// Canonicalize a `<ns>::<member>` reference (single `::`, prefix is a
+    /// namespace import alias) to the bare `<member>` form. Returns `None`
+    /// when the name isn't of that shape — including multi-segment cases like
+    /// `<ns>::<Type>::<case>`, which route through dedicated namespace paths
+    /// (see `resolve_ident` / `resolve_call` / `reify_ident`).
+    ///
+    /// This is the single source of truth shared by both the annotate phase
+    /// ([`super::super::Elaborator`]) and the reify phase
+    /// ([`super::super::reify::Reify`]): the AST keeps the user-written
+    /// `ns::member` (so LSP cursors land on it as typed) while every
+    /// registry lookup sees the canonical bare name the registries were
+    /// populated with.
+    pub(crate) fn strip_ns_prefix<'s>(&self, name: &'s str) -> Option<&'s str> {
+        strip_ns_prefix(&self.namespace_imports, name)
+    }
+}
+
+/// Canonicalize a `<ns>::<member>` reference against a namespace-alias map.
+///
+/// Shared by [`ModuleImports::strip_ns_prefix`] and the type resolver's
+/// [`super::super::types::TypeLookup`], which carries only the alias map
+/// rather than the full [`ModuleImports`]. Returns the bare `<member>` for a
+/// single-`::` reference whose prefix is a known namespace alias, and `None`
+/// otherwise (including multi-segment `<ns>::<Type>::<case>` forms).
+pub(crate) fn strip_ns_prefix<'s>(
+    namespace_imports: &IndexMap<String, ModuleSource>,
+    name: &'s str,
+) -> Option<&'s str> {
+    let pos = name.find("::")?;
+    let prefix = &name[..pos];
+    let suffix = &name[pos + 2..];
+    if suffix.contains("::") {
+        return None;
+    }
+    if !namespace_imports.contains_key(prefix) {
+        return None;
+    }
+    Some(suffix)
+}

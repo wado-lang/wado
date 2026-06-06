@@ -1,0 +1,21 @@
+// A namespace-imported function used as a value (function reference), not just
+// called directly, must reify to a `FuncRef` for the defining module.
+use h from "./sub/ns_robust_helper.wado";
+
+fn apply(f: fn(i32, i32) -> i32, a: i32, b: i32) -> i32 {
+    return f(a, b);
+}
+
+test "namespace function reference via ns::" {
+    let f = h::add;
+    assert f(2, 3) == 5;
+    assert apply(h::add, 10, 20) == 30;
+}
+
+test "namespace function reference bare" {
+    let g = add;
+    assert g(4, 5) == 9;
+}
+
+__DATA__
+{"test": {}}

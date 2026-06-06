@@ -1628,6 +1628,13 @@ pub(crate) struct TypeLookup<'a> {
     pub(crate) current_module_source: &'a ModuleSource,
     pub(crate) imported_type_sources: &'a IndexMap<String, ModuleSource>,
     pub(crate) import_original_names: &'a IndexMap<String, String>,
+    /// Namespace-import aliases (`use ns from "..."`). A type written as
+    /// `ns::Type` in type position is canonicalized to the bare `Type`
+    /// before any registry lookup, so namespace-imported newtypes / structs
+    /// / variants / enums / flags resolve the same as a directly-imported
+    /// `Type`. Collection passes that have no import context pass an empty
+    /// map (ns-qualified type references only appear in resolved bodies).
+    pub(crate) namespace_imports: &'a IndexMap<String, ModuleSource>,
     pub(crate) all_newtypes: &'a IndexMap<ModuleSource, IndexMap<String, TypeId>>,
     pub(crate) all_struct_fields: &'a IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>,
     pub(crate) all_variant_cases: &'a IndexMap<ModuleSource, IndexMap<String, VariantInfo>>,
@@ -1654,6 +1661,13 @@ impl<'a> TypeLookup<'a> {
         local: Option<&'a IndexMap<String, V>>,
         all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
     ) -> Option<&'a V> {
+        // Canonicalize a `<ns>::<Type>` reference to its bare `<Type>` form
+        // (single `::`, prefix is a namespace-import alias). All registries
+        // below are keyed by bare names; this is the single chokepoint for
+        // every type-name lookup, so namespace-imported types resolve here
+        // without each caller stripping the prefix itself.
+        let name =
+            super::sem::imports::strip_ns_prefix(self.namespace_imports, name).unwrap_or(name);
         if let Some(local) = local
             && let Some(v) = local.get(name)
         {

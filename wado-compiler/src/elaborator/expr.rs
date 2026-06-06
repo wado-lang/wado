@@ -654,6 +654,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `IntLiteral`.
                     return flags_info.type_id;
                 }
+
+                // Check associated constants in the namespace's module
+                // (`ns::Type::CONST`). The `associated_constants` registry is
+                // keyed by the bare `Type::member` (built via `format_local`
+                // across all loaded modules), so the namespace alias is
+                // dropped for the lookup. Mirrors the bare associated-constant
+                // branch above; the const body is inlined here for its facts
+                // and re-reified under its defining module's perspective.
+                let assoc_key = format!("{type_name}::{case_name}");
+                if let Some((const_module, type_id, const_expr)) = self
+                    .sem
+                    .decls
+                    .associated_constants
+                    .get(&assoc_key)
+                    .cloned()
+                {
+                    let prev_override = self.ann_module_override.replace(const_module);
+                    self.resolve_expr(&const_expr, ctx, Some(type_id));
+                    self.ann_module_override = prev_override;
+                    return type_id;
+                }
             }
         }
 

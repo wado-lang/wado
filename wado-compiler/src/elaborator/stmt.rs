@@ -550,7 +550,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
         match qualifier {
-            Type::Named(t) => t.name == scrutinee_name,
+            Type::Named(t) => {
+                // `h::Case` parses as a `Named("h")` qualifier plus the bare
+                // `Case`. When `h` is a namespace import alias (not a type),
+                // the prefix only names the case's source module: accept it
+                // iff the namespace resolves to the scrutinee's defining
+                // module, so the bare case lookup below validates the rest —
+                // mirroring an unqualified `Case` pattern.
+                t.name == scrutinee_name
+                    || self
+                        .sem
+                        .imports
+                        .namespace_imports
+                        .get(&t.name)
+                        .is_some_and(|m| m == scrutinee_module)
+            }
             Type::Generic(g) => {
                 g.name == scrutinee_name && scrutinee_arg_len.is_none_or(|n| n == g.args.len())
             }

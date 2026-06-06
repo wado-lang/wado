@@ -338,6 +338,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             current_module_source: &self.current_module_source,
             imported_type_sources: &self.sem.imports.imported_type_sources,
             import_original_names: &self.sem.imports.import_original_names,
+            namespace_imports: &self.sem.imports.namespace_imports,
             all_newtypes: &self.tysys.all_newtypes,
             all_struct_fields: &self.tysys.all_struct_fields,
             all_variant_cases: &self.tysys.all_variant_cases,
@@ -7425,6 +7426,27 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::TirExprKind;
 
+        // Canonicalize `<ns>::<member>` (single `::`, prefix is a namespace
+        // import alias) to the bare `<member>` form, exactly as
+        // `resolve_ident` does at annotate time (expr.rs). Every registry
+        // consulted below is keyed by canonical names; keeping the rewrite
+        // here in lock-step with annotate is what makes namespace-imported
+        // globals / functions / cases reify the same node the elaborator
+        // resolved. The original `id` / `span` are preserved.
+        let canonical_ident;
+        let ident = if let Some(stripped) = self.sem.imports.strip_ns_prefix(&ident.name) {
+            canonical_ident = ast::IdentExpr {
+                id: ident.id,
+                name: stripped.to_string(),
+                segments: ident.segments.clone(),
+                type_args: ident.type_args.clone(),
+                span: ident.span,
+            };
+            &canonical_ident
+        } else {
+            ident
+        };
+
         // 1. Local / capture lookup, mirroring `resolve_ident`
         //    (expr.rs:534+). Use the local's stored type instead of
         //    `recorded_type`: template-string sub-parsers restart
@@ -7660,6 +7682,34 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
+        // 5b. Imported free function reference resolved through the symbol
+        //     table. Namespace imports (`use ns from "..."`) bring functions
+        //     into scope under their bare names without recording them in
+        //     `imported_type_sources`, so the branch above misses them. Mirror
+        //     annotate's `resolve_func_ref_ident` → `lookup_func_ast_for_ref`,
+        //     which also resolves via the symbol table, and emit a `FuncRef`
+        //     keyed by the function's defining module + original name.
+        if self.sem.decls.imported_functions.contains(&ident.name)
+            && let Some(symbol) = self
+                .symbols
+                .lookup(&self.current_module_source, &ident.name)
+            && matches!(symbol.kind, crate::symbol::SymbolKind::Function(_))
+        {
+            let type_args = self
+                .ann_generic_instantiations(ident.id)
+                .map(|gi| gi.type_args)
+                .unwrap_or_default();
+            return TirExpr::new(
+                TirExprKind::FuncRef {
+                    module_source: symbol.module_source().clone(),
+                    name: symbol.name.clone(),
+                    type_args,
+                },
+                recorded_type,
+                ident.span,
+            );
+        }
+
         // 6. Qualified case path `Type::Case`. Variant / enum / flags
         //    are checked in the same priority order as
         //    `Elaborator::resolve_ident` (expr.rs:607+). The
@@ -7820,6 +7870,47 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         enum_type,
                         ident.span,
                     );
+                }
+
+                // Flags member in the namespace's module. Mirrors the
+                // two-segment `Type::Member` flags branch above and the
+                // annotate-side handling in `resolve_ident` (expr.rs); a
+                // flags member lowers to its bitmask `IntLiteral`.
+                if let Some(flags_info) = self
+                    .tysys
+                    .all_flags_cases
+                    .get(&ns_source)
+                    .and_then(|m| m.get(type_name))
+                    .cloned()
+                    && let Some(member) = flags_info
+                        .members
+                        .iter()
+                        .find(|m| m.name == case_name)
+                        .cloned()
+                {
+                    return TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: u64::from(member.bitmask),
+                            repr: member.bitmask.to_string(),
+                        },
+                        flags_info.type_id,
+                        ident.span,
+                    );
+                }
+
+                // Associated constant in the namespace's module
+                // (`ns::Type::CONST`). Mirrors the bare associated-constant
+                // case (4) above: the registry is keyed by the bare
+                // `Type::member`, and the body is re-reified under its
+                // defining module's perspective.
+                let assoc_key = format!("{type_name}::{case_name}");
+                if let Some((const_module, type_id, const_expr)) =
+                    self.sem.decls.associated_constants.get(&assoc_key).cloned()
+                {
+                    let resolved = self.with_const_module_perspective(&const_module, |this| {
+                        this.reify_expr(&const_expr, ctx, Some(type_id))
+                    });
+                    return TirExpr::new(resolved.kind, type_id, ident.span);
                 }
             }
         }

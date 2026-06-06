@@ -1,0 +1,55 @@
+// Comprehensive helper for namespace-import robustness fixtures: exercises
+// every public symbol kind reachable through `use h from "..."`.
+
+pub fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+pub global ANSWER: i32 = 42;
+pub global mut COUNTER: i32 = 0;
+
+pub struct Point {
+    pub x: i32,
+    pub y: i32,
+}
+
+impl Point {
+    pub fn new(x: i32, y: i32) -> Point {
+        return Point { x, y };
+    }
+
+    pub fn sum(&self) -> i32 {
+        return self.x + self.y;
+    }
+}
+
+pub enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+pub variant Shape {
+    Circle(f64),
+    Square(f64),
+}
+
+pub flags Perms {
+    Read,
+    Write,
+    Execute,
+}
+
+pub type Meters = f64;
+
+pub struct Config {
+    pub limit: i32,
+}
+
+impl Config {
+    pub const MAX_LIMIT: i32 = 100;
+
+    pub fn make() -> Config {
+        return Config { limit: 1 };
+    }
+}

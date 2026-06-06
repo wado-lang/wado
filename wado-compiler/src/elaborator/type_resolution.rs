@@ -228,6 +228,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 TypeTable::ERROR
             }
+        } else if self
+            .sem
+            .imports
+            .namespace_imports
+            .contains_key(namespaced.namespace.as_str())
+        {
+            // `ns::Type` (or `ns::Type<args>`) where `ns` is a namespace
+            // import alias: resolve the bare `Type`, since every type
+            // registry is keyed by canonical bare names. Mirrors
+            // `strip_ns_prefix` for expression-position idents.
+            if namespaced.args.is_empty() {
+                self.resolve_named_type(&namespaced.name, namespaced.span)
+            } else {
+                self.resolve_generic_type(&namespaced.name, &namespaced.args, namespaced.span)
+            }
         } else {
             let _ = self.logger.error(TypeError::UnknownType {
                 name: format!("{}::{}", namespaced.namespace, namespaced.name),

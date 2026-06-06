@@ -410,6 +410,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
                 let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
                 let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
+                let empty_ns: IndexMap<String, ModuleSource> = IndexMap::default();
                 for item in &module.items {
                     let Item::Newtype(newtype_decl) = item else {
                         continue;
@@ -426,6 +427,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             current_module_source: module_source,
                             imported_type_sources: &imported_type_sources,
                             import_original_names: &import_original_names,
+                            namespace_imports: &empty_ns,
                             all_newtypes: &all_newtypes,
                             all_struct_fields: &all_struct_fields,
                             all_variant_cases: &all_variant_cases,
@@ -510,12 +512,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
             let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
             let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
+            let empty_ns: IndexMap<String, ModuleSource> = IndexMap::default();
 
             for item in &module.items {
                 let lookup = TypeLookup {
                     current_module_source: module_source,
                     imported_type_sources: &imported_type_sources,
                     import_original_names: &import_original_names,
+                    namespace_imports: &empty_ns,
                     all_newtypes: &all_newtypes,
                     all_struct_fields: &all_struct_fields,
                     all_variant_cases: &all_variant_cases,
@@ -1176,10 +1180,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
                 let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
                 let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
+                let empty_ns: IndexMap<String, ModuleSource> = IndexMap::default();
                 let lookup = TypeLookup {
                     current_module_source: module_source,
                     imported_type_sources: &imported_type_sources,
                     import_original_names: &import_original_names,
+                    namespace_imports: &empty_ns,
                     all_newtypes: &state.tysys.all_newtypes,
                     all_struct_fields: &state.tysys.all_struct_fields,
                     all_variant_cases: &state.tysys.all_variant_cases,
@@ -2869,6 +2875,35 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         namespaced.name.clone(),
                         vec![],
                         vec![],
+                    );
+                }
+                // `ns::Type` namespace-import alias in type position: resolve
+                // the bare `Type` via the `Named` / `Generic` arms (registries
+                // are keyed by bare names). Mirrors the dynamic resolver's
+                // `resolve_namespaced_generic_type` namespace-alias branch.
+                if lookup
+                    .namespace_imports
+                    .contains_key(namespaced.namespace.as_str())
+                {
+                    let bare = if namespaced.args.is_empty() {
+                        Type::Named(crate::ast::NamedType::new(
+                            namespaced.id,
+                            namespaced.name.clone(),
+                            namespaced.span,
+                        ))
+                    } else {
+                        Type::Generic(crate::ast::GenericType {
+                            id: namespaced.id,
+                            name: namespaced.name.clone(),
+                            args: namespaced.args.clone(),
+                            span: namespaced.span,
+                        })
+                    };
+                    return Self::resolve_type_static_with_params(
+                        &bare,
+                        type_table,
+                        lookup,
+                        type_params,
                     );
                 }
                 TypeTable::UNKNOWN
