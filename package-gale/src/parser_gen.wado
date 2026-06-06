@@ -495,6 +495,7 @@ fn gen_bt_scan_if_possible(w: &mut CodeWriter, alt: &Alternative, lowered_rule: 
     let mut f = FnSpec::new(&scan_name);
     f.add_param(&"tokens", &"&List<Token>");
     f.add_param(&"pos", &"i32");
+    add_follow_param(&mut f);
     f.set_return_type(&"i32");
     f.emit_begin(w);
     w.line(&"let mut pos = pos;");
@@ -569,6 +570,7 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
         type_str: "i32",
         default_value: Option::<String>::Some("0"),
     });
+    add_follow_param(&mut f);
     f.set_return_type(&"i32");
     f.emit_begin(w);
 
@@ -679,6 +681,7 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &List<L
     let mut fa = FnSpec::new(&atom_name);
     fa.add_param(&"tokens", &"&List<Token>");
     fa.add_param(&"pos", &"i32");
+    add_follow_param(&mut fa);
     fa.set_return_type(&"i32");
     fa.emit_begin(w);
     let mut non_lr_alts: List<Alternative> = [];
@@ -710,9 +713,10 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &List<L
         type_str: "i32",
         default_value: Option::<String>::Some("0"),
     });
+    add_follow_param(&mut f2);
     f2.set_return_type(&"i32");
     f2.emit_begin(w);
-    w.line(&`let mut pos = {atom_name}(tokens, pos);`);
+    w.line(&`let mut pos = {atom_name}(tokens, pos, follow);`);
     w.line(&"if pos < 0 { return -1; }");
     gen_scan_lr_suffix_dispatch(w, rule, lr_alts, lr_dispatch, ctx, fn_name);
     w.line(&"return pos;");
@@ -737,6 +741,7 @@ fn gen_scan_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &L
         let mut f = FnSpec::new(&suffix_fn);
         f.add_param(&"tokens", &"&List<Token>");
         f.add_param(&"pos", &"i32");
+        add_follow_param(&mut f);
         f.set_return_type(&"i32");
         f.emit_begin(w);
         w.line(&"let mut pos = pos;");
@@ -829,7 +834,7 @@ fn gen_scan_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, prec: i32)
     // makes the same decision lazily after attempting the suffix.
     w.begin(&`if {prec} >= min_prec`);
     w.line(&`let lr_saved_pos = pos;`);
-    w.line(&`pos = {*suffix_fn}(tokens, pos);`);
+    w.line(&`pos = {*suffix_fn}(tokens, pos, follow);`);
     w.line(&"if pos < 0 { pos = lr_saved_pos; break; }");
     w.else_begin(&"else");
     w.line(&"break;");
@@ -1221,11 +1226,9 @@ fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContex
         return;
     }
     if let RuleCall(rc) = se {
-        let fn_name = if let Some(id) = rc.variant_id {
-            `scan_{rc.target_snake}__follow_{id}`;
-        } else {
-            `scan_{rc.target_snake}`;
-        };
+        // Redesign: single scan callee + runtime FOLLOW arg.
+        let fn_name = `scan_{rc.target_snake}`;
+        let follow_expr = follow_arg_expr(&rc.follow_arg);
         // `min_prec_arg`, when set, is the baked precedence for a
         // self-recursive call inside an LR suffix (stamped by
         // `stamp_lr_self_ref_min_prec`). Otherwise fall back to
@@ -1238,7 +1241,7 @@ fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContex
         } else {
             min_prec_override;
         };
-        w.line(&`pos = {fn_name}(tokens, pos, {min_prec});`);
+        w.line(&`pos = {fn_name}(tokens, pos, {min_prec}, {follow_expr});`);
         w.line(&`if pos < 0 \{ {*fail_stmt} \}`);
         return;
     }
@@ -1286,11 +1289,8 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         return;
     }
     if let RuleCall(rc) = se {
-        let fn_name = if let Some(id) = rc.variant_id {
-            `scan_{rc.target_snake}__follow_{id}`;
-        } else {
-            `scan_{rc.target_snake}`;
-        };
+        let fn_name = `scan_{rc.target_snake}`;
+        let follow_expr = follow_arg_expr(&rc.follow_arg);
         // `_assign` only fires inside Repeat bodies — never reachable
         // from bt-scan's trailing-self-ref site, so `min_prec` here
         // is always the rule's default `0` (or whatever
@@ -1300,7 +1300,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         } else {
             0;
         };
-        w.line(&`pos = {fn_name}(tokens, pos, {min_prec});`);
+        w.line(&`pos = {fn_name}(tokens, pos, {min_prec}, {follow_expr});`);
         return;
     }
     if let Wildcard = se {
@@ -1403,7 +1403,14 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
     // otherwise the scan tournament that picks the calling rule's alt
     // would over-count this Repeat and reject the alt that actually
     // matches.
-    let k_match_scan = k_prefix_match_expr_scan(&re.k_prefix_mask, ctx);
+    // Redesign: the scan-side gate reads the runtime FOLLOW continuation
+    // (`follow` param) instead of a baked mask, exactly mirroring the
+    // parse-side `emit_caller_follow_gate`. Inert when `follow` is empty.
+    let k_match_scan = if re.gate_caller_follow {
+        "follow_yields(tokens, pos, follow, TK_EOF)";
+    } else {
+        "";
+    };
 
     if let Optional = re.kind {
         // OptionalLookahead doesn't reach this path (it's a
@@ -3582,7 +3589,7 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
     // K-prefix matches at this position, yield to caller (null) so the
     // Optional body doesn't swallow tokens the caller needs. Empty
     // mask falls through to the regular `first_check` shape.
-    let k_prefix_match = k_prefix_match_expr(&rep_op.k_prefix_mask, ctx);
+    let k_prefix_match = if rep_op.gate_caller_follow { "follow_yields(&p.tokens, p.pos, follow, TK_EOF)" } else { "" };
     if !k_prefix_match.is_empty() {
         w.begin(&`let {opt_field}: Option<{inner_type}> = if {k_prefix_match}`);
         w.line(&"null");
@@ -3624,7 +3631,7 @@ fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
 
     // Same K-prefix gate as the RuleCall arm — see
     // `gen_op_repeat_optional_rulecall` for the rationale.
-    let k_prefix_match = k_prefix_match_expr(&rep_op.k_prefix_mask, ctx);
+    let k_prefix_match = if rep_op.gate_caller_follow { "follow_yields(&p.tokens, p.pos, follow, TK_EOF)" } else { "" };
     if !k_prefix_match.is_empty() {
         w.begin(&`let {opt_field}: Option<{inner_type}> = if {k_prefix_match}`);
         w.line(&"null");
