@@ -219,7 +219,15 @@ The old fixed-point loop and the engine co-exist during the port.
         cost / recursion / remap analysis stays tree-shaped over the callee
         clones. `Body`'s tree→arena `Lower` now borrows the target maps so
         `from_block` and `lower_expr` share it.
-  - Remaining: `field_scalarize`.
+  - [x] `field_scalarize` — arena driver (loop discovery + nested recursion);
+        each loop's hot-field scalarization runs the tree state machine on a
+        materialized copy of the loop body (subtree materialization) and lowers
+        the transformed body + pre/post sync statements back via the new
+        `Body::lower_block` / `to_tree_block`. The dataflow lattice / sync /
+        convergence logic stays tree-shaped over the per-loop materialization;
+        the function body itself flows as arena.
+  - All nine remaining passes are ported. The only pass still on the
+    `body_block` bridge is the deferred `const_folding` (niri-blocked).
   - Added `Body::clone_expr` (structural arena deep-clone) — the
     non-engine counterpart of `Engine::clone_expr`, for rewrites that
     duplicate a subtree.

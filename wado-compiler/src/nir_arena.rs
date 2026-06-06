@@ -369,6 +369,20 @@ impl Body {
         self.lower().expr(expr)
     }
 
+    /// Lower a standalone tree block into this arena, appending fresh nodes and
+    /// returning the new block id. The block-level counterpart of
+    /// [`Body::lower_expr`]; used by passes that materialize a sub-block to a
+    /// tree, transform it, and splice the result back.
+    pub fn lower_block(&mut self, block: &NirBlock) -> BlockId {
+        self.lower().block(block)
+    }
+
+    /// Materialize a sub-block subtree to its tree form (a deliberate
+    /// subtree clone for passes whose transform is still tree-shaped).
+    pub fn to_tree_block(&self, block: BlockId) -> NirBlock {
+        self.block_to_tree(block)
+    }
+
     fn lower(&mut self) -> Lower<'_> {
         Lower {
             exprs: &mut self.exprs,
