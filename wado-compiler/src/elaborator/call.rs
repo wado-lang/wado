@@ -508,16 +508,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // entry survives because it was recorded by the
                     // `resolve_expr` wrapper for the argument itself.
                     //
-                    // Compare by canonical decl identity, not bare name: two
-                    // distinct types from different modules can share a name
-                    // (`core:temporal::Instant` vs `wasi:clocks::Instant`), and a
-                    // bare-name match here would wrongly collapse a real
-                    // `From<OtherInstant>` conversion into an identity. Types
-                    // without a declaring module (primitives) fall back to name
-                    // equality.
-                    let is_reflexive = match self.type_decl_key(arg_type) {
-                        Some(arg_key) => arg_key == self.canonical_decl_key(prefix),
-                        None => arg_type_name == prefix,
+                    // Match by canonical decl identity, not bare name: two types
+                    // from different modules can share a name
+                    // (`core:temporal::Instant` vs `wasi:clocks::Instant`) and a
+                    // bare-name match would collapse a real conversion into an
+                    // identity. Generic instances keep the name compare — a decl
+                    // key drops type args, so it cannot tell `Foo<A>` from
+                    // `Foo<B>`; primitives have no decl key and fall back too.
+                    let arg_is_generic = {
+                        let tt = self.tysys.type_table.borrow();
+                        matches!(
+                            tt.get(tt.peel_refs(arg_type)),
+                            crate::tir::ResolvedType::GenericInstance { .. }
+                                | crate::tir::ResolvedType::GenericResource { .. }
+                        )
+                    };
+                    let is_reflexive = if arg_is_generic {
+                        arg_type_name == prefix
+                    } else if let Some(arg_key) = self.type_decl_key(arg_type) {
+                        arg_key == self.canonical_decl_key(prefix)
+                    } else {
+                        arg_type_name == prefix
                     };
                     if is_reflexive {
                         self.record_desugar(

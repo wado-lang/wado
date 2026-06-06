@@ -1731,17 +1731,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 }
 
                                 // Bind `Self` to the impl's concrete type so a
-                                // `-> Self` return type resolves: a cross-module
-                                // trait associated fn (`fn make() -> Self`) is
-                                // resolved here from the impl AST, where
+                                // `-> Self` return resolves cross-module (here
                                 // `resolve_named_type` reads `Self` off
-                                // `trait_ctx.self_type` rather than the now-gone
-                                // impl context.
-                                scope.trait_ctx.self_type =
-                                    Some(scope.resolve_return_type_in_module(
-                                        struct_module,
-                                        Some(&impl_block.ty),
-                                    ));
+                                // `trait_ctx.self_type`, the now-gone impl
+                                // context). Only when the return mentions `Self`,
+                                // to avoid the extra resolution otherwise.
+                                if method
+                                    .return_type
+                                    .as_ref()
+                                    .is_some_and(|t| Self::ast_type_mentions_self(t))
+                                {
+                                    scope.trait_ctx.self_type =
+                                        Some(scope.resolve_return_type_in_module(
+                                            struct_module,
+                                            Some(&impl_block.ty),
+                                        ));
+                                }
                                 let result = scope.resolve_return_type_in_module(
                                     struct_module,
                                     method.return_type.as_ref(),
@@ -1889,9 +1894,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `resolve_type` would fail to canonicalise a return type
             // the caller never `use`'d.
             // Bind `Self` to the impl's concrete type (see the inherent-impl
-            // branch above) so a `-> Self` return type resolves here too.
-            scope.trait_ctx.self_type =
-                Some(scope.resolve_return_type_in_module(&ms, Some(&impl_ty)));
+            // branch above), only when the return mentions `Self`.
+            if method
+                .return_type
+                .as_ref()
+                .is_some_and(|t| Self::ast_type_mentions_self(t))
+            {
+                scope.trait_ctx.self_type =
+                    Some(scope.resolve_return_type_in_module(&ms, Some(&impl_ty)));
+            }
             let result = scope.resolve_return_type_in_module(&ms, method.return_type.as_ref());
 
             drop(scope);
@@ -2435,6 +2446,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `FunctionRef` gets the correct `module_source` — especially when a
     /// user defines `impl From<MyType> for i32` in the entry module (or
     /// another module), so DCE and WIR building can find it.
+    /// The un-aliased declaration name `name` refers to *within `module`* — its
+    /// `use { Original as name }` original, or `name` itself when not aliased.
+    /// Resolving in the type's defining module (not the call site) makes
+    /// `From`-impl matching independent of whatever alias the caller happens to
+    /// use for the source type.
+    fn import_original_name(&self, name: &str, module: &ModuleSource) -> String {
+        let fallback = || name.to_string();
+        if module == &self.current_module_source {
+            return self
+                .sem
+                .imports
+                .import_original_names
+                .get(name)
+                .cloned()
+                .unwrap_or_else(fallback);
+        }
+        let Some(ast_module) = self.loaded_modules.get(module) else {
+            return fallback();
+        };
+        let (_, originals) = Self::build_imported_type_sources(
+            &mut self.interner.borrow_mut(),
+            ast_module,
+            module,
+            Some(&self.entry_module_source),
+            &self.invocations,
+        );
+        originals.get(name).cloned().unwrap_or_else(fallback)
+    }
+
+    /// Whether an AST type syntactically mentions `Self`. Over-approximates
+    /// (returns `true` for the few forms it does not descend into) so a caller
+    /// using it to decide whether to bind `Self` never under-binds.
+    fn ast_type_mentions_self(ty: &ast::Type) -> bool {
+        match ty {
+            ast::Type::Named(n) => n.name == "Self",
+            ast::Type::Generic(g) => {
+                g.name == "Self" || g.args.iter().any(Self::ast_type_mentions_self)
+            }
+            ast::Type::Tuple(elems) => elems.iter().any(Self::ast_type_mentions_self),
+            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
+                Self::ast_type_mentions_self(inner)
+            }
+            _ => true,
+        }
+    }
+
     pub(super) fn locate_static_method_impl(
         &self,
         struct_name: &str,
@@ -2459,7 +2516,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        let matches_arg_type = |trait_type: &ast::Type| -> bool {
+        let matches_arg_type = |trait_type: &ast::Type, impl_module: &ModuleSource| -> bool {
             let Some(expected) = arg_type_name else {
                 return true;
             };
@@ -2468,23 +2525,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let ast::Type::Generic(g) = trait_type
                 && let Some(arg) = g.args.first()
             {
-                // Canonicalise the impl's source-type name before comparing:
-                // it may be an import alias (`impl From<ClockInstant>` where
-                // `ClockInstant` is `use { Instant as ClockInstant }`), whereas
-                // the call site's `expected` is the resolved type's real name.
-                // Comparing the alias verbatim would miss the impl and fall
-                // back to a (non-existent) inherent `Type::from`.
+                // Un-alias the impl's source-type name *in the impl's module*
+                // before comparing: `impl From<ClockInstant>` (where
+                // `ClockInstant` is `use { Instant as ClockInstant }`) must match
+                // a call whose argument's real name is `Instant`, regardless of
+                // the alias the caller used. The verbatim name would miss the
+                // impl and fall back to a (non-existent) inherent `Type::from`.
                 let arg_name = Self::get_type_name_static(arg);
-                let canonical = self.canonical_decl_key(&arg_name).1;
-                return canonical == expected;
+                return self.import_original_name(&arg_name, impl_module) == expected;
             }
             !is_from_or_try_from(&base)
         };
 
-        let check_impl = |impl_block: &ast::ImplBlock| -> Option<String> {
+        let check_impl = |impl_block: &ast::ImplBlock, impl_module: &ModuleSource| -> Option<String> {
             let trait_type = impl_block.trait_type.as_ref()?;
             if Self::get_type_name_static(&impl_block.ty) != struct_name
-                || !matches_arg_type(trait_type)
+                || !matches_arg_type(trait_type, impl_module)
             {
                 return None;
             }
@@ -2524,7 +2580,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         for item in self.current_module_items {
             if let Item::Impl(impl_block) = item
-                && let Some(trait_name) = check_impl(impl_block)
+                && let Some(trait_name) = check_impl(impl_block, &self.current_module_source)
             {
                 return Some(StaticMethodRef::new(
                     self.current_module_source.clone(),
@@ -2540,7 +2596,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (module_source, item_idx) in entries {
                 if let Some(module) = self.loaded_modules.get(module_source)
                     && let Item::Impl(impl_block) = &module.items[*item_idx]
-                    && let Some(trait_name) = check_impl(impl_block)
+                    && let Some(trait_name) = check_impl(impl_block, module_source)
                 {
                     return Some(StaticMethodRef::new(
                         module_source.clone(),
