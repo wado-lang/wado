@@ -2464,8 +2464,10 @@ impl<'a> Interpreter<'a> {
         }
 
         // Rule 2: `match X { Pat => true, _ => false } → <discriminator>`.
+        // The scrutinee is preserved inside the synthesised `Binary`, and the
+        // `Match` node `e` keeps its own span — only its `kind` is replaced —
+        // mirroring the tree `EnumEqReplacement::into_kind`.
         if let Some(replacement) = try_match_bool_discriminator_a(body, &arms_data) {
-            let span = body.exprs[e].span;
             let right = body.exprs.push(ExprNode {
                 kind: ExprKind::EnumConstruct {
                     enum_type: replacement.enum_type,
@@ -2475,7 +2477,6 @@ impl<'a> Interpreter<'a> {
                 type_id: replacement.enum_type,
                 span: replacement.span,
             });
-            let _ = span;
             body.exprs[e].kind = ExprKind::Binary {
                 left: scrutinee,
                 op: NirBinaryOp::Eq,
