@@ -125,6 +125,10 @@ pub struct Semantics {
     /// The batch compiler consumes these directly; LSP queries ignore them.
     /// Empty when `build_tir` did not run or bailed.
     pub(crate) tir_modules: IndexMap<ModuleSource, TirModule>,
+    /// Source-level liveness produced between `annotate_bodies` and `reify`.
+    /// `dead_items` feeds the unused-diagnostics emitter; `live_items` is the
+    /// set reify will gate emission on. Empty when annotate did not complete.
+    pub(crate) liveness: crate::elaborator::liveness::Liveness,
     /// True when every analysis phase ran to completion without bailing.
     /// Batch compilation refuses to continue when this is false; LSP queries
     /// proceed with whatever partial state the phases managed to produce.
@@ -230,6 +234,7 @@ impl Semantics {
             coercions,
             desugars,
             tir_modules,
+            liveness: crate::elaborator::liveness::Liveness::default(),
             is_complete: false,
         }
     }
@@ -1010,6 +1015,15 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // so the result is never "complete" even if later phases ran clean.
     let no_syntax_errors = load_result.modules.values().all(|m| !m.has_syntax_errors());
 
+    // Source-level liveness: reachability from the export boundary over the
+    // call graph the elaborator recorded in `references`. Runs between
+    // `annotate_bodies` and `reify`; both the diagnostic emitter and (in a
+    // later slice) reify gating read the result off `Semantics`.
+    let liveness = {
+        let _span = logger.span("elaborate/liveness");
+        crate::elaborator::liveness::compute(&load_result.modules, &references)
+    };
+
     Semantics {
         entry_module_source: load_result.entry_module_source,
         modules: load_result.modules,
@@ -1026,6 +1040,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         coercions,
         desugars,
         tir_modules,
+        liveness,
         is_complete: lower_ok && no_syntax_errors,
     }
 }

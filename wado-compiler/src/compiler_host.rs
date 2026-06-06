@@ -135,6 +135,12 @@ pub enum Code {
     /// Optimizer remark (residual cost that survived optimization).
     Remark,
 
+    // Unused diagnostics (lints)
+    /// A function is never reached from the export boundary.
+    DeadFunction,
+    /// A global is never reached from the export boundary.
+    DeadGlobal,
+
     // Kiln errors
     /// A generator's `Options` struct uses a shape not supported by Kiln.
     GeneratorOptionsUnsupported,
@@ -192,6 +198,8 @@ impl std::fmt::Display for Code {
             Code::SpanEnd => "SPAN_END",
             Code::Log => "LOG",
             Code::Remark => "REMARK",
+            Code::DeadFunction => "DEAD_FUNCTION",
+            Code::DeadGlobal => "DEAD_GLOBAL",
             Code::GeneratorOptionsUnsupported => "GENERATOR_OPTIONS_UNSUPPORTED",
             Code::GeneratorOptionsInvalid => "GENERATOR_OPTIONS_INVALID",
             Code::KilnStaleCache => "KILN_STALE_CACHE",

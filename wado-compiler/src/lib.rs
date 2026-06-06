@@ -164,7 +164,7 @@ pub struct DumpResult {
 }
 
 /// Compilation options for the compiler
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct CompilerOptions {
     /// Optimization level
     pub opt_level: OptLevel,
@@ -204,6 +204,29 @@ pub struct CompilerOptions {
     /// option (e.g. `["array-copy"]`). Parsed into [`CodegenFlags`] during
     /// compilation; an unrecognized flag is a hard error. Empty by default.
     pub codegen_flags: Vec<String>,
+    /// Emit unused diagnostics (`DeadFunction` / `DeadGlobal`, …). On by
+    /// default; the CLI's `--no-unused` flag turns it off. Gates only the
+    /// diagnostic emission, never the liveness analysis itself.
+    pub unused_diagnostics: bool,
+}
+
+impl Default for CompilerOptions {
+    fn default() -> Self {
+        Self {
+            opt_level: OptLevel::default(),
+            target_world: None,
+            skip_validation: false,
+            retain_wir: false,
+            inline_threshold: None,
+            opt_iterations: None,
+            log_level: None,
+            allocator: None,
+            invocations: kiln::InvocationIndex::default(),
+            test_name_filters: Vec::new(),
+            codegen_flags: Vec::new(),
+            unused_diagnostics: true,
+        }
+    }
 }
 
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
@@ -241,6 +264,39 @@ pub async fn compile_with_host<H: CompilerHost>(
 /// This is the main compilation entry point with all options. It runs the full compilation pipeline:
 /// lexer -> parser -> binder -> loader -> analyzer -> elaborator -> lower -> optimize -> `tir_to_wir`
 ///
+/// Emit `DeadFunction` / `DeadGlobal` warnings for the user-authored items
+/// the liveness pass found unreachable from the export boundary.
+fn emit_unused_diagnostics<H: CompilerHost>(sem: &semantics::Semantics, logger: &Logger<'_, H>) {
+    use crate::ast::Item;
+    use crate::compiler_host::{Code, DiagnosticSpan};
+
+    for key in &sem.liveness.dead_items {
+        let Some(module) = sem.modules.get(&key.module) else {
+            continue;
+        };
+        let filename = key.module.diagnostic_filename();
+        for item in &module.items {
+            match item {
+                Item::Function(func) if func.id == key.ast_id => {
+                    logger.warn_at(
+                        Code::DeadFunction,
+                        format!("function `{}` is never used", func.name),
+                        DiagnosticSpan::from_span(&func.name_span, Some(filename.as_str())),
+                    );
+                }
+                Item::Global(global) if global.id == key.ast_id => {
+                    logger.warn_at(
+                        Code::DeadGlobal,
+                        format!("global `{}` is never used", global.name),
+                        DiagnosticSpan::from_span(&global.name_span, Some(filename.as_str())),
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 /// # Arguments
 /// * `source` - The entry module source code
 /// * `host` - `CompilerHost` for loading imported modules and emitting diagnostics
@@ -372,6 +428,12 @@ fn compile_after_load<H: CompilerHost>(
     let sem = semantics::semantics_with_logger(load_result, logger, true);
     if !sem.is_complete() {
         return Err(Bail);
+    }
+
+    // Source-level unused diagnostics. Reads the liveness computed during
+    // `semantics_with_logger`; gated on the option (CLI `--no-unused`).
+    if options.unused_diagnostics {
+        emit_unused_diagnostics(&sem, logger);
     }
 
     // === Phase 6c: Kiln `Options` descriptor extraction ===
