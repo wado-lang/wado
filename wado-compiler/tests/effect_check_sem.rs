@@ -172,6 +172,31 @@ export fn run() {}
 }
 
 #[test]
+fn indirect_closure_call_missing_effect_is_reported() {
+    // Calling a closure value whose body needs Stdout from an effect-free
+    // function: the indirect call's function type carries the effect.
+    let source = r#"
+use { println, Stdout } from "core:cli";
+
+fn bad() {
+    let f = || {
+        println("needs stdout");
+    };
+    f();
+}
+
+export fn run() with Stdout {
+    println("ok");
+}
+"#;
+    let v = violations(source);
+    assert!(
+        v.iter().any(|s| s.contains("Stdout")),
+        "indirect call should require Stdout, got {v:?}"
+    );
+}
+
+#[test]
 fn effect_free_program_has_no_violations() {
     let source = r#"
 fn add(a: i32, b: i32) -> i32 {

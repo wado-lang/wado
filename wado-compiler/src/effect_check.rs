@@ -2136,6 +2136,19 @@ impl AstVisitor for SemEffectWalker<'_> {
                     let resolved =
                         self.resolve_effect_params(&effects, &params, is_method, &call.args);
                     self.report_missing(&resolved, callee_name(&call.callee), call.span);
+                } else if let Some(callee_type) = self
+                    .sem
+                    .expression_types
+                    .get(&SymbolKey::new(self.module.clone(), call.callee.id()))
+                    .copied()
+                {
+                    // Indirect call: the callee is a function-typed value (a
+                    // closure or `fn(...)` parameter). Its type carries the
+                    // effects it performs when invoked.
+                    if let ResolvedType::Function { effects, .. } = self.sem.types.get(callee_type) {
+                        let effects = effects.to_vec();
+                        self.report_missing(&effects, "(indirect call)", call.span);
+                    }
                 }
             }
             Expr::MethodCall(method_call) => {
