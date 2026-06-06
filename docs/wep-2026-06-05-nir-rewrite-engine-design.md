@@ -140,17 +140,37 @@ The old fixed-point loop and the engine co-exist during the port.
       and break golden / `wir_expect` fixtures. So the env-driven part stays a
       flow-sensitive pass; the first production rule in C is a genuinely-local
       one (`select_lowering` or `match_to_switch`).
-- [ ] C. Wire the engine into the optimize loop and migrate the _genuinely
-      local_ peephole passes onto rules one at a time — starting with
-      `select_lowering` / `match_to_switch`, then `string_push`,
-      `array_literal`, the `elide_*` / `ref_elim` shapes, etc. — removing each
-      pass's `body_block()` bridge as it ports, e2e green at every step. Passes
-      that are flow-sensitive (`const_folding`'s env walk, `copy_prop`, `licm`,
-      `field_scalarize`, `cse`, `store_load_forward`, `value_copy_demote`) keep
-      their own walkers but read the arena. When the last _local_ bridge is
-      gone the per-pass `Body ↔ tree` conversions on the engine's path vanish
-      and the arena flows lower → optimize → wir_build with no converter —
-      completing Phase 3's goal. Measure the speed win here.
+- C. Migrate the passes off the `body_block()` bridge one at a time, e2e
+  bit-identical at every step. Genuinely-local peephole passes become engine
+  `Rule`s; whole-function / flow-sensitive passes keep their own walkers but
+  read and mutate the arena `Body` directly. A shared `optimize/arena_query`
+  module holds the arena counterparts of the tree helpers (`is_local`,
+  `expr_mentions_local`, `stmt_mentions_local`, `is_pure_expr`); the tree
+  helpers stay for the not-yet-ported tree consumers. The engine gained an
+  `apply_block` entry point + `set_block_stmts` (statement-list edits),
+  `is_local_read` (use-index liveness), and a `build_uses` that walks live
+  nodes from the root so dead nodes left by a prior in-place pass are not
+  counted once two arena passes run back-to-back.
+  - Ported so far:
+  - [x] `select_lowering` — expr `Rule` (`If` → `builtin::select`).
+  - [x] `match_to_switch` — expr `Rule` (dense `Match` → `Switch`);
+  param/global/struct-field defaults reuse it via a wrap-in-`Body`
+  helper.
+  - [x] `string_push` — block `Rule` (`push_str("…")` → per-byte `push`).
+  - [x] `array_literal` — block `Rule` (builder window → `ArrayLiteral`).
+  - [x] `elide_local` — block `Rule` on `is_local_read`.
+  - [x] `value_copy_elide` — direct arena walk (single-pass strip).
+  - [x] `drve` — direct arena walks (bodies); globals stay tree.
+  - Remaining local / whole-function passes: `ref_elim`, `elide_box_local`,
+  `dae`, `cse`, `sroa`, `sroa_param`, `const_object_globalization`,
+  `multi_value_return`, `labeled_block_fusion`, `container_sroa`,
+  `branch_prune`, `condition_implication`, `dce`, `inline`.
+  - Flow-sensitive (keep walkers, read arena): `const_folding`'s env walk,
+  `copy_prop`, `licm`, `field_scalarize`, `store_load_forward`,
+  `value_copy_demote`, `tmpl_hoist`.
+  - When the last bridge is gone the per-pass `Body ↔ tree` conversions
+  vanish and the arena flows lower → optimize → wir_build with no
+  converter — completing Phase 3's goal. Measure the speed win here.
 
 ## Out of scope
 
