@@ -142,6 +142,56 @@ impl Token {
 // with reference-containing fields triggers a compiler bug
 // (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
 
+/// Runtime FOLLOW-continuation gate for tail-greedy loops.
+///
+/// `follow` is the caller's deterministic K-prefix continuation:
+/// `follow[d]` is the set of token kinds that may appear at input depth
+/// `d` if control belongs to the caller rather than to another iteration
+/// of the loop. An empty `follow` (the common, non-repair case) disables
+/// the gate. The loop yields to the caller — breaking `*`/`+` or skipping
+/// `?` — exactly when EVERY non-empty depth-set matches the upcoming
+/// input, i.e. when the next tokens are unambiguously the caller's
+/// continuation.
+///
+/// Threaded as a defaulted `&EMPTY_FOLLOW` argument through the generated
+/// `parse_*` / `scan_*` functions; repair call sites pass a `FOLLOW_MASK_*`
+/// constant (or forward their own `follow`). This replaces the previous
+/// per-(rule, mask) cloned `__follow_<id>` variants: the mask is data
+/// carried at runtime, not code baked into a specialised function.
+///
+/// `eof_kind` is the token kind reported past the end of the stream, so a
+/// caller continuation ending in EOF gates correctly. Used by both the
+/// parse side (`tokens = &p.tokens`, `pos = p.pos`) and the scan side
+/// (raw `tokens` / `pos`), keeping the longest-match tournament's view in
+/// lockstep with parse.
+pub global EMPTY_FOLLOW: List<List<i32>> = [];
+
+pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+    if follow.is_empty() {
+        return false;
+    }
+    for let mut d = 0; d < follow.len(); d += 1 {
+        let set = &follow[d];
+        if set.is_empty() {
+            // No constraint at this depth — a vacuous match, keep going.
+            continue;
+        }
+        let idx = pos + d;
+        let kind = if idx < tokens.len() { tokens[idx].kind } else { eof_kind };
+        let mut hit = false;
+        for let t of set {
+            if kind == *t {
+                hit = true;
+                break;
+            }
+        }
+        if !hit {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// ParseError represents a parse failure with location and expected tokens.
 ///
 /// `message` is the local "expected X, got Y" description, kept free of
