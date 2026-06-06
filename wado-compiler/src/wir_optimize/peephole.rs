@@ -5,8 +5,16 @@
 //! - Dead `If` elimination (constant condition)
 //! - Redundant `ValueCopy` elision
 //! - Copy-used-only-for-field-reads elision
+//! - Sign-extension folding into loads / mask elision
+//! - Redundant `ref.cast` / `ref.test` elimination
+//! - `local.set` + first `local.get` fusion into `local.tee`
+//!
+//! These are Wasm-instruction-selection-level rewrites that have no NIR
+//! analogue (`local.tee`, the signed-load variants, `ref.cast` redundancy
+//! against the WIR static type), so they only make sense after lowering.
 
-use crate::wir::{WirInstr, WirPackage, WirType, WirTypeDef};
+use crate::wir::{WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
+use crate::wir_optimize::util::{is_side_effect_free, may_trap};
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 use indexmap::{IndexMap, IndexSet};
 
@@ -330,7 +338,10 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], types: &[WirTypeDef]) {
     fold_eqz_patterns(instrs);
     fold_branchless_increment(instrs);
     simplify_redundant_byte_masks(instrs);
+    fold_sign_extensions(instrs);
+    simplify_redundant_ref_ops(instrs);
     relax_gc_operand_nullability(instrs);
+    fuse_local_tee(instrs);
 }
 
 /// Recurse into nested instruction bodies and eliminate dead branches.
@@ -889,6 +900,316 @@ fn is_boolean_valued(instr: &WirInstr) -> bool {
     )
 }
 
+/// Fold integer sign-extension instructions into a cheaper equivalent.
+///
+/// All of these are pure Wasm-instruction-selection rewrites:
+/// - `i32.extend8_s(i32.load8_u a)` → `i32.load8_s a` (and the 16-bit variant);
+///   the unsigned load + explicit sign-extend collapses into the signed load.
+/// - `i32.extend8_s(i32.load8_s a)` → `i32.load8_s a`; re-extending an already
+///   sign-extended byte is a no-op (idempotent).
+/// - `i32.extend8_s(x & mask)` → `i32.extend8_s(x)` when `mask`'s low 8 bits are
+///   all set; `extend8_s` only inspects the low byte, so the mask is dead.
+/// - `i32.extend8_s(i32.extend8_s x)` → `i32.extend8_s x` (idempotent), and
+///   `i32.extend16_s(i32.extend8_s x)` → `i32.extend8_s x` (the 8-bit result
+///   already fits the 16-bit signed range).
+fn fold_sign_extensions(instrs: &mut [WirInstr]) {
+    struct FoldExt;
+    impl WirMutVisitor for FoldExt {
+        fn visit_instr(&mut self, instr: &mut WirInstr) {
+            self.walk_instr(instr);
+            try_fold_sign_extension(instr);
+        }
+    }
+    for instr in instrs.iter_mut() {
+        FoldExt.visit_instr(instr);
+    }
+}
+
+fn try_fold_sign_extension(instr: &mut WirInstr) {
+    // Width of this extension (8 or 16), and whether it is the 8-bit form.
+    let width = match instr {
+        WirInstr::I32Extend8S(_) => 8,
+        WirInstr::I32Extend16S(_) => 16,
+        _ => return,
+    };
+    let (WirInstr::I32Extend8S(inner) | WirInstr::I32Extend16S(inner)) = instr else {
+        return;
+    };
+    match inner.as_mut() {
+        // Unsigned load + sign-extend → signed load.
+        WirInstr::I32Load8U {
+            offset,
+            align,
+            addr,
+        } if width == 8 => {
+            let addr = std::mem::replace(addr, Box::new(WirInstr::Nop));
+            *instr = WirInstr::I32Load8S {
+                offset: *offset,
+                align: *align,
+                addr,
+            };
+        }
+        WirInstr::I32Load16U {
+            offset,
+            align,
+            addr,
+        } if width == 16 => {
+            let addr = std::mem::replace(addr, Box::new(WirInstr::Nop));
+            *instr = WirInstr::I32Load16S {
+                offset: *offset,
+                align: *align,
+                addr,
+            };
+        }
+        // Re-extending an already-signed load / extend of the same-or-narrower
+        // width is a no-op.
+        WirInstr::I32Load8S { .. } | WirInstr::I32Extend8S(_) => {
+            *instr = std::mem::replace(inner.as_mut(), WirInstr::Nop);
+        }
+        WirInstr::I32Load16S { .. } | WirInstr::I32Extend16S(_) if width == 16 => {
+            *instr = std::mem::replace(inner.as_mut(), WirInstr::Nop);
+        }
+        // `x & mask` whose low `width` bits are all set: the mask cannot change
+        // what `extend*_s` observes, so drop it.
+        WirInstr::I32And(l, r) => {
+            let unmasked = match (l.as_ref(), r.as_ref()) {
+                (_, WirInstr::I32Const(m)) if low_bits_all_set(*m, width) => Some(l),
+                (WirInstr::I32Const(m), _) if low_bits_all_set(*m, width) => Some(r),
+                _ => None,
+            };
+            if let Some(slot) = unmasked {
+                let value = std::mem::replace(slot.as_mut(), WirInstr::Nop);
+                **inner = value;
+            }
+        }
+        _ => {}
+    }
+}
+
+/// True if the low `width` bits of `mask` are all set (so a `& mask` preserves
+/// every bit a `width`-bit sign extension reads).
+fn low_bits_all_set(mask: i32, width: u32) -> bool {
+    let low = (1u32 << width) - 1;
+    (mask.cast_unsigned() & low) == low
+}
+
+/// Eliminate redundant `ref.cast` / `ref.test` against the WIR static type.
+///
+/// - `ref.cast $T(expr)` where `expr` is statically a `$T` reference is the
+///   identity. It collapses to `expr`, or to `ref.as_non_null(expr)` when the
+///   cast asserts non-null but the source type is nullable.
+/// - `ref.test $T(expr)` where `expr` is statically a `$T` reference and the
+///   test cannot fail (the source is non-null, or the test accepts null) folds
+///   to `1`, provided dropping `expr`'s evaluation is observably safe.
+///
+/// Only exact `type_id` matches are recognised; supertype/subtype narrowing
+/// (the shape variant pattern matching emits) is deliberately left untouched.
+fn simplify_redundant_ref_ops(instrs: &mut [WirInstr]) {
+    struct SimplifyRef;
+    impl WirMutVisitor for SimplifyRef {
+        fn visit_instr(&mut self, instr: &mut WirInstr) {
+            self.walk_instr(instr);
+            try_simplify_ref_op(instr);
+        }
+    }
+    for instr in instrs.iter_mut() {
+        SimplifyRef.visit_instr(instr);
+    }
+}
+
+/// The statically known GC reference type `(type_id, nullable)` an instruction
+/// produces, when the WIR carries enough information to be certain.
+fn static_ref_type(instr: &WirInstr) -> Option<(WirTypeId, bool)> {
+    match instr {
+        WirInstr::LocalGet { result_ty, .. }
+        | WirInstr::GlobalGet { result_ty, .. }
+        | WirInstr::StructGet { result_ty, .. }
+        | WirInstr::ArrayGet { result_ty, .. }
+        | WirInstr::ArrayGetS { result_ty, .. }
+        | WirInstr::ArrayGetU { result_ty, .. } => match result_ty {
+            WirType::Ref { type_id, nullable } => Some((type_id.clone(), *nullable)),
+            _ => None,
+        },
+        WirInstr::StructNew { type_id, .. }
+        | WirInstr::ArrayNew { type_id, .. }
+        | WirInstr::ArrayNewDefault { type_id, .. }
+        | WirInstr::ArrayNewData { type_id, .. }
+        | WirInstr::ArrayNewFixed { type_id, .. } => Some((type_id.clone(), false)),
+        WirInstr::RefCast {
+            type_id, nullable, ..
+        } => Some((type_id.clone(), *nullable)),
+        WirInstr::RefAsNonNull(inner) => static_ref_type(inner).map(|(t, _)| (t, false)),
+        _ => None,
+    }
+}
+
+fn try_simplify_ref_op(instr: &mut WirInstr) {
+    match instr {
+        WirInstr::RefCast {
+            type_id,
+            nullable,
+            expr,
+        } => {
+            let Some((src_id, src_nullable)) = static_ref_type(expr) else {
+                return;
+            };
+            if src_id != *type_id {
+                return;
+            }
+            let inner = std::mem::replace(expr.as_mut(), WirInstr::Nop);
+            if !*nullable && src_nullable {
+                // The cast still asserts non-null; preserve that as
+                // `ref.as_non_null` (cleanup elides it if the source is
+                // already statically non-null).
+                *instr = WirInstr::RefAsNonNull(Box::new(inner));
+            } else {
+                *instr = inner;
+            }
+        }
+        WirInstr::RefTest {
+            type_id,
+            nullable,
+            expr,
+        } => {
+            let Some((src_id, src_nullable)) = static_ref_type(expr) else {
+                return;
+            };
+            // The test always succeeds when the value is exactly `$type_id`
+            // and either non-null or the test accepts null.
+            let always_true = src_id == *type_id && (!src_nullable || *nullable);
+            if always_true && is_side_effect_free(expr) && !may_trap(expr) {
+                *instr = WirInstr::I32Const(1);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Fuse a `local.set` with the first subsequent `local.get` of the same local
+/// into a single `local.tee`.
+///
+/// When a statement `local.set $x (v)` is immediately followed by a statement
+/// whose first-evaluated leaf is `local.get $x`, the pair
+/// `(local.set $x v) … (local.get $x …)` collapses to `(local.tee $x v) …`,
+/// dropping one `local.get`. The set value `v` is evaluated at the tee site,
+/// which is the first thing the consumer statement runs — so nothing executes
+/// between the old set and the moved evaluation and the order is preserved.
+/// The emptied `local.set` becomes a `Nop`, which the phase-7 `cleanup` removes.
+///
+/// Restricted to non-reference locals so the tee never interacts with codegen's
+/// `ref.as_non_null`-on-`local.tee` narrowing for `ref_locals`. Descent into the
+/// consumer stops at control flow (`Block`/`Loop`/`If`/`Seq`/`Br*`/`Select`):
+/// these either evaluate their first child conditionally / repeatedly, or list
+/// their operands in an order that does not match Wasm's evaluation order.
+fn fuse_local_tee(instrs: &mut [WirInstr]) {
+    if instrs.len() < 2 {
+        return;
+    }
+    for i in 0..instrs.len() - 1 {
+        let WirInstr::LocalSet { name, .. } = &instrs[i] else {
+            continue;
+        };
+        let name = name.clone();
+        if !leftmost_leaf_is_local_get(&instrs[i + 1], &name) {
+            continue;
+        }
+        let value = match &mut instrs[i] {
+            WirInstr::LocalSet { value, .. } => std::mem::replace(value, Box::new(WirInstr::Nop)),
+            _ => unreachable!(),
+        };
+        let mut slot = Some(value);
+        let fused = fuse_into_leftmost_leaf(&mut instrs[i + 1], &name, &mut slot);
+        debug_assert!(fused, "leftmost check and fuse must agree");
+        instrs[i] = WirInstr::Nop;
+    }
+}
+
+/// True if the first-evaluated leaf of `instr` is a non-reference
+/// `local.get $name`. Mirrors the descent of [`fuse_into_leftmost_leaf`].
+fn leftmost_leaf_is_local_get(instr: &WirInstr, name: &str) -> bool {
+    if let WirInstr::LocalGet {
+        name: got,
+        result_ty,
+    } = instr
+    {
+        return got == name && !is_ref_type(result_ty);
+    }
+    if descent_blocked(instr) {
+        return false;
+    }
+    let mut result = false;
+    let mut first = true;
+    instr.for_each_child(&mut |child| {
+        if first {
+            first = false;
+            result = leftmost_leaf_is_local_get(child, name);
+        }
+    });
+    result
+}
+
+/// Replace the first-evaluated `local.get $name` leaf of `instr` with
+/// `local.tee $name (slot)`, taking the value out of `slot`. Returns whether
+/// the replacement happened.
+fn fuse_into_leftmost_leaf(
+    instr: &mut WirInstr,
+    name: &str,
+    slot: &mut Option<Box<WirInstr>>,
+) -> bool {
+    if let WirInstr::LocalGet {
+        name: got,
+        result_ty,
+    } = instr
+    {
+        if got == name
+            && !is_ref_type(result_ty)
+            && let Some(value) = slot.take()
+        {
+            *instr = WirInstr::LocalTee {
+                name: name.to_string(),
+                value,
+            };
+            return true;
+        }
+        return false;
+    }
+    if descent_blocked(instr) {
+        return false;
+    }
+    let mut fused = false;
+    let mut first = true;
+    instr.for_each_boxed_child_mut(&mut |child| {
+        if first {
+            first = false;
+            fused = fuse_into_leftmost_leaf(child, name, slot);
+        }
+    });
+    fused
+}
+
+/// Nodes whose first child is not a sound place to continue a leftmost-leaf
+/// descent: control flow (conditional / repeated / order-sensitive) and
+/// `select` (whose Wasm operand order differs from the child visitation order).
+fn descent_blocked(instr: &WirInstr) -> bool {
+    matches!(
+        instr,
+        WirInstr::Block { .. }
+            | WirInstr::Loop { .. }
+            | WirInstr::If { .. }
+            | WirInstr::Seq(_)
+            | WirInstr::Br { .. }
+            | WirInstr::BrIf { .. }
+            | WirInstr::BrTable { .. }
+            | WirInstr::BranchHint { .. }
+            | WirInstr::Select { .. }
+            | WirInstr::MultiValueLocalBind { .. }
+    )
+}
+
+fn is_ref_type(ty: &WirType) -> bool {
+    matches!(ty, WirType::Ref { .. } | WirType::AbstractRef { .. })
+}
+
 /// Relax `LocalGet.result_ty` from non-null to nullable for GC access operands.
 ///
 /// GC access instructions (`array.get`, `array.set`, `struct.get`, `struct.set`,
@@ -932,5 +1253,240 @@ fn relax_ref_local_get(instr: &mut WirInstr) {
         && result_ty.is_nonnull_ref()
     {
         *result_ty = result_ty.clone().as_nullable();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::rc::Rc;
+
+    fn tid(index: u32) -> WirTypeId {
+        WirTypeId::new(index, Rc::from(format!("T{index}").as_str()))
+    }
+
+    fn local_get(name: &str, result_ty: WirType) -> WirInstr {
+        WirInstr::LocalGet {
+            name: name.to_string(),
+            result_ty,
+        }
+    }
+
+    fn ref_ty(index: u32, nullable: bool) -> WirType {
+        WirType::Ref {
+            type_id: tid(index),
+            nullable,
+        }
+    }
+
+    #[test]
+    fn extend8_over_load8u_becomes_load8s() {
+        let mut instr = WirInstr::I32Extend8S(Box::new(WirInstr::I32Load8U {
+            offset: 4,
+            align: 0,
+            addr: Box::new(WirInstr::I32Const(16)),
+        }));
+        try_fold_sign_extension(&mut instr);
+        match instr {
+            WirInstr::I32Load8S { offset, align, .. } => {
+                assert_eq!(offset, 4);
+                assert_eq!(align, 0);
+            }
+            other => panic!("expected I32Load8S, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn extend16_over_load16u_becomes_load16s() {
+        let mut instr = WirInstr::I32Extend16S(Box::new(WirInstr::I32Load16U {
+            offset: 0,
+            align: 1,
+            addr: Box::new(WirInstr::I32Const(0)),
+        }));
+        try_fold_sign_extension(&mut instr);
+        assert!(matches!(instr, WirInstr::I32Load16S { .. }));
+    }
+
+    #[test]
+    fn extend8_over_load8s_is_idempotent() {
+        let mut instr = WirInstr::I32Extend8S(Box::new(WirInstr::I32Load8S {
+            offset: 0,
+            align: 0,
+            addr: Box::new(WirInstr::I32Const(0)),
+        }));
+        try_fold_sign_extension(&mut instr);
+        assert!(matches!(instr, WirInstr::I32Load8S { .. }));
+    }
+
+    #[test]
+    fn extend8_over_mask_drops_mask() {
+        let mut instr = WirInstr::I32Extend8S(Box::new(WirInstr::I32And(
+            Box::new(local_get("x", WirType::I32)),
+            Box::new(WirInstr::I32Const(0xFF)),
+        )));
+        try_fold_sign_extension(&mut instr);
+        match instr {
+            WirInstr::I32Extend8S(inner) => assert!(matches!(*inner, WirInstr::LocalGet { .. })),
+            other => panic!("expected I32Extend8S(LocalGet), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn extend8_keeps_partial_low_mask() {
+        // Mask 0x0F does not preserve the full low byte, so it must stay.
+        let mut instr = WirInstr::I32Extend8S(Box::new(WirInstr::I32And(
+            Box::new(local_get("x", WirType::I32)),
+            Box::new(WirInstr::I32Const(0x0F)),
+        )));
+        try_fold_sign_extension(&mut instr);
+        assert!(matches!(*as_extend_inner(&instr), WirInstr::I32And(..)));
+    }
+
+    fn as_extend_inner(instr: &WirInstr) -> &WirInstr {
+        match instr {
+            WirInstr::I32Extend8S(inner) | WirInstr::I32Extend16S(inner) => inner,
+            _ => panic!("not an extend"),
+        }
+    }
+
+    #[test]
+    fn refcast_same_type_nullable_collapses_to_expr() {
+        // ref.cast (nullable) of an already non-null T -> just the expr.
+        let mut instr = WirInstr::RefCast {
+            type_id: tid(7),
+            nullable: true,
+            expr: Box::new(local_get("p", ref_ty(7, false))),
+        };
+        try_simplify_ref_op(&mut instr);
+        assert!(matches!(instr, WirInstr::LocalGet { .. }));
+    }
+
+    #[test]
+    fn refcast_nonnull_of_nullable_source_keeps_assertion() {
+        // ref.cast (non-null) of a nullable T -> ref.as_non_null(expr).
+        let mut instr = WirInstr::RefCast {
+            type_id: tid(7),
+            nullable: false,
+            expr: Box::new(local_get("p", ref_ty(7, true))),
+        };
+        try_simplify_ref_op(&mut instr);
+        assert!(matches!(instr, WirInstr::RefAsNonNull(_)));
+    }
+
+    #[test]
+    fn refcast_different_type_is_untouched() {
+        let mut instr = WirInstr::RefCast {
+            type_id: tid(7),
+            nullable: false,
+            expr: Box::new(local_get("p", ref_ty(9, false))),
+        };
+        try_simplify_ref_op(&mut instr);
+        assert!(matches!(instr, WirInstr::RefCast { .. }));
+    }
+
+    #[test]
+    fn reftest_always_true_folds_to_one() {
+        let mut instr = WirInstr::RefTest {
+            type_id: tid(7),
+            nullable: false,
+            expr: Box::new(local_get("p", ref_ty(7, false))),
+        };
+        try_simplify_ref_op(&mut instr);
+        assert!(matches!(instr, WirInstr::I32Const(1)));
+    }
+
+    #[test]
+    fn reftest_nonnull_of_nullable_source_is_untouched() {
+        // A non-null test of a nullable source can still fail on null.
+        let mut instr = WirInstr::RefTest {
+            type_id: tid(7),
+            nullable: false,
+            expr: Box::new(local_get("p", ref_ty(7, true))),
+        };
+        try_simplify_ref_op(&mut instr);
+        assert!(matches!(instr, WirInstr::RefTest { .. }));
+    }
+
+    #[test]
+    fn tee_fuses_set_then_first_get() {
+        // local.set t = (x + 1); return t * t  ->  return (local.tee t (x+1)) * t
+        let mut body = vec![
+            WirInstr::LocalSet {
+                name: "t".to_string(),
+                value: Box::new(WirInstr::I32Add(
+                    Box::new(local_get("x", WirType::I32)),
+                    Box::new(WirInstr::I32Const(1)),
+                )),
+            },
+            WirInstr::Return {
+                value: Some(Box::new(WirInstr::I32Mul(
+                    Box::new(local_get("t", WirType::I32)),
+                    Box::new(local_get("t", WirType::I32)),
+                ))),
+            },
+        ];
+        fuse_local_tee(&mut body);
+        assert!(matches!(body[0], WirInstr::Nop));
+        let WirInstr::Return { value: Some(v) } = &body[1] else {
+            panic!("expected return");
+        };
+        let WirInstr::I32Mul(lhs, rhs) = v.as_ref() else {
+            panic!("expected mul");
+        };
+        assert!(matches!(lhs.as_ref(), WirInstr::LocalTee { .. }));
+        assert!(matches!(rhs.as_ref(), WirInstr::LocalGet { .. }));
+    }
+
+    #[test]
+    fn tee_does_not_fuse_when_get_is_not_leftmost() {
+        // return 1 * t : the first leaf is the constant, not `t`.
+        let mut body = vec![
+            WirInstr::LocalSet {
+                name: "t".to_string(),
+                value: Box::new(WirInstr::I32Const(5)),
+            },
+            WirInstr::Return {
+                value: Some(Box::new(WirInstr::I32Mul(
+                    Box::new(WirInstr::I32Const(1)),
+                    Box::new(local_get("t", WirType::I32)),
+                ))),
+            },
+        ];
+        fuse_local_tee(&mut body);
+        assert!(matches!(body[0], WirInstr::LocalSet { .. }));
+    }
+
+    #[test]
+    fn tee_does_not_fuse_ref_locals() {
+        let mut body = vec![
+            WirInstr::LocalSet {
+                name: "r".to_string(),
+                value: Box::new(WirInstr::RefNull {
+                    heap_type: crate::wir::WirAbstractHeapType::Any,
+                }),
+            },
+            WirInstr::Return {
+                value: Some(Box::new(local_get("r", ref_ty(1, true)))),
+            },
+        ];
+        fuse_local_tee(&mut body);
+        assert!(matches!(body[0], WirInstr::LocalSet { .. }));
+    }
+
+    #[test]
+    fn tee_does_not_descend_into_loop() {
+        // A `local.get` inside a loop body could re-execute; never fuse across it.
+        let mut body = vec![
+            WirInstr::LocalSet {
+                name: "t".to_string(),
+                value: Box::new(WirInstr::I32Const(0)),
+            },
+            WirInstr::Loop {
+                label: None,
+                body: vec![WirInstr::Drop(Box::new(local_get("t", WirType::I32)))],
+            },
+        ];
+        fuse_local_tee(&mut body);
+        assert!(matches!(body[0], WirInstr::LocalSet { .. }));
     }
 }
