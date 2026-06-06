@@ -785,7 +785,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"_parse_expr__inner(p, 2)");
+    assert str_contains(&output, &"_parse_expr__inner(p, follow, 2)");
 }
 
 test "generate right-associative LR alt passes own_prec on right operand" {
@@ -798,9 +798,9 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"_parse_expr__inner(p, 1)");
+    assert str_contains(&output, &"_parse_expr__inner(p, follow, 1)");
     // And the scan-side mirror must be kept in sync.
-    assert str_contains(&output, &"scan_expr(tokens, pos, 1)");
+    assert str_contains(&output, &"scan_expr(tokens, pos, follow, 1)");
 }
 
 fn parse_grammar(input: String, path: String) -> Grammar {
@@ -871,10 +871,10 @@ WS : [ \\t\\n]+ -> skip ;
     let helper = extract_fn_body(&output, &"fn _parse_expr__inner_lr_1");
     // Send is the second LR alt of two left-assoc: own_prec=1, conflict_min=2.
     assert !str_contains(&helper, &"_parse_expr__inner(p)?");
-    assert str_contains(&helper, &"_parse_expr__inner(p, 2)?");
+    assert str_contains(&helper, &"_parse_expr__inner(p, follow, 2)?");
     let scan_helper = extract_fn_body(&output, &"fn scan_expr_lr_1");
-    assert !str_contains(&scan_helper, &"scan_expr(tokens, pos, 0)");
-    assert str_contains(&scan_helper, &"scan_expr(tokens, pos, 2)");
+    assert !str_contains(&scan_helper, &"scan_expr(tokens, pos, follow, 0)");
+    assert str_contains(&scan_helper, &"scan_expr(tokens, pos, follow, 2)");
 }
 
 test "SimpleCst group emit threads min_prec_arg on a self-ref alt inside an LR suffix" {
@@ -1025,7 +1025,7 @@ WS : [ \\t\\n]+ -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"pub fn parse_expr(input: &String)");
-    assert str_contains(&output, &"let _result = _parse_expr(&mut parser, 0);");
+    assert str_contains(&output, &"let _result = _parse_expr(&mut parser, &EMPTY_FOLLOW, 0);");
 }
 
 test "token-only group `(K_A | K_B)` gates p.advance() on a kind-check" {
