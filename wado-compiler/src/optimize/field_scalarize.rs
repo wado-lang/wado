@@ -1857,10 +1857,7 @@ type ScalarStates = Vec<CanonState>;
 /// is canonical for any reader after the loop. Candidates that *are* read
 /// through the reference inside the loop keep the `Both` entry / body-end
 /// force so the read observes an up-to-date field.
-fn entry_states_for(
-    candidates: &[ScalarizeCandidate],
-    deferrable: &[bool],
-) -> ScalarStates {
+fn entry_states_for(candidates: &[ScalarizeCandidate], deferrable: &[bool]) -> ScalarStates {
     candidates
         .iter()
         .enumerate()

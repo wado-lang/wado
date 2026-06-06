@@ -1289,10 +1289,8 @@ fn is_invariant_arith(body: &Body, e: ExprId, modified: &ModifiedVars) -> bool {
                 && is_invariant_arith(body, *right, modified)
         }
         ExprKind::Unary { op, expr } => {
-            matches!(
-                op,
-                NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot
-            ) && is_invariant_arith(body, *expr, modified)
+            matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
+                && is_invariant_arith(body, *expr, modified)
         }
         ExprKind::Cast { expr, .. } => is_invariant_arith(body, *expr, modified),
         _ => false,
@@ -1331,7 +1329,9 @@ fn arith_exprs_equal(body: &Body, a: ExprId, b: ExprId) -> bool {
     }
     match (&body.exprs[a].kind, &body.exprs[b].kind) {
         (ExprKind::Local { index: i1, .. }, ExprKind::Local { index: i2, .. }) => i1 == i2,
-        (ExprKind::IntLiteral { value: v1, .. }, ExprKind::IntLiteral { value: v2, .. }) => v1 == v2,
+        (ExprKind::IntLiteral { value: v1, .. }, ExprKind::IntLiteral { value: v2, .. }) => {
+            v1 == v2
+        }
         (ExprKind::FloatLiteral { value: v1, .. }, ExprKind::FloatLiteral { value: v2, .. }) => {
             v1.to_bits() == v2.to_bits()
         }
@@ -1349,10 +1349,9 @@ fn arith_exprs_equal(body: &Body, a: ExprId, b: ExprId) -> bool {
                 right: r2,
             },
         ) => o1 == o2 && arith_exprs_equal(body, *l1, *l2) && arith_exprs_equal(body, *r1, *r2),
-        (
-            ExprKind::Unary { op: o1, expr: e1 },
-            ExprKind::Unary { op: o2, expr: e2 },
-        ) => o1 == o2 && arith_exprs_equal(body, *e1, *e2),
+        (ExprKind::Unary { op: o1, expr: e1 }, ExprKind::Unary { op: o2, expr: e2 }) => {
+            o1 == o2 && arith_exprs_equal(body, *e1, *e2)
+        }
         (
             ExprKind::Cast {
                 expr: e1,
