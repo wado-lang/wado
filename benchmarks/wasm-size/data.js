@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780720988685,
+  "lastUpdate": 1780722938067,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30505,6 +30505,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d8e41d62270549438f1f6728e659e104579a419e"
         },
         "date": 1780720988151,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8780,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16583,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 456150,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a04807a712b835400cdb6df0d8a5d1eed1b43295",
+          "message": "Merge pull request #1309 from wado-lang/claude/cbor-wep-setup-ytwND\n\nBytes-primary serde groundwork for core:cbor (+ P0 codegen fix)",
+          "timestamp": "2026-06-06T14:06:42+09:00",
+          "tree_id": "02149bf712e303600b4351e96ba77662be4e5dca",
+          "url": "https://github.com/wado-lang/wado/commit/a04807a712b835400cdb6df0d8a5d1eed1b43295"
+        },
+        "date": 1780722937527,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
