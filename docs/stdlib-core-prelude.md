@@ -679,9 +679,9 @@ syntax which is not yet supported.
 
 Zero-copy conversion to a `ByteSlice`.
 
-Implemented by `ByteArray`, `ByteList`, and `ByteSlice`, so byte-reading
-APIs (e.g. `core:cbor` / `core:json` `from_bytes`) accept any of them
-without copying.
+Implemented by `ByteArray`, `ByteList`, and `ByteSlice` (and `String`, whose
+UTF-8 bytes view directly), so byte-reading APIs (e.g. `core:cbor` /
+`core:json` `from_bytes`) accept any of them without copying.
 
 #### `fn as_byte_slice(&self) -> ByteSlice`
 
@@ -3043,6 +3043,10 @@ Internal: build a slice from a backing array reference and bounds.
 
 Returns the number of elements in the slice.
 
+Also the byte-length anchor for the synthesised `FieldSchema::lookup`
+(on `ArraySlice<u8>`), routed through `#[compiler_item]` so a rename
+here cannot silently break code generation.
+
 #### `pub fn is_empty(&self) -> bool`
 
 Returns true if the slice has no elements.
@@ -3050,6 +3054,17 @@ Returns true if the slice has no elements.
 #### `pub fn get(&self, index: i32) -> Option<T>`
 
 Returns a copy of the element at `index`, or None if out of bounds.
+
+#### `pub fn get_unchecked(&self, index: i32) -> T`
+
+Returns the element at `index` without bounds checking.
+
+The caller must guarantee `0 <= index < len()`; an out-of-range
+`index` reads past the view into the backing array or traps.
+
+Also the byte-read anchor for the synthesised `FieldSchema::lookup`
+(on `ArraySlice<u8>`), routed through `#[compiler_item]` for the same
+rename-safety reason as `len`.
 
 #### `pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T>`
 
@@ -3189,6 +3204,14 @@ Read the byte at `index` without bounds checks.
 
 For safe byte access, use `bytes()` iterator instead. This method is
 reserved for performance-critical code where bounds have been proven.
+
+#### `pub fn as_bytes(&self) -> ArraySlice<u8>`
+
+Zero-copy view of the string's UTF-8 bytes as an `ArraySlice<u8>`.
+No allocation: the slice references the string's backing buffer over
+`[0, len())`. Used by the byte-based deserializers to hand a wire key
+to `FieldSchema::lookup` without a `String` copy. The `AsByteSlice`
+trait impl (in `core:prelude/bytes.wado`) wraps this as a `ByteSlice`.
 
 #### `pub fn set_byte_unchecked(&mut self, index: i32, value: u8)`
 
@@ -3484,6 +3507,17 @@ Build a String from any iterable of bytes, validating that they form valid UTF-8
 Returns Ok(String) on success, or Err(String) with an error message on failure.
 
 Accepts any `IntoIterator` whose item is `u8`: `List<u8>`, `StrUtf8ByteIter`, etc.
+
+#### `pub fn from_utf8_slice(bytes: ByteSlice) -> Result<String, String>`
+
+Validate a contiguous byte slice as UTF-8 and wrap it as a `String` with
+a single bulk copy — no per-codepoint decode-and-re-encode.
+
+The validation core that `from_utf8` and the JSON deserializer route
+through: one forward pass over `decode_utf8_scalar`, then one `to_array`
+copy wrapped via `internal_from_utf8_raw`. Cheaper than `from_utf8`'s old
+codepoint-by-codepoint rebuild whenever the bytes already live in one
+buffer (e.g. a JSON string token sliced out of the borrowed input).
 
 #### `pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String`
 
@@ -3803,6 +3837,16 @@ In-place sort with comparator. Stable, O(n log n) worst case.
 #### `pub fn join(&self, separator: String) -> String`
 
 Joins elements into a string with the given separator.
+
+#### `pub fn get_byte_unchecked(&self, index: i32) -> u8`
+
+Returns the byte at `index` without bounds checking — the `List<u8>`
+parallel to `String::get_byte_unchecked`.
+
+The caller must guarantee `0 <= index < len()`; an out-of-range `index`
+reads past the buffer or traps. Intended for hot byte-scanning loops that
+have already range-checked `index` (e.g. a forthcoming `core:cbor`
+decoder over an owned `ByteList`).
 
 #### `pub fn to_hex(&self) -> String`
 

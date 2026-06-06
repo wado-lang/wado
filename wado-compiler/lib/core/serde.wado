@@ -225,16 +225,21 @@ pub trait DeserializeMap {
 /// Static, per-type, format-agnostic field-name → index mapping.
 ///
 /// The struct-deserialize synthesiser implements `FieldSchema` for every
-/// deserializable struct, generating a `lookup` that byte-compares
-/// `input[start..end]` against the wire-form field names. Self-describing
-/// formats invoke it from `DeserializeStruct::next_field`; non-self-describing
+/// deserializable struct, generating a `lookup` that byte-compares the wire
+/// key against the wire-form field names. Self-describing formats invoke it
+/// from `DeserializeStruct::next_field` with the key's bytes; non-self-describing
 /// formats ignore the schema and stay positional.
+///
+/// The key is a borrowed byte view (`ArraySlice<u8>`, i.e. `ByteSlice`), not a
+/// `String`: deserializer input is bytes (UTF-8 for JSON, a byte string for
+/// CBOR), so a bytes key avoids a `String` round-trip and is shared identically
+/// by every format.
 ///
 /// `lookup` is a static method resolved at monomorphization, so the call is
 /// direct and inlinable — no closure value, no per-decode allocation.
 #[compiler_item("field_schema")]
 pub trait FieldSchema {
-    fn lookup(input: &String, start: i32, end: i32) -> Option<i32>;
+    fn lookup(key: ArraySlice<u8>) -> Option<i32>;
 }
 
 #[compiler_item("deserialize_struct")]

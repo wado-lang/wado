@@ -12,7 +12,7 @@ use {
 } from "core:serde";
 use { TreeMap } from "core:collections";
 
-use { to_string, to_string_pretty, to_bytes, from_string, write_escaped_string, PrettyJsonSerializer } from "core:json";
+use { to_string, to_string_pretty, to_bytes, to_bytes_canonical, to_bytes_pretty, from_string, from_bytes, write_escaped_string, PrettyJsonSerializer } from "core:json";
 
 fn assert_bytes_eq_string(bytes: &List<u8>, s: &String) {
     let expected: List<u8> = s.bytes().collect();
@@ -334,4 +334,81 @@ test "deserialize malformed error" {
 test "deserialize eof error" {
     let r: Result<String, DeserializeError> = from_string(`"`);
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::Eof };
+}
+
+struct CanonInner {
+    z: i32,
+    a: i32,
+}
+
+impl Serialize for CanonInner;
+
+struct CanonOuter {
+    m: CanonInner,
+}
+
+impl Serialize for CanonOuter;
+
+test "from_bytes accepts a String via AsByteSlice" {
+    let r: Result<TreeMap<String, i32>, DeserializeError> = from_bytes("{\"y\":2}");
+    assert r matches { Ok(_) };
+    if let Ok(m) = r {
+        assert m["y"] == 2;
+    }
+}
+
+test "from_bytes parses a ByteList" {
+    let bytes: ByteList = [0x7b, 0x22, 0x78, 0x22, 0x3a, 0x31, 0x7d];  // {"x":1}
+    let r: Result<TreeMap<String, i32>, DeserializeError> = from_bytes(bytes);
+    assert r matches { Ok(_) };
+    if let Ok(m) = r {
+        assert m["x"] == 1;
+    }
+}
+
+test "from_bytes rejects invalid UTF-8" {
+    let bytes: ByteList = [0x7b, 0x22, 0xff, 0x22, 0x7d];  // {"<0xff>"}
+    let r: Result<TreeMap<String, i32>, DeserializeError> = from_bytes(bytes);
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+}
+
+test "to_bytes_canonical sorts map keys" {
+    let mut m: TreeMap<String, i32> = TreeMap::new();
+    m["banana"] = 2;
+    m["apple"] = 1;
+    m["cherry"] = 3;
+    let r = to_bytes_canonical(&m);
+    assert r matches { Ok(_) };
+    if let Ok(b) = r {
+        assert_bytes_eq_string(&b, &"{\"apple\":1,\"banana\":2,\"cherry\":3}");
+    }
+}
+
+test "to_bytes_canonical sorts struct fields" {
+    let u = PrettyUser { first_name: "Ann", age: 30 };
+    let r = to_bytes_canonical(&u);
+    assert r matches { Ok(_) };
+    if let Ok(b) = r {
+        assert_bytes_eq_string(&b, &"{\"age\":30,\"firstName\":\"Ann\"}");
+    }
+}
+
+test "to_bytes_canonical sorts nested struct fields recursively" {
+    let o = CanonOuter { m: CanonInner { z: 1, a: 2 } };
+    let r = to_bytes_canonical(&o);
+    assert r matches { Ok(_) };
+    if let Ok(b) = r {
+        assert_bytes_eq_string(&b, &"{\"m\":{\"a\":2,\"z\":1}}");
+    }
+}
+
+test "to_bytes_pretty matches to_string_pretty" {
+    let u = PrettyUser { first_name: "Bo", age: 5 };
+    let pretty = to_bytes_pretty(&u);
+    assert pretty matches { Ok(_) };
+    if let Ok(b) = pretty {
+        if let Ok(s) = to_string_pretty(&u) {
+            assert_bytes_eq_string(&b, &s);
+        }
+    }
 }

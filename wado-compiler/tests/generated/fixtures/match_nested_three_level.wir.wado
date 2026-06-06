@@ -20,7 +20,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[Point, Point] {  // TypeId(3)
+struct tuple//[wado-compiler/tests/fixtures/match_nested_three_level.wado/Point, wado-compiler/tests/fixtures/match_nested_three_level.wado/Point] {  // TypeId(3)
     mut 0: ref "wado-compiler/tests/fixtures/match_nested_three_level.wado//Point",
     mut 1: ref "wado-compiler/tests/fixtures/match_nested_three_level.wado//Point",
 }
@@ -104,7 +104,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/match_nested_three_level.wado/run"() with Stdout {
-    let data: ref null "tuple//[Point, Point]";
+    let data: ref null "tuple//[wado-compiler/tests/fixtures/match_nested_three_level.wado/Point, wado-compiler/tests/fixtures/match_nested_three_level.wado/Point]";
     let x1: i32;
     let y1: i32;
     let x2: i32;
@@ -116,9 +116,9 @@ fn "wado-compiler/tests/fixtures/match_nested_three_level.wado/run"() with Stdou
     let f_17: ref "core:prelude/format.wado//Formatter";
     let f_22: ref "core:prelude/format.wado//Formatter";
     let f_27: ref "core:prelude/format.wado//Formatter";
-    data = struct.new "tuple//[Point, Point]" { 0: struct.new "wado-compiler/tests/fixtures/match_nested_three_level.wado//Point" { x: 1, y: 2 }, 1: struct.new "wado-compiler/tests/fixtures/match_nested_three_level.wado//Point" { x: 3, y: 4 } };
+    data = struct.new "tuple//[wado-compiler/tests/fixtures/match_nested_three_level.wado/Point, wado-compiler/tests/fixtures/match_nested_three_level.wado/Point]" { 0: struct.new "wado-compiler/tests/fixtures/match_nested_three_level.wado//Point" { x: 1, y: 2 }, 1: struct.new "wado-compiler/tests/fixtures/match_nested_three_level.wado//Point" { x: 3, y: 4 } };
     result = (if ref.is_null(data) == 0 -> ref "core:prelude/string.wado//String" {
-        let __variant_payload_1: ref "tuple//[Point, Point]";
+        let __variant_payload_1: ref "tuple//[wado-compiler/tests/fixtures/match_nested_three_level.wado/Point, wado-compiler/tests/fixtures/match_nested_three_level.wado/Point]";
         __variant_payload_1 = ref.as_non_null(data);
         let __tuple_elem_2: ref "wado-compiler/tests/fixtures/match_nested_three_level.wado//Point";
         __tuple_elem_2 = __variant_payload_1.0;

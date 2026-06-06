@@ -1,16 +1,24 @@
-#![stdlib("core:json_value")]
-//! Dynamically-typed JSON value type.
+#![stdlib("core:value")]
+//! Dynamically-typed, format-agnostic value type.
 //!
-//! Represents any JSON value: null, boolean, number (as f64), string,
-//! array, or object. Implements `Serialize` and `Deserialize` so it
-//! works transparently with `core:json`'s `to_string` / `from_string`.
+//! `Value` represents any value the serde data model can carry, shared by
+//! every self-describing format (`core:json`, `core:cbor`). It implements
+//! `Serialize` and `Deserialize`, so it round-trips through `from_bytes` /
+//! `to_bytes` with no per-type work.
+//!
+//! It is a general dynamic value, so it deliberately contains no
+//! format-specific concepts (no CBOR `Tag`, no `Simple`): a single opaque
+//! escape hatch, `Unknown`, carries the raw encoded bytes of anything the
+//! model cannot represent. `Bytes` (a semantic byte-string value) and
+//! `Unknown` (raw, format-specific encoded bytes) are distinct and must not
+//! be conflated.
 //!
 //! Usage:
-//!   use { Value } from "core:json_value";
-//!   use { to_string, from_string } from "core:json";
+//!   use { Value } from "core:value";
+//!   use { from_bytes, to_bytes } from "core:json";
 //!
-//!   let v = from_string::<Value>(`{"x": 1, "y": [true, null]}`);
-//!   let s = to_string::<Value>(&v);
+//!   let v: Value = from_bytes(`{"x": 1, "y": [true, null]}`)?;
+//!   let s = to_bytes::<Value>(&v)?;
 
 
 use {
@@ -21,20 +29,32 @@ use {
     DeserializeSeq,
     DeserializeMap,
     SerializeError,
+    SerializeErrorKind,
     DeserializeError,
     Visitor,
 } from "core:serde";
 
 use { TreeMap } from "core:collections";
 
-/// A dynamically-typed JSON value, analogous to serde_json::Value.
+/// A dynamically-typed, format-agnostic value.
+///
+/// JSON only ever produces `Null` / `Bool` / `Float` / `String` / `List` /
+/// `Object` (it has no integer/float distinction and no byte strings); the
+/// remaining arms are produced by binary formats such as CBOR.
 pub variant Value {
     Null,
     Bool(bool),
-    Number(f64),
+    Int(i64),
+    UInt(u64),
+    Int128(i128),
+    UInt128(u128),
+    Float(f64),                      // binary16/32/64 all widened to f64
     String(String),
+    Bytes(ByteList),                 // a byte-string *value*
     List(List<Value>),
-    Object(TreeMap<String, Value>),
+    Object(TreeMap<String, Value>),  // string keys only, insertion order preserved
+    Undefined,                       // CBOR simple 23; also present in JS/MsgPack data
+    Unknown(ByteList),               // raw encoded bytes of an unrepresentable item
 }
 
 impl Eq for Value {
@@ -42,8 +62,13 @@ impl Eq for Value {
         return match [*self, *other] {
             [Null, Null] => true,
             [Bool(a), Bool(b)] => a == b,
-            [Number(a), Number(b)] => a == b,
+            [Int(a), Int(b)] => a == b,
+            [UInt(a), UInt(b)] => a == b,
+            [Int128(a), Int128(b)] => a == b,
+            [UInt128(a), UInt128(b)] => a == b,
+            [Float(a), Float(b)] => a == b,
             [String(a), String(b)] => a == b,
+            [Bytes(a), Bytes(b)] => a == b,
             [List(a), List(b)] => {
                 if a.len() != b.len() {
                     return false;
@@ -72,6 +97,8 @@ impl Eq for Value {
                 }
                 true;
             },
+            [Undefined, Undefined] => true,
+            [Unknown(a), Unknown(b)] => a == b,
             _ => false,
         };
     }
@@ -82,8 +109,13 @@ impl Serialize for Value {
         return match self {
             Null => s.serialize_null(),
             Bool(b) => s.serialize_bool(*b),
-            Number(n) => s.serialize_f64(*n),
+            Int(n) => s.serialize_i64(*n),
+            UInt(n) => s.serialize_u64(*n),
+            Int128(n) => s.serialize_i128(*n),
+            UInt128(n) => s.serialize_u128(*n),
+            Float(n) => s.serialize_f64(*n),
             String(str_val) => s.serialize_string(str_val),
+            Bytes(bytes) => s.serialize_bytes(bytes.as_byte_slice()),
             List(arr) => {
                 let seq = s.begin_seq(arr.len())?;
                 for let item of arr {
@@ -99,6 +131,18 @@ impl Serialize for Value {
                 }
                 m.end();
             },
+            // `Undefined` has no serde data-model entry, and `Unknown` holds
+            // raw format-specific bytes that only the originating format can
+            // splice back. Neither is expressible through the generic
+            // `Serializer`, so serialization errors by default (RFC 8949 §6).
+            Undefined => Result::Err(SerializeError {
+                kind: SerializeErrorKind::UnsupportedValue,
+                message: "Value::Undefined cannot be serialized",
+            }),
+            Unknown(_) => Result::Err(SerializeError {
+                kind: SerializeErrorKind::UnsupportedValue,
+                message: "Value::Unknown cannot be re-serialized through a generic Serializer",
+            }),
         };
     }
 }
@@ -117,12 +161,32 @@ impl Visitor for ValueVisitor {
         return Result::Ok(Value::Bool(v));
     }
 
+    fn visit_i64(&mut self, v: i64) -> Result<Value, DeserializeError> {
+        return Result::Ok(Value::Int(v));
+    }
+
+    fn visit_u64(&mut self, v: u64) -> Result<Value, DeserializeError> {
+        return Result::Ok(Value::UInt(v));
+    }
+
+    fn visit_i128(&mut self, v: i128) -> Result<Value, DeserializeError> {
+        return Result::Ok(Value::Int128(v));
+    }
+
+    fn visit_u128(&mut self, v: u128) -> Result<Value, DeserializeError> {
+        return Result::Ok(Value::UInt128(v));
+    }
+
     fn visit_f64(&mut self, v: f64) -> Result<Value, DeserializeError> {
-        return Result::Ok(Value::Number(v));
+        return Result::Ok(Value::Float(v));
     }
 
     fn visit_string(&mut self, v: String) -> Result<Value, DeserializeError> {
         return Result::Ok(Value::String(v));
+    }
+
+    fn visit_bytes(&mut self, v: ByteList) -> Result<Value, DeserializeError> {
+        return Result::Ok(Value::Bytes(v));
     }
 
     fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<Value, DeserializeError> {
@@ -155,6 +219,10 @@ impl Visitor for ValueVisitor {
             }
         }
     }
+
+    fn visit_unknown(&mut self, raw: ByteList) -> Result<Value, DeserializeError> {
+        return Result::Ok(Value::Unknown(raw));
+    }
 }
 
 impl Inspect for Value {
@@ -162,8 +230,16 @@ impl Inspect for Value {
         match self {
             Null => f.write_str(&"null"),
             Bool(b) => f.write_str(&if *b { "true" } else { "false" }),
-            Number(n) => (*n).inspect(f),
+            Int(n) => (*n).inspect(f),
+            UInt(n) => (*n).inspect(f),
+            Int128(n) => (*n).inspect(f),
+            UInt128(n) => (*n).inspect(f),
+            Float(n) => (*n).inspect(f),
             String(s) => (*s).inspect(f),
+            Bytes(b) => {
+                f.write_str(&"0x");
+                f.write_str(&b.to_hex());
+            },
             List(arr) => {
                 f.write_char('[');
                 for let mut i = 0; i < arr.len(); i += 1 {
@@ -188,6 +264,12 @@ impl Inspect for Value {
                 }
                 f.write_char('}');
             },
+            Undefined => f.write_str(&"undefined"),
+            Unknown(b) => {
+                f.write_str(&"unknown(0x");
+                f.write_str(&b.to_hex());
+                f.write_char(')');
+            },
         }
     }
 }
@@ -197,8 +279,16 @@ impl InspectAlt for Value {
         match self {
             Null => f.write_str(&"null"),
             Bool(b) => f.write_str(&if *b { "true" } else { "false" }),
-            Number(n) => (*n).inspect_alt(f),
+            Int(n) => (*n).inspect_alt(f),
+            UInt(n) => (*n).inspect_alt(f),
+            Int128(n) => (*n).inspect_alt(f),
+            UInt128(n) => (*n).inspect_alt(f),
+            Float(n) => (*n).inspect_alt(f),
             String(s) => (*s).inspect_alt(f),
+            Bytes(b) => {
+                f.write_str(&"0x");
+                f.write_str(&b.to_hex());
+            },
             List(arr) => {
                 if arr.is_empty() {
                     f.write_str(&"[]");
@@ -226,6 +316,12 @@ impl InspectAlt for Value {
                     f.write_char(',');
                 }
                 f.close_brace("}");
+            },
+            Undefined => f.write_str(&"undefined"),
+            Unknown(b) => {
+                f.write_str(&"unknown(0x");
+                f.write_str(&b.to_hex());
+                f.write_char(')');
             },
         }
     }

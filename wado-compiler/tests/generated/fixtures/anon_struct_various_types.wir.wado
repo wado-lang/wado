@@ -34,7 +34,7 @@ struct core:prelude/int128.wado//u128 {  // TypeId(5)
     mut high: u64,
 }
 
-struct tuple//[i32, bool, String] {  // TypeId(6)
+struct tuple//[i32, bool, core:prelude/string.wado/String] {  // TypeId(6)
     mut 0: i32,
     mut 1: bool,
     mut 2: ref "core:prelude/string.wado//String",
@@ -68,7 +68,7 @@ type "functype//wado-compiler/tests/fixtures/anon_struct_various_types.wado/__cm
 
 type "functype//wado-compiler/tests/fixtures/anon_struct_various_types.wado/__cm_export__run" = fn();  // TypeId(20)
 
-type "functype//wado-compiler/tests/fixtures/anon_struct_various_types.wado/$value_copy$T86" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(21)
+type "functype//wado-compiler/tests/fixtures/anon_struct_various_types.wado/$value_copy$T92" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(21)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(22)
 
@@ -153,7 +153,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 fn "wado-compiler/tests/fixtures/anon_struct_various_types.wado/run"() with Stdout {
     let e: ref "core:prelude/int128.wado//i128";
     let f_5: ref "core:prelude/string.wado//String";
-    let g: ref "tuple//[i32, bool, String]";
+    let g: ref "tuple//[i32, bool, core:prelude/string.wado/String]";
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
     let __local_10: ref "core:prelude/string.wado//String";
@@ -172,7 +172,7 @@ fn "wado-compiler/tests/fixtures/anon_struct_various_types.wado/run"() with Stdo
     let __sroa_self_value_71: bool;
     e = struct.new "core:prelude/int128.wado//i128" { low: 999_i64, high: 0_i64 };
     f_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    g = struct.new "tuple//[i32, bool, String]" { 0: 1, 1: 1, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
+    g = struct.new "tuple//[i32, bool, core:prelude/string.wado/String]" { 0: 1, 1: 1, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
     "core:cli/println"(__local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 }; "core:prelude/primitive.wado/i32::fmt_decimal"(1, __local_9); __local_8);
     "core:cli/println"(__local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 }; "core:prelude/primitive.wado/i32::fmt_decimal"(2, __local_11); __local_10);
     "core:cli/println"(__local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_12 }; "core:prelude/primitive.wado/char^Display::fmt"(struct.new "core:prelude/types.wado//Box<char>" { value: 65 }, __local_13); __local_12);
@@ -195,7 +195,7 @@ fn "wado-compiler/tests/fixtures/anon_struct_various_types.wado/__cm_export__run
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/anon_struct_various_types.wado/$value_copy$T86"(v) {
+fn "wado-compiler/tests/fixtures/anon_struct_various_types.wado/$value_copy$T92"(v) {
     return struct.new "core:prelude/int128.wado//u128" { low: v.low, high: v.high };
 }
 
@@ -517,9 +517,9 @@ fn "core:prelude/int128.wado/i128::fmt_decimal"(self, f) {
         return;
     }
     ten = struct.new "core:prelude/int128.wado//u128" { low: 10_i64, high: 0_i64 };
-    drop("wado-compiler/tests/fixtures/anon_struct_various_types.wado/$value_copy$T86"(abs_val));
+    drop("wado-compiler/tests/fixtures/anon_struct_various_types.wado/$value_copy$T92"(abs_val));
     digit_count = 0;
-    temp_9 = "wado-compiler/tests/fixtures/anon_struct_various_types.wado/$value_copy$T86"(abs_val);
+    temp_9 = "wado-compiler/tests/fixtures/anon_struct_various_types.wado/$value_copy$T92"(abs_val);
     b37: block {
         l38: loop {
             if "core:prelude/int128.wado/u128^Ord::cmp"(temp_9, struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }) != 2 {
@@ -538,7 +538,7 @@ fn "core:prelude/int128.wado/i128::fmt_decimal"(self, f) {
     self_22 = f.buf;
     arr_11 = self_22.repr;
     pos = offset_10 + digit_count;
-    temp_13 = "wado-compiler/tests/fixtures/anon_struct_various_types.wado/$value_copy$T86"(abs_val);
+    temp_13 = "wado-compiler/tests/fixtures/anon_struct_various_types.wado/$value_copy$T92"(abs_val);
     b40: block {
         l41: loop {
             if "core:prelude/int128.wado/u128^Ord::cmp"(temp_13, struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }) != 2 {

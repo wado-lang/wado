@@ -165,7 +165,7 @@ struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(23)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(24)
+struct tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(24)
     mut 0: i32,
     mut 1: i32,
 }
@@ -282,7 +282,7 @@ type "functype//wado-compiler/tests/fixtures/http_fields.wado/__cm_binding__Fiel
 
 type "functype//wado-compiler/tests/fixtures/http_fields.wado/__cm_binding__Fields_delete" = fn(i32, ref "core:prelude/string.wado//String") -> ref null "wasi:http/types.wado//HeaderError";  // TypeId(59)
 
-type "functype//wado-compiler/tests/fixtures/http_fields.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(60)
+type "functype//wado-compiler/tests/fixtures/http_fields.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(60)
 
 type "functype//wado-compiler/tests/fixtures/http_fields.wado/__cm_export__handle" = fn(i32);  // TypeId(61)
 
@@ -520,7 +520,7 @@ fn "wado-compiler/tests/fixtures/http_fields.wado/handle"(request) {
     let __local_188: i64;
     let __local_189: i32;
     let __local_190: i32;
-    let __pattern_temp_1: ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let f_197: ref "core:prelude/format.wado//Formatter";
     let f_202: ref "core:prelude/format.wado//Formatter";
     let f_221: ref "core:prelude/format.wado//Formatter";
@@ -1049,7 +1049,7 @@ fn "wado-compiler/tests/fixtures/http_fields.wado/__cm_binding__Response_new"(he
     __lifted_result_8 = builtin::load_i32(__outptr + 0);
     __lifted_result_9 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_8, 1: __lifted_result_9 };
+    return struct.new "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_8, 1: __lifted_result_9 };
 }
 
 fn "wado-compiler/tests/fixtures/http_fields.wado/__cm_export__handle"(request) {

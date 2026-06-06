@@ -10,7 +10,7 @@ use { println, env, Stdout, Stderr, Environment } from "core:cli";
 use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Method, Scheme, Trailers } from "wasi:http";
 use { Client } from "wasi:http";
 use { Serialize, Deserialize } from "core:serde";
-use { to_string, from_string } from "core:json";
+use { to_bytes, from_bytes } from "core:json";
 
 struct ChatMessage {
     role: String,
@@ -37,7 +37,7 @@ impl Deserialize for ChatResponse;
 
 global MODEL_NAME: String = "google/gemma-4-26b-a4b-it:free";
 
-fn send_post(api_key: String, body: String) -> Response with Client {
+fn send_post(api_key: String, body: List<u8>) -> Response with Client {
     let [body_rx, body_tx] = Stream::<u8>::new();
     let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
 
@@ -71,7 +71,7 @@ fn send_post(api_key: String, body: String) -> Response with Client {
     // calls rendezvous with it and the whole body flows out without
     // deadlock.
     let subtask = Client::send(req);
-    body_tx.write(body.bytes().collect());
+    body_tx.write(body);
     body_tx.drop();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 
@@ -81,7 +81,7 @@ fn send_post(api_key: String, body: String) -> Response with Client {
     };
 }
 
-fn read_body(resp: Response) -> String {
+fn read_body(resp: Response) -> ByteList {
     let [res_rx, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream_rx, _trailers] = Response::consume_body(resp, res_rx);
 
@@ -94,7 +94,7 @@ fn read_body(resp: Response) -> String {
         buf.extend(&chunk);
     }
     body_stream_rx.drop();
-    return String::from_utf8_lossy(buf);
+    return buf as ByteList;
 }
 
 export fn run() with Stdout, Stderr, Environment, Client {
@@ -111,7 +111,7 @@ export fn run() with Stdout, Stderr, Environment, Client {
             content: "Explain WebAssembly briefly",
         },
     ];
-    let request_body = to_string(&ChatRequest {
+    let request_body = to_bytes(&ChatRequest {
         model: MODEL_NAME,
         messages,
     }).unwrap();
@@ -121,10 +121,10 @@ export fn run() with Stdout, Stderr, Environment, Client {
     let body = read_body(resp);
 
     if status != 200 {
-        panic(`HTTP {status as i32}: {body}`);
+        panic(`HTTP {status as i32}: {String::from_utf8_lossy(body)}`);
     }
 
-    let parsed = match from_string::<ChatResponse>(body) {
+    let parsed = match from_bytes::<ChatResponse, ByteList>(body) {
         Ok(r) => r,
         Err(e) => {
             panic(`failed to parse JSON response: {e:?}`);

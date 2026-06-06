@@ -21,7 +21,9 @@ Writes a JSON-escaped string (with surrounding quotes) into buf.
 
 ### `pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError>`
 
-Serializes a value to a JSON string.
+Serializes a value to a JSON string. Convenience over `to_bytes` for text
+contexts; serde I/O is bytes-primary, so prefer `to_bytes` when the output
+is consumed as bytes (e.g. an HTTP response body).
 
 ### `pub fn to_bytes<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError>`
 
@@ -35,11 +37,35 @@ as bytes (e.g. an HTTP response body).
 
 ### `pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, SerializeError>`
 
-Serializes a value to a pretty JSON string.
+Serializes a value to a pretty JSON string. Convenience over
+`to_bytes_pretty`; serde I/O is bytes-primary.
 
 ### `pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError>`
 
-Deserializes a value from a JSON string.
+Deserializes a value from a JSON string. Convenience wrapper over
+`from_bytes` (a `String` is a UTF-8 byte source); serde I/O is bytes-primary.
+
+### `pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S) -> Result<T, DeserializeError>`
+
+Deserializes a value from UTF-8 JSON bytes — the primary entry point.
+
+Accepts any byte source via `AsByteSlice`: a `ByteList`, `ByteArray`,
+`ByteSlice`, or a `String` (its UTF-8 bytes). The deserializer scans the
+borrowed bytes directly (zero-copy); UTF-8 is validated where string content
+is materialized (RFC 8259 §8.1), reporting invalid bytes as `MalformedInput`.
+
+### `pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError>`
+
+Serializes a value to canonical (deterministic) UTF-8 JSON bytes.
+
+Object / struct keys are emitted in ascending bytewise order of their
+encoded form (RFC 8785-style); equal values produce byte-identical output
+regardless of map insertion order. Use this for signing or content
+addressing; use `to_bytes` for the faster insertion-order form.
+
+### `pub fn to_bytes_pretty<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError>`
+
+Serializes a value to pretty-printed UTF-8 JSON bytes.
 
 ## Structs
 
@@ -133,7 +159,7 @@ _Fields are private._
 
 ### `pub struct JsonDeserializer`
 
-#### `input: String`
+#### `input: ByteSlice`
 
 #### `pos: i32`
 
@@ -226,3 +252,45 @@ Skips the next JSON value without allocating.
 ##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<JsonVariantAccess, DeserializeError>`
 
 ##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
+
+### `pub struct CanonicalJsonSerializer`
+
+_Fields are private._
+
+#### `impl Serializer for CanonicalJsonSerializer`
+
+##### `fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>`
+
+##### `fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError>`
+
+##### `fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError>`
+
+##### `fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError>`
+
+##### `fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError>`
+
+##### `fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError>`
+
+##### `fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError>`
+
+##### `fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError>`
+
+##### `fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError>`
+
+##### `fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>`
+
+##### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
+
+##### `fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError>`
+
+##### `fn serialize_null(&mut self) -> Result<(), SerializeError>`
+
+##### `fn begin_seq(&mut self, len: i32) -> Result<CanonicalSeqSerializer, SerializeError>`
+
+##### `fn begin_map(&mut self, len: i32) -> Result<CanonicalMapSerializer, SerializeError>`
+
+##### `fn begin_struct(&mut self, name: &String, fields: i32) -> Result<CanonicalStructSerializer, SerializeError>`
+
+##### `fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>`
+
+##### `fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<CanonicalVariantSerializer, SerializeError>`

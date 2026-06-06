@@ -26,7 +26,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[i32, String] {  // TypeId(4)
+struct tuple//[i32, core:prelude/string.wado/String] {  // TypeId(4)
     mut 0: i32,
     mut 1: ref "core:prelude/string.wado//String",
 }
@@ -189,11 +189,11 @@ fn "wado-compiler/tests/fixtures/return_merged.wado/__test_3_tuple_var"() {
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
-    let t: ref "tuple//[i32, String]";
+    let t: ref "tuple//[i32, core:prelude/string.wado/String]";
     let f_13: ref "core:prelude/format.wado//Formatter";
     let f_18: ref "core:prelude/format.wado//Formatter";
     let f_24: ref "core:prelude/format.wado//Formatter";
-    t = struct.new "tuple//[i32, String]" { 0: 42, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
+    t = struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: 42, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
     __cond_2 = local.tee __v0_1(42) == 42;
     if __cond_2 == 0 {
         "core:internal/panic"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(123), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_3_tuple_var"), used: 18 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/return_merged.wado"), used: 47 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_13 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(40, f_13); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("

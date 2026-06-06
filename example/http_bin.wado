@@ -83,7 +83,7 @@ impl Serialize for AccessLog;
 struct RouteResponse {
     status: StatusCode,
     content_type: String,
-    body: String,
+    body: List<u8>,
     allow: Option<String>,
 }
 
@@ -180,12 +180,12 @@ fn parse_status_code(s: String) -> Option<u16> {
     return null;
 }
 
-fn build_request_json(method: Method, url: &Url, headers: &Headers, body: Option<String>) -> String {
+fn build_request_json(method: Method, url: &Url, headers: &Headers, body: Option<String>) -> List<u8> {
     let origin = match get_header(headers, "x-forwarded-for") {
         Some(s) => s,
         None => "",
     };
-    return json::to_string_pretty(&RequestInfo {
+    return json_line(&RequestInfo {
         method: method_name(method),
         path: url.path,
         args: url.query_params(),
@@ -193,14 +193,23 @@ fn build_request_json(method: Method, url: &Url, headers: &Headers, body: Option
         origin,
         url: url.to_string(),
         data: body,
-    }).unwrap() + "\n";
+    });
 }
 
-fn json_error(msg: String) -> String {
-    return json::to_string_pretty(&ErrorResponse { error: msg }).unwrap() + "\n";
+/// Serialize `value` to pretty UTF-8 JSON bytes with a trailing newline — the
+/// shape httpbin response bodies take. HTTP bodies are bytes, so the router's
+/// `RouteResponse.body` is a `List<u8>` and serialization stays bytes-end-to-end.
+fn json_line<T: Serialize>(value: &T) -> List<u8> {
+    let mut b = json::to_bytes_pretty(value).unwrap();
+    b.push('\n' as u8);
+    return b;
 }
 
-fn json_response(status: StatusCode, body: String) -> RouteResponse {
+fn json_error(msg: String) -> List<u8> {
+    return json_line(&ErrorResponse { error: msg });
+}
+
+fn json_response(status: StatusCode, body: List<u8>) -> RouteResponse {
     return RouteResponse {
         status,
         content_type: "application/json",
@@ -228,25 +237,25 @@ fn respond_home() -> RouteResponse {
 
 fn respond_headers(request: Request) -> RouteResponse {
     let h = request.get_headers();
-    let body = json::to_string_pretty(&HeadersResponse {
+    let body = json_line(&HeadersResponse {
         headers: headers_to_map(&h),
-    }).unwrap() + "\n";
+    });
     return json_response(200, body);
 }
 
 fn respond_ip(request: Request) -> RouteResponse {
     let h = request.get_headers();
-    let body = json::to_string_pretty(&IpResponse {
+    let body = json_line(&IpResponse {
         origin: get_header(&h, "x-forwarded-for"),
-    }).unwrap() + "\n";
+    });
     return json_response(200, body);
 }
 
 fn respond_user_agent(request: Request) -> RouteResponse {
     let h = request.get_headers();
-    let body = json::to_string_pretty(&UserAgentResponse {
+    let body = json_line(&UserAgentResponse {
         user_agent: get_header(&h, "user-agent"),
-    }).unwrap() + "\n";
+    });
     return json_response(200, body);
 }
 
@@ -255,7 +264,7 @@ fn respond_status(code_str: String) -> RouteResponse {
         return RouteResponse {
             status: code as StatusCode,
             content_type: "text/plain",
-            body: "",
+            body: [],
             allow: null,
         };
     }
@@ -267,7 +276,7 @@ fn respond_base64(encoded: String) -> RouteResponse {
         return RouteResponse {
             status: 200,
             content_type: "text/plain",
-            body: String::from_utf8_lossy(decoded_bytes),
+            body: decoded_bytes,
             allow: null,
         };
     }
@@ -305,7 +314,7 @@ fn build_router() -> Router<Handler> {
     return r;
 }
 
-global HOMEPAGE: String = #include_str("./http-bin-index.html");
+global HOMEPAGE: List<u8> = #include_bytes("./http-bin-index.html");
 global ROUTER: Router<Handler> = build_router();
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> with MonotonicClock {
@@ -351,7 +360,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
 
     task return Result::Ok(response);
 
-    body_tx.write(resp.body.bytes().collect());
+    body_tx.write(resp.body);
     body_tx.drop();
 
     // Server-Timing trailer carries the handler's wall-clock time so curious

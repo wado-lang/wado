@@ -24,7 +24,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[bool, i32, String] {  // TypeId(4)
+struct tuple//[bool, i32, core:prelude/string.wado/String] {  // TypeId(4)
     mut 0: bool,
     mut 1: i32,
     mut 2: ref "core:prelude/string.wado//String",
@@ -36,7 +36,7 @@ array Array<u32> (mut u32);  // TypeId(6)
 
 array Array<u16> (mut u16);  // TypeId(7)
 
-array Array<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>> (mut ref "tuple//[bool, i32, String]");  // TypeId(8)
+array Array<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>> (mut ref "tuple//[bool, i32, core:prelude/string.wado/String]");  // TypeId(8)
 
 array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(9)
 
@@ -364,9 +364,9 @@ type "functype//core:prelude/list.wado/List<u32>::push" = fn(ref "core:prelude//
 
 type "functype//core:prelude/list.wado/List<u16>::push" = fn(ref "core:prelude//List<u16>", u16);  // TypeId(122)
 
-type "functype//core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>") -> ref null "tuple//[bool, i32, String]";  // TypeId(123)
+type "functype//core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>") -> ref null "tuple//[bool, i32, core:prelude/string.wado/String]";  // TypeId(123)
 
-type "functype//core:prelude/list.wado/List<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>::push" = fn(ref "core:prelude//List<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>", ref "tuple//[bool, i32, String]");  // TypeId(124)
+type "functype//core:prelude/list.wado/List<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>::push" = fn(ref "core:prelude//List<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>", ref "tuple//[bool, i32, core:prelude/string.wado/String]");  // TypeId(124)
 
 type "functype//core:prelude/slice.wado/ArrayIter<core:prelude/string.wado/String>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:prelude/string.wado/String>") -> ref null "core:prelude/string.wado//String";  // TypeId(125)
 
@@ -732,20 +732,20 @@ fn "wado-compiler/tests/fixtures/array_specialized.wado/array_specialized_string
 fn "wado-compiler/tests/fixtures/array_specialized.wado/array_specialized_tuple"() with Stdout {
     let __b: ref "core:prelude//List<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>";
     let __iter_2: ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>";
-    let x: ref "tuple//[bool, i32, String]";
+    let x: ref "tuple//[bool, i32, core:prelude/string.wado/String]";
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
-    let __match_6: ref null "tuple//[bool, i32, String]";
+    let __match_6: ref null "tuple//[bool, i32, core:prelude/string.wado/String]";
     let repr: ref "Array<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>";
     let end: i32;
     let f_17: ref "core:prelude/format.wado//Formatter";
     let f_22: ref "core:prelude/format.wado//Formatter";
     let __sroa_self_value_25: bool;
     let __sroa_self_value_26: i32;
-    __b = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "tuple//[bool, i32, String]">(0), used: 0 };
-    "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>::push"(__b, struct.new "tuple//[bool, i32, String]" { 0: 1, 1: 1, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 110, 101), used: 3 } });
-    "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>::push"(__b, struct.new "tuple//[bool, i32, String]" { 0: 0, 1: 2, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 119, 111), used: 3 } });
-    "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>::push"(__b, struct.new "tuple//[bool, i32, String]" { 0: 1, 1: 3, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("three"), used: 5 } });
+    __b = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "tuple//[bool, i32, core:prelude/string.wado/String]">(0), used: 0 };
+    "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>::push"(__b, struct.new "tuple//[bool, i32, core:prelude/string.wado/String]" { 0: 1, 1: 1, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 110, 101), used: 3 } });
+    "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>::push"(__b, struct.new "tuple//[bool, i32, core:prelude/string.wado/String]" { 0: 0, 1: 2, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 119, 111), used: 3 } });
+    "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>::push"(__b, struct.new "tuple//[bool, i32, core:prelude/string.wado/String]" { 0: 1, 1: 3, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("three"), used: 5 } });
     repr = __b.repr;
     end = __b.used;
     __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>" { repr: repr, index: 0, end: end };
@@ -2547,11 +2547,11 @@ fn "core:prelude/list.wado/List<u16>::push"(self, value) {
 }
 
 fn "core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>^Iterator::next"(self) {
-    let item: ref "tuple//[bool, i32, String]";
+    let item: ref "tuple//[bool, i32, core:prelude/string.wado/String]";
     if self.index >= self.end {
         return ref.null none;
     }
-    item = builtin::array_get<ref "tuple//[bool, i32, String]">(self.repr, self.index);
+    item = builtin::array_get<ref "tuple//[bool, i32, core:prelude/string.wado/String]">(self.repr, self.index);
     self.index = self.index + 1;
     return item;
 }
@@ -2562,7 +2562,7 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<bool,i32,core:prel
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
         "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>::grow"(self);
     }
-    builtin::array_set<ref "tuple//[bool, i32, String]">(self.repr, used, value);
+    builtin::array_set<ref "tuple//[bool, i32, core:prelude/string.wado/String]">(self.repr, used, value);
     self.used = used + 1;
 }
 
@@ -2872,8 +2872,8 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<bool,i32,core:prel
     let new_repr: ref "Array<core:prelude/types.wado/Tuple<bool,i32,core:prelude/string.wado/String>>";
     let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<ref "tuple//[bool, i32, String]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "tuple//[bool, i32, String]">(new_repr, 0, self.repr, 0, self.used);
+    new_repr = builtin::array_new<ref "tuple//[bool, i32, core:prelude/string.wado/String]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    builtin::array_copy<ref "tuple//[bool, i32, core:prelude/string.wado/String]">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 

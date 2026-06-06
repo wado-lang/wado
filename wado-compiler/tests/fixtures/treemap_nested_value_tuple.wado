@@ -1,0 +1,50 @@
+// Regression: a `TreeMap` whose value type carries a nullable struct ref
+// (another `TreeMap`, or any struct with an `Option<Struct>` field) used to ICE
+// at codegen with a `ref` vs `ref null` Wasm GC validation mismatch.
+//
+// Root cause (wir_build::types::register_tuple_types): the per-entry tuple type
+// `[K, V]` produced by `entries()` was registered twice for the same logical
+// type — once with the inner value type's name qualified (`GenericInstance`
+// form) and once unqualified (monomorphized `Struct` form) — because the tuple
+// elements were mangled with the short form instead of the module-qualified
+// type-arg form. Two structurally-identical WIR struct types resulted, and the
+// non-null tuple from the array met the `ref null` tuple of the iterator's
+// `Option<[K, V]>` return, failing validation. The tuple elements now use the
+// qualified mangler, so the same logical tuple registers once.
+
+use { TreeMap } from "core:collections";
+
+struct LNode {
+    val: i32,
+    next: Option<LNode>,
+}
+
+test "TreeMap-valued TreeMap iterates entries" {
+    let mut inner: TreeMap<String, i32> = TreeMap::new();
+    inner["z"] = 1;
+    inner["a"] = 2;
+    let mut outer: TreeMap<String, TreeMap<String, i32>> = TreeMap::new();
+    outer["m"] = inner;
+    let mut count = 0;
+    for let [k, v] of outer.entries() {
+        assert k == "m";
+        assert v.len() == 2;
+        count += 1;
+    }
+    assert count == 1;
+}
+
+test "TreeMap with recursive-struct value iterates entries" {
+    let mut m: TreeMap<String, LNode> = TreeMap::new();
+    m["a"] = LNode { val: 7, next: null };
+    let mut count = 0;
+    for let [k, v] of m.entries() {
+        assert k == "a";
+        assert v.val == 7;
+        count += 1;
+    }
+    assert count == 1;
+}
+
+__DATA__
+{"test": {}}
