@@ -287,6 +287,34 @@ impl Value {
             _ => None,
         }
     }
+
+    /// Arena counterpart of [`Value::from_literal_expr`]: project an arena
+    /// expression to a `Value` when it's a primitive literal whose type id
+    /// resolves to a tracked primitive.
+    #[must_use]
+    pub fn from_arena_literal(body: &Body, e: ExprId, type_table: &TypeTable) -> Option<Self> {
+        let node = &body.exprs[e];
+        match &node.kind {
+            ExprKind::IntLiteral { value, .. } => {
+                let prim = prim_of(node.type_id, type_table).filter(|p| is_int_prim(*p))?;
+                Some(Self::Int {
+                    value: *value,
+                    prim,
+                })
+            }
+            ExprKind::FloatLiteral { value, .. } => {
+                let prim = prim_of(node.type_id, type_table)
+                    .filter(|p| matches!(p, PrimitiveType::F32 | PrimitiveType::F64))?;
+                Some(Self::Float {
+                    value: *value,
+                    prim,
+                })
+            }
+            ExprKind::BoolLiteral(b) => Some(Self::Bool(*b)),
+            ExprKind::CharLiteral(c) => Some(Self::Char(*c)),
+            _ => None,
+        }
+    }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -2302,6 +2330,19 @@ impl<'a> Interpreter<'a> {
         }
         body.blocks[block].stmts = new_stmts;
         true
+    }
+
+    /// Arena counterpart of [`Self::reduce_to_lattice`]. Unlike the tree
+    /// version, the const-fold visitor has already reduced every child of
+    /// `e` bottom-up before this is called, so there is no separate
+    /// `reduce_in_place` step: `try_fold_a` sees the already-folded
+    /// children directly, and a non-foldable node falls through to
+    /// `expr_to_lattice_a`.
+    pub fn reduce_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
+        match self.try_fold_a(body, e) {
+            Lattice::Unevaluated => self.expr_to_lattice_a(body, e),
+            other => other,
+        }
     }
 
     /// Arena counterpart of [`Self::rewrite_if_expr`].
