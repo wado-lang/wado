@@ -331,36 +331,50 @@ Gating is therefore disabled until both are addressed:
       so there is nothing to retire — it stays as silent cleanup as
       designed.
 
-Batch switch — blocked:
+Batch switch — attempted twice, reverted; remaining gaps mapped:
 
 Replacing the batch TIR `check_effects` with `check_effects_semantic`
-was attempted and reverted. Running it over the full E2E suite surfaced
-false positives in the effect-propagation fixtures: e.g.
-`effect_propagation_signature_param` reported a bogus "missing resource
-'StreamWritable'" on a `Stream::new()` / `.drop()` sequence. Root cause:
-the Semantics propagation closure is built from the `effect_ops` facts,
-but stdlib effect / resource declarations that are rehydrated from the
-snapshot (the `Core` / `Wasi` variants) do not carry `effect_ops` in
-`module_semantics`, so the closure misses stdlib effect→resource
-propagation (`Stdout → Stream`, `Stream → StreamWritable`, …). The
-TIR-based closure does not have this gap because it is built from the
-rehydrated `TirModule`s, which are complete.
+was attempted over the full E2E suite. Two root causes are now fixed:
 
-The same gap is a known limitation of the LSP effect diagnostics today:
-user code that directly drives resource-propagation APIs (rather than
-going through `println`-style wrappers) can see a spurious "missing
-resource". Typical effect usage (`with Stdout` + `println`) is
-unaffected.
+- [x] Stdlib `effect_ops` (and the other non-drained per-module facts)
+      were not seeded from the snapshot, so the propagation closure
+      missed stdlib effect→resource propagation (`Stdout → Stream`,
+      `Stream → StreamWritable`). The snapshot now clones each stdlib
+      module's `types`. This removed 26 of 36 effect-fixture failures
+      (and fixes the same false positives in the LSP).
+- [x] Bundled stdlib `.wado` files load as `ModuleSource::Local` with a
+      `wasi:` / `core:` scheme path, so `is_user_authored` wrongly
+      treated them as user code. Now excluded.
 
-- [ ] Make stdlib `effect_ops` available to `build_propagation_closure_sem`
-      (seed them into the snapshot, or build the closure from a source
-      that includes the rehydrated stdlib), then re-attempt the batch
-      switch and validate the full E2E suite.
+Five effect fixtures still fail with the switch on (so it stays
+reverted; batch keeps the TIR check). Each is a real gap in the
+Semantics checker that also limits the LSP feature:
 
-(While diagnosing this, a separate bug was fixed: bundled stdlib `.wado`
-files load as `ModuleSource::Local` with a `wasi:` / `core:` scheme
-path, so `is_user_authored` wrongly treated them as user code. They are
-now excluded, which also removes stdlib false positives from the LSP.)
+- [ ] Effect-handler scopes. `with H => … do { … }` installs a handler
+      that grants effect `H` to calls inside the block (directly or via
+      helpers). The Semantics walker does not model handler scopes, so
+      it false-positives inside them (`effect_handler_cross_function`).
+      Needs `handler_bindings` + scope tracking in the walk.
+- [ ] Variant-payload-nested resources. `signature_resources` /
+      the closure follow struct fields but not variant case payloads, so
+      a resource nested in a variant payload is missed
+      (`effect_propagation_variant_payload`). Build a `variant_payloads`
+      map like `struct_fields`.
+- [ ] Indirect calls through a function-typed _parameter_. The callee
+      ident resolves via `references` to a local/param whose type is in
+      `local_types`, not `expression_types`; the indirect branch must
+      consult `local_types` first (`effect_indirect_call_error`).
+- [ ] Default-expression purity. Parameter / field default expressions
+      live in the signature, not a function body, so the Semantics
+      walker never visits them; the expected "default must be pure"
+      error is lost (`default_arg_effectful_default_error`,
+      `default_field_effectful_default_error`). `check_default_purity`
+      must move to `Semantics` too (Phase 1d) or the defaults must be
+      walked here.
+
+Until these land, batch effect-checking stays on the TIR `check_effects`
+(complete), and the LSP carries these as known false-positive /
+under-report limitations on advanced effect code.
 
 #### Phase 1b design — effect check on `Semantics`
 
