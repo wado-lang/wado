@@ -20,7 +20,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(2)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[i32, String, bool, i32] {  // TypeId(3)
+struct tuple//[i32, core:prelude/string.wado/String, bool, i32] {  // TypeId(3)
     mut 0: i32,
     mut 1: ref "core:prelude/string.wado//String",
     mut 2: bool,
@@ -49,15 +49,15 @@ type "functype//wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_
 
 type "functype//wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/__cm_export____test_0_generic_method_in_variadic_for_of_monomorphizes_in_every_position" = fn();  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_in_binary<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>" = fn(ref "tuple//[i32, String, bool, i32]") -> i32;  // TypeId(15)
+type "functype//wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_in_binary<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>" = fn(ref "tuple//[i32, core:prelude/string.wado/String, bool, i32]") -> i32;  // TypeId(15)
 
-type "functype//wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_in_match<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>" = fn(ref "tuple//[i32, String, bool, i32]") -> i32;  // TypeId(16)
+type "functype//wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_in_match<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>" = fn(ref "tuple//[i32, core:prelude/string.wado/String, bool, i32]") -> i32;  // TypeId(16)
 
-type "functype//wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_in_while<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>" = fn(ref "tuple//[i32, String, bool, i32]") -> i32;  // TypeId(17)
+type "functype//wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_in_while<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>" = fn(ref "tuple//[i32, core:prelude/string.wado/String, bool, i32]") -> i32;  // TypeId(17)
 
-type "functype//wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_in_if<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>" = fn(ref "tuple//[i32, String, bool, i32]") -> i32;  // TypeId(18)
+type "functype//wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_in_if<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>" = fn(ref "tuple//[i32, core:prelude/string.wado/String, bool, i32]") -> i32;  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_direct<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>" = fn(ref "tuple//[i32, String, bool, i32]") -> i32;  // TypeId(19)
+type "functype//wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_direct<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>" = fn(ref "tuple//[i32, core:prelude/string.wado/String, bool, i32]") -> i32;  // TypeId(19)
 
 type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(20)
 
@@ -111,7 +111,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 fn "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/__test_0_generic_method_in_variadic_for_of_monomorphizes_in_every_position"() {
-    let t: ref "tuple//[i32, String, bool, i32]";
+    let t: ref "tuple//[i32, core:prelude/string.wado/String, bool, i32]";
     let __v0_1: i32;
     let __cond_2: bool;
     let __v0_3: i32;
@@ -142,41 +142,36 @@ fn "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/__te
     let f_62: ref "core:prelude/format.wado//Formatter";
     let f_68: ref "core:prelude/format.wado//Formatter";
     let f_73: ref "core:prelude/format.wado//Formatter";
-    t = struct.new "tuple//[i32, String, bool, i32]" { 0: 10, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, 2: 1, 3: 20 };
-    __v0_1 = "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_direct<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>"(t);
-    __cond_2 = __v0_1 == 131;
+    t = struct.new "tuple//[i32, core:prelude/string.wado/String, bool, i32]" { 0: 10, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, 2: 1, 3: 20 };
+    __cond_2 = local.tee __v0_1("wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_direct<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>"(t)) == 131;
     if __cond_2 == 0 {
         "core:internal/panic"(__local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(138), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_generic_method_in_variadic_for_of_monomorphizes_in_every_position"), used: 74 }); "core:prelude/string.wado/String::push"(__local_11, 32); "core:prelude/string.wado/String::push"(__local_11, 97); "core:prelude/string.wado/String::push"(__local_11, 116); "core:prelude/string.wado/String::push"(__local_11, 32); "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado"), used: 71 }); "core:prelude/string.wado/String::push"(__local_11, 58); __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_11 }; f_24 = __local_12; "core:prelude/primitive.wado/i32::fmt_decimal"(64, f_24); "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: sum_direct(t) == 131
 "), used: 33 }); "core:prelude/string.wado/String::push_str"(__local_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sum_direct(t): "), used: 15 }); __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_11 }; f_29 = __local_12; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_1, f_29); "core:prelude/string.wado/String::push"(__local_11, 10); __local_11);
         unreachable;
     }
-    __v0_3 = "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_in_if<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>"(t);
-    __cond_4 = __v0_3 == 131;
+    __cond_4 = local.tee __v0_3("wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_in_if<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>"(t)) == 131;
     if __cond_4 == 0 {
         "core:internal/panic"(__local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(136), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_generic_method_in_variadic_for_of_monomorphizes_in_every_position"), used: 74 }); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push"(__local_13, 97); "core:prelude/string.wado/String::push"(__local_13, 116); "core:prelude/string.wado/String::push"(__local_13, 32); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado"), used: 71 }); "core:prelude/string.wado/String::push"(__local_13, 58); __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_13 }; f_35 = __local_14; "core:prelude/primitive.wado/i32::fmt_decimal"(65, f_35); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: sum_in_if(t) == 131
 "), used: 32 }); "core:prelude/string.wado/String::push_str"(__local_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sum_in_if(t): "), used: 14 }); __local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_13 }; f_40 = __local_14; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_3, f_40); "core:prelude/string.wado/String::push"(__local_13, 10); __local_13);
         unreachable;
     }
-    __v0_5 = "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_in_while<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>"(t);
-    __cond_6 = __v0_5 == 131;
+    __cond_6 = local.tee __v0_5("wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_in_while<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>"(t)) == 131;
     if __cond_6 == 0 {
         "core:internal/panic"(__local_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(142), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_generic_method_in_variadic_for_of_monomorphizes_in_every_position"), used: 74 }); "core:prelude/string.wado/String::push"(__local_15, 32); "core:prelude/string.wado/String::push"(__local_15, 97); "core:prelude/string.wado/String::push"(__local_15, 116); "core:prelude/string.wado/String::push"(__local_15, 32); "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado"), used: 71 }); "core:prelude/string.wado/String::push"(__local_15, 58); __local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_15 }; f_46 = __local_16; "core:prelude/primitive.wado/i32::fmt_decimal"(66, f_46); "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: sum_in_while(t) == 131
 "), used: 35 }); "core:prelude/string.wado/String::push_str"(__local_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sum_in_while(t): "), used: 17 }); __local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_15 }; f_51 = __local_16; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_5, f_51); "core:prelude/string.wado/String::push"(__local_15, 10); __local_15);
         unreachable;
     }
-    __v0_7 = "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_in_match<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>"(t);
-    __cond_8 = __v0_7 == 131;
+    __cond_8 = local.tee __v0_7("wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_in_match<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>"(t)) == 131;
     if __cond_8 == 0 {
         "core:internal/panic"(__local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(142), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_generic_method_in_variadic_for_of_monomorphizes_in_every_position"), used: 74 }); "core:prelude/string.wado/String::push"(__local_17, 32); "core:prelude/string.wado/String::push"(__local_17, 97); "core:prelude/string.wado/String::push"(__local_17, 116); "core:prelude/string.wado/String::push"(__local_17, 32); "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado"), used: 71 }); "core:prelude/string.wado/String::push"(__local_17, 58); __local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_17 }; f_57 = __local_18; "core:prelude/primitive.wado/i32::fmt_decimal"(67, f_57); "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: sum_in_match(t) == 131
 "), used: 35 }); "core:prelude/string.wado/String::push_str"(__local_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sum_in_match(t): "), used: 17 }); __local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_17 }; f_62 = __local_18; "core:prelude/primitive.wado/i32::fmt_decimal"(__v0_7, f_62); "core:prelude/string.wado/String::push"(__local_17, 10); __local_17);
         unreachable;
     }
-    __v0_9 = "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_in_binary<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>"(t);
-    __cond_10 = __v0_9 == 131;
+    __cond_10 = local.tee __v0_9("wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_in_binary<core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String,bool,i32>>"(t)) == 131;
     if __cond_10 == 0 {
         "core:internal/panic"(__local_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(144), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_0_generic_method_in_variadic_for_of_monomorphizes_in_every_position"), used: 74 }); "core:prelude/string.wado/String::push"(__local_19, 32); "core:prelude/string.wado/String::push"(__local_19, 97); "core:prelude/string.wado/String::push"(__local_19, 116); "core:prelude/string.wado/String::push"(__local_19, 32); "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado"), used: 71 }); "core:prelude/string.wado/String::push"(__local_19, 58); __local_20 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_19 }; f_68 = __local_20; "core:prelude/primitive.wado/i32::fmt_decimal"(68, f_68); "core:prelude/string.wado/String::push_str"(__local_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: sum_in_binary(t) == 131
@@ -210,11 +205,11 @@ fn "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_
     let __sroa_acc_total: i32;
     __sroa_acc_total = 0;
     v_5 = items.0;
-    __sroa_acc_total = 0 + v_5;
-    __sroa_acc_total = __sroa_acc_total + 100;
-    __sroa_acc_total = __sroa_acc_total + 1;
+    drop(local.tee __sroa_acc_total(0 + v_5));
+    drop(local.tee __sroa_acc_total(__sroa_acc_total + 100));
+    drop(local.tee __sroa_acc_total(__sroa_acc_total + 1));
     v_10 = items.3;
-    __sroa_acc_total = __sroa_acc_total + v_10;
+    drop(local.tee __sroa_acc_total(__sroa_acc_total + v_10));
     return __sroa_acc_total;
 }
 
@@ -234,7 +229,7 @@ fn "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_
             if once_3 == 0 {
                 break b5;
             }
-            __sroa_acc_total = __sroa_acc_total + v_5;
+            drop(local.tee __sroa_acc_total(__sroa_acc_total + v_5));
             once_3 = 0;
             continue l6;
         };
@@ -245,7 +240,7 @@ fn "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_
             if once_7 == 0 {
                 break b8;
             }
-            __sroa_acc_total = __sroa_acc_total + 100;
+            drop(local.tee __sroa_acc_total(__sroa_acc_total + 100));
             once_7 = 0;
             continue l9;
         };
@@ -256,7 +251,7 @@ fn "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_
             if once_9 == 0 {
                 break b11;
             }
-            __sroa_acc_total = __sroa_acc_total + 1;
+            drop(local.tee __sroa_acc_total(__sroa_acc_total + 1));
             once_9 = 0;
             continue l12;
         };
@@ -268,7 +263,7 @@ fn "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_
             if once_11 == 0 {
                 break b14;
             }
-            __sroa_acc_total = __sroa_acc_total + v_10;
+            drop(local.tee __sroa_acc_total(__sroa_acc_total + v_10));
             once_11 = 0;
             continue l15;
         };
@@ -282,11 +277,11 @@ fn "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_
     let __sroa_acc_total: i32;
     __sroa_acc_total = 0;
     v_4 = items.0;
-    __sroa_acc_total = 0 + v_4;
-    __sroa_acc_total = __sroa_acc_total + 100;
-    __sroa_acc_total = __sroa_acc_total + 1;
+    drop(local.tee __sroa_acc_total(0 + v_4));
+    drop(local.tee __sroa_acc_total(__sroa_acc_total + 100));
+    drop(local.tee __sroa_acc_total(__sroa_acc_total + 1));
     v_7 = items.3;
-    __sroa_acc_total = __sroa_acc_total + v_7;
+    drop(local.tee __sroa_acc_total(__sroa_acc_total + v_7));
     return __sroa_acc_total;
 }
 
@@ -296,11 +291,11 @@ fn "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_
     let __sroa_acc_total: i32;
     __sroa_acc_total = 0;
     v_4 = items.0;
-    __sroa_acc_total = 0 + v_4;
-    __sroa_acc_total = __sroa_acc_total + 100;
-    __sroa_acc_total = __sroa_acc_total + 1;
+    drop(local.tee __sroa_acc_total(0 + v_4));
+    drop(local.tee __sroa_acc_total(__sroa_acc_total + 100));
+    drop(local.tee __sroa_acc_total(__sroa_acc_total + 1));
     v_7 = items.3;
-    __sroa_acc_total = __sroa_acc_total + v_7;
+    drop(local.tee __sroa_acc_total(__sroa_acc_total + v_7));
     return __sroa_acc_total;
 }
 
@@ -379,8 +374,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
     let ptr: i32;
     let raw_len: i32;
     let result: i32;
-    packed = "core:internal/cm_lower_list_u8"(data, len);
-    ptr = builtin::i32_wrap_i64(packed);
+    ptr = builtin::i32_wrap_i64(local.tee packed("core:internal/cm_lower_list_u8"(data, len)));
     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
@@ -439,8 +433,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let offset: i32;
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
-    abs_val = select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self));
-    digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
+    digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
@@ -455,10 +448,7 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    a_7 = capacity * 2;
-    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
-    new_capacity = select i32(a_5 > 8, a_5, 8);
-    new_repr = builtin::array_new<u8>(new_capacity);
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
