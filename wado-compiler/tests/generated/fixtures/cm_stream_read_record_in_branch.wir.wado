@@ -185,11 +185,10 @@ fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/run"() wit
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
         return;
     }
-    dir = if builtin::unlikely(0 >= dirs.used) {
+    __pattern_temp_0 = "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_binding__Descriptor_read_directory"(local.tee dir(if builtin::unlikely(0 >= dirs.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0).0;
-    __pattern_temp_0 = "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_binding__Descriptor_read_directory"(dir);
+    }; builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0).0));
     dir_stream = __pattern_temp_0.0;
     _done = __pattern_temp_0.1;
     v = (if dirs.used > 0 -> ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>" {
@@ -246,19 +245,16 @@ fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_bindi
     let ptr: i32;
     let len_10: i32;
     let arr: ref Array<u8>;
-    __outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:filesystem/Preopens::get_directories"(__outptr);
+    "wasi/wasi:filesystem/Preopens::get_directories"(local.tee __outptr("mem/realloc"(0, 0, 4, 8)));
     __base = builtin::load_i32(__outptr);
-    __count = builtin::load_i32(__outptr + 4);
-    __result = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "tuple//[Descriptor, String]">(__count), used: 0 };
+    __result = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "tuple//[Descriptor, String]">(local.tee __count(builtin::load_i32(__outptr + 4))), used: 0 };
     __i = 0;
     b8: block {
         l9: loop {
             if __i >= __count {
                 break b8;
             }
-            __elem_addr = __base + (__i * 12);
-            __lifted_result_6 = builtin::load_i32(__elem_addr + 0);
+            __lifted_result_6 = builtin::load_i32(local.tee __elem_addr(__base + (__i * 12)) + 0);
             ptr = builtin::load_i32(__elem_addr + 4);
             len_10 = builtin::load_i32((__elem_addr + 4) + 4);
             arr = "core:internal/memory_to_gc_array"(ptr, len_10);
@@ -319,16 +315,14 @@ fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_strea
     if result == -1 {
         result = "core:internal/wait_for_blocked"(handle);
     }
-    count = result >> 4;
-    arr_6 = struct.new "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>" { repr: builtin::array_new<ref "wasi:filesystem/types.wado//DirectoryEntry">(count), used: 0 };
+    arr_6 = struct.new "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>" { repr: builtin::array_new<ref "wasi:filesystem/types.wado//DirectoryEntry">(local.tee count(result >> 4)), used: 0 };
     i = 0;
     b13: block {
         l14: loop {
             if i >= count {
                 break b13;
             }
-            addr = ptr_3 + (i * 24);
-            __vdisc = builtin::load_u8(addr);
+            __vdisc = builtin::load_u8(local.tee addr(ptr_3 + (i * 24)));
             __vresult = ref.null none;
             if __vdisc == 0 {
                 __vresult = struct.new "wasi:filesystem/types.wado//DescriptorType" { 0 };
@@ -501,8 +495,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
     let ptr: i32;
     let raw_len: i32;
     let result: i32;
-    packed = "core:internal/cm_lower_list_u8"(data, len);
-    ptr = builtin::i32_wrap_i64(packed);
+    ptr = builtin::i32_wrap_i64(local.tee packed("core:internal/cm_lower_list_u8"(data, len)));
     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
@@ -574,9 +567,7 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<wasi:filesystem/ty
     let new_repr: ref "Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>";
     let a: i32;
     capacity = builtin::array_len(self.repr);
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "tuple//[Descriptor, String]">(new_capacity);
+    new_repr = builtin::array_new<ref "tuple//[Descriptor, String]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
     builtin::array_copy<ref "tuple//[Descriptor, String]">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -587,9 +578,7 @@ fn "core:prelude/list.wado/List<wasi:filesystem/types.wado/DirectoryEntry>::grow
     let new_repr: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>";
     let a: i32;
     capacity = builtin::array_len(self.repr);
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "wasi:filesystem/types.wado//DirectoryEntry">(new_capacity);
+    new_repr = builtin::array_new<ref "wasi:filesystem/types.wado//DirectoryEntry">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
     builtin::array_copy<ref "wasi:filesystem/types.wado//DirectoryEntry">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

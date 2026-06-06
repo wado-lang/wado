@@ -519,9 +519,7 @@ fn "wado-compiler/tests/fixtures/http_drop_value_block.wado/handle"(request) {
     let __pattern_temp_1: ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let f_177: ref "core:prelude/format.wado//Formatter";
     let f_182: ref "core:prelude/format.wado//Formatter";
-    let __match_scrut_0: ref "wasi:http/types.wado//Method";
-    __match_scrut_0 = "wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Request_get_method"(request);
-    probe_count = (if __match_scrut_0.discriminant == 0 -> i32 {
+    __cond = local.tee probe_count(let __match_scrut_0: ref "wasi:http/types.wado//Method"; __match_scrut_0 = "wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Request_get_method"(request); (if __match_scrut_0.discriminant == 0 -> i32 {
         probe = "wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Fields_new"();
         __b_2 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(118), used: 1 };
         drop("wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Fields_append"(probe, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-probe"), used: 7 }, __b_2));
@@ -534,8 +532,7 @@ fn "wado-compiler/tests/fixtures/http_drop_value_block.wado/handle"(request) {
         __block_v_14;
     } else {
         0;
-    });
-    __cond = probe_count == 7;
+    })) == 7;
     if __cond == 0 {
         "core:internal/panic"(__local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(132), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_12, 104); "core:prelude/string.wado/String::push"(__local_12, 97); "core:prelude/string.wado/String::push"(__local_12, 110); "core:prelude/string.wado/String::push"(__local_12, 100); "core:prelude/string.wado/String::push"(__local_12, 108); "core:prelude/string.wado/String::push"(__local_12, 101); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push"(__local_12, 97); "core:prelude/string.wado/String::push"(__local_12, 116); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_drop_value_block.wado"), used: 55 }); "core:prelude/string.wado/String::push"(__local_12, 58); __local_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_12 }; f_177 = __local_13; "core:prelude/primitive.wado/i32::fmt_decimal"(27, f_177); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: probe_count == 7
@@ -547,8 +544,7 @@ condition: probe_count == 7
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    headers = "wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Fields_new"();
-    __pattern_temp_1 = "wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __mv_lo_1);
+    __pattern_temp_1 = "wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Response_new"(local.tee headers("wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __mv_lo_1);
     response = __pattern_temp_1.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -573,8 +569,7 @@ condition: probe_count == 7
             __local_31 = 0;
             __local_32 = 0;
             if __local_30 != 0 {
-                __local_33 = "core:internal/cm_lower_string"(ref.as_non_null(__local_29));
-                __local_34 = builtin::i32_wrap_i64(__local_33);
+                __local_34 = builtin::i32_wrap_i64(local.tee __local_33("core:internal/cm_lower_string"(ref.as_non_null(__local_29))));
                 __local_35 = builtin::i32_wrap_i64(__local_33 >> 32_i64);
                 __local_31 = __local_34;
                 __local_32 = __local_35;
@@ -583,8 +578,7 @@ condition: probe_count == 7
             __local_37 = ref.test "core:prelude/types.wado//Option<u16>::Some"(__local_36);
             __local_38 = 0;
             if __local_37 != 0 {
-                __local_39 = ref.cast "core:prelude/types.wado//Option<u16>::Some"(__local_36).payload_0;
-                __local_38 = __local_39;
+                __local_38 = local.tee __local_39(ref.cast "core:prelude/types.wado//Option<u16>::Some"(__local_36).payload_0);
             }
             __tv_2 = __local_30;
             __tv_3 = builtin::i64_extend_i32_s(__local_31);
@@ -609,16 +603,14 @@ condition: probe_count == 7
             __local_43 = ref.test "core:prelude/types.wado//Option<u8>::Some"(__local_42);
             __local_44 = 0;
             if __local_43 != 0 {
-                __local_45 = ref.cast "core:prelude/types.wado//Option<u8>::Some"(__local_42).payload_0;
-                __local_44 = __local_45;
+                __local_44 = local.tee __local_45(ref.cast "core:prelude/types.wado//Option<u8>::Some"(__local_42).payload_0);
             }
             __local_46 = __local_40.alert_message;
             __local_47 = ref.is_null(__local_46) == 0;
             __local_48 = 0;
             __local_49 = 0;
             if __local_47 != 0 {
-                __local_50 = "core:internal/cm_lower_string"(ref.as_non_null(__local_46));
-                __local_51 = builtin::i32_wrap_i64(__local_50);
+                __local_51 = builtin::i32_wrap_i64(local.tee __local_50("core:internal/cm_lower_string"(ref.as_non_null(__local_46))));
                 __local_52 = builtin::i32_wrap_i64(__local_50 >> 32_i64);
                 __local_48 = __local_51;
                 __local_49 = __local_52;
@@ -635,8 +627,7 @@ condition: probe_count == 7
             __local_55 = ref.test "core:prelude/types.wado//Option<u64>::Some"(__local_53);
             __local_56 = 0_i64;
             if __local_55 != 0 {
-                __local_57 = ref.cast "core:prelude/types.wado//Option<u64>::Some"(__local_53).payload_0;
-                __local_56 = __local_57;
+                __local_56 = local.tee __local_57(ref.cast "core:prelude/types.wado//Option<u64>::Some"(__local_53).payload_0);
             }
             __tv_2 = __local_55;
             __tv_3 = __local_56;
@@ -648,8 +639,7 @@ condition: probe_count == 7
             __local_60 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_58);
             __local_61 = 0;
             if __local_60 != 0 {
-                __local_62 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_58).payload_0;
-                __local_61 = __local_62;
+                __local_61 = local.tee __local_62(ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_58).payload_0);
             }
             __tv_2 = __local_60;
             __tv_3 = builtin::i64_extend_i32_s(__local_61);
@@ -668,8 +658,7 @@ condition: probe_count == 7
                 __local_74 = 0;
                 __local_75 = 0;
                 if __local_73 != 0 {
-                    __local_76 = "core:internal/cm_lower_string"(ref.as_non_null(__local_72));
-                    __local_77 = builtin::i32_wrap_i64(__local_76);
+                    __local_77 = builtin::i32_wrap_i64(local.tee __local_76("core:internal/cm_lower_string"(ref.as_non_null(__local_72))));
                     __local_78 = builtin::i32_wrap_i64(__local_76 >> 32_i64);
                     __local_74 = __local_77;
                     __local_75 = __local_78;
@@ -678,8 +667,7 @@ condition: probe_count == 7
                 __local_80 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_79);
                 __local_81 = 0;
                 if __local_80 != 0 {
-                    __local_82 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_79).payload_0;
-                    __local_81 = __local_82;
+                    __local_81 = local.tee __local_82(ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_79).payload_0);
                 }
                 __local_66 = __local_73;
                 __local_67 = __local_74;
@@ -698,8 +686,7 @@ condition: probe_count == 7
             __local_85 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_83);
             __local_86 = 0;
             if __local_85 != 0 {
-                __local_87 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_83).payload_0;
-                __local_86 = __local_87;
+                __local_86 = local.tee __local_87(ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_83).payload_0);
             }
             __tv_2 = __local_85;
             __tv_3 = builtin::i64_extend_i32_s(__local_86);
@@ -710,8 +697,7 @@ condition: probe_count == 7
             __local_92 = 0;
             __local_93 = 0;
             if __local_91 != 0 {
-                __local_94 = "core:internal/cm_lower_string"(ref.as_non_null(__local_90));
-                __local_95 = builtin::i32_wrap_i64(__local_94);
+                __local_95 = builtin::i32_wrap_i64(local.tee __local_94("core:internal/cm_lower_string"(ref.as_non_null(__local_90))));
                 __local_96 = builtin::i32_wrap_i64(__local_94 >> 32_i64);
                 __local_92 = __local_95;
                 __local_93 = __local_96;
@@ -720,8 +706,7 @@ condition: probe_count == 7
             __local_98 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_97);
             __local_99 = 0;
             if __local_98 != 0 {
-                __local_100 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_97).payload_0;
-                __local_99 = __local_100;
+                __local_99 = local.tee __local_100(ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_97).payload_0);
             }
             __tv_2 = __local_91;
             __tv_3 = builtin::i64_extend_i32_s(__local_92);
@@ -734,8 +719,7 @@ condition: probe_count == 7
             __local_103 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_101);
             __local_104 = 0;
             if __local_103 != 0 {
-                __local_105 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_101).payload_0;
-                __local_104 = __local_105;
+                __local_104 = local.tee __local_105(ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_101).payload_0);
             }
             __tv_2 = __local_103;
             __tv_3 = builtin::i64_extend_i32_s(__local_104);
@@ -746,8 +730,7 @@ condition: probe_count == 7
             __local_110 = 0;
             __local_111 = 0;
             if __local_109 != 0 {
-                __local_112 = "core:internal/cm_lower_string"(ref.as_non_null(__local_108));
-                __local_113 = builtin::i32_wrap_i64(__local_112);
+                __local_113 = builtin::i32_wrap_i64(local.tee __local_112("core:internal/cm_lower_string"(ref.as_non_null(__local_108))));
                 __local_114 = builtin::i32_wrap_i64(__local_112 >> 32_i64);
                 __local_110 = __local_113;
                 __local_111 = __local_114;
@@ -756,8 +739,7 @@ condition: probe_count == 7
             __local_116 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_115);
             __local_117 = 0;
             if __local_116 != 0 {
-                __local_118 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_115).payload_0;
-                __local_117 = __local_118;
+                __local_117 = local.tee __local_118(ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_115).payload_0);
             }
             __tv_2 = __local_109;
             __tv_3 = builtin::i64_extend_i32_s(__local_110);
@@ -769,8 +751,7 @@ condition: probe_count == 7
             __local_121 = ref.test "core:prelude/types.wado//Option<u64>::Some"(__local_119);
             __local_122 = 0_i64;
             if __local_121 != 0 {
-                __local_123 = ref.cast "core:prelude/types.wado//Option<u64>::Some"(__local_119).payload_0;
-                __local_122 = __local_123;
+                __local_122 = local.tee __local_123(ref.cast "core:prelude/types.wado//Option<u64>::Some"(__local_119).payload_0);
             }
             __tv_2 = __local_121;
             __tv_3 = __local_122;
@@ -779,8 +760,7 @@ condition: probe_count == 7
             __local_126 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_124);
             __local_127 = 0;
             if __local_126 != 0 {
-                __local_128 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_124).payload_0;
-                __local_127 = __local_128;
+                __local_127 = local.tee __local_128(ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_124).payload_0);
             }
             __tv_2 = __local_126;
             __tv_3 = builtin::i64_extend_i32_s(__local_127);
@@ -791,8 +771,7 @@ condition: probe_count == 7
             __local_133 = 0;
             __local_134 = 0;
             if __local_132 != 0 {
-                __local_135 = "core:internal/cm_lower_string"(ref.as_non_null(__local_131));
-                __local_136 = builtin::i32_wrap_i64(__local_135);
+                __local_136 = builtin::i32_wrap_i64(local.tee __local_135("core:internal/cm_lower_string"(ref.as_non_null(__local_131))));
                 __local_137 = builtin::i32_wrap_i64(__local_135 >> 32_i64);
                 __local_133 = __local_136;
                 __local_134 = __local_137;
@@ -801,8 +780,7 @@ condition: probe_count == 7
             __local_139 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_138);
             __local_140 = 0;
             if __local_139 != 0 {
-                __local_141 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_138).payload_0;
-                __local_140 = __local_141;
+                __local_140 = local.tee __local_141(ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_138).payload_0);
             }
             __tv_2 = __local_132;
             __tv_3 = builtin::i64_extend_i32_s(__local_133);
@@ -815,8 +793,7 @@ condition: probe_count == 7
             __local_145 = 0;
             __local_146 = 0;
             if __local_144 != 0 {
-                __local_147 = "core:internal/cm_lower_string"(ref.as_non_null(__local_142));
-                __local_148 = builtin::i32_wrap_i64(__local_147);
+                __local_148 = builtin::i32_wrap_i64(local.tee __local_147("core:internal/cm_lower_string"(ref.as_non_null(__local_142))));
                 __local_149 = builtin::i32_wrap_i64(__local_147 >> 32_i64);
                 __local_145 = __local_148;
                 __local_146 = __local_149;
@@ -830,8 +807,7 @@ condition: probe_count == 7
             __local_153 = 0;
             __local_154 = 0;
             if __local_152 != 0 {
-                __local_155 = "core:internal/cm_lower_string"(ref.as_non_null(__local_150));
-                __local_156 = builtin::i32_wrap_i64(__local_155);
+                __local_156 = builtin::i32_wrap_i64(local.tee __local_155("core:internal/cm_lower_string"(ref.as_non_null(__local_150))));
                 __local_157 = builtin::i32_wrap_i64(__local_155 >> 32_i64);
                 __local_153 = __local_156;
                 __local_154 = __local_157;
@@ -850,8 +826,7 @@ condition: probe_count == 7
             __local_161 = 0;
             __local_162 = 0;
             if __local_160 != 0 {
-                __local_163 = "core:internal/cm_lower_string"(ref.as_non_null(__local_158));
-                __local_164 = builtin::i32_wrap_i64(__local_163);
+                __local_164 = builtin::i32_wrap_i64(local.tee __local_163("core:internal/cm_lower_string"(ref.as_non_null(__local_158))));
                 __local_165 = builtin::i32_wrap_i64(__local_163 >> 32_i64);
                 __local_161 = __local_164;
                 __local_162 = __local_165;
@@ -864,8 +839,7 @@ condition: probe_count == 7
     }
     let __fw_write_ptr_2: i32;
     let __fw_result_2: i32;
-    __fw_write_ptr_2 = "mem/realloc"(0, 0, 8, 40);
-    builtin::store_i64(__fw_write_ptr_2, 0_i64);
+    builtin::store_i64(local.tee __fw_write_ptr_2("mem/realloc"(0, 0, 8, 40)), 0_i64);
     builtin::store_i64[8](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[16](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[24](__fw_write_ptr_2, 0_i64);
@@ -990,8 +964,7 @@ fn "wado-compiler/tests/fixtures/http_drop_value_block.wado/__cm_binding__Respon
     __contents_disc = ref.test "core:prelude/types.wado//Option<Stream<u8>>::Some"(contents);
     __contents_inner0 = 0;
     if ref.test "core:prelude/types.wado//Option<Stream<u8>>::Some"(contents) {
-        __local_6 = ref.cast "core:prelude/types.wado//Option<Stream<u8>>::Some"(contents).payload_0;
-        __contents_inner0 = __local_6;
+        __contents_inner0 = local.tee __local_6(ref.cast "core:prelude/types.wado//Option<Stream<u8>>::Some"(contents).payload_0);
     } else {
     }
     __outptr = "mem/realloc"(0, 0, 4, 8);
@@ -1110,8 +1083,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
     let ptr: i32;
     let raw_len: i32;
     let result: i32;
-    packed = "core:internal/cm_lower_list_u8"(data, len);
-    ptr = builtin::i32_wrap_i64(packed);
+    ptr = builtin::i32_wrap_i64(local.tee packed("core:internal/cm_lower_list_u8"(data, len)));
     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
@@ -1170,8 +1142,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let offset: i32;
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
-    abs_val = select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self));
-    digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
+    digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
@@ -1186,10 +1157,7 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    a_7 = capacity * 2;
-    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
-    new_capacity = select i32(a_5 > 8, a_5, 8);
-    new_repr = builtin::array_new<u8>(new_capacity);
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
