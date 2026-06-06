@@ -51,6 +51,7 @@ use {
     FieldDecl,
     FieldKind,
     KindSet,
+    FollowArg,
     rule_header,
 } from "./gir.wado";
 use { Visibility, RepeatKind } from "./ir.wado";
@@ -163,6 +164,7 @@ test "Op::RuleCall preserves variant_id and min_prec" {
     let call = Op::RuleCall(RuleCallOp {
         target_name: "expr",
         target_snake: "expr",
+        follow_arg: FollowArg::NoFollow,
         variant_id: null,
         min_prec_arg: null,
         field: "expr",
@@ -216,6 +218,7 @@ test "Op::Repeat carries inner element and strategy" {
         body_is_single_alt_group: false,
         body_second_position_first: [],
         body_shape: RepeatBodyShape::LeafOther,
+        gate_caller_follow: false,
     });
     if let Repeat(r) = &rep {
         if let Star = r.kind {
@@ -398,6 +401,7 @@ test "ScanElement variants round-trip" {
     let token = ScanElement::Token(ScanTokenElem { kind: "TK_X" });
     let call = ScanElement::RuleCall(ScanRuleCallElem {
         target_snake: "expr",
+        follow_arg: FollowArg::NoFollow,
         variant_id: Option::<i32>::Some(2),
         min_prec_arg: null,
     });
@@ -413,6 +417,7 @@ test "ScanElement variants round-trip" {
         inner_first: [],
         caller_follow_first: [],
         k_prefix_mask: [],
+        gate_caller_follow: false,
     });
 
     if let Token(t) = &token {
