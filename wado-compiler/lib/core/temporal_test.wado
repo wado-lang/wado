@@ -407,18 +407,18 @@ test "Deserializing a malformed timestamp surfaces a DeserializeError" {
 }
 
 test "Instant converts to and from the wasi:clocks instant" {
+    let clock = ClockInstant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+
     // wasi:clocks reading -> core:temporal Instant (field-for-field copy).
-    let t = Instant::from(ClockInstant { seconds: 1_700_000_000, nanoseconds: 123_456_789 });
+    let t = Instant::from(clock);
     assert t == Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
 
     // core:temporal Instant -> wasi:clocks reading; round-trips exactly.
-    // Checked field-wise rather than with `==`: instantiating the clock
-    // record's auto-derived equality alongside this module's same-named
-    // `Instant` equality currently hits a codegen collision (a separate
-    // same-name issue), and the conversion itself does not need it.
+    // This compares the clock record with `==` (its own auto-derived equality)
+    // in the same module that uses `Instant`'s same-named equality — the two no
+    // longer collide.
     let back = ClockInstant::from(t);
-    assert back.seconds == 1_700_000_000;
-    assert back.nanoseconds == 123_456_789;
+    assert back == clock;
 
     // The pre-epoch boundary copies field-for-field too.
     let before = Instant::from(ClockInstant { seconds: -1, nanoseconds: 999_999_999 });

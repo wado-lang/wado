@@ -1583,8 +1583,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         method_info.is_type_param_receiver = resolved.is_type_param_receiver;
 
+        // Resolve the impl's module from the receiver's *actual* type, not its
+        // bare name: two same-named structs from different modules
+        // (`Pt` in module A and module B) each have their own auto-derived
+        // `Pt^Eq::eq`, and a bare-name lookup would route both `==` sites to
+        // whichever module registered first. Peel any newtype so a newtype
+        // dispatches to its base's impl module. Fall back to the by-name lookup
+        // for receivers that carry no declaring module.
+        let receiver_base = {
+            let tt = self.tysys.type_table.borrow();
+            tt.get_newtype_base(receiver.type_id)
+                .unwrap_or(receiver.type_id)
+        };
+        let module_source = self
+            .type_decl_key(receiver_base)
+            .map_or_else(
+                || self.find_struct_module_source(&resolved.impl_name),
+                |(module, _)| module,
+            );
         let function_ref = FunctionRef {
-            module_source: self.find_struct_module_source(&resolved.impl_name),
+            module_source,
             name: mangled_method_name,
             monomorph_info: None,
             method_info: Some(method_info),
