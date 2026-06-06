@@ -560,10 +560,6 @@ pub struct RuleCallOp {
     /// Replaces the `variant_id` / `__follow_<id>` mechanism: the mask is
     /// threaded as data at runtime rather than baked into a cloned callee.
     pub follow_arg: FollowArg,
-    /// DEPRECATED (redesign): superseded by `follow_arg`. Retained during
-    /// the migration so the not-yet-converted variant emit paths still
-    /// compile; removed once `emit_follow_variant` is deleted (P4).
-    pub variant_id: Option<i32>,
     /// `Some(p)` when the call should pass `p` as the `min_prec`
     /// argument. Set for self-recursive calls inside prefix LR alts.
     /// `None` is the default and corresponds to
@@ -638,31 +634,6 @@ pub struct RepeatOp {
     /// non-greedy (continue/exit disambiguation). Empty when the
     /// Repeat is at the alt's tail.
     pub caller_follow_first: List<String>,
-    /// Surrounding variant's mask when this Repeat's outer
-    /// alt-position tail is deep-nullable; `[]` otherwise (and
-    /// always `[]` for non-variant bodies). Mirrors what
-    /// `gen_alt_elements` / `gen_alt_body_skip` used to install in
-    /// `ctx.current_follow_mask` at each iteration. Emit's
-    /// `gen_op_repeat_optional_rulecall` unions this with the
-    /// caller-supplied follow (which `inner_walker_follow_for_repeat`
-    /// can legitimately clear to `[]` for inner greedy Optionals)
-    /// before subtracting from the body first set.
-    pub position_mask: List<String>,
-    /// Multi-token follow mask installed when this `Repeat` sits at a
-    /// position whose surrounding suffix is deep-nullable AND the
-    /// enclosing variant carries a K-prefix mask (see
-    /// `FollowVariantEntry.k_prefix_mask`). Emit's
-    /// `gen_op_repeat_*` family checks the next `k_prefix_mask.len()`
-    /// tokens at iter entry; if every depth-set matches, the iter is
-    /// suppressed (yield to caller).
-    ///
-    /// Empty (`[]`) for non-variant bodies and for variant bodies whose
-    /// caller had no deterministic K-prefix at the call site. Required
-    /// to close the multi-token tail-greedy gap (TODO.md) — the
-    /// soundness invariant from the single-token path is preserved
-    /// structurally by the per-depth check (HTMLParser's nested-tag
-    /// inputs differ from the closing-tag mask at depth ≥ 1).
-    pub k_prefix_mask: List<List<String>>,
     /// True iff the inner element is fully scannable (has a complete
     /// `scan_<rule>` / inline scan equivalent). Drives emit's choice
     /// between `loop` + scan-guard and `while` + first-check loop
@@ -943,8 +914,6 @@ pub struct ScanRuleCallElem {
     pub target_snake: String,
     /// Scan-side mirror of `RuleCallOp.follow_arg`. See `FollowArg`.
     pub follow_arg: FollowArg,
-    /// DEPRECATED (redesign): see `RuleCallOp.variant_id`.
-    pub variant_id: Option<i32>,
     /// Scan-side mirror of `RuleCallOp.min_prec_arg`. `Some(p)` when
     /// the call should pass `p` as the `min_prec` argument — set by
     /// `stamp_lr_self_ref_min_prec` for self-recursive RuleCalls
@@ -979,11 +948,6 @@ pub struct ScanRepeatElem {
     /// pre-Phase-2-F `gen_scan_repeat_optional_with_follow` contract).
     /// Empty when the Repeat is at the alt's tail.
     pub caller_follow_first: List<String>,
-    /// Scan-side mirror of `RepeatOp.k_prefix_mask`. Same semantics:
-    /// when non-empty, the scan-side emit gates iter entry on a K-token
-    /// peek so scan-driven dispatch stays consistent with the parse-side
-    /// variant body's yield decision.
-    pub k_prefix_mask: List<List<String>>,
     /// Scan-side mirror of `RepeatOp.gate_caller_follow`: emit
     /// `if follow_yields(tokens, pos, follow, TK_EOF) { ... }` at iter
     /// entry so the longest-match tournament yields to the caller in

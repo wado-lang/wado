@@ -3440,12 +3440,7 @@ fn gen_op_repeat_optional_group(w: &mut CodeWriter, rep: &RepeatElement, rep_op:
 /// `accessibilityModifier?` inside `optionalParameter`).
 fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, follow: &List<String>) {
     let raw_first = rep_op.body_first_set;
-    let combined_follow = if rep_op.position_mask.is_empty() {
-        *follow;
-    } else {
-        union_kind_arrays(follow, &rep_op.position_mask);
-    };
-    let first = subtract_sets(&raw_first, &combined_follow);
+    let first = subtract_sets(&raw_first, follow);
     let inner_type = op_field_type(&rep_op.body);
     let opt_field = rep_op.field;
     let _ = dedup_name(&opt_field, name_counts);
@@ -3647,9 +3642,7 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
             // the mandatory first iter ran above).
             gen_op_group(w, g_op, inner, ctx, name_counts);
             w.begin(&`while {ctx.first_check_str(&inner_first)}`);
-            if !rep_op.k_prefix_mask.is_empty() {
-                emit_caller_follow_gate(w, rep_op);
-            }
+            emit_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
             w.end();
@@ -3790,7 +3783,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             // skip emission while `plus_flag` is still true so the
             // mandatory iter cannot be suppressed. Empty mask emits
             // nothing (the if-block is dead-stripped at codegen).
-            if !rep_op.k_prefix_mask.is_empty() {
+            if rep_op.gate_caller_follow {
                 w.begin(&`if !{plus_flag}`);
                 emit_caller_follow_gate(w, rep_op);
                 w.end();

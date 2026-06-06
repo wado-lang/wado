@@ -165,14 +165,12 @@ test "Op::RuleCall preserves variant_id and min_prec" {
         target_name: "expr",
         target_snake: "expr",
         follow_arg: FollowArg::NoFollow,
-        variant_id: null,
         min_prec_arg: null,
         field: "expr",
         dedup_base: "expr",
     });
     if let RuleCall(r) = &call {
         assert r.target_snake == "expr";
-        assert r.variant_id matches { None };
         assert r.min_prec_arg matches { None };
     } else {
         panic("RuleCall");
@@ -209,8 +207,6 @@ test "Op::Repeat carries inner element and strategy" {
         strategy: RepeatStrategy::Plain,
         field: "x_list",
         caller_follow_first: [],
-        position_mask: [],
-        k_prefix_mask: [],
         caller_follow_second: [],
         body_scannable: true,
         body_has_field: true,
@@ -402,7 +398,6 @@ test "ScanElement variants round-trip" {
     let call = ScanElement::RuleCall(ScanRuleCallElem {
         target_snake: "expr",
         follow_arg: FollowArg::NoFollow,
-        variant_id: Option::<i32>::Some(2),
         min_prec_arg: null,
     });
     let any = ScanElement::Wildcard;
@@ -416,7 +411,6 @@ test "ScanElement variants round-trip" {
         strategy: ScanRepeatStrategy::Plain,
         inner_first: [],
         caller_follow_first: [],
-        k_prefix_mask: [],
         gate_caller_follow: false,
     });
 
@@ -426,11 +420,7 @@ test "ScanElement variants round-trip" {
         panic("Token");
     }
     if let RuleCall(c) = &call {
-        if let Some(id) = c.variant_id {
-            assert id == 2;
-        } else {
-            panic("variant_id");
-        }
+        assert c.target_snake == "expr";
     } else {
         panic("RuleCall");
     }

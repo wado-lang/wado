@@ -165,7 +165,6 @@ test "lower simple rule with RuleRef" {
             assert r.target_name == "expr";
             assert r.target_snake == "expr";
             assert r.field == "expr";
-            assert r.variant_id matches { None };
             assert r.min_prec_arg matches { None };
         } else {
             panic("expected Op::RuleCall");
@@ -1508,7 +1507,6 @@ test "lower simple rule produces scan body mirroring leaf ops" {
         }
         if let RuleCall(r) = &s.scan_body.elements[2] {
             assert r.target_snake == "expr";
-            assert r.variant_id matches { None };
         } else {
             panic("scan_body[2] != RuleCall");
         }

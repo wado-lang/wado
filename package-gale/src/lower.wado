@@ -747,7 +747,6 @@ fn rebind_scan_self_ref_min_prec(se: ScanElement, rule_snake: &String, prec: i32
             return ScanElement::RuleCall(ScanRuleCallElem {
                 target_snake: rc.target_snake,
                 follow_arg: rc.follow_arg,
-                variant_id: null,
                 min_prec_arg: Option::<i32>::Some(prec),
             });
         }
@@ -806,7 +805,6 @@ fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
             target_name: rc.target_name,
             target_snake: rc.target_snake,
             follow_arg: rc.follow_arg,
-            variant_id: rc.variant_id,
             min_prec_arg: Option::<i32>::Some(prec),
             field: rc.field,
             dedup_base: rc.dedup_base,
@@ -839,7 +837,6 @@ fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String
                     target_name: rc.target_name,
                     target_snake: rc.target_snake,
                     follow_arg: rc.follow_arg,
-                    variant_id: rc.variant_id,
                     min_prec_arg: Option::<i32>::Some(prec),
                     field: rc.field,
                     dedup_base: rc.dedup_base,
@@ -860,8 +857,6 @@ fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String
             strategy: r.strategy,
             field: r.field,
             caller_follow_first: r.caller_follow_first,
-            position_mask: r.position_mask,
-            k_prefix_mask: r.k_prefix_mask,
             gate_caller_follow: r.gate_caller_follow,
             caller_follow_second: r.caller_follow_second,
             body_scannable: r.body_scannable,
@@ -925,7 +920,6 @@ fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i
                 ScanElement::RuleCall(ScanRuleCallElem {
                     target_snake: rc.target_snake,
                     follow_arg: rc.follow_arg,
-                    variant_id: rc.variant_id,
                     min_prec_arg: Option::<i32>::Some(prec),
                 });
             } else {
@@ -938,7 +932,6 @@ fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i
             strategy: r.strategy,
             inner_first: r.inner_first,
             caller_follow_first: r.caller_follow_first,
-            k_prefix_mask: r.k_prefix_mask,
             gate_caller_follow: r.gate_caller_follow,
         }),
         Group(g) => {
@@ -1673,7 +1666,6 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &List<
         RuleRef(r) => ScanElement::RuleCall(ScanRuleCallElem {
             target_snake: r.snake_name,
             follow_arg: follow_arg,
-            variant_id: null,
             min_prec_arg: null,
         }),
         Wildcard(_) => ScanElement::Wildcard,
@@ -1905,7 +1897,6 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &L
         strategy: strategy,
         inner_first: inner_first,
         caller_follow_first: *outer_follow,
-        k_prefix_mask: *outer_k_prefix_position_mask,
         gate_caller_follow: gate_caller_follow && !rep.non_greedy,
     });
 }
@@ -1924,7 +1915,6 @@ fn rebind_scan_repeat_caller_follow(se: ScanElement, caller_follow_first: List<S
             strategy: re.strategy,
             inner_first: re.inner_first,
             caller_follow_first: caller_follow_first,
-            k_prefix_mask: re.k_prefix_mask,
             gate_caller_follow: re.gate_caller_follow,
         });
     }
@@ -2361,7 +2351,6 @@ fn lower_op(elem: &Element, name_counts: &mut List<[String, i32]>, rule_name: &S
             // clone selection. `variant_id` is retained (null) until the
             // deprecated field is removed.
             follow_arg: follow_arg,
-            variant_id: null,
             min_prec_arg: null,
             field: dedup_name(&r.field_name, name_counts),
             dedup_base: r.field_name,
@@ -2916,7 +2905,6 @@ fn lower_simple_cst_alt_call(elem: &Element, counts: &mut List<[String, i32]>) -
             // tail group-alt RuleRef gates on the caller. Conservative
             // NoFollow for now.
             follow_arg: FollowArg::NoFollow,
-            variant_id: null,
             min_prec_arg: null,
             field: dedup_name(&r.field_name, counts),
             dedup_base: r.field_name,
@@ -3263,8 +3251,6 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut List<[String, i32]>, r
         strategy: strategy,
         field: outer_field,
         caller_follow_first: *outer_follow,
-        position_mask: *outer_position_mask,
-        k_prefix_mask: *outer_k_prefix_position_mask,
         caller_follow_second: [],
         body_scannable,
         body_has_field,
@@ -3661,8 +3647,6 @@ fn patch_repeat_op_caller_follow(rep_op: &RepeatOp, caller_follow_first: List<St
         strategy: rep_op.strategy,
         field: rep_op.field,
         caller_follow_first: caller_follow_first,
-        position_mask: rep_op.position_mask,
-        k_prefix_mask: rep_op.k_prefix_mask,
         caller_follow_second: caller_follow_second,
         body_scannable: rep_op.body_scannable,
         body_has_field: rep_op.body_has_field,
@@ -4051,7 +4035,6 @@ pub fn rebind_op_field(op: Op, new_field: &String, new_dedup_base: &String) -> O
             target_name: r.target_name,
             target_snake: r.target_snake,
             follow_arg: r.follow_arg,
-            variant_id: r.variant_id,
             min_prec_arg: r.min_prec_arg,
             field: *new_field,
             dedup_base: *new_dedup_base,
@@ -4065,8 +4048,6 @@ pub fn rebind_op_field(op: Op, new_field: &String, new_dedup_base: &String) -> O
             strategy: rep.strategy,
             field: *new_field,
             caller_follow_first: rep.caller_follow_first,
-            position_mask: rep.position_mask,
-            k_prefix_mask: rep.k_prefix_mask,
             caller_follow_second: rep.caller_follow_second,
             body_scannable: rep.body_scannable,
             body_has_field: rep.body_has_field,
