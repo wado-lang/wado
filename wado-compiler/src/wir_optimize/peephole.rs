@@ -926,7 +926,7 @@ fn fold_sign_extensions(instrs: &mut [WirInstr]) {
 }
 
 fn try_fold_sign_extension(instr: &mut WirInstr) {
-    // Width of this extension (8 or 16), and whether it is the 8-bit form.
+    // The width (in bits) this sign extension reads from: 8 or 16.
     let width = match instr {
         WirInstr::I32Extend8S(_) => 8,
         WirInstr::I32Extend16S(_) => 16,
@@ -980,9 +980,10 @@ fn try_fold_sign_extension(instr: &mut WirInstr) {
                 addr,
             };
         }
-        // Re-extending an already-signed load / 8-bit extend is a no-op: an
-        // 8-bit sign-extended value already lies in `[-128, 127]`, which fits
-        // the 16-bit signed range, so an outer `extend16_s` changes nothing.
+        // Re-extending an already-signed value is a no-op: at the same width
+        // it is plain idempotence, and `extend16_s` over an 8-bit-extended
+        // value leaves it unchanged (the value already lies in `[-128, 127]`,
+        // within the 16-bit signed range).
         WirInstr::I32Load8S { .. } | WirInstr::I32Extend8S(_) => {
             *instr = std::mem::replace(inner.as_mut(), WirInstr::Nop);
         }
@@ -1194,9 +1195,11 @@ fn fuse_into_leftmost_leaf(
     fused
 }
 
-/// Nodes whose first child is not a sound place to continue a leftmost-leaf
-/// descent: control flow (conditional / repeated / order-sensitive) and
-/// `select` (whose Wasm operand order differs from the child visitation order).
+/// Nodes the leftmost-leaf descent must not enter: control flow whose first
+/// child runs conditionally or repeatedly (`Block`/`Loop`/`If`/`Seq`/`Br*`),
+/// `Select` (whose Wasm operand order — `if_true`, `if_false`, then condition —
+/// differs from the child-visitation order), and `BranchHint` /
+/// `MultiValueLocalBind`, whose operands we keep the tee away from.
 fn descent_blocked(instr: &WirInstr) -> bool {
     matches!(
         instr,
