@@ -213,15 +213,27 @@ impl TirMutVisitor for LocalIndexRewriter {
 }
 
 /// Collects every local index introduced by a `let` statement or a pattern
-/// binding anywhere in a TIR subtree. Used by variadic for-of expansion to find
-/// the body locals that must be retyped / reallocated for each cloned iteration.
-/// Exhaustive by construction (rides the shared `TirRefVisitor` walk), so no
-/// node kind can silently drop a local.
+/// binding in the *current function's* local frame. Used by variadic for-of
+/// expansion to find the body locals that must be retyped / reallocated for
+/// each cloned iteration.
+///
+/// Rides the shared `TirRefVisitor` walk so no in-frame node kind can silently
+/// drop a local, but deliberately stops at `Closure` boundaries: closure bodies
+/// allocate their locals in a *separate* index namespace (`new_closure`'s
+/// `FunctionContext`), so collecting them here would let the reallocation loop
+/// corrupt unrelated closure-scoped slots.
 struct LocalCollector {
     locals: Vec<u32>,
 }
 
 impl TirRefVisitor for LocalCollector {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if matches!(&expr.kind, TirExprKind::Closure { .. }) {
+            return;
+        }
+        self.walk_expr(expr);
+    }
+
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         if let TirStmtKind::Let { local_index, .. } = &stmt.kind {
             self.locals.push(*local_index);
@@ -239,14 +251,22 @@ impl TirRefVisitor for LocalCollector {
 
 /// Finds the declared type of a specific local index by scanning the `let`
 /// statement or pattern binding that introduces it. A local is defined exactly
-/// once, so the first match is the answer; the walk is exhaustive so the
-/// definition is found wherever it sits (match arm, loop body, closure, …).
+/// once, so the first match is the answer. Stops at `Closure` boundaries for
+/// the same reason as [`LocalCollector`] — a closure-scoped local could share a
+/// numeric index with the current frame's local and return the wrong type.
 struct LocalTypeFinder {
     target: u32,
     found: Option<TypeId>,
 }
 
 impl TirRefVisitor for LocalTypeFinder {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if self.found.is_some() || matches!(&expr.kind, TirExprKind::Closure { .. }) {
+            return;
+        }
+        self.walk_expr(expr);
+    }
+
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         if let TirStmtKind::Let {
             local_index,
@@ -279,14 +299,19 @@ impl TirRefVisitor for LocalTypeFinder {
 /// Fills in inferred method-level `type_args` on `MethodCall` nodes whose type
 /// arguments were left empty (T inferred from a `TypePack` element at resolution
 /// time, only concrete after variadic expansion). Rides the shared mutable walk
-/// so the inference reaches method calls in every position, not just the
-/// hand-enumerated few.
+/// so the inference reaches method calls in every in-frame position, not just
+/// the hand-enumerated few. Stops at `Closure` boundaries: a closure body is
+/// monomorphized as its own function, so its calls are inferred there, and
+/// (matching the original walker) this pass leaves them alone.
 struct MethodTypeArgInferer<'a> {
     type_table: &'a TypeTable,
 }
 
 impl TirMutVisitor for MethodTypeArgInferer<'_> {
     fn visit_expr(&mut self, expr: &mut TirExpr) {
+        if matches!(&expr.kind, TirExprKind::Closure { .. }) {
+            return;
+        }
         // Recurse first so nested calls are handled bottom-up, matching the
         // original walk order.
         self.walk_expr(expr);
@@ -3019,6 +3044,11 @@ impl Monomorphizer {
             //     covers `?`-expansion temporaries (`__qm_v`, `__qm_e`).
             let mut body_locals: Vec<u32> = Vec::new();
             Self::collect_locals_in_block(&elem_body, &mut body_locals);
+            // A single local can be collected more than once (an or-pattern
+            // binds the same slot in each alternative); dedup so the
+            // first-seen / collision bookkeeping below treats it once.
+            body_locals.sort_unstable();
+            body_locals.dedup();
             for body_local in body_locals {
                 let concrete_type = Self::find_local_type_in_block(&elem_body, body_local);
                 if !seen_locals.insert(body_local) {

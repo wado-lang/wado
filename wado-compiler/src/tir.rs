@@ -1832,13 +1832,10 @@ impl TypeTable {
                 }
                 type_id
             }
-            // `Reactive` wraps an inner type, so its parameter is substituted
-            // recursively. This arm is defensive: the reactive feature
-            // currently types bindings with the underlying value type, so a
-            // `Reactive` wrapper never actually reaches monomorphize — but the
-            // substitution contract is "rewrite every embedded parameter", and
-            // `Reactive` embeds one, so handling it keeps the invariant true by
-            // construction rather than by reachability.
+            // `Reactive` wraps an inner type, so substitute it recursively.
+            // Defensive: reactive bindings are typed with the underlying value
+            // type today, so the wrapper never reaches monomorphize — but the
+            // contract is "rewrite every embedded parameter", and it embeds one.
             ResolvedType::Reactive(inner) => {
                 let new_inner = self.substitute_type_params(inner, substitution);
                 if new_inner == inner {
