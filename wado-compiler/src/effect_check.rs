@@ -1637,6 +1637,17 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
     // resources `E`'s operations reference (e.g. `Stdout` → `Stream`).
     let closure = build_propagation_closure_sem(sem, state);
 
+    // Name → resolved `EffectRef` for every declared effect / resource, used to
+    // resolve `#[benign(E)]` names (the closure has a key per declaration).
+    let mut effect_by_name: IndexMap<String, EffectRef> = IndexMap::default();
+    for key in closure.keys() {
+        if let EffectRef::Concrete { name, .. } = key {
+            effect_by_name
+                .entry(name.clone())
+                .or_insert_with(|| key.clone());
+        }
+    }
+
     let index = EffectIndex {
         fn_effects: &fn_effects,
         fn_params: &fn_params,
@@ -1644,6 +1655,7 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
         mangled_params: &mangled_params,
         resource_names: &resource_names,
         closure: &closure,
+        effect_by_name: &effect_by_name,
     };
 
     for (src, module) in &sem.modules {
@@ -1686,6 +1698,8 @@ struct EffectIndex<'a> {
     resource_names: &'a IndexSet<(ModuleSource, String)>,
     /// Effect → implied resources propagation closure.
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
+    /// Declared effect / resource name → resolved `EffectRef` (`#[benign]`).
+    effect_by_name: &'a IndexMap<String, EffectRef>,
 }
 
 fn check_function_effects_sem(
@@ -1726,6 +1740,12 @@ fn check_function_effects_sem(
         .collect();
     if let Some(ann) = annotations {
         add_signature_resources(ann, &caller_key, &sem.types, &mut current);
+    }
+    // `#[benign(E)]` admits `E` in the body without a `with E` clause.
+    for name in benign_effect_names(&func.attrs) {
+        if let Some(effect) = index.effect_by_name.get(&name) {
+            current.insert(effect.clone());
+        }
     }
     // Expand through the propagation closure: a function holding `Stdout` may
     // call operations that internally need `Stream`, etc.
@@ -1904,6 +1924,16 @@ fn add_signature_resources(
             &mut visited,
         );
     }
+}
+
+/// `#[benign(E, F)]` effect names declared on a function.
+fn benign_effect_names(attrs: &[crate::ast::Attribute]) -> Vec<String> {
+    attrs
+        .iter()
+        .filter(|attr| attr.name == "benign")
+        .flat_map(|attr| attr.args.iter().map(crate::ast::AttrArg::as_str))
+        .map(str::to_string)
+        .collect()
 }
 
 /// Best-effort display name for a call's callee, for the diagnostic message.

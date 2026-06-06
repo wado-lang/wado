@@ -151,6 +151,27 @@ export fn run() with Stdout {
 }
 
 #[test]
+fn benign_effect_is_admitted_in_body() {
+    // `#[benign(Stdout)]` lets the body use Stdout without a `with Stdout`
+    // clause, so no violation should be reported.
+    let source = r#"
+use { println, Stdout } from "core:cli";
+
+#[benign(Stdout)]
+fn quiet_log() {
+    println("admitted");
+}
+
+export fn run() {}
+"#;
+    assert!(
+        violations(source).is_empty(),
+        "#[benign(Stdout)] admits Stdout in the body: {:?}",
+        violations(source)
+    );
+}
+
+#[test]
 fn effect_free_program_has_no_violations() {
     let source = r#"
 fn add(a: i32, b: i32) -> i32 {
