@@ -75,7 +75,9 @@ pub use semantics::{
 
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
-pub use effect_check::{EffectError, check_default_purity, check_effects, check_stores};
+pub use effect_check::{
+    EffectError, check_default_purity, check_effects, check_effects_semantic, check_stores,
+};
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
 pub use lexer::{LexError, LexErrorKind, LexResult, lex, lex_with_line};

@@ -1,0 +1,89 @@
+//! Tests for `check_effects_semantic` — the Semantics-based effect checker
+//! (Design B, Phase 1b). It runs on the LSP analysis result (no TIR), so a
+//! function with a missing effect is reported even when it is never called.
+
+#![allow(unused_crate_dependencies)]
+
+mod common;
+
+use common::InMemoryHost;
+use wado_compiler::check_effects_semantic;
+use wado_compiler::semantics::semantics;
+
+fn block_on<F: std::future::Future>(future: F) -> F::Output {
+    tokio::runtime::Runtime::new().unwrap().block_on(future)
+}
+
+/// Effect violations as `"callee: missing_effect"` strings.
+fn violations(source: &str) -> Vec<String> {
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+    check_effects_semantic(&sem)
+        .into_iter()
+        .map(|e| format!("{}: {}", e.callee, e.missing_effect))
+        .collect()
+}
+
+#[test]
+fn free_call_missing_effect_is_reported_even_in_dead_function() {
+    // `bad` is never called, so reify gating would drop it — but the effect
+    // violation must still surface from `Semantics`.
+    let source = r#"
+use { println, Stdout } from "core:cli";
+
+fn greet(name: String) with Stdout {
+    println(`Hello, {name}!`);
+}
+
+fn bad() {
+    greet("Bob");
+}
+
+export fn run() with Stdout {
+    println("ok");
+}
+"#;
+    let v = violations(source);
+    assert!(
+        v.iter().any(|s| s.contains("Stdout")),
+        "expected a missing-Stdout violation for `bad`, got {v:?}"
+    );
+}
+
+#[test]
+fn caller_with_effect_is_not_reported() {
+    let source = r#"
+use { println, Stdout } from "core:cli";
+
+fn greet(name: String) with Stdout {
+    println(`Hello, {name}!`);
+}
+
+export fn run() with Stdout {
+    greet("Bob");
+}
+"#;
+    assert!(
+        violations(source).is_empty(),
+        "caller declares `with Stdout`, so the call is covered: {:?}",
+        violations(source)
+    );
+}
+
+#[test]
+fn effect_free_program_has_no_violations() {
+    let source = r#"
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+export fn run() {
+    let _x = add(1, 2);
+}
+"#;
+    assert!(
+        violations(source).is_empty(),
+        "no effects in play: {:?}",
+        violations(source)
+    );
+}

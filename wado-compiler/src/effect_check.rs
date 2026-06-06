@@ -20,6 +20,10 @@ use crate::token::Span;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::ast::{self, AstVisitor, Expr, Function, Item};
+use crate::semantics::Semantics;
+use crate::symbol::SymbolKey;
+
 /// Lightweight signature extracted from `TirFunction` for effect checking.
 /// Avoids cloning the entire function body.
 struct EffectSignature {
@@ -1568,5 +1572,237 @@ mod tests {
             error.to_string(),
             "10:5: missing effect 'Stdout' required by 'println'"
         );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Semantics-based effect checking (Design B, Phase 1b)
+// ---------------------------------------------------------------------------
+
+/// Effect checking over [`Semantics`] (AST + recorded facts) — the Design B
+/// replacement for the TIR-based [`check_effects`]. It runs after
+/// `annotate_bodies`, so it sees every function, dead or live, and is
+/// independent of what reify emits. It also works on the LSP path, which
+/// builds no TIR. Violations are returned rather than emitted so the caller
+/// routes them (LSP diagnostics or the batch logger).
+///
+/// Current scope (incremental — see the unused-diagnostics WEP, Phase 1b):
+/// free-function and method-call effect coverage with resource injection,
+/// over user-authored modules. The propagation closure, signature-resource
+/// inference, effect-parameter resolution, `#[benign]`, static / operator /
+/// `?` / for-of dispatch, and indirect (closure) calls are follow-ups; until
+/// they land this is not wired into the production diagnostic paths.
+#[must_use]
+pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
+    let mut out = Vec::new();
+    let Some(state) = sem.state.as_ref() else {
+        return out;
+    };
+
+    // Resolved effect lists, indexed two ways: by the function's declaration
+    // key (free calls resolve through `references`) and by `(module, mangled
+    // name)` (method dispatch carries a `FunctionRef`).
+    let mut fn_effects: IndexMap<SymbolKey, Vec<EffectRef>> = IndexMap::default();
+    let mut mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>> = IndexMap::default();
+    for (src, module_sem) in &state.module_semantics {
+        for (key, effects) in &module_sem.types.function_effects {
+            fn_effects.insert(key.clone(), effects.clone());
+        }
+        for (key, names) in &module_sem.types.method_names {
+            if let Some(effects) = module_sem.types.function_effects.get(key) {
+                mangled_index.insert((src.clone(), names.mangled.clone()), effects.clone());
+            }
+        }
+    }
+
+    let mut resource_names: IndexSet<(ModuleSource, String)> = IndexSet::default();
+    for (src, module) in &sem.modules {
+        for item in &module.items {
+            if let Item::Resource(resource) = item {
+                resource_names.insert((src.clone(), resource.name.clone()));
+            }
+        }
+    }
+
+    for (src, module) in &sem.modules {
+        if !crate::elaborator::liveness::is_user_authored(src) {
+            continue;
+        }
+        for item in &module.items {
+            match item {
+                Item::Function(func) => check_function_effects_sem(
+                    sem,
+                    src,
+                    func,
+                    &fn_effects,
+                    &mangled_index,
+                    &resource_names,
+                    &mut out,
+                ),
+                Item::Impl(impl_block) => {
+                    for method in &impl_block.methods {
+                        check_function_effects_sem(
+                            sem,
+                            src,
+                            method,
+                            &fn_effects,
+                            &mangled_index,
+                            &resource_names,
+                            &mut out,
+                        );
+                    }
+                }
+                Item::Trait(trait_decl) => {
+                    for method in &trait_decl.methods {
+                        check_function_effects_sem(
+                            sem,
+                            src,
+                            method,
+                            &fn_effects,
+                            &mangled_index,
+                            &resource_names,
+                            &mut out,
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
+fn check_function_effects_sem(
+    sem: &Semantics,
+    module: &ModuleSource,
+    func: &Function,
+    fn_effects: &IndexMap<SymbolKey, Vec<EffectRef>>,
+    mangled_index: &IndexMap<(ModuleSource, String), Vec<EffectRef>>,
+    resource_names: &IndexSet<(ModuleSource, String)>,
+    out: &mut Vec<EffectError>,
+) {
+    let Some(body) = &func.body else {
+        return;
+    };
+    // `#[ambient]` bypasses the effect system; test helpers implicitly hold
+    // every effect.
+    if func.attrs.iter().any(|attr| attr.name == "ambient") || func.name.starts_with("__test_") {
+        return;
+    }
+    let caller_key = SymbolKey::new(module.clone(), func.id);
+    let current: IndexSet<EffectRef> = fn_effects
+        .get(&caller_key)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+
+    let mut walker = SemEffectWalker {
+        module,
+        sem,
+        fn_effects,
+        mangled_index,
+        resource_names,
+        current: &current,
+        out,
+    };
+    ast::walk_block(&mut walker, body);
+}
+
+/// Walks a function body, checking that each call's required effects are held.
+struct SemEffectWalker<'a> {
+    module: &'a ModuleSource,
+    sem: &'a Semantics,
+    fn_effects: &'a IndexMap<SymbolKey, Vec<EffectRef>>,
+    mangled_index: &'a IndexMap<(ModuleSource, String), Vec<EffectRef>>,
+    resource_names: &'a IndexSet<(ModuleSource, String)>,
+    current: &'a IndexSet<EffectRef>,
+    out: &'a mut Vec<EffectError>,
+}
+
+impl SemEffectWalker<'_> {
+    /// Effects a method dispatch requires: the callee's declared effects plus,
+    /// for a direct (non-trait) method on a `resource`, the resource effect.
+    fn method_effects(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
+        let mut effects = self
+            .mangled_index
+            .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
+            .cloned()
+            .unwrap_or_default();
+        if let Some(method_info) = &func_ref.method_info
+            && method_info.trait_name.is_none()
+        {
+            let resource_key = (
+                func_ref.module_source.clone(),
+                method_info.base_struct_name.clone(),
+            );
+            if self.resource_names.contains(&resource_key) {
+                let resource_effect = EffectRef::Concrete {
+                    name: method_info.base_struct_name.clone(),
+                    module_source: func_ref.module_source.clone(),
+                };
+                if !effects.contains(&resource_effect) {
+                    effects.push(resource_effect);
+                }
+            }
+        }
+        effects
+    }
+
+    fn report_missing(&mut self, effects: &[EffectRef], callee: &str, span: Span) {
+        for effect in effects {
+            // Effect parameters are resolved at call sites via function-typed
+            // arguments — that resolution is a follow-up, so skip them here
+            // rather than report a spurious miss.
+            if effect.is_param() || self.current.contains(effect) {
+                continue;
+            }
+            let kind = match effect {
+                EffectRef::Concrete {
+                    name,
+                    module_source,
+                } if self
+                    .resource_names
+                    .contains(&(module_source.clone(), name.clone())) =>
+                {
+                    EffectKind::Resource
+                }
+                _ => EffectKind::Effect,
+            };
+            self.out.push(EffectError {
+                callee: callee.to_string(),
+                missing_effect: effect.name().to_string(),
+                kind,
+                span,
+            });
+        }
+    }
+}
+
+impl AstVisitor for SemEffectWalker<'_> {
+    fn visit_expr(&mut self, expr: &Expr) {
+        match expr {
+            Expr::Call(call) => {
+                if let Expr::Ident(ident) = &call.callee {
+                    let use_key = SymbolKey::new(self.module.clone(), ident.id);
+                    if let Some(def) = self.sem.references.get(&use_key)
+                        && let Some(effects) = self.fn_effects.get(def)
+                    {
+                        let effects = effects.clone();
+                        self.report_missing(&effects, &ident.name, call.span);
+                    }
+                }
+            }
+            Expr::MethodCall(method_call) => {
+                let call_key = SymbolKey::new(self.module.clone(), method_call.id);
+                if let Some(dispatch) = self.sem.method_dispatch.get(&call_key) {
+                    let func_ref = dispatch.function_ref.clone();
+                    let effects = self.method_effects(&func_ref);
+                    self.report_missing(&effects, &method_call.method, method_call.span);
+                }
+            }
+            _ => {}
+        }
+        ast::walk_expr(self, expr);
     }
 }
