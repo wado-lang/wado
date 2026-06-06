@@ -980,7 +980,7 @@ impl Parser {
     }
 }
 
-fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     sg_0: {
@@ -1001,14 +1001,14 @@ fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
     return pos;
 }
 
-fn scan_q(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_q(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_A { return -1; }
     pos += 1;
     return pos;
 }
 
-fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
+fn _parse_a__inner(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let lit_b_or_lit_c = p.match_set([TK_LIT_B, TK_LIT_C])?;
     return Result::<ANode, ParseError>::Ok(ANode {
@@ -1017,8 +1017,8 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
     });
 }
 
-fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
-    let r = _parse_a__inner(p, follow);
+fn _parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
+    let r = _parse_a__inner(p);
     if let Err(mut e) = r {
         e.rule_stack.push("a");
         return Result::<ANode, ParseError>::Err(e);
@@ -1026,7 +1026,7 @@ fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<
     return r;
 }
 
-fn _parse_q__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<QNode, ParseError> {
+fn _parse_q__inner(p: &mut Parser) -> Result<QNode, ParseError> {
     let start = p.peek().span.start;
     let lit_a = p.expect(TK_LIT_A)?;
     return Result::<QNode, ParseError>::Ok(QNode {
@@ -1035,8 +1035,8 @@ fn _parse_q__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
     });
 }
 
-fn _parse_q(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<QNode, ParseError> {
-    let r = _parse_q__inner(p, follow);
+fn _parse_q(p: &mut Parser) -> Result<QNode, ParseError> {
+    let r = _parse_q__inner(p);
     if let Err(mut e) = r {
         e.rule_stack.push("q");
         return Result::<QNode, ParseError>::Err(e);

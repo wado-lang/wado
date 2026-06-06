@@ -1820,13 +1820,17 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &L
         FollowArg::NoFollow,
         false,
     );
+    let effective_gate = gate_caller_follow && !rep.non_greedy;
+    if effective_gate {
+        ctx.mark_caller_follow_gate();
+    }
     return ScanElement::Repeat(ScanRepeatElem {
         kind: rep.kind,
         body,
         strategy: strategy,
         inner_first: inner_first,
         caller_follow_first: *outer_follow,
-        gate_caller_follow: gate_caller_follow && !rep.non_greedy,
+        gate_caller_follow: effective_gate,
     });
 }
 
@@ -3015,6 +3019,10 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut List<[String, i32]>, r
     };
     let body_second_position_first = compute_body_second_position_first(&rep.element, ctx);
     let body_shape = classify_repeat_body_shape(&body);
+    let effective_gate = gate_caller_follow && !rep.non_greedy;
+    if effective_gate {
+        ctx.mark_caller_follow_gate();
+    }
     return Op::Repeat(RepeatOp {
         kind: rep.kind,
         body,
@@ -3029,7 +3037,7 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut List<[String, i32]>, r
         body_is_single_alt_group,
         body_second_position_first,
         body_shape,
-        gate_caller_follow: gate_caller_follow && !rep.non_greedy,
+        gate_caller_follow: effective_gate,
     });
 }
 

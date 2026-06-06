@@ -976,7 +976,7 @@ impl Parser {
     }
 }
 
-fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
@@ -1003,7 +1003,7 @@ fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
     return pos;
 }
 
-fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
+fn _parse_a__inner(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -1041,8 +1041,8 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
     });
 }
 
-fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
-    let r = _parse_a__inner(p, follow);
+fn _parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
+    let r = _parse_a__inner(p);
     if let Err(mut e) = r {
         e.rule_stack.push("a");
         return Result::<ANode, ParseError>::Err(e);
@@ -1088,6 +1088,4 @@ pub fn to_tree(node: &ANode) -> CstNode {
 fn _gale_kind_set_0(k: i32) -> bool {
     return k matches { TK_LIT_A | TK_LIT_B };
 }
-
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_LIT_C]];
 

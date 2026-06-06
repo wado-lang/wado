@@ -77,6 +77,15 @@ pub struct GenContext {
     /// `LoweredGrammar.diagnostics` by `lower_with_ctx`. See
     /// `Diagnostic` in `gir.wado`.
     diagnostics: List<Diagnostic>,
+    /// Set by lowering whenever it constructs a tail-greedy `Repeat`
+    /// that gates on the caller's FOLLOW continuation. When it stays
+    /// false the grammar has no caller-FOLLOW repair at all, so emit
+    /// skips the entire FOLLOW machinery (the `follow` parameter, its
+    /// call-site arguments, and the `FOLLOW_MASK_<id>` globals). This
+    /// keeps deep-recursion grammars — which never read `follow` — from
+    /// paying an extra stack slot per recursive frame (the
+    /// `Performance/ExpressionGrammar_2` stack-exhaustion regression).
+    caller_follow_gate_seen: bool,
     /// When set, parser emit adds trace logging (rule enter/ok/fail plus
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
     /// option. Off by default.
@@ -103,8 +112,24 @@ impl GenContext {
             follow_mask_registry: TreeMap::<String, FollowMaskEntry>::new(),
             tail_greedy_cache: TreeMap::<String, List<String>>::new(),
             diagnostics: [],
+            caller_follow_gate_seen: false,
             trace: false,
         };
+    }
+
+    /// Record that lowering emitted a tail-greedy caller-FOLLOW gate.
+    /// Flips `emit_follow` on for the whole generated parser.
+    pub fn mark_caller_follow_gate(&mut self) {
+        self.caller_follow_gate_seen = true;
+    }
+
+    /// Whether the generated parser should emit the FOLLOW machinery
+    /// (the `follow` parameter, its call arguments, and the
+    /// `FOLLOW_MASK_<id>` globals). True iff lowering produced at least
+    /// one caller-FOLLOW gate; otherwise `follow` would be threaded but
+    /// never read, so it is pruned entirely.
+    pub fn emit_follow(&self) -> bool {
+        return self.caller_follow_gate_seen;
     }
 
     /// Enable trace instrumentation in the generated parser (the

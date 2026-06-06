@@ -1053,7 +1053,7 @@ impl Parser {
     }
 }
 
-fn scan_file(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_file(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     sg_0: {
@@ -1097,7 +1097,7 @@ fn scan_file(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
     return pos;
 }
 
-fn _parse_file__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<FileNode, ParseError> {
+fn _parse_file__inner(p: &mut Parser) -> Result<FileNode, ParseError> {
     let start = p.peek().span.start;
     let mut block_or_ident_list: List<Token> = [];
     let mut _plus_first = true;
@@ -1140,8 +1140,8 @@ fn _parse_file__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     });
 }
 
-fn _parse_file(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<FileNode, ParseError> {
-    let r = _parse_file__inner(p, follow);
+fn _parse_file(p: &mut Parser) -> Result<FileNode, ParseError> {
+    let r = _parse_file__inner(p);
     if let Err(mut e) = r {
         e.rule_stack.push("file");
         return Result::<FileNode, ParseError>::Err(e);
@@ -1187,6 +1187,4 @@ pub fn to_tree(node: &FileNode) -> CstNode {
 fn _gale_kind_set_0(k: i32) -> bool {
     return k matches { TK_BLOCK | TK_IDENT };
 }
-
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
 

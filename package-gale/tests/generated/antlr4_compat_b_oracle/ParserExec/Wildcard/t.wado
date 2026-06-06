@@ -1066,13 +1066,13 @@ impl Parser {
     }
 }
 
-fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     sg_0: {
         pos = gp_0;
         sg_0_0: {
-            pos = scan_assign(tokens, pos, follow, 0);
+            pos = scan_assign(tokens, pos, 0);
             if pos < 0 { break sg_0_0; }
             break sg_0;
         }
@@ -1090,7 +1090,7 @@ fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
         sg_1: {
             pos = gp_1;
             sg_1_0: {
-                pos = scan_assign(tokens, pos, follow, 0);
+                pos = scan_assign(tokens, pos, 0);
                 if pos < 0 { break sg_1_0; }
                 break sg_1;
             }
@@ -1110,7 +1110,7 @@ fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
     return pos;
 }
 
-fn scan_assign(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_assign(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
@@ -1123,7 +1123,7 @@ fn scan_assign(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY
     return pos;
 }
 
-fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
+fn _parse_a__inner(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let mut group_0_list: List<AGroup0> = [];
     let mut _plus_first = true;
@@ -1137,7 +1137,7 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
                 sg_2: {
                     pos = gp_2;
                     sg_2_0: {
-                        pos = scan_assign(tokens, pos, follow, 0);
+                        pos = scan_assign(tokens, pos, 0);
                         if pos < 0 { break sg_2_0; }
                         break sg_2;
                     }
@@ -1163,14 +1163,14 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
                 gd_scan: {
                     let tokens = &p.tokens;
                     let mut pos: i32 = p.pos;
-                    pos = scan_assign(tokens, pos, follow, 0);
+                    pos = scan_assign(tokens, pos, 0);
                     if pos < 0 { break gd_scan; }
                     gd_winner = 0;
                     break gd_dispatch;
                 }
             }
             if gd_winner == 0 {
-                let assign = _parse_assign(p, follow)?;
+                let assign = _parse_assign(p)?;
                 group_0_opt = Option::<AGroup0>::Some(AGroup0::Alt0(AGroup0Alt0 {
                     assign,
                 }));
@@ -1195,8 +1195,8 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
     });
 }
 
-fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
-    let r = _parse_a__inner(p, follow);
+fn _parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
+    let r = _parse_a__inner(p);
     if let Err(mut e) = r {
         e.rule_stack.push("a");
         return Result::<ANode, ParseError>::Err(e);
@@ -1204,7 +1204,7 @@ fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<
     return r;
 }
 
-fn _parse_assign__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AssignNode, ParseError> {
+fn _parse_assign__inner(p: &mut Parser) -> Result<AssignNode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     let eq = p.expect(TK_LIT_EQ)?;
@@ -1219,8 +1219,8 @@ fn _parse_assign__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     });
 }
 
-fn _parse_assign(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AssignNode, ParseError> {
-    let r = _parse_assign__inner(p, follow);
+fn _parse_assign(p: &mut Parser) -> Result<AssignNode, ParseError> {
+    let r = _parse_assign__inner(p);
     if let Err(mut e) = r {
         e.rule_stack.push("assign");
         return Result::<AssignNode, ParseError>::Err(e);
@@ -1294,9 +1294,4 @@ pub fn to_tree(node: &ANode) -> CstNode {
     walk_a(&mut recorder, node);
     return recorder.build();
 }
-
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
-global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_EQ], [TK_INT], [TK_LIT_SEMI]];
-global FOLLOW_MASK_2: List<List<i32>> = [[TK_INT], [TK_LIT_SEMI]];
-global FOLLOW_MASK_3: List<List<i32>> = [[TK_LIT_SEMI]];
 

@@ -308,11 +308,12 @@ that belong to the caller's continuation. The repair gates that loop on
 the caller's deterministic FOLLOW continuation, **threaded as a runtime
 argument** rather than baked into a specialised callee.
 
-Every generated `parse_*` / `scan_*` function takes a defaulted
-`follow: &List<List<i32>>` argument (`follow[d]` is the set of token
-kinds valid at caller-continuation depth `d`; `&EMPTY_FOLLOW` for the
-common non-repair case). At a tail-greedy `Repeat` the loop yields to
-the caller — break `*`/`+`, skip `?` — exactly when
+When the grammar has at least one such gate, every generated `parse_*`
+/ `scan_*` function takes a defaulted `follow: &List<List<i32>>`
+argument (`follow[d]` is the set of token kinds valid at
+caller-continuation depth `d`; `&EMPTY_FOLLOW` for the common
+non-repair case). At a tail-greedy `Repeat` the loop yields to the
+caller — break `*`/`+`, skip `?` — exactly when
 `follow_yields(tokens, pos, follow, TK_EOF)` is true, i.e. the next
 tokens match the caller's continuation at every depth. The same
 `follow_yields` serves both the parse side (`&p.tokens`, `p.pos`) and
@@ -320,6 +321,17 @@ the scan side (raw `tokens`/`pos`), keeping the longest-match tournament
 in lockstep. `follow` precedes `min_prec` in every signature, so a
 non-precedence call site emits `parse_X(p, follow)` uniformly for LR and
 non-LR targets.
+
+The `follow` parameter is **pruned entirely** when the grammar has no
+caller-FOLLOW gate at all (`GenContext::emit_follow` — set by lowering
+whenever it constructs a gated `Repeat`). Threading a parameter that no
+function ever reads is not just dead weight: it enlarges every
+recursive scan frame, and on a deep-recursion grammar
+(`Performance/ExpressionGrammar_2`) the extra stack slot per frame
+overflowed the wasm stack at `-O2`/`-O3` while `-O1` still fit. So every
+`add_follow_param` / call-argument / `FOLLOW_MASK_<id>` emit site is
+gated on `emit_follow`; grammars with a real gate are byte-identical to
+uniform threading, gate-free grammars carry no `follow` at all.
 
 This single runtime gate subsumes what used to be two baked mask shapes
 (a 1-token `tail_greedy_first ∩ caller_follow` subtraction and a

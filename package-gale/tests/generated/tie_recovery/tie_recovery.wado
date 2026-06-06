@@ -1034,22 +1034,22 @@ impl Parser {
     }
 }
 
-fn scan_prog(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_prog(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos].kind == TK_LIT_X {
         let sp = pos;
-        pos = scan_item(tokens, pos, &EMPTY_FOLLOW, 0);
+        pos = scan_item(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    pos = scan_trailer(tokens, pos, &FOLLOW_MASK_1, 0);
+    pos = scan_trailer(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_item(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_item(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { return -1; }
     pos += 1;
@@ -1058,7 +1058,7 @@ fn scan_item(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
     return pos;
 }
 
-fn scan_trailer(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_trailer(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_X { return -1; }
     pos += 1;
@@ -1067,7 +1067,7 @@ fn scan_trailer(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPT
     return pos;
 }
 
-fn _parse_prog__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ProgNode, ParseError> {
+fn _parse_prog__inner(p: &mut Parser) -> Result<ProgNode, ParseError> {
     let start = p.peek().span.start;
     let mut item_list: List<ItemNode> = [];
     loop {
@@ -1075,7 +1075,7 @@ fn _parse_prog__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            pos = scan_item(tokens, pos, &EMPTY_FOLLOW, 0);
+            pos = scan_item(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -1083,15 +1083,15 @@ fn _parse_prog__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_LIT_X {
                 let _rec_pos = p.pos;
-                if let Err(_rec_e) = _parse_item(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                if let Err(_rec_e) = _parse_item(p) { p.record_deeper(_rec_e); }
                 p.pos = _rec_pos;
             }
             break;
         }
-        let item = _parse_item(p, &EMPTY_FOLLOW)?;
+        let item = _parse_item(p)?;
         item_list.push(item);
     }
-    let trailer = _parse_trailer(p, &FOLLOW_MASK_1)?;
+    let trailer = _parse_trailer(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<ProgNode, ParseError>::Ok(ProgNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1101,8 +1101,8 @@ fn _parse_prog__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     });
 }
 
-fn _parse_prog(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ProgNode, ParseError> {
-    let r = _parse_prog__inner(p, follow);
+fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
+    let r = _parse_prog__inner(p);
     if let Err(mut e) = r {
         e.rule_stack.push("prog");
         return Result::<ProgNode, ParseError>::Err(e);
@@ -1110,7 +1110,7 @@ fn _parse_prog(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Resu
     return r;
 }
 
-fn _parse_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ItemNode, ParseError> {
+fn _parse_item__inner(p: &mut Parser) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
     let lit_x = p.expect(TK_LIT_X)?;
     let id = p.expect(TK_ID)?;
@@ -1121,8 +1121,8 @@ fn _parse_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     });
 }
 
-fn _parse_item(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ItemNode, ParseError> {
-    let r = _parse_item__inner(p, follow);
+fn _parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
+    let r = _parse_item__inner(p);
     if let Err(mut e) = r {
         e.rule_stack.push("item");
         return Result::<ItemNode, ParseError>::Err(e);
@@ -1130,7 +1130,7 @@ fn _parse_item(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Resu
     return r;
 }
 
-fn _parse_trailer__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<TrailerNode, ParseError> {
+fn _parse_trailer__inner(p: &mut Parser) -> Result<TrailerNode, ParseError> {
     let start = p.peek().span.start;
     let lit_x = p.expect(TK_LIT_X)?;
     let eq = p.expect(TK_LIT_EQ)?;
@@ -1141,8 +1141,8 @@ fn _parse_trailer__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     });
 }
 
-fn _parse_trailer(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<TrailerNode, ParseError> {
-    let r = _parse_trailer__inner(p, follow);
+fn _parse_trailer(p: &mut Parser) -> Result<TrailerNode, ParseError> {
+    let r = _parse_trailer__inner(p);
     if let Err(mut e) = r {
         e.rule_stack.push("trailer");
         return Result::<TrailerNode, ParseError>::Err(e);
@@ -1231,9 +1231,4 @@ pub fn to_tree(node: &ProgNode) -> CstNode {
     walk_prog(&mut recorder, node);
     return recorder.build();
 }
-
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_LIT_X], [TK_LIT_EQ], [TK_EOF]];
-global FOLLOW_MASK_1: List<List<i32>> = [[TK_EOF]];
-global FOLLOW_MASK_2: List<List<i32>> = [[TK_ID]];
-global FOLLOW_MASK_3: List<List<i32>> = [[TK_LIT_EQ]];
 

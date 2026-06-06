@@ -1047,29 +1047,29 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_s(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_a(tokens, pos, &FOLLOW_MASK_0, 0);
+    pos = scan_a(tokens, pos, 0);
     if pos < 0 { return -1; }
-    pos = scan_a(tokens, pos, &FOLLOW_MASK_0, 0);
+    pos = scan_a(tokens, pos, 0);
     if pos < 0 { return -1; }
-    pos = scan_a(tokens, pos, follow, 0);
+    pos = scan_a(tokens, pos, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SNode, ParseError> {
+fn _parse_s__inner(p: &mut Parser) -> Result<SNode, ParseError> {
     let start = p.peek().span.start;
-    let a = _parse_a(p, &FOLLOW_MASK_0)?;
-    let a_2 = _parse_a(p, &FOLLOW_MASK_0)?;
-    let a_3 = _parse_a(p, follow)?;
+    let a = _parse_a(p)?;
+    let a_2 = _parse_a(p)?;
+    let a_3 = _parse_a(p)?;
     return Result::<SNode, ParseError>::Ok(SNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         a,
@@ -1078,8 +1078,8 @@ fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
     });
 }
 
-fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SNode, ParseError> {
-    let r = _parse_s__inner(p, follow);
+fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
+    let r = _parse_s__inner(p);
     if let Err(mut e) = r {
         e.rule_stack.push("s");
         return Result::<SNode, ParseError>::Err(e);
@@ -1087,7 +1087,7 @@ fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<
     return r;
 }
 
-fn _parse_a__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
+fn _parse_a__inner_bt_0(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     return Result::<ANode, ParseError>::Ok(ANode::Alt0(AAlt0 {
@@ -1096,14 +1096,14 @@ fn _parse_a__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     }));
 }
 
-fn _parse_a__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_a__inner_scan_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn _parse_a__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
+fn _parse_a__inner_bt_1(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     return Result::<ANode, ParseError>::Ok(ANode::Alt1(AAlt1 {
@@ -1112,14 +1112,14 @@ fn _parse_a__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     }));
 }
 
-fn _parse_a__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_a__inner_scan_1(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
+fn _parse_a__inner(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_ID {
@@ -1138,12 +1138,12 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
             _sd_best_i = 1;
         }
         if _sd_best_i == 0 {
-            return _parse_a__inner_bt_0(p, follow);
+            return _parse_a__inner_bt_0(p);
         }
         if _sd_best_i == 1 {
-            return _parse_a__inner_bt_1(p, follow);
+            return _parse_a__inner_bt_1(p);
         }
-        return _parse_a__inner_bt_1(p, follow);
+        return _parse_a__inner_bt_1(p);
     }
     if kind == TK_INT {
         let int = p.expect(TK_INT)?;
@@ -1159,8 +1159,8 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
     ));
 }
 
-fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
-    let r = _parse_a__inner(p, follow);
+fn _parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
+    let r = _parse_a__inner(p);
     if let Err(mut e) = r {
         e.rule_stack.push("a");
         return Result::<ANode, ParseError>::Err(e);
@@ -1241,6 +1241,4 @@ pub fn to_tree(node: &SNode) -> CstNode {
 fn _gale_kind_set_0(k: i32) -> bool {
     return k matches { TK_ID | TK_INT };
 }
-
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_ID, TK_INT]];
 

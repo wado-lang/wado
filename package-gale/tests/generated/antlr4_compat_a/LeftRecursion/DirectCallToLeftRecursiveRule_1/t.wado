@@ -1010,29 +1010,29 @@ impl Parser {
     }
 }
 
-fn scan_a_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_a_atom(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_a_lr_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_a_lr_0(tokens: &List<Token>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_a_atom(tokens, pos, follow);
+fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_a_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
         if suffix_kind == TK_ID {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_a_lr_0(tokens, pos, follow);
+                pos = scan_a_lr_0(tokens, pos);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -1044,7 +1044,7 @@ fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
     return pos;
 }
 
-fn _parse_a__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
+fn _parse_a__inner_atom(p: &mut Parser) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_ID {
@@ -1061,7 +1061,7 @@ fn _parse_a__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     ));
 }
 
-fn _parse_a__inner_lr_0(p: &mut Parser, left: ANode, start: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
+fn _parse_a__inner_lr_0(p: &mut Parser, left: ANode, start: i32) -> Result<ANode, ParseError> {
     let id = p.expect(TK_ID)?;
     return Result::<ANode, ParseError>::Ok(ANode::Alt0(AAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1070,9 +1070,9 @@ fn _parse_a__inner_lr_0(p: &mut Parser, left: ANode, start: i32, follow: &List<L
     }));
 }
 
-fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> Result<ANode, ParseError> {
+fn _parse_a__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
-    let mut result = _parse_a__inner_atom(p, follow)?;
+    let mut result = _parse_a__inner_atom(p)?;
     loop {
         let suffix_kind = p.peek_kind();
         if suffix_kind == TK_ID {
@@ -1080,7 +1080,7 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                 if scan_a_lr_0(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = _parse_a__inner_lr_0(p, result, start, follow)?;
+                result = _parse_a__inner_lr_0(p, result, start)?;
             } else {
                 break;
             }
@@ -1091,8 +1091,8 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
     return Result::<ANode, ParseError>::Ok(result);
 }
 
-fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> Result<ANode, ParseError> {
-    let r = _parse_a__inner(p, follow, min_prec);
+fn _parse_a(p: &mut Parser, min_prec: i32 = 0) -> Result<ANode, ParseError> {
+    let r = _parse_a__inner(p, min_prec);
     if let Err(mut e) = r {
         e.rule_stack.push("a");
         return Result::<ANode, ParseError>::Err(e);
@@ -1104,7 +1104,7 @@ pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    let _result = _parse_a(&mut parser, &EMPTY_FOLLOW, 0);
+    let _result = _parse_a(&mut parser, 0);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
             if _d.span.start >= _e.span.start {

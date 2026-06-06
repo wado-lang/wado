@@ -981,7 +981,7 @@ impl Parser {
     }
 }
 
-fn scan_prog(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_prog(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -1013,7 +1013,7 @@ fn scan_prog(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
     return pos;
 }
 
-fn _parse_prog__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ProgNode, ParseError> {
+fn _parse_prog__inner(p: &mut Parser) -> Result<ProgNode, ParseError> {
     let start = p.peek().span.start;
     let mut group_0_inner: Option<ProgGroup0> = null;
     let grp_kind = p.peek_kind();
@@ -1056,8 +1056,8 @@ fn _parse_prog__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     });
 }
 
-fn _parse_prog(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ProgNode, ParseError> {
-    let r = _parse_prog__inner(p, follow);
+fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
+    let r = _parse_prog__inner(p);
     if let Err(mut e) = r {
         e.rule_stack.push("prog");
         return Result::<ProgNode, ParseError>::Err(e);
@@ -1108,8 +1108,4 @@ pub fn to_tree(node: &ProgNode) -> CstNode {
     walk_prog(&mut recorder, node);
     return recorder.build();
 }
-
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF], [TK_EOF]];
-global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_Y]];
-global FOLLOW_MASK_2: List<List<i32>> = [[TK_EOF]];
 

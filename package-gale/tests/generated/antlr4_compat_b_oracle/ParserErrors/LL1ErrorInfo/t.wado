@@ -1085,9 +1085,9 @@ impl Parser {
     }
 }
 
-fn scan_start(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_start(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_animal(tokens, pos, &FOLLOW_MASK_0, 0);
+    pos = scan_animal(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos].kind == TK_AND {
         let sp = pos;
@@ -1095,7 +1095,7 @@ fn scan_start(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_
             sg_0: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_AND { break sg_0; }
                 pos += 1;
-                pos = scan_ac_class(tokens, pos, follow, 0);
+                pos = scan_ac_class(tokens, pos, 0);
                 if pos < 0 { break sg_0; }
                 break sg_0_done;
             }
@@ -1103,14 +1103,14 @@ fn scan_start(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_service(tokens, pos, &FOLLOW_MASK_2, 0);
+    pos = scan_service(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_animal(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_animal(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_1 = pos;
     sg_1: {
@@ -1131,7 +1131,7 @@ fn scan_animal(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY
     return pos;
 }
 
-fn scan_service(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_service(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_2 = pos;
     sg_2: {
@@ -1152,17 +1152,17 @@ fn scan_service(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPT
     return pos;
 }
 
-fn scan_ac_class(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_ac_class(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     return pos;
 }
 
-fn _parse_start__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StartNode, ParseError> {
+fn _parse_start__inner(p: &mut Parser) -> Result<StartNode, ParseError> {
     let start = p.peek().span.start;
-    let animal = _parse_animal(p, &FOLLOW_MASK_0)?;
+    let animal = _parse_animal(p)?;
     let and_ac_class: Option<AndAcClassItem> = if p.peek_kind() == TK_AND {
         let and = p.expect(TK_AND)?;
-        let ac_class = _parse_ac_class(p, follow)?;
+        let ac_class = _parse_ac_class(p)?;
         let and_ac_class = AndAcClassItem {
             and,
             ac_class,
@@ -1171,7 +1171,7 @@ fn _parse_start__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     } else {
         null
     };
-    let service = _parse_service(p, &FOLLOW_MASK_2)?;
+    let service = _parse_service(p)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<StartNode, ParseError>::Ok(StartNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1182,8 +1182,8 @@ fn _parse_start__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     });
 }
 
-fn _parse_start(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StartNode, ParseError> {
-    let r = _parse_start__inner(p, follow);
+fn _parse_start(p: &mut Parser) -> Result<StartNode, ParseError> {
+    let r = _parse_start__inner(p);
     if let Err(mut e) = r {
         e.rule_stack.push("start");
         return Result::<StartNode, ParseError>::Err(e);
@@ -1191,7 +1191,7 @@ fn _parse_start(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Res
     return r;
 }
 
-fn _parse_animal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AnimalNode, ParseError> {
+fn _parse_animal__inner(p: &mut Parser) -> Result<AnimalNode, ParseError> {
     let start = p.peek().span.start;
     let dog_or_cat = p.match_set([TK_DOG, TK_CAT])?;
     return Result::<AnimalNode, ParseError>::Ok(AnimalNode {
@@ -1200,8 +1200,8 @@ fn _parse_animal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     });
 }
 
-fn _parse_animal(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AnimalNode, ParseError> {
-    let r = _parse_animal__inner(p, follow);
+fn _parse_animal(p: &mut Parser) -> Result<AnimalNode, ParseError> {
+    let r = _parse_animal__inner(p);
     if let Err(mut e) = r {
         e.rule_stack.push("animal");
         return Result::<AnimalNode, ParseError>::Err(e);
@@ -1209,7 +1209,7 @@ fn _parse_animal(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Re
     return r;
 }
 
-fn _parse_service__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ServiceNode, ParseError> {
+fn _parse_service__inner(p: &mut Parser) -> Result<ServiceNode, ParseError> {
     let start = p.peek().span.start;
     let hardware_or_software = p.match_set([TK_HARDWARE, TK_SOFTWARE])?;
     return Result::<ServiceNode, ParseError>::Ok(ServiceNode {
@@ -1218,8 +1218,8 @@ fn _parse_service__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     });
 }
 
-fn _parse_service(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ServiceNode, ParseError> {
-    let r = _parse_service__inner(p, follow);
+fn _parse_service(p: &mut Parser) -> Result<ServiceNode, ParseError> {
+    let r = _parse_service__inner(p);
     if let Err(mut e) = r {
         e.rule_stack.push("service");
         return Result::<ServiceNode, ParseError>::Err(e);
@@ -1227,15 +1227,15 @@ fn _parse_service(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> R
     return r;
 }
 
-fn _parse_ac_class__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AcClassNode, ParseError> {
+fn _parse_ac_class__inner(p: &mut Parser) -> Result<AcClassNode, ParseError> {
     let start = p.peek().span.start;
     return Result::<AcClassNode, ParseError>::Ok(AcClassNode {
         span: Span::new(start, i32::max(start, p.last_end())),
     });
 }
 
-fn _parse_ac_class(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AcClassNode, ParseError> {
-    let r = _parse_ac_class__inner(p, follow);
+fn _parse_ac_class(p: &mut Parser) -> Result<AcClassNode, ParseError> {
+    let r = _parse_ac_class__inner(p);
     if let Err(mut e) = r {
         e.rule_stack.push("acClass");
         return Result::<AcClassNode, ParseError>::Err(e);
@@ -1345,8 +1345,4 @@ pub fn to_tree(node: &StartNode) -> CstNode {
     walk_start(&mut recorder, node);
     return recorder.build();
 }
-
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_AND, TK_HARDWARE, TK_SOFTWARE]];
-global FOLLOW_MASK_1: List<List<i32>> = [[TK_HARDWARE, TK_SOFTWARE]];
-global FOLLOW_MASK_2: List<List<i32>> = [[TK_EOF]];
 

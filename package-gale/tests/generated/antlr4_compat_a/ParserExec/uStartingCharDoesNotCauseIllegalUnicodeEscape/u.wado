@@ -955,14 +955,14 @@ impl Parser {
     }
 }
 
-fn scan_u(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_u(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_U { return -1; }
     pos += 1;
     return pos;
 }
 
-fn _parse_u__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<UNode, ParseError> {
+fn _parse_u__inner(p: &mut Parser) -> Result<UNode, ParseError> {
     let start = p.peek().span.start;
     let lit_u = p.expect(TK_LIT_U)?;
     return Result::<UNode, ParseError>::Ok(UNode {
@@ -971,8 +971,8 @@ fn _parse_u__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
     });
 }
 
-fn _parse_u(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<UNode, ParseError> {
-    let r = _parse_u__inner(p, follow);
+fn _parse_u(p: &mut Parser) -> Result<UNode, ParseError> {
+    let r = _parse_u__inner(p);
     if let Err(mut e) = r {
         e.rule_stack.push("u");
         return Result::<UNode, ParseError>::Err(e);
