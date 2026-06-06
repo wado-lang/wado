@@ -1,0 +1,27 @@
+// LICM hoists a maximal loop-invariant pure-arithmetic subexpression out of
+// the loop. Here the guard recomputes `hi - lo` on every iteration even
+// though both operands are loop-invariant parameters; LICM lifts it into a
+// single pre-loop `_licm_arith_*` temp.
+
+fn count_below_span(lo: i32, hi: i32) -> i32 {
+    let mut i = 0;
+    let mut sum = 0;
+    while i < hi - lo {
+        sum += i;
+        i += 1;
+    }
+    return sum;
+}
+
+export fn run() {
+    // span = 5 - 0 = 5, so i ranges 0..5: 0+1+2+3+4 = 10.
+    assert count_below_span(0, 5) == 10, `expected 10, got {count_below_span(0, 5)}`;
+    // span = 7 - 4 = 3, so i ranges 0..3: 0+1+2 = 3.
+    assert count_below_span(4, 7) == 3, `expected 3, got {count_below_span(4, 7)}`;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["_licm_arith_"]
+}
