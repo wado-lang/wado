@@ -61,15 +61,18 @@
 //! Running inside each loop iteration (rather than only once up front) also
 //! lets container SROA pick up new `List<Tuple<...>>` locals exposed by
 //! earlier-iteration inlining of helper functions.
+//!
+//! The pass reads and mutates the arena [`Body`] directly: analysis navigates
+//! by id, and the rewrite pushes the synthesized per-field calls into the arena
+//! (deep-cloning duplicated sub-expressions via [`Body::clone_expr`]).
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{
-    CallArg, FunctionRef, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt,
-    NirStmtKind, NirStruct,
+use crate::nir::{FunctionRef, NirFunction, NirLocal, NirStruct, NirUnaryOp};
+use crate::nir_arena::{
+    ArenaCallArg, BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::{NirMutVisitor, NirRefVisitor};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -249,11 +252,12 @@ enum ElementLayout {
 /// How the candidate was initialized.
 ///
 /// Any List method classified as `Constructor` with a single duplicable
-/// capacity argument qualifies. The capacity expression is cloned once per
-/// decomposed field at rewrite time, so it must be side-effect-free.
+/// capacity argument qualifies. The capacity expression (an arena `ExprId` in
+/// the live body) is deep-cloned once per decomposed field at rewrite time, so
+/// it must be side-effect-free.
 struct CandidateInit {
-    /// Capacity expression to pass to each per-field `with_capacity(...)` call.
-    capacity: NirExpr,
+    /// Capacity expression id to pass to each per-field `with_capacity(...)` call.
+    capacity: ExprId,
 }
 
 /// Apply container SROA to all functions in the project.
@@ -373,7 +377,7 @@ fn scalarize_in_function(
     // Step 1: collect candidates. Immutable borrow of type_table.
     let candidates = {
         let type_table = type_table_rc.borrow();
-        let body = &func.body_block().expect("checked in caller");
+        let body = func.body.as_ref().expect("checked in caller");
         collect_candidates(body, &type_table, struct_index, sig_kinds)
     };
     if candidates.is_empty() {
@@ -384,8 +388,10 @@ fn scalarize_in_function(
     // Also track which `ListMethodKind`s were observed on each whitelisted use,
     // so step 3 can demand only the monomorphizations that will actually be
     // emitted per field (rather than unconditionally requiring all four kinds).
-    let body_ref = &func.body_block().expect("checked in caller");
-    let (safe_indices, used_kinds_map) = compute_safe_set(body_ref, &candidates, sig_kinds);
+    let (safe_indices, used_kinds_map) = {
+        let body = func.body.as_ref().expect("checked in caller");
+        compute_safe_set(body, &candidates, sig_kinds)
+    };
     if safe_indices.is_empty() {
         return false;
     }
@@ -446,7 +452,7 @@ fn scalarize_in_function(
                     is_mut: c.is_mut,
                     span: c.span,
                     init: CandidateInit {
-                        capacity: c.init.capacity.clone(),
+                        capacity: c.init.capacity,
                     },
                 },
             )
@@ -454,8 +460,6 @@ fn scalarize_in_function(
         .collect();
 
     // Step 5: rewrite the body.
-    let mut owned = func.body_block().expect("checked in caller");
-    let body = &mut owned;
     let ctx = RewriteCtx {
         decomposed: &decomposed,
         field_local_map: &field_local_map,
@@ -464,8 +468,9 @@ fn scalarize_in_function(
         catalog,
         sig_kinds,
     };
-    Rewriter { ctx: &ctx }.visit_block(body);
-    func.set_body_block(owned);
+    let body = func.body.as_mut().expect("checked in caller");
+    let root = body.root;
+    Rewriter { ctx: &ctx }.rewrite_block(body, root);
 
     true
 }
@@ -535,10 +540,6 @@ fn required_methods_available(
 /// Locate the `SigKey` of a monomorphized `List<elem_ty>` method whose signature
 /// classifies as `kind`. Returns the first match, or `None` if no such method is
 /// monomorphized in this project.
-///
-/// The catalog is keyed by `(TypeId, SigKey)` and the `sig_kinds` index maps
-/// `SigKey → ListMethodKind`. We combine them to answer queries of the form
-/// "which stdlib List method of kind K is available for element type T?".
 fn find_sig_key_for_kind(
     catalog: &MethodCatalog,
     sig_kinds: &SigKindIndex,
@@ -557,21 +558,21 @@ fn find_sig_key_for_kind(
 /// statements (not nested blocks/loops) because P0a restricts scope to simple
 /// function-body locals — enough for the zlib insertion-sort pattern.
 fn collect_candidates(
-    body: &NirBlock,
+    body: &Body,
     type_table: &TypeTable,
     struct_index: &StructIndex<'_>,
     sig_kinds: &SigKindIndex,
 ) -> Vec<Candidate> {
     let mut out = Vec::new();
-    for stmt in &body.stmts {
-        let NirStmtKind::Let {
+    for s in &body.blocks[body.root].stmts {
+        let StmtKind::Let {
             name,
             local_index,
             is_mut,
             type_id,
             value,
             ..
-        } = &stmt.kind
+        } = &body.stmts[*s].kind
         else {
             continue;
         };
@@ -587,7 +588,7 @@ fn collect_candidates(
             continue;
         }
         // Initializer must be one of the recognized forms.
-        let Some(init) = recognize_init(value, sig_kinds) else {
+        let Some(init) = recognize_init(body, *value, sig_kinds) else {
             continue;
         };
         out.push(Candidate {
@@ -596,7 +597,7 @@ fn collect_candidates(
             is_mut: *is_mut,
             element_types,
             layout,
-            span: stmt.span,
+            span: body.stmts[*s].span,
             init,
         });
     }
@@ -656,9 +657,9 @@ fn element_layout_of(
 ///    fall through to form (1) on the inner constructor call. Neither the
 ///    label string nor the builder method name is inspected — only the
 ///    shape of the wrapper.
-fn recognize_init(value: &NirExpr, sig_kinds: &SigKindIndex) -> Option<CandidateInit> {
-    let inner = unwrap_builder_labeled_block(value).unwrap_or(value);
-    let NirExprKind::Call { func, args, .. } = &inner.kind else {
+fn recognize_init(body: &Body, value: ExprId, sig_kinds: &SigKindIndex) -> Option<CandidateInit> {
+    let inner = unwrap_builder_labeled_block(body, value).unwrap_or(value);
+    let ExprKind::Call { func, args, .. } = &body.exprs[inner].kind else {
         return None;
     };
     if list_method_kind(func, sig_kinds) != Some(ListMethodKind::Constructor) {
@@ -667,14 +668,13 @@ fn recognize_init(value: &NirExpr, sig_kinds: &SigKindIndex) -> Option<Candidate
     if args.len() != 1 {
         return None;
     }
+    let cap = args[0].expr;
     // The capacity expression is cloned once per per-field constructor
     // call during rewrite, so it must be side-effect-free.
-    if !is_duplicable_expr(&args[0].expr) {
+    if !is_duplicable_expr(body, cap) {
         return None;
     }
-    Some(CandidateInit {
-        capacity: args[0].expr.clone(),
-    })
+    Some(CandidateInit { capacity: cap })
 }
 
 /// Unwrap a labeled block of shape
@@ -686,56 +686,59 @@ fn recognize_init(value: &NirExpr, sig_kinds: &SigKindIndex) -> Option<Candidate
 /// We don't check the label, the binding name, or the break method's name —
 /// only that the `Break` exits this block by calling a zero-argument method
 /// whose receiver is the `Let`'s local (directly or via `&__b` / `&mut __b`).
-fn unwrap_builder_labeled_block(expr: &NirExpr) -> Option<&NirExpr> {
-    let NirExprKind::LabeledBlock { label, block, .. } = &expr.kind else {
+fn unwrap_builder_labeled_block(body: &Body, expr: ExprId) -> Option<ExprId> {
+    let ExprKind::LabeledBlock { label, block, .. } = &body.exprs[expr].kind else {
         return None;
     };
-    if block.stmts.len() != 2 {
+    let block = *block;
+    if body.blocks[block].stmts.len() != 2 {
         return None;
     }
-    let NirStmtKind::Let {
+    let s0 = body.blocks[block].stmts[0];
+    let s1 = body.blocks[block].stmts[1];
+    let StmtKind::Let {
         local_index: b_local,
         value: inner,
         ..
-    } = &block.stmts[0].kind
+    } = &body.stmts[s0].kind
     else {
         return None;
     };
-    let NirStmtKind::Break {
+    let b_local = *b_local;
+    let inner = *inner;
+    let StmtKind::Break {
         label: brk_label,
         value: Some(brk_val),
-    } = &block.stmts[1].kind
+    } = &body.stmts[s1].kind
     else {
         return None;
     };
     if brk_label.as_deref() != Some(label.as_str()) {
         return None;
     }
+    let brk_val = *brk_val;
     // Break value must be a zero-argument method call whose receiver is `__b`
-    // (possibly wrapped in `&`/`&mut`). We don't care what the method does
-    // semantically — the `SequenceLiteralBuilder::build()` contract is
-    // enforced by the trait, and any user-level code matching this shape is
-    // vanishingly unlikely to mean anything other than a builder commit.
-    let NirExprKind::MethodCall { receiver, args, .. } = &brk_val.kind else {
+    // (possibly wrapped in `&`/`&mut`).
+    let ExprKind::MethodCall { receiver, args, .. } = &body.exprs[brk_val].kind else {
         return None;
     };
     if !args.is_empty() {
         return None;
     }
-    let receiver_local = match &receiver.kind {
-        NirExprKind::Local { index, .. } => *index,
-        NirExprKind::Unary {
-            op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
+    let receiver_local = match &body.exprs[*receiver].kind {
+        ExprKind::Local { index, .. } => *index,
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner_ref,
         } => {
-            let NirExprKind::Local { index, .. } = &inner_ref.kind else {
+            let ExprKind::Local { index, .. } = &body.exprs[*inner_ref].kind else {
                 return None;
             };
             *index
         }
         _ => return None,
     };
-    if receiver_local != *b_local {
+    if receiver_local != b_local {
         return None;
     }
     Some(inner)
@@ -750,22 +753,9 @@ fn list_method_kind(func: &FunctionRef, sig_kinds: &SigKindIndex) -> Option<List
 }
 
 /// Compute the set of safe (decomposable) candidate locals via whitelist escape
-/// analysis plus a fixpoint for element-source dependency:
-///
-/// - A candidate `v` is whitelisted if every use is one of:
-///   * `v.ElementWriter(source)` — where `source` is element-decomposable
-///     (i.e., `push` or a push-shaped method family)
-///   * `v.IndexWriter(i, source)` (slot assign)
-///   * `v.Query()` (length-invariant query like `len`/`is_empty`/`capacity`)
-///   * `v.IndexReader(i).K` — field access on an index-read result (K constant)
-/// - "element source" is either a direct `TupleLiteral`/`StructLiteral` of N
-///   elements, or `other.IndexReader(j)` where `other` is also safe (fixpoint).
-///
-/// Anything else — bare `Local { v }`, `&v`, `&mut v`, an unclassified method
-/// call, a full-value `index_value(i)` without `FieldAccess` — marks `v` as
-/// escaped. Classification is signature-driven via `sig_kinds`.
+/// analysis plus a fixpoint for element-source dependency.
 fn compute_safe_set(
-    body: &NirBlock,
+    body: &Body,
     candidates: &[Candidate],
     sig_kinds: &SigKindIndex,
 ) -> (IndexSet<u32>, IndexMap<u32, IndexSet<ListMethodKind>>) {
@@ -791,7 +781,7 @@ fn compute_safe_set(
             escaped: IndexSet::default(),
             used_kinds: IndexMap::default(),
         };
-        checker.visit_block(body);
+        checker.visit(body, NodeRef::Block(body.root));
         if checker.escaped.is_empty() {
             break checker.used_kinds;
         }
@@ -809,10 +799,6 @@ struct WhitelistChecker<'a> {
     sig_kinds: &'a SigKindIndex,
     escaped: IndexSet<u32>,
     /// Per-candidate set of `ListMethodKind`s observed on whitelisted uses.
-    /// Only kinds the rewrite actually needs to emit are recorded; bare
-    /// `IndexReader` uses (which escape) are not. Drives the
-    /// `required_methods_available` check so we only demand stdlib
-    /// monomorphizations that will actually be called.
     used_kinds: IndexMap<u32, IndexSet<ListMethodKind>>,
 }
 
@@ -828,34 +814,50 @@ impl WhitelistChecker<'_> {
         self.used_kinds.entry(idx).or_default().insert(kind);
     }
 
+    /// Default walk: recurse into every id-bearing child. The checker only
+    /// overrides expression handling (`visit_expr`); statements, blocks, and
+    /// patterns fall to this walk.
+    fn visit(&mut self, body: &Body, node: NodeRef) {
+        if let NodeRef::Expr(e) = node {
+            self.visit_expr(body, e);
+            return;
+        }
+        self.walk(body, node);
+    }
+
+    fn walk(&mut self, body: &Body, node: NodeRef) {
+        let mut kids = Vec::new();
+        body.for_each_child(node, |c| kids.push(c));
+        for c in kids {
+            self.visit(body, c);
+        }
+    }
+
     /// Check an expression used as a value-source for `push`/`index_assign`.
-    /// Returns true if the expression is a decomposable element source matching
-    /// `expected_layout` and `expected_arity`. If the source references another
-    /// (escaped) candidate as a non-decomposable use, that candidate is marked
-    /// escaped.
     fn check_source(
         &mut self,
-        expr: &NirExpr,
+        body: &Body,
+        e: ExprId,
         expected_arity: usize,
         expected_layout: &ElementLayout,
     ) -> bool {
-        match &expr.kind {
+        match &body.exprs[e].kind {
             // Direct tuple literal `[e0, e1, ...]` (heap or multi-value form).
-            NirExprKind::TupleLiteral { elements } => {
+            ExprKind::TupleLiteral { elements } => {
                 if !matches!(expected_layout, ElementLayout::Tuple) {
                     return false;
                 }
                 if elements.len() != expected_arity {
                     return false;
                 }
-                // Recurse into each element with a "normal" (non-tuple-source) visit.
-                for e in elements {
-                    self.visit_expr(e);
+                let elements = elements.clone();
+                for el in elements {
+                    self.visit_expr(body, el);
                 }
                 true
             }
             // Direct struct literal: StructName { field_0: v0, field_1: v1, ... }
-            NirExprKind::StructLiteral {
+            ExprKind::StructLiteral {
                 struct_type,
                 fields,
                 ..
@@ -882,13 +884,14 @@ impl WhitelistChecker<'_> {
                     }
                     seen[k] = true;
                 }
-                for f in fields {
-                    self.visit_expr(&f.value);
+                let field_vals: Vec<ExprId> = fields.iter().map(|f| f.value).collect();
+                for v in field_vals {
+                    self.visit_expr(body, v);
                 }
                 true
             }
             // Element from another candidate: other.IndexReader(j)
-            NirExprKind::MethodCall {
+            ExprKind::MethodCall {
                 receiver,
                 func,
                 args,
@@ -897,9 +900,11 @@ impl WhitelistChecker<'_> {
                 if args.len() != 1 {
                     return false;
                 }
-                let Some(other) = receiver_local(receiver) else {
+                let receiver = *receiver;
+                let arg0 = args[0].expr;
+                let Some(other) = receiver_local(body, receiver) else {
                     // Receiver isn't a bare local — recurse normally.
-                    self.visit_expr(expr);
+                    self.visit_expr(body, e);
                     return false;
                 };
                 // The receiver must be one of our candidates with matching arity.
@@ -910,8 +915,6 @@ impl WhitelistChecker<'_> {
                     return false;
                 }
                 // Layouts must match: tuple ↔ tuple, and struct ↔ same struct.
-                // Cross-layout pushes are impossible under a sound type system,
-                // but we check defensively.
                 let Some(other_layout) = self.layout_of.get(&other) else {
                     return false;
                 };
@@ -919,18 +922,14 @@ impl WhitelistChecker<'_> {
                     return false;
                 }
                 // The rewrite clones the index expression N times (once per field).
-                // If the index is not duplicable, `decompose_source` bails —
-                // so we must also bail here, otherwise escape analysis would
-                // whitelist this use and the rewrite would leave a dangling
-                // `v.push(w[i])` referencing decomposed locals.
-                if !is_duplicable_expr(&args[0].expr) {
+                if !is_duplicable_expr(body, arg0) {
                     // Fall through to a normal visit so `other` gets marked
                     // escaped via the bare `index_value` branch in `visit_expr`.
-                    self.visit_expr(expr);
+                    self.visit_expr(body, e);
                     return false;
                 }
                 // Index expression must be visited as a normal expression.
-                self.visit_expr(&args[0].expr);
+                self.visit_expr(body, arg0);
                 // Record that `other` is being read via IndexReader so it
                 // needs that method monomorphization during rewrite.
                 self.record_use(other, ListMethodKind::IndexReader);
@@ -939,37 +938,23 @@ impl WhitelistChecker<'_> {
             _ => false,
         }
     }
-}
 
-/// Both layouts must agree: either both tuple of the same arity, or both the
-/// same struct type. Arity is enforced separately by the caller.
-fn layouts_compatible(a: &ElementLayout, b: &ElementLayout) -> bool {
-    match (a, b) {
-        (ElementLayout::Tuple, ElementLayout::Tuple) => true,
-        (ElementLayout::Struct { type_id: ta }, ElementLayout::Struct { type_id: tb }) => ta == tb,
-        _ => false,
-    }
-}
-
-impl NirRefVisitor for WhitelistChecker<'_> {
-    fn visit_stmt(&mut self, stmt: &NirStmt) {
-        self.walk_stmt(stmt);
-    }
-
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        match &expr.kind {
+    fn visit_expr(&mut self, body: &Body, e: ExprId) {
+        match &body.exprs[e].kind {
             // v.method(...) — inspect receiver for whitelisted patterns.
-            NirExprKind::MethodCall {
+            ExprKind::MethodCall {
                 receiver,
                 func,
                 args,
                 ..
             } => {
-                if let Some(rec_local) = receiver_local(receiver)
+                let receiver = *receiver;
+                let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+                let kind = list_method_kind(func, self.sig_kinds);
+                if let Some(rec_local) = receiver_local(body, receiver)
                     && self.safe.contains(&rec_local)
                 {
-                    let kind = list_method_kind(func, self.sig_kinds);
-                    match (kind, args.len()) {
+                    match (kind, arg_ids.len()) {
                         // v.push-shaped(source)
                         (Some(ListMethodKind::ElementWriter), 1) => {
                             let arity = self.arity_of.get(&rec_local).copied().unwrap_or(0);
@@ -978,7 +963,7 @@ impl NirRefVisitor for WhitelistChecker<'_> {
                                 .get(&rec_local)
                                 .cloned()
                                 .unwrap_or(ElementLayout::Tuple);
-                            if self.check_source(&args[0].expr, arity, &layout) {
+                            if self.check_source(body, arg_ids[0], arity, &layout) {
                                 self.record_use(rec_local, ListMethodKind::ElementWriter);
                             } else {
                                 self.mark(rec_local);
@@ -998,22 +983,16 @@ impl NirRefVisitor for WhitelistChecker<'_> {
                                 .get(&rec_local)
                                 .cloned()
                                 .unwrap_or(ElementLayout::Tuple);
-                            // The rewrite clones the destination index N times
-                            // (once per field). Non-duplicable indices force a
-                            // bail in `try_expand_call_stmt`, so we must also
-                            // bail here — otherwise the candidate would be
-                            // decomposed but the original `v.index_assign(i,
-                            // ...)` statement would remain, referencing the
-                            // removed local.
-                            if !is_duplicable_expr(&args[0].expr) {
+                            // The rewrite clones the destination index N times.
+                            if !is_duplicable_expr(body, arg_ids[0]) {
                                 self.mark(rec_local);
-                                self.visit_expr(&args[0].expr);
-                                self.visit_expr(&args[1].expr);
+                                self.visit_expr(body, arg_ids[0]);
+                                self.visit_expr(body, arg_ids[1]);
                                 return;
                             }
                             // index argument visited normally
-                            self.visit_expr(&args[0].expr);
-                            if self.check_source(&args[1].expr, arity, &layout) {
+                            self.visit_expr(body, arg_ids[0]);
+                            if self.check_source(body, arg_ids[1], arity, &layout) {
                                 self.record_use(rec_local, ListMethodKind::IndexWriter);
                             } else {
                                 self.mark(rec_local);
@@ -1021,13 +1000,11 @@ impl NirRefVisitor for WhitelistChecker<'_> {
                             return;
                         }
                         // Bare v.index_value(i) — safe only when the *enclosing*
-                        // expression is a `FieldAccess` with a constant field
-                        // index. That case is short-circuited by the
-                        // `FieldAccess` branch below; if we arrive here directly
-                        // the entire struct value is escaping.
+                        // expression is a `FieldAccess` (handled below). Reaching
+                        // here directly means the whole struct value escapes.
                         (Some(ListMethodKind::IndexReader), 1) => {
                             self.mark(rec_local);
-                            self.visit_expr(&args[0].expr);
+                            self.visit_expr(body, arg_ids[0]);
                             return;
                         }
                         // Any other method call on a candidate → escape.
@@ -1037,66 +1014,77 @@ impl NirRefVisitor for WhitelistChecker<'_> {
                     }
                 }
                 // Fall through: recurse into receiver and args normally.
-                self.visit_expr(receiver);
-                for arg in args {
-                    self.visit_expr(&arg.expr);
+                self.visit_expr(body, receiver);
+                for a in arg_ids {
+                    self.visit_expr(body, a);
                 }
             }
             // v.IndexReader(i).K — safe read pattern
-            NirExprKind::FieldAccess { expr: inner, .. } => {
-                if let NirExprKind::MethodCall {
+            ExprKind::FieldAccess { expr: inner, .. } => {
+                let inner = *inner;
+                let safe_read = if let ExprKind::MethodCall {
                     receiver,
                     func,
                     args,
                     ..
-                } = &inner.kind
+                } = &body.exprs[inner].kind
                     && list_method_kind(func, self.sig_kinds) == Some(ListMethodKind::IndexReader)
                     && args.len() == 1
-                    && let Some(rec_local) = receiver_local(receiver)
+                    && let Some(rec_local) = receiver_local(body, *receiver)
                     && self.safe.contains(&rec_local)
                 {
+                    Some((rec_local, args[0].expr))
+                } else {
+                    None
+                };
+                if let Some((rec_local, idx_arg)) = safe_read {
                     // Safe — just visit the index expression.
                     self.record_use(rec_local, ListMethodKind::IndexReader);
-                    self.visit_expr(&args[0].expr);
+                    self.visit_expr(body, idx_arg);
                     return;
                 }
-                self.visit_expr(inner);
+                self.visit_expr(body, inner);
             }
             // Bare Local reference to a candidate → escape.
-            NirExprKind::Local { index, .. } => {
+            ExprKind::Local { index, .. } => {
                 self.mark(*index);
             }
             // Address taken on a candidate → escape.
-            NirExprKind::Unary { op, expr: inner } => {
-                if matches!(
-                    op,
-                    crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef
-                ) && let NirExprKind::Local { index, .. } = &inner.kind
+            ExprKind::Unary { op, expr: inner } => {
+                let inner = *inner;
+                if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
+                    && let ExprKind::Local { index, .. } = &body.exprs[inner].kind
                 {
                     self.mark(*index);
                     return;
                 }
-                self.visit_expr(inner);
+                self.visit_expr(body, inner);
             }
-            _ => self.walk_expr(expr),
+            _ => self.walk(body, NodeRef::Expr(e)),
         }
     }
 }
 
+/// Both layouts must agree: either both tuple of the same arity, or both the
+/// same struct type. Arity is enforced separately by the caller.
+fn layouts_compatible(a: &ElementLayout, b: &ElementLayout) -> bool {
+    match (a, b) {
+        (ElementLayout::Tuple, ElementLayout::Tuple) => true,
+        (ElementLayout::Struct { type_id: ta }, ElementLayout::Struct { type_id: tb }) => ta == tb,
+        _ => false,
+    }
+}
+
 /// If the expression is `Local { index }` — or `Unary::{Ref,MutRef}` wrapping
-/// a Local — return the index. Method call receivers in lowered NIR are
-/// typically `Unary::MutRef(Local)` for `&mut self` methods and
-/// `Unary::Ref(Local)` for `&self` methods. We treat both as receivers of
-/// the underlying local; when they appear elsewhere (as a function argument,
-/// for example), the `Unary` branch in `visit_expr` marks the local escaped.
-fn receiver_local(expr: &NirExpr) -> Option<u32> {
-    match &expr.kind {
-        NirExprKind::Local { index, .. } => Some(*index),
-        NirExprKind::Unary {
-            op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
+/// a Local — return the index.
+fn receiver_local(body: &Body, e: ExprId) -> Option<u32> {
+    match &body.exprs[e].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
         } => {
-            if let NirExprKind::Local { index, .. } = &inner.kind {
+            if let ExprKind::Local { index, .. } = &body.exprs[*inner].kind {
                 Some(*index)
             } else {
                 None
@@ -1107,142 +1095,133 @@ fn receiver_local(expr: &NirExpr) -> Option<u32> {
 }
 
 /// Drives the in-place rewrite of decomposed container candidates over a
-/// function body. `visit_block` performs the statement-level expansion
+/// function body. `rewrite_block` performs the statement-level expansion
 /// (candidate `Let` → N per-field `Let`s, and `push` / `index_assign`
-/// expression-statements → N per-field statements); `visit_expr` rewrites the
+/// expression-statements → N per-field statements); `rewrite_expr` rewrites the
 /// remaining whitelisted reads (`len` / `is_empty`, `index_value(i).K`).
 struct Rewriter<'a, 'c> {
     ctx: &'c RewriteCtx<'a>,
 }
 
 impl Rewriter<'_, '_> {
+    /// Replace candidate let-bindings and expression-statement-level
+    /// `push` / `index_assign` calls with their per-field versions; recurse
+    /// into everything else.
+    fn rewrite_block(&self, body: &mut Body, block: BlockId) {
+        let old_stmts = std::mem::take(&mut body.blocks[block].stmts);
+        let mut out: Vec<StmtId> = Vec::with_capacity(old_stmts.len());
+        for s in old_stmts {
+            self.process_stmt(body, s, &mut out);
+        }
+        body.blocks[block].stmts = out;
+    }
+
     /// Route a statement: either emit its per-field expansion or recurse + push as-is.
-    fn process_stmt(&mut self, mut stmt: NirStmt, out: &mut Vec<NirStmt>) {
+    fn process_stmt(&self, body: &mut Body, s: StmtId, out: &mut Vec<StmtId>) {
         let ctx = self.ctx;
         // Candidate Let: expand in place.
-        if let NirStmtKind::Let { local_index, .. } = &stmt.kind
+        if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
             && ctx.decomposed.contains(local_index)
         {
-            expand_candidate_let(&stmt, out, ctx);
+            let local_index = *local_index;
+            self.expand_candidate_let(body, local_index, out);
             return;
         }
 
         // Candidate push/index_assign as an ExprStmt at the statement level.
-        if let NirStmtKind::Expr(expr) = &stmt.kind
-            && let Some(expanded) = self.try_expand_call_stmt(expr, stmt.span)
-        {
-            out.extend(expanded);
-            return;
+        if let StmtKind::Expr(expr) = &body.stmts[s].kind {
+            let expr = *expr;
+            let span = body.stmts[s].span;
+            if let Some(expanded) = self.try_expand_call_stmt(body, expr, span) {
+                out.extend(expanded);
+                return;
+            }
         }
 
         // Otherwise, recurse into the statement (rewriting any nested
         // expressions/blocks) and push it unchanged.
-        self.visit_stmt(&mut stmt);
-        out.push(stmt);
+        self.walk_children(body, NodeRef::Stmt(s));
+        out.push(s);
     }
-}
 
-/// Emit N per-field Let statements for a decomposed candidate.
-/// The original Let's initializer is replaced by N `List<T_k>::with_capacity(cap)`
-/// calls, one per field. The same (duplicable) capacity expression from the
-/// original initializer is cloned once per field.
-fn expand_candidate_let(stmt: &NirStmt, out: &mut Vec<NirStmt>, ctx: &RewriteCtx) {
-    let NirStmtKind::Let { local_index, .. } = &stmt.kind else {
-        return;
-    };
-    let info = ctx
-        .candidate_data
-        .get(local_index)
-        .expect("candidate data must exist for decomposed local");
-    for (k, &elem_ty) in info.element_types.iter().enumerate() {
-        let new_local_index = ctx.field_local_map[&(*local_index, k as u32)];
-        let (new_name, arr_ty) = ctx.field_info_map[&(*local_index, k as u32)].clone();
-        let init =
-            build_with_capacity_call(elem_ty, arr_ty, info.init.capacity.clone(), info.span, ctx);
-        let let_stmt = NirStmt::new(
-            NirStmtKind::Let {
-                name: new_name,
-                local_index: new_local_index,
-                is_mut: info.is_mut,
-                is_reactive: false,
-                type_id: arr_ty,
-                value: init,
-                skip_value_copy: false,
-            },
-            info.span,
-        );
-        out.push(let_stmt);
+    /// Emit N per-field Let statements for a decomposed candidate.
+    fn expand_candidate_let(&self, body: &mut Body, local_index: u32, out: &mut Vec<StmtId>) {
+        let ctx = self.ctx;
+        let info = ctx
+            .candidate_data
+            .get(&local_index)
+            .expect("candidate data must exist for decomposed local");
+        let element_types = info.element_types.clone();
+        let is_mut = info.is_mut;
+        let span = info.span;
+        let capacity = info.init.capacity;
+        for (k, elem_ty) in element_types.into_iter().enumerate() {
+            let new_local_index = ctx.field_local_map[&(local_index, k as u32)];
+            let (new_name, arr_ty) = ctx.field_info_map[&(local_index, k as u32)].clone();
+            // Deep-clone the (duplicable) capacity once per field.
+            let cap = body.clone_expr(capacity);
+            let init = build_with_capacity_call(body, elem_ty, arr_ty, cap, span, ctx);
+            let let_stmt = body.stmts.push(StmtNode {
+                kind: StmtKind::Let {
+                    name: new_name,
+                    local_index: new_local_index,
+                    is_mut,
+                    is_reactive: false,
+                    type_id: arr_ty,
+                    value: init,
+                    skip_value_copy: false,
+                },
+                span,
+            });
+            out.push(let_stmt);
+        }
     }
-}
 
-/// Build a `List<T_k>::Constructor(cap)` NIR call — e.g. `with_capacity(cap)`.
-/// The specific method is resolved via `find_sig_key_for_kind(Constructor)`,
-/// so there's no hardcoded name match. `cap` is the (duplicable) capacity
-/// expression recognized from the original initializer, already cloned once
-/// for this field.
-fn build_with_capacity_call(
-    elem_ty: TypeId,
-    arr_ty: TypeId,
-    cap: NirExpr,
-    span: Span,
-    ctx: &RewriteCtx,
-) -> NirExpr {
-    let sig = find_sig_key_for_kind(
-        ctx.catalog,
-        ctx.sig_kinds,
-        elem_ty,
-        ListMethodKind::Constructor,
-    )
-    .expect("Constructor checked by required_methods_available");
-    let func = ctx
-        .catalog
-        .get(&(elem_ty, sig))
-        .expect("Constructor entry checked by required_methods_available")
-        .clone();
-    let call = NirExprKind::Call {
-        func,
-        type_args: Vec::new(),
-        args: vec![CallArg::new(cap, false)],
-    };
-    NirExpr::new(call, arr_ty, span)
-}
-
-impl Rewriter<'_, '_> {
     /// Try to expand an expression-statement into multiple per-field statements.
     /// Returns `Some(stmts)` if the expression was a `push`/`index_assign` call on a
     /// decomposed candidate; `None` otherwise.
-    fn try_expand_call_stmt(&mut self, expr: &NirExpr, span: Span) -> Option<Vec<NirStmt>> {
+    fn try_expand_call_stmt(
+        &self,
+        body: &mut Body,
+        expr: ExprId,
+        span: Span,
+    ) -> Option<Vec<StmtId>> {
         let ctx = self.ctx;
-        let NirExprKind::MethodCall {
-            receiver,
-            func,
-            args,
-            ..
-        } = &expr.kind
-        else {
-            return None;
+        let (receiver, func, arg_ids) = match &body.exprs[expr].kind {
+            ExprKind::MethodCall {
+                receiver,
+                func,
+                args,
+                ..
+            } => (
+                *receiver,
+                func.clone(),
+                args.iter().map(|a| a.expr).collect::<Vec<_>>(),
+            ),
+            _ => return None,
         };
-        let rec_local = receiver_local(receiver)?;
+        let rec_local = receiver_local(body, receiver)?;
         if !ctx.decomposed.contains(&rec_local) {
             return None;
         }
         let info = ctx.candidate_data.get(&rec_local)?;
         let arity = info.element_types.len();
         let layout = info.layout.clone();
+        let element_types = info.element_types.clone();
 
-        let kind = list_method_kind(func, ctx.sig_kinds);
-        match (kind, args.len()) {
+        let kind = list_method_kind(&func, ctx.sig_kinds);
+        match (kind, arg_ids.len()) {
             // Case 1: v.ElementWriter(source) — e.g. push
             (Some(ListMethodKind::ElementWriter), 1) => {
-                let src = &args[0].expr;
-                let per_field = self.decompose_source(src, arity, &layout)?;
-                let sig = sig_key_of(func)?;
+                let per_field = self.decompose_source(body, arg_ids[0], arity, &layout)?;
+                let sig = sig_key_of(&func)?;
                 let mut out = Vec::with_capacity(arity);
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
                     let field_local = ctx.field_local_map[&(rec_local, k as u32)];
                     let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
-                    let elem_ty = info.element_types[k];
+                    let elem_ty = element_types[k];
                     let call = build_element_writer_call(
+                        body,
                         elem_ty,
                         arr_ty,
                         field_local,
@@ -1252,79 +1231,84 @@ impl Rewriter<'_, '_> {
                         span,
                         ctx,
                     );
-                    out.push(NirStmt::new(NirStmtKind::Expr(call), span));
+                    let st = body.stmts.push(StmtNode {
+                        kind: StmtKind::Expr(call),
+                        span,
+                    });
+                    out.push(st);
                 }
                 Some(out)
             }
             // Case 2: v.IndexWriter(i, source) — e.g. index_assign
             (Some(ListMethodKind::IndexWriter), 2) => {
-                let idx = &args[0].expr;
-                let src = &args[1].expr;
-                if !is_duplicable_expr(idx) {
+                let idx = arg_ids[0];
+                let src = arg_ids[1];
+                if !is_duplicable_expr(body, idx) {
                     return None;
                 }
-                let per_field = self.decompose_source(src, arity, &layout)?;
-                let sig = sig_key_of(func)?;
+                let per_field = self.decompose_source(body, src, arity, &layout)?;
+                let sig = sig_key_of(&func)?;
                 let mut out = Vec::with_capacity(arity);
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
                     let field_local = ctx.field_local_map[&(rec_local, k as u32)];
                     let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
-                    let elem_ty = info.element_types[k];
+                    let elem_ty = element_types[k];
+                    let idx_clone = body.clone_expr(idx);
                     let call = build_index_writer_call(
+                        body,
                         elem_ty,
                         arr_ty,
                         field_local,
                         field_name,
-                        idx.clone(),
+                        idx_clone,
                         elem_expr,
                         &sig,
                         span,
                         ctx,
                     );
-                    out.push(NirStmt::new(NirStmtKind::Expr(call), span));
+                    let st = body.stmts.push(StmtNode {
+                        kind: StmtKind::Expr(call),
+                        span,
+                    });
+                    out.push(st);
                 }
                 Some(out)
             }
             _ => None,
         }
     }
-}
 
-impl Rewriter<'_, '_> {
-    /// Decompose a source expression into N per-field expressions.
-    /// Supports three forms:
-    /// - `TupleLiteral([e_0, e_1, ...])` (for tuple layout)
-    /// - `StructLiteral { .. }` (for struct layout; fields reordered by `field_index`)
-    /// - `other.index_value(j)` where `other` is decomposed → `[other_k.index_value(j)]` for each k
-    ///
-    /// Returns `None` if the expression doesn't match a decomposable form or if
-    /// preconditions fail (wrong arity, non-duplicable index, layout mismatch, etc.).
+    /// Decompose a source expression into N per-field expression ids.
     fn decompose_source(
-        &mut self,
-        expr: &NirExpr,
+        &self,
+        body: &mut Body,
+        expr: ExprId,
         expected_arity: usize,
         expected_layout: &ElementLayout,
-    ) -> Option<Vec<NirExpr>> {
+    ) -> Option<Vec<ExprId>> {
         let ctx = self.ctx;
-        match &expr.kind {
-            NirExprKind::TupleLiteral { elements } => {
+        // Classify the source shape from a read-only inspection first.
+        enum Source {
+            Tuple(Vec<ExprId>),
+            Struct(Vec<(u32, ExprId)>),
+            IndexRead {
+                other: u32,
+                idx: ExprId,
+                sig: SigKey,
+                span: Span,
+            },
+        }
+        let source = match &body.exprs[expr].kind {
+            ExprKind::TupleLiteral { elements } => {
                 if !matches!(expected_layout, ElementLayout::Tuple) {
                     return None;
                 }
                 if elements.len() != expected_arity {
                     return None;
                 }
-                // Each element becomes one per-field value, rewritten to propagate
-                // nested decomposed reads (e.g., FieldAccess on another candidate's index_value).
-                let mut out = Vec::with_capacity(expected_arity);
-                for e in elements {
-                    let mut e = e.clone();
-                    self.visit_expr(&mut e);
-                    out.push(e);
-                }
-                Some(out)
+                Source::Tuple(elements.clone())
             }
-            NirExprKind::StructLiteral {
+            ExprKind::StructLiteral {
                 struct_type,
                 fields,
                 ..
@@ -1341,25 +1325,9 @@ impl Rewriter<'_, '_> {
                 if fields.len() != expected_arity {
                     return None;
                 }
-                // Reorder by `field_index` so output position k corresponds to
-                // field k (matching the per-field local layout). Check-source
-                // already verified that indices cover 0..N exactly once.
-                let mut out: Vec<Option<NirExpr>> = (0..expected_arity).map(|_| None).collect();
-                for f in fields {
-                    let k = f.field_index as usize;
-                    if k >= expected_arity {
-                        return None;
-                    }
-                    if out[k].is_some() {
-                        return None;
-                    }
-                    let mut e = f.value.clone();
-                    self.visit_expr(&mut e);
-                    out[k] = Some(e);
-                }
-                out.into_iter().collect::<Option<Vec<_>>>()
+                Source::Struct(fields.iter().map(|f| (f.field_index, f.value)).collect())
             }
-            NirExprKind::MethodCall {
+            ExprKind::MethodCall {
                 receiver,
                 func,
                 args,
@@ -1367,7 +1335,7 @@ impl Rewriter<'_, '_> {
             } if list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::IndexReader)
                 && args.len() == 1 =>
             {
-                let other = receiver_local(receiver)?;
+                let other = receiver_local(body, *receiver)?;
                 if !ctx.decomposed.contains(&other) {
                     return None;
                 }
@@ -1378,284 +1346,166 @@ impl Rewriter<'_, '_> {
                 if !layouts_compatible(expected_layout, &other_info.layout) {
                     return None;
                 }
-                let idx_expr = &args[0].expr;
-                if !is_duplicable_expr(idx_expr) {
+                let idx_expr = args[0].expr;
+                if !is_duplicable_expr(body, idx_expr) {
                     return None;
                 }
                 let sig = sig_key_of(func)?;
+                Source::IndexRead {
+                    other,
+                    idx: idx_expr,
+                    sig,
+                    span: body.exprs[expr].span,
+                }
+            }
+            _ => return None,
+        };
+
+        match source {
+            Source::Tuple(elements) => {
+                // Each element becomes one per-field value, deep-cloned then
+                // rewritten to propagate nested decomposed reads.
+                let mut out = Vec::with_capacity(expected_arity);
+                for el in elements {
+                    let c = body.clone_expr(el);
+                    self.rewrite_expr(body, c);
+                    out.push(c);
+                }
+                Some(out)
+            }
+            Source::Struct(fields) => {
+                // Reorder by `field_index` so output position k corresponds to
+                // field k. `check_source` verified indices cover 0..N exactly once.
+                let mut out: Vec<Option<ExprId>> = (0..expected_arity).map(|_| None).collect();
+                for (field_index, value) in fields {
+                    let k = field_index as usize;
+                    if k >= expected_arity {
+                        return None;
+                    }
+                    if out[k].is_some() {
+                        return None;
+                    }
+                    let c = body.clone_expr(value);
+                    self.rewrite_expr(body, c);
+                    out[k] = Some(c);
+                }
+                out.into_iter().collect::<Option<Vec<_>>>()
+            }
+            Source::IndexRead {
+                other,
+                idx,
+                sig,
+                span,
+            } => {
+                let other_info = ctx.candidate_data.get(&other)?;
+                let other_elem_types = other_info.element_types.clone();
                 let mut out = Vec::with_capacity(expected_arity);
                 for k in 0..expected_arity {
                     let other_field_local = ctx.field_local_map[&(other, k as u32)];
                     let (other_field_name, other_arr_ty) =
                         ctx.field_info_map[&(other, k as u32)].clone();
-                    let other_elem_ty = other_info.element_types[k];
+                    let other_elem_ty = other_elem_types[k];
+                    let idx_clone = body.clone_expr(idx);
                     let call = build_index_reader_call(
+                        body,
                         other_elem_ty,
                         other_arr_ty,
                         other_field_local,
                         other_field_name,
-                        idx_expr.clone(),
+                        idx_clone,
                         &sig,
-                        expr.span,
+                        span,
                         ctx,
                     );
                     out.push(call);
                 }
                 Some(out)
             }
-            _ => None,
         }
     }
-}
 
-/// Build a `Unary::{Ref|MutRef}(Local{field_local})` receiver expression matching
-/// the convention used by the lowering phase for method call receivers.
-fn build_receiver(
-    field_local: u32,
-    field_name: String,
-    arr_ty: TypeId,
-    mut_ref: bool,
-    span: Span,
-) -> NirExpr {
-    let local = NirExpr::new(
-        NirExprKind::Local {
-            index: field_local,
-            name: field_name,
-        },
-        arr_ty,
-        span,
-    );
-    let op = if mut_ref {
-        crate::nir::NirUnaryOp::MutRef
-    } else {
-        crate::nir::NirUnaryOp::Ref
-    };
-    NirExpr::new(
-        NirExprKind::Unary {
-            op,
-            expr: Box::new(local),
-        },
-        arr_ty,
-        span,
-    )
-}
-
-/// Build `v_field.ElementWriter(value)` — e.g. `v_field.push(value)` — using the
-/// supplied method family `sig`. The `sig` is taken from the original call that
-/// triggered the rewrite, so any stdlib method matching `ElementWriter` flows
-/// through unchanged.
-fn build_element_writer_call(
-    elem_ty: TypeId,
-    arr_ty: TypeId,
-    field_local: u32,
-    field_name: String,
-    value: NirExpr,
-    sig: &SigKey,
-    span: Span,
-    ctx: &RewriteCtx,
-) -> NirExpr {
-    let func = ctx
-        .catalog
-        .get(&(elem_ty, sig.clone()))
-        .expect("ElementWriter entry checked by required_methods_available")
-        .clone();
-    let receiver = build_receiver(
-        field_local,
-        field_name,
-        arr_ty,
-        /*mut_ref=*/ true,
-        span,
-    );
-    let kind = NirExprKind::method_call(
-        Box::new(receiver),
-        func,
-        Vec::new(),
-        vec![CallArg::new(value, false)],
-    );
-    NirExpr::new(kind, TypeTable::UNIT, span)
-}
-
-/// Build `v_field.IndexWriter(index, value)` — e.g. `index_assign(index, value)`.
-/// The `sig` is taken from the original call that triggered the rewrite.
-fn build_index_writer_call(
-    elem_ty: TypeId,
-    arr_ty: TypeId,
-    field_local: u32,
-    field_name: String,
-    index: NirExpr,
-    value: NirExpr,
-    sig: &SigKey,
-    span: Span,
-    ctx: &RewriteCtx,
-) -> NirExpr {
-    let func = ctx
-        .catalog
-        .get(&(elem_ty, sig.clone()))
-        .expect("IndexWriter entry checked by required_methods_available")
-        .clone();
-    let receiver = build_receiver(
-        field_local,
-        field_name,
-        arr_ty,
-        /*mut_ref=*/ true,
-        span,
-    );
-    let kind = NirExprKind::method_call(
-        Box::new(receiver),
-        func,
-        Vec::new(),
-        vec![CallArg::new(index, false), CallArg::new(value, false)],
-    );
-    NirExpr::new(kind, TypeTable::UNIT, span)
-}
-
-/// Build `v_field.IndexReader(index)` — e.g. `index_value(index)`. Returns a
-/// `NirExpr` of type `elem_ty`. The `sig` is taken from the original call that
-/// triggered the rewrite.
-fn build_index_reader_call(
-    elem_ty: TypeId,
-    arr_ty: TypeId,
-    field_local: u32,
-    field_name: String,
-    index: NirExpr,
-    sig: &SigKey,
-    span: Span,
-    ctx: &RewriteCtx,
-) -> NirExpr {
-    let func = ctx
-        .catalog
-        .get(&(elem_ty, sig.clone()))
-        .expect("IndexReader entry checked by required_methods_available")
-        .clone();
-    let receiver = build_receiver(
-        field_local,
-        field_name,
-        arr_ty,
-        /*mut_ref=*/ false,
-        span,
-    );
-    let kind = NirExprKind::method_call(
-        Box::new(receiver),
-        func,
-        Vec::new(),
-        vec![CallArg::new(index, false)],
-    );
-    NirExpr::new(kind, elem_ty, span)
-}
-
-/// Returns true if the expression can be safely duplicated (cloned and
-/// re-evaluated N times with no observable side effects).
-fn is_duplicable_expr(e: &NirExpr) -> bool {
-    match &e.kind {
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. } => true,
-        NirExprKind::Binary { left, right, .. } => {
-            is_duplicable_expr(left) && is_duplicable_expr(right)
-        }
-        NirExprKind::Unary { op, expr: inner } => {
-            !matches!(
-                op,
-                crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef
-            ) && is_duplicable_expr(inner)
-        }
-        NirExprKind::Cast { expr: inner, .. } => is_duplicable_expr(inner),
-        // FieldAccess is only duplicable if its inner is too (most commonly a Local).
-        // We deliberately exclude MethodCall / Call / Index / etc. because they
-        // may allocate, trap, or have side effects.
-        NirExprKind::FieldAccess { expr: inner, .. } => is_duplicable_expr(inner),
-        _ => false,
-    }
-}
-
-impl NirMutVisitor for Rewriter<'_, '_> {
-    fn visit_block(&mut self, block: &mut NirBlock) {
-        // Replace candidate let-bindings and expression-statement-level
-        // `push` / `index_assign` calls with their per-field versions; recurse
-        // into everything else.
-        let old_stmts = std::mem::take(&mut block.stmts);
-        let mut out: Vec<NirStmt> = Vec::with_capacity(old_stmts.len());
-        for stmt in old_stmts {
-            self.process_stmt(stmt, &mut out);
-        }
-        block.stmts = out;
-    }
-
-    /// Rewrite an expression in place. This handles the "leaf" uses of a
-    /// decomposed candidate that were whitelisted by escape analysis:
-    /// - `v.len()` / `v.is_empty()` → same call on field 0 (len is invariant across fields)
-    /// - `v.index_value(i).K` → `v_K.index_value(i)`
-    ///
-    /// All other expressions recurse into children via `walk_expr`. A bare
-    /// `Local { v }` reference should not occur here (escape analysis would have
-    /// marked it escaped).
-    fn visit_expr(&mut self, expr: &mut NirExpr) {
+    /// Rewrite an expression in place: `v.len()`/`v.is_empty()` → field-0 call;
+    /// `v.index_value(i).K` → `v_K.index_value(i)`. All other expressions recurse.
+    fn rewrite_expr(&self, body: &mut Body, e: ExprId) {
         let ctx = self.ctx;
 
         // Handle FieldAccess on IndexValue first (read pattern).
-        if let NirExprKind::FieldAccess {
+        let field_read = if let ExprKind::FieldAccess {
             expr: inner,
             field_index,
             ..
-        } = &expr.kind
-            && let NirExprKind::MethodCall {
+        } = &body.exprs[e].kind
+        {
+            let inner = *inner;
+            let field_index = *field_index;
+            if let ExprKind::MethodCall {
                 receiver,
                 func,
                 args,
                 ..
-            } = &inner.kind
-            && list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::IndexReader)
-            && args.len() == 1
-            && let Some(rec_local) = receiver_local(receiver)
-            && ctx.decomposed.contains(&rec_local)
-        {
+            } = &body.exprs[inner].kind
+                && list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::IndexReader)
+                && args.len() == 1
+                && let Some(rec_local) = receiver_local(body, *receiver)
+                && ctx.decomposed.contains(&rec_local)
+            {
+                sig_key_of(func).map(|sig| (rec_local, field_index, args[0].expr, sig))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        if let Some((rec_local, field_index, idx_arg, sig)) = field_read {
             let info = ctx
                 .candidate_data
                 .get(&rec_local)
                 .expect("decomposed must have candidate data");
-            let k = *field_index as usize;
+            let k = field_index as usize;
             if k < info.element_types.len() {
                 let elem_ty = info.element_types[k];
                 let field_local = ctx.field_local_map[&(rec_local, k as u32)];
                 let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
-                let mut idx_expr = args[0].expr.clone();
-                let sig = sig_key_of(func).expect("IndexReader call must have SigKey");
-                self.visit_expr(&mut idx_expr);
+                let idx_clone = body.clone_expr(idx_arg);
+                self.rewrite_expr(body, idx_clone);
                 let new_call = build_index_reader_call(
+                    body,
                     elem_ty,
                     arr_ty,
                     field_local,
                     field_name,
-                    idx_expr,
+                    idx_clone,
                     &sig,
-                    expr.span,
+                    body.exprs[e].span,
                     ctx,
                 );
-                *expr = new_call;
+                let node = body.exprs[new_call].clone();
+                body.exprs[e] = node;
                 return;
             }
         }
 
-        // Handle Query calls on decomposed candidates (len/is_empty/capacity —
-        // anything classified as length-invariant). Dispatch to field 0: since
-        // all per-field arrays are kept in lockstep by push/index_assign/
-        // with_capacity, field 0 is representative.
-        if let NirExprKind::MethodCall {
+        // Handle Query calls on decomposed candidates (len/is_empty/capacity).
+        let query = if let ExprKind::MethodCall {
             receiver,
             func,
             args,
             ..
-        } = &expr.kind
-            && let Some(rec_local) = receiver_local(receiver)
-            && ctx.decomposed.contains(&rec_local)
-            && args.is_empty()
-            && list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::Query)
+        } = &body.exprs[e].kind
         {
+            if let Some(rec_local) = receiver_local(body, *receiver)
+                && ctx.decomposed.contains(&rec_local)
+                && args.is_empty()
+                && list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::Query)
+            {
+                sig_key_of(func).map(|sig| (rec_local, sig))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        if let Some((rec_local, sig)) = query {
             let info = ctx
                 .candidate_data
                 .get(&rec_local)
@@ -1663,32 +1513,237 @@ impl NirMutVisitor for Rewriter<'_, '_> {
             let elem_ty = info.element_types[0];
             let field_local = ctx.field_local_map[&(rec_local, 0)];
             let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, 0)].clone();
-            // Look up the same query method on List<T_0>. A missing catalog entry
-            // here is a compiler bug: escape analysis records every observed Query
-            // use via `record_use`, and `required_methods_available` verifies the
-            // entry exists for every per-field element type before the candidate
-            // is admitted to the decomposed set. Reaching this branch with a miss
-            // would mean those invariants broke.
-            let sig = sig_key_of(func).expect("Query call must have SigKey");
             let new_func = ctx
                 .catalog
                 .get(&(elem_ty, sig))
                 .cloned()
                 .expect("Query monomorphization must exist for decomposed element type");
-            let new_receiver = build_receiver(
-                field_local,
-                field_name,
-                arr_ty,
-                /*mut_ref=*/ false,
-                expr.span,
-            );
-            let kind =
-                NirExprKind::method_call(Box::new(new_receiver), new_func, Vec::new(), Vec::new());
-            expr.kind = kind;
+            let span = body.exprs[e].span;
+            let new_receiver = build_receiver(body, field_local, field_name, arr_ty, false, span);
+            body.exprs[e].kind = ExprKind::MethodCall {
+                receiver: new_receiver,
+                func: new_func,
+                type_args: Vec::new(),
+                args: Vec::new(),
+            };
             return;
         }
 
         // Default: recurse into children.
-        self.walk_expr(expr);
+        self.walk_children(body, NodeRef::Expr(e));
+    }
+
+    /// Default mutating walk: recurse into every id-bearing child, dispatching
+    /// blocks back through the statement-restructuring `rewrite_block`.
+    fn walk_children(&self, body: &mut Body, node: NodeRef) {
+        let mut kids = Vec::new();
+        body.for_each_child(node, |c| kids.push(c));
+        for c in kids {
+            match c {
+                NodeRef::Block(b) => self.rewrite_block(body, b),
+                NodeRef::Expr(ex) => self.rewrite_expr(body, ex),
+                NodeRef::Stmt(_) | NodeRef::Pat(_) => self.walk_children(body, c),
+            }
+        }
+    }
+}
+
+/// Build a `Unary::{Ref|MutRef}(Local{field_local})` receiver expression.
+fn build_receiver(
+    body: &mut Body,
+    field_local: u32,
+    field_name: String,
+    arr_ty: TypeId,
+    mut_ref: bool,
+    span: Span,
+) -> ExprId {
+    let local = body.exprs.push(ExprNode {
+        kind: ExprKind::Local {
+            index: field_local,
+            name: field_name,
+        },
+        type_id: arr_ty,
+        span,
+    });
+    let op = if mut_ref {
+        NirUnaryOp::MutRef
+    } else {
+        NirUnaryOp::Ref
+    };
+    body.exprs.push(ExprNode {
+        kind: ExprKind::Unary { op, expr: local },
+        type_id: arr_ty,
+        span,
+    })
+}
+
+/// Build a `List<T_k>::Constructor(cap)` NIR call — e.g. `with_capacity(cap)`.
+fn build_with_capacity_call(
+    body: &mut Body,
+    elem_ty: TypeId,
+    arr_ty: TypeId,
+    cap: ExprId,
+    span: Span,
+    ctx: &RewriteCtx,
+) -> ExprId {
+    let sig = find_sig_key_for_kind(
+        ctx.catalog,
+        ctx.sig_kinds,
+        elem_ty,
+        ListMethodKind::Constructor,
+    )
+    .expect("Constructor checked by required_methods_available");
+    let func = ctx
+        .catalog
+        .get(&(elem_ty, sig))
+        .expect("Constructor entry checked by required_methods_available")
+        .clone();
+    body.exprs.push(ExprNode {
+        kind: ExprKind::Call {
+            func,
+            type_args: Vec::new(),
+            args: vec![ArenaCallArg {
+                expr: cap,
+                is_mut: false,
+            }],
+        },
+        type_id: arr_ty,
+        span,
+    })
+}
+
+/// Build `v_field.ElementWriter(value)` — e.g. `v_field.push(value)`.
+#[allow(clippy::too_many_arguments)]
+fn build_element_writer_call(
+    body: &mut Body,
+    elem_ty: TypeId,
+    arr_ty: TypeId,
+    field_local: u32,
+    field_name: String,
+    value: ExprId,
+    sig: &SigKey,
+    span: Span,
+    ctx: &RewriteCtx,
+) -> ExprId {
+    let func = ctx
+        .catalog
+        .get(&(elem_ty, sig.clone()))
+        .expect("ElementWriter entry checked by required_methods_available")
+        .clone();
+    let receiver = build_receiver(body, field_local, field_name, arr_ty, true, span);
+    body.exprs.push(ExprNode {
+        kind: ExprKind::MethodCall {
+            receiver,
+            func,
+            type_args: Vec::new(),
+            args: vec![ArenaCallArg {
+                expr: value,
+                is_mut: false,
+            }],
+        },
+        type_id: TypeTable::UNIT,
+        span,
+    })
+}
+
+/// Build `v_field.IndexWriter(index, value)` — e.g. `index_assign(index, value)`.
+#[allow(clippy::too_many_arguments)]
+fn build_index_writer_call(
+    body: &mut Body,
+    elem_ty: TypeId,
+    arr_ty: TypeId,
+    field_local: u32,
+    field_name: String,
+    index: ExprId,
+    value: ExprId,
+    sig: &SigKey,
+    span: Span,
+    ctx: &RewriteCtx,
+) -> ExprId {
+    let func = ctx
+        .catalog
+        .get(&(elem_ty, sig.clone()))
+        .expect("IndexWriter entry checked by required_methods_available")
+        .clone();
+    let receiver = build_receiver(body, field_local, field_name, arr_ty, true, span);
+    body.exprs.push(ExprNode {
+        kind: ExprKind::MethodCall {
+            receiver,
+            func,
+            type_args: Vec::new(),
+            args: vec![
+                ArenaCallArg {
+                    expr: index,
+                    is_mut: false,
+                },
+                ArenaCallArg {
+                    expr: value,
+                    is_mut: false,
+                },
+            ],
+        },
+        type_id: TypeTable::UNIT,
+        span,
+    })
+}
+
+/// Build `v_field.IndexReader(index)` — e.g. `index_value(index)`, of type `elem_ty`.
+#[allow(clippy::too_many_arguments)]
+fn build_index_reader_call(
+    body: &mut Body,
+    elem_ty: TypeId,
+    arr_ty: TypeId,
+    field_local: u32,
+    field_name: String,
+    index: ExprId,
+    sig: &SigKey,
+    span: Span,
+    ctx: &RewriteCtx,
+) -> ExprId {
+    let func = ctx
+        .catalog
+        .get(&(elem_ty, sig.clone()))
+        .expect("IndexReader entry checked by required_methods_available")
+        .clone();
+    let receiver = build_receiver(body, field_local, field_name, arr_ty, false, span);
+    body.exprs.push(ExprNode {
+        kind: ExprKind::MethodCall {
+            receiver,
+            func,
+            type_args: Vec::new(),
+            args: vec![ArenaCallArg {
+                expr: index,
+                is_mut: false,
+            }],
+        },
+        type_id: elem_ty,
+        span,
+    })
+}
+
+/// Returns true if the expression can be safely duplicated (cloned and
+/// re-evaluated N times with no observable side effects).
+fn is_duplicable_expr(body: &Body, e: ExprId) -> bool {
+    match &body.exprs[e].kind {
+        ExprKind::IntLiteral { .. }
+        | ExprKind::FloatLiteral { .. }
+        | ExprKind::BoolLiteral(_)
+        | ExprKind::CharLiteral(_)
+        | ExprKind::Null
+        | ExprKind::Unit
+        | ExprKind::Local { .. }
+        | ExprKind::GlobalVarGet { .. } => true,
+        ExprKind::Binary { left, right, .. } => {
+            is_duplicable_expr(body, *left) && is_duplicable_expr(body, *right)
+        }
+        ExprKind::Unary { op, expr: inner } => {
+            !matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef) && is_duplicable_expr(body, *inner)
+        }
+        ExprKind::Cast { expr: inner, .. } => is_duplicable_expr(body, *inner),
+        // FieldAccess is only duplicable if its inner is too (most commonly a Local).
+        // We deliberately exclude MethodCall / Call / Index / etc. because they
+        // may allocate, trap, or have side effects.
+        ExprKind::FieldAccess { expr: inner, .. } => is_duplicable_expr(body, *inner),
+        _ => false,
     }
 }

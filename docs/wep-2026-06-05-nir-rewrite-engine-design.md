@@ -192,8 +192,15 @@ The old fixed-point loop and the engine co-exist during the port.
         eliminators drive a local `ArenaOptVisitor` (mirrors `NirOptVisitor`'s
         default walk); a guard-implied condition is rewritten to `false`
         in place. DefMap-resolution helpers are value-typed and unchanged.
-  - Remaining: `container_sroa`, `licm`, `dce`, `labeled_block_fusion`,
-    `inline`, `field_scalarize`.
+  - [x] `container_sroa` — arena candidate collection + whitelist escape
+        analysis (fixpoint) + per-field rewrite. Synthesized per-field
+        calls are pushed into the arena; duplicated sub-expressions
+        (capacity, index) deep-clone via the new `Body::clone_expr`.
+  - Remaining: `licm`, `dce`, `labeled_block_fusion`, `inline`,
+    `field_scalarize`.
+  - Added `Body::clone_expr` (structural arena deep-clone) — the
+    non-engine counterpart of `Engine::clone_expr`, for rewrites that
+    duplicate a subtree.
   - Deferred: `const_folding` — unlike the others it drives the whole `niri`
     interpreter (tree-shaped) over the body with flow-sensitive env threading,
     so it stays on the bridge until `niri` itself is ported to the arena
