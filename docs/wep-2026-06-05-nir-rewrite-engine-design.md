@@ -196,8 +196,12 @@ The old fixed-point loop and the engine co-exist during the port.
         analysis (fixpoint) + per-field rewrite. Synthesized per-field
         calls are pushed into the arena; duplicated sub-expressions
         (capacity, index) deep-clone via the new `Body::clone_expr`.
-  - Remaining: `licm`, `dce`, `labeled_block_fusion`, `inline`,
-    `field_scalarize`.
+  - [x] `licm` — arena modified-var / ref-binding / hoist-candidate
+        analysis and in-place field-access replacement; hoist `Let`s pushed
+        into the arena. The hoist/replace/ref walks share a `*_child_nodes`
+        enumerator that reproduces the tree walk's pattern-excluding child set
+        (so hoist-local numbering stays identical).
+  - Remaining: `dce`, `labeled_block_fusion`, `inline`, `field_scalarize`.
   - Added `Body::clone_expr` (structural arena deep-clone) — the
     non-engine counterpart of `Engine::clone_expr`, for rewrites that
     duplicate a subtree.
