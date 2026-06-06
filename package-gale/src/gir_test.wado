@@ -14,7 +14,6 @@ use {
     MultiAltRule,
     LeftRecursiveRule,
     LrDispatchData,
-    FollowVariant,
     MultiAltDispatch,
     DirectDispatch,
     DispatchBranch,
@@ -78,7 +77,6 @@ fn empty_header(name: &String) -> RuleHeader {
         field_name: *name,
         type_name: `{*name}Node`,
         visibility: Visibility::Default,
-        variant_of: null,
         case_names: [],
     };
 }
@@ -101,13 +99,11 @@ test "LoweredGrammar empty construction" {
         channels: [],
         lit_tokens: [],
         parser_rules: [],
-        variant_rules: [],
         kind_sets: [],
         diagnostics: [],
     };
     assert g.name == "Empty";
     assert g.parser_rules.is_empty();
-    assert g.variant_rules.is_empty();
     assert g.kind_sets.is_empty();
     assert g.mode_names.len() == 1;
     assert g.diagnostics.is_empty();
@@ -443,20 +439,6 @@ test "ScanElement variants round-trip" {
     } else {
         panic("Repeat");
     }
-}
-
-test "FollowVariant carries scan/parse usage" {
-    let v = FollowVariant {
-        id: 7,
-        rule_name: "ws",
-        mask: ["TK_SPACE"],
-        scan_used: true,
-        parse_used: false,
-    };
-    assert v.id == 7;
-    assert v.scan_used == true;
-    assert v.parse_used == false;
-    assert v.mask.len() == 1;
 }
 
 test "FieldDecl and KindSet" {

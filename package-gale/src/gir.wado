@@ -83,14 +83,6 @@ pub struct LoweredGrammar {
     /// Lowered parser rules in source order. `parser_rules[0]` is the
     /// start rule (per ANTLR4 convention) and seeds `gen_parse_entry`.
     pub parser_rules: List<Rule>,
-    /// Follow-aware variant rules registered during lowering.
-    /// Variants are emitted as additional `parse_<rule>__follow_<id>`
-    /// / `scan_<rule>__follow_<id>` functions; their bodies are
-    /// independent `Rule` values whose `mask` field is non-empty.
-    /// Distinct from `parser_rules` so emit can iterate variants
-    /// without filtering and so the regular-rule emission order is
-    /// stable regardless of variant registration.
-    pub variant_rules: List<Rule>,
     /// Interned multi-element token-kind sets. `lower` rewrites every
     /// `<expr> matches { TK_X | TK_Y | ... }` decision into a
     /// `_gale_kind_set_<id>(<expr>)` call; this list drives the
@@ -184,11 +176,6 @@ pub struct RuleHeader {
     /// `Public` affect generated visibility today; the rest are
     /// preserved for round-trip / future tooling.
     pub visibility: Visibility,
-    /// `Some(v)` when this rule is a follow-aware variant of the
-    /// regular rule with the same `name`. The mask in `v` drives
-    /// tail-greedy suppression in the variant body, and `v.id`
-    /// drives the variant's function-name suffix.
-    pub variant_of: Option<FollowVariant>,
     /// Cached `case_names_for_rule(&rule.alternatives)`. Empty for
     /// `Simple`. Indexed by alt position in the original rule body.
     pub case_names: List<String>,
@@ -310,34 +297,6 @@ pub struct LrDispatchData {
     /// Overlap groups between the suffix first-sets. Each inner
     /// array lists indices into `valid_lr_alts`.
     pub groups: List<List<i32>>,
-}
-
-/// Metadata for one follow-aware variant of a rule. Variants exist
-/// to suppress tail-greedy iterations whose first set collides with
-/// the caller's local FOLLOW. The pair `(rule_name, mask)` keys the
-/// `lower`-time interning, and `id` drives the variant-function-name
-/// suffix `__follow_<id>`. See `package-gale/AGENTS.md` for the LL
-/// invariants the variant emit must respect.
-pub struct FollowVariant {
-    /// Variant id, assigned in registration order during lowering.
-    /// Stable across runs because lower walks the grammar in
-    /// deterministic order.
-    pub id: i32,
-    /// The rule this variant specialises. The variant's body shares
-    /// shape with the regular rule's body but applies `mask` as
-    /// additional follow.
-    pub rule_name: String,
-    /// Canonical (sorted, unique) intersection of `caller_follow`
-    /// and `tail_greedy_first(rule)` at the call sites that
-    /// triggered registration. Drives suppression in
-    /// `RepeatStrategy::WithFollowSubtraction` and friends.
-    pub mask: List<String>,
-    /// True when the variant has at least one scan-side caller.
-    /// Drives whether `scan_<rule>__follow_<id>` is emitted.
-    pub scan_used: bool,
-    /// True when the variant has at least one parse-side caller.
-    /// Drives whether `parse_<rule>__follow_<id>` is emitted.
-    pub parse_used: bool,
 }
 
 // ==========================================================================

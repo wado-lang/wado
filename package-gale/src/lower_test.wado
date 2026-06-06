@@ -85,7 +85,6 @@ test "lower passes through grammar metadata" {
     assert lowered.source_files.len() == 1;
     assert lowered.source_files[0] == "JSON.g4";
     assert lowered.parser_rules.is_empty();
-    assert lowered.variant_rules.is_empty();
     assert lowered.kind_sets.is_empty();
     assert lowered.mode_names.len() == 1;
 }
@@ -2573,7 +2572,6 @@ test "lower: RuleCall before a token gets a Mask FollowArg; callee tail Repeat g
 
     let lowered = lower(&g, &no_lit_tokens());
     // No variant bodies are ever produced now.
-    assert lowered.variant_rules.is_empty(), `expected no variant_rules, got {lowered.variant_rules.len()}`;
     // `r`'s `a` call carries a static-mask FollowArg.
     if let Simple(s) = &lowered.parser_rules[0] {
         if let RuleCall(rc) = &s.body.ops[0] {

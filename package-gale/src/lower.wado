@@ -128,7 +128,6 @@ use {
     FieldDecl,
     FieldKind,
     KindSet,
-    FollowVariant,
     FollowArg,
     DiagnosticKind,
 } from "./gir.wado";
@@ -228,11 +227,6 @@ pub fn lower_with_ctx(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut 
     for let rule of &grammar.parser_rules {
         parser_rules.push(lower_rule(rule, ctx, &empty_mask, &empty_k_mask));
     }
-    // The runtime-FOLLOW redesign lowers each rule exactly once (above);
-    // there are no per-(rule, mask) variant bodies. `variant_rules` is
-    // retained as an empty list while `LoweredGrammar.variant_rules`
-    // exists.
-    let variant_rules: List<Rule> = [];
     // Phase 2.7 — pre-intern multi-element token-kind sets that
     // surface in dispatch branches and `Op::Excluded` kinds. The
     // resulting registry is the source of truth for `_gale_kind_set_<id>`
@@ -249,7 +243,6 @@ pub fn lower_with_ctx(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut 
         channels: grammar.channels,
         lit_tokens: *lit_tokens,
         parser_rules,
-        variant_rules,
         kind_sets,
         diagnostics: ctx.take_diagnostics(),
     };
@@ -2179,7 +2172,6 @@ fn lower_header(rule: &ParserRule) -> RuleHeader {
         field_name: rule.field_name,
         type_name: rule.type_name,
         visibility: rule.visibility,
-        variant_of: null,
         case_names: case_names_for_rule(&rule.alternatives),
     };
 }
