@@ -2848,27 +2848,50 @@ impl Monomorphizer {
                 Self::rewrite_local_index_in_stmt(s, binding_local_idx, iter_binding);
             }
 
-            // Reallocate body locals that conflict with previous iterations.
-            // This handles temporaries from `?` expansion (__qm_v, __qm_e) and other
-            // locals that share the same index across cloned iteration bodies.
+            // Reconcile body-local types and reallocate collisions across the
+            // cloned per-iteration bodies.
+            //
+            // A `let` inside the for-of body is typed once, in the generic
+            // template, as the type-pack / tuple element type. After cloning
+            // and substituting each iteration, the *statement* type is the
+            // concrete per-element type, but the shared `locals` table entry
+            // still carries the stale generic type. Two things must happen:
+            //
+            //  1. The first iteration keeps the original local index, so its
+            //     `locals` entry must be retyped to the concrete element type —
+            //     otherwise codegen declares the slot with the generic (often
+            //     reference-shaped) type while the body stores a different
+            //     concrete value, producing an invalid Wasm local. This bites
+            //     whenever the local survives optimization, e.g. inside a
+            //     `match` arm where copy-propagation cannot fold it away.
+            //  2. Later iterations reuse the same index, so they must be
+            //     reallocated to a fresh local (also typed concretely) to avoid
+            //     sharing one slot across heterogeneous element types. This also
+            //     covers `?`-expansion temporaries (`__qm_v`, `__qm_e`).
             let mut body_locals: Vec<u32> = Vec::new();
             Self::collect_locals_in_block(&elem_body, &mut body_locals);
             for body_local in body_locals {
+                let concrete_type = Self::find_local_type_in_block(&elem_body, body_local);
                 if !seen_locals.insert(body_local) {
-                    // This local was already used by a previous iteration — reallocate
+                    // Collision with a previous iteration — reallocate.
                     let new_idx = *local_count;
                     *local_count += 1;
-                    let body_local_type = Self::find_local_type_in_block(&elem_body, body_local)
-                        .unwrap_or(
-                            locals
-                                .get(body_local as usize)
-                                .map(|l| l.type_id)
-                                .unwrap_or(TypeTable::UNIT),
-                        );
+                    let body_local_type = concrete_type.unwrap_or_else(|| {
+                        locals
+                            .get(body_local as usize)
+                            .map(|l| l.type_id)
+                            .unwrap_or(TypeTable::UNIT)
+                    });
                     locals.push(TirLocal::synth(new_idx, body_local_type, false));
                     for s in &mut elem_body.stmts {
                         Self::rewrite_local_index_in_stmt(s, body_local, new_idx);
                     }
+                } else if let Some(ty) = concrete_type
+                    && let Some(slot) = locals.get_mut(body_local as usize)
+                {
+                    // First iteration keeps this index — retype its slot to the
+                    // concrete per-element type.
+                    slot.type_id = ty;
                 }
             }
 

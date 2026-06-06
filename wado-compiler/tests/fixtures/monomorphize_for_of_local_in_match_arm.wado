@@ -1,0 +1,49 @@
+// Regression: a `let` binding whose type differs per variadic-for-of iteration
+// (i32 / String / bool), placed inside a `match` arm (and a `while` body) where
+// it survives copy-propagation. Each cloned iteration body must give the local
+// the concrete per-element type in the locals table — the first iteration used
+// to keep the generic type-pack/tuple type, declaring the slot with a
+// reference-shaped type while storing an i32, which the WIR pipeline rejected as
+// invalid core Wasm ("type mismatch: expected (ref null ...), found i32").
+
+trait Foo { fn val(&self) -> i32; }
+impl Foo for i32 { fn val(&self) -> i32 { return *self; } }
+impl Foo for String { fn val(&self) -> i32 { return 100; } }
+impl Foo for bool { fn val(&self) -> i32 { return 1; } }
+
+fn sum_in_match<..T: Foo>(items: [..T]) -> i32 {
+    let mut acc = 0;
+    for let v of items {
+        let tag = 1;
+        match tag {
+            1 => {
+                let local = v;
+                acc = acc + local.val();
+            }
+            _ => {}
+        }
+    }
+    return acc;
+}
+
+fn sum_in_while<..T: Foo>(items: [..T]) -> i32 {
+    let mut acc = 0;
+    for let v of items {
+        let mut once = true;
+        while once {
+            let local = v;
+            acc = acc + local.val();
+            once = false;
+        }
+    }
+    return acc;
+}
+
+test "per-iteration local typed concretely inside match arm and while body" {
+    let t = [10, "x", true, 20];   // 10 + 100 + 1 + 20 = 131
+    assert sum_in_match(t) == 131;
+    assert sum_in_while(t) == 131;
+}
+
+__DATA__
+{"test": {}}
