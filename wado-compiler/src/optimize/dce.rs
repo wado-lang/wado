@@ -18,9 +18,11 @@ use crate::name::{
     FreeFunctionName, FunctionId, MethodName, mangle_generic_name, mangle_local_method,
     mangle_local_trait_method, mangle_method_generic,
 };
-use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirImport, NirStmt, NirStmtKind};
+use crate::nir::{NirFunction, NirImport};
+use crate::nir_arena::{
+    BlockId, Body, ExprId, ExprKind, NodeRef, PatKind, StmtId, StmtKind, StmtNode,
+};
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Call graph: function ID -> set of called function IDs
@@ -253,7 +255,7 @@ fn extend_reachable_for_optimizer_passes(
             if !reachable.contains(&func_id) {
                 continue;
             }
-            if let Some(body) = &func.body_block() {
+            if let Some(body) = func.body.as_ref() {
                 let mut needed: IndexSet<crate::tir::TypeId> = IndexSet::default();
                 collect_array_clone_element_types(body, &mut needed);
                 for type_id in needed {
@@ -276,31 +278,20 @@ fn extend_reachable_for_optimizer_passes(
 /// `builtin::array_clone::<T>(...)` appears as a NIR call. The
 /// corresponding `$value_copy$T<id>` helper has to survive DCE because
 /// codegen will reach it by *name* at WIR time.
-fn collect_array_clone_element_types(
-    block: &crate::nir::NirBlock,
-    out: &mut IndexSet<crate::tir::TypeId>,
-) {
-    use crate::nir::{NirExpr, NirExprKind};
-    use crate::nir_visitor::NirRefVisitor;
-
-    struct Collector<'a> {
-        out: &'a mut IndexSet<crate::tir::TypeId>,
-    }
-    impl NirRefVisitor for Collector<'_> {
-        fn visit_expr(&mut self, expr: &NirExpr) {
-            if let NirExprKind::Call { func, .. } = &expr.kind
-                && func.module_source.is_core_builtin()
-                && func.name == "array_clone"
-                && let Some(mi) = func.monomorph_info.as_ref()
-                && let Some(elem) = mi.impl_type_args.first().copied()
-            {
-                self.out.insert(elem);
-            }
-            self.walk_expr(expr);
+fn collect_array_clone_element_types(body: &Body, out: &mut IndexSet<crate::tir::TypeId>) {
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::Call { func, .. } = &body.exprs[e].kind
+            && func.module_source.is_core_builtin()
+            && func.name == "array_clone"
+            && let Some(mi) = func.monomorph_info.as_ref()
+            && let Some(elem) = mi.impl_type_args.first().copied()
+        {
+            out.insert(elem);
         }
+        body.for_each_child(node, |c| stack.push(c));
     }
-    let mut collector = Collector { out };
-    collector.visit_block(block);
 }
 
 /// Compute reachable functions from all entry points via call graph traversal.
@@ -493,168 +484,32 @@ pub fn filter_bytes_literals(project: &mut NirPackage) {
 
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if let Some(body) = &func.body_block() {
-            collect_bytes_literals_block(body, &mut used_bytes);
+        if let Some(body) = func.body.as_ref() {
+            collect_bytes_literals_block(body, body.root, &mut used_bytes);
         }
     }
 
     project.bytes_literals.retain(|b| used_bytes.contains(b));
 }
 
-fn collect_bytes_literals_block(block: &NirBlock, used: &mut IndexSet<Vec<u8>>) {
-    for stmt in &block.stmts {
-        collect_bytes_literals_stmt(stmt, used);
-    }
-}
-
-fn collect_bytes_literals_stmt(stmt: &NirStmt, used: &mut IndexSet<Vec<u8>>) {
-    match &stmt.kind {
-        NirStmtKind::Let { value, .. }
-        | NirStmtKind::LetDestructure { value, .. }
-        | NirStmtKind::Expr(value) => {
-            collect_bytes_literals_expr(value, used);
+fn collect_bytes_literals_block(body: &Body, root: BlockId, used: &mut IndexSet<Vec<u8>>) {
+    // Collect every `BytesLiteral` reachable from `root`, excluding patterns
+    // (the tree walk never descended into `LetDestructure` / match-arm
+    // patterns, so a `BytesLiteral` inside a `ConstantValue` pattern is not
+    // counted).
+    let mut stack = vec![NodeRef::Block(root)];
+    while let Some(node) = stack.pop() {
+        if matches!(node, NodeRef::Pat(_)) {
+            continue;
         }
-        NirStmtKind::Return { value } => {
-            if let Some(expr) = value {
-                collect_bytes_literals_expr(expr, used);
-            }
-        }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            collect_bytes_literals_expr(condition, used);
-            collect_bytes_literals_block(then_block, used);
-            if let Some(else_blk) = else_block {
-                collect_bytes_literals_block(else_blk, used);
-            }
-        }
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            collect_bytes_literals_block(body, used);
-        }
-        NirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                collect_bytes_literals_expr(v, used);
-            }
-        }
-        NirStmtKind::Continue => {}
-    }
-}
-
-fn collect_bytes_literals_expr(expr: &NirExpr, used: &mut IndexSet<Vec<u8>>) {
-    match &expr.kind {
-        NirExprKind::BytesLiteral(b) => {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::BytesLiteral(b) = &body.exprs[e].kind
+        {
             used.insert(b.clone());
         }
-        NirExprKind::Binary { left, right, .. } => {
-            collect_bytes_literals_expr(left, used);
-            collect_bytes_literals_expr(right, used);
-        }
-        NirExprKind::Unary { expr, .. }
-        | NirExprKind::Cast { expr, .. }
-        | NirExprKind::FieldAccess { expr, .. }
-        | NirExprKind::VariantTag { expr }
-        | NirExprKind::VariantTest { expr, .. }
-        | NirExprKind::VariantPayload { expr, .. }
-        | NirExprKind::GlobalVarSet { value: expr, .. }
-        | NirExprKind::ClosureToCanonical { functor: expr, .. } => {
-            collect_bytes_literals_expr(expr, used);
-        }
-        NirExprKind::Index { expr, index }
-        | NirExprKind::Assign {
-            target: expr,
-            value: index,
-        } => {
-            collect_bytes_literals_expr(expr, used);
-            collect_bytes_literals_expr(index, used);
-        }
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                collect_bytes_literals_expr(&arg.expr, used);
-            }
-        }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            collect_bytes_literals_expr(receiver, used);
-            for arg in args {
-                collect_bytes_literals_expr(&arg.expr, used);
-            }
-        }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                collect_bytes_literals_expr(arg, used);
-            }
-        }
-        NirExprKind::IndirectCall { callee, args } => {
-            collect_bytes_literals_expr(callee, used);
-            for arg in args {
-                collect_bytes_literals_expr(arg, used);
-            }
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            collect_bytes_literals_expr(condition, used);
-            collect_bytes_literals_block(then_branch, used);
-            if let Some(else_blk) = else_branch {
-                collect_bytes_literals_block(else_blk, used);
-            }
-        }
-        NirExprKind::Match { expr, arms } => {
-            collect_bytes_literals_expr(expr, used);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    collect_bytes_literals_expr(guard, used);
-                }
-                collect_bytes_literals_expr(&arm.body, used);
-            }
-        }
-        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
-            collect_bytes_literals_block(block, used);
-        }
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            for e in elements {
-                collect_bytes_literals_expr(e, used);
-            }
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for f in fields {
-                collect_bytes_literals_expr(&f.value, used);
-            }
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                collect_bytes_literals_expr(p, used);
-            }
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            collect_bytes_literals_expr(scrutinee, used);
-            for arm in arms {
-                collect_bytes_literals_block(arm, used);
-            }
-            collect_bytes_literals_block(default, used);
-        }
-        // Leaf nodes — no children to recurse into
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::Unit
-        | NirExprKind::Null
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
+        body.for_each_child(node, |c| stack.push(c));
     }
 }
-
 /// Remove closure functors whose `__call` method was eliminated by function DCE.
 pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
     // Build a set of surviving (module_source, func_name) pairs for O(1) lookup.
@@ -839,7 +694,7 @@ fn collect_inspectable_signatures_from_reachable(
         if !reachable.contains(&func_id) {
             continue;
         }
-        if let Some(body) = &func.body_block() {
+        if let Some(body) = func.body.as_ref() {
             scan_inspect_signatures_block(body, type_table, &mut sigs);
         }
     }
@@ -882,47 +737,41 @@ fn function_id_for(func: &NirFunction) -> FunctionId {
 }
 
 fn scan_inspect_signatures_block(
-    block: &NirBlock,
+    body: &Body,
     type_table: &TypeTable,
     sigs: &mut InspectableSignatures,
 ) {
-    struct Scanner<'a> {
-        type_table: &'a TypeTable,
-        sigs: &'a mut InspectableSignatures,
-    }
-    impl NirRefVisitor for Scanner<'_> {
-        fn visit_expr(&mut self, expr: &NirExpr) {
-            if let NirExprKind::MethodCall { receiver, func, .. } = &expr.kind
-                && let Some(info) = &func.method_info
-                && info.base_struct_name == "Fn"
-                && let Some(trait_name) = info.base_trait_name.as_deref()
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::MethodCall { receiver, func, .. } = &body.exprs[e].kind
+            && let Some(info) = &func.method_info
+            && info.base_struct_name == "Fn"
+            && let Some(trait_name) = info.base_trait_name.as_deref()
+        {
+            // Receiver is `&Fn(...)` (possibly wrapped in `Box<fn(...)>` by the
+            // boxing pass); peel both to read the function's arity + return type.
+            let recv_type = type_table.peel_refs_and_box(body.exprs[*receiver].type_id);
+            if let ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } = type_table.get(recv_type)
             {
-                // Receiver is `&Fn(...)` (possibly wrapped in `Box<fn(...)>`
-                // by the boxing pass); peel both to read the function's
-                // arity + return type from the type table.
-                let recv_type = self.type_table.peel_refs_and_box(receiver.type_id);
-                if let ResolvedType::Function {
-                    params,
-                    return_type,
-                    ..
-                } = self.type_table.get(recv_type)
-                {
-                    let key = (params.len(), *return_type);
-                    match trait_name {
-                        "Inspect" => {
-                            self.sigs.inspect.insert(key);
-                        }
-                        "InspectAlt" => {
-                            self.sigs.inspect_alt.insert(key);
-                        }
-                        _ => {}
+                let key = (params.len(), *return_type);
+                match trait_name {
+                    "Inspect" => {
+                        sigs.inspect.insert(key);
                     }
+                    "InspectAlt" => {
+                        sigs.inspect_alt.insert(key);
+                    }
+                    _ => {}
                 }
             }
-            self.walk_expr(expr);
         }
+        body.for_each_child(node, |c| stack.push(c));
     }
-    Scanner { type_table, sigs }.visit_block(block);
 }
 
 /// Single-walk DCE fact collector: a [`NirRefVisitor`] that collects
@@ -969,8 +818,8 @@ impl<'a> DceWalker<'a> {
                 self.analysis.used_types.insert(ta);
             }
         }
-        if let Some(body) = &func.body_block() {
-            self.visit_block(body);
+        if let Some(body) = func.body.as_ref() {
+            self.walk_node(body, NodeRef::Block(body.root));
         }
     }
 
@@ -1065,7 +914,7 @@ impl<'a> DceWalker<'a> {
         }
     }
 
-    fn record_method_call(&mut self, receiver: &NirExpr, func: &crate::nir::FunctionRef) {
+    fn record_method_call(&mut self, receiver_type: TypeId, func: &crate::nir::FunctionRef) {
         let func_name = func.name.clone();
 
         // Monomorphized methods (e.g. `List<i32>::len`) already have
@@ -1095,7 +944,7 @@ impl<'a> DceWalker<'a> {
 
         // Non-monomorphized method - determine target from receiver type.
         // Strip any reference wrappers and newtypes to get the base type.
-        let mut current_type = self.type_table.get(receiver.type_id);
+        let mut current_type = self.type_table.get(receiver_type);
         let mut newtype_info: Option<(String, ModuleSource)> = None;
         loop {
             match current_type {
@@ -1230,7 +1079,7 @@ impl<'a> DceWalker<'a> {
                 // Trait/inherent methods on primitives (`i32^Ord::cmp`,
                 // `char::is_ascii_space`, `42.to_string()`, …).
                 if method_name == "to_string" {
-                    add_to_string_callee(receiver.type_id, self.type_table, &mut self.analysis);
+                    add_to_string_callee(receiver_type, self.type_table, &mut self.analysis);
                 }
                 let method_id = FunctionId::Method(MethodName::new(
                     ModuleSource::primitive(),
@@ -1431,72 +1280,76 @@ impl<'a> DceWalker<'a> {
     }
 }
 
-impl NirRefVisitor for DceWalker<'_> {
-    fn visit_stmt(&mut self, stmt: &NirStmt) {
-        // The `Let` binding's declared type is not visible from its `value`
-        // (the value's `type_id` is the RHS type before any coercion).
-        if let NirStmtKind::Let { type_id, .. } = &stmt.kind {
-            self.add_type(*type_id);
+impl DceWalker<'_> {
+    /// Record the per-node facts, then recurse into every id-bearing child
+    /// (including patterns, matching the former `NirRefVisitor` full walk).
+    fn walk_node(&mut self, body: &Body, node: NodeRef) {
+        match node {
+            NodeRef::Stmt(s) => {
+                // The `Let` binding's declared type is not visible from its
+                // `value` (the value's `type_id` is the RHS type before coercion).
+                if let StmtKind::Let { type_id, .. } = &body.stmts[s].kind {
+                    self.add_type(*type_id);
+                }
+            }
+            NodeRef::Expr(e) => {
+                // Every expression has a result type that needs to stay alive.
+                self.add_type(body.exprs[e].type_id);
+                match &body.exprs[e].kind {
+                    ExprKind::Call { func, .. } => self.record_call(func),
+                    ExprKind::MethodCall { receiver, func, .. } => {
+                        self.record_method_call(body.exprs[*receiver].type_id, func);
+                    }
+                    ExprKind::CmRawCall { local_name, .. } => self.record_cm_raw_call(local_name),
+                    ExprKind::ClosureToCanonical {
+                        functor_id,
+                        target_fn_type,
+                        closure_module,
+                        ..
+                    } => {
+                        self.add_type(*target_fn_type);
+                        self.record_closure_to_canonical(
+                            *functor_id,
+                            *target_fn_type,
+                            closure_module,
+                        );
+                    }
+                    ExprKind::GlobalVarGet {
+                        module_source,
+                        name,
+                    } => {
+                        self.analysis
+                            .used_globals
+                            .insert((module_source.to_path().join("::"), name.clone()));
+                    }
+                    ExprKind::Cast { target_type, .. } => self.add_type(*target_type),
+                    ExprKind::StructLiteral { struct_type, .. } => self.add_type(*struct_type),
+                    ExprKind::VariantConstruct { variant_type, .. } => self.add_type(*variant_type),
+                    ExprKind::VariantPayload { payload_type, .. } => self.add_type(*payload_type),
+                    _ => {}
+                }
+            }
+            NodeRef::Pat(p) => match &body.pats[p].kind {
+                PatKind::Binding { type_id, .. } => self.add_type(*type_id),
+                PatKind::Variant {
+                    enum_type,
+                    payload_type,
+                    ..
+                } => {
+                    self.add_type(*enum_type);
+                    self.add_type(*payload_type);
+                }
+                PatKind::Enum { enum_type, .. } => self.add_type(*enum_type),
+                PatKind::Struct { struct_type, .. } => self.add_type(*struct_type),
+                _ => {}
+            },
+            NodeRef::Block(_) => {}
         }
-        self.walk_stmt(stmt);
-    }
-
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        // Every expression has a result type that needs to stay alive.
-        self.add_type(expr.type_id);
-
-        match &expr.kind {
-            NirExprKind::Call { func, .. } => self.record_call(func),
-            NirExprKind::MethodCall { receiver, func, .. } => {
-                self.record_method_call(receiver, func);
-            }
-            NirExprKind::CmRawCall { local_name, .. } => self.record_cm_raw_call(local_name),
-            NirExprKind::ClosureToCanonical {
-                functor_id,
-                target_fn_type,
-                closure_module,
-                ..
-            } => {
-                self.add_type(*target_fn_type);
-                self.record_closure_to_canonical(*functor_id, *target_fn_type, closure_module);
-            }
-            NirExprKind::GlobalVarGet {
-                module_source,
-                name,
-            } => {
-                self.analysis
-                    .used_globals
-                    .insert((module_source.to_path().join("::"), name.clone()));
-            }
-            NirExprKind::Cast { target_type, .. } => self.add_type(*target_type),
-            NirExprKind::StructLiteral { struct_type, .. } => self.add_type(*struct_type),
-            NirExprKind::VariantConstruct { variant_type, .. } => self.add_type(*variant_type),
-            NirExprKind::VariantPayload { payload_type, .. } => self.add_type(*payload_type),
-            _ => {}
+        let mut kids = Vec::new();
+        body.for_each_child(node, |c| kids.push(c));
+        for c in kids {
+            self.walk_node(body, c);
         }
-        // Default recursion into children — handled uniformly by the
-        // visitor trait, so a new `NirExprKind` variant only needs its
-        // sub-expression layout described once in `nir_visitor.rs`.
-        self.walk_expr(expr);
-    }
-
-    fn visit_pattern(&mut self, pattern: &crate::nir::NirPattern) {
-        use crate::nir::NirPattern;
-        match pattern {
-            NirPattern::Binding { type_id, .. } => self.add_type(*type_id),
-            NirPattern::Variant {
-                enum_type,
-                payload_type,
-                ..
-            } => {
-                self.add_type(*enum_type);
-                self.add_type(*payload_type);
-            }
-            NirPattern::Enum { enum_type, .. } => self.add_type(*enum_type),
-            NirPattern::Struct { struct_type, .. } => self.add_type(*struct_type),
-            _ => {}
-        }
-        self.walk_pattern(pattern);
     }
 }
 
@@ -1713,7 +1566,17 @@ fn populate_type_reachability(
             }
             collect_type_transitive(global.ty, &type_table, &mut analysis.types);
             let mut walker = DceWalker::new(&type_table, &global.module_source);
-            walker.visit_expr(&global.initializer);
+            // Globals stay tree-shaped NIR; wrap the initializer in a one-stmt
+            // `Body` so the arena walker can traverse it.
+            let init_span = global.initializer.span;
+            let init_body = Body::from_block(&crate::nir::NirBlock {
+                stmts: vec![crate::nir::NirStmt::new(
+                    crate::nir::NirStmtKind::Expr(global.initializer.clone()),
+                    init_span,
+                )],
+                span: init_span,
+            });
+            walker.walk_node(&init_body, NodeRef::Block(init_body.root));
             for id in walker.analysis.used_types {
                 analysis.types.insert(id);
             }
@@ -1992,9 +1855,9 @@ pub fn remove_unreachable_globals(
 
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        if let Some(mut owned) = func.body_block() {
-            remove_dead_global_sets_block(&mut owned, used_globals);
-            func.set_body_block(owned);
+        if let Some(body) = func.body.as_mut() {
+            let root = body.root;
+            remove_dead_global_sets_block(body, root, used_globals);
         }
     }
 }
@@ -2005,167 +1868,196 @@ pub fn remove_unreachable_globals(
 /// effects), the `GlobalVarSet` is replaced with the value expression to
 /// preserve the side effects. For pure initializers (constants, struct/array
 /// literals without calls), the entire statement is removed.
-fn remove_dead_global_sets_block(block: &mut NirBlock, used: &IndexSet<(String, String)>) {
-    // Recurse into sub-statements first
-    for stmt in &mut block.stmts {
-        remove_dead_global_sets_stmt(stmt, used);
+fn remove_dead_global_sets_block(
+    body: &mut Body,
+    block: BlockId,
+    used: &IndexSet<(String, String)>,
+) {
+    // Recurse into sub-statements first.
+    for s in body.blocks[block].stmts.clone() {
+        remove_dead_global_sets_stmt(body, s, used);
     }
 
-    // Process GlobalVarSet statements for dead globals
-    let mut new_stmts: Vec<NirStmt> = Vec::with_capacity(block.stmts.len());
-    for stmt in std::mem::take(&mut block.stmts) {
-        if let NirStmtKind::Expr(ref expr) = stmt.kind
-            && let NirExprKind::GlobalVarSet {
-                ref module_source,
-                ref name,
-                ref value,
+    // Process GlobalVarSet statements for dead globals.
+    let old = std::mem::take(&mut body.blocks[block].stmts);
+    let mut new_stmts: Vec<StmtId> = Vec::with_capacity(old.len());
+    for s in old {
+        let dead = if let StmtKind::Expr(expr) = &body.stmts[s].kind
+            && let ExprKind::GlobalVarSet {
+                module_source,
+                name,
+                value,
                 ..
-            } = expr.kind
+            } = &body.exprs[*expr].kind
         {
             let key = (module_source.to_path().join("::"), name.clone());
-            if !used.contains(&key) {
-                // Dead global: keep the value expression only if it has side effects
-                // (e.g., panic() / unreachable — detected via never type)
-                if expr_has_side_effects(value) {
-                    new_stmts.push(NirStmt::new(NirStmtKind::Expr(*value.clone()), stmt.span));
-                }
-                continue;
+            if used.contains(&key) {
+                None
+            } else {
+                Some((*value, body.stmts[s].span))
             }
+        } else {
+            None
+        };
+        if let Some((value, span)) = dead {
+            // Dead global: keep the value expression only if it has side
+            // effects (e.g. panic() / unreachable — detected via never type).
+            // The discarded GlobalVarSet owned `value`, so reuse its id here.
+            if expr_has_side_effects(body, value) {
+                let new_s = body.stmts.push(StmtNode {
+                    kind: StmtKind::Expr(value),
+                    span,
+                });
+                new_stmts.push(new_s);
+            }
+            continue;
         }
-        new_stmts.push(stmt);
+        new_stmts.push(s);
     }
-    block.stmts = new_stmts;
+    body.blocks[block].stmts = new_stmts;
 }
 
 /// Check whether an expression tree contains observable side effects.
 ///
 /// Only diverging expressions (type `never` — e.g. `panic()`, `unreachable()`) are
 /// considered side effects. Pure function calls like array construction are not.
-fn expr_has_side_effects(expr: &NirExpr) -> bool {
-    if expr.type_id == TypeTable::NEVER {
+fn expr_has_side_effects(body: &Body, e: ExprId) -> bool {
+    if body.exprs[e].type_id == TypeTable::NEVER {
         return true;
     }
-    match &expr.kind {
-        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
-            block_has_side_effects(block)
+    match &body.exprs[e].kind {
+        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
+            block_has_side_effects(body, *block)
         }
-        NirExprKind::If {
+        ExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            expr_has_side_effects(condition)
-                || block_has_side_effects(then_branch)
-                || else_branch.as_ref().is_some_and(block_has_side_effects)
+            expr_has_side_effects(body, *condition)
+                || block_has_side_effects(body, *then_branch)
+                || else_branch.is_some_and(|b| block_has_side_effects(body, b))
         }
-        NirExprKind::Match { expr, arms } => {
-            expr_has_side_effects(expr)
+        ExprKind::Match { expr, arms } => {
+            expr_has_side_effects(body, *expr)
                 || arms.iter().any(|a| {
-                    a.guard.as_ref().is_some_and(expr_has_side_effects)
-                        || expr_has_side_effects(&a.body)
+                    a.guard.is_some_and(|g| expr_has_side_effects(body, g))
+                        || expr_has_side_effects(body, a.body)
                 })
         }
-        NirExprKind::Switch {
+        ExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
         } => {
-            expr_has_side_effects(scrutinee)
-                || arms.iter().any(block_has_side_effects)
-                || block_has_side_effects(default)
+            expr_has_side_effects(body, *scrutinee)
+                || arms.iter().any(|a| block_has_side_effects(body, *a))
+                || block_has_side_effects(body, *default)
         }
         _ => false,
     }
 }
 
-fn block_has_side_effects(block: &NirBlock) -> bool {
-    block.stmts.iter().any(|stmt| match &stmt.kind {
-        NirStmtKind::Expr(e) | NirStmtKind::Let { value: e, .. } => expr_has_side_effects(e),
-        NirStmtKind::Return { value } => value.as_ref().is_some_and(expr_has_side_effects),
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            expr_has_side_effects(condition)
-                || block_has_side_effects(then_block)
-                || else_block.as_ref().is_some_and(block_has_side_effects)
-        }
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            block_has_side_effects(body)
-        }
-        NirStmtKind::Break { value, .. } => value.as_ref().is_some_and(expr_has_side_effects),
-        NirStmtKind::Continue => false,
-        NirStmtKind::LetDestructure { value, .. } => expr_has_side_effects(value),
-    })
+fn block_has_side_effects(body: &Body, block: BlockId) -> bool {
+    body.blocks[block]
+        .stmts
+        .iter()
+        .any(|s| match &body.stmts[*s].kind {
+            StmtKind::Expr(e) | StmtKind::Let { value: e, .. } => expr_has_side_effects(body, *e),
+            StmtKind::Return { value } => value.is_some_and(|v| expr_has_side_effects(body, v)),
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                expr_has_side_effects(body, *condition)
+                    || block_has_side_effects(body, *then_block)
+                    || else_block.is_some_and(|b| block_has_side_effects(body, b))
+            }
+            StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
+                block_has_side_effects(body, *b)
+            }
+            StmtKind::Break { value, .. } => value.is_some_and(|v| expr_has_side_effects(body, v)),
+            StmtKind::Continue => false,
+            StmtKind::LetDestructure { value, .. } => expr_has_side_effects(body, *value),
+        })
 }
 
-fn remove_dead_global_sets_stmt(stmt: &mut NirStmt, used: &IndexSet<(String, String)>) {
-    match &mut stmt.kind {
-        NirStmtKind::Expr(expr) | NirStmtKind::Let { value: expr, .. } => {
-            remove_dead_global_sets_expr(expr, used);
-        }
-        NirStmtKind::If {
+fn remove_dead_global_sets_stmt(body: &mut Body, s: StmtId, used: &IndexSet<(String, String)>) {
+    enum W {
+        Expr(ExprId),
+        Blocks(BlockId, Option<BlockId>),
+        None,
+    }
+    let w = match &body.stmts[s].kind {
+        StmtKind::Expr(expr) | StmtKind::Let { value: expr, .. } => W::Expr(*expr),
+        StmtKind::If {
             then_block,
             else_block,
             ..
-        } => {
-            remove_dead_global_sets_block(then_block, used);
-            if let Some(else_blk) = else_block {
-                remove_dead_global_sets_block(else_blk, used);
+        } => W::Blocks(*then_block, *else_block),
+        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => W::Blocks(*b, None),
+        StmtKind::Return { value } | StmtKind::Break { value, .. } => match value {
+            Some(expr) => W::Expr(*expr),
+            None => W::None,
+        },
+        StmtKind::Continue | StmtKind::LetDestructure { .. } => W::None,
+    };
+    match w {
+        W::Expr(e) => remove_dead_global_sets_expr(body, e, used),
+        W::Blocks(b0, b1) => {
+            remove_dead_global_sets_block(body, b0, used);
+            if let Some(b1) = b1 {
+                remove_dead_global_sets_block(body, b1, used);
             }
         }
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            remove_dead_global_sets_block(body, used);
-        }
-        NirStmtKind::Return { value } => {
-            if let Some(expr) = value {
-                remove_dead_global_sets_expr(expr, used);
-            }
-        }
-        NirStmtKind::Break { value, .. } => {
-            if let Some(expr) = value {
-                remove_dead_global_sets_expr(expr, used);
-            }
-        }
-        NirStmtKind::Continue | NirStmtKind::LetDestructure { .. } => {}
+        W::None => {}
     }
 }
 
 /// Recursively remove dead `GlobalVarSet` from expressions that contain blocks.
-fn remove_dead_global_sets_expr(expr: &mut NirExpr, used: &IndexSet<(String, String)>) {
-    match &mut expr.kind {
-        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
-            remove_dead_global_sets_block(block, used);
-        }
-        NirExprKind::If {
+fn remove_dead_global_sets_expr(body: &mut Body, e: ExprId, used: &IndexSet<(String, String)>) {
+    enum W {
+        Block(BlockId),
+        If(ExprId, BlockId, Option<BlockId>),
+        Match(ExprId, Vec<ExprId>),
+        Switch(Vec<BlockId>, BlockId),
+        None,
+    }
+    let w = match &body.exprs[e].kind {
+        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => W::Block(*block),
+        ExprKind::If {
             condition,
             then_branch,
             else_branch,
-        } => {
-            remove_dead_global_sets_expr(condition, used);
-            remove_dead_global_sets_block(then_branch, used);
-            if let Some(else_blk) = else_branch {
-                remove_dead_global_sets_block(else_blk, used);
+        } => W::If(*condition, *then_branch, *else_branch),
+        ExprKind::Match { expr, arms } => W::Match(*expr, arms.iter().map(|a| a.body).collect()),
+        ExprKind::Switch { arms, default, .. } => W::Switch(arms.clone(), *default),
+        _ => W::None,
+    };
+    match w {
+        W::Block(b) => remove_dead_global_sets_block(body, b, used),
+        W::If(cond, then_b, else_b) => {
+            remove_dead_global_sets_expr(body, cond, used);
+            remove_dead_global_sets_block(body, then_b, used);
+            if let Some(eb) = else_b {
+                remove_dead_global_sets_block(body, eb, used);
             }
         }
-        NirExprKind::Match {
-            expr: scrutinee,
-            arms,
-        } => {
-            remove_dead_global_sets_expr(scrutinee, used);
-            for arm in arms {
-                remove_dead_global_sets_expr(&mut arm.body, used);
+        W::Match(scrutinee, bodies) => {
+            remove_dead_global_sets_expr(body, scrutinee, used);
+            for b in bodies {
+                remove_dead_global_sets_expr(body, b, used);
             }
         }
-        NirExprKind::Switch { arms, default, .. } => {
-            for arm in arms {
-                remove_dead_global_sets_block(arm, used);
+        W::Switch(arms, default) => {
+            for a in arms {
+                remove_dead_global_sets_block(body, a, used);
             }
-            remove_dead_global_sets_block(default, used);
+            remove_dead_global_sets_block(body, default, used);
         }
-        _ => {}
+        W::None => {}
     }
 }
 

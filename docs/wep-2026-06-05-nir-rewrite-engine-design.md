@@ -201,7 +201,13 @@ The old fixed-point loop and the engine co-exist during the port.
         into the arena. The hoist/replace/ref walks share a `*_child_nodes`
         enumerator that reproduces the tree walk's pattern-excluding child set
         (so hoist-local numbering stays identical).
-  - Remaining: `dce`, `labeled_block_fusion`, `inline`, `field_scalarize`.
+  - [x] `dce` — the body-touching helpers (array-clone-elem / bytes-literal /
+        inspect-signature collectors, the `DceWalker` fact walk, and dead
+        `GlobalVarSet` removal) read/mutate the arena; the reachability /
+        type / function / global graph machinery is body-independent and
+        unchanged. Global initializers (still tree NIR) wrap in a one-stmt
+        `Body` for the walk.
+  - Remaining: `labeled_block_fusion`, `inline`, `field_scalarize`.
   - Added `Body::clone_expr` (structural arena deep-clone) — the
     non-engine counterpart of `Engine::clone_expr`, for rewrites that
     duplicate a subtree.
