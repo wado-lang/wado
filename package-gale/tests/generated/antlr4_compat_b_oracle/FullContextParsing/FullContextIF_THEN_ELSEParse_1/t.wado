@@ -1264,7 +1264,7 @@ fn _parse_stat__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         let id = p.expect(TK_ID)?;
         let lit_then = p.expect(TK_LIT_THEN)?;
         let stat = _parse_stat(p, follow)?;
-        let lit_else_id: Option<LitElseIdItem> = if p.peek_kind() == TK_LIT_ELSE && p.peek_at(1) == TK_ID {
+        let lit_else_id: Option<LitElseIdItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_ELSE && p.peek_at(1) == TK_ID) {
             let lit_else = p.expect(TK_LIT_ELSE)?;
             let id = p.expect(TK_ID)?;
             let lit_else_id = LitElseIdItem {

@@ -1906,7 +1906,7 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &L
         inner_first: inner_first,
         caller_follow_first: *outer_follow,
         k_prefix_mask: *outer_k_prefix_position_mask,
-        gate_caller_follow: gate_caller_follow,
+        gate_caller_follow: gate_caller_follow && !rep.non_greedy,
     });
 }
 
@@ -3272,7 +3272,7 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut List<[String, i32]>, r
         body_is_single_alt_group,
         body_second_position_first,
         body_shape,
-        gate_caller_follow: gate_caller_follow,
+        gate_caller_follow: gate_caller_follow && !rep.non_greedy,
     });
 }
 

@@ -1232,7 +1232,7 @@ fn _parse_if_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let lit_if = p.expect(TK_LIT_IF)?;
     let lit_y = p.expect(TK_LIT_Y)?;
     let statement = _parse_statement(p, follow)?;
-    let lit_else_statement: Option<LitElseStatementItem> = if p.peek_kind() == TK_LIT_ELSE {
+    let lit_else_statement: Option<LitElseStatementItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_ELSE) {
         let lit_else = p.expect(TK_LIT_ELSE)?;
         let statement = _parse_statement(p, follow)?;
         let lit_else_statement = LitElseStatementItem {

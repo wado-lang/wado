@@ -1334,7 +1334,7 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             }
             opt_scan_pos = pos;
         }
-        let opt1_or_opt2_or_opt3: Option<Token> = if opt_scan_pos >= 0 {
+        let opt1_or_opt2_or_opt3: Option<Token> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
             let opt1_or_opt2_or_opt3 = p.match_set([TK_OPT1, TK_OPT2, TK_OPT3])?;
             Option::<Token>::Some(opt1_or_opt2_or_opt3)
         } else {

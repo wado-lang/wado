@@ -1351,7 +1351,7 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             }
             opt_scan_pos = pos;
         }
-        let group_0: Option<StatementGroup0> = if opt_scan_pos >= 0 {
+        let group_0: Option<StatementGroup0> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
             let group_0: StatementGroup0 = if p.peek_kind() == TK_OPT1 {
                 let opt1 = p.expect(TK_OPT1)?;
                 StatementGroup0::Alt0(StatementGroup0Alt0 {

@@ -16828,7 +16828,7 @@ fn _parse_type_body__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         }
         opt_scan_pos = pos;
     }
-    let semicolon_or_comma: Option<Token> = if opt_scan_pos >= 0 {
+    let semicolon_or_comma: Option<Token> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
         let semicolon_or_comma = p.match_set([TK_SemiColon, TK_LIT_COMMA])?;
         Option::<Token>::Some(semicolon_or_comma)
     } else {
@@ -16947,7 +16947,7 @@ fn _parse_type_member__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &Lis
 fn _parse_type_member__inner_bt_4(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<TypeMemberNode, ParseError> {
     let start = p.peek().span.start;
     let method_signature = _parse_method_signature(p, follow)?;
-    let lit_eqgt_type_: Option<LitEqgtTypeItem> = if p.peek_kind() == TK_LIT_EQGT {
+    let lit_eqgt_type_: Option<LitEqgtTypeItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_EQGT) {
         let lit_eqgt = p.expect(TK_LIT_EQGT)?;
         let type_ = _parse_type_(p, follow)?;
         let lit_eqgt_type_ = LitEqgtTypeItem {
@@ -17434,7 +17434,7 @@ fn _parse_property_signatur__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     } else {
         null
     };
-    let lit_eqgt_type_: Option<LitEqgtTypeItem> = if p.peek_kind() == TK_LIT_EQGT {
+    let lit_eqgt_type_: Option<LitEqgtTypeItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_EQGT) {
         let lit_eqgt = p.expect(TK_LIT_EQGT)?;
         let type_ = _parse_type_(p, follow)?;
         let lit_eqgt_type_ = LitEqgtTypeItem {
@@ -17568,7 +17568,7 @@ fn _parse_parameter_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             };
             comma_parameter_list.push(comma_parameter);
         }
-        let comma_rest_parameter: Option<CommaRestParameterItem> = if p.peek_kind() == TK_LIT_COMMA {
+        let comma_rest_parameter: Option<CommaRestParameterItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_COMMA) {
             let comma = p.expect(TK_LIT_COMMA)?;
             let rest_parameter = _parse_rest_parameter(p, follow)?;
             let comma_rest_parameter = CommaRestParameterItem {
@@ -18128,7 +18128,7 @@ fn _parse_constructor_declaration__inner(p: &mut Parser, follow: &List<List<i32>
         }
         opt_scan_pos = pos;
     }
-    let group_0: Option<ConstructorDeclarationGroup0> = if opt_scan_pos >= 0 {
+    let group_0: Option<ConstructorDeclarationGroup0> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
         let group_0: ConstructorDeclarationGroup0 = if p.peek_kind() == TK_LIT_LBRACE {
             let lbrace = p.expect(TK_LIT_LBRACE)?;
             let function_body = _parse_function_body(p, &FOLLOW_MASK_15)?;
@@ -18414,7 +18414,7 @@ fn _parse_enum_member_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 fn _parse_enum_member__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<EnumMemberNode, ParseError> {
     let start = p.peek().span.start;
     let property_name = _parse_property_name(p, follow)?;
-    let eq_single_expression: Option<EqSingleExpressionItem> = if p.peek_kind() == TK_LIT_EQ {
+    let eq_single_expression: Option<EqSingleExpressionItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_EQ) {
         let eq = p.expect(TK_LIT_EQ)?;
         let single_expression = _parse_single_expression(p, follow)?;
         let eq_single_expression = EqSingleExpressionItem {
@@ -20473,7 +20473,7 @@ fn _parse_import_module_items(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 fn _parse_import_alias_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ImportAliasNameNode, ParseError> {
     let start = p.peek().span.start;
     let module_export_name = _parse_module_export_name(p, follow)?;
-    let as__imported_binding: Option<AsImportedBindingItem> = if p.peek_kind() == TK_As {
+    let as__imported_binding: Option<AsImportedBindingItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_As) {
         let as_ = p.expect(TK_As)?;
         let imported_binding = _parse_imported_binding(p, follow)?;
         let as__imported_binding = AsImportedBindingItem {
@@ -20609,7 +20609,7 @@ fn _parse_import_namespace__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         }));
     }
     let group_0 = group_0_inner;
-    let as__identifier_name: Option<AsIdentifierNameItem> = if p.peek_kind() == TK_As {
+    let as__identifier_name: Option<AsIdentifierNameItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_As) {
         let as_ = p.expect(TK_As)?;
         let identifier_name = _parse_identifier_name(p, follow)?;
         let as__identifier_name = AsIdentifierNameItem {
@@ -20659,7 +20659,7 @@ fn _parse_import_from(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 fn _parse_alias_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AliasNameNode, ParseError> {
     let start = p.peek().span.start;
     let identifier_name = _parse_identifier_name(p, follow)?;
-    let as__identifier_name: Option<AsIdentifierNameItem> = if p.peek_kind() == TK_As {
+    let as__identifier_name: Option<AsIdentifierNameItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_As) {
         let as_ = p.expect(TK_As)?;
         let identifier_name = _parse_identifier_name(p, follow)?;
         let as__identifier_name = AsIdentifierNameItem {
@@ -20960,7 +20960,7 @@ fn _parse_export_module_items(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 fn _parse_export_alias_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ExportAliasNameNode, ParseError> {
     let start = p.peek().span.start;
     let module_export_name = _parse_module_export_name(p, follow)?;
-    let as__module_export_name: Option<AsModuleExportNameItem> = if p.peek_kind() == TK_As {
+    let as__module_export_name: Option<AsModuleExportNameItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_As) {
         let as_ = p.expect(TK_As)?;
         let module_export_name = _parse_module_export_name(p, follow)?;
         let as__module_export_name = AsModuleExportNameItem {
@@ -21369,7 +21369,7 @@ fn _parse_variable_declaration__inner(p: &mut Parser, follow: &List<List<i32>> =
     } else {
         null
     };
-    let eq_type_parameters_single_expression: Option<EqTypeParametersOptSingleExpressionItem> = if p.peek_kind() == TK_LIT_EQ {
+    let eq_type_parameters_single_expression: Option<EqTypeParametersOptSingleExpressionItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_EQ) {
         let eq = p.expect(TK_LIT_EQ)?;
         let type_parameters: Option<TypeParametersNode> = if p.peek_kind() == TK_LIT_LT {
             let type_parameters = _parse_type_parameters(p, &EMPTY_FOLLOW)?;
@@ -21457,7 +21457,7 @@ fn _parse_if_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let expression_sequence = _parse_expression_sequence(p, &FOLLOW_MASK_8)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
     let statement = _parse_statement(p, follow)?;
-    let else__statement: Option<ElseStatementItem> = if p.peek_kind() == TK_Else {
+    let else__statement: Option<ElseStatementItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Else) {
         let else_ = p.expect(TK_Else)?;
         let statement = _parse_statement(p, follow)?;
         let else__statement = ElseStatementItem {
@@ -22031,7 +22031,7 @@ fn _parse_continue_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
-    if opt_scan_pos >= 0 {
+    if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
         let identifier = _parse_identifier(p, &EMPTY_FOLLOW)?;
     }
     let eos = _parse_eos(p, follow)?;
@@ -22062,7 +22062,7 @@ fn _parse_break_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
-    if opt_scan_pos >= 0 {
+    if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
         let identifier = _parse_identifier(p, &EMPTY_FOLLOW)?;
     }
     let eos = _parse_eos(p, follow)?;
@@ -22093,7 +22093,7 @@ fn _parse_return_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
-    if opt_scan_pos >= 0 {
+    if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
         let expression_sequence = _parse_expression_sequence(p, &EMPTY_FOLLOW)?;
     }
     let eos = _parse_eos(p, follow)?;
@@ -22124,7 +22124,7 @@ fn _parse_yield_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
-    if opt_scan_pos >= 0 {
+    if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
         let expression_sequence = _parse_expression_sequence(p, &EMPTY_FOLLOW)?;
     }
     let eos = _parse_eos(p, follow)?;
@@ -23657,7 +23657,7 @@ fn _parse_formal_parameter_list__inner_bt_0(p: &mut Parser, follow: &List<List<i
         };
         comma_formal_parameter_arg_list.push(comma_formal_parameter_arg);
     }
-    let comma_last_formal_parameter_arg: Option<CommaLastFormalParameterArgItem> = if p.peek_kind() == TK_LIT_COMMA {
+    let comma_last_formal_parameter_arg: Option<CommaLastFormalParameterArgItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_COMMA) {
         let comma = p.expect(TK_LIT_COMMA)?;
         let last_formal_parameter_arg = _parse_last_formal_parameter_arg(p, follow)?;
         let comma_last_formal_parameter_arg = CommaLastFormalParameterArgItem {
@@ -23729,7 +23729,7 @@ fn _parse_formal_parameter_list__inner_scan_0(tokens: &List<Token>, pos: i32, fo
 fn _parse_formal_parameter_list__inner_bt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<FormalParameterListNode, ParseError> {
     let start = p.peek().span.start;
     let object_literal = _parse_object_literal(p, follow)?;
-    let colon_formal_parameter_list: Option<ColonFormalParameterListItem> = if p.peek_kind() == TK_LIT_COLON {
+    let colon_formal_parameter_list: Option<ColonFormalParameterListItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_COLON) {
         let colon = p.expect(TK_LIT_COLON)?;
         let formal_parameter_list = _parse_formal_parameter_list(p, follow)?;
         let colon_formal_parameter_list = ColonFormalParameterListItem {
@@ -23869,7 +23869,7 @@ fn _parse_formal_parameter_arg__inner(p: &mut Parser, follow: &List<List<i32>> =
     } else {
         null
     };
-    let eq_single_expression: Option<EqSingleExpressionItem> = if p.peek_kind() == TK_LIT_EQ {
+    let eq_single_expression: Option<EqSingleExpressionItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_EQ) {
         let eq = p.expect(TK_LIT_EQ)?;
         let single_expression = _parse_single_expression(p, follow)?;
         let eq_single_expression = EqSingleExpressionItem {
@@ -26662,7 +26662,7 @@ fn _parse_as_expression__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &L
 fn _parse_as_expression__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AsExpressionNode, ParseError> {
     let start = p.peek().span.start;
     let predefined_type = _parse_predefined_type(p, follow)?;
-    let lbracket_rbracket: Option<LbracketRbracketItem> = if p.peek_kind() == TK_LIT_LBRACKET && p.peek_at(1) == TK_LIT_RBRACKET {
+    let lbracket_rbracket: Option<LbracketRbracketItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_LBRACKET && p.peek_at(1) == TK_LIT_RBRACKET) {
         let lbracket = p.expect(TK_LIT_LBRACKET)?;
         let rbracket = p.expect(TK_LIT_RBRACKET)?;
         let lbracket_rbracket = LbracketRbracketItem {

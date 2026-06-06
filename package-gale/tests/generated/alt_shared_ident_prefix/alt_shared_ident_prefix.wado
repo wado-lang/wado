@@ -1595,7 +1595,7 @@ fn _parse_pattern__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<Li
 fn _parse_pattern__inner_bt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PatternNode, ParseError> {
     let start = p.peek().span.start;
     let path = _parse_path(p, follow)?;
-    let lparen_item_rparen: Option<LparenItemOptRparenItem> = if p.peek_kind() == TK_LIT_LPAREN {
+    let lparen_item_rparen: Option<LparenItemOptRparenItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_LPAREN) {
         let lparen = p.expect(TK_LIT_LPAREN)?;
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {

@@ -7292,7 +7292,7 @@ fn _parse_rule_alt_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 fn _parse_labeled_alt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LabeledAltNode, ParseError> {
     let start = p.peek().span.start;
     let alternative = _parse_alternative(p, follow)?;
-    let pound_identifier: Option<PoundIdentifierItem> = if p.peek_kind() == TK_POUND {
+    let pound_identifier: Option<PoundIdentifierItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_POUND) {
         let pound = p.expect(TK_POUND)?;
         let identifier = _parse_identifier(p, follow)?;
         let pound_identifier = PoundIdentifierItem {

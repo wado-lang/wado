@@ -1265,7 +1265,7 @@ fn _parse_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         }
         opt_scan_pos = pos;
     }
-    let arm_item_comma: Option<ArmItemListCommaOptItem> = if opt_scan_pos >= 0 {
+    let arm_item_comma: Option<ArmItemListCommaOptItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
         let arm = _parse_arm(p, follow)?;
         let mut comma_arm_list: List<CommaArmItem> = [];
         loop {

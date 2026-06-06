@@ -34474,7 +34474,7 @@ fn _parse_media_query_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         }
         opt_scan_pos = pos;
     }
-    let media_query_item: Option<MediaQueryItemListItem> = if opt_scan_pos >= 0 {
+    let media_query_item: Option<MediaQueryItemListItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
         let media_query = _parse_media_query(p, follow)?;
         let mut comma_ws_media_query_list: List<CommaWsMediaQueryItem> = [];
         loop {

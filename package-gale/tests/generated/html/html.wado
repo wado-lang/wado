@@ -2980,7 +2980,7 @@ fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 pos += 1;
                 opt_scan_pos = pos;
             }
-            let html_content_tag_open_tag_slash_tag_name_tag_close: Option<HtmlContentTagOpenTagSlashTagNameTagCloseItem> = if opt_scan_pos >= 0 {
+            let html_content_tag_open_tag_slash_tag_name_tag_close: Option<HtmlContentTagOpenTagSlashTagNameTagCloseItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
                 let html_content = _parse_html_content(p, &FOLLOW_MASK_5)?;
                 let tag_open = p.expect(TK_TAG_OPEN)?;
                 let tag_slash = p.expect(TK_TAG_SLASH)?;
@@ -3162,7 +3162,7 @@ fn _parse_html_content(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 fn _parse_html_attribute__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<HtmlAttributeNode, ParseError> {
     let start = p.peek().span.start;
     let tag_name = p.expect(TK_TAG_NAME)?;
-    let tag_equals_attvalue_value: Option<TagEqualsAttvalueValueItem> = if p.peek_kind() == TK_TAG_EQUALS && p.peek_at(1) == TK_ATTVALUE_VALUE {
+    let tag_equals_attvalue_value: Option<TagEqualsAttvalueValueItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_TAG_EQUALS && p.peek_at(1) == TK_ATTVALUE_VALUE) {
         let tag_equals = p.expect(TK_TAG_EQUALS)?;
         let attvalue_value = p.expect(TK_ATTVALUE_VALUE)?;
         let tag_equals_attvalue_value = TagEqualsAttvalueValueItem {

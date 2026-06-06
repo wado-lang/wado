@@ -1116,7 +1116,7 @@ fn _parse_ifstat__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     let start = p.peek().span.start;
     let lit_if = p.expect(TK_LIT_IF)?;
     let stat = _parse_stat(p, follow)?;
-    let lit_else_stat: Option<LitElseStatItem> = if p.peek_kind() == TK_LIT_ELSE {
+    let lit_else_stat: Option<LitElseStatItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_ELSE) {
         let lit_else = p.expect(TK_LIT_ELSE)?;
         let stat = _parse_stat(p, follow)?;
         let lit_else_stat = LitElseStatItem {

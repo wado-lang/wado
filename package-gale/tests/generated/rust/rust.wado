@@ -18585,7 +18585,7 @@ fn _parse_use_declaration(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 fn _parse_use_tree__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<UseTreeNode, ParseError> {
     let start = p.peek().span.start;
     let simple_path = _parse_simple_path(p, follow)?;
-    let kw_as_item: Option<KwAsItemItem> = if p.peek_kind() == TK_KW_AS {
+    let kw_as_item: Option<KwAsItemItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_KW_AS) {
         let kw_as = p.expect(TK_KW_AS)?;
         let mut group_1_inner: Option<UseTreeGroup1> = null;
         let grp_kind = p.peek_kind();
@@ -18992,7 +18992,7 @@ fn _parse_function_qualifiers__inner(p: &mut Parser, follow: &List<List<i32>> = 
     } else {
         null
     };
-    let kw_extern_abi: Option<KwExternAbiOptItem> = if p.peek_kind() == TK_KW_EXTERN {
+    let kw_extern_abi: Option<KwExternAbiOptItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_KW_EXTERN) {
         let kw_extern = p.expect(TK_KW_EXTERN)?;
         let abi: Option<AbiNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
             null
@@ -20115,7 +20115,7 @@ fn _parse_enum_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         }
         opt_scan_pos = pos;
     }
-    let enum_item_tuple_or_enum_item_struct_or_enum_item_discriminant: Option<EnumItemTupleOrEnumItemStructOrEnumItemDiscriminantGroup> = if opt_scan_pos >= 0 {
+    let enum_item_tuple_or_enum_item_struct_or_enum_item_discriminant: Option<EnumItemTupleOrEnumItemStructOrEnumItemDiscriminantGroup> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
         let enum_item_tuple_or_enum_item_struct_or_enum_item_discriminant: EnumItemTupleOrEnumItemStructOrEnumItemDiscriminantGroup = if p.peek_kind() == TK_LPAREN {
             let enum_item_tuple = _parse_enum_item_tuple(p, &EMPTY_FOLLOW)?;
             EnumItemTupleOrEnumItemStructOrEnumItemDiscriminantGroup::EnumItemTuple(enum_item_tuple)
@@ -21050,7 +21050,7 @@ fn _parse_lifetime_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         null
     };
     let lifetime_or_label = p.expect(TK_LIFETIME_OR_LABEL)?;
-    let colon_lifetime_bounds: Option<ColonLifetimeBoundsItem> = if p.peek_kind() == TK_COLON {
+    let colon_lifetime_bounds: Option<ColonLifetimeBoundsItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_COLON) {
         let colon = p.expect(TK_COLON)?;
         let lifetime_bounds = _parse_lifetime_bounds(p, follow)?;
         let colon_lifetime_bounds = ColonLifetimeBoundsItem {
@@ -21087,7 +21087,7 @@ fn _parse_type_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         null
     };
     let identifier = _parse_identifier(p, follow)?;
-    let colon_type_param_bounds: Option<ColonTypeParamBoundsOptItem> = if p.peek_kind() == TK_COLON {
+    let colon_type_param_bounds: Option<ColonTypeParamBoundsOptItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_COLON) {
         let colon = p.expect(TK_COLON)?;
         let type_param_bounds: Option<TypeParamBoundsNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
             null
@@ -21105,7 +21105,7 @@ fn _parse_type_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     } else {
         null
     };
-    let eq_type_: Option<EqTypeItem> = if p.peek_kind() == TK_EQ {
+    let eq_type_: Option<EqTypeItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_EQ) {
         let eq = p.expect(TK_EQ)?;
         let type_ = _parse_type_(p, follow)?;
         let eq_type_ = EqTypeItem {
@@ -24995,7 +24995,7 @@ fn _parse_closure_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         outer_attribute_list.push(outer_attribute);
     }
     let pattern = _parse_pattern(p, follow)?;
-    let colon_type_: Option<ColonTypeItem> = if p.peek_kind() == TK_COLON {
+    let colon_type_: Option<ColonTypeItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_COLON) {
         let colon = p.expect(TK_COLON)?;
         let type_ = _parse_type_(p, follow)?;
         let colon_type_ = ColonTypeItem {
@@ -25197,7 +25197,7 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let kw_if = p.expect(TK_KW_IF)?;
     let expression = _parse_expression(p, &FOLLOW_MASK_18)?;
     let block_expression = _parse_block_expression(p, follow)?;
-    let kw_else_item: Option<KwElseItemItem> = if p.peek_kind() == TK_KW_ELSE {
+    let kw_else_item: Option<KwElseItemItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_KW_ELSE) {
         let kw_else = p.expect(TK_KW_ELSE)?;
         let mut block_expression_or_if_expression_or_if_let_expression_inner: Option<BlockExpressionOrIfExpressionOrIfLetExpressionGroup> = null;
         let grp_kind = p.peek_kind();
@@ -25259,7 +25259,7 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     let eq = p.expect(TK_EQ)?;
     let expression = _parse_expression(p, &FOLLOW_MASK_18)?;
     let block_expression = _parse_block_expression(p, follow)?;
-    let kw_else_item: Option<KwElseItemItem> = if p.peek_kind() == TK_KW_ELSE {
+    let kw_else_item: Option<KwElseItemItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_KW_ELSE) {
         let kw_else = p.expect(TK_KW_ELSE)?;
         let mut block_expression_or_if_expression_or_if_let_expression_inner: Option<BlockExpressionOrIfExpressionOrIfLetExpressionGroup> = null;
         let grp_kind = p.peek_kind();
@@ -26204,7 +26204,7 @@ fn _parse_identifier_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &
         null
     };
     let identifier = _parse_identifier(p, follow)?;
-    let at_pattern: Option<AtPatternItem> = if p.peek_kind() == TK_AT {
+    let at_pattern: Option<AtPatternItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_AT) {
         let at = p.expect(TK_AT)?;
         let pattern = _parse_pattern(p, follow)?;
         let at_pattern = AtPatternItem {
@@ -26573,7 +26573,7 @@ fn _parse_struct_pattern_elements__inner_scan_1(tokens: &List<Token>, pos: i32, 
 fn _parse_struct_pattern_elements__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StructPatternElementsNode, ParseError> {
     let start = p.peek().span.start;
     let struct_pattern_fields = _parse_struct_pattern_fields(p, follow)?;
-    let comma_struct_pattern_et_cetera: Option<CommaStructPatternEtCeteraOptItem> = if p.peek_kind() == TK_COMMA {
+    let comma_struct_pattern_et_cetera: Option<CommaStructPatternEtCeteraOptItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
         let comma = p.expect(TK_COMMA)?;
         let struct_pattern_et_cetera: Option<StructPatternEtCeteraNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
             null
@@ -28055,7 +28055,7 @@ fn _parse_function_type_qualifiers__inner(p: &mut Parser, follow: &List<List<i32
     } else {
         null
     };
-    let kw_extern_abi: Option<KwExternAbiOptItem> = if p.peek_kind() == TK_KW_EXTERN {
+    let kw_extern_abi: Option<KwExternAbiOptItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_KW_EXTERN) {
         let kw_extern = p.expect(TK_KW_EXTERN)?;
         let abi: Option<AbiNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
             null
@@ -28934,7 +28934,7 @@ fn _parse_path_in_expression(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 fn _parse_path_expr_segment__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PathExprSegmentNode, ParseError> {
     let start = p.peek().span.start;
     let path_ident_segment = _parse_path_ident_segment(p, follow)?;
-    let pathsep_generic_args: Option<PathsepGenericArgsItem> = if p.peek_kind() == TK_PATHSEP {
+    let pathsep_generic_args: Option<PathsepGenericArgsItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_PATHSEP) {
         let pathsep = p.expect(TK_PATHSEP)?;
         let generic_args = _parse_generic_args(p, follow)?;
         let pathsep_generic_args = PathsepGenericArgsItem {
@@ -29933,7 +29933,7 @@ fn _parse_type_path_segment__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         }
         opt_scan_pos = pos;
     }
-    let generic_args_or_type_path_fn: Option<GenericArgsOrTypePathFnGroup> = if opt_scan_pos >= 0 {
+    let generic_args_or_type_path_fn: Option<GenericArgsOrTypePathFnGroup> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
         let generic_args_or_type_path_fn: GenericArgsOrTypePathFnGroup = if p.peek_kind() == TK_LT {
             let generic_args = _parse_generic_args(p, &EMPTY_FOLLOW)?;
             GenericArgsOrTypePathFnGroup::GenericArgs(generic_args)
@@ -29972,7 +29972,7 @@ fn _parse_type_path_fn__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         null
     };
     let rparen = p.expect(TK_RPAREN)?;
-    let rarrow_type_: Option<RarrowTypeItem> = if p.peek_kind() == TK_RARROW {
+    let rarrow_type_: Option<RarrowTypeItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_RARROW) {
         let rarrow = p.expect(TK_RARROW)?;
         let type_ = _parse_type_(p, follow)?;
         let rarrow_type_ = RarrowTypeItem {
@@ -30061,7 +30061,7 @@ fn _parse_type_path_inputs(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 fn _parse_visibility__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<VisibilityNode, ParseError> {
     let start = p.peek().span.start;
     let kw_pub = p.expect(TK_KW_PUB)?;
-    let lparen_item_rparen: Option<LparenItemRparenItem> = if p.peek_kind() == TK_LPAREN {
+    let lparen_item_rparen: Option<LparenItemRparenItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LPAREN) {
         let lparen = p.expect(TK_LPAREN)?;
         let mut group_0_inner: Option<VisibilityGroup0> = null;
         let grp_kind = p.peek_kind();
