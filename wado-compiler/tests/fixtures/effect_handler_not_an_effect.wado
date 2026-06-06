@@ -1,0 +1,28 @@
+// Negative test: the `E` in `with E => h do` must name an effect or resource
+// declaration. A plain trait is installable nowhere — it declares no
+// operations to dispatch — so naming one in the handler position is rejected
+// with `NotAnEffect` instead of silently installing a no-op handler.
+
+trait Plain {
+    fn ping(&self) -> i32;
+}
+
+struct H {
+    n: i32,
+}
+
+impl Plain for H {
+    fn ping(&self) -> i32 {
+        return self.n;
+    }
+}
+
+export fn run() {
+    let h = H { n: 1 };
+    with Plain => &h do {
+        let _ = h.ping();
+    }
+}
+
+__DATA__
+{"compile_error": "'Plain' is not an effect"}
