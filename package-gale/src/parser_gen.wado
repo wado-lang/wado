@@ -2412,11 +2412,11 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &
         Token(t) => w.line(&`let {t.field} = p.expect({t.kind})?;`),
         Literal(l) => w.line(&`let {l.field} = p.expect({l.kind})?;`),
         RuleCall(r) => {
-            let fn_name = if let Some(id) = r.variant_id {
-                `_parse_{r.target_snake}__follow_{id}`;
-            } else {
-                `_parse_{r.target_snake}`;
-            };
+            // Redesign: one callee per rule; the caller's continuation is
+            // threaded at runtime via `follow_arg` rather than selecting a
+            // cloned `__follow_<id>`.
+            let fn_name = `_parse_{r.target_snake}`;
+            let follow_expr = follow_arg_expr(&r.follow_arg);
             // `RuleCallOp.min_prec_arg` carries the resolved precedence
             // for every self-recursive call that needs one — `lower_lr_alt_suffix`
             // stamps internal LR-suffix self-refs via
@@ -2424,9 +2424,9 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &
             // trailing self-ref of a prefix LR alt (e.g. `'-' e`) so emit
             // reads a single source.
             if let Some(min_prec) = r.min_prec_arg {
-                w.line(&`let {r.field} = {fn_name}(p, {min_prec})?;`);
+                w.line(&`let {r.field} = {fn_name}(p, {min_prec}, {follow_expr})?;`);
             } else {
-                w.line(&`let {r.field} = {fn_name}(p)?;`);
+                w.line(&`let {r.field} = {fn_name}(p, {follow_expr})?;`);
             }
         },
         Wildcard(wop) => w.line(&`let {wop.field} = p.match_any()?;`),
@@ -3850,15 +3850,12 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
 fn rep_recovery_call(rep_op: &RepeatOp) -> Option<String> {
     if let LeafRuleCall = rep_op.body_shape {
         if let RuleCall(r) = &rep_op.body {
-            let fn_name = if let Some(id) = r.variant_id {
-                `_parse_{r.target_snake}__follow_{id}`;
-            } else {
-                `_parse_{r.target_snake}`;
-            };
+            let fn_name = `_parse_{r.target_snake}`;
+            let follow_expr = follow_arg_expr(&r.follow_arg);
             let call = if let Some(min_prec) = r.min_prec_arg {
-                `{fn_name}(p, {min_prec})`;
+                `{fn_name}(p, {min_prec}, {follow_expr})`;
             } else {
-                `{fn_name}(p)`;
+                `{fn_name}(p, {follow_expr})`;
             };
             return Option::<String>::Some(call);
         }
@@ -4237,17 +4234,14 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &List<i32>
         // `min_prec_arg` (baked at lower time) reach emit. The surface
         // `RuleRef` carries only the source-level name.
         if let RuleCall(rc) = &g_op_alts[alt_idx].ops[0] {
-            let fn_name = if let Some(id) = rc.variant_id {
-                `_parse_{rc.target_snake}__follow_{id}`;
-            } else {
-                `_parse_{rc.target_snake}`;
-            };
+            let fn_name = `_parse_{rc.target_snake}`;
+            let follow_expr = follow_arg_expr(&rc.follow_arg);
             let case_name = group_case_name(&alts[alt_idx]);
             let local_var = rc.target_snake;
             let call_args = if let Some(min_prec) = rc.min_prec_arg {
-                `p, {min_prec}`;
+                `p, {min_prec}, {follow_expr}`;
             } else {
-                "p";
+                `p, {follow_expr}`;
             };
 
             if k == 0 && !is_last {
@@ -5229,7 +5223,7 @@ fn gen_prediction_code(w: &mut CodeWriter, node: &PredictionNode, fn_name: &Stri
 fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name: &String, alts: &List<Alternative>, lowered_rule: &Rule, type_name: &String, ctx: &mut GenContext, skip: i32, name_counts: &mut List<[String, i32]>, rule_display: &String) {
     if let Leaf(idx) = node {
         if skip == 0 {
-            w.line(&`return {*fn_name}_bt_{idx}(p);`);
+            w.line(&`return {*fn_name}_bt_{idx}(p, follow);`);
         } else {
             // Consumed prefix tokens already — inline the remaining alt body.
             let alt = &alts[*idx];
@@ -5330,14 +5324,14 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
                         let idx = sorted_indices[i];
                         w.begin(&`if _sd_best_i == {idx}`);
-                        w.line(&`return {*fn_name}_bt_{idx}(p);`);
+                        w.line(&`return {*fn_name}_bt_{idx}(p, follow);`);
                         w.end();
                     }
                     // Fall through: no alt's scan succeeded. Emit error via
                     // the last alt's parse path (which produces a useful
                     // diagnostic).
                     let last_idx = sorted_indices[sorted_indices.len() - 1];
-                    w.line(&`return {*fn_name}_bt_{last_idx}(p);`);
+                    w.line(&`return {*fn_name}_bt_{last_idx}(p, follow);`);
                 } else {
                     // Some scans are partial — scan success is a hint,
                     // not a guarantee. Use save/restore with scan guards.
@@ -5349,7 +5343,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                             if ctx.is_trace() {
                                 w.line(&`trace_pick(p, &{escape_string(rule_display)}, {idx});`);
                             }
-                            w.line(&`return {*fn_name}_bt_{idx}(p);`);
+                            w.line(&`return {*fn_name}_bt_{idx}(p, follow);`);
                         } else {
                             let has_scan = alt_has_scan(&alts[idx].elements, ctx);
                             let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
@@ -5359,12 +5353,12 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                                 if ctx.is_trace() {
                                     w.line(&`trace_pick(p, &{escape_string(rule_display)}, {idx});`);
                                 }
-                                w.line(&`return {*fn_name}_bt_{idx}(p);`);
+                                w.line(&`return {*fn_name}_bt_{idx}(p, follow);`);
                                 w.end();
                             } else if has_scan {
                                 // Partial scan: try parse, fall through on failure.
                                 w.begin(&`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
-                                w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
+                                w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p, follow);`);
                                 w.begin(&`if let Err(_) = r_{idx}`);
                                 if ctx.is_trace() {
                                     w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, false);`);
@@ -5379,7 +5373,7 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                                 w.end();
                             } else {
                                 // No scan: save-and-rewind speculative parse.
-                                w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
+                                w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p, follow);`);
                                 w.begin(&`if let Err(_) = r_{idx}`);
                                 if ctx.is_trace() {
                                     w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, false);`);
@@ -5405,9 +5399,9 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
                         if ctx.is_trace() {
                             w.line(&`trace_pick(p, &{escape_string(rule_display)}, {idx});`);
                         }
-                        w.line(&`return {*fn_name}_bt_{idx}(p);`);
+                        w.line(&`return {*fn_name}_bt_{idx}(p, follow);`);
                     } else {
-                        w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p);`);
+                        w.line(&`let r_{idx} = {*fn_name}_bt_{idx}(p, follow);`);
                         w.begin(&`if let Err(_) = r_{idx}`);
                         if ctx.is_trace() {
                             w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, false);`);
