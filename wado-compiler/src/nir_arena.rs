@@ -6,10 +6,13 @@
 //! `PatId`) and references children by id. This is the substrate the
 //! worklist rewrite engine needs: stable handles that survive in-place edits.
 //!
-//! Phase 1 (see `docs/wep-2026-06-05-nir-skeleton-arena.md`) provides only the
-//! representation and the tree <-> arena converters. The parent map, the local
-//! use index, and the mutating edit API land in a later phase, with the engine
-//! that consumes them.
+//! This module owns the representation, the tree <-> arena converters
+//! (`from_block` / `to_block` and the per-node `lower_*` / `to_tree_*`
+//! helpers), structural traversal (`for_each_child`), and structural cloning
+//! (`clone_expr` / `clone_block`). The parent map, the local use index, and the
+//! mutating edit API live on the rewrite [`crate::nir_engine::Engine`] that
+//! consumes this arena, not on `Body` itself (so they don't burden every
+//! `from_block`). See `docs/wep-2026-06-05-nir-skeleton-arena.md`.
 
 use cranelift_entity::{PrimaryMap, entity_impl};
 

@@ -7,10 +7,13 @@
 //!
 //! See `docs/wep-2026-06-05-nir-rewrite-engine-design.md`.
 //!
-//! This module currently provides stage A — the engine *session*: the parent
-//! map, the local use index, and the worklist, built once per function from a
-//! `Body`. The mutating edit API, the `Rule` trait, and the driver land in
-//! stage B; the peephole passes become rules in stage C.
+//! The module provides the full engine: the *session* (the parent map, the
+//! local use index, and the worklist, built once per function from a `Body`),
+//! the mutating edit API (`replace_expr_kind`, `set_block_stmts`,
+//! `alloc_*`, `clone_expr`) that keeps the parent map and use index coherent,
+//! the [`Rule`] trait, and the `run` driver. Genuinely-local peephole passes
+//! (`select_lowering`, `match_to_switch`, `string_push`, `array_literal`,
+//! `elide_local`) run as rules over it.
 
 use std::collections::VecDeque;
 

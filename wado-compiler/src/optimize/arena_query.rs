@@ -1,11 +1,12 @@
 //! Arena-side structural queries shared by the rewrite-engine rules.
 //!
-//! These mirror the tree-shaped helpers in `nir_visitor` / `elide_local`
-//! (`is_local`, `expr_mentions_local`, `stmt_mentions_local`, `is_pure_expr`)
-//! but read the [`Body`] arena directly, so passes ported onto the worklist
-//! engine need no `Body ↔ tree` bridge. The tree helpers stay for the passes
-//! that have not yet ported; this module is the single arena counterpart they
-//! converge onto.
+//! These mirror the tree-shaped structural helpers (`is_local`,
+//! `expr_mentions_local`, `stmt_mentions_local`, `is_pure_expr`, …) but read
+//! the [`Body`] arena directly, so the ported passes need no `Body ↔ tree`
+//! bridge. The tree versions that are still consumed elsewhere (`is_local`,
+//! `expr_mentions_local`, `stmt_mentions_local` in `nir_visitor`) stay for
+//! those callers; the purely-arena ones (`is_pure_expr`, `collect_reads`) have
+//! no tree counterpart left.
 
 use crate::hashmap::IndexSet;
 use crate::nir::NirUnaryOp;

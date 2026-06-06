@@ -19,7 +19,7 @@
 //! transfer field knowledge across the one-level shallow value-copy
 //! helpers (see `lower::plan::value_copy::synthesize`).
 //!
-//! [`recognize_value_copy`] is the single-call recognizer.
+//! [`recognize_value_copy_a`] is the single-call recognizer.
 //!
 //! TODO(optimizer): plumb the callee's `stores` annotation into
 //! `AliasCollector` so a `Ref` / `MutRef` on a local that flows into a
