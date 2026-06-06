@@ -424,6 +424,26 @@ stays in place: it removes the post-monomorphization population
 inlined-away code) that never passes through `Semantics`. It retires
 only from diagnostic emission.
 
+#### Prerequisite: diagnostics come from `Semantics`, not TIR
+
+Gating reify is sound only once every semantic diagnostic that can fire
+on dead code is produced from `Semantics` (AST + recorded facts), not
+from the emitted TIR. Wado reports errors in unreachable code (the
+effect, stores, purity, and world-export-conformance checks), and those
+checks historically ran on the `TirModule`s _after_ reify — so dropping
+a dead function silently suppressed its error (proven by
+`effect_check_missing`, `export_required_for_run`,
+`stores_violation_*`). The checks therefore move to the post-`annotate`
+analysis layer alongside `liveness`, reading the same facts
+(`function_effects`, `effect_ops`, `method_dispatch`, …). This is the
+same TIR→AST+facts move Stage 7 made for control-flow / missing-return,
+and it lets the LSP surface effect and stores diagnostics too (it builds
+no TIR). Until that move lands, reify passes `None` as its live set
+(gating off); `liveness` is still computed and feeds the
+`DeadFunction` / `DeadGlobal` diagnostics. The policy is owned by
+[`wep-2026-05-16-unused-diagnostics.md`](./wep-2026-05-16-unused-diagnostics.md)
+(Phase 3b).
+
 The roots, suppression rules, stdlib exclusion, and severity policy
 remain owned by the unused-diagnostics WEP and are not duplicated
 here.
@@ -615,9 +635,14 @@ block-result-type reader.
       of every `TirFunction`, including default methods.
 - [x] **Stage 7a** — routing removed; the combined walk survives only as the
       (still TIR-building) `annotate` fact-recorder.
-- [ ] **Stage 6** — Liveness / DCE. Design settled (see the DCE /
-      Liveness section); implementation not started. Independent of
-      Stage 7.
+- [~] **Stage 6** — Liveness / DCE. Landed: `elaborator/liveness.rs`
+      and the `Liveness` field on `Semantics`, computed in the WEP phase
+      order (`build_tir_from_state` runs all `annotate_bodies` →
+      `liveness::compute` → all `reify`); the `DeadFunction` /
+      `DeadGlobal` diagnostics consume `dead_items`. Reify gating is
+      wired but disabled (`None` live set) pending the
+      diagnostics-from-`Semantics` move (see "Prerequisite" above) and
+      cross-module graph completeness. Independent of Stage 7.
 - [x] **Stage 7-A** — reify is mechanical. Every decision-bearing read goes
       through a recorded fact:
   - [x] Function / method signatures — params, return, type params, impl

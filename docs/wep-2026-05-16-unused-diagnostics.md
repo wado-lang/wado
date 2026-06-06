@@ -260,10 +260,12 @@ land with stage 6 of the rearchitecture (see
 
 #### Phase 1 — diagnostic plumbing
 
-- [ ] Add `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction`, `DeadGlobal` and their `Display` strings.
-- [ ] Add `Logger::warn_at(code, message, span, file)`.
-- [ ] Add `CompilerOptions::unused_diagnostics` (default `true`).
-- [ ] Add `AstIndex::is_param(id)` and tests.
+- [x] Add `Code::DeadFunction`, `DeadGlobal` and their `Display` strings.
+      (`UnusedImport` / `UnusedVariable` / `UnusedParameter` land with the
+      reference pass.)
+- [x] Add `Logger::warn_at(code, message, span)`.
+- [x] Add `CompilerOptions::unused_diagnostics` (default `true`).
+- [ ] Add `AstIndex::is_param(id)` and tests (reference pass).
 
 #### Phase 2 — reference pass
 
@@ -272,22 +274,63 @@ land with stage 6 of the rearchitecture (see
 - [ ] Wire into `compile_with_options` and `Engine::diagnostics`.
 - [ ] Add fixtures under `tests/fixtures/unused_*.wado`; touch `tests/e2e.rs`.
 
-#### Phase 3 — liveness pass (lands with elaborator rearchitecture stage 6)
+#### Phase 3 — liveness pass and DeadFunction / DeadGlobal
 
-- [ ] Land `elaborator/liveness.rs` per the rearchitecture WEP: the
-      enclosing-item index, the edge collection over `references` plus
-      the dispatch facts, the BFS, and the non-optional `Liveness`
-      field on `Semantics`.
-- [ ] Implement the liveness-pass emitter (`DeadFunction`, `DeadGlobal`) consuming `Liveness::dead_items`.
-- [ ] Wire `reify` to skip items absent from `Liveness::live_items`
-      (fail-loud: a dropped-live item ICEs downstream and is fixed as a
-      graph bug, not masked by over-approximation).
-- [ ] Retire the optimize-time DCE's diagnostic role (it remains as silent cleanup).
-- [ ] Add fixtures under `tests/fixtures/dead_fn_*.wado` and `tests/fixtures/dead_global_*.wado`.
+- [x] Land `elaborator/liveness.rs`: the enclosing-item index (an AST
+      id-collector), edge collection over `references`, the BFS, and the
+      `Liveness` field on `Semantics`. Free functions and globals are
+      precise; every method is seeded live as an intermediary (so the
+      free-function reachability stays sound without the operator / `?` /
+      for-of dispatch edges).
+- [x] Implement the emitter (`DeadFunction`, `DeadGlobal`) consuming
+      `Liveness::dead_items`; tests in `tests/unused_diagnostics.rs`.
+- [ ] E2E `dead_fn_*` / `dead_global_*` fixtures — blocked on a
+      fixture-spec field for asserting warnings (the harness surfaces only
+      runtime output and errors today).
 
-#### Phase 4 — CLI wiring
+#### Phase 3b — reify gating (Design B)
+
+Reify gating is the input-shrinking win (`monomorphize` / `lower` /
+`optimize` see only the reachable closure). The first attempt gated
+inside reify and broke two contracts, both now understood:
+
+1. Diagnostics in dead code. Wado reports errors in unreachable code
+   (effect / stores / purity / world-conformance). Those checks run on
+   the emitted TIR _after_ reify, so dropping a dead function suppressed
+   its error. The fix is structural — produce those diagnostics from
+   `Semantics` (AST + recorded facts) so they see the whole program
+   regardless of what reify emits. This also lets the LSP surface them
+   (it builds no TIR). See the rearchitecture WEP's DCE / Liveness note.
+2. A cross-module reachability gap — a dropped-live function the
+   source-level graph missed (`cross_module_type_identity` ICE'd at WIR
+   build). The graph must be a sound over-approximation of reachable.
+
+Gating is therefore disabled until both are addressed:
+
+- [ ] 1b. Port `check_effects` to operate on `Semantics` (AST + facts)
+      instead of `TirModule`; run it after `annotate_bodies` for both
+      batch and LSP.
+- [ ] 1c. Port `check_stores` likewise.
+- [ ] 1d. Port `check_default_purity` likewise.
+- [ ] 1a. Move the world-export conformance check (`export`-required,
+      param / return mismatch) off the gated TIR — read the entry
+      module's AST / `Semantics` in `compile_with_options` (where the
+      target world is known). Record the world-export root set on
+      `Semantics` for the liveness roots.
+- [ ] 2. Close the liveness graph's cross-module gaps (foreign-keyed
+      `references` from `with_module_perspective`, inlined-foreign-AST,
+      namespace imports, test-world roots).
+- [ ] 3. Re-enable reify gating on `Liveness::live_items` and validate
+      the full E2E suite green (fail-loud: a dropped-live item ICEs).
+- [ ] The optimize-time DCE never carried a user-facing diagnostic role,
+      so there is nothing to retire — it stays as silent cleanup as
+      designed.
+
+#### Phase 4 — CLI wiring and reference pass
 
 - [ ] `wado-cli`: add `--no-unused` flag for `compile` / `run` / `serve` / `dump`.
+- [ ] Reference pass: `UnusedImport` / `UnusedVariable` / `UnusedParameter`.
+- [ ] Method-level dead detection (the dispatch edges; stop seeding every method live).
 
 ### Test plan
 
