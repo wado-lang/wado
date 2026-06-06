@@ -6,7 +6,7 @@
 use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{NirBinaryOp, NirFunction, NirParam, NirStmt, NirStmtKind, NirUnaryOp};
+use crate::nir::{NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{CanonicalIntrinsic, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
@@ -20,29 +20,29 @@ use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
 /// `tir_func.locals[idx].name` (for example, slots created in expression
 /// contexts the walker doesn't recurse into, or by optimizer passes that
 /// allocate locals without emitting a `Let`).
-fn collect_let_names(names: &mut IndexMap<u32, String>, stmts: &[NirStmt]) {
-    for stmt in stmts {
-        match &stmt.kind {
-            NirStmtKind::Let {
+fn collect_let_names(body: &Body, names: &mut IndexMap<u32, String>, block: BlockId) {
+    for &sid in &body.blocks[block].stmts {
+        match &body.stmts[sid].kind {
+            StmtKind::Let {
                 name, local_index, ..
             } => {
                 names.insert(*local_index, name.clone());
             }
-            NirStmtKind::Loop { body } => {
-                collect_let_names(names, &body.stmts);
+            StmtKind::Loop { body: b } => {
+                collect_let_names(body, names, *b);
             }
-            NirStmtKind::If {
+            StmtKind::If {
                 then_block,
                 else_block,
                 ..
             } => {
-                collect_let_names(names, &then_block.stmts);
+                collect_let_names(body, names, *then_block);
                 if let Some(eb) = else_block {
-                    collect_let_names(names, &eb.stmts);
+                    collect_let_names(body, names, *eb);
                 }
             }
-            NirStmtKind::LabeledBlock { block, .. } => {
-                collect_let_names(names, &block.stmts);
+            StmtKind::LabeledBlock { block: b, .. } => {
+                collect_let_names(body, names, *b);
             }
             _ => {}
         }
@@ -889,8 +889,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
             for param in &tir_func.params {
                 local_names.insert(param.local_index, param.name.clone());
             }
-            let body_tree = body.to_block();
-            collect_let_names(&mut local_names, &body_tree.stmts);
+            collect_let_names(body, &mut local_names, body.root);
             for (idx, local) in tir_func.locals.iter().enumerate() {
                 let key = u32::try_from(idx).unwrap();
                 local_names.entry(key).or_insert_with(|| local.name.clone());
