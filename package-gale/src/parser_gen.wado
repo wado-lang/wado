@@ -1800,6 +1800,7 @@ fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &
             default_value: Option::<String>::Some("0"),
         });
     }
+    add_follow_param(&mut f);
     f.set_return_type(&`Result<{type_name}, ParseError>`);
     f.emit_begin(w);
     let lit = escape_string(rule_display);
@@ -1807,10 +1808,12 @@ fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &
         w.line(&`trace_enter(p, &{lit});`);
         w.line(&"p.trace_depth += 1;");
     }
+    // Forward the runtime FOLLOW continuation to the inner body so its
+    // tail-greedy gate sees the caller's continuation.
     if takes_min_prec {
-        w.line(&`let r = {*inner_name}(p, min_prec);`);
+        w.line(&`let r = {*inner_name}(p, min_prec, follow);`);
     } else {
-        w.line(&`let r = {*inner_name}(p);`);
+        w.line(&`let r = {*inner_name}(p, follow);`);
     }
     if trace {
         w.line(&"p.trace_depth -= 1;");
@@ -1849,6 +1852,7 @@ fn gen_parse_fn_simple_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule
 
     let mut f = FnSpec::new(fn_name);
     f.add_param(&"p", &"&mut Parser");
+    add_follow_param(&mut f);
     f.set_return_type(&`Result<{type_name}, ParseError>`);
     f.emit_begin(w);
     w.line(&"let start = p.peek().span.start;");
@@ -1948,6 +1952,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
 
                     let mut f = FnSpec::new(&helper_name);
                     f.add_param(&"p", &"&mut Parser");
+                    add_follow_param(&mut f);
                     f.set_return_type(&`Result<{type_name}, ParseError>`);
                     f.emit_begin(w);
                     w.line(&"let start = p.peek().span.start;");
@@ -1982,6 +1987,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         let atom_name = `{*fn_name}_atom`;
         let mut f = FnSpec::new(&atom_name);
         f.add_param(&"p", &"&mut Parser");
+        add_follow_param(&mut f);
         f.set_return_type(&`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
         w.line(&"let start = p.peek().span.start;");
@@ -2021,10 +2027,11 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
             type_str: "i32",
             default_value: Option::<String>::Some("0"),
         });
+        add_follow_param(&mut f2);
         f2.set_return_type(&`Result<{type_name}, ParseError>`);
         f2.emit_begin(w);
         w.line(&"let start = p.peek().span.start;");
-        w.line(&`let mut result = {*fn_name}_atom(p)?;`);
+        w.line(&`let mut result = {*fn_name}_atom(p, follow)?;`);
         gen_lr_suffix_dispatch(w, rule, &type_name, lr_alts, lr_dispatch, ctx, true, fn_name, scan_fn_name);
         w.line(&`return Result::<{type_name}, ParseError>::Ok(result);`);
         w.end();
@@ -2032,6 +2039,7 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
     } else {
         let mut f = FnSpec::new(fn_name);
         f.add_param(&"p", &"&mut Parser");
+        add_follow_param(&mut f);
         f.set_return_type(&`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
         w.line(&"let start = p.peek().span.start;");
