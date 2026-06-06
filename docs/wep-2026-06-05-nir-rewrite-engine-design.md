@@ -212,7 +212,14 @@ The old fixed-point loop and the engine co-exist during the port.
         labeled block's statements (reusing ids) and deep-clones the
         THEN/ELSE blocks per break site via `Body::clone_block`. Added a
         public `Body::clone_block`.
-  - Remaining: `inline`, `field_scalarize`.
+  - [x] `inline` — the caller body walk and entry are arena: call sites are
+        found in the arena, the inlined labeled block is built by the existing
+        tree remap (callee materialized as a deliberate read-only clone) and
+        lowered back into the caller arena via the new `Body::lower_expr`. The
+        cost / recursion / remap analysis stays tree-shaped over the callee
+        clones. `Body`'s tree→arena `Lower` now borrows the target maps so
+        `from_block` and `lower_expr` share it.
+  - Remaining: `field_scalarize`.
   - Added `Body::clone_expr` (structural arena deep-clone) — the
     non-engine counterpart of `Engine::clone_expr`, for rewrites that
     duplicate a subtree.

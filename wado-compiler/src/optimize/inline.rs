@@ -13,6 +13,7 @@ use crate::nir::{
     CallArg, InlineHint, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirPattern,
     NirStmt, NirStmtKind, NirUnaryOp,
 };
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::block_has_break_to;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -437,7 +438,7 @@ fn is_inline_eligible(
     }
 
     // Must have a body
-    let Some(body) = &func.body_block() else {
+    let Some(body) = &func.body.as_ref().map(crate::nir_arena::Body::to_block) else {
         return false;
     };
 
@@ -513,7 +514,7 @@ fn find_recursive_functions(functions: &[Rc<RefCell<NirFunction>>]) -> IndexSet<
         let full_name = tir_function_full_name(&func);
         if let Some(caller_idx) = name_to_idx.get(&full_name) {
             let mut callee_names: IndexSet<String> = IndexSet::default();
-            if let Some(body) = &func.body_block() {
+            if let Some(body) = &func.body.as_ref().map(crate::nir_arena::Body::to_block) {
                 collect_callees_from_block(body, &mut callee_names);
             }
             let callees: Vec<usize> = callee_names
@@ -784,28 +785,32 @@ pub fn inline_functions(project: &mut NirPackage, inline_threshold: usize) -> bo
         let mut func = func_rc.borrow_mut();
         let caller_module_source = func.module_source.clone();
         let func_name = func.name.clone();
-        if let Some(taken) = func.body.take() {
-            let mut body = taken.to_block();
+        if func.body.is_some() {
             // Track which functions were inlined into this function
             let mut inlined_funcs: Vec<(ModuleSource, String)> = Vec::new();
             // Take ownership of local_count and locals to avoid borrow conflicts
+            // with the `&mut func.body` walk below.
             let mut local_count = func.local_count;
             let mut locals = std::mem::take(&mut func.locals);
             // Counter for generating unique inline labels
             let mut inline_counter: u32 = 0;
-            inline_calls_in_block(
-                &mut body,
-                &inline_candidates,
-                &caller_module_source,
-                &mut local_count,
-                &mut locals,
-                &project.type_table.borrow(),
-                &mut inlined_funcs,
-                &mut inline_counter,
-            );
+            {
+                let body = func.body.as_mut().unwrap();
+                let root = body.root;
+                inline_calls_in_block(
+                    body,
+                    root,
+                    &inline_candidates,
+                    &caller_module_source,
+                    &mut local_count,
+                    &mut locals,
+                    &project.type_table.borrow(),
+                    &mut inlined_funcs,
+                    &mut inline_counter,
+                );
+            }
             func.local_count = local_count;
             func.locals = locals;
-            func.set_body_block(body);
 
             if !inlined_funcs.is_empty() {
                 changed = true;
@@ -851,8 +856,13 @@ pub fn inline_functions(project: &mut NirPackage, inline_threshold: usize) -> bo
 }
 
 /// Inline function calls in a block
+/// Inline function calls in a block (arena). Each statement is processed in
+/// place (1:1); a `Let` / `Expr` / `Return` value gets a top-level inline
+/// attempt (which then re-scans the inlined body), while other statements
+/// recurse into their sub-expressions and sub-blocks.
 fn inline_calls_in_block(
-    block: &mut NirBlock,
+    body: &mut Body,
+    block: BlockId,
     candidates: &IndexMap<(ModuleSource, String), NirFunction>,
     current_module: &ModuleSource,
     local_count: &mut u32,
@@ -861,276 +871,35 @@ fn inline_calls_in_block(
     inlined_funcs: &mut Vec<(ModuleSource, String)>,
     inline_counter: &mut u32,
 ) {
-    let mut new_stmts = Vec::new();
-
-    for stmt in std::mem::take(&mut block.stmts) {
-        match stmt.kind {
-            NirStmtKind::Let {
-                name,
-                local_index,
-                is_mut,
-                is_reactive,
-                type_id,
-                value,
-                skip_value_copy,
-            } => {
-                // Try to inline the value expression if it's a call or method call
-                let inline_result = try_inline_call_expr(
-                    &value,
-                    candidates,
-                    current_module,
-                    local_count,
-                    locals,
-                    type_table,
-                    inline_counter,
-                )
-                .or_else(|| {
-                    try_inline_method_call_expr(
-                        &value,
-                        candidates,
-                        current_module,
-                        local_count,
-                        locals,
-                        type_table,
-                        inline_counter,
-                    )
-                });
-
-                if let Some((mut inlined_expr, inlined_key)) = inline_result {
-                    // Track the inlined function
-                    if !inlined_funcs.contains(&inlined_key) {
-                        inlined_funcs.push(inlined_key.clone());
-                    }
-                    // Process the inlined expression for nested inlining opportunities
-                    inline_calls_in_expr(
-                        &mut inlined_expr,
-                        candidates,
-                        current_module,
-                        local_count,
-                        locals,
-                        type_table,
-                        &mut new_stmts,
-                        inlined_funcs,
-                        inline_counter,
-                    );
-                    // Create the let with the inlined labeled block expression
-                    new_stmts.push(NirStmt::new(
-                        NirStmtKind::Let {
-                            name,
-                            local_index,
-                            is_mut,
-                            is_reactive,
-                            type_id,
-                            value: inlined_expr,
-                            skip_value_copy,
-                        },
-                        stmt.span,
-                    ));
-                } else {
-                    // Recursively process nested calls in value
-                    let mut new_value = value;
-                    inline_calls_in_expr(
-                        &mut new_value,
-                        candidates,
-                        current_module,
-                        local_count,
-                        locals,
-                        type_table,
-                        &mut new_stmts,
-                        inlined_funcs,
-                        inline_counter,
-                    );
-                    new_stmts.push(NirStmt::new(
-                        NirStmtKind::Let {
-                            name,
-                            local_index,
-                            is_mut,
-                            is_reactive,
-                            type_id,
-                            value: new_value,
-                            skip_value_copy,
-                        },
-                        stmt.span,
-                    ));
-                }
-            }
-            NirStmtKind::Expr(expr) => {
-                // Try to inline the expression if it's a call or method call
-                let inline_result = try_inline_call_expr(
-                    &expr,
-                    candidates,
-                    current_module,
-                    local_count,
-                    locals,
-                    type_table,
-                    inline_counter,
-                )
-                .or_else(|| {
-                    try_inline_method_call_expr(
-                        &expr,
-                        candidates,
-                        current_module,
-                        local_count,
-                        locals,
-                        type_table,
-                        inline_counter,
-                    )
-                });
-
-                if let Some((mut inlined_expr, inlined_key)) = inline_result {
-                    if !inlined_funcs.contains(&inlined_key) {
-                        inlined_funcs.push(inlined_key);
-                    }
-                    // Process the inlined expression for nested inlining opportunities
-                    inline_calls_in_expr(
-                        &mut inlined_expr,
-                        candidates,
-                        current_module,
-                        local_count,
-                        locals,
-                        type_table,
-                        &mut new_stmts,
-                        inlined_funcs,
-                        inline_counter,
-                    );
-                    // For void functions, still emit the expression for side effects
-                    new_stmts.push(NirStmt::new(NirStmtKind::Expr(inlined_expr), stmt.span));
-                } else {
-                    let mut new_expr = expr;
-                    inline_calls_in_expr(
-                        &mut new_expr,
-                        candidates,
-                        current_module,
-                        local_count,
-                        locals,
-                        type_table,
-                        &mut new_stmts,
-                        inlined_funcs,
-                        inline_counter,
-                    );
-                    new_stmts.push(NirStmt::new(NirStmtKind::Expr(new_expr), stmt.span));
-                }
-            }
-            NirStmtKind::Return { value } => {
-                if let Some(expr) = value {
-                    let inline_result = try_inline_call_expr(
-                        &expr,
-                        candidates,
-                        current_module,
-                        local_count,
-                        locals,
-                        type_table,
-                        inline_counter,
-                    )
-                    .or_else(|| {
-                        try_inline_method_call_expr(
-                            &expr,
-                            candidates,
-                            current_module,
-                            local_count,
-                            locals,
-                            type_table,
-                            inline_counter,
-                        )
-                    });
-
-                    if let Some((mut inlined_expr, inlined_key)) = inline_result {
-                        if !inlined_funcs.contains(&inlined_key) {
-                            inlined_funcs.push(inlined_key);
-                        }
-                        // Process the inlined expression for nested inlining opportunities
-                        inline_calls_in_expr(
-                            &mut inlined_expr,
-                            candidates,
-                            current_module,
-                            local_count,
-                            locals,
-                            type_table,
-                            &mut new_stmts,
-                            inlined_funcs,
-                            inline_counter,
-                        );
-                        new_stmts.push(NirStmt::new(
-                            NirStmtKind::Return {
-                                value: Some(inlined_expr),
-                            },
-                            stmt.span,
-                        ));
-                    } else {
-                        let mut new_expr = expr;
-                        inline_calls_in_expr(
-                            &mut new_expr,
-                            candidates,
-                            current_module,
-                            local_count,
-                            locals,
-                            type_table,
-                            &mut new_stmts,
-                            inlined_funcs,
-                            inline_counter,
-                        );
-                        new_stmts.push(NirStmt::new(
-                            NirStmtKind::Return {
-                                value: Some(new_expr),
-                            },
-                            stmt.span,
-                        ));
-                    }
-                } else {
-                    new_stmts.push(NirStmt::new(NirStmtKind::Return { value: None }, stmt.span));
-                }
-            }
-            NirStmtKind::If {
-                mut condition,
-                mut then_block,
+    enum Shape {
+        TopLevel(ExprId),
+        Nested(ExprId),
+        If(ExprId, BlockId, Option<BlockId>),
+        Block(BlockId),
+        None,
+    }
+    for stmt_id in body.blocks[block].stmts.clone() {
+        let shape = match &body.stmts[stmt_id].kind {
+            StmtKind::Let { value, .. } => Shape::TopLevel(*value),
+            StmtKind::Expr(expr) => Shape::TopLevel(*expr),
+            StmtKind::Return { value: Some(v) } => Shape::TopLevel(*v),
+            StmtKind::If {
+                condition,
+                then_block,
                 else_block,
-            } => {
-                inline_calls_in_expr(
-                    &mut condition,
-                    candidates,
-                    current_module,
-                    local_count,
-                    locals,
-                    type_table,
-                    &mut new_stmts,
-                    inlined_funcs,
-                    inline_counter,
-                );
-                inline_calls_in_block(
-                    &mut then_block,
-                    candidates,
-                    current_module,
-                    local_count,
-                    locals,
-                    type_table,
-                    inlined_funcs,
-                    inline_counter,
-                );
-                let new_else = else_block.map(|mut eb| {
-                    inline_calls_in_block(
-                        &mut eb,
-                        candidates,
-                        current_module,
-                        local_count,
-                        locals,
-                        type_table,
-                        inlined_funcs,
-                        inline_counter,
-                    );
-                    eb
-                });
-                new_stmts.push(NirStmt::new(
-                    NirStmtKind::If {
-                        condition,
-                        then_block,
-                        else_block: new_else,
-                    },
-                    stmt.span,
-                ));
+            } => Shape::If(*condition, *then_block, *else_block),
+            StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
+                Shape::Block(*b)
             }
-            NirStmtKind::Loop { mut body } => {
-                inline_calls_in_block(
-                    &mut body,
+            StmtKind::Break { value: Some(v), .. } => Shape::Nested(*v),
+            StmtKind::LetDestructure { value, .. } => Shape::Nested(*value),
+            _ => Shape::None,
+        };
+        match shape {
+            Shape::TopLevel(value) => {
+                let new_value = inline_top_level(
+                    body,
+                    value,
                     candidates,
                     current_module,
                     local_count,
@@ -1139,80 +908,219 @@ fn inline_calls_in_block(
                     inlined_funcs,
                     inline_counter,
                 );
-                new_stmts.push(NirStmt::new(NirStmtKind::Loop { body }, stmt.span));
+                match &mut body.stmts[stmt_id].kind {
+                    StmtKind::Let { value, .. } => *value = new_value,
+                    StmtKind::Expr(expr) => *expr = new_value,
+                    StmtKind::Return { value } => *value = Some(new_value),
+                    _ => {}
+                }
             }
-            NirStmtKind::LabeledBlock { label, mut block } => {
-                inline_calls_in_block(
-                    &mut block,
-                    candidates,
-                    current_module,
-                    local_count,
-                    locals,
-                    type_table,
-                    inlined_funcs,
-                    inline_counter,
-                );
-                new_stmts.push(NirStmt::new(
-                    NirStmtKind::LabeledBlock { label, block },
-                    stmt.span,
-                ));
-            }
-            NirStmtKind::Break { label, value } => {
-                let new_value = value.map(|mut v| {
-                    inline_calls_in_expr(
-                        &mut v,
-                        candidates,
-                        current_module,
-                        local_count,
-                        locals,
-                        type_table,
-                        &mut new_stmts,
-                        inlined_funcs,
-                        inline_counter,
-                    );
-                    v
-                });
-                new_stmts.push(NirStmt::new(
-                    NirStmtKind::Break {
-                        label,
-                        value: new_value,
-                    },
-                    stmt.span,
-                ));
-            }
-            NirStmtKind::Continue => {
-                new_stmts.push(NirStmt::new(NirStmtKind::Continue, stmt.span));
-            }
-            NirStmtKind::LetDestructure {
-                pattern,
-                is_mut,
+            Shape::Nested(value) => inline_calls_in_expr(
+                body,
                 value,
-            } => {
-                let mut new_value = value;
+                candidates,
+                current_module,
+                local_count,
+                locals,
+                type_table,
+                inlined_funcs,
+                inline_counter,
+            ),
+            Shape::If(cond, tb, eb) => {
                 inline_calls_in_expr(
-                    &mut new_value,
+                    body,
+                    cond,
                     candidates,
                     current_module,
                     local_count,
                     locals,
                     type_table,
-                    &mut new_stmts,
                     inlined_funcs,
                     inline_counter,
                 );
-                new_stmts.push(NirStmt::new(
-                    NirStmtKind::LetDestructure {
-                        pattern,
-                        is_mut,
-                        value: new_value,
-                    },
-                    stmt.span,
-                ));
+                inline_calls_in_block(
+                    body,
+                    tb,
+                    candidates,
+                    current_module,
+                    local_count,
+                    locals,
+                    type_table,
+                    inlined_funcs,
+                    inline_counter,
+                );
+                if let Some(eb) = eb {
+                    inline_calls_in_block(
+                        body,
+                        eb,
+                        candidates,
+                        current_module,
+                        local_count,
+                        locals,
+                        type_table,
+                        inlined_funcs,
+                        inline_counter,
+                    );
+                }
             }
+            Shape::Block(b) => inline_calls_in_block(
+                body,
+                b,
+                candidates,
+                current_module,
+                local_count,
+                locals,
+                type_table,
+                inlined_funcs,
+                inline_counter,
+            ),
+            Shape::None => {}
         }
     }
+}
 
-    block.stmts = new_stmts;
+/// Top-level inline of a statement value: try to inline the call, and if it
+/// fires, re-scan the inlined body for nested opportunities. Returns the
+/// (possibly new) value expression id.
+#[allow(clippy::too_many_arguments)]
+fn inline_top_level(
+    body: &mut Body,
+    value: ExprId,
+    candidates: &IndexMap<(ModuleSource, String), NirFunction>,
+    current_module: &ModuleSource,
+    local_count: &mut u32,
+    locals: &mut Vec<NirLocal>,
+    type_table: &TypeTable,
+    inlined_funcs: &mut Vec<(ModuleSource, String)>,
+    inline_counter: &mut u32,
+) -> ExprId {
+    let tree = body.to_tree_expr(value);
+    let result = try_inline_call_expr(
+        &tree,
+        candidates,
+        current_module,
+        local_count,
+        locals,
+        type_table,
+        inline_counter,
+    )
+    .or_else(|| {
+        try_inline_method_call_expr(
+            &tree,
+            candidates,
+            current_module,
+            local_count,
+            locals,
+            type_table,
+            inline_counter,
+        )
+    });
+    if let Some((inlined_tree, inlined_key)) = result {
+        if !inlined_funcs.contains(&inlined_key) {
+            inlined_funcs.push(inlined_key);
+        }
+        let new_id = body.lower_expr(&inlined_tree);
+        inline_calls_in_expr(
+            body,
+            new_id,
+            candidates,
+            current_module,
+            local_count,
+            locals,
+            type_table,
+            inlined_funcs,
+            inline_counter,
+        );
+        new_id
+    } else {
+        inline_calls_in_expr(
+            body,
+            value,
+            candidates,
+            current_module,
+            local_count,
+            locals,
+            type_table,
+            inlined_funcs,
+            inline_counter,
+        );
+        value
+    }
+}
+
+/// The expression and block children of `e`, excluding patterns, in the order
+/// the tree `inline_calls_in_expr` recursed (expression children first, then
+/// block children — `If`/`Switch` put condition/scrutinee before their blocks,
+/// so the split preserves visitation order, which drives label / local
+/// numbering).
+fn inline_expr_children(body: &Body, e: ExprId) -> (Vec<ExprId>, Vec<BlockId>) {
+    let mut exprs = Vec::new();
+    let mut blocks = Vec::new();
+    match &body.exprs[e].kind {
+        ExprKind::Binary { left, right, .. }
+        | ExprKind::Assign {
+            target: left,
+            value: right,
+        }
+        | ExprKind::Index {
+            expr: left,
+            index: right,
+        } => {
+            exprs.push(*left);
+            exprs.push(*right);
+        }
+        ExprKind::Unary { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. }
+        | ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::ClosureToCanonical { functor: inner, .. }
+        | ExprKind::GlobalVarSet { value: inner, .. }
+        | ExprKind::VariantTag { expr: inner }
+        | ExprKind::VariantTest { expr: inner, .. }
+        | ExprKind::VariantPayload { expr: inner, .. } => exprs.push(*inner),
+        ExprKind::CmRawCall { args, .. } => exprs.extend(args.iter().copied()),
+        ExprKind::IndirectCall { callee, args } => {
+            exprs.push(*callee);
+            exprs.extend(args.iter().copied());
+        }
+        ExprKind::StructLiteral { fields, .. } => exprs.extend(fields.iter().map(|f| f.value)),
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+            exprs.extend(elements.iter().copied());
+        }
+        ExprKind::VariantConstruct { payload, .. } => exprs.extend(payload.iter().copied()),
+        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => blocks.push(*block),
+        ExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            exprs.push(*condition);
+            blocks.push(*then_branch);
+            if let Some(eb) = else_branch {
+                blocks.push(*eb);
+            }
+        }
+        ExprKind::Match { expr, arms } => {
+            exprs.push(*expr);
+            for arm in arms {
+                if let Some(g) = arm.guard {
+                    exprs.push(g);
+                }
+                exprs.push(arm.body);
+            }
+        }
+        ExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            exprs.push(*scrutinee);
+            blocks.extend(arms.iter().copied());
+            blocks.push(*default);
+        }
+        _ => {}
+    }
+    (exprs, blocks)
 }
 
 /// Look up an inline candidate by module path and function name.
@@ -1389,7 +1297,10 @@ fn try_inline_call_expr(
     let func_name = func.name.clone();
     let (candidate, inlined_key) =
         find_inline_candidate(candidates, &func.module_source, current_module, &func_name)?;
-    let bb = candidate.body_block();
+    let bb = candidate
+        .body
+        .as_ref()
+        .map(crate::nir_arena::Body::to_block);
     let body = bb.as_ref()?;
 
     // Use argument's type_id to match the actual value being assigned
@@ -1445,7 +1356,10 @@ fn try_inline_method_call_expr(
     let func_name = func.name.clone();
     let (candidate, inlined_key) =
         find_inline_candidate(candidates, &func.module_source, current_module, &func_name)?;
-    let bb = candidate.body_block();
+    let bb = candidate
+        .body
+        .as_ref()
+        .map(crate::nir_arena::Body::to_block);
     let body = bb.as_ref()?;
 
     let mut bindings: Vec<InlineBinding> = Vec::with_capacity(candidate.params.len());
@@ -2112,109 +2026,49 @@ fn remap_stmt_inner(
 
 /// Recursively inline calls within an expression
 fn inline_calls_in_expr(
-    expr: &mut NirExpr,
+    body: &mut Body,
+    e: ExprId,
     candidates: &IndexMap<(ModuleSource, String), NirFunction>,
     current_module: &ModuleSource,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
-    pre_stmts: &mut Vec<NirStmt>,
     inlined_funcs: &mut Vec<(ModuleSource, String)>,
     inline_counter: &mut u32,
 ) {
-    match &mut expr.kind {
-        NirExprKind::Binary { left, right, .. } => {
-            inline_calls_in_expr(
-                left,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-            inline_calls_in_expr(
-                right,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-        }
-        NirExprKind::Unary { expr: inner, .. } => {
-            inline_calls_in_expr(
-                inner,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-        }
-        NirExprKind::Assign { target, value } => {
-            inline_calls_in_expr(
-                target,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-            inline_calls_in_expr(
-                value,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-        }
-        NirExprKind::Cast { expr: inner, .. } => {
-            inline_calls_in_expr(
-                inner,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-        }
-        NirExprKind::Call { args, .. } => {
-            // First, recursively process arguments
-            for arg in args {
+    enum Call {
+        Free,
+        Method,
+        Other,
+    }
+    let kind = match &body.exprs[e].kind {
+        ExprKind::Call { .. } => Call::Free,
+        ExprKind::MethodCall { .. } => Call::Method,
+        _ => Call::Other,
+    };
+    match kind {
+        Call::Free => {
+            // Recurse into arguments first, then attempt to inline this call.
+            let args: Vec<ExprId> = match &body.exprs[e].kind {
+                ExprKind::Call { args, .. } => args.iter().map(|a| a.expr).collect(),
+                _ => Vec::new(),
+            };
+            for a in args {
                 inline_calls_in_expr(
-                    &mut arg.expr,
+                    body,
+                    a,
                     candidates,
                     current_module,
                     local_count,
                     locals,
                     type_table,
-                    pre_stmts,
                     inlined_funcs,
                     inline_counter,
                 );
             }
-            // Try to inline this call
-            if let Some((inlined_expr, inlined_key)) = try_inline_call_expr(
-                expr,
+            let tree = body.to_tree_expr(e);
+            if let Some((inlined_tree, inlined_key)) = try_inline_call_expr(
+                &tree,
                 candidates,
                 current_module,
                 local_count,
@@ -2225,38 +2079,45 @@ fn inline_calls_in_expr(
                 if !inlined_funcs.contains(&inlined_key) {
                     inlined_funcs.push(inlined_key);
                 }
-                *expr = inlined_expr;
+                let new_id = body.lower_expr(&inlined_tree);
+                let node = body.exprs[new_id].clone();
+                body.exprs[e] = node;
             }
         }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            // First, recursively process subexpressions
+        Call::Method => {
+            let (receiver, args): (ExprId, Vec<ExprId>) = match &body.exprs[e].kind {
+                ExprKind::MethodCall { receiver, args, .. } => {
+                    (*receiver, args.iter().map(|a| a.expr).collect())
+                }
+                _ => unreachable!(),
+            };
             inline_calls_in_expr(
+                body,
                 receiver,
                 candidates,
                 current_module,
                 local_count,
                 locals,
                 type_table,
-                pre_stmts,
                 inlined_funcs,
                 inline_counter,
             );
-            for arg in args {
+            for a in args {
                 inline_calls_in_expr(
-                    &mut arg.expr,
+                    body,
+                    a,
                     candidates,
                     current_module,
                     local_count,
                     locals,
                     type_table,
-                    pre_stmts,
                     inlined_funcs,
                     inline_counter,
                 );
             }
-            // Try to inline this method call
-            if let Some((inlined_expr, inlined_key)) = try_inline_method_call_expr(
-                expr,
+            let tree = body.to_tree_expr(e);
+            if let Some((inlined_tree, inlined_key)) = try_inline_method_call_expr(
+                &tree,
                 candidates,
                 current_module,
                 local_count,
@@ -2267,187 +2128,30 @@ fn inline_calls_in_expr(
                 if !inlined_funcs.contains(&inlined_key) {
                     inlined_funcs.push(inlined_key);
                 }
-                *expr = inlined_expr;
+                let new_id = body.lower_expr(&inlined_tree);
+                let node = body.exprs[new_id].clone();
+                body.exprs[e] = node;
             }
         }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
+        Call::Other => {
+            let (exprs, blocks) = inline_expr_children(body, e);
+            for ex in exprs {
                 inline_calls_in_expr(
-                    arg,
+                    body,
+                    ex,
                     candidates,
                     current_module,
                     local_count,
                     locals,
                     type_table,
-                    pre_stmts,
                     inlined_funcs,
                     inline_counter,
                 );
             }
-        }
-        NirExprKind::FieldAccess { expr: inner, .. } => {
-            inline_calls_in_expr(
-                inner,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-        }
-        NirExprKind::Index { expr: inner, index } => {
-            inline_calls_in_expr(
-                inner,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-            inline_calls_in_expr(
-                index,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                inline_calls_in_expr(
-                    &mut field.value,
-                    candidates,
-                    current_module,
-                    local_count,
-                    locals,
-                    type_table,
-                    pre_stmts,
-                    inlined_funcs,
-                    inline_counter,
-                );
-            }
-        }
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            for elem in elements {
-                inline_calls_in_expr(
-                    elem,
-                    candidates,
-                    current_module,
-                    local_count,
-                    locals,
-                    type_table,
-                    pre_stmts,
-                    inlined_funcs,
-                    inline_counter,
-                );
-            }
-        }
-        NirExprKind::IndirectCall { callee, args } => {
-            inline_calls_in_expr(
-                callee,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-            for arg in args {
-                inline_calls_in_expr(
-                    arg,
-                    candidates,
-                    current_module,
-                    local_count,
-                    locals,
-                    type_table,
-                    pre_stmts,
-                    inlined_funcs,
-                    inline_counter,
-                );
-            }
-        }
-        NirExprKind::ClosureToCanonical { functor, .. } => {
-            inline_calls_in_expr(
-                functor,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                inline_calls_in_expr(
-                    payload_expr,
-                    candidates,
-                    current_module,
-                    local_count,
-                    locals,
-                    type_table,
-                    pre_stmts,
-                    inlined_funcs,
-                    inline_counter,
-                );
-            }
-        }
-        NirExprKind::LabeledBlock { block, .. } => {
-            // Process the block for nested inlining opportunities
-            inline_calls_in_block(
-                block,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                inlined_funcs,
-                inline_counter,
-            );
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            inline_calls_in_expr(
-                condition,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-            inline_calls_in_block(
-                then_branch,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                inlined_funcs,
-                inline_counter,
-            );
-            if let Some(else_block) = else_branch {
+            for b in blocks {
                 inline_calls_in_block(
-                    else_block,
+                    body,
+                    b,
                     candidates,
                     current_module,
                     local_count,
@@ -2458,136 +2162,5 @@ fn inline_calls_in_expr(
                 );
             }
         }
-        NirExprKind::Match { expr: inner, arms } => {
-            inline_calls_in_expr(
-                inner,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-            for arm in arms {
-                if let Some(guard) = &mut arm.guard {
-                    inline_calls_in_expr(
-                        guard,
-                        candidates,
-                        current_module,
-                        local_count,
-                        locals,
-                        type_table,
-                        pre_stmts,
-                        inlined_funcs,
-                        inline_counter,
-                    );
-                }
-                inline_calls_in_expr(
-                    &mut arm.body,
-                    candidates,
-                    current_module,
-                    local_count,
-                    locals,
-                    type_table,
-                    pre_stmts,
-                    inlined_funcs,
-                    inline_counter,
-                );
-            }
-        }
-        NirExprKind::Block(block) => {
-            inline_calls_in_block(
-                block,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                inlined_funcs,
-                inline_counter,
-            );
-        }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            inline_calls_in_expr(
-                value,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-        }
-        NirExprKind::VariantTag { expr: inner }
-        | NirExprKind::VariantTest { expr: inner, .. }
-        | NirExprKind::VariantPayload { expr: inner, .. } => {
-            inline_calls_in_expr(
-                inner,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            inline_calls_in_expr(
-                scrutinee,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-            for arm_block in arms {
-                inline_calls_in_block(
-                    arm_block,
-                    candidates,
-                    current_module,
-                    local_count,
-                    locals,
-                    type_table,
-                    inlined_funcs,
-                    inline_counter,
-                );
-            }
-            inline_calls_in_block(
-                default,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                inlined_funcs,
-                inline_counter,
-            );
-        }
-        // Leaf expressions (no sub-expressions to recurse into)
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
     }
 }

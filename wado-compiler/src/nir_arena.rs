@@ -347,17 +347,34 @@ impl Body {
     /// Build a `Body` from a standalone block (e.g. a global initializer or a
     /// test fixture); function-level fact sets are left empty.
     pub fn from_block(block: &NirBlock) -> Self {
-        let mut b = Lower::default();
-        let root = b.block(block);
-        Self {
-            exprs: b.exprs,
-            stmts: b.stmts,
-            blocks: b.blocks,
-            pats: b.pats,
-            root,
+        let mut body = Self {
+            exprs: PrimaryMap::new(),
+            stmts: PrimaryMap::new(),
+            blocks: PrimaryMap::new(),
+            pats: PrimaryMap::new(),
+            root: BlockId::from_u32(0),
             locals: Vec::new(),
             address_taken_locals: IndexSet::default(),
             stores_aliased_locals: IndexSet::default(),
+        };
+        body.root = body.lower().block(block);
+        body
+    }
+
+    /// Lower a standalone tree expression into this arena, appending fresh
+    /// nodes and returning the new root id. Used by passes that splice
+    /// tree-shaped subtrees (e.g. the inliner's remapped callee body) into a
+    /// live arena body.
+    pub fn lower_expr(&mut self, expr: &NirExpr) -> ExprId {
+        self.lower().expr(expr)
+    }
+
+    fn lower(&mut self) -> Lower<'_> {
+        Lower {
+            exprs: &mut self.exprs,
+            stmts: &mut self.stmts,
+            blocks: &mut self.blocks,
+            pats: &mut self.pats,
         }
     }
 
@@ -368,16 +385,16 @@ impl Body {
 }
 
 /// Tree -> arena lowering. Pushes children before parents so ids are dense and
-/// well-formed.
-#[derive(Default)]
-struct Lower {
-    exprs: PrimaryMap<ExprId, ExprNode>,
-    stmts: PrimaryMap<StmtId, StmtNode>,
-    blocks: PrimaryMap<BlockId, BlockNode>,
-    pats: PrimaryMap<PatId, PatNode>,
+/// well-formed. Borrows the target body's maps so `from_block` (fresh body) and
+/// `Body::lower_expr` (append into a live body) share one lowering.
+struct Lower<'a> {
+    exprs: &'a mut PrimaryMap<ExprId, ExprNode>,
+    stmts: &'a mut PrimaryMap<StmtId, StmtNode>,
+    blocks: &'a mut PrimaryMap<BlockId, BlockNode>,
+    pats: &'a mut PrimaryMap<PatId, PatNode>,
 }
 
-impl Lower {
+impl Lower<'_> {
     fn block(&mut self, block: &NirBlock) -> BlockId {
         let stmts = block.stmts.iter().map(|s| self.stmt(s)).collect();
         self.blocks.push(BlockNode {

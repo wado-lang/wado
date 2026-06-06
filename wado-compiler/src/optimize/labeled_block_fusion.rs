@@ -1668,7 +1668,7 @@ fn subst_variant_payload_in_stmt(
     };
     match shape {
         Shape::Expr(e) => {
-            subst_variant_payload_in_expr(body, e, temp_local, case_index, payload_local)
+            subst_variant_payload_in_expr(body, e, temp_local, case_index, payload_local);
         }
         Shape::ExprAndBlocks(cond, blocks) => {
             if let Some(c) = cond {
