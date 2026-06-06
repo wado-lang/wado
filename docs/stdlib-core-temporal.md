@@ -9,10 +9,11 @@ This is the MVP described in `docs/wep-2026-06-05-core-temporal.md`: it
 provides only the two value types every temporal API is built around, an
 exact point on the timeline (`Instant`) and that instant paired with a
 time-zone interpretation (`ZonedDateTime`). They carry ISO 8601 / RFC 3339
-formatting (`Display`), civil field accessors, RFC 3339 parsing, and epoch
-constructors; arithmetic, `now()`, and `Duration` are deferred to follow-up
-work. The types exist so `core:cbor` has a concrete Wado type to deserialize
-timestamps into.
+formatting (`Display`), civil field accessors, RFC 3339 parsing, epoch
+constructors, and serde `Serialize`/`Deserialize` (as RFC 3339 strings, the
+idiomatic timestamp form in both JSON and CBOR); arithmetic, `now()`, and
+`Duration` are deferred to follow-up work. The types exist so a serde format
+such as `core:json` or `core:cbor` has a concrete Wado type for timestamps.
 
 Relationship to `wasi:clocks`: `wasi:clocks` exposes its own `Instant`
 record (`{ seconds, nanoseconds }`) for the system clock. That type is a
@@ -103,6 +104,12 @@ Temporal uses a BigInt; this returns an `i64` and so is only valid within
 multiplication traps. Use the `seconds`/`nanoseconds` fields directly for
 the full range.
 
+#### `pub fn to_rfc3339(&self) -> String`
+
+RFC 3339 / ISO 8601 string in UTC (`…Z`), using the least sub-second
+precision (0, 3, 6, or 9 fraction digits) that represents the instant
+exactly. This is the serde wire form.
+
 #### `impl Display for Instant`
 
 ##### `fn fmt(&self, f: &mut Formatter)`
@@ -110,6 +117,14 @@ the full range.
 #### `impl DisplayAlt for Instant`
 
 ##### `fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl Serialize for Instant`
+
+##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
+
+#### `impl Deserialize for Instant`
+
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<Instant, DeserializeError>`
 
 ### `pub struct ZonedDateTime`
 
@@ -135,18 +150,28 @@ IANA time-zone identifier (e.g. `"America/New_York"`, `"UTC"`) or a
 fixed UTC offset (e.g. `"+09:00"`). Mirrors the Temporal time-zone slot,
 which is also a string after the removal of `Temporal.TimeZone`.
 
-#### `pub fn parse_rfc3339(text: String) -> ZonedDateTime`
+#### `pub fn parse_rfc3339(text: String) -> Result<ZonedDateTime, DeserializeError>`
 
 Parse an RFC 3339 / ISO 8601 timestamp such as
 `"2023-11-14T22:13:20.5+09:00"` or `"1970-01-01T00:00:00Z"`, preserving
-the offset as a fixed-offset zone (so it round-trips through `Display`).
+the offset as a fixed-offset zone (so it round-trips through `to_rfc3339`
+/ `Display` in canonical form).
 
 The grammar is `[±]Y…Y-MM-DDThh:mm:ss[.fraction](Z|±hh:mm)`: the year is
 four or more digits with an optional sign (ISO 8601 extended years), the
 date/time separator may be `T`, `t`, or a space, the fraction is
 truncated to nanosecond precision, and the offset is mandatory. `"Z"` and
-`"+00:00"` both normalize to a `"Z"` zone. Malformed input traps; a
-fallible parser returning a `Result` is future work.
+`"+00:00"` both normalize to a `"Z"` zone. Field values are range-checked
+against the ISO 8601 calendar (so e.g. `"2023-02-29"` and `"…T24:00:00Z"`
+are rejected); malformed or out-of-range input returns a
+`DeserializeError` carrying the byte offset of the problem.
+
+#### `pub fn to_rfc3339(&self) -> String`
+
+RFC 3339 / ISO 8601 string in this zone's local time, with the offset
+suffix (or `Z`) and the least sub-second precision that is exact. This is
+the serde wire form. Traps on an IANA zone name (offset resolution is
+future work).
 
 #### `pub fn year(&self) -> i32`
 
@@ -215,3 +240,11 @@ Number of months in this year — always `12` for ISO 8601.
 #### `impl DisplayAlt for ZonedDateTime`
 
 ##### `fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl Serialize for ZonedDateTime`
+
+##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
+
+#### `impl Deserialize for ZonedDateTime`
+
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<ZonedDateTime, DeserializeError>`

@@ -1,4 +1,5 @@
 use { Instant, ZonedDateTime } from "core:temporal";
+use { to_string, from_string } from "core:json";
 
 test "Instant construction and field access" {
     let i = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
@@ -284,7 +285,7 @@ test "Instant::from_unix_seconds splits fractional seconds" {
 }
 
 test "ZonedDateTime::parse_rfc3339 parses a UTC timestamp" {
-    let zdt = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20Z");
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20Z").unwrap();
     assert zdt.instant == Instant { seconds: 1_700_000_000, nanoseconds: 0 };
     assert zdt.year() == 2023;
     assert zdt.month() == 11;
@@ -296,7 +297,7 @@ test "ZonedDateTime::parse_rfc3339 parses a UTC timestamp" {
 }
 
 test "ZonedDateTime::parse_rfc3339 preserves a fixed offset" {
-    let zdt = ZonedDateTime::parse_rfc3339("2023-11-15T07:13:20+09:00");
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-15T07:13:20+09:00").unwrap();
     // Same instant as 2023-11-14T22:13:20Z.
     assert zdt.instant == Instant { seconds: 1_700_000_000, nanoseconds: 0 };
     assert zdt.time_zone == "+09:00";
@@ -306,47 +307,91 @@ test "ZonedDateTime::parse_rfc3339 preserves a fixed offset" {
 }
 
 test "ZonedDateTime::parse_rfc3339 reads fractional seconds, truncating" {
-    let zdt = ZonedDateTime::parse_rfc3339("1970-01-01T00:00:00.123456789Z");
+    let zdt = ZonedDateTime::parse_rfc3339("1970-01-01T00:00:00.123456789Z").unwrap();
     assert zdt.instant == Instant { seconds: 0, nanoseconds: 123_456_789 };
 
     // A short fraction is padded; an over-long one is truncated.
-    let half = ZonedDateTime::parse_rfc3339("1970-01-01T00:00:00.5Z");
+    let half = ZonedDateTime::parse_rfc3339("1970-01-01T00:00:00.5Z").unwrap();
     assert half.instant == Instant { seconds: 0, nanoseconds: 500_000_000 };
-    let over = ZonedDateTime::parse_rfc3339("1970-01-01T00:00:00.1234567899Z");
+    let over = ZonedDateTime::parse_rfc3339("1970-01-01T00:00:00.1234567899Z").unwrap();
     assert over.instant == Instant { seconds: 0, nanoseconds: 123_456_789 };
 }
 
 test "ZonedDateTime::parse_rfc3339 accepts a negative offset and lowercase separators" {
-    let zdt = ZonedDateTime::parse_rfc3339("2023-11-14t17:13:20-05:00");
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-14t17:13:20-05:00").unwrap();
     assert zdt.instant == Instant { seconds: 1_700_000_000, nanoseconds: 0 };
     assert zdt.time_zone == "-05:00";
 }
 
 test "ZonedDateTime::parse_rfc3339 round-trips through Display" {
     let original = "2023-11-15T07:13:20+09:00";
-    let zdt = ZonedDateTime::parse_rfc3339(original);
+    let zdt = ZonedDateTime::parse_rfc3339(original).unwrap();
     assert `{zdt}` == original;
 
     // A negative pre-epoch instant also round-trips.
-    let pre = ZonedDateTime::parse_rfc3339("1969-12-31T23:59:59Z");
+    let pre = ZonedDateTime::parse_rfc3339("1969-12-31T23:59:59Z").unwrap();
     assert pre.instant == Instant { seconds: -1, nanoseconds: 0 };
     assert `{pre}` == "1969-12-31T23:59:59Z";
 }
 
 test "ZonedDateTime::parse_rfc3339 parses extended ISO 8601 years" {
-    let big = ZonedDateTime::parse_rfc3339("+012023-11-14T22:13:20Z");
+    let big = ZonedDateTime::parse_rfc3339("+012023-11-14T22:13:20Z").unwrap();
     assert big.year() == 12023;
 
-    let neg = ZonedDateTime::parse_rfc3339("-000001-01-01T00:00:00Z");
+    let neg = ZonedDateTime::parse_rfc3339("-000001-01-01T00:00:00Z").unwrap();
     assert neg.year() == -1;
 }
 
-#[expect_trap]
-test "ZonedDateTime::parse_rfc3339 traps without an offset" {
-    let _ = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20");
+test "ZonedDateTime::parse_rfc3339 returns Err without an offset or on malformed input" {
+    assert ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("2023/11/14 22:13:20Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("not-a-timestamp") matches { Err(_) };
 }
 
-#[expect_trap]
-test "ZonedDateTime::parse_rfc3339 traps on a malformed timestamp" {
-    let _ = ZonedDateTime::parse_rfc3339("2023/11/14 22:13:20Z");
+test "ZonedDateTime::parse_rfc3339 range-checks the calendar fields" {
+    assert ZonedDateTime::parse_rfc3339("2023-13-01T00:00:00Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("2023-02-30T00:00:00Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("2023-01-01T24:00:00Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("2023-01-01T00:60:00Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("2023-01-01T00:00:00+24:00") matches { Err(_) };
+
+    // Feb 29 is valid only in a leap year.
+    assert ZonedDateTime::parse_rfc3339("2024-02-29T00:00:00Z") matches { Ok(_) };
+    assert ZonedDateTime::parse_rfc3339("2023-02-29T00:00:00Z") matches { Err(_) };
+}
+
+test "Instant serializes as an RFC 3339 string with minimal precision" {
+    let whole = Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+    assert to_string(&whole) matches { Ok(s) && s == `"2023-11-14T22:13:20Z"` };
+
+    let millis = Instant { seconds: 1_700_000_000, nanoseconds: 123_000_000 };
+    assert to_string(&millis) matches { Ok(s) && s == `"2023-11-14T22:13:20.123Z"` };
+
+    let nanos = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    assert to_string(&nanos) matches { Ok(s) && s == `"2023-11-14T22:13:20.123456789Z"` };
+}
+
+test "Instant round-trips through JSON serde" {
+    let t = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    let json = to_string(&t).unwrap();
+    let back = from_string::<Instant>(json).unwrap();
+    assert back == t;
+}
+
+test "ZonedDateTime round-trips through JSON serde, preserving the offset" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-15T07:13:20.5+09:00").unwrap();
+    let json = to_string(&zdt).unwrap();
+    assert json == `"2023-11-15T07:13:20.500+09:00"`;
+    let back = from_string::<ZonedDateTime>(json).unwrap();
+    assert back == zdt;
+}
+
+test "Instant deserializes from any offset, normalizing to the instant" {
+    // A non-UTC string still decodes to the correct absolute Instant.
+    let t = from_string::<Instant>(`"2023-11-15T07:13:20+09:00"`).unwrap();
+    assert t == Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+}
+
+test "Deserializing a malformed timestamp surfaces a DeserializeError" {
+    assert from_string::<Instant>(`"2023-13-01T00:00:00Z"`) matches { Err(_) };
 }

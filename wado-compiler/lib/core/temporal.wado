@@ -5,10 +5,11 @@
 //! provides only the two value types every temporal API is built around, an
 //! exact point on the timeline (`Instant`) and that instant paired with a
 //! time-zone interpretation (`ZonedDateTime`). They carry ISO 8601 / RFC 3339
-//! formatting (`Display`), civil field accessors, RFC 3339 parsing, and epoch
-//! constructors; arithmetic, `now()`, and `Duration` are deferred to follow-up
-//! work. The types exist so `core:cbor` has a concrete Wado type to deserialize
-//! timestamps into.
+//! formatting (`Display`), civil field accessors, RFC 3339 parsing, epoch
+//! constructors, and serde `Serialize`/`Deserialize` (as RFC 3339 strings, the
+//! idiomatic timestamp form in both JSON and CBOR); arithmetic, `now()`, and
+//! `Duration` are deferred to follow-up work. The types exist so a serde format
+//! such as `core:json` or `core:cbor` has a concrete Wado type for timestamps.
 //!
 //! Relationship to `wasi:clocks`: `wasi:clocks` exposes its own `Instant`
 //! record (`{ seconds, nanoseconds }`) for the system clock. That type is a
@@ -28,6 +29,8 @@
 //! let epoch = Instant { seconds: 0, nanoseconds: 0 };
 //! let zoned = ZonedDateTime { instant: epoch, time_zone: "UTC" };
 //! ```
+
+use { Serialize, Serializer, SerializeError, Deserialize, Deserializer, DeserializeError } from "core:serde";
 
 /// An exact point on the timeline, as the offset from the Unix epoch
 /// (1970-01-01T00:00:00Z). Time-zone- and calendar-independent.
@@ -323,20 +326,31 @@ impl Instant {
     pub fn epoch_nanoseconds(&self) -> i64 {
         return self.seconds * 1_000_000_000 + self.nanoseconds as i64;
     }
+
+    /// RFC 3339 / ISO 8601 string in UTC (`…Z`), using the least sub-second
+    /// precision (0, 3, 6, or 9 fraction digits) that represents the instant
+    /// exactly. This is the serde wire form.
+    pub fn to_rfc3339(&self) -> String {
+        let digits = fraction_digits_for(self.nanoseconds);
+        return render_iso8601(self.seconds, self.nanoseconds, 0, digits, "Z");
+    }
 }
 
 impl ZonedDateTime {
     /// Parse an RFC 3339 / ISO 8601 timestamp such as
     /// `"2023-11-14T22:13:20.5+09:00"` or `"1970-01-01T00:00:00Z"`, preserving
-    /// the offset as a fixed-offset zone (so it round-trips through `Display`).
+    /// the offset as a fixed-offset zone (so it round-trips through `to_rfc3339`
+    /// / `Display` in canonical form).
     ///
     /// The grammar is `[±]Y…Y-MM-DDThh:mm:ss[.fraction](Z|±hh:mm)`: the year is
     /// four or more digits with an optional sign (ISO 8601 extended years), the
     /// date/time separator may be `T`, `t`, or a space, the fraction is
     /// truncated to nanosecond precision, and the offset is mandatory. `"Z"` and
-    /// `"+00:00"` both normalize to a `"Z"` zone. Malformed input traps; a
-    /// fallible parser returning a `Result` is future work.
-    pub fn parse_rfc3339(text: String) -> ZonedDateTime {
+    /// `"+00:00"` both normalize to a `"Z"` zone. Field values are range-checked
+    /// against the ISO 8601 calendar (so e.g. `"2023-02-29"` and `"…T24:00:00Z"`
+    /// are rejected); malformed or out-of-range input returns a
+    /// `DeserializeError` carrying the byte offset of the problem.
+    pub fn parse_rfc3339(text: String) -> Result<ZonedDateTime, DeserializeError> {
         let len = text.len();
         let mut i: i32 = 0;
 
@@ -356,7 +370,7 @@ impl ZonedDateTime {
             i += 1;
         }
         if i == year_start {
-            rfc3339_error(&text);
+            return Result::Err(DeserializeError::malformed("expected a year", year_start as i64));
         }
         let mut year: i64 = 0;
         let mut yi = year_start;
@@ -366,30 +380,45 @@ impl ZonedDateTime {
         }
         year = year * year_sign;
 
-        i = expect_byte(&text, i, '-' as u8);
-        let month = read_two_digits(&text, i);
+        i = expect_byte(&text, i, '-' as u8)?;
+        let month = read_two_digits(&text, i)?;
+        if month < 1 || month > 12 {
+            return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
+        }
         i += 2;
-        i = expect_byte(&text, i, '-' as u8);
-        let day = read_two_digits(&text, i);
+        i = expect_byte(&text, i, '-' as u8)?;
+        let day = read_two_digits(&text, i)?;
+        if day < 1 || day > days_in_month_value(year, month) {
+            return Result::Err(DeserializeError::invalid_value("day out of range", i as i64));
+        }
         i += 2;
 
         // Date/time separator: 'T', 't', or a space.
         if i >= len {
-            rfc3339_error(&text);
+            return Result::Err(DeserializeError::eof(i as i64));
         }
         let sep = text.get_byte_unchecked(i);
         if sep != 'T' as u8 && sep != 't' as u8 && sep != ' ' as u8 {
-            rfc3339_error(&text);
+            return Result::Err(DeserializeError::malformed("expected a date/time separator", i as i64));
         }
         i += 1;
 
-        let hour = read_two_digits(&text, i);
+        let hour = read_two_digits(&text, i)?;
+        if hour > 23 {
+            return Result::Err(DeserializeError::invalid_value("hour out of range", i as i64));
+        }
         i += 2;
-        i = expect_byte(&text, i, ':' as u8);
-        let minute = read_two_digits(&text, i);
+        i = expect_byte(&text, i, ':' as u8)?;
+        let minute = read_two_digits(&text, i)?;
+        if minute > 59 {
+            return Result::Err(DeserializeError::invalid_value("minute out of range", i as i64));
+        }
         i += 2;
-        i = expect_byte(&text, i, ':' as u8);
-        let second = read_two_digits(&text, i);
+        i = expect_byte(&text, i, ':' as u8)?;
+        let second = read_two_digits(&text, i)?;
+        if second > 59 {
+            return Result::Err(DeserializeError::invalid_value("second out of range", i as i64));
+        }
         i += 2;
 
         // Optional fractional seconds, truncated to nanosecond precision.
@@ -406,19 +435,34 @@ impl ZonedDateTime {
                 i += 1;
             }
             if i == frac_start {
-                rfc3339_error(&text);
+                return Result::Err(DeserializeError::malformed(
+                    "expected fractional digits after '.'",
+                    frac_start as i64,
+                ));
             }
         }
 
         // Mandatory zone designator: 'Z'/'z' or ±hh:mm.
-        let offset = parse_zone_designator(&text, i, len);
+        let offset = parse_zone_designator(&text, i, len)?;
 
         let days = days_from_civil(year, month, day);
         let local_seconds = days * 86400 + hour * 3600 + minute * 60 + second;
-        return ZonedDateTime {
+        return Result::Ok(ZonedDateTime {
             instant: Instant { seconds: local_seconds - offset, nanoseconds: nanoseconds as u32 },
             time_zone: format_offset_suffix(offset),
-        };
+        });
+    }
+
+    /// RFC 3339 / ISO 8601 string in this zone's local time, with the offset
+    /// suffix (or `Z`) and the least sub-second precision that is exact. This is
+    /// the serde wire form. Traps on an IANA zone name (offset resolution is
+    /// future work).
+    pub fn to_rfc3339(&self) -> String {
+        let offset = parse_fixed_offset(&self.time_zone);
+        let digits = fraction_digits_for(self.instant.nanoseconds);
+        return render_iso8601(self.instant.seconds, self.instant.nanoseconds, offset, digits, format_offset_suffix(
+            offset,
+        ));
     }
 
     /// ISO year in the zone's local time. May be negative or beyond four digits.
@@ -562,39 +606,39 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
     return era * 146097 + doe - 719468;
 }
 
-/// Require byte `byte` at index `i` of `text`, returning the next index. Traps
-/// on mismatch or end of input.
-fn expect_byte(text: &String, i: i32, byte: u8) -> i32 {
+/// Require byte `byte` at index `i` of `text`, returning the next index, or a
+/// `DeserializeError` on mismatch or end of input.
+fn expect_byte(text: &String, i: i32, byte: u8) -> Result<i32, DeserializeError> {
     if i >= text.len() || text.get_byte_unchecked(i) != byte {
-        rfc3339_error(text);
+        return Result::Err(DeserializeError::malformed(`expected '{byte as char}'`, i as i64));
     }
-    return i + 1;
+    return Result::Ok(i + 1);
 }
 
-/// Read exactly two ASCII digits at index `i` of `text` as an integer, trapping
+/// Read exactly two ASCII digits at index `i` of `text` as an integer, erroring
 /// if either is missing or non-numeric.
-fn read_two_digits(text: &String, i: i32) -> i64 {
+fn read_two_digits(text: &String, i: i32) -> Result<i64, DeserializeError> {
     if i + 1 >= text.len()
         || !is_ascii_digit(text.get_byte_unchecked(i))
         || !is_ascii_digit(text.get_byte_unchecked(i + 1)) {
-        rfc3339_error(text);
+        return Result::Err(DeserializeError::malformed("expected two digits", i as i64));
     }
     let tens = (text.get_byte_unchecked(i) - '0' as u8) as i64;
     let ones = (text.get_byte_unchecked(i + 1) - '0' as u8) as i64;
-    return tens * 10 + ones;
+    return Result::Ok(tens * 10 + ones);
 }
 
 /// Parse the mandatory RFC 3339 zone designator in `text[start..end]` into a
-/// signed second offset: `"Z"`/`"z"` yields 0, `±hh:mm` its offset. Traps
-/// otherwise (an absent or malformed offset).
-fn parse_zone_designator(text: &String, start: i32, end: i32) -> i64 {
+/// signed second offset: `"Z"`/`"z"` yields 0, `±hh:mm` its offset. Errors on an
+/// absent, malformed, or out-of-range offset.
+fn parse_zone_designator(text: &String, start: i32, end: i32) -> Result<i64, DeserializeError> {
     let span = end - start;
     if span == 1 {
         let c = text.get_byte_unchecked(start);
         if c == 'Z' as u8 || c == 'z' as u8 {
-            return 0;
+            return Result::Ok(0);
         }
-        rfc3339_error(text);
+        return Result::Err(DeserializeError::malformed("expected 'Z' or a ±hh:mm offset", start as i64));
     }
     let well_formed = span == 6
         && (text.get_byte_unchecked(start) == '+' as u8 || text.get_byte_unchecked(start) == '-' as u8)
@@ -604,18 +648,63 @@ fn parse_zone_designator(text: &String, start: i32, end: i32) -> i64 {
         && is_ascii_digit(text.get_byte_unchecked(start + 4))
         && is_ascii_digit(text.get_byte_unchecked(start + 5));
     if !well_formed {
-        rfc3339_error(text);
+        return Result::Err(DeserializeError::malformed("expected 'Z' or a ±hh:mm offset", start as i64));
     }
     let hours = (text.get_byte_unchecked(start + 1) - '0' as u8) as i64 * 10 + (text.get_byte_unchecked(start + 2) - '0' as u8) as i64;
     let minutes = (text.get_byte_unchecked(start + 4) - '0' as u8) as i64 * 10 + (text.get_byte_unchecked(start + 5) - '0' as u8) as i64;
+    if hours > 23 || minutes > 59 {
+        return Result::Err(DeserializeError::invalid_value("time-zone offset out of range", start as i64));
+    }
     let magnitude = hours * 3600 + minutes * 60;
     if text.get_byte_unchecked(start) == '-' as u8 {
-        return -magnitude;
+        return Result::Ok(-magnitude);
     }
-    return magnitude;
+    return Result::Ok(magnitude);
 }
 
-/// Trap with a uniform diagnostic for a malformed RFC 3339 timestamp.
-fn rfc3339_error(text: &String) -> ! {
-    panic(`core:temporal: malformed RFC 3339 timestamp "{text}"`);
+/// Least sub-second precision (0, 3, 6, or 9 fraction digits) that renders
+/// `nanoseconds` without loss.
+fn fraction_digits_for(nanoseconds: u32) -> i32 {
+    if nanoseconds == 0 {
+        return 0;
+    }
+    if nanoseconds % 1_000_000 == 0 {
+        return 3;
+    }
+    if nanoseconds % 1000 == 0 {
+        return 6;
+    }
+    return 9;
+}
+
+// serde — `Instant` and `ZonedDateTime` round-trip as RFC 3339 strings, the
+// idiomatic timestamp form in both JSON (a string) and CBOR (a text string).
+
+impl Serialize for Instant {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let text = self.to_rfc3339();
+        return s.serialize_string(&text);
+    }
+}
+
+impl Deserialize for Instant {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Instant, DeserializeError> {
+        let text = d.deserialize_string()?;
+        let zdt = ZonedDateTime::parse_rfc3339(text)?;
+        return Result::Ok(zdt.instant);
+    }
+}
+
+impl Serialize for ZonedDateTime {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let text = self.to_rfc3339();
+        return s.serialize_string(&text);
+    }
+}
+
+impl Deserialize for ZonedDateTime {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<ZonedDateTime, DeserializeError> {
+        let text = d.deserialize_string()?;
+        return ZonedDateTime::parse_rfc3339(text);
+    }
 }
