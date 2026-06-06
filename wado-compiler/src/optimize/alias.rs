@@ -31,11 +31,24 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind, NirUnaryOp};
+use crate::nir::NirUnaryOp;
+use crate::nir_arena::{Body, ExprKind, NodeRef, StmtKind};
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::NirRefVisitor;
 use crate::niri::{AliasInfo, LocalSet};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
+
+/// Apply `f` to every node reachable from the body root, parents before
+/// children. The arena counterpart of the tree [`crate::nir_visitor`] walk the
+/// alias collectors used; visiting every node and matching on `Stmt` / `Expr`
+/// gives the same coverage.
+fn walk_all(body: &Body, node: NodeRef, f: &mut impl FnMut(&Body, NodeRef)) {
+    f(body, node);
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    for c in kids {
+        walk_all(body, c, f);
+    }
+}
 
 /// Build the `(module_source, func_name) → struct type id` map of
 /// synthesized `$value_copy$T<id>` helpers. The const-fold visitor
@@ -77,7 +90,7 @@ pub(super) fn build_value_copy_helpers(
 ///   `&mut T`). Used to widen field-assignment invalidation: writing
 ///   `dst.field = …` drops the same field on every alias.
 pub(super) fn build_alias_info(
-    body: &NirBlock,
+    body: &Body,
     locals: &[crate::nir::NirLocal],
     address_taken_locals: &IndexSet<u32>,
     stores_aliased_locals: &IndexSet<u32>,
@@ -96,10 +109,9 @@ pub(super) fn build_alias_info(
     for &idx in stores_aliased_locals {
         untrackable.insert(idx);
     }
-    {
-        let mut collector = AliasCollector { out: &mut aliased };
-        collector.visit_block(body);
-    }
+    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+        collect_aliased_node(body, node, &mut aliased);
+    });
     // Reference parameters/locals pointing at the same struct may alias the
     // same heap object (Wado references alias, no borrow checker), so a write
     // through one must invalidate field knowledge of the others. Treat them as
@@ -197,18 +209,14 @@ fn same_pointee_reference_edges(
 }
 
 fn collect_alias_groups(
-    body: &NirBlock,
+    body: &Body,
     type_table: &TypeTable,
     extra_edges: &[(u32, u32)],
 ) -> IndexMap<u32, IndexSet<u32>> {
     let mut edges: Vec<(u32, u32)> = extra_edges.to_vec();
-    {
-        let mut collector = AliasEdgeCollector {
-            type_table,
-            edges: &mut edges,
-        };
-        collector.visit_block(body);
-    }
+    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+        collect_alias_edges_node(body, node, type_table, &mut edges);
+    });
     if edges.is_empty() {
         return IndexMap::default();
     }
@@ -291,33 +299,35 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
     }
 }
 
-struct AliasEdgeCollector<'a> {
-    type_table: &'a TypeTable,
-    edges: &'a mut Vec<(u32, u32)>,
-}
-
-impl NirRefVisitor for AliasEdgeCollector<'_> {
-    fn visit_stmt(&mut self, stmt: &NirStmt) {
-        if let NirStmtKind::Let {
-            local_index, value, ..
-        } = &stmt.kind
-            && let NirExprKind::Local { index: src, .. } = &value.kind
-            && type_creates_alias(value.type_id, self.type_table)
-        {
-            self.edges.push((*local_index, *src));
+/// Record one alias-group edge if `node` is a reference-typed Local→Local
+/// `let dst = src` or `dst = src`.
+fn collect_alias_edges_node(
+    body: &Body,
+    node: NodeRef,
+    type_table: &TypeTable,
+    edges: &mut Vec<(u32, u32)>,
+) {
+    match node {
+        NodeRef::Stmt(s) => {
+            if let StmtKind::Let {
+                local_index, value, ..
+            } = &body.stmts[s].kind
+                && let ExprKind::Local { index: src, .. } = &body.exprs[*value].kind
+                && type_creates_alias(body.exprs[*value].type_id, type_table)
+            {
+                edges.push((*local_index, *src));
+            }
         }
-        self.walk_stmt(stmt);
-    }
-
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        if let NirExprKind::Assign { target, value } = &expr.kind
-            && let NirExprKind::Local { index: dst, .. } = &target.kind
-            && let NirExprKind::Local { index: src, .. } = &value.kind
-            && type_creates_alias(value.type_id, self.type_table)
-        {
-            self.edges.push((*dst, *src));
+        NodeRef::Expr(e) => {
+            if let ExprKind::Assign { target, value } = &body.exprs[e].kind
+                && let ExprKind::Local { index: dst, .. } = &body.exprs[*target].kind
+                && let ExprKind::Local { index: src, .. } = &body.exprs[*value].kind
+                && type_creates_alias(body.exprs[*value].type_id, type_table)
+            {
+                edges.push((*dst, *src));
+            }
         }
-        self.walk_expr(expr);
+        NodeRef::Block(_) | NodeRef::Pat(_) => {}
     }
 }
 
@@ -325,81 +335,75 @@ impl NirRefVisitor for AliasEdgeCollector<'_> {
 // Body-visible aliasing (transient inlined-in copies, captures, struct stores)
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Augments the seeded `aliased` set with body-visible aliasing
-/// markers. Conservative — false positives only cost missed
+/// Augments the seeded `aliased` set with body-visible aliasing markers for a
+/// single arena node. Conservative — false positives only cost missed
 /// optimizations.
-struct AliasCollector<'a> {
-    out: &'a mut LocalSet,
-}
-
-impl NirRefVisitor for AliasCollector<'_> {
-    fn visit_stmt(&mut self, stmt: &NirStmt) {
-        match &stmt.kind {
+fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
+    let local = |id: crate::nir_arena::ExprId| -> Option<u32> {
+        match &body.exprs[id].kind {
+            ExprKind::Local { index, .. } => Some(*index),
+            _ => None,
+        }
+    };
+    match node {
+        NodeRef::Stmt(s) => match &body.stmts[s].kind {
             // `let dst = src` (Local→Local copy) → both share storage.
-            NirStmtKind::Let {
+            StmtKind::Let {
                 local_index, value, ..
             } => {
-                if let NirExprKind::Local { index: src, .. } = &value.kind {
-                    self.out.insert(*local_index);
-                    self.out.insert(*src);
+                if let Some(src) = local(*value) {
+                    out.insert(*local_index);
+                    out.insert(src);
                 }
             }
-            NirStmtKind::Expr(expr) => {
-                // `dst = src` (Assign Local→Local) — same aliasing.
-                if let NirExprKind::Assign { target, value } = &expr.kind
-                    && let NirExprKind::Local { index: dst, .. } = &target.kind
-                    && let NirExprKind::Local { index: src, .. } = &value.kind
+            // `dst = src` (Assign Local→Local) — same aliasing.
+            StmtKind::Expr(expr) => {
+                if let ExprKind::Assign { target, value } = &body.exprs[*expr].kind
+                    && let Some(dst) = local(*target)
+                    && let Some(src) = local(*value)
                 {
-                    self.out.insert(*dst);
-                    self.out.insert(*src);
+                    out.insert(dst);
+                    out.insert(src);
                 }
             }
-            NirStmtKind::LetDestructure { .. }
-            | NirStmtKind::Return { .. }
-            | NirStmtKind::Break { .. }
-            | NirStmtKind::If { .. }
-            | NirStmtKind::Loop { .. }
-            | NirStmtKind::LabeledBlock { .. }
-            | NirStmtKind::Continue => {}
-        }
-        self.walk_stmt(stmt);
-    }
-
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        match &expr.kind {
+            StmtKind::LetDestructure { .. }
+            | StmtKind::Return { .. }
+            | StmtKind::Break { .. }
+            | StmtKind::If { .. }
+            | StmtKind::Loop { .. }
+            | StmtKind::LabeledBlock { .. }
+            | StmtKind::Continue => {}
+        },
+        NodeRef::Expr(e) => match &body.exprs[e].kind {
             // `&local` or `&mut local` escapes a reference. The OLD
             // WIR-level pass distinguished by `stores` annotation, but
             // at NIR we don't have a callee-level view here — be
             // conservative and treat any Ref/MutRef on a Local as
             // alias-creating.
-            NirExprKind::Unary {
+            ExprKind::Unary {
                 op: NirUnaryOp::MutRef | NirUnaryOp::Ref,
                 expr: inner,
             } => {
-                if let NirExprKind::Local { index, .. } = &inner.kind {
-                    self.out.insert(*index);
+                if let Some(index) = local(*inner) {
+                    out.insert(index);
                 }
             }
             // Calls with mut args may stash the reference — alias.
-            NirExprKind::Call { args, .. } => {
+            ExprKind::Call { args, .. } => {
                 for arg in args {
-                    if arg.is_mut
-                        && let NirExprKind::Local { index, .. } = &arg.expr.kind
-                    {
-                        self.out.insert(*index);
+                    if arg.is_mut && let Some(index) = local(arg.expr) {
+                        out.insert(index);
                     }
                 }
             }
-            NirExprKind::MethodCall { receiver, args, .. } => {
+            ExprKind::MethodCall { receiver, args, .. } => {
                 // Auto-ref: receiver may be passed as `&mut self`.
-                if let NirExprKind::Local { index, .. } = &receiver.kind {
-                    self.out.insert(*index);
+                if let Some(index) = local(*receiver) {
+                    out.insert(index);
                 }
                 for arg in args {
-                    if arg.is_mut
-                        && let NirExprKind::Local { index, .. } = &arg.expr.kind
-                    {
-                        self.out.insert(*index);
+                    if arg.is_mut && let Some(index) = local(arg.expr) {
+                        out.insert(index);
                     }
                 }
             }
@@ -407,58 +411,58 @@ impl NirRefVisitor for AliasCollector<'_> {
             // reachable through that aggregate; future reads through the
             // aggregate (including via captured-closure access or stored
             // references) may modify them. Mark aliased.
-            NirExprKind::StructLiteral { fields, .. } => {
+            ExprKind::StructLiteral { fields, .. } => {
                 for field in fields {
-                    if let NirExprKind::Local { index, .. } = &field.value.kind {
-                        self.out.insert(*index);
+                    if let Some(index) = local(field.value) {
+                        out.insert(index);
                     }
                 }
             }
-            NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-                for elem in elements {
-                    if let NirExprKind::Local { index, .. } = &elem.kind {
-                        self.out.insert(*index);
+            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                for &elem in elements {
+                    if let Some(index) = local(elem) {
+                        out.insert(index);
                     }
                 }
             }
-            NirExprKind::VariantConstruct {
+            ExprKind::VariantConstruct {
                 payload: Some(p), ..
             } => {
-                if let NirExprKind::Local { index, .. } = &p.kind {
-                    self.out.insert(*index);
+                if let Some(index) = local(*p) {
+                    out.insert(index);
                 }
             }
-            NirExprKind::Unary { .. }
-            | NirExprKind::Binary { .. }
-            | NirExprKind::Cast { .. }
-            | NirExprKind::CmRawCall { .. }
-            | NirExprKind::IndirectCall { .. }
-            | NirExprKind::ClosureToCanonical { .. }
-            | NirExprKind::Block(_)
-            | NirExprKind::LabeledBlock { .. }
-            | NirExprKind::If { .. }
-            | NirExprKind::Match { .. }
-            | NirExprKind::Switch { .. }
-            | NirExprKind::Assign { .. }
-            | NirExprKind::Index { .. }
-            | NirExprKind::FieldAccess { .. }
-            | NirExprKind::VariantTag { .. }
-            | NirExprKind::VariantTest { .. }
-            | NirExprKind::VariantPayload { .. }
-            | NirExprKind::VariantConstruct { payload: None, .. }
-            | NirExprKind::GlobalVarSet { .. }
-            | NirExprKind::Local { .. }
-            | NirExprKind::GlobalVarGet { .. }
-            | NirExprKind::IntLiteral { .. }
-            | NirExprKind::FloatLiteral { .. }
-            | NirExprKind::StringLiteral(_)
-            | NirExprKind::BytesLiteral(_)
-            | NirExprKind::BoolLiteral(_)
-            | NirExprKind::CharLiteral(_)
-            | NirExprKind::Null
-            | NirExprKind::Unit
-            | NirExprKind::EnumConstruct { .. } => {}
-        }
-        self.walk_expr(expr);
+            ExprKind::Unary { .. }
+            | ExprKind::Binary { .. }
+            | ExprKind::Cast { .. }
+            | ExprKind::CmRawCall { .. }
+            | ExprKind::IndirectCall { .. }
+            | ExprKind::ClosureToCanonical { .. }
+            | ExprKind::Block(_)
+            | ExprKind::LabeledBlock { .. }
+            | ExprKind::If { .. }
+            | ExprKind::Match { .. }
+            | ExprKind::Switch { .. }
+            | ExprKind::Assign { .. }
+            | ExprKind::Index { .. }
+            | ExprKind::FieldAccess { .. }
+            | ExprKind::VariantTag { .. }
+            | ExprKind::VariantTest { .. }
+            | ExprKind::VariantPayload { .. }
+            | ExprKind::VariantConstruct { payload: None, .. }
+            | ExprKind::GlobalVarSet { .. }
+            | ExprKind::Local { .. }
+            | ExprKind::GlobalVarGet { .. }
+            | ExprKind::IntLiteral { .. }
+            | ExprKind::FloatLiteral { .. }
+            | ExprKind::StringLiteral(_)
+            | ExprKind::BytesLiteral(_)
+            | ExprKind::BoolLiteral(_)
+            | ExprKind::CharLiteral(_)
+            | ExprKind::Null
+            | ExprKind::Unit
+            | ExprKind::EnumConstruct { .. } => {}
+        },
+        NodeRef::Block(_) | NodeRef::Pat(_) => {}
     }
 }

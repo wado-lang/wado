@@ -93,14 +93,11 @@ pub fn fold_constants(project: &mut NirPackage) -> bool {
             visitor.interpreter.enter_function();
             // Compute per-function alias annotations (driven by the
             // function's stable address-taken / stores sets plus a
-            // body walk for transient inlined-in copies). The walk is
-            // tree-shaped, so it runs over a read-only materialization
-            // of the arena body. The interpreter consults these every
-            // time the visitor calls `bind_field` / `invalidate_field`
-            // / `invalidate_aliased_fields`.
-            let body_tree = body.to_block();
+            // body walk for transient inlined-in copies). The interpreter
+            // consults these every time the visitor calls `bind_field` /
+            // `invalidate_field` / `invalidate_aliased_fields`.
             let alias_info = build_alias_info(
-                &body_tree,
+                body,
                 &locals,
                 &address_taken,
                 &stores_aliased,
