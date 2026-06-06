@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780725422228,
+  "lastUpdate": 1780730657489,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30593,6 +30593,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1f315e841dcd9d086785a0d14ecefb78722f6108"
         },
         "date": 1780725421826,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8780,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16583,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 456150,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b3921cb519f66edd45fcc7ce6e218956eb8cd12d",
+          "message": "Merge pull request #1313 from wado-lang/claude/benchmark-wasm-size-data-8SbVo\n\nfix(benchmark): render wasm-size graphs and serialize gh-pages writes",
+          "timestamp": "2026-06-06T16:15:46+09:00",
+          "tree_id": "fd7572ac9287d4ca5fe6af4614eba595bf01e0ed",
+          "url": "https://github.com/wado-lang/wado/commit/b3921cb519f66edd45fcc7ce6e218956eb8cd12d"
+        },
+        "date": 1780730657017,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
