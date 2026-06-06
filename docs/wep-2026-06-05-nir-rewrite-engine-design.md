@@ -172,9 +172,17 @@ The old fixed-point loop and the engine co-exist during the port.
         globals via wrap-in-`Body`.
   - [x] `const_branch_prune` — bottom-up arena walk; last user of the shared
         `visit_project_functions` tree bridge.
-  - Remaining local / whole-function passes: `elide_box_local`, `sroa`,
-    `sroa_param`, `multi_value_return`, `labeled_block_fusion`,
-    `container_sroa`, `condition_implication`, `dce`, `inline`.
+  - [x] `sroa_param` — arena validation + callee / call-site rewrite; globals
+        via wrap-in-`Body`.
+  - [x] `multi_value_return` — pure arena classification (sets `return_abi`).
+  - [x] `elide_box_local` — arena body traversal; `ModRef` + the
+        leftmost-walker run on materialized subtrees (`Body::to_tree_*`).
+  - Remaining local / whole-function passes: `sroa`, `labeled_block_fusion`,
+    `container_sroa`, `condition_implication`, `dce`, `inline`. The
+    support-analysis-coupled ones (`copy_prop` / `value_copy_demote` /
+    `store_load_forward` / `const_folding` lean on `alias` / `niri`) follow the
+    `elide_box_local` precedent — port the body walk, run the tree analysis on
+    a materialized subtree.
   - Flow-sensitive (keep walkers, read arena): `const_folding`'s env walk,
     `copy_prop`, `licm`, `field_scalarize`, `store_load_forward`,
     `value_copy_demote`, `tmpl_hoist`.
