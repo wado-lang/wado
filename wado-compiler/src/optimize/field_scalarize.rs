@@ -1911,6 +1911,25 @@ fn compute_deferrable_candidates(
                 self.touched.extend(sync.write_back.iter().copied());
                 self.touched.extend(sync.re_read.iter().copied());
             }
+            // Taking a reference to the candidate's exact field — `&self.f` /
+            // `&mut self.f` — lets a callee read or write the field through the
+            // reference, bypassing the scalar. `accumulate_call_sync` only
+            // tracks whole-local `&`/`&mut` args, so guard the field-ref shape
+            // here: such a candidate must NOT be deferred (its field is not
+            // call-clean). Conservative — at worst it forgoes the deferral.
+            if let NirExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                expr: inner,
+            } = &expr.kind
+                && let NirExprKind::FieldAccess {
+                    expr: base,
+                    field_index,
+                    ..
+                } = &inner.kind
+                && let NirExprKind::Local { index, .. } = &base.kind
+            {
+                self.touched.insert((*index, *field_index));
+            }
             self.walk_expr(expr);
         }
     }
@@ -2817,12 +2836,12 @@ fn accumulate_call_sync(
             // CmRawCall is a lowered Wasm import — its args are primitive
             // Wasm types, never struct refs.
         }
-        // The remaining NirExprKind variants are not call sites. The
-        // single caller (`compute_call_field_effects`) is reached only
-        // from `walk_call_expr`, which dispatches exclusively for
-        // `Call` / `MethodCall` / `IndirectCall`. Fail loud if a future
-        // refactor pushes a different shape into here, rather than
-        // silently producing no sync.
+        // The remaining NirExprKind variants are not call sites. Both callers
+        // (`compute_call_field_effects` via `walk_call_expr`, and
+        // `compute_deferrable_candidates`' `CallTouchVisitor`) gate on the
+        // `Call` / `MethodCall` / `IndirectCall` / `CmRawCall` shape before
+        // dispatching here. Fail loud if a future refactor pushes a different
+        // shape into here, rather than silently producing no sync.
         _ => unreachable!("accumulate_call_sync called on non-call expression"),
     }
 }

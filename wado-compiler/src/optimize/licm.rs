@@ -1276,6 +1276,11 @@ fn is_hoistable_binop(op: crate::nir::NirBinaryOp) -> bool {
 /// reassigned nor `&mut`-borrowed in the loop (loop-body `let` bindings are
 /// recorded as fully-modified by `collect_modified_vars`, so they are
 /// correctly rejected).
+///
+/// `Cast` is deliberately excluded: a float→int cast lowers to the trapping
+/// `i32.trunc_f64_s` family (not `trunc_sat`), so hoisting one to the
+/// pre-header could trap on a NaN/out-of-range value where a zero-iteration
+/// loop never would — the same trap-soundness reason `Div`/`Mod` are excluded.
 fn is_invariant_arith(body: &Body, e: ExprId, modified: &ModifiedVars) -> bool {
     match &body.exprs[e].kind {
         ExprKind::IntLiteral { .. }
@@ -1292,7 +1297,6 @@ fn is_invariant_arith(body: &Body, e: ExprId, modified: &ModifiedVars) -> bool {
             matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
                 && is_invariant_arith(body, *expr, modified)
         }
-        ExprKind::Cast { expr, .. } => is_invariant_arith(body, *expr, modified),
         _ => false,
     }
 }
@@ -1305,24 +1309,24 @@ fn arith_has_local(body: &Body, e: ExprId) -> bool {
         ExprKind::Binary { left, right, .. } => {
             arith_has_local(body, *left) || arith_has_local(body, *right)
         }
-        ExprKind::Unary { expr, .. } | ExprKind::Cast { expr, .. } => arith_has_local(body, *expr),
+        ExprKind::Unary { expr, .. } => arith_has_local(body, *expr),
         _ => false,
     }
 }
 
-/// Whether `e` is a compound (`Binary` / `Unary` / `Cast`) loop-invariant
-/// arithmetic expression worth hoisting into a pre-loop temp.
+/// Whether `e` is a compound (`Binary` / `Unary`) loop-invariant arithmetic
+/// expression worth hoisting into a pre-loop temp.
 fn is_hoistable_invariant_compound(body: &Body, e: ExprId, modified: &ModifiedVars) -> bool {
     let compound = matches!(
         &body.exprs[e].kind,
-        ExprKind::Binary { .. } | ExprKind::Unary { .. } | ExprKind::Cast { .. }
+        ExprKind::Binary { .. } | ExprKind::Unary { .. }
     );
     compound && is_invariant_arith(body, e, modified) && arith_has_local(body, e)
 }
 
 /// Structural equality over the hoistable-arithmetic grammar (`Local`,
-/// numeric/bool/char literals, `Binary` / `Unary` / `Cast`). Used to dedup
-/// equal invariant expressions into a single hoisted temp.
+/// numeric/bool/char literals, `Binary` / `Unary`). Used to dedup equal
+/// invariant expressions into a single hoisted temp.
 fn arith_exprs_equal(body: &Body, a: ExprId, b: ExprId) -> bool {
     if body.exprs[a].type_id != body.exprs[b].type_id {
         return false;
@@ -1352,46 +1356,8 @@ fn arith_exprs_equal(body: &Body, a: ExprId, b: ExprId) -> bool {
         (ExprKind::Unary { op: o1, expr: e1 }, ExprKind::Unary { op: o2, expr: e2 }) => {
             o1 == o2 && arith_exprs_equal(body, *e1, *e2)
         }
-        (
-            ExprKind::Cast {
-                expr: e1,
-                target_type: t1,
-            },
-            ExprKind::Cast {
-                expr: e2,
-                target_type: t2,
-            },
-        ) => t1 == t2 && arith_exprs_equal(body, *e1, *e2),
         _ => false,
     }
-}
-
-/// Deep-clone a hoistable-arithmetic subtree into fresh arena nodes.
-fn clone_arith_subtree(body: &mut Body, e: ExprId) -> ExprId {
-    let kind = body.exprs[e].kind.clone();
-    let type_id = body.exprs[e].type_id;
-    let span = body.exprs[e].span;
-    let new_kind = match kind {
-        ExprKind::Binary { left, op, right } => ExprKind::Binary {
-            left: clone_arith_subtree(body, left),
-            op,
-            right: clone_arith_subtree(body, right),
-        },
-        ExprKind::Unary { op, expr } => ExprKind::Unary {
-            op,
-            expr: clone_arith_subtree(body, expr),
-        },
-        ExprKind::Cast { expr, target_type } => ExprKind::Cast {
-            expr: clone_arith_subtree(body, expr),
-            target_type,
-        },
-        other => other,
-    };
-    body.exprs.push(ExprNode {
-        kind: new_kind,
-        type_id,
-        span,
-    })
 }
 
 /// Collect the maximal loop-invariant arithmetic subexpressions in `block`.
@@ -1485,7 +1451,7 @@ fn hoist_invariant_arith(
 
         // Clone the representative into the pre-header `let` *before* rewriting
         // the in-loop occurrences (which include `rep` itself) to a `Local`.
-        let value = clone_arith_subtree(body, rep);
+        let value = body.clone_expr(rep);
         let let_stmt = body.stmts.push(StmtNode {
             kind: StmtKind::Let {
                 name: name.clone(),
