@@ -24,20 +24,18 @@
 //! non-greedy semantics, `Not` complements (single token or
 //! multi-token Group), and scalar / list (`+=`) Labels. Dispatch
 //! falls into `Direct` for disjoint first-sets or `Tournament` for
-//! overlapping fully-scannable alts. Follow-aware variants are
-//! registered per call site and re-lowered per `(rule, mask)` pair;
-//! variant-body Repeats pick `Suppressed` / `WithFollowSubtraction`
-//! / `Plain` based on how the mask intersects the loop's inner
-//! first set. Repeats over General-Group inners coordinate the
+//! overlapping fully-scannable alts. The tail-position caller-FOLLOW
+//! repair is threaded at runtime (a `FollowArg` per `RuleRef` call
+//! site and a `gate_caller_follow` flag per tail Repeat), so greedy
+//! Repeats stay `Plain` and yield to the caller via `follow_yields`
+//! at run time. Repeats over General-Group inners coordinate the
 //! per-rule `group_counter` so the outer field name and the inner
 //! variant share the same id.
 //!
-//! Optional `?` Repeats now resolve to `OptionalLookahead` when
-//! the inner is a single-alt Group of ≥ 2 fixed tokens, or to
+//! Optional `?` Repeats resolve to `OptionalLookahead` when the
+//! inner is a single-alt Group of ≥ 2 fixed tokens, or to
 //! `OptionalScanGuard` when the inner is a scannable Group /
-//! RuleRef without a usable fixed-token prefix. The mask-driven
-//! `Suppressed` decision still wins over both — if every iteration
-//! is claimed by the variant's follow mask, the loop never runs.
+//! RuleRef without a usable fixed-token prefix; otherwise `Plain`.
 //!
 //! Phase 3 swaps `codegen::generate` to call `lower` and feed the
 //! result through a thin emit adapter; until then this file is
@@ -114,7 +112,6 @@ use {
     RepeatBodyShape,
     RepeatStrategy,
     NonGreedyStrategy,
-    WithFollowSubtractionStrategy,
     OptionalLookaheadStrategy,
     OptionalShapeLookaheadStrategy,
     OptionalLookaheadShape,
@@ -132,10 +129,10 @@ use {
     DiagnosticKind,
 } from "./gir.wado";
 
-/// Redesign: compute the runtime FOLLOW argument a `RuleRef` call at
-/// index `i` in `elements` must supply to its callee. Replaces the
-/// per-call-site `intern_follow_variant` selection — instead of cloning
-/// the callee per mask, the caller threads the mask as data.
+/// Compute the runtime FOLLOW argument a `RuleRef` call at index `i`
+/// in `elements` must supply to its callee. Instead of cloning the
+/// callee per mask (the retired `__follow_<id>` variant mechanism),
+/// the caller threads the mask as data.
 ///
 /// The callee's continuation past the call is the local suffix
 /// `elements[i+1..]`:
@@ -149,8 +146,8 @@ use {
 ///       · non-empty local prefix → `Combined(id)` (runtime prepend).
 ///
 /// The continuation is computed once per call site here, against the
-/// regular (single) rule body — there are no variant clones, so no
-/// surrounding `variant_k_prefix_mask` is threaded.
+/// single rule body — there are no variant clones, so nothing is
+/// threaded into the callee beyond the runtime `follow` argument.
 fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) -> FollowArg {
     let mut visiting: List<String> = [];
     let [deep, _consumed] = ctx.deep_position_first_sets_from(elements, i + 1, FOLLOW_VARIANT_MAX_K, &mut visiting);
@@ -203,7 +200,7 @@ fn compute_gate_caller_follow(ctx: &mut GenContext, elements: &List<Element>, i:
 /// pass serves both the lexer and parser sides.
 /// Convenience entry for callers that don't share a `GenContext`
 /// with downstream emit (e.g. `lower_test.wado` smoke tests). Real
-/// codegen calls `lower_with_ctx` instead so the variant and
+/// codegen calls `lower_with_ctx` instead so the follow-mask and
 /// kind-set registries land in the ctx emit later consumes.
 pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>) -> LoweredGrammar {
     let mut ctx = GenContext::new(&grammar.parser_rules, lit_tokens);
@@ -211,16 +208,15 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>) -> LoweredGrammar {
 }
 
 pub fn lower_with_ctx(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContext) -> LoweredGrammar {
-    // `ctx` is shared with downstream emit. The follow-variant and
+    // `ctx` is shared with downstream emit. The follow-mask and
     // kind-set registries lower writes into ctx are the same ones
-    // emit reads from later: the per-rule lower walk below interns
-    // variants at every `RuleRef` site through
-    // `ctx.intern_follow_variant` (idempotent on the canonical
-    // `(rule, mask, k_prefix_mask)` triple), and emit's `gen_parser`
-    // loops over `ctx.follow_variants()` to emit the body for each
-    // entry. Caches (first / nullable / single-token / scannable /
-    // tail-greedy) survive across the lower-then-emit boundary and
-    // only get computed once.
+    // emit reads from later: the per-rule lower walk below interns a
+    // FOLLOW mask at every `RuleRef` site through
+    // `ctx.intern_follow_mask` (idempotent on the canonical mask), and
+    // emit's `gen_follow_mask_globals` emits one `FOLLOW_MASK_<id>`
+    // global per distinct mask. Caches (first / nullable / single-token
+    // / scannable / tail-greedy) survive across the lower-then-emit
+    // boundary and only get computed once.
     let mut parser_rules: List<Rule> = [];
     for let rule of &grammar.parser_rules {
         parser_rules.push(lower_rule(rule, ctx));
@@ -300,9 +296,8 @@ fn scan_element_contains_self_ref(se: &ScanElement, rule_snake: &String) -> bool
 /// Covers the `Direct` dispatch (multi-token branch.tokens) and
 /// `Op::Excluded.kinds`. `Tournament` carries only alt indices and
 /// has no kind set to intern. Strategy-internal token sets
-/// (`WithFollowSubtraction.effective_first`, `NonGreedy.exit_*`,
-/// `OptionalLookahead.sigs`) are consumed inline by emit and don't
-/// need helper-function interning.
+/// (`NonGreedy.exit_*`, `OptionalLookahead.sigs`) are consumed inline
+/// by emit and don't need helper-function interning.
 fn intern_kind_sets(parser_rules: &List<Rule>, ctx: &mut GenContext) -> List<KindSet> {
     // Prime ctx's kind-set registry with every multi-element token
     // set the lowered IR carries. ctx is also where emit interns
@@ -386,23 +381,15 @@ fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
         },
         Repeat(r) => {
             // `gen_scan_op_repeat` reads `inner_first` for the
-            // while-loop guard. `WithFollowSubtraction` overrides it
-            // with `effective_first`. For Optional + RuleRef bodies
-            // the emit additionally subtracts `caller_follow_first`
-            // from the loop's first set — pre-register that derived
-            // set too so the `_gale_kind_set_<id>` registry stays
-            // anchored to the lower walk order.
+            // while-loop guard. For Optional + RuleRef bodies the emit
+            // additionally subtracts `caller_follow_first` from the
+            // loop's first set — pre-register that derived set too so
+            // the `_gale_kind_set_<id>` registry stays anchored to the
+            // lower walk order.
             if r.inner_first.len() >= 2 {
                 ctx.intern_kind_set(&r.inner_first);
             }
-            let loop_first = if let WithFollowSubtraction(s) = &r.strategy {
-                if s.effective_first.len() >= 2 {
-                    ctx.intern_kind_set(&s.effective_first);
-                }
-                s.effective_first;
-            } else {
-                r.inner_first;
-            };
+            let loop_first = r.inner_first;
             if let Optional = r.kind {
                 let body_is_rulecall = r.body matches { RuleCall(_) };
                 if body_is_rulecall && !r.caller_follow_first.is_empty() {
@@ -726,12 +713,10 @@ fn stamp_lr_self_ref_min_prec(lr_alts: &mut List<LrAlt>, rule_name: &String, rul
 
 /// Scan-side counterpart to `rebind_self_ref_min_prec`. Stamps
 /// `min_prec_arg` on the top-level `ScanRuleCall` when it targets
-/// `rule_snake`, and clears `variant_id` — for an LR self-ref the
-/// LR loop's `min_prec` is what disambiguates the climb, so the
-/// per-call-site variant id `intern_follow_variant` returned is not
-/// what we want here. `lower_variant_rules` re-stamps `variant_id`
-/// for variant bodies via `attach_variant_id_to_lr_self_refs` so a
-/// `__follow_<id>` variant recurses into the same variant.
+/// `rule_snake` — for an LR self-ref the LR loop's `min_prec` is what
+/// disambiguates the climb. The call's `follow_arg` is preserved
+/// as-is; the runtime `follow` is threaded independently of the
+/// precedence argument.
 fn rebind_scan_self_ref_min_prec(se: ScanElement, rule_snake: &String, prec: i32) -> ScanElement {
     if let RuleCall(rc) = se {
         if rc.target_snake == *rule_snake {
@@ -899,11 +884,10 @@ fn deep_stamp_inner_self_refs_op(op: Op, rule_name: &String, rule_snake: &String
     };
 }
 
-/// Scan-side mirror of `deep_stamp_inner_self_refs_op`. Preserves
-/// `variant_id` (unlike the top-level `rebind_scan_self_ref_min_prec`
-/// which clears it): a nested self-ref isn't an LR climb, so the
-/// per-call-site id `intern_follow_variant` set for the local follow
-/// must survive.
+/// Scan-side mirror of `deep_stamp_inner_self_refs_op`. Preserves the
+/// call's `follow_arg`: a nested self-ref isn't an LR climb, so the
+/// per-call-site FOLLOW argument computed for the local continuation
+/// must survive while only `min_prec_arg` is stamped.
 fn deep_stamp_inner_self_refs_scan(se: ScanElement, rule_snake: &String, prec: i32) -> ScanElement {
     return match se {
         RuleCall(rc) => {
@@ -1404,8 +1388,8 @@ fn build_overlap_dispatch(ctx_name: &String, alts: &List<Alternative>, indices: 
     }
 
     // Surface the overlap as an advisory diagnostic. `GenContext::warn`
-    // dedupes on `(rule, message)`, so a rule re-lowered once per
-    // follow-variant reports each overlap once. The scan pass uses a
+    // dedupes on `(rule, message)`, so each overlap is reported once
+    // even though parse and scan passes both visit it. The scan pass uses a
     // distinct "(scan)" label that `warn` would NOT dedupe against the
     // parse-side label, so skip it here — the parse-side pass is the one
     // that carries the rule-facing label.
@@ -1838,7 +1822,10 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &L
     // disambiguation to distinguish `(',' a)*?` from `(',' b)*`, the
     // `NonGreedyStrategy` infrastructure on the parse side (carrying
     // `exit_second`) is the natural foundation to restore here.
-    let strategy = choose_greedy_scan_repeat_strategy(&inner_first, &([] as List<String>));
+    // The scan side has no mask-driven strategies (the caller-FOLLOW
+    // repair is the runtime `gate_caller_follow` gate), so the scan
+    // repeat strategy is always `Plain`.
+    let strategy = ScanRepeatStrategy::Plain;
 
     let iter_follow = union_kind_arrays(&inner_first, outer_follow);
 
@@ -2222,9 +2209,9 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
         );
         // For Repeat ops, replace `caller_follow_first` with the basic
         // first set of the surrounding suffix. `compute_call_site_follow_and_mask`
-        // returns the variant-interning follow (which considers deep-nullable
-        // suffixes via the threaded `variant_mask`); emit's per-position
-        // `gen_repeat*` decisions use the simpler `first_of_elements_from`.
+        // returns the deep follow (which considers deep-nullable
+        // suffixes); emit's per-position `gen_repeat*` decisions use the
+        // simpler `first_of_elements_from`.
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
@@ -2284,9 +2271,8 @@ fn lower_op(elem: &Element, name_counts: &mut List<[String, i32]>, rule_name: &S
         RuleRef(r) => Op::RuleCall(RuleCallOp {
             target_name: r.name,
             target_snake: r.snake_name,
-            // Redesign: runtime FOLLOW arg instead of a `__follow_<id>`
-            // clone selection. `variant_id` is retained (null) until the
-            // deprecated field is removed.
+            // Runtime FOLLOW arg threaded to the callee instead of a
+            // per-(rule, mask) `__follow_<id>` clone selection.
             follow_arg: follow_arg,
             min_prec_arg: null,
             field: dedup_name(&r.field_name, name_counts),
@@ -2759,16 +2745,10 @@ fn lower_simple_cst_scan_group(alts: &List<Alternative>, ctx: &mut GenContext, o
         let alt = &alts[i];
         let elem = &alt.elements[0];
         // Pass `outer_follow` (not an empty per-position follow) here so
-        // lower's variant-registry stays in lock-step across the variant
-        // body: `variant_mask` carries the variant's mask, and any
-        // RuleRef call inside the variant re-lowers with that mask
-        // propagated through `compute_call_site_follow`. Cutting the
-        // follow to `[]` here would make lower under-register variants
-        // at this site — and `gen_parser`'s post-lower assert catches
-        // such divergence. The spurious `scan_X__follow_N` cases this
-        // approach re-introduces (e.g. `scan_sql_stmt_list__follow_0`)
-        // are currently observable; see the matching commit message
-        // for the tradeoff.
+        // any RuleRef call inside this group sees the correct caller
+        // continuation when `compute_call_site_follow` builds its FOLLOW
+        // mask. Cutting the follow to `[]` here would under-constrain the
+        // mask at this site.
         // SimpleCst alts are single RuleRefs by construction
         // (`is_simple_cst_group`), so `lower_scan_element` produces a
         // `ScanRuleCall` here, never a Repeat — no caller-follow
@@ -2955,10 +2935,11 @@ fn lower_general_group(alts: &List<Alternative>, name_counts: &mut List<[String,
 /// Default strategy is `Plain`: emit produces `while peek_kind ∈
 /// first_of_inner { … push body }` for `Star` and `Plus` (with `+`'s
 /// mandatory-first guard handled at emit time, not in the strategy
-/// enum). When `variant_mask` is non-empty (variant bodies),
-/// `choose_greedy_repeat_strategy` picks `Suppressed` /
-/// `WithFollowSubtraction` / `OptionalLookahead` / `OptionalScanGuard`
-/// as appropriate.
+/// enum). For greedy `Optional` inners, `pick_optional_specialised`
+/// may upgrade `Plain` to `OptionalLookahead` / `OptionalShapeLookahead`
+/// / `OptionalScanGuard`. The tail-position caller-FOLLOW repair is
+/// threaded at runtime via `gate_caller_follow`, not baked into the
+/// strategy.
 ///
 /// The inner Op uses a fresh `name_counts` because the binding name
 /// inside a loop body is a local to that iteration — it does not
@@ -3015,9 +2996,9 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut List<[String, i32]>, r
     //
     // `pick_optional_specialised` resolves which one fires using the
     // `body_has_field` storability flag to match emit's storable /
-    // transparent dispatch order. All three kick in only outside a
-    // follow-mask suppression window; when the mask fully blocks the
-    // loop (`Suppressed`), the specialised strategies are unnecessary.
+    // transparent dispatch order. When none fires the strategy is
+    // `Plain` and the tail-position caller-FOLLOW repair is threaded
+    // at runtime via `gate_caller_follow`.
     let body_has_field = element_has_field(&rep.element);
     let mut opt_specialised: Option<RepeatStrategy> = null;
     if !rep.non_greedy {
@@ -3034,19 +3015,14 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut List<[String, i32]>, r
         // tracked in package-gale/TODO.md. `*?` / `+?` keep the
         // dedicated non-greedy strategy.
         if let Optional = rep.kind {
-            let mask_decision = choose_greedy_repeat_strategy(&inner_first, &([] as List<String>));
-            pick_greedy_strategy(mask_decision, opt_specialised);
+            pick_greedy_strategy(opt_specialised);
         } else {
             compute_non_greedy_strategy(&rep.element, outer_follow, ctx);
         }
     } else {
-        // Mask-driven `Suppressed` always wins — if every iteration's
-        // first token is in the variant mask, the loop never enters
-        // and any specialised guard would be unreachable. Otherwise
-        // prefer the specialised strategy when one is available;
-        // fall through to the mask-aware decision when not.
-        let mask_decision = choose_greedy_repeat_strategy(&inner_first, &([] as List<String>));
-        pick_greedy_strategy(mask_decision, opt_specialised);
+        // Greedy: a specialised Optional strategy when one fires,
+        // otherwise `Plain`.
+        pick_greedy_strategy(opt_specialised);
     };
 
     // The inner body's `outer_follow` for nested constructs is the
@@ -3241,9 +3217,8 @@ fn element_has_field(elem: &Element) -> bool {
 ///   preferred because each shape inlines different elements
 ///   directly; falls back to k-token, then scan-guard.
 ///
-/// Returns `null` when none apply; the caller falls through to the
-/// mask-aware `Plain` / `WithFollowSubtraction` / `Suppressed` decision.
-/// This function is the single source of truth for the
+/// Returns `null` when none apply; the caller falls through to
+/// `Plain`. This function is the single source of truth for the
 /// Optional+Group dispatch decision — emit consumes the resulting
 /// strategy variant directly via `gen_op_storable_optional` /
 /// `gen_op_transparent_optional`.
@@ -3302,7 +3277,7 @@ fn try_optional_k_token_lookahead(inner: &Element) -> Option<RepeatStrategy> {
 /// Returns `[]` for non-Group inners — leaf Optionals (`TokenRef?` /
 /// `Literal?`) are handled by `gen_op_repeat_with_follow_override`'s
 /// Optional+leaf arm using `inner_first` directly, so we keep their
-/// strategy at the mask-aware `Plain` / `WithFollowSubtraction`.
+/// strategy at `Plain`.
 fn collect_optional_leading_tokens(inner: &Element) -> List<String> {
     let mut tokens: List<String> = [];
     if let Group(g) = inner {
@@ -3373,17 +3348,16 @@ fn try_optional_shape_lookahead(inner: &Element, ctx: &mut GenContext) -> Option
     return null;
 }
 
-/// Combine the mask-aware decision with an optional specialised
-/// strategy: `Suppressed` always wins (the loop won't run at all);
-/// otherwise the specialised strategy is preferred when available.
-fn pick_greedy_strategy(mask_decision: RepeatStrategy, specialised: Option<RepeatStrategy>) -> RepeatStrategy {
-    if let Suppressed = mask_decision {
-        return mask_decision;
-    }
+/// Resolve the greedy Repeat strategy: a specialised Optional
+/// strategy when `pick_optional_specialised` produced one, otherwise
+/// `Plain`. The tail-position caller-FOLLOW repair is threaded at
+/// runtime (`gate_caller_follow`), so there is no static mask
+/// decision to combine here.
+fn pick_greedy_strategy(specialised: Option<RepeatStrategy>) -> RepeatStrategy {
     if let Some(strat) = specialised {
         return strat;
     }
-    return mask_decision;
+    return RepeatStrategy::Plain;
 }
 
 /// Try to materialise an `OptionalScanGuard` strategy for an
@@ -3416,55 +3390,6 @@ fn try_optional_scan_guard(inner: &Element, ctx: &mut GenContext) -> Option<Repe
         return null;
     }
     return Option::<RepeatStrategy>::Some(RepeatStrategy::OptionalScanGuard);
-}
-
-/// Greedy Repeat strategy decision. Outside a follow-aware variant
-/// (`variant_mask` empty) the strategy is `Plain`. Inside a variant
-/// we apply the mask to the inner's first set:
-///
-/// * `effective_first` is empty → every iteration's first token is
-///   in the mask, so the loop should never enter — emit it
-///   `Suppressed` and the runtime skips the storage allocation
-///   entirely.
-/// * `effective_first` is shorter than `inner_first` (some overlap
-///   between the loop's first set and the mask) → emit guards on
-///   the subtracted set with `WithFollowSubtraction`.
-/// * No overlap at all → `Plain` (the mask doesn't intersect this
-///   loop's iteration condition, so emit walks the standard
-///   `while peek ∈ first` path).
-fn choose_greedy_repeat_strategy(inner_first: &List<String>, mask: &List<String>) -> RepeatStrategy {
-    if mask.is_empty() {
-        return RepeatStrategy::Plain;
-    }
-    let effective = subtract_first(inner_first, mask);
-    if effective.is_empty() {
-        return RepeatStrategy::Suppressed;
-    }
-    if effective.len() == inner_first.len() {
-        return RepeatStrategy::Plain;
-    }
-    return RepeatStrategy::WithFollowSubtraction(WithFollowSubtractionStrategy {
-        effective_first: effective,
-    });
-}
-
-/// Scan-side twin of `choose_greedy_repeat_strategy`. Different
-/// enum (`ScanRepeatStrategy` lacks `OptionalLookahead` /
-/// `OptionalScanGuard`) but otherwise identical decision tree.
-fn choose_greedy_scan_repeat_strategy(inner_first: &List<String>, mask: &List<String>) -> ScanRepeatStrategy {
-    if mask.is_empty() {
-        return ScanRepeatStrategy::Plain;
-    }
-    let effective = subtract_first(inner_first, mask);
-    if effective.is_empty() {
-        return ScanRepeatStrategy::Suppressed;
-    }
-    if effective.len() == inner_first.len() {
-        return ScanRepeatStrategy::Plain;
-    }
-    return ScanRepeatStrategy::WithFollowSubtraction(WithFollowSubtractionStrategy {
-        effective_first: effective,
-    });
 }
 
 /// Token-by-token subtraction of `b` from `a`, preserving `a`'s

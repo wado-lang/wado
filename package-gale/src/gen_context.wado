@@ -36,20 +36,20 @@ pub struct FollowMaskEntry {
     pub mask: List<List<String>>,
 }
 
-/// Maximum K-prefix depth carried into `intern_follow_variant` for the
-/// multi-token follow-mask path. Bounds the variant body's runtime
-/// peek; deeper continuations are truncated (the deepest tokens are
-/// the cheapest to disambiguate at runtime via the existing 1-token
-/// dispatch, so truncation hurts precision rather than correctness).
+/// Maximum K-prefix depth carried into `intern_follow_mask` for the
+/// multi-token follow-mask path. Bounds the runtime peek; deeper
+/// continuations are truncated (the deepest tokens are the cheapest to
+/// disambiguate at runtime via the existing 1-token dispatch, so
+/// truncation hurts precision rather than correctness).
 pub global FOLLOW_VARIANT_MAX_K: i32 = 4;
 
 /// Codegen-time context shared across emit walkers. Holds the
 /// first / nullable / single-token / scannable caches, the
 /// `single_alt_owner` and `kind_set` registries, and the
-/// follow-variant registry. No walker-mutable state — every
-/// per-walk value (variant mask, per-outer-position mask, current
-/// rule name, etc.) is threaded as an explicit parameter through
-/// the lowering and emission call chains.
+/// follow-mask registry. No walker-mutable state — every
+/// per-walk value (per-outer-position mask, current rule name, etc.)
+/// is threaded as an explicit parameter through the lowering and
+/// emission call chains.
 pub struct GenContext {
     pub parser_rules: List<ParserRule>,
     pub lit_tokens: List<LitToken>,
@@ -122,11 +122,10 @@ impl GenContext {
     }
 
     /// Record a prediction-strategy diagnostic for `rule`, deduped on
-    /// `(rule, message)`. A single decision site can be revisited: lower
-    /// re-lowers a rule once per registered follow-variant
-    /// (`lower_variant_rules`), and parse/scan passes lower the same
-    /// alts twice — both re-enter the same warn site with an identical
-    /// `(rule, message)`. Collapsing here keeps each prediction warning
+    /// `(rule, message)`. A single decision site can be revisited: the
+    /// parse and scan passes lower the same alts twice — both re-enter
+    /// the same warn site with an identical `(rule, message)`.
+    /// Collapsing here keeps each prediction warning
     /// reported once regardless of how many times lowering revisits the
     /// decision, so the dedup does not depend on a display-string
     /// heuristic. `message` already encodes everything `kind` does, so

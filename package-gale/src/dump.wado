@@ -5,7 +5,7 @@
 //! The output is plain text and stable across runs: every collection
 //! is iterated in its stored (deterministic) order. Each rule appears
 //! once, with non-overlapping sections (shape, alts, prediction tree,
-//! repeats, follow-variants, diagnostics). The trailing summary lists
+//! repeats, diagnostics). The trailing summary lists
 //! every diagnostic — including the group-scoped ones whose label
 //! carries no quoted rule name and so are not inlined under a rule
 //! (see `render_rule_diagnostics`; a structured owner id would let
@@ -485,18 +485,12 @@ fn repeat_kind_label(kind: &RepeatKind) -> String {
 fn repeat_strategy_label(strategy: &RepeatStrategy) -> String {
     return match strategy {
         Plain => "Plain",
-        WithFollowSubtraction(_) => "WithFollowSubtraction",
         NonGreedy(_) => "NonGreedy",
         OptionalLookahead(_) => "OptionalLookahead",
         OptionalShapeLookahead(_) => "OptionalShapeLookahead",
         OptionalScanGuard => "OptionalScanGuard",
-        Suppressed => "Suppressed",
     };
 }
-
-// ==========================================================================
-// Follow-variants
-// ==========================================================================
 
 // ==========================================================================
 // Diagnostics

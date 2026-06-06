@@ -337,9 +337,9 @@ test "tail_greedy_first: tail Optional with single-token-alt Group inner is also
 // `position_first_sets_from`: K-token prefix FIRST sets walked from an
 // element slice. Generalises `alt_position_first_sets` (which is the
 // `start = 0` special case) by accepting an arbitrary `start` index.
-// Used by `compute_call_site_k_prefix_mask` to build multi-token
-// follow masks for `intern_follow_variant_k` — the multi-token analog
-// of `compute_call_site_follow_and_mask`.
+// Underpins `deep_position_first_sets_from`, which `compute_follow_arg`
+// uses to build the multi-depth FOLLOW mask threaded at a `RuleRef`
+// call site.
 
 test "position_first_sets_from: full single-token sequence X Y Z, K=3" {
     let mut ctx = mk_ctx();
@@ -674,10 +674,10 @@ test "position_first_sets_from: matches alt_position_first_sets at start=0" {
 }
 
 test "warn dedupes diagnostics with the same rule and message" {
-    // A single prediction decision is revisited by lowering: a rule is
-    // re-lowered once per registered follow-variant, and parse/scan
-    // passes lower the same alts twice. Each revisit re-enters the same
-    // warn site with an identical (rule, message), so `warn` must
+    // A single prediction decision is revisited by lowering: the
+    // parse and scan passes lower the same alts twice. Each revisit
+    // re-enters the same warn site with an identical (rule, message),
+    // so `warn` must
     // collapse them — otherwise the same overlap warning is reported
     // N+1 times in `gale dump` and on `gale gen` stderr.
     let mut ctx = mk_ctx();

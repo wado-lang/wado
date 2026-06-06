@@ -37,17 +37,17 @@ impl FollowSet {
 /// * `rule_follow` — per-rule classical FOLLOW set, computed by
 ///   the worklist fixed point in [`compute_rule_follow`].
 ///
-/// The follow-variant registry — the per-`(rule, mask, k_prefix_mask)`
-/// triple table consumed by codegen — is intentionally NOT populated
-/// here. Lower's element walks (the only walker that needs to know
-/// every site's per-call-site `caller_follow`) mint registry entries
-/// directly via `GenContext::intern_follow_variant`, so there is one
-/// authoritative element-walking pass that both builds the IR and
-/// registers variants. Duplicating that walk in `FollowEnv::build` to
-/// pre-populate the registry would only re-derive what lower is
-/// already about to compute — and would have to be kept in lock-step
-/// with lower's per-shape handling, which is the kind of drift
-/// surface this project deliberately avoids.
+/// The follow-mask registry — the distinct-mask table consumed by
+/// codegen to emit the `FOLLOW_MASK_<id>` globals — is intentionally
+/// NOT populated here. Lower's element walks (the only walker that
+/// needs to know every site's per-call-site `caller_follow`) mint
+/// registry entries directly via `GenContext::intern_follow_mask`, so
+/// there is one authoritative element-walking pass that both builds
+/// the IR and registers masks. Duplicating that walk in
+/// `FollowEnv::build` to pre-populate the registry would only re-derive
+/// what lower is already about to compute — and would have to be kept
+/// in lock-step with lower's per-shape handling, which is the kind of
+/// drift surface this project deliberately avoids.
 pub struct FollowEnv {
     /// Token kinds the rule may *greedily* consume at tail position
     /// (Optional/Star/Plus elements with no required successor in the

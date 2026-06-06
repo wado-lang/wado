@@ -1261,22 +1261,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
 }
 
 fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenContext, fail_stmt: &String) {
-    // Suppressed: mask covers all of the inner's first set — no
-    // iterations possible.
-    if let Suppressed = &re.strategy {
-        if let Plus = re.kind {
-            // Plus mandatory — emit one mandatory iteration; the runtime
-            // will fail with the parse error then.
-            gen_scan_op_element(w, &re.body, ctx, fail_stmt);
-        }
-        return;
-    }
-    // Greedy: pick loop_first based on strategy.
-    let loop_first = if let WithFollowSubtraction(s) = &re.strategy {
-        s.effective_first;
-    } else {
-        re.inner_first;
-    };
+    let loop_first = re.inner_first;
 
     // K-prefix yield gate: when the caller's deterministic K-prefix
     // matches at this scan position, the scan must stop (mirroring
@@ -1304,10 +1289,8 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElem, ctx: &mut GenCont
         // the caller-side follow first (the tokens that may appear
         // right after this Optional in the surrounding alt) so we
         // don't fire the Optional on a token that belongs to the
-        // caller's next position. Strategy-subtracted `loop_first`
-        // already accounts for the variant mask; the additional
-        // `caller_follow_first` subtraction matches the surface
-        // emitter's `combined_follow = follow_first ∪ mask`.
+        // caller's next position. The `caller_follow_first` subtraction
+        // matches the surface emitter's `combined_follow = follow_first`.
         let body_is_rulecall = re.body matches { RuleCall(_) };
         let effective_first = if body_is_rulecall && !re.caller_follow_first.is_empty() {
             subtract_sets(&loop_first, &re.caller_follow_first);
@@ -1754,20 +1737,16 @@ fn gen_parse_fn_simple_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule
 }
 
 
-/// Body emitter shared by `gen_parse_fn` and the follow-aware variant
-/// pass. The variant pass calls this with
-/// `fn_name = parse_<rule>__follow_<id>` against a `variant_rule` that
-/// lower already produced with `variant_mask = entry.mask` threaded
-/// through — so the regular emit path produces the variant's body
-/// unmodified. Tail-greedy suppression is baked on
-/// `RepeatOp.strategy`, the per-outer-position mask emit unions with
-/// the caller-supplied follow at Optional+RuleCall lives on
-/// `RepeatOp.position_mask`, and `RuleCallOp.variant_id` carries the
-/// variant-selection decision at inner `RuleRef` sites.
+/// Body emitter for multi-alt and left-recursive rules. The
+/// tail-position caller-FOLLOW repair is threaded at runtime: each
+/// `RuleRef` call site carries a `RuleCallOp.follow_arg` and each tail
+/// Repeat a `RepeatOp.gate_caller_follow` flag, so the regular emit
+/// path needs no per-(rule, mask) specialisation.
 ///
-/// `emit_visibility` is `false` for variant emission to suppress the
-/// `pub`/`export` doc comment on the variant function (variants are
-/// implementation details, not part of the rule's exposed surface).
+/// `emit_visibility` gates the `pub`/`export` doc comment on the
+/// emitted function. It is `true` for every live call site today;
+/// the parameter survives from the retired follow-variant pass, which
+/// emitted implementation-detail clones with it set `false`.
 fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String, emit_visibility: bool) {
     // Variant emission and the shared dispatch path route through
     // here. Single-alt rules are handled by the dedicated
@@ -2252,7 +2231,7 @@ fn inner_walker_follow_for_repeat(rep: &RepeatElement, rep_op: &RepeatOp, elemen
 
 /// True when the lowered op is a leaf shape that emit can render
 /// directly from `op.field` / `op.kind` / `op.target_snake` /
-/// `op.variant_id` / `op.min_prec_arg` — i.e. lower has resolved
+/// `op.follow_arg` / `op.min_prec_arg` — i.e. lower has resolved
 /// every decision and the emit body is a single `let … = …?;` line.
 /// Repeat / Group / ListLabel ops still flow through the surface-IR
 /// helpers in this slice and will migrate in later (2) slices.
@@ -2279,9 +2258,9 @@ fn op_is_rulecall(op: &Op) -> bool {
 }
 
 /// Emit a single leaf-op parse line, reading the deduped field name
-/// and resolved token / variant / min-prec values straight from
+/// and resolved token / follow-arg / min-prec values straight from
 /// `Op`. Lower's `lower_alt_body` / `lower_label_op` / etc. have
-/// already baked in dedup, follow-variant interning, and the
+/// already baked in dedup, the per-call-site `FollowArg`, and the
 /// LR-prefix `min_prec` argument — emit does not re-derive any of
 /// it. Counterpart of the leaf arms of `gen_element` for the surface
 /// IR walker; that walker is still in use inside group bodies and
@@ -2552,12 +2531,9 @@ fn emit_op_opt_scan_guard_for_group(w: &mut CodeWriter, g_op: &GroupOp, g_elem: 
 /// `rep_op.strategy`. The Optional-specialised strategies
 /// (`OptionalLookahead`, `OptionalShapeLookahead`, `OptionalScanGuard`)
 /// are produced by lower's `pick_optional_specialised`; when none
-/// applies, lower falls back to the mask-aware `Plain` /
-/// `WithFollowSubtraction` decision (`Suppressed` is caught earlier
-/// by `gen_op_repeat_with_follow_override` and never reaches here).
-/// `NonGreedy` only fires for `*?` / `+?` and is handled by
-/// `gen_op_repeat_non_greedy`, so this `match` is exhaustive over
-/// the strategies a greedy `?` can carry.
+/// applies, lower falls back to `Plain`. `NonGreedy` only fires for
+/// `*?` / `+?` and is handled by `gen_op_repeat_non_greedy`, so this
+/// `match` is exhaustive over the strategies a greedy `?` can carry.
 ///
 /// In every case the inner parse routes through op-driven helpers
 /// (`gen_op_inner_for_storable_repeat`, `gen_op_dispatch_element` /
@@ -2605,10 +2581,8 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
                 &gate_cond_with_caller_follow(&`{scan_pos_var} >= 0`, rep_op.gate_caller_follow),
             );
         },
-        // `pick_optional_specialised` returned `null` and lower fell
-        // through to the mask-aware decision: gate on
-        // `body_first_set` (`Plain`) or the mask-subtracted variant
-        // (`WithFollowSubtraction`).
+        // `pick_optional_specialised` returned `null`: gate on
+        // `body_first_set` (`Plain`).
         Plain => emit_op_storable_optional_with_first(
             w,
             rep_op,
@@ -2619,20 +2593,10 @@ fn gen_op_storable_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &Re
             &inner_field,
             &gate_cond_with_caller_follow(&ctx.first_check_str(&rep_op.body_first_set), rep_op.gate_caller_follow),
         ),
-        WithFollowSubtraction(s) => emit_op_storable_optional_with_first(
-            w,
-            rep_op,
-            inner_elem,
-            ctx,
-            &opt_field,
-            &inner_type,
-            &inner_field,
-            &gate_cond_with_caller_follow(&ctx.first_check_str(&s.effective_first), rep_op.gate_caller_follow),
-        ),
-        // Suppressed / NonGreedy / Suppressed are caught upstream;
+        // `NonGreedy` is caught upstream by `gen_op_repeat_non_greedy`;
         // reaching here is a lower-side bug.
-        Suppressed | NonGreedy(_) => panic(
-            "gen_op_storable_optional: Suppressed / NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
+        NonGreedy(_) => panic(
+            "gen_op_storable_optional: NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
         ),
     };
 }
@@ -2667,9 +2631,8 @@ fn emit_op_storable_optional_with_first(w: &mut CodeWriter, rep_op: &RepeatOp, i
 /// Op-driven emit for Optional + non-storable (Transparent) Group.
 /// Dispatches on `rep_op.strategy`. Strategy coverage mirrors
 /// `gen_op_storable_optional` — Optional-specialised shapes from
-/// `pick_optional_specialised` plus the mask-aware fallback (`Plain`
-/// / `WithFollowSubtraction`). No outer `Option<T>` wrapping; each
-/// branch inlines the inner alt directly.
+/// `pick_optional_specialised` plus the `Plain` fallback. No outer
+/// `Option<T>` wrapping; each branch inlines the inner alt directly.
 fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let _ = dedup_name(&rep_op.field, name_counts);
 
@@ -2695,17 +2658,8 @@ fn gen_op_transparent_optional(w: &mut CodeWriter, rep: &RepeatElement, rep_op: 
         Plain => emit_op_transparent_optional_with_cond(w, g_op, g_elem, ctx, &gate_cond_with_caller_follow(
             &ctx.first_check_str(&rep_op.body_first_set), rep_op.gate_caller_follow
         )),
-        WithFollowSubtraction(s) => emit_op_transparent_optional_with_cond(
-            w,
-            g_op,
-            g_elem,
-            ctx,
-            &gate_cond_with_caller_follow(
-                &ctx.first_check_str(&s.effective_first), rep_op.gate_caller_follow
-            ),
-        ),
-        Suppressed | NonGreedy(_) => panic(
-            "gen_op_transparent_optional: Suppressed / NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
+        NonGreedy(_) => panic(
+            "gen_op_transparent_optional: NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
         ),
     };
 }
@@ -3139,13 +3093,13 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
     }
     if let RuleRef(r) = elem {
         let field_name = dedup_name(&r.field_name, name_counts);
-        // Per-call-site follow variants are baked on `RuleCallOp.variant_id`
-        // by lower's `compute_call_site_follow` and consumed by the
-        // op-driven walkers; the surface `gen_element` arm only fires for
-        // legacy paths (Label inner / LR-suffix fallback / Consume node)
-        // where the variant is always the regular `parse_X`. Prefix LR
-        // alts' trailing self-ref is reached via `gen_op_leaf` on
-        // `RuleCallOp.min_prec_arg`, so `gen_element` never threads
+        // Per-call-site FOLLOW args are baked on `RuleCallOp.follow_arg`
+        // by lower and consumed by the op-driven walkers; the surface
+        // `gen_element` arm only fires for legacy paths (Label inner /
+        // LR-suffix fallback / Consume node) where the call needs no
+        // follow argument and so passes the defaulted `&EMPTY_FOLLOW`.
+        // Prefix LR alts' trailing self-ref is reached via `gen_op_leaf`
+        // on `RuleCallOp.min_prec_arg`, so `gen_element` never threads
         // precedence here either.
         w.line(&`let {field_name} = _parse_{r.snake_name}(p)?;`);
         return;
@@ -3216,9 +3170,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
 /// Op-driven top-level Repeat dispatcher. Walkers reach this with
 /// `rep` (surface) and `rep_op` (lowered, carrying baked follow /
 /// strategy / scannable / has-field). Internally routes to the
-/// existing emit helpers using the baked data, with one specialised
-/// short-circuit for `RepeatStrategy::Suppressed` on `Optional` and
-/// `Star` (mask-suppressed loops emit just the storage decl).
+/// existing emit helpers using the baked data.
 fn gen_op_repeat(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     gen_op_repeat_with_follow_override(w, rep, rep_op, ctx, name_counts, &rep_op.caller_follow_first);
 }
@@ -3230,20 +3182,6 @@ fn gen_op_repeat(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx
 /// `caller_follow_first` computation alone (lower doesn't see the
 /// outer iter_follow at group-alt time).
 fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, follow: &List<String>) {
-    // Suppressed short-circuit. Plus is mandatory (must consume ≥ 1),
-    // so even with a covering mask its loop must still emit — fall
-    // through to the Star/Plus arm in that case.
-    if let Suppressed = &rep_op.strategy {
-        let is_plus = if let Plus = rep.kind {
-            true;
-        } else {
-            false;
-        };
-        if !is_plus {
-            gen_op_repeat_suppressed(w, rep, rep_op, name_counts);
-            return;
-        }
-    }
     if rep.non_greedy {
         // `??` routes through the greedy Optional emitter because lower
         // already picked a greedy strategy for it (see `lower_repeat_op`).
@@ -3261,28 +3199,6 @@ fn gen_op_repeat_with_follow_override(w: &mut CodeWriter, rep: &RepeatElement, r
     }
     // Star / Plus, greedy.
     gen_op_repeat_star_plus_greedy(w, rep, rep_op, ctx, name_counts, follow);
-}
-
-/// `RepeatStrategy::Suppressed` short-circuit. The enclosing variant's
-/// follow mask covers every iteration's first token, so the loop never
-/// enters at runtime. Emit just allocates the storage (Optional → null;
-/// Star → empty list) when the body contributes a CST field. Plus is
-/// mandatory, so a `Suppressed` strategy on Plus is a lower-side bug
-/// and the caller's later panic will surface it.
-fn gen_op_repeat_suppressed(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, name_counts: &mut List<[String, i32]>) {
-    if !rep_op.body_has_field {
-        return;
-    }
-    let inner_type = op_field_type(&rep_op.body);
-    let _ = dedup_name(&rep_op.field, name_counts);
-    if let Optional = rep.kind {
-        w.line(&`let {rep_op.field}: Option<{inner_type}> = null;`);
-        return;
-    }
-    if let Star = rep.kind {
-        w.line(&`let mut {rep_op.field}: List<{inner_type}> = [];`);
-        return;
-    }
 }
 
 /// Non-greedy `*?` / `+?`. Dispatches on `rep_op.body_shape`:
@@ -3388,8 +3304,7 @@ fn gen_op_repeat_non_greedy_transparent(w: &mut CodeWriter, rep: &RepeatElement,
 /// disambiguation); Group delegates to `gen_op_storable_optional` /
 /// `gen_op_transparent_optional` which consume the baked strategy
 /// variants; other leaves (Token / Literal / Wildcard / Excluded) use
-/// `inner_first` with the mask subtraction baked into
-/// `WithFollowSubtraction`. The `match` is exhaustive — lower asserts
+/// `inner_first` directly. The `match` is exhaustive — lower asserts
 /// at construction time that no other body shape reaches here.
 fn gen_op_repeat_optional_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, follow: &List<String>) {
     return match rep_op.body_shape {
@@ -3482,18 +3397,11 @@ fn gen_op_repeat_optional_rulecall(w: &mut CodeWriter, rep: &RepeatElement, rep_
 }
 
 /// Greedy Optional whose body is a non-RuleCall leaf (Token / Literal /
-/// Wildcard / Excluded). Differs from the RuleCall arm: the caller-side
-/// follow legitimately overlaps with the inner's first
-/// (e.g. `K_DATABASE` reappearing inside `expr` via `name → keyword`),
-/// so we gate only on `inner_first - mask`. Lower's `RepeatStrategy`
-/// already bakes the mask subtraction as `WithFollowSubtraction` when
-/// it applies.
+/// Wildcard / Excluded). The tail-position caller-FOLLOW repair is
+/// threaded at runtime (`gate_caller_follow` → `follow_yields`), so the
+/// loop guard is the plain `body_first_set` check.
 fn gen_op_repeat_optional_leaf(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
-    let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
-        s.effective_first;
-    } else {
-        rep_op.body_first_set;
-    };
+    let loop_first = rep_op.body_first_set;
     let inner_type = op_field_type(&rep_op.body);
     let opt_field = rep_op.field;
     let _ = dedup_name(&opt_field, name_counts);
@@ -3591,11 +3499,7 @@ fn gen_op_repeat_star_plus_greedy(w: &mut CodeWriter, rep: &RepeatElement, rep_o
 fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, g_op: &GroupOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     let inner = &rep.element;
     let inner_first = rep_op.body_first_set;
-    let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
-        s.effective_first;
-    } else {
-        inner_first;
-    };
+    let loop_first = inner_first;
     let _ = dedup_name(&rep_op.field, name_counts);
 
     if let Star = rep.kind {
@@ -3715,11 +3619,7 @@ fn emit_rep_break_with_recovery(w: &mut CodeWriter, scan_pos: &String, rep_op: &
 fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep_op: &RepeatOp, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, follow: &List<String>) {
     let inner = &rep.element;
     let inner_first = rep_op.body_first_set;
-    let loop_first = if let WithFollowSubtraction(s) = &rep_op.strategy {
-        s.effective_first;
-    } else {
-        inner_first;
-    };
+    let loop_first = inner_first;
     // Per-iteration follow propagated into a nested non-greedy Repeat
     // inside a SingleAlt body — `first(inner) ∪ outer_follow`.
     let iter_follow = if rep_op.body_is_single_alt_group { union_kind_arrays(&inner_first, follow) } else { *follow };
@@ -4045,7 +3945,7 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &List<i32>
     for let mut k = 0; k < sorted_group.len(); k += 1 {
         let alt_idx = sorted_group[k];
         let is_last = k == last;
-        // Read the lowered `RuleCallOp` so `variant_id` and
+        // Read the lowered `RuleCallOp` so `follow_arg` and
         // `min_prec_arg` (baked at lower time) reach emit. The surface
         // `RuleRef` carries only the source-level name.
         if let RuleCall(rc) = &g_op_alts[alt_idx].ops[0] {

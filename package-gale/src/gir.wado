@@ -27,7 +27,7 @@
 //!   help with frequent shapes are allowed; they must not consult
 //!   the original grammar.
 //! * Stable across runs — every collection that influences generated
-//!   identifiers (kind-set ids, follow-variant ids, group indices,
+//!   identifiers (kind-set ids, follow-mask ids, group indices,
 //!   field-name dedup counters) is laid out by `lower` in
 //!   deterministic order.
 //!
@@ -411,7 +411,7 @@ pub struct AltBody {
 ///
 /// The variant tag selects the emit shape; the payload struct
 /// carries the resolved attributes (token kind, dedupped field name,
-/// follow-variant id, min-prec arg, etc.) that emit needs. Case
+/// follow arg, min-prec arg, etc.) that emit needs. Case
 /// names within `Op` are scoped under the variant so they do not
 /// collide with `ir::Element` cases of the same spelling.
 pub variant Op {
@@ -679,8 +679,7 @@ pub struct GroupOp {
 /// cascade of `op_is_leaf` / `op_is_rulecall` / `let Group(_) = ...`
 /// probes guarded by an "unhandled body shape" panic. Lower asserts
 /// at construction time that the body op falls into one of the four
-/// variants; ListLabel / Repeat / Suppressed shapes never reach
-/// `lower_repeat_op`.
+/// variants; ListLabel / Repeat shapes never reach `lower_repeat_op`.
 pub variant RepeatBodyShape {
     /// `Op::RuleCall` body. Optional dispatch routes here for the
     /// caller-follow subtraction (`gen_op_repeat_optional_rulecall`),
@@ -709,13 +708,10 @@ pub variant RepeatBodyShape {
 /// fan-out that legacy `gen_repeat_body` performs.
 pub variant RepeatStrategy {
     /// Plain greedy loop. `while peek in first { ... }` for `*` /
-    /// `+`; bare `if peek in first { ... }` for `?`.
+    /// `+`; bare `if peek in first { ... }` for `?`. The tail-position
+    /// caller-FOLLOW repair is threaded at runtime (`follow_yields`),
+    /// so the loop guard itself stays the plain first-set check.
     Plain,
-    /// `?` over a `RuleRef`-shaped inner with a non-empty caller-
-    /// local FOLLOW. The effective first set already has the caller
-    /// follow subtracted at lower time, so emit just guards on the
-    /// reduced set.
-    WithFollowSubtraction(WithFollowSubtractionStrategy),
     /// Non-greedy `*?` / `+?` / `??`. Exit conditions are computed
     /// from the surrounding alt's follow at lower time.
     NonGreedy(NonGreedyStrategy),
@@ -732,18 +728,6 @@ pub variant RepeatStrategy {
     /// `?` whose inner can't be decided by lookahead but IS fully
     /// scannable — emit uses a save-scan-rewind guard.
     OptionalScanGuard,
-    /// The repeat is fully suppressed by the enclosing variant's
-    /// follow mask — emit replaces the whole repeat with a
-    /// `let <field>: Option<T> = null;` (or nothing for non-storable
-    /// inners). Variants register this when every first-token of the
-    /// repeat body lies in the mask.
-    Suppressed,
-}
-
-pub struct WithFollowSubtractionStrategy {
-    /// First-set of the inner, already with the caller-local FOLLOW
-    /// subtracted. emit guards on `peek_kind() ∈ effective_first`.
-    pub effective_first: List<String>,
 }
 
 pub struct NonGreedyStrategy {
@@ -895,8 +879,7 @@ pub struct ScanRepeatElem {
     /// First set of `body` cached at lower time. emit's scan-side
     /// repeat emitter uses this for `while peek_kind ∈ inner_first`
     /// loop guards (Plain strategy) and for Plus's mandatory-first
-    /// iteration condition. WithFollowSubtraction carries the
-    /// effective (mask-subtracted) first separately in its payload.
+    /// iteration condition.
     pub inner_first: List<String>,
     /// Scan-side mirror of `RepeatOp.caller_follow_first`. Default is
     /// the variant-aware `outer_follow` at construction time; alt-level
@@ -916,8 +899,6 @@ pub struct ScanRepeatElem {
 
 pub variant ScanRepeatStrategy {
     Plain,
-    WithFollowSubtraction(WithFollowSubtractionStrategy),
-    Suppressed,
 }
 
 pub struct ScanGroupElem {

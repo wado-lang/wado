@@ -61,7 +61,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let mut w = CodeWriter::with_capacity(estimated_size);
     // Lower up-front so CST emission can consume `AltBody.fields` /
     // `GroupShape` directly. Sharing the GenContext primes the
-    // follow-variant / kind-set registries and the first / nullable
+    // follow-mask / kind-set registries and the first / nullable
     // / scannable caches for the subsequent parser emit.
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
     let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);

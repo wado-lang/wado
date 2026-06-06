@@ -30,7 +30,6 @@ use {
     RepeatOp,
     RepeatBodyShape,
     RepeatStrategy,
-    WithFollowSubtractionStrategy,
     NonGreedyStrategy,
     OptionalLookaheadStrategy,
     OptionalShapeLookaheadStrategy,
@@ -156,7 +155,7 @@ test "Op::Literal round-trip" {
     }
 }
 
-test "Op::RuleCall preserves variant_id and min_prec" {
+test "Op::RuleCall preserves follow_arg and min_prec" {
     let call = Op::RuleCall(RuleCallOp {
         target_name: "expr",
         target_snake: "expr",
@@ -167,6 +166,7 @@ test "Op::RuleCall preserves variant_id and min_prec" {
     });
     if let RuleCall(r) = &call {
         assert r.target_snake == "expr";
+        assert r.follow_arg matches { NoFollow };
         assert r.min_prec_arg matches { None };
     } else {
         panic("RuleCall");
@@ -225,9 +225,6 @@ test "Op::Repeat carries inner element and strategy" {
 
 test "RepeatStrategy variants round-trip" {
     let plain = RepeatStrategy::Plain;
-    let with_follow = RepeatStrategy::WithFollowSubtraction(WithFollowSubtractionStrategy {
-        effective_first: ["TK_A"],
-    });
     let non_greedy = RepeatStrategy::NonGreedy(NonGreedyStrategy {
         exit_first: ["TK_END"],
         exit_second: [],
@@ -258,17 +255,11 @@ test "RepeatStrategy variants round-trip" {
     };
     let shape_lookahead = RepeatStrategy::OptionalShapeLookahead(shape_strategy);
     let scan_guard = RepeatStrategy::OptionalScanGuard;
-    let suppressed = RepeatStrategy::Suppressed;
 
     if let Plain = &plain {
         assert true;
     } else {
         panic("Plain");
-    }
-    if let WithFollowSubtraction(s) = &with_follow {
-        assert s.effective_first[0] == "TK_A";
-    } else {
-        panic("WithFollowSubtraction");
     }
     if let NonGreedy(s) = &non_greedy {
         assert s.exit_first[0] == "TK_END";
@@ -293,11 +284,6 @@ test "RepeatStrategy variants round-trip" {
         assert true;
     } else {
         panic("OptionalScanGuard");
-    }
-    if let Suppressed = &suppressed {
-        assert true;
-    } else {
-        panic("Suppressed");
     }
 }
 

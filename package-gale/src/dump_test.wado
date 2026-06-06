@@ -4,8 +4,8 @@
 //! g4 parser), lower it, and assert on substrings of the rendered
 //! report. The point is the report's MECE structure, not exact byte
 //! layout — substring checks keep the tests robust to spacing. A few
-//! tests that need LR / follow-variant shapes (awkward to hand-build)
-//! go through the g4 front-end via `dump_source`.
+//! tests that need LR shapes (awkward to hand-build) go through the
+//! g4 front-end via `dump_source`.
 
 use {
     Grammar,
@@ -28,7 +28,7 @@ use { parse } from "./g4/parser.wado";
 
 /// Run the full front-end (parse → merge → synth → lower) and render,
 /// mirroring `cmd_dump`. Used by tests whose grammar shape (left
-/// recursion, K-prefix follow-variants) is impractical to hand-build.
+/// recursion) is impractical to hand-build.
 fn dump_source(input: &String) -> String {
     let mut merged = merge_grammars([parse(*input).unwrap()]);
     synthesize_implicit_tokens(&mut merged);
@@ -42,7 +42,7 @@ fn dump_source(input: &String) -> String {
 fn dump_grammar(g: &Grammar) -> String {
     let lit_tokens = no_lit_tokens();
     // Lower through the render ctx (mirrors cmd_dump) so the
-    // follow-variant registry is populated for the dump.
+    // follow-mask registry is populated for the dump.
     let mut ctx = GenContext::new(&g.parser_rules, &lit_tokens);
     let lowered = lower_with_ctx(g, &lit_tokens, &mut ctx);
     return render_dump(g, &lowered, &mut ctx);
