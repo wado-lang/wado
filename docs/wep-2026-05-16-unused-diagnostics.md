@@ -53,9 +53,9 @@ existing `CompilerHost`. Two passes contribute, both consuming
 2. Liveness pass — the elaborate-time DCE pass introduced by
    [elaborator rearchitecture](./wep-2026-05-26-elaborator-rearchitecture.md).
    Computes source-level reachability from world-export roots over
-   the cross-module call graph that `bindings` already encodes.
-   Emits `DeadFunction` and `DeadGlobal` for source items the
-   computation does not reach.
+   the cross-module call graph encoded in `bindings` and the dispatch
+   facts. Emits `DeadFunction` and `DeadGlobal` for the source items
+   the computation does not reach (its `Liveness::dead_items`).
 
 Both passes are guarded by `CompilerOptions::unused_diagnostics` (on
 by default). No package-kind toggle is needed: `export` already names
@@ -195,17 +195,20 @@ Walk `Semantics::locals`. For each `(key, sym)` whose kind is
 
 The elaborate-time `liveness` pass computes the closure of reachable
 source items from the root set (see Reachability roots) over the
-call-graph encoded in `ModuleSemantics.bindings`. The closure is
-computed once over source-level `SymbolKey`s, so there is no
-fixed-point loop and no per-iteration dedup. Globals reference
-functions through their initialiser, functions reference globals and
-other functions through their bodies; both edge kinds are already
-present in `bindings`.
+source-level call graph. The graph mechanism — node set, the
+per-module enclosing-item index, the edge sources
+(`ModuleBindings.references` plus the dispatch facts in
+`TypeAnnotations`), precise `FunctionRef` resolution, and the
+fail-loud treatment of generic trait dispatch — is owned by the
+[elaborator rearchitecture](./wep-2026-05-26-elaborator-rearchitecture.md)
+(see its DCE / Liveness section). The closure is a single BFS over a
+static graph, so there is no fixed-point loop and no per-iteration
+dedup.
 
-For each user-authored module, the emitter walks the module's
-function and global declarations and reports any whose `SymbolKey` is
-absent from `Liveness::live_items`. Stdlib modules and synthesised
-items (which are not in `Semantics` at all) cannot appear.
+The emitter walks `Liveness::dead_items` and reports `DeadFunction`
+or `DeadGlobal` for each user-authored entry. Stdlib modules and
+synthesised items (which are not in `Semantics` at all) never enter
+`dead_items`.
 
 Span: `Semantics::name_span_of(key)`, with fallback to the item's
 `span` for declarations without a narrow name span.
@@ -271,9 +274,14 @@ land with stage 6 of the rearchitecture (see
 
 #### Phase 3 — liveness pass (lands with elaborator rearchitecture stage 6)
 
-- [ ] Land `elaborator/liveness.rs` per the rearchitecture WEP.
-- [ ] Implement the liveness-pass emitter (`DeadFunction`, `DeadGlobal`) consuming `Liveness::live_items`.
-- [ ] Wire `reify` to skip items absent from `live_items`.
+- [ ] Land `elaborator/liveness.rs` per the rearchitecture WEP: the
+      enclosing-item index, the edge collection over `references` plus
+      the dispatch facts, the BFS, and the non-optional `Liveness`
+      field on `Semantics`.
+- [ ] Implement the liveness-pass emitter (`DeadFunction`, `DeadGlobal`) consuming `Liveness::dead_items`.
+- [ ] Wire `reify` to skip items absent from `Liveness::live_items`
+      (fail-loud: a dropped-live item ICEs downstream and is fixed as a
+      graph bug, not masked by over-approximation).
 - [ ] Retire the optimize-time DCE's diagnostic role (it remains as silent cleanup).
 - [ ] Add fixtures under `tests/fixtures/dead_fn_*.wado` and `tests/fixtures/dead_global_*.wado`.
 
