@@ -1406,7 +1406,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         modules,
                         logger,
                         Rc::clone(&state.interner),
-                        Some(&state.liveness.live_items),
+                        // Gating disabled until the semantic diagnostics
+                        // (effect / stores / purity / world-conformance) are
+                        // produced from `Semantics` rather than the emitted
+                        // TIR (Design B, Phase 1) and the liveness graph is
+                        // complete for cross-module reachability (Phase 2).
+                        // Dropping a dead function before then suppresses its
+                        // diagnostics or drops a reachable one (ICE).
+                        None,
                     );
                     if let Ok(reified) = reify.reify_module(module, module_source.clone()) {
                         result.insert(module_source.clone(), reified);

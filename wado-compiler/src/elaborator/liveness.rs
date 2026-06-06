@@ -33,8 +33,11 @@ use crate::token::Span;
 /// diagnostic emitter.
 #[derive(Default, Clone)]
 pub(crate) struct Liveness {
-    /// Reachable items. Reify gates free-function / global emission on this;
-    /// `dead_items` is its user-authored complement.
+    /// Reachable items, used internally to derive `dead_items`. Reify will
+    /// gate free-function / global emission on this once the semantic
+    /// diagnostics move to `Semantics` (Design B, Phase 1) and the graph is
+    /// complete (Phase 2); gating is disabled until then.
+    #[expect(dead_code, reason = "reify gating re-enabled after Design B Phase 1/2")]
     pub(crate) live_items: IndexSet<SymbolKey>,
     pub(crate) dead_items: Vec<SymbolKey>,
 }
