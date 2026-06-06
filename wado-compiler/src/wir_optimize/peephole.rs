@@ -935,6 +935,25 @@ fn try_fold_sign_extension(instr: &mut WirInstr) {
     let (WirInstr::I32Extend8S(inner) | WirInstr::I32Extend16S(inner)) = instr else {
         return;
     };
+
+    // Step 1: drop a redundant `x & mask` whose low `width` bits are all set —
+    // the mask cannot change what `extend*_s` observes. Doing this first
+    // canonicalises `inner` so step 2 can still see an exposed load/extend
+    // (e.g. `extend8_s((load8_u a) & 0xFF)` → `extend8_s(load8_u a)` → folded
+    // to `load8_s a` below).
+    if let WirInstr::I32And(l, r) = inner.as_mut() {
+        let unmasked = match (l.as_ref(), r.as_ref()) {
+            (_, WirInstr::I32Const(m)) if low_bits_all_set(*m, width) => Some(l),
+            (WirInstr::I32Const(m), _) if low_bits_all_set(*m, width) => Some(r),
+            _ => None,
+        };
+        if let Some(slot) = unmasked {
+            let value = std::mem::replace(slot.as_mut(), WirInstr::Nop);
+            **inner = value;
+        }
+    }
+
+    // Step 2: collapse the (possibly newly exposed) inner load/extend.
     match inner.as_mut() {
         // Unsigned load + sign-extend → signed load.
         WirInstr::I32Load8U {
@@ -961,26 +980,14 @@ fn try_fold_sign_extension(instr: &mut WirInstr) {
                 addr,
             };
         }
-        // Re-extending an already-signed load / extend of the same-or-narrower
-        // width is a no-op.
+        // Re-extending an already-signed load / 8-bit extend is a no-op: an
+        // 8-bit sign-extended value already lies in `[-128, 127]`, which fits
+        // the 16-bit signed range, so an outer `extend16_s` changes nothing.
         WirInstr::I32Load8S { .. } | WirInstr::I32Extend8S(_) => {
             *instr = std::mem::replace(inner.as_mut(), WirInstr::Nop);
         }
         WirInstr::I32Load16S { .. } | WirInstr::I32Extend16S(_) if width == 16 => {
             *instr = std::mem::replace(inner.as_mut(), WirInstr::Nop);
-        }
-        // `x & mask` whose low `width` bits are all set: the mask cannot change
-        // what `extend*_s` observes, so drop it.
-        WirInstr::I32And(l, r) => {
-            let unmasked = match (l.as_ref(), r.as_ref()) {
-                (_, WirInstr::I32Const(m)) if low_bits_all_set(*m, width) => Some(l),
-                (WirInstr::I32Const(m), _) if low_bits_all_set(*m, width) => Some(r),
-                _ => None,
-            };
-            if let Some(slot) = unmasked {
-                let value = std::mem::replace(slot.as_mut(), WirInstr::Nop);
-                **inner = value;
-            }
         }
         _ => {}
     }
@@ -1332,6 +1339,51 @@ mod tests {
     }
 
     #[test]
+    fn extend8_over_masked_load8u_folds_to_load8s() {
+        // After the mask is dropped, the exposed `load8_u` must still fold to
+        // `load8_s` in the same pass (the re-fold step).
+        let mut instr = WirInstr::I32Extend8S(Box::new(WirInstr::I32And(
+            Box::new(WirInstr::I32Load8U {
+                offset: 0,
+                align: 0,
+                addr: Box::new(WirInstr::I32Const(0)),
+            }),
+            Box::new(WirInstr::I32Const(0xFF)),
+        )));
+        try_fold_sign_extension(&mut instr);
+        assert!(matches!(instr, WirInstr::I32Load8S { .. }));
+    }
+
+    #[test]
+    fn extend8_over_extend16_is_untouched() {
+        // `extend8_s(extend16_s x)` truncates to 8 bits; it must NOT collapse
+        // to the wider inner `extend16_s x`.
+        let mut instr = WirInstr::I32Extend8S(Box::new(WirInstr::I32Extend16S(Box::new(
+            local_get("x", WirType::I32),
+        ))));
+        try_fold_sign_extension(&mut instr);
+        match instr {
+            WirInstr::I32Extend8S(inner) => assert!(matches!(*inner, WirInstr::I32Extend16S(_))),
+            other => panic!("expected unchanged I32Extend8S(I32Extend16S), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn extend8_over_load16s_is_untouched() {
+        // `extend8_s(load16_s a)` truncates to 8 bits; must NOT fold to load16_s.
+        let mut instr = WirInstr::I32Extend8S(Box::new(WirInstr::I32Load16S {
+            offset: 0,
+            align: 0,
+            addr: Box::new(WirInstr::I32Const(0)),
+        }));
+        try_fold_sign_extension(&mut instr);
+        match instr {
+            WirInstr::I32Extend8S(inner) => assert!(matches!(*inner, WirInstr::I32Load16S { .. })),
+            other => panic!("expected unchanged I32Extend8S(I32Load16S), got {other:?}"),
+        }
+    }
+
+    #[test]
     fn extend8_keeps_partial_low_mask() {
         // Mask 0x0F does not preserve the full low byte, so it must stay.
         let mut instr = WirInstr::I32Extend8S(Box::new(WirInstr::I32And(
@@ -1435,6 +1487,41 @@ mod tests {
         };
         assert!(matches!(lhs.as_ref(), WirInstr::LocalTee { .. }));
         assert!(matches!(rhs.as_ref(), WirInstr::LocalGet { .. }));
+    }
+
+    #[test]
+    fn tee_fuses_when_set_value_reads_same_local() {
+        // local.set t = (t + 1); return t * t
+        // The set value reads `t`; the tee evaluates it with the old `t`, then
+        // stores, and the trailing `t` read observes the new value.
+        let mut body = vec![
+            WirInstr::LocalSet {
+                name: "t".to_string(),
+                value: Box::new(WirInstr::I32Add(
+                    Box::new(local_get("t", WirType::I32)),
+                    Box::new(WirInstr::I32Const(1)),
+                )),
+            },
+            WirInstr::Return {
+                value: Some(Box::new(WirInstr::I32Mul(
+                    Box::new(local_get("t", WirType::I32)),
+                    Box::new(local_get("t", WirType::I32)),
+                ))),
+            },
+        ];
+        fuse_local_tee(&mut body);
+        assert!(matches!(body[0], WirInstr::Nop));
+        let WirInstr::Return { value: Some(v) } = &body[1] else {
+            panic!("expected return");
+        };
+        let WirInstr::I32Mul(lhs, _) = v.as_ref() else {
+            panic!("expected mul");
+        };
+        // The leftmost `t` becomes the tee; the inner `t + 1` is preserved.
+        let WirInstr::LocalTee { value, .. } = lhs.as_ref() else {
+            panic!("expected leftmost local.tee");
+        };
+        assert!(matches!(value.as_ref(), WirInstr::I32Add(..)));
     }
 
     #[test]
