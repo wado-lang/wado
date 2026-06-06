@@ -1022,7 +1022,7 @@ impl Parser {
     }
 }
 
-fn scan_r(tokens: &List<Token>, pos: i32, min_prec: i32 = 0, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_r(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -1031,15 +1031,15 @@ fn scan_r(tokens: &List<Token>, pos: i32, min_prec: i32 = 0, follow: &List<List<
         sg_0: {
             pos = gp_0;
             sg_0_0: {
-                pos = scan_a(tokens, pos, 0, &FOLLOW_MASK_1);
+                pos = scan_a(tokens, pos, &FOLLOW_MASK_1, 0);
                 if pos < 0 { break sg_0_0; }
-                pos = scan_b(tokens, pos, 0, follow);
+                pos = scan_b(tokens, pos, follow, 0);
                 if pos < 0 { break sg_0_0; }
                 if pos > sg_0_best { sg_0_best = pos; }
             }
             pos = gp_0;
             sg_0_1: {
-                pos = scan_a(tokens, pos, 0, follow);
+                pos = scan_a(tokens, pos, follow, 0);
                 if pos < 0 { break sg_0_1; }
                 if pos > sg_0_best { sg_0_best = pos; }
             }
@@ -1052,7 +1052,7 @@ fn scan_r(tokens: &List<Token>, pos: i32, min_prec: i32 = 0, follow: &List<List<
     return pos;
 }
 
-fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_X { return -1; }
     pos += 1;
@@ -1064,7 +1064,7 @@ fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0, follow: &List<List<
     return pos;
 }
 
-fn scan_b(tokens: &List<Token>, pos: i32, min_prec: i32 = 0, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_b(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Y { return -1; }
     pos += 1;
@@ -1081,9 +1081,9 @@ fn _parse_r__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
             gd_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                pos = scan_a(tokens, pos, 0, &FOLLOW_MASK_1);
+                pos = scan_a(tokens, pos, &FOLLOW_MASK_1, 0);
                 if pos < 0 { break gd_scan; }
-                pos = scan_b(tokens, pos, 0, follow);
+                pos = scan_b(tokens, pos, follow, 0);
                 if pos < 0 { break gd_scan; }
                 gd_winner = 0;
                 break gd_dispatch;

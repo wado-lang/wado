@@ -154,14 +154,29 @@ use {
 /// surrounding `variant_k_prefix_mask` is threaded.
 fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) -> FollowArg {
     let mut visiting: List<String> = [];
-    let [local, _consumed] = ctx.deep_position_first_sets_from(elements, i + 1, FOLLOW_VARIANT_MAX_K, &mut visiting);
+    let [deep, _consumed] = ctx.deep_position_first_sets_from(elements, i + 1, FOLLOW_VARIANT_MAX_K, &mut visiting);
+    // Effective caller-continuation mask. Prefer the multi-depth deep
+    // walk; when it halts immediately (a `Repeat` / `Group` / multi-alt
+    // `RuleRef` at the suffix head, e.g. `a b?`), fall back to the
+    // 1-token follow. `compute_call_site_follow` with an empty outer
+    // correctly handles a first-exact deep-nullable suffix (unioning
+    // `first(b)` here) and drops a non-first-exact one (soundness
+    // invariant 2) — exactly the depth-0 token the deep walk misses.
+    let no_outer: List<String> = [];
+    let one_tok = ctx.compute_call_site_follow(elements, i, &no_outer);
+    let mut mask: List<List<String>> = [];
+    if !deep.is_empty() {
+        mask = deep;
+    } else if !one_tok.is_empty() {
+        mask.push(one_tok);
+    }
     if !ctx.tail_is_nullable_deep(elements, i + 1) {
-        if let Some(id) = ctx.intern_follow_mask(&local) {
+        if let Some(id) = ctx.intern_follow_mask(&mask) {
             return FollowArg::Mask(id);
         }
         return FollowArg::NoFollow;
     }
-    if let Some(id) = ctx.intern_follow_mask(&local) {
+    if let Some(id) = ctx.intern_follow_mask(&mask) {
         return FollowArg::Combined(id);
     }
     return FollowArg::Forward;

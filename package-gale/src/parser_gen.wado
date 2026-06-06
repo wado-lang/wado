@@ -565,12 +565,12 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
     // Accept (and ignore) min_prec so call sites pass it uniformly
     // regardless of whether the target rule is left-recursive. See
     // `GenContext.scan_ruleref_min_prec` for the bt-scan use case.
+    add_follow_param(&mut f);
     f.add_param_spec(ParamSpec {
         name: "min_prec",
         type_str: "i32",
         default_value: Option::<String>::Some("0"),
     });
-    add_follow_param(&mut f);
     f.set_return_type(&"i32");
     f.emit_begin(w);
 
@@ -708,12 +708,12 @@ fn gen_scan_lr_functions(w: &mut CodeWriter, rule: &ParserRule, lr_alts: &List<L
     let mut f2 = FnSpec::new(fn_name);
     f2.add_param(&"tokens", &"&List<Token>");
     f2.add_param(&"pos", &"i32");
+    add_follow_param(&mut f2);
     f2.add_param_spec(ParamSpec {
         name: "min_prec",
         type_str: "i32",
         default_value: Option::<String>::Some("0"),
     });
-    add_follow_param(&mut f2);
     f2.set_return_type(&"i32");
     f2.emit_begin(w);
     w.line(&`let mut pos = {atom_name}(tokens, pos, follow);`);
@@ -1241,7 +1241,7 @@ fn gen_scan_op_element(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContex
         } else {
             min_prec_override;
         };
-        w.line(&`pos = {fn_name}(tokens, pos, {min_prec}, {follow_expr});`);
+        w.line(&`pos = {fn_name}(tokens, pos, {follow_expr}, {min_prec});`);
         w.line(&`if pos < 0 \{ {*fail_stmt} \}`);
         return;
     }
@@ -1300,7 +1300,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         } else {
             0;
         };
-        w.line(&`pos = {fn_name}(tokens, pos, {min_prec}, {follow_expr});`);
+        w.line(&`pos = {fn_name}(tokens, pos, {follow_expr}, {min_prec});`);
         return;
     }
     if let Wildcard = se {
@@ -1800,6 +1800,10 @@ fn gen_trace_helpers(w: &mut CodeWriter) {
 fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &String, type_name: &String, rule_display: &String, takes_min_prec: bool, trace: bool) {
     let mut f = FnSpec::new(outer_name);
     f.add_param(&"p", &"&mut Parser");
+    // `follow` precedes `min_prec` so a non-precedence call site can pass
+    // just `_parse_X(p, follow)` and let `min_prec` default — uniform for
+    // LR and non-LR targets.
+    add_follow_param(&mut f);
     if takes_min_prec {
         f.add_param_spec(ParamSpec {
             name: "min_prec",
@@ -1807,7 +1811,6 @@ fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &
             default_value: Option::<String>::Some("0"),
         });
     }
-    add_follow_param(&mut f);
     f.set_return_type(&`Result<{type_name}, ParseError>`);
     f.emit_begin(w);
     let lit = escape_string(rule_display);
@@ -1818,7 +1821,7 @@ fn gen_rule_entry_wrapper(w: &mut CodeWriter, outer_name: &String, inner_name: &
     // Forward the runtime FOLLOW continuation to the inner body so its
     // tail-greedy gate sees the caller's continuation.
     if takes_min_prec {
-        w.line(&`let r = {*inner_name}(p, min_prec, follow);`);
+        w.line(&`let r = {*inner_name}(p, follow, min_prec);`);
     } else {
         w.line(&`let r = {*inner_name}(p, follow);`);
     }
@@ -2029,12 +2032,12 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
         // Callers without a precedence context omit min_prec and get 0.
         let mut f2 = FnSpec::new(fn_name);
         f2.add_param(&"p", &"&mut Parser");
+        add_follow_param(&mut f2);
         f2.add_param_spec(ParamSpec {
             name: "min_prec",
             type_str: "i32",
             default_value: Option::<String>::Some("0"),
         });
-        add_follow_param(&mut f2);
         f2.set_return_type(&`Result<{type_name}, ParseError>`);
         f2.emit_begin(w);
         w.line(&"let start = p.peek().span.start;");
@@ -2431,7 +2434,7 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &
             // trailing self-ref of a prefix LR alt (e.g. `'-' e`) so emit
             // reads a single source.
             if let Some(min_prec) = r.min_prec_arg {
-                w.line(&`let {r.field} = {fn_name}(p, {min_prec}, {follow_expr})?;`);
+                w.line(&`let {r.field} = {fn_name}(p, {follow_expr}, {min_prec})?;`);
             } else {
                 w.line(&`let {r.field} = {fn_name}(p, {follow_expr})?;`);
             }
@@ -3860,7 +3863,7 @@ fn rep_recovery_call(rep_op: &RepeatOp) -> Option<String> {
             let fn_name = `_parse_{r.target_snake}`;
             let follow_expr = follow_arg_expr(&r.follow_arg);
             let call = if let Some(min_prec) = r.min_prec_arg {
-                `{fn_name}(p, {min_prec}, {follow_expr})`;
+                `{fn_name}(p, {follow_expr}, {min_prec})`;
             } else {
                 `{fn_name}(p, {follow_expr})`;
             };
@@ -4246,7 +4249,7 @@ fn gen_rule_ref_group_scan_dispatch(w: &mut CodeWriter, sorted_group: &List<i32>
             let case_name = group_case_name(&alts[alt_idx]);
             let local_var = rc.target_snake;
             let call_args = if let Some(min_prec) = rc.min_prec_arg {
-                `p, {min_prec}, {follow_expr}`;
+                `p, {follow_expr}, {min_prec}`;
             } else {
                 `p, {follow_expr}`;
             };
@@ -4295,7 +4298,7 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
             if let RuleCall(rc) = &body.ops[0] {
                 let fn_name = `_parse_{rc.target_snake}`;
                 let local_var = rc.target_snake;
-                let call_args = if let Some(min_prec) = rc.min_prec_arg { `p, {min_prec}, {follow_arg_expr(&rc.follow_arg)}` } else { `p, {follow_arg_expr(&rc.follow_arg)}` };
+                let call_args = if let Some(min_prec) = rc.min_prec_arg { `p, {follow_arg_expr(&rc.follow_arg)}, {min_prec}` } else { `p, {follow_arg_expr(&rc.follow_arg)}` };
                 w.line(&`let {local_var} = {fn_name}({call_args})?;`);
                 w.line(&`{type_name}::{body.case_name}({local_var})`);
             } else {
@@ -4331,7 +4334,7 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
                 if let RuleCall(rc) = &body.ops[0] {
                     let fn_name = `_parse_{rc.target_snake}`;
                     let local_var = rc.target_snake;
-                    let call_args = if let Some(min_prec) = rc.min_prec_arg { `p, {min_prec}, {follow_arg_expr(&rc.follow_arg)}` } else { `p, {follow_arg_expr(&rc.follow_arg)}` };
+                    let call_args = if let Some(min_prec) = rc.min_prec_arg { `p, {follow_arg_expr(&rc.follow_arg)}, {min_prec}` } else { `p, {follow_arg_expr(&rc.follow_arg)}` };
                     w.line(&`let {local_var} = {fn_name}({call_args})?;`);
                     w.line(&`{opt_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
                 } else {
@@ -4412,7 +4415,7 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape
             if let RuleCall(rc) = &body.ops[0] {
                 let fn_name = `_parse_{rc.target_snake}`;
                 let local_var = rc.target_snake;
-                let call_args = if let Some(min_prec) = rc.min_prec_arg { `p, {min_prec}, {follow_arg_expr(&rc.follow_arg)}` } else { `p, {follow_arg_expr(&rc.follow_arg)}` };
+                let call_args = if let Some(min_prec) = rc.min_prec_arg { `p, {follow_arg_expr(&rc.follow_arg)}, {min_prec}` } else { `p, {follow_arg_expr(&rc.follow_arg)}` };
                 w.line(&`let {local_var} = {fn_name}({call_args})?;`);
                 w.line(&`{inner_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
             }
@@ -4805,6 +4808,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
         f.add_param(&"p", &"&mut Parser");
         f.add_param(&"left", type_name);
         f.add_param(&"start", &"i32");
+        add_follow_param(&mut f);
         f.set_return_type(&`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
 
@@ -4830,7 +4834,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                 if rr.name == rule.name {
                     let field_name = dedup_name(&rr.field_name, &mut name_counts);
                     let prec = lookup_baked_min_prec(suffix_op);
-                    w.line(&`let {field_name} = {*fn_name}(p, {prec})?;`);
+                    w.line(&`let {field_name} = {*fn_name}(p, follow, {prec})?;`);
                 } else {
                     let elem_fn = `_parse_{rr.snake_name}`;
                     let field_name = dedup_name(&rr.field_name, &mut name_counts);
@@ -4846,7 +4850,7 @@ fn gen_lr_suffix_helpers(w: &mut CodeWriter, rule: &ParserRule, type_name: &Stri
                         let lab_name = dedup_name(&lab.field_name, &mut name_counts);
                         let inner_name = dedup_name(&rr.field_name, &mut name_counts);
                         let prec = lookup_baked_min_prec(suffix_op);
-                        w.line(&`let {inner_name} = {*fn_name}(p, {prec})?;`);
+                        w.line(&`let {inner_name} = {*fn_name}(p, follow, {prec})?;`);
                         if lab.list {
                             // Type-annotate the local so `[inner]` parses as
                             // `List<T>` rather than a 1-tuple `[T]`.
@@ -5003,7 +5007,7 @@ fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, scan_suffix_fn:
         w.begin(&`if {*scan_suffix_fn}(&p.tokens, p.pos) < 0`);
         w.line(&"break;");
         w.end();
-        w.line(&`result = {*suffix_fn}(p, result, start)?;`);
+        w.line(&`result = {*suffix_fn}(p, result, start, follow)?;`);
         w.else_begin(&"else");
         w.line(&"break;");
         w.end();
@@ -5011,7 +5015,7 @@ fn gen_lr_call_with_prec(w: &mut CodeWriter, suffix_fn: &String, scan_suffix_fn:
         w.begin(&`if {*scan_suffix_fn}(&p.tokens, p.pos) < 0`);
         w.line(&"break;");
         w.end();
-        w.line(&`result = {*suffix_fn}(p, result, start)?;`);
+        w.line(&`result = {*suffix_fn}(p, result, start, follow)?;`);
     }
 }
 
@@ -5557,7 +5561,7 @@ fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule) {
     w.line(&"let chars: List<char> = input.chars().collect();");
     w.line(&"let mut parser = Parser::new(tokens, chars);");
     if rule_takes_min_prec(rule) {
-        w.line(&`let _result = _parse_{header.snake_name}(&mut parser, 0);`);
+        w.line(&`let _result = _parse_{header.snake_name}(&mut parser, &EMPTY_FOLLOW, 0);`);
     } else {
         w.line(&`let _result = _parse_{header.snake_name}(&mut parser);`);
     }
