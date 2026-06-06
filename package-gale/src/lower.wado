@@ -222,10 +222,8 @@ pub fn lower_with_ctx(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut 
     // tail-greedy) survive across the lower-then-emit boundary and
     // only get computed once.
     let mut parser_rules: List<Rule> = [];
-    let empty_mask: List<String> = [];
-    let empty_k_mask: List<List<String>> = [];
     for let rule of &grammar.parser_rules {
-        parser_rules.push(lower_rule(rule, ctx, &empty_mask, &empty_k_mask));
+        parser_rules.push(lower_rule(rule, ctx));
     }
     // Phase 2.7 — pre-intern multi-element token-kind sets that
     // surface in dispatch branches and `Op::Excluded` kinds. The
@@ -517,19 +515,19 @@ fn walk_op_for_kind_sets(op: &Op, ctx: &mut GenContext) {
 /// The shape decision matches `parser_gen::gen_parse_fn_named`'s
 /// branching exactly so the eventual Phase 4 split is a structural
 /// translation rather than a re-classification.
-fn lower_rule(rule: &ParserRule, ctx: &mut GenContext, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>) -> Rule {
+fn lower_rule(rule: &ParserRule, ctx: &mut GenContext) -> Rule {
     if rule.alternatives.len() == 1 {
-        return Rule::Simple(lower_simple_rule(rule, ctx, variant_mask, variant_k_prefix_mask));
+        return Rule::Simple(lower_simple_rule(rule, ctx));
     }
     if has_left_recursive_alt(rule) {
-        return Rule::LeftRecursive(lower_lr_rule(rule, ctx, variant_mask, variant_k_prefix_mask));
+        return Rule::LeftRecursive(lower_lr_rule(rule, ctx));
     }
-    return Rule::MultiAlt(lower_multi_alt_rule(rule, ctx, variant_mask, variant_k_prefix_mask));
+    return Rule::MultiAlt(lower_multi_alt_rule(rule, ctx));
 }
 
-fn lower_simple_rule(rule: &ParserRule, ctx: &mut GenContext, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>) -> SimpleRule {
-    let body = lower_alt_body(&rule.alternatives[0], 0, rule, ctx, variant_mask, variant_k_prefix_mask);
-    let scan_body = lower_scan_body(&rule.alternatives[0], ctx, variant_mask, variant_k_prefix_mask);
+fn lower_simple_rule(rule: &ParserRule, ctx: &mut GenContext) -> SimpleRule {
+    let body = lower_alt_body(&rule.alternatives[0], 0, rule, ctx);
+    let scan_body = lower_scan_body(&rule.alternatives[0], ctx);
     return SimpleRule {
         header: lower_header(rule),
         body,
@@ -541,7 +539,7 @@ fn lower_simple_rule(rule: &ParserRule, ctx: &mut GenContext, variant_mask: &Lis
 /// case where every pair of alts has disjoint first-sets — the
 /// dispatch is a single token-led `if / else if` chain (`Direct`).
 /// Overlapping first-sets land in `Tournament` (scan-and-commit).
-fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>) -> MultiAltRule {
+fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule {
     let header = lower_header(rule);
 
     // Compute per-alt first sets up-front so the dispatch decision
@@ -557,8 +555,8 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext, variant_mask: &
     let mut scan_alts: List<ScanBody> = [];
     let mut all_indices: List<i32> = [];
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-        alts.push(lower_alt_body(&rule.alternatives[i], i, rule, ctx, variant_mask, variant_k_prefix_mask));
-        scan_alts.push(lower_scan_body(&rule.alternatives[i], ctx, variant_mask, variant_k_prefix_mask));
+        alts.push(lower_alt_body(&rule.alternatives[i], i, rule, ctx));
+        scan_alts.push(lower_scan_body(&rule.alternatives[i], ctx));
         all_indices.push(i);
     }
 
@@ -592,7 +590,7 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext, variant_mask: &
 /// Phase 2.4 only handles the disjoint-suffix-first case (no overlap
 /// groups beyond singletons). Overlapping suffix first-sets need
 /// the scan-tournament dispatch from Phase 2.3c.
-fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>) -> LeftRecursiveRule {
+fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     let header = lower_header(rule);
 
     // Partition alts into atom (non-LR) and lr (LR). ANTLR4 requires
@@ -612,7 +610,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext, variant_mask: &List<St
     assert !lr_indices.is_empty(), `LR rule '{rule.name}' has no LR alt — should not have reached lower_lr_rule`;
 
     let total_lr: i32 = lr_indices.len();
-    let atom = lower_lr_atom(rule, &non_lr_indices, ctx, variant_mask, variant_k_prefix_mask);
+    let atom = lower_lr_atom(rule, &non_lr_indices, ctx);
 
     // Lower each LR alt's suffix and compute its precedence /
     // metadata. `own_prec` follows ANTLR4's convention: first LR
@@ -624,7 +622,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext, variant_mask: &List<St
         let alt = &rule.alternatives[*lr_idx];
         let own_prec = total_lr - lr_position;
         let conflict_min = compute_lr_conflict_min_prec(alt, own_prec, &lr_indices, rule, ctx, total_lr);
-        lr_alts.push(lower_lr_alt(rule, *lr_idx, own_prec, conflict_min, ctx, variant_mask, variant_k_prefix_mask));
+        lr_alts.push(lower_lr_alt(rule, *lr_idx, own_prec, conflict_min, ctx));
         lr_position += 1;
     }
 
@@ -1016,7 +1014,7 @@ fn compute_self_ref_prec_from_ops(ops: &List<Op>, k: i32, elem_idx: i32, last_se
 /// `case_name` / `struct_name` still match the ORIGINAL alt index in
 /// the surface `rule.alternatives` list. emit relies on that
 /// correspondence to look up case names from `header.case_names`.
-fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenContext, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>) -> MultiAltRule {
+fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenContext) -> MultiAltRule {
     let header = lower_header(rule);
 
     let mut first_sets: List<List<String>> = [];
@@ -1028,8 +1026,8 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
     let mut alts: List<AltBody> = [];
     let mut scan_alts: List<ScanBody> = [];
     for let idx of non_lr_indices {
-        alts.push(lower_alt_body(&rule.alternatives[*idx], *idx, rule, ctx, variant_mask, variant_k_prefix_mask));
-        scan_alts.push(lower_scan_body(&rule.alternatives[*idx], ctx, variant_mask, variant_k_prefix_mask));
+        alts.push(lower_alt_body(&rule.alternatives[*idx], *idx, rule, ctx));
+        scan_alts.push(lower_scan_body(&rule.alternatives[*idx], ctx));
     }
 
     let ctx_label = `LR rule '{rule.name}' atom`;
@@ -1047,7 +1045,7 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
 /// lowers everything after it as the alt's suffix body. The
 /// precedence (`own_prec`) and conflict floor (`conflict_min`) are
 /// computed by the caller and stored verbatim.
-fn lower_lr_alt(rule: &ParserRule, alt_idx: i32, own_prec: i32, conflict_min: i32, ctx: &mut GenContext, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>) -> LrAlt {
+fn lower_lr_alt(rule: &ParserRule, alt_idx: i32, own_prec: i32, conflict_min: i32, ctx: &mut GenContext) -> LrAlt {
     let alt = &rule.alternatives[alt_idx];
     assert !alt.elements.is_empty(), `LR alt {alt_idx} of '{rule.name}' is empty — should not be classified LR`;
 
@@ -1074,8 +1072,8 @@ fn lower_lr_alt(rule: &ParserRule, alt_idx: i32, own_prec: i32, conflict_min: i3
     let suffix_first = ctx.first_of_elements_from(&alt.elements, 1);
 
     // Lower the suffix (elements[1..]) as an AltBody / ScanBody.
-    let suffix = lower_lr_alt_suffix(rule, alt_idx, &case_name, &struct_name, ctx, variant_mask, variant_k_prefix_mask);
-    let scan_suffix = lower_lr_alt_scan_suffix(rule, alt_idx, ctx, variant_mask, variant_k_prefix_mask);
+    let suffix = lower_lr_alt_suffix(rule, alt_idx, &case_name, &struct_name, ctx);
+    let scan_suffix = lower_lr_alt_scan_suffix(rule, alt_idx, ctx);
 
     return LrAlt {
         alt_index: alt_idx,
@@ -1092,7 +1090,7 @@ fn lower_lr_alt(rule: &ParserRule, alt_idx: i32, own_prec: i32, conflict_min: i3
     };
 }
 
-fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, struct_name: &String, ctx: &mut GenContext, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>) -> AltBody {
+fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, struct_name: &String, ctx: &mut GenContext) -> AltBody {
     let alt = &rule.alternatives[alt_idx];
 
     // Per-alt counter starts at this alt's position in the rule's
@@ -1117,7 +1115,7 @@ fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, stru
     // self-ref).
     let outer_follow: List<String> = [];
     for let mut i = 1; i < alt.elements.len(); i += 1 {
-        let [elem_follow, position_mask] = ctx.compute_call_site_follow_and_mask(&alt.elements, i, variant_mask);
+        let [elem_follow, position_mask] = ctx.compute_call_site_follow_and_mask(&alt.elements, i, &([] as List<String>));
         let elem_follow_arg = compute_follow_arg(ctx, &alt.elements, i);
         let elem_gate = compute_gate_caller_follow(ctx, &alt.elements, i);
         let mut op = lower_op(
@@ -1128,8 +1126,6 @@ fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, stru
             &mut group_counter,
             &elem_follow,
             &empty_k_prefix(),
-            variant_mask,
-            variant_k_prefix_mask,
             &position_mask,
             &empty_k_prefix(),
             elem_follow_arg,
@@ -1155,7 +1151,7 @@ fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, stru
     };
 }
 
-fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_idx: i32, ctx: &mut GenContext, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>) -> ScanBody {
+fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_idx: i32, ctx: &mut GenContext) -> ScanBody {
     let alt = &rule.alternatives[alt_idx];
     let mut elements: List<ScanElement> = [];
     // LR suffix walks `alt.elements[1..]` — the leading self-ref is
@@ -1168,8 +1164,6 @@ fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_idx: i32, ctx: &mut GenContex
             &alt.elements,
             i,
             ctx,
-            variant_mask,
-            variant_k_prefix_mask,
             &empty_k_prefix(),
         ));
     }
@@ -1628,22 +1622,20 @@ fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
 /// The scan side has no field bindings, no struct construction, and
 /// no name dedup — it only produces a token-stream walk that
 /// returns the new `pos`.
-fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>) -> ScanBody {
+fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext) -> ScanBody {
     let mut elements: List<ScanElement> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         elements.push(lower_alt_scan_element(
             &alt.elements,
             i,
             ctx,
-            variant_mask,
-            variant_k_prefix_mask,
             &empty_k_prefix(),
         ));
     }
     return ScanBody { elements };
 }
 
-fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &List<String>, outer_k_prefix: &List<List<String>>, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>, outer_k_prefix_position_mask: &List<List<String>>, follow_arg: FollowArg, gate_caller_follow: bool) -> ScanElement {
+fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &List<String>, outer_k_prefix: &List<List<String>>, outer_k_prefix_position_mask: &List<List<String>>, follow_arg: FollowArg, gate_caller_follow: bool) -> ScanElement {
     return match *elem {
         TokenRef(t) => ScanElement::Token(ScanTokenElem { kind: `TK_{t.name}` }),
         Literal(l) => ScanElement::Token(ScanTokenElem {
@@ -1663,8 +1655,6 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &List<
             ctx,
             outer_follow,
             outer_k_prefix,
-            variant_mask,
-            variant_k_prefix_mask,
             outer_k_prefix_position_mask,
             follow_arg,
             gate_caller_follow,
@@ -1673,8 +1663,6 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &List<
             &rep,
             ctx,
             outer_follow,
-            variant_mask,
-            variant_k_prefix_mask,
             outer_k_prefix_position_mask,
             gate_caller_follow,
         ),
@@ -1682,8 +1670,6 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &List<
             &g,
             ctx,
             outer_follow,
-            variant_mask,
-            variant_k_prefix_mask,
             outer_k_prefix_position_mask,
         ),
     };
@@ -1694,7 +1680,7 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &List<
 /// dispatch step: single-alt groups have no dispatch (one body run
 /// unconditionally / wrapped in a one-alt `ScanGroupElem`), while
 /// multi-alt token-only groups dispatch on token kind.
-fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<String>, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>, outer_k_prefix_position_mask: &List<List<String>>) -> ScanElement {
+fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<String>, outer_k_prefix_position_mask: &List<List<String>>) -> ScanElement {
     let alts = &g.alternatives;
     assert alts.len() > 0, "Group with no alts is not a valid scan-lowering input";
     if alts.len() == 1 {
@@ -1708,8 +1694,6 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<
                 ctx,
                 outer_follow,
                 &empty_k_prefix(),
-                variant_mask,
-                variant_k_prefix_mask,
                 &empty_k_prefix(),
                 FollowArg::NoFollow,
                 false,
@@ -1723,8 +1707,6 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<
                 &alt.elements,
                 i,
                 ctx,
-                variant_mask,
-                variant_k_prefix_mask,
                 &empty_k_prefix(),
             ));
         }
@@ -1756,8 +1738,6 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<
                         ctx,
                         outer_follow,
                         &empty_k_prefix(),
-                        variant_mask,
-                        variant_k_prefix_mask,
                         &empty_k_prefix(),
                         FollowArg::NoFollow,
                         false,
@@ -1775,15 +1755,15 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<
         });
     }
     if is_simple_cst_group(alts) {
-        return lower_simple_cst_scan_group(alts, ctx, outer_follow, variant_mask, variant_k_prefix_mask);
+        return lower_simple_cst_scan_group(alts, ctx, outer_follow);
     }
     if is_general_group(alts) {
-        return lower_general_scan_group(alts, ctx, outer_follow, variant_mask, variant_k_prefix_mask, &empty_k_prefix());
+        return lower_general_scan_group(alts, ctx, outer_follow, &empty_k_prefix());
     }
     panic("Group shape (scan side) unrecognised by classifier");
 }
 
-fn lower_general_scan_group(alts: &List<Alternative>, ctx: &mut GenContext, outer_follow: &List<String>, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>, outer_k_prefix_position_mask: &List<List<String>>) -> ScanElement {
+fn lower_general_scan_group(alts: &List<Alternative>, ctx: &mut GenContext, outer_follow: &List<String>, outer_k_prefix_position_mask: &List<List<String>>) -> ScanElement {
     let mut bodies: List<ScanBody> = [];
     let mut first_sets: List<List<String>> = [];
     let mut all_indices: List<i32> = [];
@@ -1795,8 +1775,6 @@ fn lower_general_scan_group(alts: &List<Alternative>, ctx: &mut GenContext, oute
                 &alt.elements,
                 i,
                 ctx,
-                variant_mask,
-                variant_k_prefix_mask,
                 &empty_k_prefix(),
             ));
         }
@@ -1823,7 +1801,7 @@ fn lower_general_scan_group(alts: &List<Alternative>, ctx: &mut GenContext, oute
 
 /// Scan-side twin of `lower_repeat_op`. Same restrictions: greedy
 /// `Star` / `Plus` with a leaf inner only.
-fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &List<String>, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>, outer_k_prefix_position_mask: &List<List<String>>, gate_caller_follow: bool) -> ScanElement {
+fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &List<String>, outer_k_prefix_position_mask: &List<List<String>>, gate_caller_follow: bool) -> ScanElement {
     // Greedy Optional + Group inner with nested optional sub-elements
     // is the shape-based-lookahead case: lower produces
     // `ScanElement::OptionalLookahead` so emit reads per-shape sigs
@@ -1840,8 +1818,6 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &L
                         &g.alternatives[0],
                         ctx,
                         outer_follow,
-                        variant_mask,
-                        variant_k_prefix_mask,
                     );
                 }
             }
@@ -1862,7 +1838,7 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &L
     // disambiguation to distinguish `(',' a)*?` from `(',' b)*`, the
     // `NonGreedyStrategy` infrastructure on the parse side (carrying
     // `exit_second`) is the natural foundation to restore here.
-    let strategy = choose_greedy_scan_repeat_strategy(&inner_first, variant_mask);
+    let strategy = choose_greedy_scan_repeat_strategy(&inner_first, &([] as List<String>));
 
     let iter_follow = union_kind_arrays(&inner_first, outer_follow);
 
@@ -1871,8 +1847,6 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &L
         ctx,
         &iter_follow,
         &empty_k_prefix(),
-        variant_mask,
-        variant_k_prefix_mask,
         &empty_k_prefix(),
         FollowArg::NoFollow,
         false,
@@ -1917,8 +1891,8 @@ fn rebind_scan_repeat_caller_follow(se: ScanElement, caller_follow_first: List<S
 /// that emit parse-side ops alongside scan elements (`lower_single_alt_group`,
 /// `lower_general_group`) inline the post-pass so they can share
 /// `basic_follow` with the parse-side rebind.
-fn lower_alt_scan_element(alt_elements: &List<Element>, i: i32, ctx: &mut GenContext, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>, outer_k_prefix_position_mask: &List<List<String>>) -> ScanElement {
-    let elem_follow = ctx.compute_call_site_follow(alt_elements, i, variant_mask);
+fn lower_alt_scan_element(alt_elements: &List<Element>, i: i32, ctx: &mut GenContext, outer_k_prefix_position_mask: &List<List<String>>) -> ScanElement {
+    let elem_follow = ctx.compute_call_site_follow(alt_elements, i, &([] as List<String>));
     // Compute the same per-position K-prefix the parse-side uses so
     // both sides register the same variant key — without this the
     // scan-side would intern a separate variant with an empty
@@ -1938,8 +1912,6 @@ fn lower_alt_scan_element(alt_elements: &List<Element>, i: i32, ctx: &mut GenCon
         ctx,
         &elem_follow,
         &empty_k_prefix(),
-        variant_mask,
-        variant_k_prefix_mask,
         &empty_k_prefix(),
         elem_follow_arg,
         elem_gate,
@@ -2024,13 +1996,13 @@ fn surface_contains_variable_repeat(elem: &Element) -> bool {
 /// scan body separately (the optional sub-elements that are "on"
 /// in this shape, unwrapped from their Optional Repeat wrappers,
 /// plus the corresponding inner Group flattening when applicable).
-fn lower_scan_optional_lookahead_group(alt: &Alternative, ctx: &mut GenContext, outer_follow: &List<String>, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>) -> ScanElement {
+fn lower_scan_optional_lookahead_group(alt: &Alternative, ctx: &mut GenContext, outer_follow: &List<String>) -> ScanElement {
     let shapes = compute_shapes_for_alt(&alt.elements);
     let mut sigs: List<List<List<String>>> = [];
     let mut bodies: List<ScanBody> = [];
     for let shape of &shapes {
         sigs.push(shape_lookahead_signature_for_alt(shape, &alt.elements, ctx));
-        bodies.push(lower_scan_shape_body(shape, &alt.elements, ctx, variant_mask, variant_k_prefix_mask));
+        bodies.push(lower_scan_shape_body(shape, &alt.elements, ctx));
     }
     return ScanElement::OptionalLookahead(ScanOptionalLookaheadElem {
         sigs: sigs,
@@ -2043,7 +2015,7 @@ fn lower_scan_optional_lookahead_group(alt: &Alternative, ctx: &mut GenContext, 
 /// each selected position, unwrap the optional, and if the unwrapped
 /// is a single-alt Group, flatten its inner elements into the scan
 /// body directly. Otherwise lower the unwrapped element.
-fn lower_scan_shape_body(shape: &List<i32>, elements: &List<Element>, ctx: &mut GenContext, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>) -> ScanBody {
+fn lower_scan_shape_body(shape: &List<i32>, elements: &List<Element>, ctx: &mut GenContext) -> ScanBody {
     let mut body_elems: List<ScanElement> = [];
     for let mut k = 0; k < shape.len(); k += 1 {
         let idx = shape[k];
@@ -2062,8 +2034,6 @@ fn lower_scan_shape_body(shape: &List<i32>, elements: &List<Element>, ctx: &mut 
                             ctx,
                             &empty_follow,
                             &empty_k_prefix(),
-                            variant_mask,
-                            variant_k_prefix_mask,
                             &empty_k_prefix(),
                             FollowArg::NoFollow,
                             false,
@@ -2078,8 +2048,6 @@ fn lower_scan_shape_body(shape: &List<i32>, elements: &List<Element>, ctx: &mut 
             ctx,
             &empty_follow,
             &empty_k_prefix(),
-            variant_mask,
-            variant_k_prefix_mask,
             &empty_k_prefix(),
             FollowArg::NoFollow,
             false,
@@ -2201,7 +2169,7 @@ fn compute_alt_gc_starts(alternatives: &List<Alternative>) -> List<i32> {
 /// `case_names_for_rule` and the convention `<RuleBase><CaseName>`
 /// (`<RuleBase>` being `rule_type_name(rule.name)` with the trailing
 /// `Node` stripped — same as `parser_gen::gen_alt_body` callers).
-fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenContext, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>) -> AltBody {
+fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenContext) -> AltBody {
     let type_name = rule.type_name;
     let mut case_name: String = "";
     let mut struct_name: String = type_name;
@@ -2231,7 +2199,7 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
     let outer_follow: List<String> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
-        let [elem_follow, position_mask] = ctx.compute_call_site_follow_and_mask(&alt.elements, i, variant_mask);
+        let [elem_follow, position_mask] = ctx.compute_call_site_follow_and_mask(&alt.elements, i, &([] as List<String>));
         // Redesign: the runtime FOLLOW argument for a RuleRef at this
         // position, and whether a tail Repeat here gates on the caller's
         // continuation. Computed against the alt's surface elements,
@@ -2247,8 +2215,6 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
             &mut group_counter,
             &elem_follow,
             &empty_k_prefix(),
-            variant_mask,
-            variant_k_prefix_mask,
             &position_mask,
             &empty_k_prefix(),
             elem_follow_arg,
@@ -2300,7 +2266,7 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
 /// live under). Phase 2.1 covers the trivial leaf elements; the
 /// remaining shapes panic with their own `TODO Phase 2.x` markers
 /// so a half-lowered alt body can't quietly reach codegen.
-fn lower_op(elem: &Element, name_counts: &mut List<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &List<String>, outer_k_prefix: &List<List<String>>, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>, outer_position_mask: &List<String>, outer_k_prefix_position_mask: &List<List<String>>, follow_arg: FollowArg, gate_caller_follow: bool) -> Op {
+fn lower_op(elem: &Element, name_counts: &mut List<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &List<String>, outer_k_prefix: &List<List<String>>, outer_position_mask: &List<String>, outer_k_prefix_position_mask: &List<List<String>>, follow_arg: FollowArg, gate_caller_follow: bool) -> Op {
     return match *elem {
         TokenRef(t) => Op::Token(TokenOp {
             kind: `TK_{t.name}`,
@@ -2345,8 +2311,6 @@ fn lower_op(elem: &Element, name_counts: &mut List<[String, i32]>, rule_name: &S
             ctx,
             group_counter,
             outer_follow,
-            variant_mask,
-            variant_k_prefix_mask,
             outer_position_mask,
             outer_k_prefix_position_mask,
             gate_caller_follow,
@@ -2359,8 +2323,6 @@ fn lower_op(elem: &Element, name_counts: &mut List<[String, i32]>, rule_name: &S
             group_counter,
             outer_follow,
             outer_k_prefix,
-            variant_mask,
-            variant_k_prefix_mask,
             outer_position_mask,
             outer_k_prefix_position_mask,
         ),
@@ -2372,8 +2334,6 @@ fn lower_op(elem: &Element, name_counts: &mut List<[String, i32]>, rule_name: &S
             group_counter,
             outer_follow,
             outer_k_prefix,
-            variant_mask,
-            variant_k_prefix_mask,
             outer_position_mask,
             outer_k_prefix_position_mask,
             follow_arg,
@@ -2401,7 +2361,7 @@ fn lower_op(elem: &Element, name_counts: &mut List<[String, i32]>, rule_name: &S
 /// * Phase 2.x.simplecst — every alt a single distinct RuleRef →
 ///   `GroupShape::SimpleCst`
 /// * Phase 2.x.general — multi-alt non-trivial → `GroupShape::General`
-fn lower_group_op(g: &GroupElement, name_counts: &mut List<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &List<String>, outer_k_prefix: &List<List<String>>, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>, outer_position_mask: &List<String>, outer_k_prefix_position_mask: &List<List<String>>) -> Op {
+fn lower_group_op(g: &GroupElement, name_counts: &mut List<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &List<String>, outer_k_prefix: &List<List<String>>, outer_position_mask: &List<String>, outer_k_prefix_position_mask: &List<List<String>>) -> Op {
     let alts = &g.alternatives;
     assert alts.len() > 0, "Group with no alts is not a valid lowering input";
     if alts.len() == 1 {
@@ -2418,8 +2378,6 @@ fn lower_group_op(g: &GroupElement, name_counts: &mut List<[String, i32]>, rule_
                 group_counter,
                 outer_follow,
                 outer_k_prefix,
-                variant_mask,
-                variant_k_prefix_mask,
                 outer_position_mask,
                 outer_k_prefix_position_mask,
             );
@@ -2431,17 +2389,15 @@ fn lower_group_op(g: &GroupElement, name_counts: &mut List<[String, i32]>, rule_
             ctx,
             group_counter,
             outer_follow,
-            variant_mask,
-            variant_k_prefix_mask,
             outer_position_mask,
             outer_k_prefix_position_mask,
         );
     }
     if is_token_only_group(alts) {
-        return lower_token_only_group(alts, name_counts, ctx, variant_mask, variant_k_prefix_mask);
+        return lower_token_only_group(alts, name_counts, ctx);
     }
     if is_simple_cst_group(alts) {
-        return lower_simple_cst_group(alts, name_counts, ctx, variant_mask, variant_k_prefix_mask);
+        return lower_simple_cst_group(alts, name_counts, ctx);
     }
     if is_general_group(alts) {
         return lower_general_group(
@@ -2451,8 +2407,6 @@ fn lower_group_op(g: &GroupElement, name_counts: &mut List<[String, i32]>, rule_
             ctx,
             group_counter,
             outer_follow,
-            variant_mask,
-            variant_k_prefix_mask,
             outer_position_mask,
             outer_k_prefix_position_mask,
         );
@@ -2462,7 +2416,7 @@ fn lower_group_op(g: &GroupElement, name_counts: &mut List<[String, i32]>, rule_
 
 /// Single-element single-alt: `(e)` lowers to `e` with no struct of
 /// its own. The binding nests in the surrounding alt's name table.
-fn lower_transparent_group(inner: &Element, name_counts: &mut List<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &List<String>, outer_k_prefix: &List<List<String>>, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>, outer_position_mask: &List<String>, outer_k_prefix_position_mask: &List<List<String>>) -> Op {
+fn lower_transparent_group(inner: &Element, name_counts: &mut List<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &List<String>, outer_k_prefix: &List<List<String>>, outer_position_mask: &List<String>, outer_k_prefix_position_mask: &List<List<String>>) -> Op {
     // Nested inner is allowed: `((a))` / `(a*)` / `(name=a)`.
     // The Op carries whatever shape `lower_op` produces; the
     // surrounding emit-side Transparent path inlines it directly.
@@ -2482,8 +2436,6 @@ fn lower_transparent_group(inner: &Element, name_counts: &mut List<[String, i32]
         group_counter,
         outer_follow,
         outer_k_prefix,
-        variant_mask,
-        variant_k_prefix_mask,
         outer_position_mask,
         outer_k_prefix_position_mask,
         FollowArg::NoFollow,
@@ -2504,8 +2456,6 @@ fn lower_transparent_group(inner: &Element, name_counts: &mut List<[String, i32]
                 ctx,
                 outer_follow,
                 &empty_k_prefix(),
-                variant_mask,
-                variant_k_prefix_mask,
                 &empty_k_prefix(),
                 FollowArg::NoFollow,
                 false,
@@ -2535,7 +2485,7 @@ fn lower_transparent_group(inner: &Element, name_counts: &mut List<[String, i32]
 /// monomorph table key (`<RuleName>Group<idx>`). For Phase
 /// 2.x.singlealt the inner ops are leaves only; nested groups land
 /// in Phase 2.x.nested.
-fn lower_single_alt_group(alt: &Alternative, name_counts: &mut List<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &List<String>, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>, outer_position_mask: &List<String>, outer_k_prefix_position_mask: &List<List<String>>) -> Op {
+fn lower_single_alt_group(alt: &Alternative, name_counts: &mut List<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &List<String>, outer_position_mask: &List<String>, outer_k_prefix_position_mask: &List<List<String>>) -> Op {
     // Nested elements are allowed: `(a (b c))` / `(a*)` /
     // `(name=a b)`. Each elem is lowered through the standard
     // `lower_op` recursion.
@@ -2564,7 +2514,7 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut List<[String, i32
         // positions, that's the first-set of the suffix in the
         // group's alt. The last position inherits the surrounding
         // alt's `outer_follow`.
-        let elem_follow = ctx.compute_call_site_follow(&alt.elements, i, variant_mask);
+        let elem_follow = ctx.compute_call_site_follow(&alt.elements, i, &([] as List<String>));
         // Inner positions get a FRESH per-position K-prefix mask
         // computed from the inner alt's suffix — the outer position's
         // mask doesn't carry through (the inner sits at a different
@@ -2582,8 +2532,6 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut List<[String, i32
             group_counter,
             &elem_follow,
             &empty_k_prefix(),
-            variant_mask,
-            variant_k_prefix_mask,
             outer_position_mask,
             outer_k_prefix_position_mask,
             elem_follow_arg,
@@ -2594,8 +2542,6 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut List<[String, i32
             ctx,
             &elem_follow,
             &empty_k_prefix(),
-            variant_mask,
-            variant_k_prefix_mask,
             &empty_k_prefix(),
             elem_follow_arg,
             elem_gate,
@@ -2662,7 +2608,7 @@ fn empty_direct_dispatch() -> MultiAltDispatch {
 /// scope. Inner ops carry no field name of their own — emit reads
 /// the matched token off the runtime stack and writes it into the
 /// outer `field` slot.
-fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[String, i32]>, ctx: &mut GenContext, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>) -> Op {
+fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[String, i32]>, ctx: &mut GenContext) -> Op {
     let field = dedup_name(&token_group_field_name(alts), name_counts);
 
     let mut bodies: List<AltBody> = [];
@@ -2691,8 +2637,6 @@ fn lower_token_only_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
                     ctx,
                     &empty_follow,
                     &empty_k_prefix(),
-                    variant_mask,
-                    variant_k_prefix_mask,
                     &empty_k_prefix(),
                     FollowArg::NoFollow,
                     false,
@@ -2748,7 +2692,7 @@ fn token_only_kind(elem: &Element) -> String {
 /// the dispatch is a clean `Direct` chain. Overlapping rule-ref
 /// alts (e.g. two rules sharing a leading IDENT) need the scan-side
 /// tournament dispatch — that lands in Phase 2.3c.
-fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[String, i32]>, ctx: &mut GenContext, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>) -> Op {
+fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[String, i32]>, ctx: &mut GenContext) -> Op {
     let type_name = group_variant_type_name(alts);
     let field = dedup_name(&group_field_base_name(alts), name_counts);
 
@@ -2786,8 +2730,6 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
                     ctx,
                     &empty_follow,
                     &empty_k_prefix(),
-                    variant_mask,
-                    variant_k_prefix_mask,
                     &empty_k_prefix(),
                     FollowArg::NoFollow,
                     false,
@@ -2809,7 +2751,7 @@ fn lower_simple_cst_group(alts: &List<Alternative>, name_counts: &mut List<[Stri
     });
 }
 
-fn lower_simple_cst_scan_group(alts: &List<Alternative>, ctx: &mut GenContext, outer_follow: &List<String>, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>) -> ScanElement {
+fn lower_simple_cst_scan_group(alts: &List<Alternative>, ctx: &mut GenContext, outer_follow: &List<String>) -> ScanElement {
     let mut bodies: List<ScanBody> = [];
     let mut first_sets: List<List<String>> = [];
     let mut all_indices: List<i32> = [];
@@ -2838,8 +2780,6 @@ fn lower_simple_cst_scan_group(alts: &List<Alternative>, ctx: &mut GenContext, o
                     ctx,
                     outer_follow,
                     &empty_k_prefix(),
-                    variant_mask,
-                    variant_k_prefix_mask,
                     &empty_k_prefix(),
                     FollowArg::NoFollow,
                     false,
@@ -2901,7 +2841,7 @@ fn lower_simple_cst_alt_call(elem: &Element, counts: &mut List<[String, i32]>) -
 /// names inside the group's struct, not the outer alt. The shared
 /// `group_counter` is bumped before lowering inner alts so any
 /// nested general groups get the next sequential ids.
-fn lower_general_group(alts: &List<Alternative>, name_counts: &mut List<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &List<String>, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>, outer_position_mask: &List<String>, outer_k_prefix_position_mask: &List<List<String>>) -> Op {
+fn lower_general_group(alts: &List<Alternative>, name_counts: &mut List<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &List<String>, outer_position_mask: &List<String>, outer_k_prefix_position_mask: &List<List<String>>) -> Op {
     let group_index = *group_counter;
     *group_counter += 1;
 
@@ -2933,7 +2873,7 @@ fn lower_general_group(alts: &List<Alternative>, name_counts: &mut List<[String,
         let mut scan_elements: List<ScanElement> = [];
         for let mut ei = 0; ei < alt.elements.len(); ei += 1 {
             let elem = &alt.elements[ei];
-            let elem_follow = ctx.compute_call_site_follow(&alt.elements, ei, variant_mask);
+            let elem_follow = ctx.compute_call_site_follow(&alt.elements, ei, &([] as List<String>));
             // Fresh per-position K-prefix from the inner alt's suffix —
             // the outer K-prefix doesn't propagate into per-alt inner
             // positions (each alt's inner sits at its own input depth).
@@ -2950,8 +2890,6 @@ fn lower_general_group(alts: &List<Alternative>, name_counts: &mut List<[String,
                 group_counter,
                 &elem_follow,
                 &empty_k_prefix(),
-                variant_mask,
-                variant_k_prefix_mask,
                 outer_position_mask,
                 outer_k_prefix_position_mask,
                 elem_follow_arg,
@@ -2962,8 +2900,6 @@ fn lower_general_group(alts: &List<Alternative>, name_counts: &mut List<[String,
                 ctx,
                 &elem_follow,
                 &empty_k_prefix(),
-                variant_mask,
-                variant_k_prefix_mask,
                 &empty_k_prefix(),
                 elem_follow_arg,
                 elem_gate,
@@ -3029,7 +2965,7 @@ fn lower_general_group(alts: &List<Alternative>, name_counts: &mut List<[String,
 /// shadow or dedup against the surrounding alt's bindings (the
 /// outer alt's list-typed field comes from `FieldDecl` in Phase 2.9,
 /// independent of the inner binding).
-fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut List<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &List<String>, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>, outer_position_mask: &List<String>, outer_k_prefix_position_mask: &List<List<String>>, gate_caller_follow: bool) -> Op {
+fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut List<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &List<String>, outer_position_mask: &List<String>, outer_k_prefix_position_mask: &List<List<String>>, gate_caller_follow: bool) -> Op {
     // Outer struct field name for the alt that contains this
     // Repeat. For `Star` / `Plus` it's `<inner_base>_list` (the
     // struct holds an `List<...>`); for `Optional` it's just the
@@ -3098,7 +3034,7 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut List<[String, i32]>, r
         // tracked in package-gale/TODO.md. `*?` / `+?` keep the
         // dedicated non-greedy strategy.
         if let Optional = rep.kind {
-            let mask_decision = choose_greedy_repeat_strategy(&inner_first, variant_mask);
+            let mask_decision = choose_greedy_repeat_strategy(&inner_first, &([] as List<String>));
             pick_greedy_strategy(mask_decision, opt_specialised);
         } else {
             compute_non_greedy_strategy(&rep.element, outer_follow, ctx);
@@ -3109,7 +3045,7 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut List<[String, i32]>, r
         // and any specialised guard would be unreachable. Otherwise
         // prefer the specialised strategy when one is available;
         // fall through to the mask-aware decision when not.
-        let mask_decision = choose_greedy_repeat_strategy(&inner_first, variant_mask);
+        let mask_decision = choose_greedy_repeat_strategy(&inner_first, &([] as List<String>));
         pick_greedy_strategy(mask_decision, opt_specialised);
     };
 
@@ -3149,8 +3085,6 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut List<[String, i32]>, r
                 group_counter,
                 &iter_follow,
                 &empty_k_prefix(),
-                variant_mask,
-                variant_k_prefix_mask,
                 outer_position_mask,
                 &empty_k_prefix(),
                 FollowArg::NoFollow,
@@ -3168,8 +3102,6 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut List<[String, i32]>, r
             group_counter,
             &iter_follow,
             &empty_k_prefix(),
-            variant_mask,
-            variant_k_prefix_mask,
             outer_position_mask,
             &empty_k_prefix(),
             FollowArg::NoFollow,
@@ -3190,8 +3122,6 @@ fn lower_repeat_op(rep: &RepeatElement, name_counts: &mut List<[String, i32]>, r
         ctx,
         &iter_follow,
         &empty_k_prefix(),
-        variant_mask,
-        variant_k_prefix_mask,
         &empty_k_prefix(),
         FollowArg::NoFollow,
         false,
@@ -3716,7 +3646,7 @@ fn repeat_inner_group_base_name(g: &GroupElement, gc_speculative: i32) -> String
 /// rebind can be expressed. List labels (`+=`) need an additional
 /// `List<...>`-typed wrapper field; that wrapping is handled by
 /// the CST `FieldDecl` enumeration in Phase 2.9.
-fn lower_label_op(lab: &LabelElement, name_counts: &mut List<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &List<String>, outer_k_prefix: &List<List<String>>, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>, outer_position_mask: &List<String>, outer_k_prefix_position_mask: &List<List<String>>, follow_arg: FollowArg, gate_caller_follow: bool) -> Op {
+fn lower_label_op(lab: &LabelElement, name_counts: &mut List<[String, i32]>, rule_name: &String, ctx: &mut GenContext, group_counter: &mut i32, outer_follow: &List<String>, outer_k_prefix: &List<List<String>>, outer_position_mask: &List<String>, outer_k_prefix_position_mask: &List<List<String>>, follow_arg: FollowArg, gate_caller_follow: bool) -> Op {
     let label_field = dedup_name(&lab.field_name, name_counts);
     let mut inner_counts: List<[String, i32]> = [];
     // A label `name=elem` is positionally identical to `elem` at the
@@ -3732,8 +3662,6 @@ fn lower_label_op(lab: &LabelElement, name_counts: &mut List<[String, i32]>, rul
         group_counter,
         outer_follow,
         outer_k_prefix,
-        variant_mask,
-        variant_k_prefix_mask,
         outer_position_mask,
         outer_k_prefix_position_mask,
         follow_arg,
