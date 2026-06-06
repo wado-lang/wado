@@ -222,18 +222,28 @@ impl AstVisitor for IdCollector {
 }
 
 /// User-authored modules are the entry point and the files / URLs it
-/// transitively imports. Stdlib (`Core` / `Wasi` / `Wasm` / `Builtin`) is
-/// never reported — and never reify-gated: stdlib functions reached only
-/// through compiler synthesis (CM bindings, effect dispatch) have no
-/// source-level caller, so the optimize-time DCE removes their dead ones.
+/// transitively imports. Stdlib is never reported — and never reify-gated:
+/// stdlib functions reached only through compiler synthesis (CM bindings,
+/// effect dispatch) have no source-level caller, so the optimize-time DCE
+/// removes their dead ones.
+///
+/// Stdlib lives in the `Core` / `Wasi` / `Wasm` variants *and* in bundled
+/// `.wado` files that the loader registers as `Local` with a scheme-prefixed
+/// path (`wasi:cli/terminal_stdout.wado`, `core:…`). Those must be excluded
+/// too; a user's `Local` import is a relative path with no such scheme.
 pub(crate) fn is_user_authored(source: &ModuleSource) -> bool {
-    matches!(
-        source,
+    match source {
         ModuleSource::EntryPoint { .. }
-            | ModuleSource::Local { .. }
-            | ModuleSource::Remote { .. }
-            | ModuleSource::Redirected { .. }
-    )
+        | ModuleSource::Remote { .. }
+        | ModuleSource::Redirected { .. } => true,
+        ModuleSource::Local { path } => {
+            let path = path.as_str();
+            !(path.starts_with("core:")
+                || path.starts_with("wasi:")
+                || path.starts_with("wasm:"))
+        }
+        _ => false,
+    }
 }
 
 /// `#[export]` marks a raw Wasm export — an export-boundary root.
