@@ -10,6 +10,16 @@ on:
     paths-ignore:
       - '**/*.md'
 
+# Only push events write to gh-pages, and two runs writing concurrently race on
+# the branch tip (the store steps and the deploy push). Serialize all push runs
+# under one group so they land one at a time; cancel-in-progress: false lets the
+# in-progress run finish and push its data instead of being killed mid-write.
+# Pull-request runs only read gh-pages, so give each its own group (keyed by
+# run id) to keep them fully independent.
+concurrency:
+  group: benchmark-gh-pages-${{ github.event_name == 'push' && 'main' || github.run_id }}
+  cancel-in-progress: false
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
