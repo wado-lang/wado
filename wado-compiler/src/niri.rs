@@ -109,6 +109,7 @@ use crate::nir::{
     NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirFunction, NirLiteralPattern, NirMatchArm,
     NirPattern, NirStmt, NirStmtKind, NirUnaryOp,
 };
+use crate::nir_arena::{ArmData, BlockId, Body, ExprId, ExprKind, PatId, PatKind, StmtKind};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// Three-state lattice over compile-time evaluation results.
@@ -1928,6 +1929,272 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    // ───────────────────────────────────────────────────────────────────────
+    // Arena evaluator (read-only). The arena counterparts of `expr_to_lattice`
+    // / `try_fold` / `block_lattice` / `match_lattice` / `pattern_matches`,
+    // operating on a `Body` the const-fold visitor walks. CTFE (`try_call_fold`)
+    // keeps using the tree path on a materialized callee tail.
+    // ───────────────────────────────────────────────────────────────────────
+
+    /// Arena counterpart of [`Self::expr_to_lattice`].
+    pub fn expr_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
+        let node = &body.exprs[e];
+        match &node.kind {
+            ExprKind::BoolLiteral(b) => Lattice::Const(Value::Bool(*b)),
+            ExprKind::CharLiteral(c) => Lattice::Const(Value::Char(*c)),
+            ExprKind::IntLiteral { value, .. } => {
+                let Some(prim) =
+                    prim_of(node.type_id, self.type_table).filter(|p| is_int_prim(*p))
+                else {
+                    return Lattice::Unevaluated;
+                };
+                Lattice::Const(Value::Int { value: *value, prim })
+            }
+            ExprKind::FloatLiteral { value, .. } => {
+                let prim = if is_f32_type(node.type_id, self.type_table) {
+                    PrimitiveType::F32
+                } else {
+                    PrimitiveType::F64
+                };
+                Lattice::Const(Value::Float { value: *value, prim })
+            }
+            ExprKind::Local { index, .. } => {
+                self.env.get(index).copied().unwrap_or(Lattice::Unevaluated)
+            }
+            ExprKind::FieldAccess {
+                expr: inner,
+                field_name,
+                ..
+            } => match &body.exprs[*inner].kind {
+                ExprKind::Local { index, .. } => self
+                    .field_env
+                    .get(index)
+                    .and_then(|m| m.get(field_name.as_str()))
+                    .copied()
+                    .map_or(Lattice::Unevaluated, Lattice::Const),
+                ExprKind::GlobalVarGet {
+                    module_source,
+                    name,
+                } => self
+                    .global_fields
+                    .and_then(|m| m.get(&(module_source.clone(), name.clone())))
+                    .and_then(|m| m.get(field_name.as_str()))
+                    .copied()
+                    .map_or(Lattice::Unevaluated, Lattice::Const),
+                _ => Lattice::Unevaluated,
+            },
+            ExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => self.global_lattice(module_source, name),
+            ExprKind::Block(b) => self.block_lattice_a(body, *b),
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let cond = self.expr_to_lattice_a(body, *condition);
+                match cond {
+                    Lattice::Const(Value::Bool(true)) => self.block_lattice_a(body, *then_branch),
+                    Lattice::Const(Value::Bool(false)) => match else_branch {
+                        Some(eb) => self.block_lattice_a(body, *eb),
+                        None => Lattice::Unevaluated,
+                    },
+                    _ => {
+                        let then_lat =
+                            arm_lattice_for_feasible_join(self.block_lattice_a(body, *then_branch));
+                        let else_lat = match else_branch {
+                            Some(eb) => {
+                                arm_lattice_for_feasible_join(self.block_lattice_a(body, *eb))
+                            }
+                            None => Lattice::NonConst,
+                        };
+                        then_lat.join(else_lat)
+                    }
+                }
+            }
+            ExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => self.match_lattice_a(body, *scrutinee, arms),
+            _ => Lattice::Unevaluated,
+        }
+    }
+
+    /// Arena counterpart of [`Self::try_fold`].
+    pub fn try_fold_a(&self, body: &Body, e: ExprId) -> Lattice {
+        let node = &body.exprs[e];
+        match &node.kind {
+            ExprKind::Binary { left, op, right } => {
+                let l = match self.expr_to_lattice_a(body, *left) {
+                    Lattice::Const(v) => v,
+                    other => return other,
+                };
+                let r = match self.expr_to_lattice_a(body, *right) {
+                    Lattice::Const(v) => v,
+                    other => return other,
+                };
+                option_to_lattice(eval_binary(l, *op, r))
+            }
+            ExprKind::Unary { op, expr: inner } => {
+                let v = match self.expr_to_lattice_a(body, *inner) {
+                    Lattice::Const(v) => v,
+                    other => return other,
+                };
+                option_to_lattice(eval_unary(*op, v))
+            }
+            ExprKind::Cast { expr: inner, .. } => {
+                let Some(target) = prim_of(node.type_id, self.type_table) else {
+                    return Lattice::Unevaluated;
+                };
+                match self.expr_to_lattice_a(body, *inner) {
+                    Lattice::Const(v) => option_to_lattice(eval_cast(v, target)),
+                    other => other,
+                }
+            }
+            ExprKind::Call { func, args, .. } if args.len() == 1 && func.is_branch_hint_call() => {
+                self.expr_to_lattice_a(body, args[0].expr)
+            }
+            _ => Lattice::Unevaluated,
+        }
+    }
+
+    /// Arena counterpart of [`Self::block_lattice`].
+    fn block_lattice_a(&self, body: &Body, b: BlockId) -> Lattice {
+        match body.blocks[b].stmts.as_slice() {
+            [] => Lattice::Unevaluated,
+            [single] => match &body.stmts[*single].kind {
+                StmtKind::Expr(e) => self.expr_to_lattice_a(body, *e),
+                _ => Lattice::Unevaluated,
+            },
+            _ => Lattice::Unevaluated,
+        }
+    }
+
+    /// Arena counterpart of [`Self::match_lattice`].
+    fn match_lattice_a(&self, body: &Body, scrutinee: ExprId, arms: &[ArmData]) -> Lattice {
+        let scrut_const = self.expr_to_lattice_a(body, scrutinee).as_const();
+        if arms.is_empty() {
+            return Lattice::Unevaluated;
+        }
+        if let Some(scrut_v) = scrut_const {
+            let mut candidates = Vec::<Lattice>::new();
+            let mut yes_found = false;
+            for arm in arms {
+                let pm = if arm.guard.is_some() {
+                    PatternMatch::Unknown
+                } else {
+                    self.pattern_matches_a(body, &scrut_v, arm.pattern)
+                };
+                let body_lat = arm_lattice_for_feasible_join(self.expr_to_lattice_a(body, arm.body));
+                match pm {
+                    PatternMatch::No => {}
+                    PatternMatch::Yes => {
+                        if candidates.is_empty() {
+                            return self.expr_to_lattice_a(body, arm.body);
+                        }
+                        candidates.push(body_lat);
+                        yes_found = true;
+                        break;
+                    }
+                    PatternMatch::Unknown => candidates.push(body_lat),
+                }
+            }
+            if !yes_found {
+                return Lattice::NonConst;
+            }
+            join_all(&candidates)
+        } else {
+            if !is_provably_exhaustive_a(body, arms) {
+                return Lattice::NonConst;
+            }
+            let mut acc = Lattice::Unevaluated;
+            for arm in arms {
+                acc = acc.join(arm_lattice_for_feasible_join(
+                    self.expr_to_lattice_a(body, arm.body),
+                ));
+            }
+            acc
+        }
+    }
+
+    /// Arena counterpart of [`Self::pattern_matches`].
+    fn pattern_matches_a(&self, body: &Body, value: &Value, pat: PatId) -> PatternMatch {
+        match &body.pats[pat].kind {
+            PatKind::Wildcard => PatternMatch::Yes,
+            PatKind::Literal(lit) => match (lit, value) {
+                (NirLiteralPattern::I128(p), Value::Int { value: v, prim }) => {
+                    bool_to_match(int_value_matches_i128(*v, *prim, *p))
+                }
+                (NirLiteralPattern::U128(p), Value::Int { value: v, prim }) => {
+                    bool_to_match(int_value_matches_u128(*v, *prim, *p))
+                }
+                (NirLiteralPattern::Bool(p), Value::Bool(v)) => bool_to_match(p == v),
+                (NirLiteralPattern::Char(p), Value::Char(v)) => bool_to_match(p == v),
+                (
+                    NirLiteralPattern::I128(_)
+                    | NirLiteralPattern::U128(_)
+                    | NirLiteralPattern::Bool(_)
+                    | NirLiteralPattern::Char(_),
+                    _,
+                ) => PatternMatch::No,
+                (NirLiteralPattern::String(_) | NirLiteralPattern::Null, _) => PatternMatch::Unknown,
+            },
+            PatKind::Or(alts) => {
+                let mut any_unknown = false;
+                for alt in alts {
+                    match self.pattern_matches_a(body, value, *alt) {
+                        PatternMatch::Yes => return PatternMatch::Yes,
+                        PatternMatch::No => {}
+                        PatternMatch::Unknown => any_unknown = true,
+                    }
+                }
+                if any_unknown {
+                    PatternMatch::Unknown
+                } else {
+                    PatternMatch::No
+                }
+            }
+            PatKind::Range {
+                start,
+                end,
+                inclusive,
+                is_unsigned,
+            } => match value {
+                Value::Int { value: v, prim } => bool_to_match(range_matches_int(
+                    *v,
+                    *prim,
+                    *start,
+                    *end,
+                    *inclusive,
+                    *is_unsigned,
+                )),
+                Value::Char(c) => {
+                    let cp = i128::from(u32::from(*c));
+                    bool_to_match(if *inclusive {
+                        cp >= *start && cp <= *end
+                    } else {
+                        cp >= *start && cp < *end
+                    })
+                }
+                _ => PatternMatch::No,
+            },
+            PatKind::ConstantValue { expr } => {
+                match self.expr_to_lattice_a(body, *expr).as_const() {
+                    Some(v) if &v == value => PatternMatch::Yes,
+                    Some(_) => PatternMatch::No,
+                    None => PatternMatch::Unknown,
+                }
+            }
+            PatKind::Binding { .. }
+            | PatKind::Tuple(_, _)
+            | PatKind::Variant { .. }
+            | PatKind::Enum { .. }
+            | PatKind::Struct { .. } => PatternMatch::Unknown,
+        }
+    }
+
+
     /// Look up a `(module_source, name)` global in the installed
     /// [`GlobalEnv`]. Absent keys default to [`Lattice::Unevaluated`]
     /// — the engine simply has no information, same convention as
@@ -2328,6 +2595,38 @@ fn value_to_expr_kind(v: Value) -> NirExprKind {
         Value::Char(c) => NirExprKind::CharLiteral(c),
     }
 }
+
+/// Arena counterpart of [`value_to_expr_kind`].
+#[allow(dead_code)] // wired up by the arena rewriter (Stage 2).
+fn value_to_arena_kind(v: Value) -> ExprKind {
+    match v {
+        Value::Int { value, prim } => ExprKind::IntLiteral {
+            repr: format_int_repr(value, prim),
+            value,
+        },
+        Value::Float { value, .. } => ExprKind::FloatLiteral {
+            repr: format_float_repr(value),
+            value,
+        },
+        Value::Bool(b) => ExprKind::BoolLiteral(b),
+        Value::Char(c) => ExprKind::CharLiteral(c),
+    }
+}
+
+/// Arena counterpart of [`is_provably_exhaustive`].
+fn is_provably_exhaustive_a(body: &Body, arms: &[ArmData]) -> bool {
+    arms.iter()
+        .any(|a| a.guard.is_none() && pattern_is_catch_all_a(body, a.pattern))
+}
+
+fn pattern_is_catch_all_a(body: &Body, pat: PatId) -> bool {
+    match &body.pats[pat].kind {
+        PatKind::Wildcard | PatKind::Binding { .. } => true,
+        PatKind::Or(alts) => alts.iter().any(|p| pattern_is_catch_all_a(body, *p)),
+        _ => false,
+    }
+}
+
 
 /// Identity simplifications for short-circuit operators that *preserve*
 /// every subexpression. `false || X → X`, `true && X → X`, and the RHS
