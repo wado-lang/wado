@@ -4286,17 +4286,9 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
             }
             let body = &g_op_alts[alt_idx];
             if let RuleCall(rc) = &body.ops[0] {
-                let fn_name = if let Some(id) = rc.variant_id {
-                    `_parse_{rc.target_snake}__follow_{id}`;
-                } else {
-                    `_parse_{rc.target_snake}`;
-                };
+                let fn_name = `_parse_{rc.target_snake}`;
                 let local_var = rc.target_snake;
-                let call_args = if let Some(min_prec) = rc.min_prec_arg {
-                    `p, {min_prec}`;
-                } else {
-                    "p";
-                };
+                let call_args = if let Some(min_prec) = rc.min_prec_arg { `p, {min_prec}, {follow_arg_expr(&rc.follow_arg)}` } else { `p, {follow_arg_expr(&rc.follow_arg)}` };
                 w.line(&`let {local_var} = {fn_name}({call_args})?;`);
                 w.line(&`{type_name}::{body.case_name}({local_var})`);
             } else {
@@ -4330,17 +4322,9 @@ fn gen_consume_group_store_op(w: &mut CodeWriter, scst: &SimpleCstShape, g_op_al
                 let alt_idx = group[0];
                 let body = &g_op_alts[alt_idx];
                 if let RuleCall(rc) = &body.ops[0] {
-                    let fn_name = if let Some(id) = rc.variant_id {
-                        `_parse_{rc.target_snake}__follow_{id}`;
-                    } else {
-                        `_parse_{rc.target_snake}`;
-                    };
+                    let fn_name = `_parse_{rc.target_snake}`;
                     let local_var = rc.target_snake;
-                    let call_args = if let Some(min_prec) = rc.min_prec_arg {
-                        `p, {min_prec}`;
-                    } else {
-                        "p";
-                    };
+                    let call_args = if let Some(min_prec) = rc.min_prec_arg { `p, {min_prec}, {follow_arg_expr(&rc.follow_arg)}` } else { `p, {follow_arg_expr(&rc.follow_arg)}` };
                     w.line(&`let {local_var} = {fn_name}({call_args})?;`);
                     w.line(&`{opt_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
                 } else {
@@ -4419,17 +4403,9 @@ fn gen_consume_group_store_optional_op(w: &mut CodeWriter, scst: &SimpleCstShape
             let alt_idx = group[0];
             let body = &g_op_alts[alt_idx];
             if let RuleCall(rc) = &body.ops[0] {
-                let fn_name = if let Some(id) = rc.variant_id {
-                    `_parse_{rc.target_snake}__follow_{id}`;
-                } else {
-                    `_parse_{rc.target_snake}`;
-                };
+                let fn_name = `_parse_{rc.target_snake}`;
                 let local_var = rc.target_snake;
-                let call_args = if let Some(min_prec) = rc.min_prec_arg {
-                    `p, {min_prec}`;
-                } else {
-                    "p";
-                };
+                let call_args = if let Some(min_prec) = rc.min_prec_arg { `p, {min_prec}, {follow_arg_expr(&rc.follow_arg)}` } else { `p, {follow_arg_expr(&rc.follow_arg)}` };
                 w.line(&`let {local_var} = {fn_name}({call_args})?;`);
                 w.line(&`{inner_var} = Option::<{type_name}>::Some({type_name}::{body.case_name}({local_var}));`);
             }
