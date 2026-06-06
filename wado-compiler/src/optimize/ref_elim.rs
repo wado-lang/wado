@@ -16,8 +16,6 @@
 //!
 //! The pass also handles bindings whose source is a field-access chain
 //! (`let r: &T = &v.f1.f2`), substituting the chain at each `r.field` use.
-//! This is what `inline` produces for `&self.tokens.len()`-style calls after
-//! the body's `self.used` is rewritten in terms of the inlined receiver.
 //!
 //! The algorithm uses a two-pass approach that processes ALL ref bindings
 //! simultaneously, avoiding the O(K × N) cost of processing each binding
@@ -27,565 +25,33 @@
 //!   and classify every use of each `r` as field-access-only or not.
 //! Pass 2 (transform): Single traversal to replace eliminable field accesses
 //!   and remove dead let statements.
+//!
+//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
+//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): the analysis and
+//! transform read and mutate the arena `Body` directly. The referent of a
+//! binding is stored as the *unresolved* source expression id and resolved
+//! lazily during the transform — the refs map is complete by then, so a
+//! transitive `let r2 = &r1.field` resolves through `r1` even though `r1`'s
+//! `let` is dropped. The deref-only source is single-use, so it is moved into
+//! its one `*r` site rather than cloned.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind, NirUnaryOp};
+use crate::nir::{NirFunction, NirUnaryOp};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::{NirOptVisitor, NirRefVisitor, opt_walk_expr, opt_walk_stmt};
+use crate::tir::TypeId;
+use crate::token::Span;
 
 /// Per-binding analysis state, keyed by the ref local index.
 struct RefInfo {
-    /// The expression `E` from `let r = &E` (or the resolved referent of a
-    /// transitive `let r = s` shadow). Must be a chain of `FieldAccess`
-    /// bottoming out at a `Local`, so it's safe to clone at each use site.
-    referent: NirExpr,
-    /// True until a non-field-access use is found
+    /// The *unresolved* source expression `E` from `let r = &E` (or the
+    /// inherited referent of a transitive `let r = s` shadow). Resolved
+    /// lazily in pass 2.
+    referent_e: ExprId,
+    /// True until a non-field-access use is found.
     eliminable: bool,
 }
 
-/// An expression is a valid referent if it's a pure read of a local — either
-/// a bare `Local` or a chain of `FieldAccess` bottoming out at one. Restricting
-/// to this shape keeps substitution cheap (duplicates only struct.get) and
-/// observably equivalent (no side effects, no method calls).
-fn is_valid_referent(expr: &NirExpr) -> bool {
-    match &expr.kind {
-        NirExprKind::Local { .. } => true,
-        NirExprKind::FieldAccess { expr: inner, .. } => is_valid_referent(inner),
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::EnumConstruct { .. }
-        | NirExprKind::VariantConstruct { .. }
-        | NirExprKind::VariantTag { .. }
-        | NirExprKind::VariantTest { .. }
-        | NirExprKind::VariantPayload { .. }
-        | NirExprKind::Binary { .. }
-        | NirExprKind::Unary { .. }
-        | NirExprKind::Cast { .. }
-        | NirExprKind::Assign { .. }
-        | NirExprKind::Index { .. }
-        | NirExprKind::Call { .. }
-        | NirExprKind::CmRawCall { .. }
-        | NirExprKind::MethodCall { .. }
-        | NirExprKind::IndirectCall { .. }
-        | NirExprKind::ClosureToCanonical { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::GlobalVarSet { .. }
-        | NirExprKind::StructLiteral { .. }
-        | NirExprKind::TupleLiteral { .. }
-        | NirExprKind::ArrayLiteral { .. }
-        | NirExprKind::Block(_)
-        | NirExprKind::LabeledBlock { .. }
-        | NirExprKind::If { .. }
-        | NirExprKind::Match { .. }
-        | NirExprKind::Switch { .. } => false,
-    }
-}
-
-/// Resolve any `Local(idx)` in `expr` whose binding is already tracked, by
-/// splicing in the tracked binding's referent. Eliminable bindings are dropped
-/// in pass 2; without this resolution, a chained pattern like
-/// `let r1 = &v; let r2 = &r1.field; ... r2.x ...` would substitute `r2.x`
-/// to `(Local(r1)).field.x` only to find `r1`'s `let` removed underneath it.
-/// Pre-resolving at registration time keeps Pass 2 a single substitution.
-fn resolve_referent(expr: &NirExpr, refs: &IndexMap<u32, RefInfo>) -> NirExpr {
-    match &expr.kind {
-        NirExprKind::Local { index, .. } => {
-            if let Some(info) = refs.get(index) {
-                info.referent.clone()
-            } else {
-                expr.clone()
-            }
-        }
-        NirExprKind::FieldAccess {
-            expr: inner,
-            field_index,
-            field_name,
-        } => {
-            let resolved_inner = resolve_referent(inner, refs);
-            NirExpr {
-                kind: NirExprKind::FieldAccess {
-                    expr: Box::new(resolved_inner),
-                    field_index: *field_index,
-                    field_name: field_name.clone(),
-                },
-                type_id: expr.type_id,
-                span: expr.span,
-            }
-        }
-        _ => expr.clone(),
-    }
-}
-
-/// Walk the function body and return the set of local indices that are
-/// bound by more than one `Let`. `analyze_refs_in_block` skips Pattern 1/2
-/// registration for those locals — the inliner may reuse an index when
-/// expanding mutually-exclusive branches, and the second `Let` would
-/// otherwise overwrite the first binding's referent (see
-/// `eliminate_refs_in_function`).
-fn find_rebound_locals(block: &NirBlock) -> IndexSet<u32> {
-    let mut collector = RebindCollector {
-        seen: IndexSet::default(),
-        rebound: IndexSet::default(),
-    };
-    collector.visit_block(block);
-    collector.rebound
-}
-
-struct RebindCollector {
-    seen: IndexSet<u32>,
-    rebound: IndexSet<u32>,
-}
-
-impl NirRefVisitor for RebindCollector {
-    fn visit_stmt(&mut self, stmt: &NirStmt) {
-        if let NirStmtKind::Let { local_index, .. } = &stmt.kind
-            && !self.seen.insert(*local_index)
-        {
-            self.rebound.insert(*local_index);
-        }
-        self.walk_stmt(stmt);
-    }
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Pass 1: collect ref bindings + classify every use of each binding.
-// ──────────────────────────────────────────────────────────────────────────────
-
-/// Collect all `let r = &v` / `let r = &v.f` / inlined shadow `let r = s`
-/// bindings reachable from `block`, and classify every use of each tracked
-/// local as field-access-only (eliminable) or other (non-eliminable).
-///
-/// The walk threads `refs` through the visitor as a single mutable map,
-/// which gives both registration (Let stmts) and use-classification (every
-/// other expression) a stable view of which locals are tracked at the
-/// statement they're inspecting.
-fn analyze_refs_in_block(
-    block: &NirBlock,
-    rebound: &IndexSet<u32>,
-    refs: &mut IndexMap<u32, RefInfo>,
-) {
-    let mut analyzer = RefAnalyzer { rebound, refs };
-    analyzer.visit_block(block);
-}
-
-struct RefAnalyzer<'a> {
-    rebound: &'a IndexSet<u32>,
-    refs: &'a mut IndexMap<u32, RefInfo>,
-}
-
-impl RefAnalyzer<'_> {
-    fn register_let_binding(&mut self, local_index: u32, value: &NirExpr) {
-        if self.rebound.contains(&local_index) {
-            return;
-        }
-        // Pattern (1): `let r = &E` / `let r = &mut E` where E is a
-        // pure-read referent (Local or FieldAccess chain). Resolve any
-        // tracked Locals in `E` to their referents up front so chained
-        // shadows survive Pass 2's drop of intermediate bindings.
-        if let NirExprKind::Unary { op, expr } = &value.kind
-            && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-            && is_valid_referent(expr)
-        {
-            self.refs.insert(
-                local_index,
-                RefInfo {
-                    referent: resolve_referent(expr, self.refs),
-                    eliminable: true,
-                },
-            );
-            return;
-        }
-        // Pattern (2): `let r = s` where s is itself a tracked ref local
-        // (the inlined shadow). Resolve transitively to s's referent so
-        // `r.field` can be replaced with `<root>.field` directly.
-        if let NirExprKind::Local { index, .. } = &value.kind
-            && let Some(info) = self.refs.get(index)
-        {
-            let info = RefInfo {
-                referent: info.referent.clone(),
-                eliminable: info.eliminable,
-            };
-            self.refs.insert(local_index, info);
-        }
-    }
-}
-
-impl NirRefVisitor for RefAnalyzer<'_> {
-    fn visit_stmt(&mut self, stmt: &NirStmt) {
-        if let NirStmtKind::Let {
-            local_index, value, ..
-        } = &stmt.kind
-        {
-            self.register_let_binding(*local_index, value);
-        }
-        self.walk_stmt(stmt);
-    }
-
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        match &expr.kind {
-            // Field access on a tracked ref local: this is the pattern
-            // we want to optimize. The use is acceptable so we *do not*
-            // mark it as non-eliminable, but we still need to recurse
-            // into any non-Local inner expressions so nested ref uses
-            // are still classified.
-            NirExprKind::FieldAccess { expr: inner, .. } => {
-                if let NirExprKind::Local { index, .. } = &inner.kind
-                    && self.refs.contains_key(index)
-                {
-                    return;
-                }
-                self.visit_expr(inner);
-            }
-            // Direct use of a tracked ref local (not through field
-            // access): non-eliminable.
-            NirExprKind::Local { index, .. } => {
-                if let Some(info) = self.refs.get_mut(index) {
-                    info.eliminable = false;
-                }
-            }
-            NirExprKind::Binary { .. }
-            | NirExprKind::Unary { .. }
-            | NirExprKind::Cast { .. }
-            | NirExprKind::Assign { .. }
-            | NirExprKind::Index { .. }
-            | NirExprKind::Call { .. }
-            | NirExprKind::CmRawCall { .. }
-            | NirExprKind::MethodCall { .. }
-            | NirExprKind::IndirectCall { .. }
-            | NirExprKind::ClosureToCanonical { .. }
-            | NirExprKind::Block(_)
-            | NirExprKind::LabeledBlock { .. }
-            | NirExprKind::If { .. }
-            | NirExprKind::Match { .. }
-            | NirExprKind::Switch { .. }
-            | NirExprKind::StructLiteral { .. }
-            | NirExprKind::TupleLiteral { .. }
-            | NirExprKind::ArrayLiteral { .. }
-            | NirExprKind::VariantConstruct { .. }
-            | NirExprKind::VariantTag { .. }
-            | NirExprKind::VariantTest { .. }
-            | NirExprKind::VariantPayload { .. }
-            | NirExprKind::GlobalVarGet { .. }
-            | NirExprKind::GlobalVarSet { .. }
-            | NirExprKind::IntLiteral { .. }
-            | NirExprKind::FloatLiteral { .. }
-            | NirExprKind::BoolLiteral(_)
-            | NirExprKind::CharLiteral(_)
-            | NirExprKind::StringLiteral(_)
-            | NirExprKind::BytesLiteral(_)
-            | NirExprKind::Null
-            | NirExprKind::Unit
-            | NirExprKind::EnumConstruct { .. } => self.walk_expr(expr),
-        }
-    }
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Pass 2: replace eliminable `r.field` with the referent and drop the let.
-// ──────────────────────────────────────────────────────────────────────────────
-
-fn transform_block(block: &mut NirBlock, eliminable: &IndexMap<u32, RefInfo>) {
-    // Remove dead let statements for eliminable bindings.
-    block.stmts.retain(|stmt| {
-        if let NirStmtKind::Let { local_index, .. } = &stmt.kind {
-            !eliminable.contains_key(local_index)
-        } else {
-            true
-        }
-    });
-
-    let mut transformer = RefTransformer { eliminable };
-    for stmt in &mut block.stmts {
-        transformer.visit_stmt(stmt);
-    }
-}
-
-struct RefTransformer<'a> {
-    eliminable: &'a IndexMap<u32, RefInfo>,
-}
-
-impl NirOptVisitor for RefTransformer<'_> {
-    fn visit_expr(&mut self, expr: &mut NirExpr) -> bool {
-        if let NirExprKind::FieldAccess { expr: inner, .. } = &mut expr.kind
-            && let NirExprKind::Local { index, .. } = &inner.kind
-            && let Some(info) = self.eliminable.get(index)
-        {
-            // Replace `r` with the referent expression. For `let r = &v`
-            // the referent is `Local(v)`; for `let r = &v.f` it's
-            // `FieldAccess(Local(v), "f")`. We swap only the `kind` and
-            // keep `inner.type_id`/`inner.span` — the surrounding code
-            // (the outer `FieldAccess.field_index` we're inside, plus
-            // any downstream consumers) was sized to the ref-type tag
-            // that `r` had at this position, and changing it here would
-            // ripple incorrect types into codegen.
-            inner.kind = info.referent.clone().kind;
-            return true;
-        }
-        opt_walk_expr(self, expr)
-    }
-
-    fn visit_block(&mut self, block: &mut NirBlock) -> bool {
-        let before = block.stmts.len();
-        block.stmts.retain(|stmt| {
-            if let NirStmtKind::Let { local_index, .. } = &stmt.kind {
-                !self.eliminable.contains_key(local_index)
-            } else {
-                true
-            }
-        });
-        let mut changed = block.stmts.len() < before;
-        for stmt in &mut block.stmts {
-            changed |= self.visit_stmt(stmt);
-        }
-        changed
-    }
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Deref-only elision: `let r = &StructLit; ... *r ...` → inline the literal.
-// ──────────────────────────────────────────────────────────────────────────────
-
-/// Tracking state for `let r = &struct_or_tuple_literal` where r is only
-/// used as `*r`.
-struct DerefOnlyRef {
-    /// The source expression (struct or tuple literal) from
-    /// `let r = &source_expr`.
-    source_expr: NirExpr,
-    /// True until a non-deref use is found.
-    eliminable: bool,
-    /// Number of times r is used as `*r`.
-    use_count: u32,
-}
-
-fn collect_deref_only_refs_in_block(block: &NirBlock, refs: &mut IndexMap<u32, DerefOnlyRef>) {
-    let mut collector = DerefOnlyCollector { refs };
-    collector.visit_block(block);
-}
-
-struct DerefOnlyCollector<'a> {
-    refs: &'a mut IndexMap<u32, DerefOnlyRef>,
-}
-
-impl NirRefVisitor for DerefOnlyCollector<'_> {
-    fn visit_stmt(&mut self, stmt: &NirStmt) {
-        if let NirStmtKind::Let {
-            local_index, value, ..
-        } = &stmt.kind
-            && let NirExprKind::Unary { op, expr } = &value.kind
-            && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-            && matches!(
-                expr.kind,
-                NirExprKind::StructLiteral { .. } | NirExprKind::TupleLiteral { .. }
-            )
-        {
-            self.refs.insert(
-                *local_index,
-                DerefOnlyRef {
-                    source_expr: *expr.clone(),
-                    eliminable: true,
-                    use_count: 0,
-                },
-            );
-        }
-        self.walk_stmt(stmt);
-    }
-
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        match &expr.kind {
-            // `*r` where r is a deref-only candidate: acceptable use.
-            NirExprKind::Unary {
-                op: NirUnaryOp::Deref,
-                expr: inner,
-            } => {
-                if let NirExprKind::Local { index, .. } = &inner.kind
-                    && let Some(info) = self.refs.get_mut(index)
-                {
-                    info.use_count += 1;
-                    return;
-                }
-                self.visit_expr(inner);
-            }
-            // Any other bare use of r (field access on the ref, passed
-            // as call argument, returned, ...) disqualifies.
-            NirExprKind::Local { index, .. } => {
-                if let Some(info) = self.refs.get_mut(index) {
-                    info.eliminable = false;
-                }
-            }
-            NirExprKind::Unary { .. }
-            | NirExprKind::Binary { .. }
-            | NirExprKind::Cast { .. }
-            | NirExprKind::Assign { .. }
-            | NirExprKind::Index { .. }
-            | NirExprKind::Call { .. }
-            | NirExprKind::CmRawCall { .. }
-            | NirExprKind::MethodCall { .. }
-            | NirExprKind::IndirectCall { .. }
-            | NirExprKind::ClosureToCanonical { .. }
-            | NirExprKind::Block(_)
-            | NirExprKind::LabeledBlock { .. }
-            | NirExprKind::If { .. }
-            | NirExprKind::Match { .. }
-            | NirExprKind::Switch { .. }
-            | NirExprKind::StructLiteral { .. }
-            | NirExprKind::TupleLiteral { .. }
-            | NirExprKind::ArrayLiteral { .. }
-            | NirExprKind::VariantConstruct { .. }
-            | NirExprKind::VariantTag { .. }
-            | NirExprKind::VariantTest { .. }
-            | NirExprKind::VariantPayload { .. }
-            | NirExprKind::FieldAccess { .. }
-            | NirExprKind::GlobalVarGet { .. }
-            | NirExprKind::GlobalVarSet { .. }
-            | NirExprKind::IntLiteral { .. }
-            | NirExprKind::FloatLiteral { .. }
-            | NirExprKind::BoolLiteral(_)
-            | NirExprKind::CharLiteral(_)
-            | NirExprKind::StringLiteral(_)
-            | NirExprKind::BytesLiteral(_)
-            | NirExprKind::Null
-            | NirExprKind::Unit
-            | NirExprKind::EnumConstruct { .. } => self.walk_expr(expr),
-        }
-    }
-}
-
-struct DerefOnlyRewriter<'a> {
-    eliminable: &'a IndexMap<u32, NirExpr>,
-}
-
-impl NirOptVisitor for DerefOnlyRewriter<'_> {
-    fn visit_expr(&mut self, expr: &mut NirExpr) -> bool {
-        if let NirExprKind::Unary {
-            op: NirUnaryOp::Deref,
-            expr: inner,
-        } = &expr.kind
-            && let NirExprKind::Local { index, .. } = &inner.kind
-            && let Some(source) = self.eliminable.get(index)
-        {
-            let span = expr.span;
-            let type_id = expr.type_id;
-            *expr = NirExpr {
-                kind: source.kind.clone(),
-                type_id,
-                span,
-            };
-            return true;
-        }
-        opt_walk_expr(self, expr)
-    }
-
-    fn visit_block(&mut self, block: &mut NirBlock) -> bool {
-        let before = block.stmts.len();
-        block.stmts.retain(|stmt| {
-            if let NirStmtKind::Let { local_index, .. } = &stmt.kind {
-                !self.eliminable.contains_key(local_index)
-            } else {
-                true
-            }
-        });
-        let mut changed = block.stmts.len() < before;
-        for stmt in &mut block.stmts {
-            changed |= self.visit_stmt(stmt);
-        }
-        changed
-    }
-
-    fn visit_stmt(&mut self, stmt: &mut NirStmt) -> bool {
-        opt_walk_stmt(self, stmt)
-    }
-}
-
-/// Eliminate `let r = &struct_literal` bindings where all uses of r are `*r`.
-///
-/// This handles the pattern produced by inlining `into_iter()` on struct iterators:
-/// ```text
-/// let self: &StrUtf8ByteIter = &StrUtf8ByteIter { repr, used, index: 0 };
-/// break label: *self;
-/// ```
-/// After elimination:
-/// ```text
-/// break label: StrUtf8ByteIter { repr, used, index: 0 };
-/// ```
-fn eliminate_deref_ref_pairs_in_function(func: &mut NirFunction) -> bool {
-    let Some(mut owned) = func.body_block() else {
-        return false;
-    };
-    let body = &mut owned;
-
-    let mut refs: IndexMap<u32, DerefOnlyRef> = IndexMap::default();
-    collect_deref_only_refs_in_block(body, &mut refs);
-
-    // Only eliminate refs that are still eliminable AND used exactly
-    // once via `*r`. Multi-use elision would duplicate the source
-    // literal at every site, which trades a GC alloc for repeated
-    // recomputation of any field initialiser inside it.
-    let eliminable: IndexMap<u32, NirExpr> = refs
-        .into_iter()
-        .filter(|(_, info)| info.eliminable && info.use_count == 1)
-        .map(|(idx, info)| (idx, info.source_expr))
-        .collect();
-
-    if eliminable.is_empty() {
-        return false;
-    }
-
-    let mut rewriter = DerefOnlyRewriter {
-        eliminable: &eliminable,
-    };
-    let r = rewriter.visit_block(body);
-    func.set_body_block(owned);
-    r
-}
-
-/// Eliminate unnecessary reference bindings in a single function.
-fn eliminate_refs_in_function(func: &mut NirFunction) -> bool {
-    let Some(mut owned) = func.body_block() else {
-        return false;
-    };
-    let body = &mut owned;
-
-    // Pre-scan: locals bound by more than one `Let` (the inliner reuses
-    // an index when expanding mutually-exclusive branches that each
-    // rebind the same temporary, e.g. an inlined function whose body
-    // has two `let g = &variant_payload(...)` shadows for different
-    // match arms). Each `Let` can carry a different referent, but
-    // `refs.insert` is keyed by `local_index` and would silently
-    // overwrite — leaving every use of the local substituted with the
-    // last-seen referent, even in branches that initialised it
-    // differently. The cheapest correct response is to refuse
-    // elimination on any rebound local.
-    let rebound = find_rebound_locals(body);
-
-    // Pass 1: Collect all ref bindings and analyze uses in a single traversal.
-    let mut refs: IndexMap<u32, RefInfo> = IndexMap::default();
-    analyze_refs_in_block(body, &rebound, &mut refs);
-
-    // Filter to only eliminable bindings.
-    let eliminable: IndexMap<u32, RefInfo> = refs
-        .into_iter()
-        .filter(|(_, info)| info.eliminable)
-        .collect();
-
-    if eliminable.is_empty() {
-        return false;
-    }
-
-    // Pass 2: Replace field accesses and remove dead bindings in a single traversal.
-    transform_block(body, &eliminable);
-    func.set_body_block(owned);
-    true
-}
-
-/// Eliminate unnecessary reference bindings in all functions.
-///
-/// Main entry point for reference elimination optimization.
 pub fn eliminate_unnecessary_refs(project: &mut NirPackage) -> bool {
     let mut changed = false;
     for func_rc in &project.functions {
@@ -594,4 +60,471 @@ pub fn eliminate_unnecessary_refs(project: &mut NirPackage) -> bool {
         changed |= eliminate_deref_ref_pairs_in_function(&mut func);
     }
     changed
+}
+
+/// An expression is a valid referent if it's a pure read of a local — either
+/// a bare `Local` or a chain of `FieldAccess` bottoming out at one.
+fn is_valid_referent(body: &Body, id: ExprId) -> bool {
+    match &body.exprs[id].kind {
+        ExprKind::Local { .. } => true,
+        ExprKind::FieldAccess { expr: inner, .. } => is_valid_referent(body, *inner),
+        _ => false,
+    }
+}
+
+/// Local indices bound by more than one `Let`. The inliner may reuse an index
+/// when expanding mutually-exclusive branches; a second `Let` would otherwise
+/// overwrite the first binding's referent, so such locals are skipped.
+fn find_rebound_locals(body: &Body) -> IndexSet<u32> {
+    let mut seen: IndexSet<u32> = IndexSet::default();
+    let mut rebound: IndexSet<u32> = IndexSet::default();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+            && !seen.insert(*local_index)
+        {
+            rebound.insert(*local_index);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    rebound
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Pass 1: collect ref bindings + classify every use of each binding.
+// ──────────────────────────────────────────────────────────────────────────────
+
+fn analyze_block(
+    body: &Body,
+    block: BlockId,
+    rebound: &IndexSet<u32>,
+    refs: &mut IndexMap<u32, RefInfo>,
+) {
+    for s in &body.blocks[block].stmts {
+        analyze_stmt(body, *s, rebound, refs);
+    }
+}
+
+fn analyze_stmt(
+    body: &Body,
+    stmt: StmtId,
+    rebound: &IndexSet<u32>,
+    refs: &mut IndexMap<u32, RefInfo>,
+) {
+    if let StmtKind::Let {
+        local_index, value, ..
+    } = &body.stmts[stmt].kind
+    {
+        register_let_binding(body, *local_index, *value, rebound, refs);
+    }
+    // Then classify uses in the statement's children (the value, nested blocks).
+    let mut kids = Vec::new();
+    body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
+    for c in kids {
+        analyze_node(body, c, rebound, refs);
+    }
+}
+
+fn register_let_binding(
+    body: &Body,
+    local_index: u32,
+    value: ExprId,
+    rebound: &IndexSet<u32>,
+    refs: &mut IndexMap<u32, RefInfo>,
+) {
+    if rebound.contains(&local_index) {
+        return;
+    }
+    // Pattern (1): `let r = &E` / `let r = &mut E` with E a pure-read referent.
+    if let ExprKind::Unary { op, expr } = &body.exprs[value].kind
+        && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
+        && is_valid_referent(body, *expr)
+    {
+        let referent_e = *expr;
+        refs.insert(
+            local_index,
+            RefInfo {
+                referent_e,
+                eliminable: true,
+            },
+        );
+        return;
+    }
+    // Pattern (2): `let r = s` where s is itself a tracked ref local.
+    if let ExprKind::Local { index, .. } = &body.exprs[value].kind
+        && let Some(info) = refs.get(index)
+    {
+        let inherited = RefInfo {
+            referent_e: info.referent_e,
+            eliminable: info.eliminable,
+        };
+        refs.insert(local_index, inherited);
+    }
+}
+
+fn analyze_node(
+    body: &Body,
+    node: NodeRef,
+    rebound: &IndexSet<u32>,
+    refs: &mut IndexMap<u32, RefInfo>,
+) {
+    match node {
+        NodeRef::Expr(id) => analyze_expr(body, id, rebound, refs),
+        NodeRef::Block(b) => analyze_block(body, b, rebound, refs),
+        NodeRef::Stmt(s) => analyze_stmt(body, s, rebound, refs),
+        NodeRef::Pat(_) => {
+            // Patterns may carry a `ConstantValue` sub-expression; classify it.
+            let mut kids = Vec::new();
+            body.for_each_child(node, |c| kids.push(c));
+            for c in kids {
+                analyze_node(body, c, rebound, refs);
+            }
+        }
+    }
+}
+
+fn analyze_expr(
+    body: &Body,
+    id: ExprId,
+    rebound: &IndexSet<u32>,
+    refs: &mut IndexMap<u32, RefInfo>,
+) {
+    match &body.exprs[id].kind {
+        // Field access on a tracked ref local: the pattern we optimize — an
+        // acceptable use, so do not mark non-eliminable. Recurse into a
+        // non-Local inner so nested ref uses are still classified.
+        ExprKind::FieldAccess { expr: inner, .. } => {
+            let inner = *inner;
+            if let ExprKind::Local { index, .. } = &body.exprs[inner].kind
+                && refs.contains_key(index)
+            {
+                return;
+            }
+            analyze_expr(body, inner, rebound, refs);
+        }
+        // Direct (non-field-access) use of a tracked ref local: non-eliminable.
+        ExprKind::Local { index, .. } => {
+            let index = *index;
+            if let Some(info) = refs.get_mut(&index) {
+                info.eliminable = false;
+            }
+        }
+        _ => {
+            let mut kids = Vec::new();
+            body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
+            for c in kids {
+                analyze_node(body, c, rebound, refs);
+            }
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Pass 2: replace eliminable `r.field` with the referent and drop the let.
+// ──────────────────────────────────────────────────────────────────────────────
+
+fn eliminate_refs_in_function(func: &mut NirFunction) -> bool {
+    let Some(body) = func.body.as_mut() else {
+        return false;
+    };
+    let rebound = find_rebound_locals(body);
+    let mut refs: IndexMap<u32, RefInfo> = IndexMap::default();
+    analyze_block(body, body.root, &rebound, &mut refs);
+
+    if !refs.values().any(|i| i.eliminable) {
+        return false;
+    }
+
+    transform_block(body, body.root, &refs);
+    true
+}
+
+/// Resolve the unresolved referent `e` into a fresh arena subtree, splicing in
+/// any tracked local's referent transitively.
+fn resolve(body: &mut Body, e: ExprId, refs: &IndexMap<u32, RefInfo>) -> ExprId {
+    enum Action {
+        Tracked(ExprId),
+        Field(ExprId, u32, String, TypeId, Span),
+        Leaf,
+    }
+    let action = match &body.exprs[e].kind {
+        ExprKind::Local { index, .. } => match refs.get(index) {
+            Some(info) => Action::Tracked(info.referent_e),
+            None => Action::Leaf,
+        },
+        ExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            field_name,
+        } => Action::Field(
+            *inner,
+            *field_index,
+            field_name.clone(),
+            body.exprs[e].type_id,
+            body.exprs[e].span,
+        ),
+        _ => Action::Leaf,
+    };
+    match action {
+        Action::Tracked(re) => resolve(body, re, refs),
+        Action::Field(inner, field_index, field_name, type_id, span) => {
+            let resolved_inner = resolve(body, inner, refs);
+            body.exprs.push(ExprNode {
+                kind: ExprKind::FieldAccess {
+                    expr: resolved_inner,
+                    field_index,
+                    field_name,
+                },
+                type_id,
+                span,
+            })
+        }
+        Action::Leaf => {
+            let node = body.exprs[e].clone();
+            body.exprs.push(node)
+        }
+    }
+}
+
+fn transform_block(body: &mut Body, block: BlockId, refs: &IndexMap<u32, RefInfo>) {
+    // Remove dead let statements for eliminable bindings.
+    let kept: Vec<StmtId> = body.blocks[block]
+        .stmts
+        .iter()
+        .copied()
+        .filter(|s| match &body.stmts[*s].kind {
+            StmtKind::Let { local_index, .. } => {
+                !refs.get(local_index).is_some_and(|i| i.eliminable)
+            }
+            _ => true,
+        })
+        .collect();
+    body.blocks[block].stmts = kept;
+
+    let stmts = body.blocks[block].stmts.clone();
+    for s in stmts {
+        transform_node(body, NodeRef::Stmt(s), refs);
+    }
+}
+
+fn transform_node(body: &mut Body, node: NodeRef, refs: &IndexMap<u32, RefInfo>) {
+    match node {
+        NodeRef::Expr(id) => transform_expr(body, id, refs),
+        NodeRef::Block(b) => transform_block(body, b, refs),
+        NodeRef::Stmt(_) | NodeRef::Pat(_) => {
+            let mut kids = Vec::new();
+            body.for_each_child(node, |c| kids.push(c));
+            for c in kids {
+                transform_node(body, c, refs);
+            }
+        }
+    }
+}
+
+fn transform_expr(body: &mut Body, id: ExprId, refs: &IndexMap<u32, RefInfo>) {
+    if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[id].kind {
+        let inner = *inner;
+        if let ExprKind::Local { index, .. } = &body.exprs[inner].kind {
+            let index = *index;
+            if let Some(info) = refs.get(&index)
+                && info.eliminable
+            {
+                // Replace `r` (the inner Local) with the resolved referent,
+                // keeping `inner`'s type_id / span — the surrounding code was
+                // sized to the ref-type tag `r` had at this position.
+                let resolved = resolve(body, info.referent_e, refs);
+                let kind = body.exprs[resolved].kind.clone();
+                body.exprs[inner].kind = kind;
+                return;
+            }
+        }
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
+    for c in kids {
+        transform_node(body, c, refs);
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Deref-only elision: `let r = &StructLit; ... *r ...` → inline the literal.
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Tracking state for `let r = &struct_or_tuple_literal` where r is only used
+/// as `*r`.
+struct DerefOnlyRef {
+    /// The arena id of the source struct / tuple literal from `let r = &source`.
+    source_e: ExprId,
+    /// True until a non-deref use is found.
+    eliminable: bool,
+    /// Number of times r is used as `*r`.
+    use_count: u32,
+}
+
+fn eliminate_deref_ref_pairs_in_function(func: &mut NirFunction) -> bool {
+    let Some(body) = func.body.as_mut() else {
+        return false;
+    };
+
+    let mut refs: IndexMap<u32, DerefOnlyRef> = IndexMap::default();
+    deref_collect_block(body, body.root, &mut refs);
+
+    // Only eliminate refs still eliminable AND used exactly once via `*r`.
+    // Multi-use elision would duplicate the source literal at every site.
+    let eliminable: IndexSet<u32> = refs
+        .iter()
+        .filter(|(_, info)| info.eliminable && info.use_count == 1)
+        .map(|(idx, _)| *idx)
+        .collect();
+    if eliminable.is_empty() {
+        return false;
+    }
+    let sources: IndexMap<u32, ExprId> = refs
+        .into_iter()
+        .filter(|(idx, _)| eliminable.contains(idx))
+        .map(|(idx, info)| (idx, info.source_e))
+        .collect();
+
+    deref_transform_block(body, body.root, &sources);
+    true
+}
+
+fn deref_collect_block(body: &Body, block: BlockId, refs: &mut IndexMap<u32, DerefOnlyRef>) {
+    for s in &body.blocks[block].stmts {
+        deref_collect_stmt(body, *s, refs);
+    }
+}
+
+fn deref_collect_stmt(body: &Body, stmt: StmtId, refs: &mut IndexMap<u32, DerefOnlyRef>) {
+    if let StmtKind::Let {
+        local_index, value, ..
+    } = &body.stmts[stmt].kind
+        && let ExprKind::Unary { op, expr } = &body.exprs[*value].kind
+        && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
+        && matches!(
+            body.exprs[*expr].kind,
+            ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
+        )
+    {
+        refs.insert(
+            *local_index,
+            DerefOnlyRef {
+                source_e: *expr,
+                eliminable: true,
+                use_count: 0,
+            },
+        );
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
+    for c in kids {
+        deref_collect_node(body, c, refs);
+    }
+}
+
+fn deref_collect_node(body: &Body, node: NodeRef, refs: &mut IndexMap<u32, DerefOnlyRef>) {
+    match node {
+        NodeRef::Expr(id) => deref_collect_expr(body, id, refs),
+        NodeRef::Block(b) => deref_collect_block(body, b, refs),
+        NodeRef::Stmt(s) => deref_collect_stmt(body, s, refs),
+        NodeRef::Pat(_) => {
+            let mut kids = Vec::new();
+            body.for_each_child(node, |c| kids.push(c));
+            for c in kids {
+                deref_collect_node(body, c, refs);
+            }
+        }
+    }
+}
+
+fn deref_collect_expr(body: &Body, id: ExprId, refs: &mut IndexMap<u32, DerefOnlyRef>) {
+    match &body.exprs[id].kind {
+        // `*r` where r is a deref-only candidate: an acceptable use.
+        ExprKind::Unary {
+            op: NirUnaryOp::Deref,
+            expr: inner,
+        } => {
+            let inner = *inner;
+            if let ExprKind::Local { index, .. } = &body.exprs[inner].kind {
+                let index = *index;
+                if let Some(info) = refs.get_mut(&index) {
+                    info.use_count += 1;
+                    return;
+                }
+            }
+            deref_collect_expr(body, inner, refs);
+        }
+        // Any other bare use of r disqualifies it.
+        ExprKind::Local { index, .. } => {
+            let index = *index;
+            if let Some(info) = refs.get_mut(&index) {
+                info.eliminable = false;
+            }
+        }
+        _ => {
+            let mut kids = Vec::new();
+            body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
+            for c in kids {
+                deref_collect_node(body, c, refs);
+            }
+        }
+    }
+}
+
+fn deref_transform_block(body: &mut Body, block: BlockId, sources: &IndexMap<u32, ExprId>) {
+    let kept: Vec<StmtId> = body.blocks[block]
+        .stmts
+        .iter()
+        .copied()
+        .filter(|s| match &body.stmts[*s].kind {
+            StmtKind::Let { local_index, .. } => !sources.contains_key(local_index),
+            _ => true,
+        })
+        .collect();
+    body.blocks[block].stmts = kept;
+
+    let stmts = body.blocks[block].stmts.clone();
+    for s in stmts {
+        deref_transform_node(body, NodeRef::Stmt(s), sources);
+    }
+}
+
+fn deref_transform_node(body: &mut Body, node: NodeRef, sources: &IndexMap<u32, ExprId>) {
+    match node {
+        NodeRef::Expr(id) => deref_transform_expr(body, id, sources),
+        NodeRef::Block(b) => deref_transform_block(body, b, sources),
+        NodeRef::Stmt(_) | NodeRef::Pat(_) => {
+            let mut kids = Vec::new();
+            body.for_each_child(node, |c| kids.push(c));
+            for c in kids {
+                deref_transform_node(body, c, sources);
+            }
+        }
+    }
+}
+
+fn deref_transform_expr(body: &mut Body, id: ExprId, sources: &IndexMap<u32, ExprId>) {
+    if let ExprKind::Unary {
+        op: NirUnaryOp::Deref,
+        expr: inner,
+    } = &body.exprs[id].kind
+    {
+        let inner = *inner;
+        if let ExprKind::Local { index, .. } = &body.exprs[inner].kind {
+            let index = *index;
+            if let Some(&source_e) = sources.get(&index) {
+                // Single-use (`use_count == 1`): move the source literal into
+                // this `*r` site, keeping the deref expr's type_id / span.
+                let kind = std::mem::replace(&mut body.exprs[source_e].kind, ExprKind::Unit);
+                body.exprs[id].kind = kind;
+                return;
+            }
+        }
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
+    for c in kids {
+        deref_transform_node(body, c, sources);
+    }
 }
