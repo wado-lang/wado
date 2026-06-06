@@ -37,22 +37,33 @@
 //!   `Match` / `Switch` / `LabeledBlock` / nested `Block`) blocks
 //!   substitution — those constructs may not execute the use on
 //!   every path.
+//!
+//! ## Arena port
+//!
+//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
+//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): the body traversal
+//! (stats, the bottom-up driver, candidate detection, substitution) reads and
+//! mutates the arena `Body` directly. The two soundness gates — `ModRef` and
+//! the leftmost-evaluated-subexpression walker — are still tree-shaped and are
+//! invoked on materialized subtrees (`Body::to_tree_{expr,stmt}`); their full
+//! arena port is deferred. Materializing a subtree is bit-identical to the
+//! original, so the soundness decision (and codegen) is unchanged.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{
-    NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirFunction, NirPattern, NirStmt, NirStmtKind,
-    NirUnaryOp,
+    NirBinaryOp, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind, NirUnaryOp,
+};
+use crate::nir_arena::{
+    BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, PatKind, StmtId, StmtKind,
 };
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::{NirMutVisitor, NirOptVisitor, NirRefVisitor, opt_walk_block};
-use crate::token::Span;
+use crate::tir::TypeTable;
 
 use super::mod_ref::{ModRef, can_move_past};
 
 pub fn elide_adjacent_box_locals(project: &mut NirPackage) -> bool {
     let mut changed = false;
-    let funcs = project.functions.clone();
-    for func_rc in &funcs {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if elide_in_function(&mut func) {
             changed = true;
@@ -62,28 +73,62 @@ pub fn elide_adjacent_box_locals(project: &mut NirPackage) -> bool {
 }
 
 fn elide_in_function(func: &mut NirFunction) -> bool {
-    if func.body.is_none() {
-        return false;
-    }
-
-    // Identity / aliasing safety: locals whose reference could escape
-    // via callee-side storage are off-limits.
+    // Identity / aliasing safety: locals whose reference could escape via
+    // callee-side storage are off-limits.
     let mut blacklist: IndexSet<u32> = IndexSet::default();
     blacklist.extend(func.address_taken_locals.iter().copied());
     blacklist.extend(func.stores_aliased_locals.iter().copied());
 
-    let mut owned = func.body_block().unwrap();
-    let body = &mut owned;
-    let stats = collect_local_stats(body);
-    let mut elider = Elider {
-        stats: &stats,
-        blacklist: &blacklist,
+    let Some(body) = func.body.as_mut() else {
+        return false;
     };
+    let stats = collect_local_stats(body);
     let mut changed = false;
-    while elider.visit_block(body) {
+    let root = body.root;
+    while elide_block(body, root, &stats, &blacklist) {
         changed = true;
     }
-    func.set_body_block(owned);
+    changed
+}
+
+/// Visit nested blocks bottom-up (inner first), then sibling-scan this block —
+/// the arena analog of the old `Elider`'s `opt_walk_block`-then-scan order.
+fn elide_block(
+    body: &mut Body,
+    block: BlockId,
+    stats: &IndexMap<u32, LocalStats>,
+    blacklist: &IndexSet<u32>,
+) -> bool {
+    let mut changed = false;
+    let mut kids = Vec::new();
+    body.for_each_child(NodeRef::Block(block), |c| kids.push(c));
+    for c in kids {
+        changed |= elide_descend(body, c, stats, blacklist);
+    }
+    let stmts = body.blocks[block].stmts.clone();
+    for i in 0..stmts.len() {
+        if try_elide_at(body, &stmts, i, stats, blacklist) {
+            changed = true;
+        }
+    }
+    changed
+}
+
+fn elide_descend(
+    body: &mut Body,
+    node: NodeRef,
+    stats: &IndexMap<u32, LocalStats>,
+    blacklist: &IndexSet<u32>,
+) -> bool {
+    if let NodeRef::Block(b) = node {
+        return elide_block(body, b, stats, blacklist);
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    let mut changed = false;
+    for c in kids {
+        changed |= elide_descend(body, c, stats, blacklist);
+    }
     changed
 }
 
@@ -105,120 +150,115 @@ struct LocalStats {
     defs: u32,
 }
 
-fn collect_local_stats(body: &NirBlock) -> IndexMap<u32, LocalStats> {
+fn collect_local_stats(body: &Body) -> IndexMap<u32, LocalStats> {
     let mut stats: IndexMap<u32, LocalStats> = IndexMap::default();
-    let mut collector = StatsCollector { stats: &mut stats };
-    collector.visit_block(body);
+    stats_node(body, NodeRef::Block(body.root), &mut stats);
     stats
 }
 
-struct StatsCollector<'a> {
-    stats: &'a mut IndexMap<u32, LocalStats>,
+fn stats_node(body: &Body, node: NodeRef, stats: &mut IndexMap<u32, LocalStats>) {
+    match node {
+        NodeRef::Expr(id) => stats_expr(body, id, stats),
+        NodeRef::Stmt(s) => stats_stmt(body, s, stats),
+        _ => body.for_each_child(node, |c| stats_node(body, c, stats)),
+    }
 }
 
-impl NirRefVisitor for StatsCollector<'_> {
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        match &expr.kind {
-            NirExprKind::FieldAccess {
-                expr: inner,
-                field_name,
-                ..
-            } => {
-                if let NirExprKind::Local { index, .. } = &inner.kind {
-                    let s = self.stats.entry(*index).or_default();
-                    s.total_reads += 1;
-                    s.fieldaccess_reads += 1;
-                    s.field_names.insert(field_name.clone());
-                    return;
-                }
-                self.walk_expr(expr);
-            }
-            NirExprKind::Local { index, .. } => {
-                self.stats.entry(*index).or_default().total_reads += 1;
-            }
-            NirExprKind::Assign { target, value } => {
-                if let NirExprKind::Local { index, .. } = &target.kind {
-                    self.stats.entry(*index).or_default().defs += 1;
-                    self.visit_expr(value);
-                    return;
-                }
-                self.walk_expr(expr);
-            }
-            _ => self.walk_expr(expr),
+fn stats_stmt(body: &Body, stmt: StmtId, stats: &mut IndexMap<u32, LocalStats>) {
+    match &body.stmts[stmt].kind {
+        StmtKind::Let {
+            local_index, value, ..
+        } => {
+            let (local_index, value) = (*local_index, *value);
+            stats.entry(local_index).or_default().defs += 1;
+            stats_node(body, NodeRef::Expr(value), stats);
         }
-    }
-
-    fn visit_stmt(&mut self, stmt: &NirStmt) {
-        match &stmt.kind {
-            NirStmtKind::Let {
-                local_index, value, ..
-            } => {
-                self.stats.entry(*local_index).or_default().defs += 1;
-                self.visit_expr(value);
+        StmtKind::LetDestructure { pattern, value, .. } => {
+            let (pattern, value) = (*pattern, *value);
+            record_pattern_defs(body, pattern, stats);
+            stats_node(body, NodeRef::Expr(value), stats);
+        }
+        _ => {
+            let mut kids = Vec::new();
+            body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
+            for c in kids {
+                stats_node(body, c, stats);
             }
-            NirStmtKind::LetDestructure { pattern, value, .. } => {
-                record_pattern_defs(pattern, self.stats);
-                self.visit_expr(value);
-            }
-            _ => self.walk_stmt(stmt),
         }
     }
 }
 
-fn record_pattern_defs(pat: &NirPattern, stats: &mut IndexMap<u32, LocalStats>) {
-    match pat {
-        NirPattern::Binding { local_index, .. } => {
+fn stats_expr(body: &Body, id: ExprId, stats: &mut IndexMap<u32, LocalStats>) {
+    match &body.exprs[id].kind {
+        ExprKind::FieldAccess {
+            expr: inner,
+            field_name,
+            ..
+        } => {
+            let inner = *inner;
+            let field_name = field_name.clone();
+            if let ExprKind::Local { index, .. } = &body.exprs[inner].kind {
+                let index = *index;
+                let s = stats.entry(index).or_default();
+                s.total_reads += 1;
+                s.fieldaccess_reads += 1;
+                s.field_names.insert(field_name);
+            } else {
+                stats_node(body, NodeRef::Expr(inner), stats);
+            }
+        }
+        ExprKind::Local { index, .. } => {
+            stats.entry(*index).or_default().total_reads += 1;
+        }
+        ExprKind::Assign { target, value } => {
+            let (target, value) = (*target, *value);
+            if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
+                let index = *index;
+                stats.entry(index).or_default().defs += 1;
+                stats_node(body, NodeRef::Expr(value), stats);
+            } else {
+                stats_node(body, NodeRef::Expr(target), stats);
+                stats_node(body, NodeRef::Expr(value), stats);
+            }
+        }
+        _ => {
+            let mut kids = Vec::new();
+            body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
+            for c in kids {
+                stats_node(body, c, stats);
+            }
+        }
+    }
+}
+
+fn record_pattern_defs(
+    body: &Body,
+    pat: crate::nir_arena::PatId,
+    stats: &mut IndexMap<u32, LocalStats>,
+) {
+    match &body.pats[pat].kind {
+        PatKind::Binding { local_index, .. } => {
             stats.entry(*local_index).or_default().defs += 1;
         }
-        NirPattern::Tuple(patterns, _) => {
+        PatKind::Tuple(patterns, _) | PatKind::Or(patterns) => {
+            let patterns = patterns.clone();
             for p in patterns {
-                record_pattern_defs(p, stats);
+                record_pattern_defs(body, p, stats);
             }
         }
-        NirPattern::Variant { bindings, .. } => {
+        PatKind::Variant { bindings, .. } => {
+            let bindings = bindings.clone();
             for p in bindings {
-                record_pattern_defs(p, stats);
+                record_pattern_defs(body, p, stats);
             }
         }
-        NirPattern::Struct { fields, .. } => {
-            for f in fields {
-                record_pattern_defs(&f.pattern, stats);
-            }
-        }
-        NirPattern::Or(alts) => {
-            for a in alts {
-                record_pattern_defs(a, stats);
+        PatKind::Struct { fields, .. } => {
+            let fields: Vec<crate::nir_arena::PatId> = fields.iter().map(|f| f.pattern).collect();
+            for p in fields {
+                record_pattern_defs(body, p, stats);
             }
         }
         _ => {}
-    }
-}
-
-// -----------------------------------------------------------------------
-// Elision driver
-// -----------------------------------------------------------------------
-
-/// Drives the elision pass via [`NirOptVisitor`]. The default `visit_expr` /
-/// `visit_stmt` recursion handles all the boilerplate descent into nested
-/// blocks; the only override is `visit_block`, which adds a sibling-window
-/// scan AFTER its children have run (so inner-scope candidates fire before
-/// we try outer-scope ones).
-struct Elider<'a> {
-    stats: &'a IndexMap<u32, LocalStats>,
-    blacklist: &'a IndexSet<u32>,
-}
-
-impl NirOptVisitor for Elider<'_> {
-    fn visit_block(&mut self, block: &mut NirBlock) -> bool {
-        let mut changed = opt_walk_block(self, block);
-        let mut i = 0;
-        while i < block.stmts.len() {
-            if try_elide_at(&mut block.stmts, i, self.stats, self.blacklist) {
-                changed = true;
-            }
-            i += 1;
-        }
-        changed
     }
 }
 
@@ -227,80 +267,88 @@ impl NirOptVisitor for Elider<'_> {
 // -----------------------------------------------------------------------
 
 fn try_elide_at(
-    stmts: &mut [NirStmt],
+    body: &mut Body,
+    stmts: &[StmtId],
     i: usize,
     stats: &IndexMap<u32, LocalStats>,
     blacklist: &IndexSet<u32>,
 ) -> bool {
-    let Some((candidate, field_name, inner_mr)) = describe_candidate(&stmts[i], stats, blacklist)
+    let Some((candidate, field_name, inner_mr)) =
+        describe_candidate(body, stmts[i], stats, blacklist)
     else {
         return false;
     };
 
-    let Some(j) = find_use_site(stmts, i + 1, candidate, &field_name, &inner_mr) else {
+    let Some(j) = find_use_site(body, stmts, i + 1, candidate, &field_name, &inner_mr) else {
         return false;
     };
 
-    let inner = take_candidate_inner(&mut stmts[i]);
-    substitute_first_use(&mut stmts[j], candidate, &field_name, inner);
+    let inner = take_candidate_inner(body, stmts[i]);
+    substitute_first_use(body, stmts[j], candidate, &field_name, inner);
     true
 }
 
 fn describe_candidate(
-    stmt: &NirStmt,
+    body: &Body,
+    stmt: StmtId,
     stats: &IndexMap<u32, LocalStats>,
     blacklist: &IndexSet<u32>,
 ) -> Option<(u32, String, ModRef)> {
-    let NirStmtKind::Let {
+    let StmtKind::Let {
         local_index, value, ..
-    } = &stmt.kind
+    } = &body.stmts[stmt].kind
     else {
         return None;
     };
-    if blacklist.contains(local_index) {
+    let (local_index, value) = (*local_index, *value);
+    if blacklist.contains(&local_index) {
         return None;
     }
-    let s = stats.get(local_index)?;
+    let s = stats.get(&local_index)?;
     if s.defs != 1 || s.fieldaccess_reads != 1 || s.total_reads != 1 {
         return None;
     }
     if s.field_names.len() != 1 {
         return None;
     }
-    let NirExprKind::StructLiteral { fields, .. } = &value.kind else {
+    let ExprKind::StructLiteral { fields, .. } = &body.exprs[value].kind else {
         return None;
     };
     if fields.len() != 1 {
         return None;
     }
+    let inner_value = fields[0].value;
     let field_name = s.field_names.iter().next().unwrap().clone();
-    let inner_mr = ModRef::of_expr(&fields[0].value);
-    Some((*local_index, field_name, inner_mr))
+    // ModRef is still a tree analysis; run it on the materialized inner subtree.
+    let inner_mr = ModRef::of_expr(&body.to_tree_expr(inner_value));
+    Some((local_index, field_name, inner_mr))
 }
 
-fn take_candidate_inner(stmt: &mut NirStmt) -> NirExpr {
-    let placeholder = NirStmt::new(NirStmtKind::Expr(unit_expr(stmt.span)), stmt.span);
-    let taken = std::mem::replace(stmt, placeholder);
-    let NirStmtKind::Let { value, .. } = taken.kind else {
+/// Extract the candidate's single-field initializer (returning its expr id) and
+/// replace the `let` with a void `Expr(Unit)` placeholder. The placeholder must
+/// carry the actual Unit type so downstream passes recognise it as void.
+fn take_candidate_inner(body: &mut Body, stmt: StmtId) -> ExprId {
+    let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
         unreachable!("guarded by describe_candidate");
     };
-    let NirExprKind::StructLiteral { mut fields, .. } = value.kind else {
+    let value = *value;
+    let ExprKind::StructLiteral { fields, .. } = &body.exprs[value].kind else {
         unreachable!("guarded by describe_candidate");
     };
-    fields.remove(0).value
-}
-
-fn unit_expr(span: Span) -> NirExpr {
-    // The placeholder must carry the actual Unit type so downstream passes
-    // (`infer_stmts_result_type`, `branch_prune`, `wir_build::translate_stmt`'s
-    // `Drop` wrap heuristic) recognise it as a void expression. `TypeId(0)`
-    // is `I8` (`tir.rs:529`) — using it would tag the Unit placeholder as
-    // an i8 value and tempt downstream code to emit a stray `drop`.
-    NirExpr::new(NirExprKind::Unit, crate::tir::TypeTable::UNIT, span)
+    let inner = fields[0].value;
+    let span = body.stmts[stmt].span;
+    let unit = body.exprs.push(ExprNode {
+        kind: ExprKind::Unit,
+        type_id: TypeTable::UNIT,
+        span,
+    });
+    body.stmts[stmt].kind = StmtKind::Expr(unit);
+    inner
 }
 
 fn find_use_site(
-    stmts: &[NirStmt],
+    body: &Body,
+    stmts: &[StmtId],
     from: usize,
     candidate: u32,
     field_name: &str,
@@ -308,18 +356,21 @@ fn find_use_site(
 ) -> Option<usize> {
     let mut k = from;
     while k < stmts.len() {
-        let stmt = &stmts[k];
-        if is_placeholder(stmt) {
+        let stmt = stmts[k];
+        if is_placeholder(body, stmt) {
             k += 1;
             continue;
         }
+        // The leftmost-walker and ModRef are still tree analyses; run them on
+        // the materialized statement subtree.
+        let tree = body.to_tree_stmt(stmt);
         if matches!(
-            walk_stmt_for_leftmost(stmt, candidate, field_name),
+            walk_stmt_for_leftmost(&tree, candidate, field_name),
             LeftmostWalk::Found
         ) {
             return Some(k);
         }
-        let int_mr = ModRef::of_stmt(stmt);
+        let int_mr = ModRef::of_stmt(&tree);
         if !can_move_past(inner_mr, &int_mr, candidate) {
             return None;
         }
@@ -328,11 +379,8 @@ fn find_use_site(
     None
 }
 
-fn is_placeholder(stmt: &NirStmt) -> bool {
-    matches!(
-        &stmt.kind,
-        NirStmtKind::Expr(e) if matches!(e.kind, NirExprKind::Unit)
-    )
+fn is_placeholder(body: &Body, stmt: StmtId) -> bool {
+    matches!(&body.stmts[stmt].kind, StmtKind::Expr(e) if matches!(body.exprs[*e].kind, ExprKind::Unit))
 }
 
 // -----------------------------------------------------------------------
@@ -595,61 +643,55 @@ fn walk_children_observable<'a>(
 // Substitution at use site
 // -----------------------------------------------------------------------
 
-/// Replaces the first `FieldAccess(Local(candidate), field_name)` reached
-/// in eval order with the saved `replacement` (consumed at most once).
-/// Drives the traversal via [`NirMutVisitor`]: each `visit_expr` either
-/// performs the replacement (consuming `slot`) or recurses through
-/// `walk_expr`, which already enumerates children in evaluation order.
-/// Once `slot` is `None` the visitor short-circuits.
-struct Substituter<'a> {
-    candidate: u32,
-    field_name: &'a str,
-    slot: Option<NirExpr>,
-}
-
-impl NirMutVisitor for Substituter<'_> {
-    fn visit_expr(&mut self, expr: &mut NirExpr) {
-        if self.slot.is_none() {
-            return;
-        }
-        if let NirExprKind::FieldAccess {
-            expr: inner,
-            field_name: fname,
-            ..
-        } = &expr.kind
-            && fname == self.field_name
-            && let NirExprKind::Local { index, .. } = &inner.kind
-            && *index == self.candidate
-        {
-            // Preserve the outer FieldAccess's `type_id` and `span`.
-            // The candidate's inner expression and the field access
-            // share the same declared type, but the field-access node
-            // is the one downstream passes have type-resolved against
-            // (post-monomorphization type registries are keyed by the
-            // node's `type_id`). Replacing the whole `NirExpr` would
-            // swap in the slot's `type_id`, which is structurally
-            // equal but identity-distinct from the field-access type
-            // and can drift through generic specialization.
-            let slot = self.slot.take().unwrap();
-            *expr = NirExpr::new(slot.kind, expr.type_id, expr.span);
-            return;
-        }
-        self.walk_expr(expr);
-    }
-}
-
+/// Replace the single `FieldAccess(Local(candidate), field_name)` use with the
+/// candidate's inner initializer, moving `inner`'s content into the field-access
+/// node while keeping that node's `type_id` / `span` (downstream type registries
+/// are keyed by the field-access node's `type_id`). The candidate has exactly
+/// one such use (guaranteed by `fieldaccess_reads == 1` / `total_reads == 1`),
+/// so the first pre-order match is the only one.
 fn substitute_first_use(
-    stmt: &mut NirStmt,
+    body: &mut Body,
+    use_stmt: StmtId,
     candidate: u32,
     field_name: &str,
-    replacement: NirExpr,
+    inner: ExprId,
 ) {
-    let mut sub = Substituter {
-        candidate,
-        field_name,
-        slot: Some(replacement),
-    };
-    sub.visit_stmt(stmt);
+    substitute_node(body, NodeRef::Stmt(use_stmt), candidate, field_name, inner);
+}
+
+fn substitute_node(
+    body: &mut Body,
+    node: NodeRef,
+    candidate: u32,
+    field_name: &str,
+    inner: ExprId,
+) -> bool {
+    if let NodeRef::Expr(id) = node {
+        let is_match = if let ExprKind::FieldAccess {
+            expr: fa_inner,
+            field_name: fname,
+            ..
+        } = &body.exprs[id].kind
+        {
+            fname == field_name
+                && matches!(&body.exprs[*fa_inner].kind, ExprKind::Local { index, .. } if *index == candidate)
+        } else {
+            false
+        };
+        if is_match {
+            let kind = std::mem::replace(&mut body.exprs[inner].kind, ExprKind::Unit);
+            body.exprs[id].kind = kind;
+            return true;
+        }
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    for c in kids {
+        if substitute_node(body, c, candidate, field_name, inner) {
+            return true;
+        }
+    }
+    false
 }
 
 #[cfg(test)]
