@@ -1,9 +1,11 @@
-// Verify that HFS write-backs are NOT inserted before `break;` that exits
-// the HFS loop directly.  The post-loop write-back covers them.
+// Verify that a call-clean hot field (`state.counter`, never read through the
+// `&mut State` reference inside the loop) defers its write-back to the loop's
+// exit instead of writing back on every back-edge iteration.
 //
-// Structure: a loop with hot field access (`state.counter`) that breaks
-// from the main loop body.  The WIR should show the post-loop write-back
-// but NOT a write-back immediately before the break.
+// Structure: a loop with hot field access (`state.counter`) that breaks from
+// the main loop body. The WIR should show the write-back at the exit `break`
+// (so the post-loop reader sees the final value) but NO per-iteration
+// write-back on the `continue` back-edge.
 
 struct State {
     counter: i32,
@@ -38,6 +40,9 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_not_expect:O2": ["state.counter = __hfs_counter_7;\n                break b0"],
-    "wir_expect:O2": ["__hfs_counter_7 = state.counter"]
+    "wir_expect:O2": [
+        "__hfs_counter_7 = state.counter",
+        "state.counter = __hfs_counter_7;\n                break b0"
+    ],
+    "wir_not_expect:O2": ["state.counter = __hfs_counter_7;\n            continue l1"]
 }
