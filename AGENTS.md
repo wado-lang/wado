@@ -62,7 +62,7 @@ For the detailed specification, read `docs/spec.md`.
 Unlike Rust:
 
 - No lifetimes. No borrow checker. No ownership. Just GC.
-- Value semantics: every value is deeply copied when assigned or passed to a function, except for references and `builtin::array<T>` (an internal type, not user-facing).
+- Value semantics: every value is deeply copied when assigned or passed to a function, except for references. Even the raw fixed-length GC array `Array<T>` is a value type (deep-copied), so `&` is the only thing with reference semantics.
 - Wado splits Rust's `enum` into `variant` for sum types with payloads and `enum` for plain discriminants (no payload). Bitmask types use `flags`.
 - No macros.
 - No `unsafe`. No raw pointers.
