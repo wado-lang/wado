@@ -1162,13 +1162,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let module = modules.get(module_source).expect("module should exist");
 
             // Build imported type sources and module-specific flat maps for this module
-            let (imported_type_sources, import_original_names) = Self::build_imported_type_sources(
-                &mut state.interner.borrow_mut(),
-                module,
-                module_source,
-                Some(&entry_module_source),
-                &state.invocations,
-            );
+            let (mut imported_type_sources, mut import_original_names) =
+                Self::build_imported_type_sources(
+                    &mut state.interner.borrow_mut(),
+                    module,
+                    module_source,
+                    Some(&entry_module_source),
+                    &state.invocations,
+                );
             // Build function_return_types for this module only
             // (functions defined in this module). The lookup borrows the
             // shared `all_*` tables; no per-module flat-map cloning.
@@ -1239,8 +1240,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     }
                                 }
                             }
-                            crate::ast::UseItem::Namespace { name } => {
-                                // Namespace import: all symbols from source module are available
+                            crate::ast::UseItem::Namespace { name: ns } => {
+                                // Namespace import: every public symbol becomes
+                                // available as `ns::member`, canonicalized to
+                                // the `ns$member` alias. Register each alias in
+                                // the same per-name maps that back `use { X as
+                                // Y }`, so two namespaces exporting the same
+                                // member stay distinct (keyed `a$X` vs `b$X`).
                                 let source = crate::name::resolve_import_with_invocations(
                                     &mut state.interner.borrow_mut(),
                                     module_source,
@@ -1249,9 +1255,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     &state.invocations,
                                 );
                                 for sym in symbols.get_module_symbols(&source) {
-                                    imported_functions.insert(sym.name.clone());
+                                    let alias = crate::name::namespace_member_alias(ns, &sym.name);
+                                    match sym.kind {
+                                        crate::symbol::SymbolKind::Function(_) => {
+                                            imported_functions.insert(alias);
+                                        }
+                                        crate::symbol::SymbolKind::Struct(_)
+                                        | crate::symbol::SymbolKind::Enum(_)
+                                        | crate::symbol::SymbolKind::Flags(_)
+                                        | crate::symbol::SymbolKind::Variant(_)
+                                        | crate::symbol::SymbolKind::Newtype(_)
+                                        | crate::symbol::SymbolKind::Resource(_)
+                                        | crate::symbol::SymbolKind::BuiltinType => {
+                                            imported_type_sources
+                                                .insert(alias.clone(), source.clone());
+                                            import_original_names.insert(alias, sym.name.clone());
+                                        }
+                                        _ => {}
+                                    }
                                 }
-                                namespace_imports.insert(name.clone(), source);
+                                namespace_imports.insert(ns.clone(), source);
                             }
                             crate::ast::UseItem::Wildcard => {
                                 // Wildcard import: no individual function names to collect
@@ -2878,29 +2901,33 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     );
                 }
                 // `ns::Type` namespace-import alias in type position: resolve
-                // the bare `Type` via the `Named` / `Generic` arms (registries
-                // are keyed by bare names). Mirrors the dynamic resolver's
-                // `resolve_namespaced_generic_type` namespace-alias branch.
+                // the `ns$Type` alias via the `Named` / `Generic` arms, which
+                // route through `imported_type_sources` to the namespace's own
+                // module. Mirrors the dynamic resolver's namespace-alias branch.
                 if lookup
                     .namespace_imports
                     .contains_key(namespaced.namespace.as_str())
                 {
-                    let bare = if namespaced.args.is_empty() {
+                    let alias = crate::name::namespace_member_alias(
+                        &namespaced.namespace,
+                        &namespaced.name,
+                    );
+                    let aliased = if namespaced.args.is_empty() {
                         Type::Named(crate::ast::NamedType::new(
                             namespaced.id,
-                            namespaced.name.clone(),
+                            alias,
                             namespaced.span,
                         ))
                     } else {
                         Type::Generic(crate::ast::GenericType {
                             id: namespaced.id,
-                            name: namespaced.name.clone(),
+                            name: alias,
                             args: namespaced.args.clone(),
                             span: namespaced.span,
                         })
                     };
                     return Self::resolve_type_static_with_params(
-                        &bare,
+                        &aliased,
                         type_table,
                         lookup,
                         type_params,

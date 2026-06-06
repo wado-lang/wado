@@ -46,6 +46,22 @@ use std::hash::{Hash, Hasher};
 /// anchor would have nothing to bind to. A `const` is the right shape.
 pub const CLOSURE_CALL_METHOD: &str = "__call";
 
+/// Separator the compiler stamps between a namespace-import alias and the
+/// imported member when canonicalizing a `ns::member` reference to its
+/// internal single-token form `ns$member`. `$` is not a valid Wado
+/// identifier character (the lexer accepts only `[A-Za-z0-9_]`), so these
+/// synthetic alias names can never collide with a user-written identifier.
+/// Keeping the alias a single `::`-free token lets it flow through the same
+/// per-name import machinery (`imported_type_sources`, `imported_globals`,
+/// the symbol-table imports) that backs `use { X as Y }`, so each namespace's
+/// members stay distinct even when two namespaces export the same name.
+pub const NAMESPACE_MEMBER_SEP: char = '$';
+
+/// Build the canonical `ns$member` alias for a namespace-imported symbol.
+pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
+    format!("{namespace}{NAMESPACE_MEMBER_SEP}{member}")
+}
+
 /// Prefix the compiler stamps onto every synthesised closure-functor
 /// struct (`__Closure_0`, `__Closure_1`, …). Like
 /// [`CLOSURE_CALL_METHOD`], this is purely a compiler-internal

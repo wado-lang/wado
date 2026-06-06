@@ -7426,18 +7426,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::TirExprKind;
 
-        // Canonicalize `<ns>::<member>` (single `::`, prefix is a namespace
-        // import alias) to the bare `<member>` form, exactly as
+        // Canonicalize `<ns>::<member>` to its `ns$member` alias, exactly as
         // `resolve_ident` does at annotate time (expr.rs). Every registry
-        // consulted below is keyed by canonical names; keeping the rewrite
-        // here in lock-step with annotate is what makes namespace-imported
-        // globals / functions / cases reify the same node the elaborator
-        // resolved. The original `id` / `span` are preserved.
+        // consulted below is keyed by these aliases; keeping the rewrite here
+        // in lock-step with annotate is what makes namespace-imported globals
+        // / functions / cases reify the same node the elaborator resolved. The
+        // original `id` / `span` are preserved.
         let canonical_ident;
-        let ident = if let Some(stripped) = self.sem.imports.strip_ns_prefix(&ident.name) {
+        let ident = if let Some(canon) = self.sem.imports.canonical_ns_ref(&ident.name) {
             canonical_ident = ast::IdentExpr {
                 id: ident.id,
-                name: stripped.to_string(),
+                name: canon,
                 segments: ident.segments.clone(),
                 type_args: ident.type_args.clone(),
                 span: ident.span,
@@ -7793,124 +7792,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         flags_info.type_id,
                         ident.span,
                     );
-                }
-            }
-        }
-
-        // 7. Namespace-imported path `ns::Type::Case` (and variants
-        //    with type args). The `ns::` prefix maps via
-        //    `sem.imports.namespace_imports` to the namespace's
-        //    source module; reify then resolves against the
-        //    namespace's `tysys.all_*` tables (rather than the
-        //    current module's).
-        if let Some(double_colon) = ident.name.find("::") {
-            let ns_prefix = &ident.name[..double_colon];
-            let rest = &ident.name[double_colon + 2..];
-            if let Some(ns_source) = self.sem.imports.namespace_imports.get(ns_prefix).cloned()
-                && let Some(inner_double_colon) = rest.find("::")
-            {
-                let type_name = &rest[..inner_double_colon];
-                let case_name = &rest[inner_double_colon + 2..];
-
-                // Variant case in the namespace's module.
-                if let Some(variant_info) = self
-                    .tysys
-                    .all_variant_cases
-                    .get(&ns_source)
-                    .and_then(|m| m.get(type_name))
-                    .cloned()
-                    && let Some((case_index, case_data)) = variant_info
-                        .cases
-                        .iter()
-                        .enumerate()
-                        .find(|(_, c)| c.name == case_name)
-                        .map(|(i, c)| (i, c.clone()))
-                {
-                    let variant_type = self
-                        .ann_generic_instantiations(ident.id)
-                        .map(|gi| gi.instance_type)
-                        .unwrap_or_else(|| {
-                            self.tysys.type_table.borrow_mut().make_variant(
-                                variant_info.name.clone(),
-                                variant_info.module_source.clone(),
-                            )
-                        });
-                    return TirExpr::new(
-                        TirExprKind::VariantConstruct {
-                            variant_type,
-                            case_index: case_index as u32,
-                            case_name: case_data.name,
-                            payload: None,
-                        },
-                        variant_type,
-                        ident.span,
-                    );
-                }
-
-                // Enum case in the namespace's module.
-                if let Some(enum_info) = self
-                    .tysys
-                    .all_enum_cases
-                    .get(&ns_source)
-                    .and_then(|m| m.get(type_name))
-                    .cloned()
-                    && let Some(case_data) = enum_info.find_case(case_name).cloned()
-                {
-                    let enum_type = self
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_enum(enum_info.name.clone(), enum_info.module_source);
-                    return TirExpr::new(
-                        TirExprKind::EnumConstruct {
-                            enum_type,
-                            case_index: case_data.index,
-                            case_name: case_data.name,
-                        },
-                        enum_type,
-                        ident.span,
-                    );
-                }
-
-                // Flags member in the namespace's module. Mirrors the
-                // two-segment `Type::Member` flags branch above and the
-                // annotate-side handling in `resolve_ident` (expr.rs); a
-                // flags member lowers to its bitmask `IntLiteral`.
-                if let Some(flags_info) = self
-                    .tysys
-                    .all_flags_cases
-                    .get(&ns_source)
-                    .and_then(|m| m.get(type_name))
-                    .cloned()
-                    && let Some(member) = flags_info
-                        .members
-                        .iter()
-                        .find(|m| m.name == case_name)
-                        .cloned()
-                {
-                    return TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: u64::from(member.bitmask),
-                            repr: member.bitmask.to_string(),
-                        },
-                        flags_info.type_id,
-                        ident.span,
-                    );
-                }
-
-                // Associated constant in the namespace's module
-                // (`ns::Type::CONST`). Mirrors the bare associated-constant
-                // case (4) above: the registry is keyed by the bare
-                // `Type::member`, and the body is re-reified under its
-                // defining module's perspective.
-                let assoc_key = format!("{type_name}::{case_name}");
-                if let Some((const_module, type_id, const_expr)) =
-                    self.sem.decls.associated_constants.get(&assoc_key).cloned()
-                {
-                    let resolved = self.with_const_module_perspective(&const_module, |this| {
-                        this.reify_expr(&const_expr, ctx, Some(type_id))
-                    });
-                    return TirExpr::new(resolved.kind, type_id, ident.span);
                 }
             }
         }

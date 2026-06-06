@@ -1239,13 +1239,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     ));
                                 }
                             }
-                            ast::UseItem::Namespace { .. } => {
+                            ast::UseItem::Namespace { name: ns } => {
+                                // Each public global is imported under its
+                                // `ns$member` alias (qualified `ns::member`
+                                // access only), keeping namespaces distinct.
                                 for src_item in &source_module.items {
                                     if let Item::Global(global_decl) = src_item
                                         && global_decl.is_pub
                                     {
                                         to_import.push((
-                                            global_decl.name.clone(),
+                                            crate::name::namespace_member_alias(
+                                                ns,
+                                                &global_decl.name,
+                                            ),
                                             global_decl.name.clone(),
                                         ));
                                     }
@@ -1324,8 +1330,29 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .collect::<Vec<_>>()
             })
             .collect();
+        // Snapshot the namespace aliases so each constant can also be
+        // registered under its `ns$Type::member` form. `ns::Type::CONST`
+        // canonicalizes to `ns$Type::CONST`, and because that alias keeps the
+        // namespace it resolves to the constant in that specific namespace's
+        // module — even when two namespaces export the same `Type::CONST`
+        // (whose bare key would otherwise collapse to a single entry).
+        let ns_aliases: Vec<(String, ModuleSource)> = self
+            .sem
+            .imports
+            .namespace_imports
+            .iter()
+            .map(|(ns, src)| (ns.clone(), src.clone()))
+            .collect();
         for (src, key, ty, value) in assoc_const_inputs {
             let type_id = self.resolve_type(&ty);
+            for (ns, ns_src) in &ns_aliases {
+                if *ns_src == src {
+                    self.sem.decls.associated_constants.insert(
+                        name::namespace_member_alias(ns, &key),
+                        (src.clone(), type_id, value.clone()),
+                    );
+                }
+            }
             self.sem
                 .decls
                 .associated_constants

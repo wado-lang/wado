@@ -1,16 +1,15 @@
-// Namespace-imported globals must resolve both as `ns::G` and as the bare `G`
-// directly available from the namespace import.
+// Namespace-imported globals are accessed with the `ns::` prefix. Two
+// namespaces exporting the same global name stay distinct (collision-free).
 use h from "./sub/ns_robust_helper.wado";
 
-test "namespace global via ns:: and bare" {
+test "namespace global read" {
     assert h::ANSWER == 42;
-    assert ANSWER == 42;
 }
 
 test "namespace mutable global write" {
     h::COUNTER = 7;
     assert h::COUNTER == 7;
-    COUNTER = COUNTER + 1;
+    h::COUNTER = h::COUNTER + 1;
     assert h::COUNTER == 8;
 }
 

@@ -42,30 +42,55 @@ pub(crate) struct ModuleImports {
 }
 
 impl ModuleImports {
-    /// Canonicalize a `<ns>::<member>` reference (single `::`, prefix is a
-    /// namespace import alias) to the bare `<member>` form. Returns `None`
-    /// when the name isn't of that shape — including multi-segment cases like
-    /// `<ns>::<Type>::<case>`, which route through dedicated namespace paths
-    /// (see `resolve_ident` / `resolve_call` / `reify_ident`).
+    /// Drop a `<ns>::<member>` namespace prefix (single `::`, prefix is a
+    /// namespace import alias) to the bare `<member>`. Returns `None` when the
+    /// name isn't of that shape.
     ///
-    /// This is the single source of truth shared by both the annotate phase
-    /// ([`super::super::Elaborator`]) and the reify phase
-    /// ([`super::super::reify::Reify`]): the AST keeps the user-written
-    /// `ns::member` (so LSP cursors land on it as typed) while every
-    /// registry lookup sees the canonical bare name the registries were
-    /// populated with.
+    /// Used only for the short-name *comparisons* in pattern matching
+    /// (`Pattern::Struct` / `Pattern::Variant`), where the goal is to check
+    /// the written type against the scrutinee's short name; the owning module
+    /// is verified separately. Name *resolution* uses
+    /// [`Self::canonical_ns_ref`] instead, which keeps the namespace so two
+    /// namespaces exporting the same member stay distinct.
     pub(crate) fn strip_ns_prefix<'s>(&self, name: &'s str) -> Option<&'s str> {
         strip_ns_prefix(&self.namespace_imports, name)
     }
+
+    /// Canonicalize a namespace-qualified reference `ns::rest` to its internal
+    /// single-token alias form `ns$rest` (e.g. `geo::Point` → `geo$Point`,
+    /// `geo::Shape::Circle` → `geo$Shape::Circle`). Returns `None` when the
+    /// first segment is not a namespace-import alias.
+    ///
+    /// Unlike [`Self::strip_ns_prefix`] (which drops the prefix to a bare name
+    /// and is used only for short-name *comparisons* in pattern matching),
+    /// this keeps the namespace baked into the name so that registry lookups
+    /// stay disambiguated by source module — two namespaces exporting the same
+    /// member resolve to distinct `a$X` / `b$X` aliases.
+    pub(crate) fn canonical_ns_ref(&self, name: &str) -> Option<String> {
+        canonical_ns_ref(&self.namespace_imports, name)
+    }
 }
 
-/// Canonicalize a `<ns>::<member>` reference against a namespace-alias map.
-///
-/// Shared by [`ModuleImports::strip_ns_prefix`] and the type resolver's
-/// [`super::super::types::TypeLookup`], which carries only the alias map
-/// rather than the full [`ModuleImports`]. Returns the bare `<member>` for a
-/// single-`::` reference whose prefix is a known namespace alias, and `None`
-/// otherwise (including multi-segment `<ns>::<Type>::<case>` forms).
+/// Free-function form of [`ModuleImports::canonical_ns_ref`], shared with the
+/// type resolver's [`super::super::types::TypeLookup`], which carries only the
+/// namespace-alias map.
+pub(crate) fn canonical_ns_ref(
+    namespace_imports: &IndexMap<String, ModuleSource>,
+    name: &str,
+) -> Option<String> {
+    let pos = name.find("::")?;
+    let prefix = &name[..pos];
+    if !namespace_imports.contains_key(prefix) {
+        return None;
+    }
+    let rest = &name[pos + 2..];
+    Some(crate::name::namespace_member_alias(prefix, rest))
+}
+
+/// Free-function form of [`ModuleImports::strip_ns_prefix`] (bare-member
+/// stripping for pattern short-name comparisons). Returns the bare `<member>`
+/// for a single-`::` reference whose prefix is a known namespace alias, and
+/// `None` otherwise (including multi-segment `<ns>::<Type>::<case>` forms).
 pub(crate) fn strip_ns_prefix<'s>(
     namespace_imports: &IndexMap<String, ModuleSource>,
     name: &'s str,

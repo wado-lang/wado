@@ -235,13 +235,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .contains_key(namespaced.namespace.as_str())
         {
             // `ns::Type` (or `ns::Type<args>`) where `ns` is a namespace
-            // import alias: resolve the bare `Type`, since every type
-            // registry is keyed by canonical bare names. Mirrors
-            // `strip_ns_prefix` for expression-position idents.
+            // import alias: resolve the `ns$Type` alias so the lookup is
+            // scoped to that namespace's own module (via
+            // `imported_type_sources`), keeping two namespaces that export the
+            // same type distinct. Mirrors `canonical_ns_ref` for idents.
+            let alias =
+                crate::name::namespace_member_alias(&namespaced.namespace, &namespaced.name);
             if namespaced.args.is_empty() {
-                self.resolve_named_type(&namespaced.name, namespaced.span)
+                self.resolve_named_type(&alias, namespaced.span)
             } else {
-                self.resolve_generic_type(&namespaced.name, &namespaced.args, namespaced.span)
+                self.resolve_generic_type(&alias, &namespaced.args, namespaced.span)
             }
         } else {
             let _ = self.logger.error(TypeError::UnknownType {

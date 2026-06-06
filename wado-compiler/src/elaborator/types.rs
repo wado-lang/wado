@@ -1661,13 +1661,13 @@ impl<'a> TypeLookup<'a> {
         local: Option<&'a IndexMap<String, V>>,
         all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
     ) -> Option<&'a V> {
-        // Canonicalize a `<ns>::<Type>` reference to its bare `<Type>` form
-        // (single `::`, prefix is a namespace-import alias). All registries
-        // below are keyed by bare names; this is the single chokepoint for
-        // every type-name lookup, so namespace-imported types resolve here
-        // without each caller stripping the prefix itself.
-        let name =
-            super::sem::imports::strip_ns_prefix(self.namespace_imports, name).unwrap_or(name);
+        // Canonicalize a `<ns>::<Type>` reference to its `ns$Type` alias
+        // (prefix is a namespace-import alias). This is the single chokepoint
+        // for every type-name lookup; the alias resolves through the
+        // `imported_type_sources` branch below to the namespace's own module,
+        // so two namespaces exporting the same type stay distinct.
+        let canon = super::sem::imports::canonical_ns_ref(self.namespace_imports, name);
+        let name = canon.as_deref().unwrap_or(name);
         if let Some(local) = local
             && let Some(v) = local.get(name)
         {

@@ -28,7 +28,7 @@ use { foo as bar } from "./mod.wado";         // rename
 pub use { foo, bar } from "./internal.wado";  // re-export
 ```
 
-Namespace imports make all pub symbols from the source module directly available:
+Namespace imports make all pub symbols from the source module available through the `ns::` prefix (qualified access only — no bare names):
 
 ```wado
 use geo from "./geo.wado";

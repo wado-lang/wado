@@ -3339,19 +3339,26 @@ use utils from "./utils.wado";
 utils::helper_function();
 ```
 
-A namespace import makes all pub symbols from the source module available. At the source level, symbols are accessed with the `ns::` prefix. Internally, the compiler desugars the prefix away during the desugar phase and registers all pub symbols from the source module as named imports:
+A namespace import makes all pub symbols from the source module available **only** through the `ns::` prefix; there is no bare (unqualified) access:
 
 ```wado
 use geo from "./geo.wado";
 
 // Functions
-geo::distance(p1, p2);           // → distance(p1, p2)
+geo::distance(p1, p2);
 
 // Types (structs, enums, variants)
-let p: geo::Point = geo::Point::origin();   // → Point, Point::origin()
-let c = geo::Color::Red;                    // → Color::Red
-let s = geo::Shape::Circle(3.14);           // → Shape::Circle(3.14)
+let p: geo::Point = geo::Point::origin();
+let c = geo::Color::Red;
+let s = geo::Shape::Circle(3.14);
 ```
+
+Internally the compiler canonicalizes each `ns::member` reference to a
+`ns$member` alias scoped to the namespace's source module (`$` is not a valid
+identifier character, so these aliases never clash with user names). Because
+the alias keeps the namespace, two namespace imports that export the same
+member name stay distinct — `a::Config` and `b::Config` resolve to their
+respective modules and never collide.
 
 **Note:** Wado does not support `use * as name` or default imports.
 
