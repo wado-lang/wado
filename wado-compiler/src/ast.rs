@@ -2595,7 +2595,7 @@ pub struct FormatSpec {
 pub enum Type {
     Named(NamedType),
     Generic(GenericType),
-    /// Namespaced generic type like `builtin::array<T>`
+    /// Namespaced generic type like `ns::Type<T>` or `T::Assoc`
     NamespacedGeneric(NamespacedGenericType),
     Function(Box<FunctionType>),
     Tuple(Vec<Type>),
@@ -2688,13 +2688,13 @@ pub struct GenericType {
     pub span: Span,
 }
 
-/// Namespaced generic type like `builtin::array<T>`
+/// Namespaced generic type like `ns::Type<T>` or `T::Assoc`
 #[derive(Debug, Clone)]
 pub struct NamespacedGenericType {
     pub id: AstId,
-    /// Namespace (e.g., "builtin")
+    /// Namespace (e.g., "json" for `json::Value`, or a type parameter `T`)
     pub namespace: String,
-    /// Type name (e.g., "array")
+    /// Type name (e.g., "Value")
     pub name: String,
     /// Generic arguments
     pub args: Vec<Type>,

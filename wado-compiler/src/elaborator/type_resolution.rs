@@ -121,7 +121,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve a namespaced generic type like `builtin::array<T>` or `Self::Output`
+    /// Resolve a namespaced generic type like `ns::Type<T>` or `Self::Output`
     pub(super) fn resolve_namespaced_generic_type(
         &mut self,
         namespaced: &crate::ast::NamespacedGenericType,
@@ -206,29 +206,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
         }
 
-        if namespaced.namespace.as_str() == "builtin" {
-            if namespaced.name.as_str() == "array" {
-                if namespaced.args.len() != 1 {
-                    let _ = self.logger.error(TypeError::ArgumentCountMismatch {
-                        expected: 1,
-                        found: namespaced.args.len(),
-                        span: namespaced.span,
-                    });
-                    return TypeTable::ERROR;
-                }
-                let element_type = self.resolve_type(&namespaced.args[0]);
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_builtin_array(element_type)
-            } else {
-                let _ = self.logger.error(TypeError::UnknownType {
-                    name: format!("builtin::{}", namespaced.name),
-                    span: namespaced.span,
-                });
-                TypeTable::ERROR
-            }
-        } else if self
+        if self
             .sem
             .imports
             .namespace_imports

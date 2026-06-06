@@ -494,7 +494,7 @@ fn describe_resolved_type_kind(ty: &ResolvedType) -> String {
         ResolvedType::Function { .. } => "function type".to_string(),
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => "nested reference type".to_string(),
         ResolvedType::Reactive(_) => "reactive type".to_string(),
-        ResolvedType::BuiltinArray(_) => "builtin array".to_string(),
+        ResolvedType::BuiltinArray(_) => "array".to_string(),
         ResolvedType::TypePack { .. } => "type pack".to_string(),
         ResolvedType::Unit => "unit".to_string(),
         ResolvedType::Never => "never".to_string(),

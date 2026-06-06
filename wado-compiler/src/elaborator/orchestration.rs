@@ -2875,19 +2875,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 type_table.make_mut_ref(inner_type)
             }
             Type::NamespacedGeneric(namespaced) => {
-                // Handle builtin::array<T>
-                if namespaced.namespace == "builtin"
-                    && namespaced.name == "array"
-                    && let Some(elem_ty) = namespaced.args.first()
-                {
-                    let elem = Self::resolve_type_static_with_params(
-                        elem_ty,
-                        type_table,
-                        lookup,
-                        type_params,
-                    );
-                    return type_table.make_builtin_array(elem);
-                }
                 // Handle T::AssocType where T is a type parameter
                 if let Some(index) = type_params.iter().position(|p| p == &namespaced.namespace) {
                     let param_id =

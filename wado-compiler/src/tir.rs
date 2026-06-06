@@ -433,7 +433,7 @@ pub enum ResolvedType {
         /// when I: `IntoIterator`<Item = u8> and `IntoIterator::Iter`: Iterator<Item = `Self::Item`>)
         assoc_type_bindings: Vec<(String, TypeId)>,
     },
-    /// Raw GC array intrinsic (`builtin::array<T>`)
+    /// Raw GC array intrinsic (`Array<T>`)
     /// This is the underlying storage type for String and List<T> structs
     BuiltinArray(TypeId),
     /// Newtype: a distinct type wrapping a base type with the same representation.
@@ -991,7 +991,7 @@ impl TypeTable {
         }
     }
 
-    /// Create a raw GC array type (`builtin::array<T>`)
+    /// Create a raw GC array type (`Array<T>`)
     pub fn make_builtin_array(&mut self, element: TypeId) -> TypeId {
         self.intern(ResolvedType::BuiltinArray(element))
     }
