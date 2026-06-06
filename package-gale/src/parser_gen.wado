@@ -115,42 +115,11 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
         let lowered_rule = &lowered.parser_rules[i];
         gen_parse_fn(w, rule, lowered_rule, ctx);
     }
-    // Phase 4 — variant emission consumes `lowered.variant_rules`
-    // as its primary source. The follow-variant registry is
-    // populated in lock-step by `lower`'s element walks: every
-    // `RuleRef` arm in `lower::lower_op` / `lower::lower_scan_element`
-    // calls `ctx.intern_follow_variant`, which is idempotent on the
-    // canonical `(rule, mask, k_prefix_mask)` triple — so the same
-    // walk that builds the IR mints the ids, and
-    // `lower::lower_variant_rules` immediately lowers a body for each
-    // registered entry. By the time we get here every registry entry
-    // already has a matching `variant_rules` slot. Nothing in the
-    // emit path registers fresh variants — emit
-    // (`gen_parse_fn_named` / `gen_scan_function_named` / the LR
-    // helpers) only reads ids back through `ctx.follow_variants()`.
-    // The fixed-point loop below is defensive: it iterates the
-    // registry to a stable length so that any future emit-time
-    // registration (or a bug that re-adds one) gets noticed instead
-    // of silently producing a dangling `__follow_<id>` reference.
-    // The assertion captures the invariant explicitly — registry
-    // length must never exceed `variant_rules` length once
-    // `lower_with_ctx` has run.
-    let mut emitted_count = 0;
-    loop {
-        let entries = ctx.follow_variants();
-        let cur = entries.len();
-        if cur == emitted_count {
-            break;
-        }
-        for let mut idx = emitted_count; idx < cur; idx += 1 {
-            let entry = &entries[idx];
-            assert idx < lowered.variant_rules.len(), `gen_parser: follow-variant entry #{idx} ({entry.rule_name} mask=[{join_kinds(
-                &entry.mask,
-            )}]) lives in the registry without a matching lowered.variant_rules entry — lower's RuleRef arms (the only path that mints new entries via ctx.intern_follow_variant) and lower::lower_variant_rules (which lowers one body per entry) ran in lock-step before emit, so this assertion firing means a fresh registration leaked into the emit phase`;
-            emit_follow_variant_from_gir(w, &lowered.variant_rules[idx], ctx);
-        }
-        emitted_count = cur;
-    }
+    // The runtime-FOLLOW redesign retired per-(rule, mask) variant
+    // emission: each rule is emitted exactly once and threads the
+    // caller's continuation at runtime via the `follow` argument (see
+    // `follow_yields` / `FollowArg`). The follow-mask globals are
+    // emitted by `gen_follow_mask_globals` at the end of codegen.
     gen_parse_entry(w, lowered);
 }
 

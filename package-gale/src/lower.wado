@@ -228,14 +228,11 @@ pub fn lower_with_ctx(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut 
     for let rule of &grammar.parser_rules {
         parser_rules.push(lower_rule(rule, ctx, &empty_mask, &empty_k_mask));
     }
-    // Phase 2.6 — follow-variant body lowering. The walk above
-    // registered every variant the rule bodies trigger via
-    // `intern_follow_variant`; iterate the registry to lower one
-    // body per entry. Each variant's body lowering re-walks the
-    // rule with the variant's mask threaded through, which may
-    // register further variants whose own bodies must be lowered —
-    // loop to a fixed point.
-    let variant_rules = lower_variant_rules(&grammar.parser_rules, ctx);
+    // The runtime-FOLLOW redesign lowers each rule exactly once (above);
+    // there are no per-(rule, mask) variant bodies. `variant_rules` is
+    // retained as an empty list while `LoweredGrammar.variant_rules`
+    // exists.
+    let variant_rules: List<Rule> = [];
     // Phase 2.7 — pre-intern multi-element token-kind sets that
     // surface in dispatch branches and `Op::Excluded` kinds. The
     // resulting registry is the source of truth for `_gale_kind_set_<id>`
