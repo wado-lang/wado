@@ -795,25 +795,13 @@ fn "wado-compiler/tests/fixtures/http_client_request_full.wado/handle"(request) 
     let f_274: ref "core:prelude/format.wado//Formatter";
     let s_280: ref "core:prelude/string.wado//String";
     let f_314: ref "core:prelude/format.wado//Formatter";
-<<<<<<< HEAD
     let collected: ref "core:prelude//List<u8>";
     let repr_337: ref Array<u8>;
     let end_339: i32;
     let repr_341: ref Array<u8>;
     let end_343: i32;
-    opts = "wado-compiler/tests/fixtures/http_client_request_full.wado/__cm_binding__RequestOptions_new"();
-    drop("wado-compiler/tests/fixtures/http_client_request_full.wado/__cm_binding__RequestOptions_set_connect_timeout"(opts, struct.new "core:prelude/types.wado//Option<u64>::Some" { discriminant: 0, payload_0: 5000000000_i64 }));
-    req_headers = "wado-compiler/tests/fixtures/http_client_request_full.wado/__cm_binding__Fields_new"();
-    drop("wado-compiler/tests/fixtures/http_client_request_full.wado/__cm_binding__Fields_append"(req_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self_235 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text/plain"), used: 10 }; struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_235.repr, used: self_235.used, index: 0 })));
-||||||| d3d2fb33
-    opts = "wado-compiler/tests/fixtures/http_client_request_full.wado/__cm_binding__RequestOptions_new"();
-    drop("wado-compiler/tests/fixtures/http_client_request_full.wado/__cm_binding__RequestOptions_set_connect_timeout"(opts, struct.new "core:prelude/types.wado//Option<u64>::Some" { discriminant: 0, payload_0: 5000000000_i64 }));
-    req_headers = "wado-compiler/tests/fixtures/http_client_request_full.wado/__cm_binding__Fields_new"();
-    drop("wado-compiler/tests/fixtures/http_client_request_full.wado/__cm_binding__Fields_append"(req_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self_235 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text/plain"), used: 10 }; struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_235.repr, used: self_235.used, index: 0 })));
-=======
     drop("wado-compiler/tests/fixtures/http_client_request_full.wado/__cm_binding__RequestOptions_set_connect_timeout"(local.tee opts("wado-compiler/tests/fixtures/http_client_request_full.wado/__cm_binding__RequestOptions_new"()), struct.new "core:prelude/types.wado//Option<u64>::Some" { discriminant: 0, payload_0: 5000000000_i64 }));
     drop("wado-compiler/tests/fixtures/http_client_request_full.wado/__cm_binding__Fields_append"(local.tee req_headers("wado-compiler/tests/fixtures/http_client_request_full.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self_235 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text/plain"), used: 10 }; struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_235.repr, used: self_235.used, index: 0 })));
->>>>>>> origin/main
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
     let __mv_lo_1: i32;
@@ -2951,9 +2939,7 @@ fn "core:prelude/slice.wado/ArrayIter<u8>::collect"(self) {
     let remaining: i32;
     let repr_2: ref Array<u8>;
     let a: i32;
-    a = self.end - self.index;
-    remaining = select i32(a > 0, a, 0);
-    repr_2 = builtin::array_new<u8>(remaining);
+    repr_2 = builtin::array_new<u8>(local.tee remaining(a = self.end - self.index; select i32(a > 0, a, 0)));
     if remaining > 0 {
         builtin::array_copy<u8>(repr_2, 0, self.repr, self.index, remaining);
     }

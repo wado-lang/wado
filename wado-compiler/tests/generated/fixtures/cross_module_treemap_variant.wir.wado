@@ -706,20 +706,8 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/strin
     let new_repr: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>>";
     let a: i32;
     capacity = builtin::array_len(self.repr);
-<<<<<<< HEAD
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "tuple//[core:prelude/string.wado/String, ./sub/cross_module_treemap_variant_helper.wado/Value]">(new_capacity);
+    new_repr = builtin::array_new<ref "tuple//[core:prelude/string.wado/String, ./sub/cross_module_treemap_variant_helper.wado/Value]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
     builtin::array_copy<ref "tuple//[core:prelude/string.wado/String, ./sub/cross_module_treemap_variant_helper.wado/Value]">(new_repr, 0, self.repr, 0, self.used);
-||||||| d3d2fb33
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "tuple//[String, Value]">(new_capacity);
-    builtin::array_copy<ref "tuple//[String, Value]">(new_repr, 0, self.repr, 0, self.used);
-=======
-    new_repr = builtin::array_new<ref "tuple//[String, Value]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "tuple//[String, Value]">(new_repr, 0, self.repr, 0, self.used);
->>>>>>> origin/main
     self.repr = new_repr;
 }
 

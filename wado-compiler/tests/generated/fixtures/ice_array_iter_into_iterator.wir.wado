@@ -222,7 +222,6 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
     if b0 <u 128 {
         return b0, 1, 1;
     }
-<<<<<<< HEAD
     if b0 <u 194 {
         return 0, 1, 0;
     }
@@ -335,18 +334,6 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
         return code_12, 4, 1;
     }
     return 0, 1, 0;
-||||||| d3d2fb33
-    a_7 = capacity * 2;
-    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
-    new_capacity = select i32(a_5 > 8, a_5, 8);
-    new_repr = builtin::array_new<u8>(new_capacity);
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-=======
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
->>>>>>> origin/main
 }
 
 fn "core:prelude/string.wado/String::from_utf8_slice"(bytes) {
@@ -389,9 +376,7 @@ fn "core:prelude/slice.wado/ArrayIter<u8>::collect"(self) {
     let remaining: i32;
     let repr_2: ref Array<u8>;
     let a: i32;
-    a = self.end - self.index;
-    remaining = select i32(a > 0, a, 0);
-    repr_2 = builtin::array_new<u8>(remaining);
+    repr_2 = builtin::array_new<u8>(local.tee remaining(a = self.end - self.index; select i32(a > 0, a, 0)));
     if remaining > 0 {
         builtin::array_copy<u8>(repr_2, 0, self.repr, self.index, remaining);
     }

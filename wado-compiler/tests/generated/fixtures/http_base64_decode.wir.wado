@@ -1752,8 +1752,7 @@ fn "core:prelude/string.wado/String::from_utf8_lossy<core:prelude/list.wado/List
         return s;
     } else {
     }
-    len = slice.end - slice.start;
-    builder = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(len), used: 0 };
+    builder = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee len(slice.end - slice.start)), used: 0 };
     i = 0;
     b201: block {
         l202: loop {
@@ -1812,9 +1811,7 @@ fn "core:prelude/slice.wado/ArrayIter<u8>::collect"(self) {
     let remaining: i32;
     let repr_2: ref Array<u8>;
     let a: i32;
-    a = self.end - self.index;
-    remaining = select i32(a > 0, a, 0);
-    repr_2 = builtin::array_new<u8>(remaining);
+    repr_2 = builtin::array_new<u8>(local.tee remaining(a = self.end - self.index; select i32(a > 0, a, 0)));
     if remaining > 0 {
         builtin::array_copy<u8>(repr_2, 0, self.repr, self.index, remaining);
     }

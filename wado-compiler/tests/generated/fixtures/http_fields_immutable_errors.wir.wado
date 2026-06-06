@@ -1342,15 +1342,7 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding_
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:http/Fields::copy_all"(self, __outptr);
     __base_2 = builtin::load_i32(__outptr);
-<<<<<<< HEAD
-    __count_3 = builtin::load_i32(__outptr + 4);
-    __result_4 = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(__count_3), used: 0 };
-||||||| d3d2fb33
-    __count_3 = builtin::load_i32(__outptr + 4);
-    __result_4 = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>" { repr: builtin::array_new<ref "tuple//[String, List<u8>]">(__count_3), used: 0 };
-=======
-    __result_4 = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>" { repr: builtin::array_new<ref "tuple//[String, List<u8>]">(local.tee __count_3(builtin::load_i32(__outptr + 4))), used: 0 };
->>>>>>> origin/main
+    __result_4 = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(local.tee __count_3(builtin::load_i32(__outptr + 4))), used: 0 };
     __i_5 = 0;
     b116: block {
         l117: loop {
@@ -1856,20 +1848,8 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/strin
     let new_repr: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>";
     let a: i32;
     capacity = builtin::array_len(self.repr);
-<<<<<<< HEAD
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(new_capacity);
+    new_repr = builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
     builtin::array_copy<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(new_repr, 0, self.repr, 0, self.used);
-||||||| d3d2fb33
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "tuple//[String, List<u8>]">(new_capacity);
-    builtin::array_copy<ref "tuple//[String, List<u8>]">(new_repr, 0, self.repr, 0, self.used);
-=======
-    new_repr = builtin::array_new<ref "tuple//[String, List<u8>]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "tuple//[String, List<u8>]">(new_repr, 0, self.repr, 0, self.used);
->>>>>>> origin/main
     self.repr = new_repr;
 }
 

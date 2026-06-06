@@ -1521,15 +1521,7 @@ fn "wado-compiler/tests/fixtures/httpbin_anything.wado/__cm_binding__Fields_copy
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:http/Fields::copy_all"(self, __outptr);
     __base_2 = builtin::load_i32(__outptr);
-<<<<<<< HEAD
-    __count_3 = builtin::load_i32(__outptr + 4);
-    __result_4 = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(__count_3), used: 0 };
-||||||| d3d2fb33
-    __count_3 = builtin::load_i32(__outptr + 4);
-    __result_4 = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>" { repr: builtin::array_new<ref "tuple//[String, List<u8>]">(__count_3), used: 0 };
-=======
-    __result_4 = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>" { repr: builtin::array_new<ref "tuple//[String, List<u8>]">(local.tee __count_3(builtin::load_i32(__outptr + 4))), used: 0 };
->>>>>>> origin/main
+    __result_4 = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>" { repr: builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(local.tee __count_3(builtin::load_i32(__outptr + 4))), used: 0 };
     __i_5 = 0;
     b73: block {
         l74: loop {
@@ -2561,8 +2553,7 @@ fn "core:base64/encode_impl"(data, table, pad) {
         return struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     }
     remainder = len % 3;
-    capacity = ((len + 2) / 3) * 4;
-    out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity), used: 0 };
+    out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity(((len + 2) / 3) * 4)), used: 0 };
     i = 0;
     _licm_used_46 = data.used;
     _licm_repr_47 = data.repr;
@@ -4732,16 +4723,14 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal"(self, f) {
     let self_13: ref "core:prelude/string.wado//String";
     is_negative = self < 0_i64;
     if self == -9223372036854775808_i64 {
-        remaining_digits = "core:prelude/primitive.wado/count_digits_i64"(922337203685477580_i64);
-        digit_count_6 = remaining_digits + 1;
+        digit_count_6 = local.tee remaining_digits("core:prelude/primitive.wado/count_digits_i64"(922337203685477580_i64)) + 1;
         offset_7 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, 1, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_6);
         self_12 = f.buf;
         repr = self_12.repr;
         "core:prelude/primitive.wado/write_decimal_digits"(repr, offset_7, 922337203685477580_i64, remaining_digits);
         builtin::array_set_u8(repr, offset_7 + remaining_digits, 56);
     } else {
-        abs_val = select i64(is_negative, 0_i64 - self, self);
-        digit_count_10 = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
+        digit_count_10 = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - self, self)));
         offset_11 = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count_10);
         "core:prelude/primitive.wado/write_decimal_digits"(self_13 = f.buf; self_13.repr, offset_11, abs_val, digit_count_10);
     }
@@ -4790,8 +4779,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
             if temp >= 0_i64 {
                 temp = temp / 10_i64;
             } else {
-                signed_rem_7 = temp % 10_i64;
-                rem_adjusted_8 = signed_rem_7 + 6_i64;
+                rem_adjusted_8 = local.tee signed_rem_7(temp % 10_i64) + 6_i64;
                 signed_quot_9 = temp / 10_i64;
                 carry_10 = 0_i64;
                 if rem_adjusted_8 < 0_i64 {
@@ -4818,8 +4806,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal"(self, f) {
                 digit = builtin::i32_wrap_i64(temp % 10_i64);
                 temp = temp / 10_i64;
             } else {
-                signed_rem_15 = temp % 10_i64;
-                rem_adjusted_16 = signed_rem_15 + 6_i64;
+                rem_adjusted_16 = local.tee signed_rem_15(temp % 10_i64) + 6_i64;
                 if rem_adjusted_16 >= 0_i64 {
                     digit = builtin::i32_wrap_i64(rem_adjusted_16);
                 } else {
@@ -5879,8 +5866,7 @@ fn "core:prelude/string.wado/String::from_utf8_lossy<core:prelude/list.wado/List
         return s;
     } else {
     }
-    len = slice.end - slice.start;
-    builder = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(len), used: 0 };
+    builder = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee len(slice.end - slice.start)), used: 0 };
     i = 0;
     b690: block {
         l691: loop {
@@ -5926,8 +5912,7 @@ fn "core:prelude/string.wado/String::from_utf8_lossy<wasi:http/types.wado/FieldV
         return s;
     } else {
     }
-    len = slice.end - slice.start;
-    builder = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(len), used: 0 };
+    builder = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee len(slice.end - slice.start)), used: 0 };
     i = 0;
     b695: block {
         l696: loop {
@@ -6137,9 +6122,7 @@ fn "core:prelude/slice.wado/ArrayIter<u8>::collect"(self) {
     let remaining: i32;
     let repr_2: ref Array<u8>;
     let a: i32;
-    a = self.end - self.index;
-    remaining = select i32(a > 0, a, 0);
-    repr_2 = builtin::array_new<u8>(remaining);
+    repr_2 = builtin::array_new<u8>(local.tee remaining(a = self.end - self.index; select i32(a > 0, a, 0)));
     if remaining > 0 {
         builtin::array_copy<u8>(repr_2, 0, self.repr, self.index, remaining);
     }
@@ -6240,20 +6223,8 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/strin
     let new_repr: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>";
     let a: i32;
     capacity = builtin::array_len(self.repr);
-<<<<<<< HEAD
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(new_capacity);
+    new_repr = builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
     builtin::array_copy<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(new_repr, 0, self.repr, 0, self.used);
-||||||| d3d2fb33
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "tuple//[String, List<u8>]">(new_capacity);
-    builtin::array_copy<ref "tuple//[String, List<u8>]">(new_repr, 0, self.repr, 0, self.used);
-=======
-    new_repr = builtin::array_new<ref "tuple//[String, List<u8>]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "tuple//[String, List<u8>]">(new_repr, 0, self.repr, 0, self.used);
->>>>>>> origin/main
     self.repr = new_repr;
 }
 
@@ -6274,20 +6245,8 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/strin
     let new_repr: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:value/Value>>";
     let a: i32;
     capacity = builtin::array_len(self.repr);
-<<<<<<< HEAD
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:value/Value]">(new_capacity);
+    new_repr = builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:value/Value]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
     builtin::array_copy<ref "tuple//[core:prelude/string.wado/String, core:value/Value]">(new_repr, 0, self.repr, 0, self.used);
-||||||| d3d2fb33
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "tuple//[String, Value]">(new_capacity);
-    builtin::array_copy<ref "tuple//[String, Value]">(new_repr, 0, self.repr, 0, self.used);
-=======
-    new_repr = builtin::array_new<ref "tuple//[String, Value]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "tuple//[String, Value]">(new_repr, 0, self.repr, 0, self.used);
->>>>>>> origin/main
     self.repr = new_repr;
 }
 
@@ -6409,20 +6368,8 @@ fn "core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/strin
     let new_repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
     let a: i32;
     capacity = builtin::array_len(self.repr);
-<<<<<<< HEAD
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(new_capacity);
+    new_repr = builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
     builtin::array_copy<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(new_repr, 0, self.repr, 0, self.used);
-||||||| d3d2fb33
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:json_value/Value>">(new_capacity);
-    builtin::array_copy<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:json_value/Value>">(new_repr, 0, self.repr, 0, self.used);
-=======
-    new_repr = builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:json_value/Value>">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:json_value/Value>">(new_repr, 0, self.repr, 0, self.used);
->>>>>>> origin/main
     self.repr = new_repr;
 }
 

@@ -240,15 +240,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/run"() with St
     open_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/__cm_binding__Descriptor_open_at"(local.tee dir(if builtin::unlikely(0 >= dirs.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-<<<<<<< HEAD
-    }; builtin::array_get<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0).0;
-    open_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 }, 0, 1));
-||||||| d3d2fb33
-    }; builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0).0;
-    open_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 }, 0, 1));
-=======
-    }; builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0).0), 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 }, 0, 1));
->>>>>>> origin/main
+    }; builtin::array_get<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0).0), 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello.txt"), used: 9 }, 0, 1));
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(open_result) {
         file = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(open_result).payload_0;
         __local_10 = "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/__cm_binding__Descriptor_read_via_stream"(file, 0_i64);
@@ -303,15 +295,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado/__cm_binding__
     let arr: ref Array<u8>;
     "wasi/wasi:filesystem/Preopens::get_directories"(local.tee __outptr("mem/realloc"(0, 0, 4, 8)));
     __base = builtin::load_i32(__outptr);
-<<<<<<< HEAD
-    __count = builtin::load_i32(__outptr + 4);
-    __result = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(__count), used: 0 };
-||||||| d3d2fb33
-    __count = builtin::load_i32(__outptr + 4);
-    __result = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "tuple//[Descriptor, String]">(__count), used: 0 };
-=======
-    __result = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "tuple//[Descriptor, String]">(local.tee __count(builtin::load_i32(__outptr + 4))), used: 0 };
->>>>>>> origin/main
+    __result = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(local.tee __count(builtin::load_i32(__outptr + 4))), used: 0 };
     __i = 0;
     b6: block {
         l7: loop {
@@ -707,20 +691,8 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<wasi:filesystem/ty
     let new_repr: ref "Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>";
     let a: i32;
     capacity = builtin::array_len(self.repr);
-<<<<<<< HEAD
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(new_capacity);
+    new_repr = builtin::array_new<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
     builtin::array_copy<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(new_repr, 0, self.repr, 0, self.used);
-||||||| d3d2fb33
-    a = capacity * 2;
-    new_capacity = select i32(a > 4, a, 4);
-    new_repr = builtin::array_new<ref "tuple//[Descriptor, String]">(new_capacity);
-    builtin::array_copy<ref "tuple//[Descriptor, String]">(new_repr, 0, self.repr, 0, self.used);
-=======
-    new_repr = builtin::array_new<ref "tuple//[Descriptor, String]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "tuple//[Descriptor, String]">(new_repr, 0, self.repr, 0, self.used);
->>>>>>> origin/main
     self.repr = new_repr;
 }
 
