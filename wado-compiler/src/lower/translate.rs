@@ -29,7 +29,6 @@ use crate::nir_arena::{
     ExprId, ExprKind, ExprNode, PatId, PatKind, PatNode, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
-use crate::token::Span;
 use crate::tir;
 use crate::tir::{
     CallArg, ClosureFunctor, FunctionRef, MonomorphInfo, TirBlock, TirCapture, TirEnum,
@@ -38,6 +37,7 @@ use crate::tir::{
     TirStmtKind, TirStruct, TirStructField, TirStructPatternField, TirTest, TirTypeParam,
     TirUnaryOp, TirVariantCase, TirVariantDecl, TypeTable,
 };
+use crate::token::Span;
 
 /// Translate a [`FlatPackage`] (TIR-shaped) into a [`NirPackage`] (NIR-shaped).
 ///
@@ -251,10 +251,11 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
 
     /// Push an expression node into the arena, returning its stable id.
     fn alloc_expr(&self, kind: ExprKind, type_id: tir::TypeId, span: Span) -> ExprId {
-        self.arena
-            .borrow_mut()
-            .exprs
-            .push(ExprNode { kind, type_id, span })
+        self.arena.borrow_mut().exprs.push(ExprNode {
+            kind,
+            type_id,
+            span,
+        })
     }
 
     /// Push a statement node into the arena.
