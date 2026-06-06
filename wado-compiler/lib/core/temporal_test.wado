@@ -151,3 +151,104 @@ test "ZonedDateTime Display traps on an IANA zone name" {
     // Resolving an IANA offset needs a tz database this MVP does not bundle.
     let _ = `{zdt}`;
 }
+
+test "ZonedDateTime exposes clock-field accessors" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 },
+        time_zone: "UTC",
+    };
+    assert zdt.year() == 2023;
+    assert zdt.month() == 11;
+    assert zdt.day() == 14;
+    assert zdt.hour() == 22;
+    assert zdt.minute() == 13;
+    assert zdt.second() == 20;
+    assert zdt.millisecond() == 123;
+    assert zdt.microsecond() == 456;
+    assert zdt.nanosecond() == 789;
+}
+
+test "ZonedDateTime accessors apply the fixed offset" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 1_700_000_000, nanoseconds: 0 },
+        time_zone: "+09:00",
+    };
+    // 2023-11-14T22:13:20Z is 2023-11-15T07:13:20+09:00.
+    assert zdt.year() == 2023;
+    assert zdt.month() == 11;
+    assert zdt.day() == 15;
+    assert zdt.hour() == 7;
+    assert zdt.day_of_week() == 3;
+}
+
+test "ZonedDateTime calendar-derived accessors" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 1_700_000_000, nanoseconds: 0 },
+        time_zone: "UTC",
+    };
+    assert zdt.day_of_week() == 2;
+    assert zdt.day_of_year() == 318;
+    assert zdt.days_in_month() == 30;
+    assert zdt.days_in_year() == 365;
+    assert !zdt.in_leap_year();
+    assert zdt.months_in_year() == 12;
+}
+
+test "ZonedDateTime accessors handle leap years" {
+    // 2024-01-01T00:00:00Z (a Monday).
+    let jan1 = ZonedDateTime {
+        instant: Instant { seconds: 1_704_067_200, nanoseconds: 0 },
+        time_zone: "UTC",
+    };
+    assert jan1.year() == 2024;
+    assert jan1.month() == 1;
+    assert jan1.day() == 1;
+    assert jan1.day_of_week() == 1;
+    assert jan1.in_leap_year();
+    assert jan1.days_in_year() == 366;
+
+    // 2024-02-29T00:00:00Z exists only in a leap year.
+    let leap_day = ZonedDateTime {
+        instant: Instant { seconds: 1_709_164_800, nanoseconds: 0 },
+        time_zone: "UTC",
+    };
+    assert leap_day.month() == 2;
+    assert leap_day.day() == 29;
+    assert leap_day.days_in_month() == 29;
+    assert leap_day.day_of_year() == 60;
+}
+
+test "ZonedDateTime accessors handle instants before the epoch" {
+    // 1969-12-31T23:59:59Z (a Wednesday).
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: -1, nanoseconds: 0 },
+        time_zone: "UTC",
+    };
+    assert zdt.year() == 1969;
+    assert zdt.month() == 12;
+    assert zdt.day() == 31;
+    assert zdt.hour() == 23;
+    assert zdt.minute() == 59;
+    assert zdt.second() == 59;
+    assert zdt.day_of_week() == 3;
+}
+
+#[expect_trap]
+test "ZonedDateTime accessors trap on an IANA zone name" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 0, nanoseconds: 0 },
+        time_zone: "Asia/Tokyo",
+    };
+    let _ = zdt.year();
+}
+
+test "Instant exposes epoch convenience accessors" {
+    let t = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    assert t.epoch_milliseconds() == 1_700_000_000_123;
+    assert t.epoch_nanoseconds() == 1_700_000_000_123_456_789;
+
+    // One nanosecond before the epoch.
+    let before = Instant { seconds: -1, nanoseconds: 999_999_999 };
+    assert before.epoch_milliseconds() == -1;
+    assert before.epoch_nanoseconds() == -1;
+}

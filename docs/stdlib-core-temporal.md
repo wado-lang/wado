@@ -59,6 +59,19 @@ Sub-second component, always in `0..1_000_000_000`. Incrementing
 (e.g. one nanosecond before the epoch is
 `Instant { seconds: -1, nanoseconds: 999_999_999 }`).
 
+#### `pub fn epoch_milliseconds(&self) -> i64`
+
+Milliseconds since the Unix epoch (`Temporal.Instant.epochMilliseconds`).
+
+#### `pub fn epoch_nanoseconds(&self) -> i64`
+
+Nanoseconds since the Unix epoch (`Temporal.Instant.epochNanoseconds`).
+
+Temporal uses a BigInt; this returns an `i64` and so is only valid within
+≈ ±292 years of the epoch (1678..=2262) — outside that range the
+multiplication traps. Use the `seconds`/`nanoseconds` fields directly for
+the full range.
+
 #### `impl Display for Instant`
 
 ##### `fn fmt(&self, f: &mut Formatter)`
@@ -90,6 +103,66 @@ The exact instant.
 IANA time-zone identifier (e.g. `"America/New_York"`, `"UTC"`) or a
 fixed UTC offset (e.g. `"+09:00"`). Mirrors the Temporal time-zone slot,
 which is also a string after the removal of `Temporal.TimeZone`.
+
+#### `pub fn year(&self) -> i32`
+
+ISO year in the zone's local time. May be negative or beyond four digits.
+
+#### `pub fn month(&self) -> i32`
+
+Month of the year, `1..=12`.
+
+#### `pub fn day(&self) -> i32`
+
+Day of the month, `1..=31`.
+
+#### `pub fn hour(&self) -> i32`
+
+Hour of the day, `0..=23`.
+
+#### `pub fn minute(&self) -> i32`
+
+Minute of the hour, `0..=59`.
+
+#### `pub fn second(&self) -> i32`
+
+Second of the minute, `0..=59`.
+
+#### `pub fn millisecond(&self) -> i32`
+
+Millisecond of the second, `0..=999`.
+
+#### `pub fn microsecond(&self) -> i32`
+
+Microsecond of the millisecond, `0..=999`.
+
+#### `pub fn nanosecond(&self) -> i32`
+
+Nanosecond of the microsecond, `0..=999`.
+
+#### `pub fn day_of_week(&self) -> i32`
+
+Day of the week, `1` (Monday) through `7` (Sunday), per ISO 8601.
+
+#### `pub fn day_of_year(&self) -> i32`
+
+Day of the year, `1..=366`.
+
+#### `pub fn days_in_month(&self) -> i32`
+
+Number of days in this month, `28..=31`.
+
+#### `pub fn days_in_year(&self) -> i32`
+
+Number of days in this year, `365` or `366`.
+
+#### `pub fn in_leap_year(&self) -> bool`
+
+Whether this year is a leap year in the ISO 8601 calendar.
+
+#### `pub fn months_in_year(&self) -> i32`
+
+Number of months in this year — always `12` for ISO 8601.
 
 #### `impl Display for ZonedDateTime`
 

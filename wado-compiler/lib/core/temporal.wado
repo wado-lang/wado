@@ -257,3 +257,168 @@ fn format_offset_suffix(offset_seconds: i64) -> String {
     let minutes = magnitude % 3600 / 60;
     return `{sign}{hours:02}:{minutes:02}`;
 }
+
+// Accessors.
+//
+// Following Temporal, the broken-down wall-clock fields live on `ZonedDateTime`
+// (an instant has no zone, so civil fields are undefined for it). `Instant`
+// exposes only epoch-based convenience values. The calendar is always ISO 8601.
+
+impl Instant {
+    /// Milliseconds since the Unix epoch (`Temporal.Instant.epochMilliseconds`).
+    pub fn epoch_milliseconds(&self) -> i64 {
+        return self.seconds * 1000 + self.nanoseconds as i64 / 1_000_000;
+    }
+
+    /// Nanoseconds since the Unix epoch (`Temporal.Instant.epochNanoseconds`).
+    ///
+    /// Temporal uses a BigInt; this returns an `i64` and so is only valid within
+    /// ≈ ±292 years of the epoch (1678..=2262) — outside that range the
+    /// multiplication traps. Use the `seconds`/`nanoseconds` fields directly for
+    /// the full range.
+    pub fn epoch_nanoseconds(&self) -> i64 {
+        return self.seconds * 1_000_000_000 + self.nanoseconds as i64;
+    }
+}
+
+impl ZonedDateTime {
+    /// ISO year in the zone's local time. May be negative or beyond four digits.
+    pub fn year(&self) -> i32 {
+        let [_, year, _, _, _] = self.local_parts();
+        return year as i32;
+    }
+
+    /// Month of the year, `1..=12`.
+    pub fn month(&self) -> i32 {
+        let [_, _, month, _, _] = self.local_parts();
+        return month as i32;
+    }
+
+    /// Day of the month, `1..=31`.
+    pub fn day(&self) -> i32 {
+        let [_, _, _, day, _] = self.local_parts();
+        return day as i32;
+    }
+
+    /// Hour of the day, `0..=23`.
+    pub fn hour(&self) -> i32 {
+        let [_, _, _, _, second_of_day] = self.local_parts();
+        return (second_of_day / 3600) as i32;
+    }
+
+    /// Minute of the hour, `0..=59`.
+    pub fn minute(&self) -> i32 {
+        let [_, _, _, _, second_of_day] = self.local_parts();
+        return (second_of_day % 3600 / 60) as i32;
+    }
+
+    /// Second of the minute, `0..=59`.
+    pub fn second(&self) -> i32 {
+        let [_, _, _, _, second_of_day] = self.local_parts();
+        return (second_of_day % 60) as i32;
+    }
+
+    /// Millisecond of the second, `0..=999`.
+    pub fn millisecond(&self) -> i32 {
+        return (self.instant.nanoseconds / 1_000_000) as i32;
+    }
+
+    /// Microsecond of the millisecond, `0..=999`.
+    pub fn microsecond(&self) -> i32 {
+        return (self.instant.nanoseconds / 1000 % 1000) as i32;
+    }
+
+    /// Nanosecond of the microsecond, `0..=999`.
+    pub fn nanosecond(&self) -> i32 {
+        return (self.instant.nanoseconds % 1000) as i32;
+    }
+
+    /// Day of the week, `1` (Monday) through `7` (Sunday), per ISO 8601.
+    pub fn day_of_week(&self) -> i32 {
+        let [days, _, _, _, _] = self.local_parts();
+        return (floor_mod(days + 3, 7) + 1) as i32;
+    }
+
+    /// Day of the year, `1..=366`.
+    pub fn day_of_year(&self) -> i32 {
+        let [days, year, _, _, _] = self.local_parts();
+        return (days - days_from_civil(year, 1, 1) + 1) as i32;
+    }
+
+    /// Number of days in this month, `28..=31`.
+    pub fn days_in_month(&self) -> i32 {
+        let [_, year, month, _, _] = self.local_parts();
+        return days_in_month_value(year, month) as i32;
+    }
+
+    /// Number of days in this year, `365` or `366`.
+    pub fn days_in_year(&self) -> i32 {
+        let [_, year, _, _, _] = self.local_parts();
+        if is_leap_year(year) {
+            return 366;
+        }
+        return 365;
+    }
+
+    /// Whether this year is a leap year in the ISO 8601 calendar.
+    pub fn in_leap_year(&self) -> bool {
+        let [_, year, _, _, _] = self.local_parts();
+        return is_leap_year(year);
+    }
+
+    /// Number of months in this year — always `12` for ISO 8601.
+    pub fn months_in_year(&self) -> i32 {
+        return 12;
+    }
+
+    /// Local broken-down parts `[days_since_epoch, year, month, day,
+    /// second_of_day]` after applying the fixed UTC offset. Traps on an IANA
+    /// zone name (offset resolution is future work).
+    fn local_parts(&self) -> [i64, i64, i64, i64, i64] {
+        let offset = parse_fixed_offset(&self.time_zone);
+        let local = self.instant.seconds + offset;
+        let [days, second_of_day] = epoch_days_and_seconds(local);
+        let [year, month, day] = civil_from_days(days);
+        return [days, year, month, day, second_of_day];
+    }
+}
+
+/// Non-negative remainder of `a` modulo positive `m`.
+fn floor_mod(a: i64, m: i64) -> i64 {
+    let r = a % m;
+    if r < 0 {
+        return r + m;
+    }
+    return r;
+}
+
+/// Whether `year` is a leap year in the proleptic Gregorian (ISO 8601) calendar.
+fn is_leap_year(year: i64) -> bool {
+    return year % 4 == 0 && year % 100 != 0 || year % 400 == 0;
+}
+
+/// Number of days in `month` (`1..=12`) of `year`.
+fn days_in_month_value(year: i64, month: i64) -> i64 {
+    if month == 2 {
+        if is_leap_year(year) {
+            return 29;
+        }
+        return 28;
+    }
+    if month == 4 || month == 6 || month == 9 || month == 11 {
+        return 30;
+    }
+    return 31;
+}
+
+/// Days since 1970-01-01 for a proleptic Gregorian date. Howard Hinnant's
+/// `days_from_civil`, the inverse of `civil_from_days`.
+fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let mp = if month > 2 { month - 3 } else { month + 9 };
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + doe - 719468;
+}
