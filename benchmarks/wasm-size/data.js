@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780744737717,
+  "lastUpdate": 1780747526144,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30769,6 +30769,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4bbdb04bbcab285c0dda49fdd1738299858250de"
         },
         "date": 1780744737372,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8780,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15232,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 456150,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "55e6bcf99b0009815c6c87080b2ef5da549e03ca",
+          "message": "Merge pull request #1317 from wado-lang/claude/iso8601-core-temporal-QiAyO\n\nfeat(core:temporal): bridge wasi:clocks Instant with From, fixing cross-module same-name dispatch",
+          "timestamp": "2026-06-06T20:58:00+09:00",
+          "tree_id": "ab9acfc4c2166aab99b4f48ae515a2e3178f00f7",
+          "url": "https://github.com/wado-lang/wado/commit/55e6bcf99b0009815c6c87080b2ef5da549e03ca"
+        },
+        "date": 1780747525792,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
