@@ -448,6 +448,7 @@ fn rebind_scan_self_ref_variant_id_deep(se: ScanElement, rule_snake: &String, va
             if rc.target_snake == *rule_snake {
                 ScanElement::RuleCall(ScanRuleCallElem {
                     target_snake: rc.target_snake,
+                    follow_arg: rc.follow_arg,
                     variant_id: Option::<i32>::Some(variant_id),
                     min_prec_arg: rc.min_prec_arg,
                 });
@@ -1394,8 +1395,6 @@ fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_idx: i32, ctx: &mut GenContex
             variant_mask,
             variant_k_prefix_mask,
             &empty_k_prefix(),
-            FollowArg::NoFollow,
-            false,
         ));
     }
     return ScanBody { elements };
@@ -1863,8 +1862,6 @@ fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext, variant_mask: &List<
             variant_mask,
             variant_k_prefix_mask,
             &empty_k_prefix(),
-            FollowArg::NoFollow,
-            false,
         ));
     }
     return ScanBody { elements };
@@ -1954,8 +1951,6 @@ fn lower_scan_group(g: &GroupElement, ctx: &mut GenContext, outer_follow: &List<
                 variant_mask,
                 variant_k_prefix_mask,
                 &empty_k_prefix(),
-                FollowArg::NoFollow,
-                false,
             ));
         }
         let mut visiting: List<String> = [];
@@ -2028,8 +2023,6 @@ fn lower_general_scan_group(alts: &List<Alternative>, ctx: &mut GenContext, oute
                 variant_mask,
                 variant_k_prefix_mask,
                 &empty_k_prefix(),
-                FollowArg::NoFollow,
-                false,
             ));
         }
         bodies.push(ScanBody { elements });
@@ -4284,6 +4277,7 @@ pub fn rebind_op_field(op: Op, new_field: &String, new_dedup_base: &String) -> O
             body_is_single_alt_group: rep.body_is_single_alt_group,
             body_second_position_first: rep.body_second_position_first,
             body_shape: rep.body_shape,
+            gate_caller_follow: rep.gate_caller_follow,
         }),
         Group(g) => Op::Group(GroupOp {
             shape: rebind_group_shape(g.shape, new_field),
