@@ -19,13 +19,16 @@ Relationship to `wasi:clocks`: `wasi:clocks` exposes its own `Instant`
 record (`{ seconds, nanoseconds }`) for the system clock. That type is a
 Component Model binding — pinned to a specific WASI version and regenerated
 by `wado-from-idl` — whereas `core:temporal`'s `Instant` is a plain,
-version-independent Wado type that will grow methods. They share a name and
-field layout deliberately: it is "the same concept, a different type", so a
-future host bridge between them is a field-for-field copy. `core:temporal`
-keeps no dependency on `wasi:clocks`, so it (and `core:cbor` on top of it)
-stays usable without pulling in a WASI import.
+version-independent Wado type that grows methods. They share a name and
+field layout deliberately: it is "the same concept, a different type". To
+bridge them without making either depend on the other's representation,
+`core:temporal` provides `From` impls both ways (a field-for-field copy), so
+a clock reading converts with `Instant::from(SystemClock::now())` and back
+with `ClockInstant::from`. Merely naming the `wasi:clocks` record in these
+impls is not a runtime use of the clock, so it pulls in no WASI import for a
+component that never calls one.
 
-Both types are ISO 8601 only and so store no calendar.
+Both `core:temporal` types are ISO 8601 only and so store no calendar.
 
 ```
 use { Instant, ZonedDateTime } from "core:temporal";
@@ -126,6 +129,10 @@ exactly. This is the serde wire form.
 #### `impl Deserialize for Instant`
 
 ##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<Instant, DeserializeError>`
+
+#### `impl From<ClockInstant> for Instant`
+
+##### `fn from(value: ClockInstant) -> Instant`
 
 ### `pub struct ZonedDateTime`
 

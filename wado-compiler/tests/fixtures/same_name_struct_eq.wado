@@ -1,0 +1,24 @@
+// Regression: two structs that share a name across modules each get their own
+// auto-derived `Eq`, and `==` must dispatch to the right one.
+//
+// The operator-dispatch code resolved the `eq` impl's module by the bare struct
+// name, so both `Stamp^Eq::eq` call sites routed to whichever module's `Stamp`
+// registered first. At codegen the surviving `eq` then received the other
+// module's struct, producing an invalid core Wasm module (a `(ref $type)`
+// mismatch). The module is now taken from the receiver's actual type.
+
+use { Stamp as A } from "./sub/same_name_struct_eq_a.wado";
+use { Stamp as B } from "./sub/same_name_struct_eq_b.wado";
+
+test "same-named cross-module structs each dispatch their own Eq" {
+    let a1 = A { seconds: 5, nanoseconds: 7 };
+    let a2 = A { seconds: 5, nanoseconds: 7 };
+    assert a1 == a2;
+
+    let b1 = B { seconds: 9, nanoseconds: 1 };
+    let b2 = B { seconds: 9, nanoseconds: 2 };
+    assert b1 != b2;
+}
+
+__DATA__
+{"test": {}}

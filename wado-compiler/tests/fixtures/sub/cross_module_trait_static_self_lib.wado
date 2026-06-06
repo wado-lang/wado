@@ -1,0 +1,25 @@
+// Helper for `cross_module_trait_static_self.wado`.
+//
+// A trait whose associated function (no `self`) returns `Self`, implemented
+// for a struct defined here. The caller in the parent fixture imports only the
+// struct and calls `Point::make(..)` / `Point::origin()` across the module
+// boundary.
+pub struct Point {
+    pub x: i32,
+    pub y: i32,
+}
+
+pub trait MakePoint {
+    fn make(x: i32, y: i32) -> Self;
+    fn origin() -> Self;
+}
+
+impl MakePoint for Point {
+    fn make(x: i32, y: i32) -> Self {
+        return Point { x, y };
+    }
+
+    fn origin() -> Self {
+        return Point::make(0, 0);
+    }
+}

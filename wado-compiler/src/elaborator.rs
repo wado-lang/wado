@@ -1053,6 +1053,57 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         )
     }
 
+    /// Canonical decl identity `(module, name)` of the declared type behind
+    /// `type_id` (refs peeled), or `None` for primitives / tuples / functions
+    /// and other types that carry no declaring module. Unlike a bare
+    /// `type_name`, this keeps two same-named types from different modules
+    /// (e.g. `core:temporal::Instant` vs `wasi:clocks::Instant`) distinct.
+    /// For a generic instance it is the *base* type's identity — type arguments
+    /// are dropped, so it cannot tell `Foo<A>` from `Foo<B>`.
+    pub(crate) fn type_decl_key(&self, type_id: tir::TypeId) -> Option<(ModuleSource, String)> {
+        use crate::tir::ResolvedType;
+        let tt = self.tysys.type_table.borrow();
+        match tt.get(tt.peel_refs(type_id)) {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Enum {
+                name,
+                module_source,
+            }
+            | ResolvedType::Variant {
+                name,
+                module_source,
+            }
+            | ResolvedType::Flags {
+                name,
+                module_source,
+            }
+            | ResolvedType::Resource {
+                name,
+                module_source,
+            }
+            | ResolvedType::Newtype {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::GenericResource {
+                name,
+                module_source,
+                ..
+            } => Some((module_source.clone(), name.clone())),
+            _ => None,
+        }
+    }
+
     /// Resolve AST effect names (strings) to TIR `EffectRefs` with module source information.
     ///
     /// `effect_ids` is a parallel slice with `(AstId, Span)` of each effect-name identifier

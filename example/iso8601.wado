@@ -14,70 +14,45 @@
 // `iana-time-zone` crate. Hosts that do not expose a real timezone may
 // return `None` from `Timezone::utc_offset` — in that case we fall back to
 // printing UTC for the local line.
+//
+// All the calendar math (epoch seconds → civil date, offset rendering) lives
+// in `core:temporal`; here we just copy the `wasi:clocks` instant into a
+// `core:temporal` `Instant` and let `ZonedDateTime` format it. The `{x:#}`
+// format prints milliseconds (`DisplayAlt`).
 
 use { println, Stdout } from "core:cli";
-use { SystemClock, Instant, Timezone } from "wasi:clocks";
+use { SystemClock, Instant as ClockInstant, Timezone } from "wasi:clocks";
+use { Instant, ZonedDateTime } from "core:temporal";
 
 export fn run() with Stdout, SystemClock, Timezone {
-    let now: Instant = SystemClock::now();
+    let now: ClockInstant = SystemClock::now();
+
+    // `core:temporal` bridges the two `Instant` types with `From`, so a
+    // `wasi:clocks` reading converts directly.
+    let instant = Instant::from(now);
 
     if let Some(name) = Timezone::iana_id() {
         println(`IANA:  {name}`);
     }
-    println(`UTC:   {format_iso8601(now.seconds, now.nanoseconds, 0)}`);
 
-    let offset_secs: i64 = match Timezone::utc_offset(now) {
-        Some(ns) => ns / 1_000_000_000,
-        None => 0,
+    let utc = ZonedDateTime { instant, time_zone: "UTC" };
+    println(`UTC:   {utc:#}`);
+
+    let zone = match Timezone::utc_offset(now) {
+        Some(ns) => offset_zone(ns / 1_000_000_000),
+        None => "UTC",
     };
-    let local_secs = now.seconds + offset_secs;
-    println(`Local: {format_iso8601(local_secs, now.nanoseconds, offset_secs)}`);
+    let local = ZonedDateTime { instant, time_zone: zone };
+    println(`Local: {local:#}`);
 }
 
-fn format_iso8601(secs: i64, nanos: u32, offset_secs: i64) -> String {
-    let [year, month, day, hour, minute, second] = split_datetime(secs);
-    let ms: u32 = nanos / 1_000_000 as u32;
-    return `{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{ms:03}{format_offset(offset_secs)}`;
-}
-
-fn format_offset(offset_secs: i64) -> String {
-    if offset_secs == 0 {
-        return "Z";
-    }
-    let sign = if offset_secs > 0 { "+" } else { "-" };
-    let abs = if offset_secs > 0 { offset_secs } else { -offset_secs };
+// Format a UTC offset in whole seconds as a fixed-offset zone string
+// (`±HH:MM`) that `ZonedDateTime` can interpret. A zero offset renders as
+// `+00:00`, which `core:temporal` normalizes to the `Z` suffix.
+fn offset_zone(offset_secs: i64) -> String {
+    let sign = if offset_secs < 0 { "-" } else { "+" };
+    let abs = if offset_secs < 0 { -offset_secs } else { offset_secs };
     let h = abs / 3600;
     let m = abs % 3600 / 60;
     return `{sign}{h:02}:{m:02}`;
-}
-
-// Convert seconds since 1970-01-01T00:00:00Z to civil date-time fields.
-fn split_datetime(secs: i64) -> [i64, u32, u32, u32, u32, u32] {
-    let mut sec_of_day = secs % 86400;
-    let mut days = secs / 86400;
-    if sec_of_day < 0 {
-        sec_of_day += 86400;
-        days -= 1;
-    }
-    let hour = (sec_of_day / 3600) as u32;
-    let minute = (sec_of_day % 3600 / 60) as u32;
-    let second = (sec_of_day % 60) as u32;
-    let [year, month, day] = days_to_ymd(days);
-    return [year, month, day, hour, minute, second];
-}
-
-// Howard Hinnant's algorithm: days since 1970-01-01 → [year, month, day].
-// Reference: https://howardhinnant.github.io/date_algorithms.html#civil_from_days
-fn days_to_ymd(days: i64) -> [i64, u32, u32] {
-    let z = days + 719468;
-    let era = if z >= 0 { z / 146097 } else { (z - 146096) / 146097 };
-    let doe = z - era * 146097;  // [0, 146096]
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;  // [0, 399]
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);  // [0, 365]
-    let mp = (5 * doy + 2) / 153;  // [0, 11]
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;  // [1, 31]
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };  // [1, 12]
-    let year = if m <= 2 { y + 1 } else { y };
-    return [year, m as u32, d];
 }
