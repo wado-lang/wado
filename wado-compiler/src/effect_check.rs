@@ -1758,7 +1758,13 @@ fn check_function_effects_sem(
         .into_iter()
         .collect();
     if let Some(ann) = annotations {
-        add_signature_resources(ann, &caller_key, &sem.types, index.struct_fields, &mut current);
+        add_signature_resources(
+            ann,
+            &caller_key,
+            &sem.types,
+            index.struct_fields,
+            &mut current,
+        );
     }
     // `#[benign(E)]` admits `E` in the body without a `with E` clause.
     for name in benign_effect_names(&func.attrs) {
@@ -2165,7 +2171,8 @@ impl AstVisitor for SemEffectWalker<'_> {
                     // Indirect call: the callee is a function-typed value (a
                     // closure or `fn(...)` parameter). Its type carries the
                     // effects it performs when invoked.
-                    if let ResolvedType::Function { effects, .. } = self.sem.types.get(callee_type) {
+                    if let ResolvedType::Function { effects, .. } = self.sem.types.get(callee_type)
+                    {
                         let effects = effects.to_vec();
                         self.report_missing(&effects, "(indirect call)", call.span);
                     }
