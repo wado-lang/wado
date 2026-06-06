@@ -806,16 +806,16 @@ test "tail_greedy_k_prefix_of_rule: rule without tail-greedy returns empty" {
     assert prefixes.is_empty(), `expected empty (no tail Repeat), got {prefixes.len()}`;
 }
 
-test "tail_greedy_k_prefix_of_rule: does NOT recurse through RuleRef" {
+test "tail_greedy_k_prefix_of_rule: recurses through RuleRef" {
     // outer : a ; a : N (X Y)+ ;
     // `outer`'s body has no direct Repeat — only a RuleRef to `a`.
-    // The K-prefix path used to walk through the RuleRef and adopt
-    // `a`'s tail-greedy; the resulting "transparent" variant on
-    // `outer` cascaded through multi-alt dispatchers whose per-alt
-    // helpers were emitted but never called (pre-existing emit
-    // shape), bloating generated parsers like TypeScript by ~7000
-    // lines / ~240 functions. Stopping the recursion at `RuleRef`
-    // keeps K-prefix focused on rules that actually emit a gate.
+    // The K-prefix cascade walks through the RuleRef and adopts `a`'s
+    // tail-greedy `[{X}, {Y}]`, so a caller whose continuation overlaps
+    // can register a transparent variant on `outer` that threads the
+    // mask down to `a`'s loop. The recursion is needed to reach a
+    // multi-token tail-greedy `Repeat` one rule hop away (the
+    // single-token 1-token mask path already recurses; the K-prefix
+    // path now matches it for the multi-token case).
     let xy = group([
         alt([
             tk("X"),
@@ -832,8 +832,15 @@ test "tail_greedy_k_prefix_of_rule: does NOT recurse through RuleRef" {
     let mut ctx = mk_ctx_with([outer, a]);
     let mut visiting: List<String> = [];
     let outer_kp = ctx.tail_greedy_k_prefix_of_rule(&"outer", 3, &mut visiting);
-    assert outer_kp.is_empty(), `outer has no direct Repeat — K-prefix should not recurse through RuleRef, got {outer_kp.len(
+    assert outer_kp.len() == 2, `outer's tail RuleRef 'a' carries a K=2 tail-greedy prefix that must cascade through, got {outer_kp.len(
     )} depths`;
+    let mut d0 = outer_kp[0];
+    d0.sort();
+    let mut d1 = outer_kp[1];
+    d1.sort();
+    let exp_d0: List<String> = ["TK_X"];
+    let exp_d1: List<String> = ["TK_Y"];
+    assert d0 == exp_d0 && d1 == exp_d1, `expected [[X], [Y]] cascaded from 'a', got [{d0}, {d1}]`;
     // Sanity: `a` still reports its direct tail-greedy K-prefix.
     let mut a_visiting: List<String> = [];
     let a_kp = ctx.tail_greedy_k_prefix_of_rule(&"a", 3, &mut a_visiting);

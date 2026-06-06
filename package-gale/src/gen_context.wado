@@ -1119,23 +1119,33 @@ impl GenContext {
                 acc;
             },
             Label(lab) => self.tail_greedy_k_prefix_of_element(&lab.element, max_k, visiting),
-            // Deliberately DO NOT recurse through `RuleRef`: a rule
-            // whose body has no direct tail-greedy `Repeat` cannot
-            // emit a K-prefix gate, so registering a K-prefix variant
-            // for it produces a "transparent" body whose only purpose
-            // is to thread the mask down to nested call sites. That
-            // threading is broken for multi-alt rules anyway (the
-            // dispatcher emit calls regular `parse_<rule>_bt_<n>`
-            // helpers rather than the variant's
-            // `<fn_name>_bt_<n>`s), so the cascade dies at the next
-            // multi-alt rule. By stopping the analysis at `RuleRef`
-            // we register K-prefix variants only for rules that will
-            // emit a real gate, drastically reducing generated parser
-            // size for grammars with deep call chains like TypeScript
-            // (without losing any actual coverage — the existing
-            // 1-token mask path still covers transitive tail-greedy
-            // for single-token-inner cases that invariant 1 admits).
-            RuleRef(_) => [],
+            // Recurse through `RuleRef` so the K-prefix cascade reaches
+            // a multi-token tail-greedy `Repeat` that lives one (or
+            // more) rule hops away from the call site — even when the
+            // intervening rule is multi-alt. A rule whose body has no
+            // direct `Repeat` then registers a "transparent" K-prefix
+            // variant whose only job is to thread the caller's mask
+            // down to the nested call site that does carry the gate.
+            //
+            // This was previously stopped at `RuleRef` because that
+            // threading was broken for multi-alt callees: the variant
+            // dispatcher emitted `parse_<rule>_bt_<n>` (the non-variant
+            // per-alt helpers) instead of the variant's own
+            // `<fn_name>_bt_<n>`s, so the gate never reached the loop
+            // and the per-alt helpers were emitted but dead. The
+            // dispatcher now routes to the variant's own
+            // `_bt_<n>` / `_scan_<n>` helpers (regression fixture
+            // `tests/grammars/ll_multi_alt_overlap.g4`), so the cascade
+            // flows through multi-alt rules cleanly. Regression fixture
+            // for the cascade itself: `tests/grammars/ll_k_prefix_cascade.g4`.
+            //
+            // The cycle guard in `tail_greedy_k_prefix_of_rule`
+            // (`visiting.contains(name)`) keeps the recursion
+            // terminating; the variant only registers when a caller's
+            // K-prefix actually overlaps the rule's tail-greedy prefix
+            // (`intern_follow_variant`), so transparent variants appear
+            // only where a real multi-token tail-greedy conflict exists.
+            RuleRef(r) => self.tail_greedy_k_prefix_of_rule(&r.name, max_k, visiting),
             TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => [],
         };
     }
