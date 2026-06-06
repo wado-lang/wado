@@ -161,10 +161,17 @@ The old fixed-point loop and the engine co-exist during the port.
   - [x] `elide_local` — block `Rule` on `is_local_read`.
   - [x] `value_copy_elide` — direct arena walk (single-pass strip).
   - [x] `drve` — direct arena walks (bodies); globals stay tree.
-  - Remaining local / whole-function passes: `ref_elim`, `elide_box_local`,
-    `dae`, `cse`, `sroa`, `sroa_param`, `const_object_globalization`,
-    `multi_value_return`, `labeled_block_fusion`, `container_sroa`,
-    `branch_prune`, `condition_implication`, `dce`, `inline`.
+  - [x] `dae` — arena dead-param detection / validation / renumber / rewrite;
+        globals via a wrap-in-`Body` helper. Last consumer of the tree
+        `is_pure_expr` / `collect_reads_in_block`, now removed; arena
+        counterparts live in `optimize/arena_query`.
+  - [x] `cse` — direct arena walk (loop-level CSE).
+  - [x] `ref_elim` — direct arena walks; lazy referent resolution, single-use
+        deref source moved.
+  - Remaining local / whole-function passes: `elide_box_local`, `sroa`,
+    `sroa_param`, `const_object_globalization`, `multi_value_return`,
+    `labeled_block_fusion`, `container_sroa`, `branch_prune`,
+    `condition_implication`, `dce`, `inline`.
   - Flow-sensitive (keep walkers, read arena): `const_folding`'s env walk,
     `copy_prop`, `licm`, `field_scalarize`, `store_load_forward`,
     `value_copy_demote`, `tmpl_hoist`.
