@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780722938067,
+  "lastUpdate": 1780725422228,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30549,6 +30549,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a04807a712b835400cdb6df0d8a5d1eed1b43295"
         },
         "date": 1780722937527,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8780,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16583,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 456150,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1f315e841dcd9d086785a0d14ecefb78722f6108",
+          "message": "Merge pull request #1312 from wado-lang/claude/tc39-temporal-spec-72fcb\n\nfeat(core:temporal): Instant and ZonedDateTime with formatting, parsing, and serde",
+          "timestamp": "2026-06-06T14:49:36+09:00",
+          "tree_id": "fdc629a0f3c81a01e408ef2781308f6df5d9ff13",
+          "url": "https://github.com/wado-lang/wado/commit/1f315e841dcd9d086785a0d14ecefb78722f6108"
+        },
+        "date": 1780725421826,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
