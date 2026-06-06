@@ -188,8 +188,12 @@ The old fixed-point loop and the engine co-exist during the port.
   - [x] `tmpl_hoist` — arena escape analysis + buffer/Formatter hoisting;
         new nodes (hoisted `Let`, field-reset `Assign`, normalized Formatter
         literal) pushed straight into the arena; rename walks navigate by id.
-  - Remaining: `condition_implication`, `container_sroa`, `licm`, `dce`,
-    `labeled_block_fusion`, `inline`, `field_scalarize`.
+  - [x] `condition_implication` — arena taint/DefMap analysis; the three
+        eliminators drive a local `ArenaOptVisitor` (mirrors `NirOptVisitor`'s
+        default walk); a guard-implied condition is rewritten to `false`
+        in place. DefMap-resolution helpers are value-typed and unchanged.
+  - Remaining: `container_sroa`, `licm`, `dce`, `labeled_block_fusion`,
+    `inline`, `field_scalarize`.
   - Deferred: `const_folding` — unlike the others it drives the whole `niri`
     interpreter (tree-shaped) over the body with flow-sensitive env threading,
     so it stays on the bridge until `niri` itself is ported to the arena

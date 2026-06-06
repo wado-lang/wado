@@ -10,14 +10,16 @@
 //!
 //! This subsumes the WIR-level `bounds_check` pass, handling both strict `<`
 //! and inclusive `<=` guard patterns.
+//!
+//! The pass reads and mutates the arena [`Body`] directly. The eliminators
+//! drive a small [`ArenaOptVisitor`] that mirrors `NirOptVisitor`'s default
+//! walk over the arena; condition replacement is an in-place `kind` rewrite.
 
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
-use crate::nir::{
-    NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind, NirUnaryOp,
-};
+use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, PatId, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::{NirOptVisitor, NirRefVisitor, opt_walk_expr, opt_walk_stmt};
 
 struct LoopGuard {
     /// Local index of the induction variable (e.g., `i`)
@@ -93,15 +95,13 @@ pub fn eliminate_implied_conditions(project: &mut NirPackage) -> bool {
 }
 
 fn process_function(func: &mut NirFunction) -> bool {
-    let Some(mut owned) = func.body_block() else {
+    let Some(body) = func.body.as_mut() else {
         return false;
     };
-    let body = &mut owned;
     let tainted = collect_tainted_locals(body);
     let mut defs = DefMap::default();
-    let r = process_block(body, &mut defs, &tainted);
-    func.set_body_block(owned);
-    r
+    let root = body.root;
+    process_block(body, root, &mut defs, &tainted)
 }
 
 /// Per-function summary of locals and `(local, field_index)` pairs
@@ -125,188 +125,202 @@ struct Taints {
 /// Walk the function body and collect every local whose value (or
 /// recorded field) could change anywhere downstream. Sources of taint
 /// are described on [`Taints`].
-fn collect_tainted_locals(body: &NirBlock) -> Taints {
-    let mut collector = TaintCollector {
-        taints: Taints::default(),
-    };
-    collector.visit_block(body);
-    collector.taints
+fn collect_tainted_locals(body: &Body) -> Taints {
+    let mut taints = Taints::default();
+    taint_node(body, NodeRef::Block(body.root), &mut taints);
+    taints
 }
 
-struct TaintCollector {
-    taints: Taints,
-}
-
-impl TaintCollector {
-    /// Resolve an `Assign`'s target shape into the (local, optional
-    /// `field_index`) it mutates and record it into `self.taints`.
-    fn taint_target(&mut self, target: &NirExpr) {
-        match &target.kind {
-            // `local = expr`.
-            NirExprKind::Local { index, .. } => {
-                self.taints.locals.insert(*index);
-            }
-            // `local.field = expr`: only that field is stale.
-            NirExprKind::FieldAccess {
-                expr: inner,
-                field_index,
-                ..
-            } if matches!(inner.kind, NirExprKind::Local { .. }) => {
-                if let NirExprKind::Local { index, .. } = &inner.kind {
-                    self.taints.fields.insert((*index, *field_index));
-                }
-            }
-            // Nested receiver: `local.f.g = …` taints `local`
-            // whole — the inner field's contents are now in an
-            // unknown state from our (one-level) recorder's view.
-            NirExprKind::FieldAccess { expr: inner, .. }
-            | NirExprKind::Unary { expr: inner, .. } => {
-                self.taint_root_local(inner);
-            }
-            // `local[i] = expr` mutates an array element, not any
-            // recorded field. DefMap never captures element values,
-            // so no taint is required.
-            NirExprKind::Index { .. } => {}
-            _ => {}
-        }
+/// Mirror of `TaintCollector` (a `NirRefVisitor`): record taint at every
+/// expression node, then recurse into all id-bearing children.
+fn taint_node(body: &Body, node: NodeRef, taints: &mut Taints) {
+    if let NodeRef::Expr(e) = node {
+        taint_record(body, e, taints);
     }
-
-    /// Walk a sub-expression to find its root Local and taint it
-    /// whole. Used when an assignment target nests deeper than one
-    /// field-access level and we can't pinpoint a single field.
-    fn taint_root_local(&mut self, expr: &NirExpr) {
-        match &expr.kind {
-            NirExprKind::Local { index, .. } => {
-                self.taints.locals.insert(*index);
-            }
-            NirExprKind::FieldAccess { expr: inner, .. }
-            | NirExprKind::Unary { expr: inner, .. }
-            | NirExprKind::Index { expr: inner, .. }
-            | NirExprKind::Cast { expr: inner, .. } => {
-                self.taint_root_local(inner);
-            }
-            _ => {}
-        }
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    for c in kids {
+        taint_node(body, c, taints);
     }
 }
 
-impl NirRefVisitor for TaintCollector {
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        match &expr.kind {
-            NirExprKind::Assign { target, .. } => {
-                self.taint_target(target);
-            }
-            NirExprKind::Unary {
-                op: NirUnaryOp::MutRef,
-                expr: inner,
-            } => {
-                // `&mut local.field` aliases the field only;
-                // `&mut local` aliases the whole local.
-                match &inner.kind {
-                    NirExprKind::Local { index, .. } => {
-                        self.taints.locals.insert(*index);
-                    }
-                    NirExprKind::FieldAccess {
-                        expr: receiver,
-                        field_index,
-                        ..
-                    } if matches!(receiver.kind, NirExprKind::Local { .. }) => {
-                        if let NirExprKind::Local { index, .. } = &receiver.kind {
-                            self.taints.fields.insert((*index, *field_index));
-                        }
-                    }
-                    _ => {
-                        self.taint_root_local(inner);
-                    }
-                }
-            }
-            NirExprKind::Call { args, .. } => {
-                for arg in args {
-                    if arg.is_mut
-                        && let NirExprKind::Local { index, .. } = &arg.expr.kind
-                    {
-                        self.taints.locals.insert(*index);
-                    }
-                }
-            }
-            NirExprKind::MethodCall { receiver, args, .. } => {
-                // Auto-ref makes the receiver implicitly mutable when
-                // the callee is a `&mut self` method, but we can't
-                // tell statically — taint the whole receiver.
-                if let NirExprKind::Local { index, .. } = &receiver.kind {
-                    self.taints.locals.insert(*index);
-                }
-                for arg in args {
-                    if arg.is_mut
-                        && let NirExprKind::Local { index, .. } = &arg.expr.kind
-                    {
-                        self.taints.locals.insert(*index);
-                    }
-                }
-            }
-            _ => {}
+fn taint_record(body: &Body, e: ExprId, taints: &mut Taints) {
+    match &body.exprs[e].kind {
+        ExprKind::Assign { target, .. } => {
+            taint_target(body, *target, taints);
         }
-        self.walk_expr(expr);
+        ExprKind::Unary {
+            op: NirUnaryOp::MutRef,
+            expr: inner,
+        } => {
+            // `&mut local.field` aliases the field only;
+            // `&mut local` aliases the whole local.
+            let inner = *inner;
+            match &body.exprs[inner].kind {
+                ExprKind::Local { index, .. } => {
+                    taints.locals.insert(*index);
+                }
+                ExprKind::FieldAccess {
+                    expr: receiver,
+                    field_index,
+                    ..
+                } if matches!(body.exprs[*receiver].kind, ExprKind::Local { .. }) => {
+                    if let ExprKind::Local { index, .. } = &body.exprs[*receiver].kind {
+                        taints.fields.insert((*index, *field_index));
+                    }
+                }
+                _ => {
+                    taint_root_local(body, inner, taints);
+                }
+            }
+        }
+        ExprKind::Call { args, .. } => {
+            for arg in args {
+                if arg.is_mut
+                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
+                {
+                    taints.locals.insert(*index);
+                }
+            }
+        }
+        ExprKind::MethodCall { receiver, args, .. } => {
+            // Auto-ref makes the receiver implicitly mutable when
+            // the callee is a `&mut self` method, but we can't
+            // tell statically — taint the whole receiver.
+            if let ExprKind::Local { index, .. } = &body.exprs[*receiver].kind {
+                taints.locals.insert(*index);
+            }
+            for arg in args {
+                if arg.is_mut
+                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
+                {
+                    taints.locals.insert(*index);
+                }
+            }
+        }
+        _ => {}
     }
 }
 
-fn process_block(block: &mut NirBlock, defs: &mut DefMap, tainted: &Taints) -> bool {
+/// Resolve an `Assign`'s target shape into the (local, optional `field_index`)
+/// it mutates and record it.
+fn taint_target(body: &Body, target: ExprId, taints: &mut Taints) {
+    match &body.exprs[target].kind {
+        // `local = expr`.
+        ExprKind::Local { index, .. } => {
+            taints.locals.insert(*index);
+        }
+        // `local.field = expr`: only that field is stale.
+        ExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } if matches!(body.exprs[*inner].kind, ExprKind::Local { .. }) => {
+            if let ExprKind::Local { index, .. } = &body.exprs[*inner].kind {
+                taints.fields.insert((*index, *field_index));
+            }
+        }
+        // Nested receiver: `local.f.g = …` taints `local` whole — the inner
+        // field's contents are now in an unknown state from our (one-level)
+        // recorder's view.
+        ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Unary { expr: inner, .. } => {
+            taint_root_local(body, *inner, taints);
+        }
+        // `local[i] = expr` mutates an array element, not any recorded field.
+        // DefMap never captures element values, so no taint is required.
+        ExprKind::Index { .. } => {}
+        _ => {}
+    }
+}
+
+/// Walk a sub-expression to find its root Local and taint it whole.
+fn taint_root_local(body: &Body, e: ExprId, taints: &mut Taints) {
+    match &body.exprs[e].kind {
+        ExprKind::Local { index, .. } => {
+            taints.locals.insert(*index);
+        }
+        ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::Unary { expr: inner, .. }
+        | ExprKind::Index { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. } => {
+            taint_root_local(body, *inner, taints);
+        }
+        _ => {}
+    }
+}
+
+fn process_block(body: &mut Body, block: BlockId, defs: &mut DefMap, tainted: &Taints) -> bool {
     let mut changed = false;
     let mut guards: Vec<ShortCircuitGuard> = Vec::new();
-    for i in 0..block.stmts.len() {
-        record_def_from_stmt(&block.stmts[i], defs, tainted);
-        record_defs_from_nested(&block.stmts[i], defs, tainted);
+    let stmts = body.blocks[block].stmts.clone();
+    for s in stmts {
+        record_def_from_stmt(body, s, defs, tainted);
+        record_defs_from_nested(body, s, defs, tainted);
         // Apply accumulated guards from previous early-exit stmts to this stmt
         for guard in &guards {
-            changed |= guard.eliminate_in_stmt(&mut block.stmts[i], defs);
+            changed |= guard.eliminate_in_stmt(body, s, defs);
         }
-        changed |= BitmaskEliminator { defs }.visit_stmt(&mut block.stmts[i]);
-        changed |= ShortCircuitEliminator { defs }.visit_stmt(&mut block.stmts[i]);
-        changed |= process_stmt(&mut block.stmts[i], defs, tainted);
+        changed |= BitmaskEliminator { defs }.visit_stmt(body, s);
+        changed |= ShortCircuitEliminator { defs }.visit_stmt(body, s);
+        changed |= process_stmt(body, s, defs, tainted);
         // If this is `if (var >= bound) { return/break }`, extract a guard
-        if let Some(guard) = extract_early_exit_guard(&block.stmts[i], defs) {
+        if let Some(guard) = extract_early_exit_guard(body, s, defs) {
             guards.push(guard);
         }
     }
     changed
 }
 
-fn process_stmt(stmt: &mut NirStmt, defs: &mut DefMap, tainted: &Taints) -> bool {
+fn process_stmt(body: &mut Body, s: StmtId, defs: &mut DefMap, tainted: &Taints) -> bool {
     // Record definitions from let bindings
-    record_def_from_stmt(stmt, defs, tainted);
+    record_def_from_stmt(body, s, defs, tainted);
 
-    match &mut stmt.kind {
-        NirStmtKind::Loop { body } => process_loop(body, defs, tainted),
-        NirStmtKind::If {
+    let shape = match &body.stmts[s].kind {
+        StmtKind::Loop { body: lb } => StmtShape::Loop(*lb),
+        StmtKind::If {
             then_block,
             else_block,
             ..
-        } => {
-            let mut changed = process_block(then_block, defs, tainted);
-            if let Some(else_block) = else_block {
-                changed |= process_block(else_block, defs, tainted);
+        } => StmtShape::If(*then_block, *else_block),
+        StmtKind::LabeledBlock { block, .. } => StmtShape::Labeled(*block),
+        _ => StmtShape::None,
+    };
+    match shape {
+        StmtShape::Loop(lb) => process_loop(body, lb, defs, tainted),
+        StmtShape::If(then_b, else_b) => {
+            let mut changed = process_block(body, then_b, defs, tainted);
+            if let Some(eb) = else_b {
+                changed |= process_block(body, eb, defs, tainted);
             }
             changed
         }
-        NirStmtKind::LabeledBlock { block, .. } => process_block(block, defs, tainted),
-        _ => false,
+        StmtShape::Labeled(b) => process_block(body, b, defs, tainted),
+        StmtShape::None => false,
     }
 }
 
-fn process_loop(body: &mut NirBlock, defs: &mut DefMap, tainted: &Taints) -> bool {
+enum StmtShape {
+    Loop(BlockId),
+    If(BlockId, Option<BlockId>),
+    Labeled(BlockId),
+    None,
+}
+
+fn process_loop(body: &mut Body, loop_body: BlockId, defs: &mut DefMap, tainted: &Taints) -> bool {
     // First, record defs inside the loop body (for copies like `let index = i`)
     // and recurse into nested structures
     let mut changed = false;
 
     // Collect defs from the loop body before eliminating
     let mut loop_defs = defs.clone();
-    for stmt in &body.stmts {
-        record_def_from_stmt(stmt, &mut loop_defs, tainted);
-        record_defs_from_nested(stmt, &mut loop_defs, tainted);
+    let stmts = body.blocks[loop_body].stmts.clone();
+    for s in &stmts {
+        record_def_from_stmt(body, *s, &mut loop_defs, tainted);
+        record_defs_from_nested(body, *s, &mut loop_defs, tainted);
     }
 
     // Extract the loop guard from the first statement
-    let guard = extract_loop_guard(&body.stmts);
+    let guard = extract_loop_guard(body, loop_body);
 
     if let Some(guard) = &guard {
         // Eliminate implied conditions in the loop body (skip the guard itself)
@@ -315,19 +329,19 @@ fn process_loop(body: &mut NirBlock, defs: &mut DefMap, tainted: &Taints) -> boo
             dom_guards: vec![],
             defs: &loop_defs,
         };
-        for stmt in body.stmts.iter_mut().skip(1) {
-            changed |= condition_elim.visit_stmt(stmt);
+        for s in stmts.iter().skip(1) {
+            changed |= condition_elim.visit_stmt(body, *s);
         }
     }
 
     // Eliminate bitmask-bounded checks in the loop body
-    for stmt in &mut body.stmts {
-        changed |= BitmaskEliminator { defs: &loop_defs }.visit_stmt(stmt);
+    for s in &stmts {
+        changed |= BitmaskEliminator { defs: &loop_defs }.visit_stmt(body, *s);
     }
 
     // Recurse into nested loops
-    for stmt in &mut body.stmts {
-        changed |= process_stmt_nested_loops(stmt, defs, tainted);
+    for s in &stmts {
+        changed |= process_stmt_nested_loops(body, *s, defs, tainted);
     }
 
     changed
@@ -335,33 +349,44 @@ fn process_loop(body: &mut NirBlock, defs: &mut DefMap, tainted: &Taints) -> boo
 
 /// Recurse into nested structures to find inner loops, but don't re-process
 /// the current loop level.
-fn process_stmt_nested_loops(stmt: &mut NirStmt, defs: &mut DefMap, tainted: &Taints) -> bool {
-    match &mut stmt.kind {
-        NirStmtKind::Loop { body } => process_loop(body, defs, tainted),
-        NirStmtKind::If {
+fn process_stmt_nested_loops(
+    body: &mut Body,
+    s: StmtId,
+    defs: &mut DefMap,
+    tainted: &Taints,
+) -> bool {
+    let shape = match &body.stmts[s].kind {
+        StmtKind::Loop { body: lb } => StmtShape::Loop(*lb),
+        StmtKind::If {
             then_block,
             else_block,
             ..
-        } => {
+        } => StmtShape::If(*then_block, *else_block),
+        StmtKind::LabeledBlock { block, .. } => StmtShape::Labeled(*block),
+        _ => StmtShape::None,
+    };
+    match shape {
+        StmtShape::Loop(lb) => process_loop(body, lb, defs, tainted),
+        StmtShape::If(then_b, else_b) => {
             let mut changed = false;
-            for s in &mut then_block.stmts {
-                changed |= process_stmt_nested_loops(s, defs, tainted);
+            for s in body.blocks[then_b].stmts.clone() {
+                changed |= process_stmt_nested_loops(body, s, defs, tainted);
             }
-            if let Some(else_block) = else_block {
-                for s in &mut else_block.stmts {
-                    changed |= process_stmt_nested_loops(s, defs, tainted);
+            if let Some(eb) = else_b {
+                for s in body.blocks[eb].stmts.clone() {
+                    changed |= process_stmt_nested_loops(body, s, defs, tainted);
                 }
             }
             changed
         }
-        NirStmtKind::LabeledBlock { block, .. } => {
+        StmtShape::Labeled(b) => {
             let mut changed = false;
-            for s in &mut block.stmts {
-                changed |= process_stmt_nested_loops(s, defs, tainted);
+            for s in body.blocks[b].stmts.clone() {
+                changed |= process_stmt_nested_loops(body, s, defs, tainted);
             }
             changed
         }
-        _ => false,
+        StmtShape::None => false,
     }
 }
 
@@ -369,49 +394,56 @@ fn process_stmt_nested_loops(stmt: &mut NirStmt, defs: &mut DefMap, tainted: &Ta
 ///
 /// Matches: `if !(var < bound) { break LABEL; }` → guard `var < bound`
 ///      or: `if !(var <= bound) { break LABEL; }` → guard `var <= bound`
-fn extract_loop_guard(stmts: &[NirStmt]) -> Option<LoopGuard> {
-    let first = stmts.first()?;
-    let NirStmtKind::If {
+fn extract_loop_guard(body: &Body, loop_body: BlockId) -> Option<LoopGuard> {
+    let first = *body.blocks[loop_body].stmts.first()?;
+    let StmtKind::If {
         condition,
         then_block,
         else_block: None,
-    } = &first.kind
+    } = &body.stmts[first].kind
     else {
         return None;
     };
+    let condition = *condition;
+    let then_block = *then_block;
 
     // then_block must be a single Break statement
-    if then_block.stmts.len() != 1 {
+    if body.blocks[then_block].stmts.len() != 1 {
         return None;
     }
-    matches!(&then_block.stmts[0].kind, NirStmtKind::Break { .. }).then_some(())?;
+    matches!(
+        &body.stmts[body.blocks[then_block].stmts[0]].kind,
+        StmtKind::Break { .. }
+    )
+    .then_some(())?;
 
     // condition must be `Not(Binary(var, Lt|LtEq, bound))`
-    let NirExprKind::Unary {
+    let ExprKind::Unary {
         op: NirUnaryOp::Not,
         expr: inner,
-    } = &condition.kind
+    } = &body.exprs[condition].kind
     else {
         return None;
     };
 
-    let NirExprKind::Binary { left, op, right } = &inner.kind else {
+    let ExprKind::Binary { left, op, right } = &body.exprs[*inner].kind else {
         return None;
     };
 
     let (is_strict, var_expr, bound_expr) = match op {
-        NirBinaryOp::Lt => (true, left, right),
-        NirBinaryOp::LtEq => (false, left, right),
+        NirBinaryOp::Lt => (true, *left, *right),
+        NirBinaryOp::LtEq => (false, *left, *right),
         _ => return None,
     };
 
-    let NirExprKind::Local { index: var, .. } = &var_expr.kind else {
+    let ExprKind::Local { index: var, .. } = &body.exprs[var_expr].kind else {
         return None;
     };
-    let bound = Bound::extract(bound_expr)?;
+    let var = *var;
+    let bound = Bound::extract(body, bound_expr)?;
 
     Some(LoopGuard {
-        var: *var,
+        var,
         bound,
         is_strict,
     })
@@ -427,12 +459,12 @@ impl Bound {
     /// `i64::try_from` so a payload with bit 63 set bails rather
     /// than silently feed a negative bound to the numeric
     /// comparisons in [`check_bound_implied_false`].
-    fn extract(expr: &NirExpr) -> Option<Bound> {
-        match &expr.kind {
-            NirExprKind::Local { index, .. } => Some(Bound::Local(*index)),
-            NirExprKind::IntLiteral { value, .. } => i64::try_from(*value).ok().map(Bound::Literal),
-            NirExprKind::FieldAccess { .. } => {
-                let (root_local, field_indices) = extract_field_chain(expr)?;
+    fn extract(body: &Body, e: ExprId) -> Option<Bound> {
+        match &body.exprs[e].kind {
+            ExprKind::Local { index, .. } => Some(Bound::Local(*index)),
+            ExprKind::IntLiteral { value, .. } => i64::try_from(*value).ok().map(Bound::Literal),
+            ExprKind::FieldAccess { .. } => {
+                let (root_local, field_indices) = extract_field_chain(body, e)?;
                 if field_indices.is_empty() {
                     Some(Bound::Local(root_local))
                 } else {
@@ -530,13 +562,15 @@ fn check_bound_implied_false(
     }
 }
 
-fn record_def_from_stmt(stmt: &NirStmt, defs: &mut DefMap, tainted: &Taints) {
-    let NirStmtKind::Let {
+fn record_def_from_stmt(body: &Body, s: StmtId, defs: &mut DefMap, tainted: &Taints) {
+    let StmtKind::Let {
         local_index, value, ..
-    } = &stmt.kind
+    } = &body.stmts[s].kind
     else {
         return;
     };
+    let local_index = *local_index;
+    let value = *value;
 
     // Skip when the let-target itself may later be reassigned: the
     // value-extracting path (`Bound::to_constant`) would otherwise
@@ -544,41 +578,41 @@ fn record_def_from_stmt(stmt: &NirStmt, defs: &mut DefMap, tainted: &Taints) {
     // between two Locals) compare names and stay sound regardless.
     // Field-level taint is handled per-field in
     // `record_struct_lit_def`.
-    if tainted.locals.contains(local_index) {
+    if tainted.locals.contains(&local_index) {
         return;
     }
 
     // Unwrap LabeledBlock to find the actual defining expression
     // (e.g., `let arr = __inline_...: { ...; break LABEL: StructLiteral { ... }; }`)
-    let effective = unwrap_labeled_block_value(value);
+    let effective = unwrap_labeled_block_value(body, value);
 
-    match &effective.kind {
-        NirExprKind::Local { index, .. } => {
-            defs.insert(*local_index, Def::Copy(*index));
+    match &body.exprs[effective].kind {
+        ExprKind::Local { index, .. } => {
+            defs.insert(local_index, Def::Copy(*index));
         }
-        NirExprKind::Binary { left, op, right } => {
+        ExprKind::Binary { left, op, right } => {
             if let (
-                NirExprKind::Local { index: lhs, .. },
+                ExprKind::Local { index: lhs, .. },
                 NirBinaryOp::Add,
-                NirExprKind::IntLiteral { value: val, .. },
-            ) = (&left.kind, op, &right.kind)
+                ExprKind::IntLiteral { value: val, .. },
+            ) = (&body.exprs[*left].kind, op, &body.exprs[*right].kind)
             {
-                defs.insert(*local_index, Def::AddConst(*lhs, *val as i64));
+                defs.insert(local_index, Def::AddConst(*lhs, *val as i64));
             } else if *op == NirBinaryOp::BitAnd {
-                if let NirExprKind::IntLiteral { value: val, .. } = &right.kind {
-                    defs.insert(*local_index, Def::BitAndConst(*val as i64));
-                } else if let NirExprKind::IntLiteral { value: val, .. } = &left.kind {
-                    defs.insert(*local_index, Def::BitAndConst(*val as i64));
+                if let ExprKind::IntLiteral { value: val, .. } = &body.exprs[*right].kind {
+                    defs.insert(local_index, Def::BitAndConst(*val as i64));
+                } else if let ExprKind::IntLiteral { value: val, .. } = &body.exprs[*left].kind {
+                    defs.insert(local_index, Def::BitAndConst(*val as i64));
                 }
             }
         }
-        NirExprKind::IntLiteral { value: val, .. } => {
-            defs.insert(*local_index, Def::IntConst(*val as i64));
+        ExprKind::IntLiteral { value: val, .. } => {
+            defs.insert(local_index, Def::IntConst(*val as i64));
         }
-        NirExprKind::FieldAccess {
+        ExprKind::FieldAccess {
             expr, field_index, ..
         } => {
-            if let NirExprKind::Local { index, .. } = &expr.kind {
+            if let ExprKind::Local { index, .. } = &body.exprs[*expr].kind {
                 // The chain `let _licm = arr.used` is captured as
                 // `Def::FieldAccess { local: arr, field_index: used }`.
                 // When `resolve_constant` walks the chain it goes
@@ -589,7 +623,7 @@ fn record_def_from_stmt(stmt: &NirStmt, defs: &mut DefMap, tainted: &Taints) {
                 // FieldAccess def itself is always sound — the
                 // soundness check happens at the StructLit layer.
                 defs.insert(
-                    *local_index,
+                    local_index,
                     Def::FieldAccess {
                         local: *index,
                         field_index: *field_index,
@@ -597,19 +631,23 @@ fn record_def_from_stmt(stmt: &NirStmt, defs: &mut DefMap, tainted: &Taints) {
                 );
             }
         }
-        NirExprKind::StructLiteral { fields, .. } => {
-            record_struct_lit_def(*local_index, fields, defs, tainted);
+        ExprKind::StructLiteral { .. } => {
+            record_struct_lit_def(body, local_index, effective, defs, tainted);
         }
         _ => {}
     }
 }
 
 fn record_struct_lit_def(
+    body: &Body,
     local_index: u32,
-    fields: &[crate::nir::NirStructField],
+    struct_lit: ExprId,
     defs: &mut DefMap,
     tainted: &Taints,
 ) {
+    let ExprKind::StructLiteral { fields, .. } = &body.exprs[struct_lit].kind else {
+        return;
+    };
     let mut field_map = IndexMap::default();
     for f in fields {
         // Skip fields that may be reassigned anywhere — `local.f = …`
@@ -619,9 +657,9 @@ fn record_struct_lit_def(
         if tainted.fields.contains(&(local_index, f.field_index)) {
             continue;
         }
-        if let NirExprKind::Local { index, .. } = &f.value.kind {
+        if let ExprKind::Local { index, .. } = &body.exprs[f.value].kind {
             field_map.insert(f.field_index, FieldSource::Local(*index));
-        } else if let NirExprKind::IntLiteral { value, .. } = &f.value.kind {
+        } else if let ExprKind::IntLiteral { value, .. } = &body.exprs[f.value].kind {
             field_map.insert(f.field_index, FieldSource::Const(*value as i64));
         }
     }
@@ -637,213 +675,236 @@ fn record_struct_lit_def(
 /// appears after `branch_prune::prune_expr` flattens a tail-break-only labeled
 /// block into a plain stmt list with the broken value as the trailing
 /// expression statement.
-fn unwrap_labeled_block_value(expr: &NirExpr) -> &NirExpr {
-    if let NirExprKind::Block(block) = &expr.kind
-        && let Some(NirStmt {
-            kind: NirStmtKind::Expr(tail),
-            ..
-        }) = block.stmts.last()
+fn unwrap_labeled_block_value(body: &Body, e: ExprId) -> ExprId {
+    if let ExprKind::Block(block) = &body.exprs[e].kind
+        && let Some(last) = body.blocks[*block].stmts.last()
+        && let StmtKind::Expr(tail) = &body.stmts[*last].kind
     {
-        return unwrap_labeled_block_value(tail);
+        return unwrap_labeled_block_value(body, *tail);
     }
-    if let NirExprKind::LabeledBlock { block, label, .. } = &expr.kind {
+    if let ExprKind::LabeledBlock { block, label, .. } = &body.exprs[e].kind {
         // Find the break statement that returns a value from this block
-        for stmt in &block.stmts {
-            if let NirStmtKind::Break {
+        for stmt in &body.blocks[*block].stmts {
+            if let StmtKind::Break {
                 label: Some(break_label),
                 value: Some(val),
-            } = &stmt.kind
+            } = &body.stmts[*stmt].kind
                 && break_label == label
             {
                 // Recursively unwrap in case of nested labeled blocks
-                return unwrap_labeled_block_value(val);
+                return unwrap_labeled_block_value(body, *val);
             }
         }
     }
-    expr
+    e
 }
 
 /// Record defs from nested blocks within a statement (e.g., labeled blocks in expressions).
-fn record_defs_from_nested(stmt: &NirStmt, defs: &mut DefMap, tainted: &Taints) {
-    match &stmt.kind {
-        NirStmtKind::Let { value, .. } => {
-            record_defs_from_expr(value, defs, tainted);
+fn record_defs_from_nested(body: &Body, s: StmtId, defs: &mut DefMap, tainted: &Taints) {
+    match &body.stmts[s].kind {
+        StmtKind::Let { value, .. } => {
+            record_defs_from_expr(body, *value, defs, tainted);
         }
-        NirStmtKind::Expr(expr) => {
-            record_defs_from_expr(expr, defs, tainted);
+        StmtKind::Expr(expr) => {
+            record_defs_from_expr(body, *expr, defs, tainted);
         }
-        NirStmtKind::LabeledBlock { block, .. } => {
-            for s in &block.stmts {
-                record_def_from_stmt(s, defs, tainted);
-                record_defs_from_nested(s, defs, tainted);
+        StmtKind::LabeledBlock { block, .. } => {
+            for s in body.blocks[*block].stmts.clone() {
+                record_def_from_stmt(body, s, defs, tainted);
+                record_defs_from_nested(body, s, defs, tainted);
             }
         }
-        NirStmtKind::If {
+        StmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            record_defs_from_expr(condition, defs, tainted);
-            for s in &then_block.stmts {
-                record_def_from_stmt(s, defs, tainted);
-                record_defs_from_nested(s, defs, tainted);
+            let condition = *condition;
+            let then_block = *then_block;
+            let else_block = *else_block;
+            record_defs_from_expr(body, condition, defs, tainted);
+            for s in body.blocks[then_block].stmts.clone() {
+                record_def_from_stmt(body, s, defs, tainted);
+                record_defs_from_nested(body, s, defs, tainted);
             }
             if let Some(eb) = else_block {
-                for s in &eb.stmts {
-                    record_def_from_stmt(s, defs, tainted);
-                    record_defs_from_nested(s, defs, tainted);
+                for s in body.blocks[eb].stmts.clone() {
+                    record_def_from_stmt(body, s, defs, tainted);
+                    record_defs_from_nested(body, s, defs, tainted);
                 }
             }
         }
-        NirStmtKind::Return { value: Some(expr) }
-        | NirStmtKind::Break {
+        StmtKind::Return { value: Some(expr) }
+        | StmtKind::Break {
             value: Some(expr), ..
         } => {
-            record_defs_from_expr(expr, defs, tainted);
+            record_defs_from_expr(body, *expr, defs, tainted);
         }
-        NirStmtKind::LetDestructure { value, .. } => {
-            record_defs_from_expr(value, defs, tainted);
+        StmtKind::LetDestructure { value, .. } => {
+            record_defs_from_expr(body, *value, defs, tainted);
         }
         // Loop bodies have their own scope handled via process_loop.
         // Remaining kinds (Return/Break with None, Continue) carry no
         // expressions with nested definitions.
-        NirStmtKind::Loop { .. }
-        | NirStmtKind::Return { value: None }
-        | NirStmtKind::Break { value: None, .. }
-        | NirStmtKind::Continue => {}
+        StmtKind::Loop { .. }
+        | StmtKind::Return { value: None }
+        | StmtKind::Break { value: None, .. }
+        | StmtKind::Continue => {}
     }
 }
 
-fn record_defs_from_expr(expr: &NirExpr, defs: &mut DefMap, tainted: &Taints) {
-    match &expr.kind {
-        NirExprKind::LabeledBlock { block, .. } | NirExprKind::Block(block) => {
-            for s in &block.stmts {
-                record_def_from_stmt(s, defs, tainted);
-                record_defs_from_nested(s, defs, tainted);
+fn record_defs_from_expr(body: &Body, e: ExprId, defs: &mut DefMap, tainted: &Taints) {
+    match &body.exprs[e].kind {
+        ExprKind::LabeledBlock { block, .. } | ExprKind::Block(block) => {
+            for s in body.blocks[*block].stmts.clone() {
+                record_def_from_stmt(body, s, defs, tainted);
+                record_defs_from_nested(body, s, defs, tainted);
             }
         }
-        NirExprKind::Binary { left, right, .. }
-        | NirExprKind::Assign {
+        ExprKind::Binary { left, right, .. }
+        | ExprKind::Assign {
             target: left,
             value: right,
         }
-        | NirExprKind::Index {
+        | ExprKind::Index {
             expr: left,
             index: right,
         } => {
-            record_defs_from_expr(left, defs, tainted);
-            record_defs_from_expr(right, defs, tainted);
+            let left = *left;
+            let right = *right;
+            record_defs_from_expr(body, left, defs, tainted);
+            record_defs_from_expr(body, right, defs, tainted);
         }
-        NirExprKind::Unary { expr: inner, .. }
-        | NirExprKind::Cast { expr: inner, .. }
-        | NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::GlobalVarSet { value: inner, .. }
-        | NirExprKind::VariantTag { expr: inner }
-        | NirExprKind::VariantTest { expr: inner, .. }
-        | NirExprKind::VariantPayload { expr: inner, .. }
-        | NirExprKind::ClosureToCanonical { functor: inner, .. } => {
-            record_defs_from_expr(inner, defs, tainted);
+        ExprKind::Unary { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. }
+        | ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::GlobalVarSet { value: inner, .. }
+        | ExprKind::VariantTag { expr: inner }
+        | ExprKind::VariantTest { expr: inner, .. }
+        | ExprKind::VariantPayload { expr: inner, .. }
+        | ExprKind::ClosureToCanonical { functor: inner, .. } => {
+            record_defs_from_expr(body, *inner, defs, tainted);
         }
-        NirExprKind::If {
+        ExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            record_defs_from_expr(condition, defs, tainted);
-            for s in &then_branch.stmts {
-                record_def_from_stmt(s, defs, tainted);
-                record_defs_from_nested(s, defs, tainted);
+            let condition = *condition;
+            let then_branch = *then_branch;
+            let else_branch = *else_branch;
+            record_defs_from_expr(body, condition, defs, tainted);
+            for s in body.blocks[then_branch].stmts.clone() {
+                record_def_from_stmt(body, s, defs, tainted);
+                record_defs_from_nested(body, s, defs, tainted);
             }
             if let Some(eb) = else_branch {
-                for s in &eb.stmts {
-                    record_def_from_stmt(s, defs, tainted);
-                    record_defs_from_nested(s, defs, tainted);
+                for s in body.blocks[eb].stmts.clone() {
+                    record_def_from_stmt(body, s, defs, tainted);
+                    record_defs_from_nested(body, s, defs, tainted);
                 }
             }
         }
-        NirExprKind::Match {
+        ExprKind::Match {
             expr: scrutinee,
             arms,
         } => {
-            record_defs_from_expr(scrutinee, defs, tainted);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    record_defs_from_expr(guard, defs, tainted);
-                }
-                record_defs_from_expr(&arm.body, defs, tainted);
+            let scrutinee = *scrutinee;
+            let arm_exprs: Vec<ExprId> = arms
+                .iter()
+                .flat_map(|arm| arm.guard.iter().copied().chain(std::iter::once(arm.body)))
+                .collect();
+            record_defs_from_expr(body, scrutinee, defs, tainted);
+            for ae in arm_exprs {
+                record_defs_from_expr(body, ae, defs, tainted);
             }
         }
-        NirExprKind::Switch {
+        ExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
         } => {
-            record_defs_from_expr(scrutinee, defs, tainted);
+            let scrutinee = *scrutinee;
+            let arms = arms.clone();
+            let default = *default;
+            record_defs_from_expr(body, scrutinee, defs, tainted);
             for arm in arms {
-                for s in &arm.stmts {
-                    record_def_from_stmt(s, defs, tainted);
-                    record_defs_from_nested(s, defs, tainted);
+                for s in body.blocks[arm].stmts.clone() {
+                    record_def_from_stmt(body, s, defs, tainted);
+                    record_defs_from_nested(body, s, defs, tainted);
                 }
             }
-            for s in &default.stmts {
-                record_def_from_stmt(s, defs, tainted);
-                record_defs_from_nested(s, defs, tainted);
+            for s in body.blocks[default].stmts.clone() {
+                record_def_from_stmt(body, s, defs, tainted);
+                record_defs_from_nested(body, s, defs, tainted);
             }
         }
-        NirExprKind::Call { args, .. } => {
+        ExprKind::Call { args, .. } => {
+            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
             for arg in args {
-                record_defs_from_expr(&arg.expr, defs, tainted);
+                record_defs_from_expr(body, arg, defs, tainted);
             }
         }
-        NirExprKind::CmRawCall { args, .. } => {
+        ExprKind::CmRawCall { args, .. } => {
+            let args = args.clone();
             for arg in args {
-                record_defs_from_expr(arg, defs, tainted);
+                record_defs_from_expr(body, arg, defs, tainted);
             }
         }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            record_defs_from_expr(receiver, defs, tainted);
+        ExprKind::MethodCall { receiver, args, .. } => {
+            let receiver = *receiver;
+            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            record_defs_from_expr(body, receiver, defs, tainted);
             for arg in args {
-                record_defs_from_expr(&arg.expr, defs, tainted);
+                record_defs_from_expr(body, arg, defs, tainted);
             }
         }
-        NirExprKind::IndirectCall { callee, args } => {
-            record_defs_from_expr(callee, defs, tainted);
+        ExprKind::IndirectCall { callee, args } => {
+            let callee = *callee;
+            let args = args.clone();
+            record_defs_from_expr(body, callee, defs, tainted);
             for arg in args {
-                record_defs_from_expr(arg, defs, tainted);
+                record_defs_from_expr(body, arg, defs, tainted);
             }
         }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for f in fields {
-                record_defs_from_expr(&f.value, defs, tainted);
+        ExprKind::StructLiteral { fields, .. } => {
+            let vals: Vec<ExprId> = fields.iter().map(|f| f.value).collect();
+            for v in vals {
+                record_defs_from_expr(body, v, defs, tainted);
             }
         }
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            for e in elements {
-                record_defs_from_expr(e, defs, tainted);
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+            let elements = elements.clone();
+            for el in elements {
+                record_defs_from_expr(body, el, defs, tainted);
             }
         }
-        NirExprKind::VariantConstruct { payload, .. } => {
+        ExprKind::VariantConstruct { payload, .. } => {
             if let Some(inner) = payload {
-                record_defs_from_expr(inner, defs, tainted);
+                record_defs_from_expr(body, *inner, defs, tainted);
             }
         }
         // Leaf nodes carry no sub-expressions with definitions.
-        NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::EnumConstruct { .. } => {}
+        ExprKind::Local { .. }
+        | ExprKind::GlobalVarGet { .. }
+        | ExprKind::IntLiteral { .. }
+        | ExprKind::FloatLiteral { .. }
+        | ExprKind::StringLiteral(_)
+        | ExprKind::BytesLiteral(_)
+        | ExprKind::BoolLiteral(_)
+        | ExprKind::CharLiteral(_)
+        | ExprKind::Null
+        | ExprKind::Unit
+        | ExprKind::EnumConstruct { .. } => {}
     }
 }
 
-/// Eliminate implied-false conditions within a statement.
+/// Replace the expression at `cond` with `false`, preserving its type and span.
+fn set_false(body: &mut Body, cond: ExprId) {
+    body.exprs[cond].kind = ExprKind::BoolLiteral(false);
+}
+
 /// NIR visitor that eliminates loop-guard-implied false bounds checks.
 ///
 /// When a loop guard proves `i < bound`, inner conditions `i >= bound` are
@@ -855,74 +916,70 @@ struct ConditionEliminator<'a> {
     defs: &'a DefMap,
 }
 
-impl NirOptVisitor for ConditionEliminator<'_> {
-    fn visit_stmt(&mut self, stmt: &mut NirStmt) -> bool {
-        // Check if this statement is a bounds check that can be eliminated.
-        if let NirStmtKind::If {
-            condition,
-            then_block,
-            else_block: None,
-        } = &mut stmt.kind
-            && is_panic_block(then_block)
-            && is_implied_false_by_any(condition, self.guard, &self.dom_guards, self.defs)
-        {
-            let type_id = condition.type_id;
-            let span = condition.span;
-            *condition = NirExpr {
-                kind: NirExprKind::BoolLiteral(false),
-                type_id,
-                span,
-            };
-            return true;
-        }
+impl ArenaOptVisitor for ConditionEliminator<'_> {
+    fn visit_stmt(&mut self, body: &mut Body, s: StmtId) -> bool {
+        let if_ids = match &body.stmts[s].kind {
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => Some((*condition, *then_block, *else_block)),
+            _ => None,
+        };
+        if let Some((condition, then_block, else_block)) = if_ids {
+            // Check if this statement is a bounds check that can be eliminated.
+            if else_block.is_none()
+                && is_panic_block(body, then_block)
+                && is_implied_false_by_any(body, condition, self.guard, &self.dom_guards, self.defs)
+            {
+                set_false(body, condition);
+                return true;
+            }
 
-        // For If stmts: extract a dominating guard from the condition to extend
-        // elimination into the then-block.
-        if let NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } = &mut stmt.kind
-        {
-            let mut changed = self.visit_expr(condition);
-            let dom = extract_dominating_guard(condition, self.defs);
+            // Extract a dominating guard from the condition to extend
+            // elimination into the then-block.
+            let mut changed = self.visit_expr(body, condition);
+            let dom = extract_dominating_guard(body, condition, self.defs);
             let saved = self.dom_guards.clone();
             if let Some(dg) = dom {
                 self.dom_guards.push(dg);
             }
-            changed |= self.visit_block(then_block);
+            changed |= self.visit_block(body, then_block);
             self.dom_guards = saved;
             if let Some(eb) = else_block {
-                changed |= self.visit_block(eb);
+                changed |= self.visit_block(body, eb);
             }
             return changed;
         }
 
-        opt_walk_stmt(self, stmt)
+        arena_opt_walk(self, body, NodeRef::Stmt(s))
     }
 
-    fn visit_expr(&mut self, expr: &mut NirExpr) -> bool {
+    fn visit_expr(&mut self, body: &mut Body, e: ExprId) -> bool {
         // For If exprs: extract a dominating guard and propagate into then-branch.
-        if let NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } = &mut expr.kind
-        {
-            let mut changed = self.visit_expr(condition);
-            let dom = extract_dominating_guard(condition, self.defs);
+        let if_ids = match &body.exprs[e].kind {
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => Some((*condition, *then_branch, *else_branch)),
+            _ => None,
+        };
+        if let Some((condition, then_branch, else_branch)) = if_ids {
+            let mut changed = self.visit_expr(body, condition);
+            let dom = extract_dominating_guard(body, condition, self.defs);
             let saved = self.dom_guards.clone();
             if let Some(dg) = dom {
                 self.dom_guards.push(dg);
             }
-            changed |= self.visit_block(then_branch);
+            changed |= self.visit_block(body, then_branch);
             self.dom_guards = saved;
             if let Some(eb) = else_branch {
-                changed |= self.visit_block(eb);
+                changed |= self.visit_block(body, eb);
             }
             return changed;
         }
-        opt_walk_expr(self, expr)
+        arena_opt_walk(self, body, NodeRef::Expr(e))
     }
 }
 
@@ -934,26 +991,24 @@ struct BitmaskEliminator<'a> {
     defs: &'a DefMap,
 }
 
-impl NirOptVisitor for BitmaskEliminator<'_> {
-    fn visit_stmt(&mut self, stmt: &mut NirStmt) -> bool {
-        if let NirStmtKind::If {
-            condition,
-            then_block,
-            else_block: None,
-        } = &mut stmt.kind
-            && is_panic_block(then_block)
-            && is_bitmask_bounded(condition, self.defs)
+impl ArenaOptVisitor for BitmaskEliminator<'_> {
+    fn visit_stmt(&mut self, body: &mut Body, s: StmtId) -> bool {
+        let if_ids = match &body.stmts[s].kind {
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block: None,
+            } => Some((*condition, *then_block)),
+            _ => None,
+        };
+        if let Some((condition, then_block)) = if_ids
+            && is_panic_block(body, then_block)
+            && is_bitmask_bounded(body, condition, self.defs)
         {
-            let type_id = condition.type_id;
-            let span = condition.span;
-            *condition = NirExpr {
-                kind: NirExprKind::BoolLiteral(false),
-                type_id,
-                span,
-            };
+            set_false(body, condition);
             return true;
         }
-        opt_walk_stmt(self, stmt)
+        arena_opt_walk(self, body, NodeRef::Stmt(s))
     }
 }
 
@@ -961,29 +1016,31 @@ impl NirOptVisitor for BitmaskEliminator<'_> {
 ///
 /// Matches: `if (var + k) >= bound { return/break }` → after this stmt,
 /// we know `(var + k) < bound`.
-fn extract_early_exit_guard(stmt: &NirStmt, defs: &DefMap) -> Option<ShortCircuitGuard> {
-    let NirStmtKind::If {
+fn extract_early_exit_guard(body: &Body, s: StmtId, defs: &DefMap) -> Option<ShortCircuitGuard> {
+    let StmtKind::If {
         condition,
         then_block,
         else_block: None,
-    } = &stmt.kind
+    } = &body.stmts[s].kind
     else {
         return None;
     };
+    let condition = *condition;
+    let then_block = *then_block;
 
     // then_block must be all early exits (return/break)
-    if !block_always_exits(then_block) {
+    if !block_always_exits(body, then_block) {
         return None;
     }
 
-    ShortCircuitGuard::extract(condition, defs)
+    ShortCircuitGuard::extract(body, condition, defs)
 }
 
-fn block_always_exits(block: &NirBlock) -> bool {
-    block.stmts.iter().any(|s| {
+fn block_always_exits(body: &Body, block: BlockId) -> bool {
+    body.blocks[block].stmts.iter().any(|s| {
         matches!(
-            s.kind,
-            NirStmtKind::Return { .. } | NirStmtKind::Break { .. }
+            body.stmts[*s].kind,
+            StmtKind::Return { .. } | StmtKind::Break { .. }
         )
     })
 }
@@ -1000,22 +1057,25 @@ struct ShortCircuitEliminator<'a> {
     defs: &'a DefMap,
 }
 
-impl NirOptVisitor for ShortCircuitEliminator<'_> {
-    fn visit_expr(&mut self, expr: &mut NirExpr) -> bool {
-        if let NirExprKind::Binary {
-            left,
-            op: NirBinaryOp::Or,
-            right,
-        } = &mut expr.kind
-        {
-            let mut changed = self.visit_expr(left);
-            if let Some(guard) = ShortCircuitGuard::extract(left, self.defs) {
-                changed |= guard.eliminate_in_expr(right, self.defs);
+impl ArenaOptVisitor for ShortCircuitEliminator<'_> {
+    fn visit_expr(&mut self, body: &mut Body, e: ExprId) -> bool {
+        let or_ids = match &body.exprs[e].kind {
+            ExprKind::Binary {
+                left,
+                op: NirBinaryOp::Or,
+                right,
+            } => Some((*left, *right)),
+            _ => None,
+        };
+        if let Some((left, right)) = or_ids {
+            let mut changed = self.visit_expr(body, left);
+            if let Some(guard) = ShortCircuitGuard::extract(body, left, self.defs) {
+                changed |= guard.eliminate_in_expr(body, right, self.defs);
             }
-            changed |= self.visit_expr(right);
+            changed |= self.visit_expr(body, right);
             return changed;
         }
-        opt_walk_expr(self, expr)
+        arena_opt_walk(self, body, NodeRef::Expr(e))
     }
 }
 
@@ -1035,15 +1095,15 @@ struct ShortCircuitGuard {
 /// Decompose `local`, `local.f1`, `local.f1.f2`, ... into a `(root_local,
 /// field_indices)` pair. Returns `None` for anything else (method calls,
 /// arithmetic, etc.) — the caller treats those as opaque bounds and bails.
-fn extract_field_chain(expr: &NirExpr) -> Option<(u32, Vec<u32>)> {
-    match &expr.kind {
-        NirExprKind::Local { index, .. } => Some((*index, Vec::new())),
-        NirExprKind::FieldAccess {
+fn extract_field_chain(body: &Body, e: ExprId) -> Option<(u32, Vec<u32>)> {
+    match &body.exprs[e].kind {
+        ExprKind::Local { index, .. } => Some((*index, Vec::new())),
+        ExprKind::FieldAccess {
             expr: inner,
             field_index,
             ..
         } => {
-            let (root, mut fields) = extract_field_chain(inner)?;
+            let (root, mut fields) = extract_field_chain(body, *inner)?;
             fields.push(*field_index);
             Some((root, fields))
         }
@@ -1053,35 +1113,38 @@ fn extract_field_chain(expr: &NirExpr) -> Option<(u32, Vec<u32>)> {
 
 impl ShortCircuitGuard {
     /// Extract a guard from `(var + k) >= bound` being false.
-    fn extract(condition: &NirExpr, defs: &DefMap) -> Option<Self> {
-        let NirExprKind::Binary { left, op, right } = &condition.kind else {
+    fn extract(body: &Body, condition: ExprId, defs: &DefMap) -> Option<Self> {
+        let ExprKind::Binary { left, op, right } = &body.exprs[condition].kind else {
             return None;
         };
         if *op != NirBinaryOp::GtEq {
             return None;
         }
+        let left = *left;
+        let right = *right;
 
-        let bound = Bound::extract(right)?;
+        let bound = Bound::extract(body, right)?;
 
-        let (var, max_offset) = match &left.kind {
-            NirExprKind::Local { index, .. } => (*index, 0),
-            NirExprKind::Binary {
+        let (var, max_offset) = match &body.exprs[left].kind {
+            ExprKind::Local { index, .. } => (*index, 0),
+            ExprKind::Binary {
                 left: inner_left,
                 op: NirBinaryOp::Add,
                 right: inner_right,
             } => {
-                let NirExprKind::Local { index: var, .. } = &inner_left.kind else {
+                let ExprKind::Local { index: var, .. } = &body.exprs[*inner_left].kind else {
                     return None;
                 };
-                let offset = match &inner_right.kind {
-                    NirExprKind::IntLiteral { value, .. } => *value as i64,
-                    NirExprKind::Local { index, .. } => resolve_constant(*index, defs)?,
+                let var = *var;
+                let offset = match &body.exprs[*inner_right].kind {
+                    ExprKind::IntLiteral { value, .. } => *value as i64,
+                    ExprKind::Local { index, .. } => resolve_constant(*index, defs)?,
                     _ => return None,
                 };
                 if offset < 0 {
                     return None;
                 }
-                (*var, offset)
+                (var, offset)
             }
             _ => return None,
         };
@@ -1094,31 +1157,30 @@ impl ShortCircuitGuard {
     }
 
     /// Check if `check_var >= check_bound` is implied false by this guard.
-    fn implies_false(&self, condition: &NirExpr, defs: &DefMap) -> bool {
-        let condition = peel_branch_hint(condition);
-        let NirExprKind::Binary { left, op, right } = &condition.kind else {
+    fn implies_false(&self, body: &Body, condition: ExprId, defs: &DefMap) -> bool {
+        let condition = peel_branch_hint(body, condition);
+        let ExprKind::Binary { left, op, right } = &body.exprs[condition].kind else {
             return false;
         };
         if *op != NirBinaryOp::GtEq {
             return false;
         }
+        let left = *left;
+        let right = *right;
 
         // Check that the bound matches
-        if !self.bound_matches(right, defs) {
+        if !self.bound_matches(body, right, defs) {
             return false;
         }
 
         // Check that check_var resolves to var + k where k <= max_offset
-        self.var_in_range(left, defs)
+        self.var_in_range(body, left, defs)
     }
 
-    fn bound_matches(&self, expr: &NirExpr, defs: &DefMap) -> bool {
-        // Decode `expr` as a Bound and compare with the guard's
-        // bound via the same identity / numeric regime that
-        // `check_bound_implied_false` uses. Strict-equality form:
-        // either structurally identical, or both bounds project to
-        // the same constant.
-        let Some(expr_bound) = Bound::extract(expr) else {
+    fn bound_matches(&self, body: &Body, e: ExprId, defs: &DefMap) -> bool {
+        // Decode `e` as a Bound and compare with the guard's bound via the same
+        // identity / numeric regime that `check_bound_implied_false` uses.
+        let Some(expr_bound) = Bound::extract(body, e) else {
             return false;
         };
         match (&expr_bound, &self.bound) {
@@ -1141,9 +1203,9 @@ impl ShortCircuitGuard {
         }
     }
 
-    fn var_in_range(&self, expr: &NirExpr, defs: &DefMap) -> bool {
-        match &expr.kind {
-            NirExprKind::Local { index, .. } => {
+    fn var_in_range(&self, body: &Body, e: ExprId, defs: &DefMap) -> bool {
+        match &body.exprs[e].kind {
+            ExprKind::Local { index, .. } => {
                 if resolves_to(*index, self.var, defs) {
                     return true; // offset 0 <= max_offset
                 }
@@ -1151,20 +1213,20 @@ impl ShortCircuitGuard {
                 resolve_offset_from(*index, self.var, defs)
                     .is_some_and(|offset| offset >= 0 && offset <= self.max_offset)
             }
-            NirExprKind::Binary {
+            ExprKind::Binary {
                 left,
                 op: NirBinaryOp::Add,
                 right,
             } => {
-                let NirExprKind::Local { index, .. } = &left.kind else {
+                let ExprKind::Local { index, .. } = &body.exprs[*left].kind else {
                     return false;
                 };
                 if !resolves_to(*index, self.var, defs) {
                     return false;
                 }
-                let offset = match &right.kind {
-                    NirExprKind::IntLiteral { value, .. } => *value as i64,
-                    NirExprKind::Local { index, .. } => {
+                let offset = match &body.exprs[*right].kind {
+                    ExprKind::IntLiteral { value, .. } => *value as i64,
+                    ExprKind::Local { index, .. } => {
                         if let Some(c) = resolve_constant(*index, defs) {
                             c
                         } else {
@@ -1179,97 +1241,121 @@ impl ShortCircuitGuard {
         }
     }
 
-    fn eliminate_in_expr(&self, expr: &mut NirExpr, defs: &DefMap) -> bool {
-        match &mut expr.kind {
-            NirExprKind::LabeledBlock { block, .. } | NirExprKind::Block(block) => {
-                self.eliminate_in_block(block, defs)
-            }
-            NirExprKind::Binary { left, right, .. } => {
-                let mut changed = self.eliminate_in_expr(left, defs);
-                changed |= self.eliminate_in_expr(right, defs);
-                changed
-            }
-            NirExprKind::Unary { expr: inner, .. }
-            | NirExprKind::Cast { expr: inner, .. }
-            | NirExprKind::FieldAccess { expr: inner, .. } => self.eliminate_in_expr(inner, defs),
-            NirExprKind::If {
+    fn eliminate_in_expr(&self, body: &mut Body, e: ExprId, defs: &DefMap) -> bool {
+        let walk = match &body.exprs[e].kind {
+            ExprKind::LabeledBlock { block, .. } | ExprKind::Block(block) => ScWalk::Block(*block),
+            ExprKind::Binary { left, right, .. } => ScWalk::Exprs2(*left, *right),
+            ExprKind::Unary { expr: inner, .. }
+            | ExprKind::Cast { expr: inner, .. }
+            | ExprKind::FieldAccess { expr: inner, .. } => ScWalk::Expr1(*inner),
+            ExprKind::If {
                 condition,
                 then_branch,
                 else_branch,
-            } => {
-                let mut changed = self.eliminate_in_expr(condition, defs);
-                changed |= self.eliminate_in_block(then_branch, defs);
+            } => ScWalk::If(*condition, *then_branch, *else_branch),
+            _ => ScWalk::None,
+        };
+        match walk {
+            ScWalk::Block(b) => self.eliminate_in_block(body, b, defs),
+            ScWalk::Exprs2(left, right) => {
+                let mut changed = self.eliminate_in_expr(body, left, defs);
+                changed |= self.eliminate_in_expr(body, right, defs);
+                changed
+            }
+            ScWalk::Expr1(inner) => self.eliminate_in_expr(body, inner, defs),
+            ScWalk::If(condition, then_branch, else_branch) => {
+                let mut changed = self.eliminate_in_expr(body, condition, defs);
+                changed |= self.eliminate_in_block(body, then_branch, defs);
                 if let Some(eb) = else_branch {
-                    changed |= self.eliminate_in_block(eb, defs);
+                    changed |= self.eliminate_in_block(body, eb, defs);
                 }
                 changed
             }
-            _ => false,
+            ScWalk::None => false,
         }
     }
 
-    fn eliminate_in_block(&self, block: &mut NirBlock, defs: &DefMap) -> bool {
+    fn eliminate_in_block(&self, body: &mut Body, block: BlockId, defs: &DefMap) -> bool {
         let mut changed = false;
-        for stmt in &mut block.stmts {
-            changed |= self.eliminate_in_stmt(stmt, defs);
+        for s in body.blocks[block].stmts.clone() {
+            changed |= self.eliminate_in_stmt(body, s, defs);
         }
         changed
     }
 
-    fn eliminate_in_stmt(&self, stmt: &mut NirStmt, defs: &DefMap) -> bool {
+    fn eliminate_in_stmt(&self, body: &mut Body, s: StmtId, defs: &DefMap) -> bool {
         // Check if this is a bounds-check `if (index >= bound) { panic() }` implied false
-        if let NirStmtKind::If {
-            condition,
-            then_block,
-            else_block: None,
-        } = &mut stmt.kind
-            && is_panic_block(then_block)
-            && self.implies_false(condition, defs)
+        let if_ids = match &body.stmts[s].kind {
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block: None,
+            } => Some((*condition, *then_block)),
+            _ => None,
+        };
+        if let Some((condition, then_block)) = if_ids
+            && is_panic_block(body, then_block)
+            && self.implies_false(body, condition, defs)
         {
-            let type_id = condition.type_id;
-            let span = condition.span;
-            *condition = NirExpr {
-                kind: NirExprKind::BoolLiteral(false),
-                type_id,
-                span,
-            };
+            set_false(body, condition);
             return true;
         }
 
         // Recurse into sub-expressions and sub-statements
-        match &mut stmt.kind {
-            NirStmtKind::Let { value, .. } => self.eliminate_in_expr(value, defs),
-            NirStmtKind::Expr(expr) => self.eliminate_in_expr(expr, defs),
-            NirStmtKind::If {
+        let walk = match &body.stmts[s].kind {
+            StmtKind::Let { value, .. } => ScStmt::Expr(*value),
+            StmtKind::Expr(expr) => ScStmt::Expr(*expr),
+            StmtKind::If {
                 condition,
                 then_block,
                 else_block,
-            } => {
-                let mut changed = self.eliminate_in_expr(condition, defs);
-                changed |= self.eliminate_in_block(then_block, defs);
+            } => ScStmt::If(*condition, *then_block, *else_block),
+            StmtKind::Return { value: Some(expr) }
+            | StmtKind::Break {
+                value: Some(expr), ..
+            } => ScStmt::Expr(*expr),
+            StmtKind::LabeledBlock { block, .. } | StmtKind::Loop { body: block } => {
+                ScStmt::Block(*block)
+            }
+            _ => ScStmt::None,
+        };
+        match walk {
+            ScStmt::Expr(e) => self.eliminate_in_expr(body, e, defs),
+            ScStmt::If(condition, then_block, else_block) => {
+                let mut changed = self.eliminate_in_expr(body, condition, defs);
+                changed |= self.eliminate_in_block(body, then_block, defs);
                 if let Some(eb) = else_block {
-                    changed |= self.eliminate_in_block(eb, defs);
+                    changed |= self.eliminate_in_block(body, eb, defs);
                 }
                 changed
             }
-            NirStmtKind::Return { value: Some(expr) }
-            | NirStmtKind::Break {
-                value: Some(expr), ..
-            } => self.eliminate_in_expr(expr, defs),
-            NirStmtKind::LabeledBlock { block, .. } | NirStmtKind::Loop { body: block } => {
-                self.eliminate_in_block(block, defs)
-            }
-            _ => false,
+            ScStmt::Block(b) => self.eliminate_in_block(body, b, defs),
+            ScStmt::None => false,
         }
     }
+}
+
+enum ScWalk {
+    Block(BlockId),
+    Exprs2(ExprId, ExprId),
+    Expr1(ExprId),
+    If(ExprId, BlockId, Option<BlockId>),
+    None,
+}
+
+enum ScStmt {
+    Expr(ExprId),
+    If(ExprId, BlockId, Option<BlockId>),
+    Block(BlockId),
+    None,
 }
 
 /// Check if `(index >= bound)` is provably false because index is bitmask-bounded.
 ///
 /// `(x & MASK) >= BOUND` is false when `MASK >= 0` and `BOUND > MASK`.
-fn is_bitmask_bounded(condition: &NirExpr, defs: &DefMap) -> bool {
-    let condition = peel_branch_hint(condition);
-    let NirExprKind::Binary { left, op, right } = &condition.kind else {
+fn is_bitmask_bounded(body: &Body, condition: ExprId, defs: &DefMap) -> bool {
+    let condition = peel_branch_hint(body, condition);
+    let ExprKind::Binary { left, op, right } = &body.exprs[condition].kind else {
         return false;
     };
 
@@ -1277,18 +1363,19 @@ fn is_bitmask_bounded(condition: &NirExpr, defs: &DefMap) -> bool {
         return false;
     }
 
-    let NirExprKind::Local {
+    let ExprKind::Local {
         index: check_var, ..
-    } = &left.kind
+    } = &body.exprs[*left].kind
     else {
         return false;
     };
-    let Some(check_bound) = Bound::extract(right) else {
+    let check_var = *check_var;
+    let Some(check_bound) = Bound::extract(body, *right) else {
         return false;
     };
 
     // Find the maximum value of check_var (if bitmask-bounded)
-    let Some(max_val) = resolve_max_value(*check_var, defs) else {
+    let Some(max_val) = resolve_max_value(check_var, defs) else {
         return false;
     };
 
@@ -1376,9 +1463,9 @@ fn resolve_constant_through_struct(
 /// For a `<=` guard (`var <= limit`):
 ///   `check_var >= check_bound` is false when `check_var` resolves to var
 ///   AND `check_bound` resolves to `limit + 1`.
-fn is_implied_false(condition: &NirExpr, guard: &LoopGuard, defs: &DefMap) -> bool {
-    let condition = peel_branch_hint(condition);
-    let NirExprKind::Binary { left, op, right } = &condition.kind else {
+fn is_implied_false(body: &Body, condition: ExprId, guard: &LoopGuard, defs: &DefMap) -> bool {
+    let condition = peel_branch_hint(body, condition);
+    let ExprKind::Binary { left, op, right } = &body.exprs[condition].kind else {
         return false;
     };
 
@@ -1387,18 +1474,19 @@ fn is_implied_false(condition: &NirExpr, guard: &LoopGuard, defs: &DefMap) -> bo
         return false;
     }
 
-    let NirExprKind::Local {
+    let ExprKind::Local {
         index: check_var, ..
-    } = &left.kind
+    } = &body.exprs[*left].kind
     else {
         return false;
     };
-    let Some(check_bound) = Bound::extract(right) else {
+    let check_var = *check_var;
+    let Some(check_bound) = Bound::extract(body, *right) else {
         return false;
     };
 
     // check_var must resolve to the guard's induction variable
-    if !resolves_to(*check_var, guard.var, defs) {
+    if !resolves_to(check_var, guard.var, defs) {
         return false;
     }
 
@@ -1419,28 +1507,29 @@ fn is_implied_false(condition: &NirExpr, guard: &LoopGuard, defs: &DefMap) -> bo
 /// [`FunctionRef::is_branch_hint_call`] so this matcher, niri's
 /// `try_fold` peel, and the WIR builder's `BranchHint` lowering stay
 /// in sync.
-fn peel_branch_hint(condition: &NirExpr) -> &NirExpr {
-    if let NirExprKind::Call { func, args, .. } = &condition.kind
+fn peel_branch_hint(body: &Body, condition: ExprId) -> ExprId {
+    if let ExprKind::Call { func, args, .. } = &body.exprs[condition].kind
         && args.len() == 1
         && func.is_branch_hint_call()
     {
-        return peel_branch_hint(&args[0].expr);
+        return peel_branch_hint(body, args[0].expr);
     }
     condition
 }
 
 /// Check if a condition is implied false by the loop guard OR any dominating guard.
 fn is_implied_false_by_any(
-    condition: &NirExpr,
+    body: &Body,
+    condition: ExprId,
     guard: &LoopGuard,
     dom_guards: &[DominatingGuard],
     defs: &DefMap,
 ) -> bool {
-    if is_implied_false(condition, guard, defs) {
+    if is_implied_false(body, condition, guard, defs) {
         return true;
     }
     for dg in dom_guards {
-        if is_implied_by_dominating_guard(condition, dg, defs) {
+        if is_implied_by_dominating_guard(body, condition, dg, defs) {
             return true;
         }
     }
@@ -1453,30 +1542,32 @@ fn is_implied_false_by_any(
 /// `var + k < bound` for all `k <= max_offset` (assuming non-negative offsets).
 /// So `(var + k) >= bound` is false for `k <= max_offset`.
 fn is_implied_by_dominating_guard(
-    condition: &NirExpr,
+    body: &Body,
+    condition: ExprId,
     dg: &DominatingGuard,
     defs: &DefMap,
 ) -> bool {
-    let condition = peel_branch_hint(condition);
-    let NirExprKind::Binary { left, op, right } = &condition.kind else {
+    let condition = peel_branch_hint(body, condition);
+    let ExprKind::Binary { left, op, right } = &body.exprs[condition].kind else {
         return false;
     };
     if *op != NirBinaryOp::GtEq {
         return false;
     }
-    let NirExprKind::Local {
+    let ExprKind::Local {
         index: check_var, ..
-    } = &left.kind
+    } = &body.exprs[*left].kind
     else {
         return false;
     };
-    let Some(check_bound) = Bound::extract(right) else {
+    let check_var = *check_var;
+    let Some(check_bound) = Bound::extract(body, *right) else {
         return false;
     };
 
     // check_var must resolve to `dg.var + offset` where
     // `0 <= offset <= dg.max_offset`.
-    let Some(offset) = resolve_offset_from(*check_var, dg.var, defs) else {
+    let Some(offset) = resolve_offset_from(check_var, dg.var, defs) else {
         return false;
     };
     if offset < 0 || offset > dg.max_offset {
@@ -1499,41 +1590,48 @@ fn is_implied_by_dominating_guard(
 ///
 /// Matches: `(var + offset) < bound` → `DominatingGuard` { var, `max_offset`: offset, bound }
 ///      or: `var < bound` → `DominatingGuard` { var, `max_offset`: 0, bound }
-fn extract_dominating_guard(condition: &NirExpr, defs: &DefMap) -> Option<DominatingGuard> {
-    let NirExprKind::Binary { left, op, right } = &condition.kind else {
+fn extract_dominating_guard(
+    body: &Body,
+    condition: ExprId,
+    defs: &DefMap,
+) -> Option<DominatingGuard> {
+    let ExprKind::Binary { left, op, right } = &body.exprs[condition].kind else {
         return None;
     };
     if *op != NirBinaryOp::Lt {
         return None;
     }
-    let bound = Bound::extract(right)?;
+    let left = *left;
+    let right = *right;
+    let bound = Bound::extract(body, right)?;
 
     // Left side: either `var` or `var + offset`
-    match &left.kind {
-        NirExprKind::Local { index: var, .. } => Some(DominatingGuard {
+    match &body.exprs[left].kind {
+        ExprKind::Local { index: var, .. } => Some(DominatingGuard {
             var: *var,
             max_offset: 0,
             bound,
         }),
-        NirExprKind::Binary {
+        ExprKind::Binary {
             left: inner_left,
             op: NirBinaryOp::Add,
             right: inner_right,
         } => {
-            let NirExprKind::Local { index: var, .. } = &inner_left.kind else {
+            let ExprKind::Local { index: var, .. } = &body.exprs[*inner_left].kind else {
                 return None;
             };
+            let var = *var;
             // Offset can be a literal or a local resolving to a constant
-            let offset = match &inner_right.kind {
-                NirExprKind::IntLiteral { value, .. } => *value as i64,
-                NirExprKind::Local { index, .. } => resolve_constant(*index, defs)?,
+            let offset = match &body.exprs[*inner_right].kind {
+                ExprKind::IntLiteral { value, .. } => *value as i64,
+                ExprKind::Local { index, .. } => resolve_constant(*index, defs)?,
                 _ => return None,
             };
             if offset < 0 {
                 return None;
             }
             Some(DominatingGuard {
-                var: *var,
+                var,
                 max_offset: offset,
                 bound,
             })
@@ -1666,16 +1764,73 @@ fn resolve_field_source(local: u32, field_index: u32, defs: &DefMap) -> Option<F
 }
 
 /// Check if a block consists of a panic call (bounds check failure path).
-fn is_panic_block(block: &NirBlock) -> bool {
-    block.stmts.iter().any(|s| match &s.kind {
-        NirStmtKind::Expr(expr) => is_panic_call(expr),
-        _ => false,
-    })
+fn is_panic_block(body: &Body, block: BlockId) -> bool {
+    body.blocks[block]
+        .stmts
+        .iter()
+        .any(|s| match &body.stmts[*s].kind {
+            StmtKind::Expr(expr) => is_panic_call(body, *expr),
+            _ => false,
+        })
 }
 
-fn is_panic_call(expr: &NirExpr) -> bool {
-    match &expr.kind {
-        NirExprKind::Call { func, .. } => func.name.contains("panic"),
+fn is_panic_call(body: &Body, e: ExprId) -> bool {
+    match &body.exprs[e].kind {
+        ExprKind::Call { func, .. } => func.name.contains("panic"),
         _ => false,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Arena opt-visitor
+// ---------------------------------------------------------------------------
+
+/// Arena counterpart of [`crate::nir_visitor::NirOptVisitor`]: a mutating walk
+/// that returns `true` when any node changed. The default `visit_*` delegate to
+/// [`arena_opt_walk`], which recurses into every id-bearing child (the same set
+/// and order as `opt_walk_*`); the eliminators override the nodes they rewrite.
+trait ArenaOptVisitor {
+    fn visit_stmt(&mut self, body: &mut Body, s: StmtId) -> bool
+    where
+        Self: Sized,
+    {
+        arena_opt_walk(self, body, NodeRef::Stmt(s))
+    }
+    fn visit_expr(&mut self, body: &mut Body, e: ExprId) -> bool
+    where
+        Self: Sized,
+    {
+        arena_opt_walk(self, body, NodeRef::Expr(e))
+    }
+    fn visit_block(&mut self, body: &mut Body, b: BlockId) -> bool
+    where
+        Self: Sized,
+    {
+        arena_opt_walk(self, body, NodeRef::Block(b))
+    }
+    fn visit_pattern(&mut self, body: &mut Body, p: PatId) -> bool
+    where
+        Self: Sized,
+    {
+        arena_opt_walk(self, body, NodeRef::Pat(p))
+    }
+}
+
+/// Recurse into every id-bearing child of `node`, dispatching by category, and
+/// OR the per-child change flags. The eliminators here only rewrite condition
+/// kinds in place (never add/remove nodes), so the upfront child snapshot stays
+/// valid through the walk.
+fn arena_opt_walk<V: ArenaOptVisitor>(v: &mut V, body: &mut Body, node: NodeRef) -> bool {
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    let mut changed = false;
+    for c in kids {
+        changed |= match c {
+            NodeRef::Stmt(s) => v.visit_stmt(body, s),
+            NodeRef::Expr(e) => v.visit_expr(body, e),
+            NodeRef::Block(b) => v.visit_block(body, b),
+            NodeRef::Pat(p) => v.visit_pattern(body, p),
+        };
+    }
+    changed
 }
