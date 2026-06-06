@@ -1,0 +1,70 @@
+#![stdlib("core:temporal")]
+//! Minimal date and time types, modelled on TC39 Temporal.
+//!
+//! This is the MVP described in `docs/wep-2026-06-05-core-temporal.md`: it
+//! provides only the two value types every temporal API is built around, an
+//! exact point on the timeline (`Instant`) and that instant paired with a
+//! time-zone interpretation (`ZonedDateTime`). Methods, arithmetic,
+//! parsing/formatting, `now()`, civil field accessors, and `Duration` are
+//! deferred to follow-up work; the types exist now so `core:cbor` has a
+//! concrete Wado type to deserialize timestamps into.
+//!
+//! Relationship to `wasi:clocks`: `wasi:clocks` exposes its own `Instant`
+//! record (`{ seconds, nanoseconds }`) for the system clock. That type is a
+//! Component Model binding — pinned to a specific WASI version and regenerated
+//! by `wado-from-idl` — whereas `core:temporal`'s `Instant` is a plain,
+//! version-independent Wado type that will grow methods. They share a name and
+//! field layout deliberately: it is "the same concept, a different type", so a
+//! future host bridge between them is a field-for-field copy. `core:temporal`
+//! keeps no dependency on `wasi:clocks`, so it (and `core:cbor` on top of it)
+//! stays usable without pulling in a WASI import.
+//!
+//! Both types are ISO 8601 only and so store no calendar.
+//!
+//! ```
+//! use { Instant, ZonedDateTime } from "core:temporal";
+//!
+//! let epoch = Instant { seconds: 0, nanoseconds: 0 };
+//! let zoned = ZonedDateTime { instant: epoch, time_zone: "UTC" };
+//! ```
+
+/// An exact point on the timeline, as the offset from the Unix epoch
+/// (1970-01-01T00:00:00Z). Time-zone- and calendar-independent.
+///
+/// Corresponds to `Temporal.Instant` and the `wasi:clocks` `instant` record.
+/// Where Temporal stores `epochNanoseconds` as a BigInt, this uses an `i64`
+/// second count (≈ ±292 billion years, far beyond Temporal's ±273,790-year
+/// range) plus a `u32` sub-second part for full nanosecond resolution — the
+/// exact shape of `wasi:clocks` `instant`.
+///
+/// `Ord` is auto-derived and orders chronologically: `seconds` is compared
+/// first, then `nanoseconds`.
+pub struct Instant {
+    /// Whole seconds since the Unix epoch. Negative values are before it.
+    pub seconds: i64,
+    /// Sub-second component, always in `0..1_000_000_000`. Incrementing
+    /// `nanoseconds` always moves forward in time, even when `seconds < 0`
+    /// (e.g. one nanosecond before the epoch is
+    /// `Instant { seconds: -1, nanoseconds: 999_999_999 }`).
+    pub nanoseconds: u32,
+}
+
+/// An exact instant together with the time zone it is interpreted in.
+///
+/// Corresponds to `Temporal.ZonedDateTime` — the only "complete" temporal
+/// value (an instant plus a wall-clock interpretation). The calendar is always
+/// ISO 8601 and therefore not stored. The broken-down wall-clock fields (year,
+/// month, day, hour, …) are a function of `instant` + `time_zone`, computed by
+/// accessors that are future work, not stored state.
+///
+/// `Ord` is auto-derived and orders by `instant` first, then `time_zone`
+/// lexically. That is _not_ a meaningful chronological order across different
+/// zones beyond the instant; ordering distinct zones is the caller's concern.
+pub struct ZonedDateTime {
+    /// The exact instant.
+    pub instant: Instant,
+    /// IANA time-zone identifier (e.g. `"America/New_York"`, `"UTC"`) or a
+    /// fixed UTC offset (e.g. `"+09:00"`). Mirrors the Temporal time-zone slot,
+    /// which is also a string after the removal of `Temporal.TimeZone`.
+    pub time_zone: String,
+}

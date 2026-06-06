@@ -1,0 +1,85 @@
+use { Instant, ZonedDateTime } from "core:temporal";
+
+test "Instant construction and field access" {
+    let i = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    assert i.seconds == 1_700_000_000;
+    assert i.nanoseconds == 123_456_789;
+}
+
+test "Instant auto-derives Eq" {
+    let a = Instant { seconds: 5, nanoseconds: 7 };
+    let b = Instant { seconds: 5, nanoseconds: 7 };
+    let c = Instant { seconds: 5, nanoseconds: 8 };
+    assert a == b;
+    assert a != c;
+}
+
+test "Instant Ord is chronological, including before the epoch" {
+    // One nanosecond before the epoch is { -1, 999_999_999 }; incrementing
+    // nanoseconds always moves forward in time.
+    let one_ns_before = Instant { seconds: -1, nanoseconds: 999_999_999 };
+    let one_sec_before = Instant { seconds: -1, nanoseconds: 0 };
+    let epoch = Instant { seconds: 0, nanoseconds: 0 };
+    assert one_sec_before < one_ns_before;
+    assert one_ns_before < epoch;
+}
+
+test "Instant sorts chronologically" {
+    let mut xs: List<Instant> = [
+        Instant { seconds: 1, nanoseconds: 0 },
+        Instant { seconds: -1, nanoseconds: 999_999_999 },
+        Instant { seconds: 0, nanoseconds: 0 },
+        Instant { seconds: -1, nanoseconds: 0 },
+    ];
+    xs.sort();
+    assert xs[0] == Instant { seconds: -1, nanoseconds: 0 };
+    assert xs[1] == Instant { seconds: -1, nanoseconds: 999_999_999 };
+    assert xs[2] == Instant { seconds: 0, nanoseconds: 0 };
+    assert xs[3] == Instant { seconds: 1, nanoseconds: 0 };
+}
+
+test "Instant auto-derives Inspect" {
+    let i = Instant { seconds: 5, nanoseconds: 7 };
+    assert `{i:?}` == "Instant { seconds: 5, nanoseconds: 7 }";
+}
+
+test "ZonedDateTime construction and nested field access" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 1_700_000_000, nanoseconds: 0 },
+        time_zone: "America/New_York",
+    };
+    assert zdt.instant.seconds == 1_700_000_000;
+    assert zdt.time_zone == "America/New_York";
+}
+
+test "ZonedDateTime accepts a fixed UTC offset as the zone" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 0, nanoseconds: 0 },
+        time_zone: "+09:00",
+    };
+    assert zdt.time_zone == "+09:00";
+}
+
+test "ZonedDateTime auto-derives Eq" {
+    let i = Instant { seconds: 0, nanoseconds: 0 };
+    let a = ZonedDateTime { instant: i, time_zone: "UTC" };
+    let b = ZonedDateTime { instant: i, time_zone: "UTC" };
+    let c = ZonedDateTime { instant: i, time_zone: "Asia/Tokyo" };
+    assert a == b;
+    assert a != c;
+}
+
+test "ZonedDateTime Ord compares instant first, then time zone" {
+    let earlier = Instant { seconds: 0, nanoseconds: 0 };
+    let later = Instant { seconds: 1, nanoseconds: 0 };
+
+    // Different instants order by instant regardless of zone.
+    let a = ZonedDateTime { instant: earlier, time_zone: "UTC" };
+    let b = ZonedDateTime { instant: later, time_zone: "Asia/Tokyo" };
+    assert a < b;
+
+    // Same instant orders by time zone lexically ("Asia/Tokyo" < "UTC").
+    let c = ZonedDateTime { instant: earlier, time_zone: "Asia/Tokyo" };
+    let d = ZonedDateTime { instant: earlier, time_zone: "UTC" };
+    assert c < d;
+}
