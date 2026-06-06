@@ -228,6 +228,27 @@ impl<'a> Engine<'a> {
         }
     }
 
+    /// Edit API: replace a block's statement list. Re-parents the new
+    /// statements to the block, re-enqueues them, the block, and the block's
+    /// parent. Statements dropped from the list become unreachable (dead nodes
+    /// are not freed mid-run; the arena → tree lowering only walks the live
+    /// tree). Use index entries for any `Let` in a dropped statement are left
+    /// in place — they name a now-dead def and are simply never consulted.
+    pub fn set_block_stmts(&mut self, block: BlockId, stmts: Vec<StmtId>) {
+        self.body.blocks[block].stmts = stmts;
+        let kids = self.body.blocks[block].stmts.clone();
+        for s in &kids {
+            self.set_parent(NodeRef::Stmt(*s), Some(NodeRef::Block(block)));
+        }
+        for s in kids {
+            self.enqueue(NodeRef::Stmt(s));
+        }
+        self.enqueue(NodeRef::Block(block));
+        if let Some(p) = self.parent_of(NodeRef::Block(block)) {
+            self.enqueue(p);
+        }
+    }
+
     /// Edit API: allocate a fresh expression node. Sets the parent of its id
     /// children, registers a `Local` mention, and enqueues it (and its
     /// children) so a freshly built subtree is visited.
@@ -624,11 +645,15 @@ impl<'a> Engine<'a> {
     pub fn run(&mut self, rules: &[&dyn Rule]) -> bool {
         let mut any = false;
         while let Some(node) = self.pop() {
-            let NodeRef::Expr(id) = node else { continue };
             loop {
                 let mut changed = false;
                 for rule in rules {
-                    if rule.apply_expr(self, id) {
+                    let fired = match node {
+                        NodeRef::Expr(id) => rule.apply_expr(self, id),
+                        NodeRef::Block(id) => rule.apply_block(self, id),
+                        NodeRef::Stmt(_) | NodeRef::Pat(_) => false,
+                    };
+                    if fired {
                         changed = true;
                         any = true;
                         break;
@@ -644,12 +669,22 @@ impl<'a> Engine<'a> {
 }
 
 /// A single-node local rewrite. The engine applies rules at a node when it is
-/// popped from the worklist or re-enqueued after a neighbouring change.
+/// popped from the worklist or re-enqueued after a neighbouring change. A rule
+/// overrides whichever entry point(s) it needs; the rest default to a no-op.
 pub trait Rule {
     /// Try to rewrite the expression node `id`; return `true` if it changed.
-    /// Most peephole rewrites are expression-typed; statement / block entry
-    /// points are added when a rule needs them.
-    fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool;
+    /// Most peephole rewrites are expression-typed.
+    fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
+        let _ = (engine, id);
+        false
+    }
+
+    /// Try to rewrite the block node `id` — a statement-list rewrite that
+    /// splices in, drops, or reorders statements; return `true` if it changed.
+    fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
+        let _ = (engine, id);
+        false
+    }
 }
 
 #[cfg(test)]
@@ -835,6 +870,81 @@ mod tests {
         // Deep copy: the clone's operands are fresh ids, not shared.
         assert_ne!(new_left, orig_left);
         assert_ne!(new_right, orig_right);
+    }
+
+    /// Demo block rule: drop every `()`-valued expression statement from a
+    /// block. Exercises `apply_block` dispatch and the `set_block_stmts` edit.
+    struct DropUnitStmts;
+    impl Rule for DropUnitStmts {
+        fn apply_block(&self, e: &mut Engine, id: BlockId) -> bool {
+            let stmts = e.body.blocks[id].stmts.clone();
+            let kept: Vec<StmtId> = stmts
+                .iter()
+                .copied()
+                .filter(|s| {
+                    !matches!(&e.body.stmts[*s].kind,
+                        StmtKind::Expr(ex) if matches!(e.body.exprs[*ex].kind, ExprKind::Unit))
+                })
+                .collect();
+            if kept.len() == stmts.len() {
+                return false;
+            }
+            e.set_block_stmts(id, kept);
+            true
+        }
+    }
+
+    /// `{ let x = 1 + 2; (); return x; }` drops the bare `()` statement.
+    #[test]
+    fn block_rule_splices_statement_list() {
+        let sp = Span::default();
+        let ty = TypeTable::UNIT;
+        let mk = |k| NirExpr::new(k, ty, sp);
+        let add = mk(NirExprKind::Binary {
+            left: Box::new(mk(NirExprKind::IntLiteral {
+                value: 1,
+                repr: "1".to_string(),
+            })),
+            op: NirBinaryOp::Add,
+            right: Box::new(mk(NirExprKind::IntLiteral {
+                value: 2,
+                repr: "2".to_string(),
+            })),
+        });
+        let let_stmt = NirStmt::new(
+            NirStmtKind::Let {
+                name: "x".to_string(),
+                local_index: 0,
+                is_mut: false,
+                is_reactive: false,
+                type_id: ty,
+                value: add,
+                skip_value_copy: false,
+            },
+            sp,
+        );
+        let unit_stmt = NirStmt::new(NirStmtKind::Expr(mk(NirExprKind::Unit)), sp);
+        let ret = NirStmt::new(
+            NirStmtKind::Return {
+                value: Some(mk(NirExprKind::Local {
+                    index: 0,
+                    name: "x".to_string(),
+                })),
+            },
+            sp,
+        );
+        let mut body = Body::from_block(&NirBlock::new(vec![let_stmt, unit_stmt, ret], sp));
+        let root = body.root;
+        assert_eq!(body.blocks[root].stmts.len(), 3);
+        {
+            let mut eng = Engine::new(&mut body);
+            assert!(eng.run(&[&DropUnitStmts]));
+        }
+        // The `()` statement is gone; the `let` and `return` remain in order.
+        let kept = &body.blocks[root].stmts;
+        assert_eq!(kept.len(), 2);
+        assert!(matches!(body.stmts[kept[0]].kind, StmtKind::Let { .. }));
+        assert!(matches!(body.stmts[kept[1]].kind, StmtKind::Return { .. }));
     }
 
     #[test]
