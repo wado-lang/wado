@@ -177,6 +177,7 @@
       'use strict';
       (function() {
         const OPT_COLORS = {
+          '-Os': '#3273dc',
           '-O1': '#3273dc',
           '-O2': '#23d160',
           '-O3': '#ff3860',
@@ -216,19 +217,19 @@
             }
           }
 
-          // Group by base name (strip optimization level suffix)
+          // Group by base name. wasm-size programs are compiled once at -Os and
+          // carry no optimization-level suffix, so each forms a single series.
+          // A name that does carry a ` (-Ox)` suffix groups under its base name
+          // as one line per level, mirroring the runtime page.
           const groups = new Map();
           for (const [name, results] of benchesByName) {
             const match = name.match(OPT_PATTERN);
-            if (match) {
-              const baseName = name.replace(OPT_PATTERN, '');
-              const optLevel = match[1];
-              if (!groups.has(baseName)) {
-                groups.set(baseName, new Map());
-              }
-              groups.get(baseName).set(optLevel, results);
+            const baseName = match ? name.replace(OPT_PATTERN, '') : name;
+            const series = match ? match[1] : '-Os';
+            if (!groups.has(baseName)) {
+              groups.set(baseName, new Map());
             }
-            // Skip entries without optimization level suffix (legacy data)
+            groups.get(baseName).set(series, results);
           }
 
           return groups;
