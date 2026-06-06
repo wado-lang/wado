@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780704116555,
+  "lastUpdate": 1780719719746,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30417,6 +30417,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d3d2fb33719dc3c3b568553d976550384fd222b5"
         },
         "date": 1780704116095,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1767,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8808,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16641,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 456413,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c8a446da1fec45866b8d1b3a81d57f0c22cefe6d",
+          "message": "Merge pull request #1310 from wado-lang/claude/robust-ns-imports-OlAeg\n\nMake namespace imports robust across all symbol kinds",
+          "timestamp": "2026-06-06T13:13:31+09:00",
+          "tree_id": "3aa0ec2134b6dd25d644e5ca4db767d2c259e85b",
+          "url": "https://github.com/wado-lang/wado/commit/c8a446da1fec45866b8d1b3a81d57f0c22cefe6d"
+        },
+        "date": 1780719719398,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
