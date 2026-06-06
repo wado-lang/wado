@@ -347,10 +347,12 @@ pub struct Body {
 }
 
 impl Body {
-    /// Build a `Body` from a standalone block (e.g. a global initializer or a
-    /// test fixture); function-level fact sets are left empty.
-    pub fn from_block(block: &NirBlock) -> Self {
-        let mut body = Self {
+    /// An empty body: no nodes and a placeholder `root` (set by the caller once
+    /// the root block is built). Used by `lower::translate` as the canonical
+    /// builder it pushes nodes into, and as the scratch arena behind
+    /// tree-typed NIR positions.
+    pub fn empty() -> Self {
+        Self {
             exprs: PrimaryMap::new(),
             stmts: PrimaryMap::new(),
             blocks: PrimaryMap::new(),
@@ -359,7 +361,13 @@ impl Body {
             locals: Vec::new(),
             address_taken_locals: IndexSet::default(),
             stores_aliased_locals: IndexSet::default(),
-        };
+        }
+    }
+
+    /// Build a `Body` from a standalone block (e.g. a global initializer or a
+    /// test fixture); function-level fact sets are left empty.
+    pub fn from_block(block: &NirBlock) -> Self {
+        let mut body = Self::empty();
         body.root = body.lower().block(block);
         body
     }
