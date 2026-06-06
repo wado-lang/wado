@@ -252,6 +252,16 @@ impl Monomorphizer {
                 let new_inner = self.substitute_type(inner, substitution, type_table);
                 type_table.make_mut_ref(new_inner)
             }
+            // `Reactive` wraps an inner type, so its parameter must be
+            // substituted recursively like `Ref`/`MutRef`. The reactive
+            // feature currently represents bindings with the underlying value
+            // type (the `Reactive` wrapper does not reach monomorphize), so
+            // this arm is defensive — but the substitution contract is "rewrite
+            // every embedded parameter", and `Reactive` embeds one.
+            ResolvedType::Reactive(inner) => {
+                let new_inner = self.substitute_type(inner, substitution, type_table);
+                type_table.intern(ResolvedType::Reactive(new_inner))
+            }
             ResolvedType::Function {
                 is_mut,
                 params,

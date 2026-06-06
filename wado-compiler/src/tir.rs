@@ -1832,8 +1832,24 @@ impl TypeTable {
                 }
                 type_id
             }
+            // `Reactive` wraps an inner type, so its parameter is substituted
+            // recursively. This arm is defensive: the reactive feature
+            // currently types bindings with the underlying value type, so a
+            // `Reactive` wrapper never actually reaches monomorphize — but the
+            // substitution contract is "rewrite every embedded parameter", and
+            // `Reactive` embeds one, so handling it keeps the invariant true by
+            // construction rather than by reachability.
+            ResolvedType::Reactive(inner) => {
+                let new_inner = self.substitute_type_params(inner, substitution);
+                if new_inner == inner {
+                    type_id
+                } else {
+                    self.intern(ResolvedType::Reactive(new_inner))
+                }
+            }
             // Primitives, Unit, Never, Unknown, Error, Struct, Enum, Variant,
-            // Resource, Newtype, Flags, Reactive — no embedded type params.
+            // Resource, Newtype, Flags — name-only or already-erased; no
+            // embedded type params.
             _ => type_id,
         }
     }
