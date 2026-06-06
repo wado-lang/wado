@@ -714,53 +714,10 @@ impl<'a> Lexer<'a> {
 
         let text = &self.input[start..self.pos];
 
-        match text {
-            "use" => TokenKind::Use,
-            "from" => TokenKind::From,
-            "as" => TokenKind::As,
-            "fn" => TokenKind::Fn,
-            "with" => TokenKind::With,
-            "let" => TokenKind::Let,
-            "mut" => TokenKind::Mut,
-            "return" => TokenKind::Return,
-            "if" => TokenKind::If,
-            "else" => TokenKind::Else,
-            "match" => TokenKind::Match,
-            "for" => TokenKind::For,
-            "while" => TokenKind::While,
-            "loop" => TokenKind::Loop,
-            "break" => TokenKind::Break,
-            "continue" => TokenKind::Continue,
-            "in" => TokenKind::In,
-            "of" => TokenKind::Of,
-            "pub" => TokenKind::Pub,
-            "effect" => TokenKind::Effect,
-            "interface" => TokenKind::Interface,
-            "reactive" => TokenKind::Reactive,
-            "unique" => TokenKind::Unique,
-            "struct" => TokenKind::Struct,
-            "enum" => TokenKind::Enum,
-            "variant" => TokenKind::Variant,
-            "flags" => TokenKind::Flags,
-            "type" => TokenKind::Type,
-            "impl" => TokenKind::Impl,
-            "trait" => TokenKind::Trait,
-            "resource" => TokenKind::Resource,
-            "world" => TokenKind::World,
-            "async" => TokenKind::Async,
-            "import" => TokenKind::Import,
-            "export" => TokenKind::Export,
-            "assert" => TokenKind::Assert,
-            "global" => TokenKind::Global,
-            "const" => TokenKind::Const,
-            "matches" => TokenKind::Matches,
-            "stores" => TokenKind::Stores,
-            // Note: "test", "do", "resume" are contextual keywords handled by the parser, not here
-            "true" => TokenKind::True,
-            "false" => TokenKind::False,
-            "null" => TokenKind::Null,
-            _ => TokenKind::Ident(text.to_string()),
-        }
+        // The keyword set is generated from `crate::syntax::KEYWORDS`.
+        // Contextual keywords ("test", "do", "resume") are intentionally absent
+        // — the parser recognises them positionally, so they lex as identifiers.
+        TokenKind::from_keyword(text).unwrap_or_else(|| TokenKind::Ident(text.to_string()))
     }
 
     fn lex_number(&mut self) -> TokenKind {

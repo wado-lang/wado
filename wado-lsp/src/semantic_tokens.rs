@@ -3,6 +3,7 @@ use wado_compiler::ast::{self, AstId, Expr, Item, Stmt, Type};
 use wado_compiler::lexer::lex;
 use wado_compiler::semantics::Semantics;
 use wado_compiler::symbol::SymbolKind;
+use wado_compiler::syntax::OperatorCategory;
 use wado_compiler::token::{Token, TokenKind};
 
 use crate::text::{PositionEncoding, codepoints_to_code_units, line_without_terminator};
@@ -624,40 +625,8 @@ fn classify_token(
             (token_type::STRING, 0)
         }
 
-        // Operators
-        TokenKind::Plus
-        | TokenKind::Minus
-        | TokenKind::Star
-        | TokenKind::Slash
-        | TokenKind::Percent
-        | TokenKind::EqEq
-        | TokenKind::NotEq
-        | TokenKind::Lt
-        | TokenKind::LtEq
-        | TokenKind::Gt
-        | TokenKind::GtEq
-        | TokenKind::And
-        | TokenKind::Or
-        | TokenKind::Not
-        | TokenKind::Caret
-        | TokenKind::Tilde
-        | TokenKind::LtLt
-        | TokenKind::GtGt
-        | TokenKind::Eq
-        | TokenKind::PlusEq
-        | TokenKind::MinusEq
-        | TokenKind::StarEq
-        | TokenKind::SlashEq
-        | TokenKind::PercentEq
-        | TokenKind::AmpEq
-        | TokenKind::PipeEq
-        | TokenKind::CaretEq
-        | TokenKind::ShlEq
-        | TokenKind::ShrEq
-        | TokenKind::Arrow
-        | TokenKind::FatArrow
-        | TokenKind::DotDotLt
-        | TokenKind::DotDotEq => (token_type::OPERATOR, 0),
+        // Operators (the highlightable subset; see `is_operator`).
+        k if is_operator(k) => (token_type::OPERATOR, 0),
 
         // Punctuation — skip (don't emit semantic tokens for brackets, commas, etc.)
         _ => return None,
@@ -670,6 +639,31 @@ fn classify_token(
         token_type,
         modifiers,
     })
+}
+
+/// Whether a token should be highlighted as an operator semantic token.
+///
+/// Derived from the shared [`OperatorCategory`] registry rather than a
+/// hand-maintained list, but narrower than "every operator": `&` / `|`
+/// (also reference and union/closure punctuation) and the path/range/try
+/// punctuation in the `Other` category (`::`, `?`, `..`, `...`) are skipped,
+/// since colouring them as operators tends to look wrong. Arrows and bounded
+/// ranges (`->`, `=>`, `..<`, `..=`) are kept.
+fn is_operator(kind: &TokenKind) -> bool {
+    match kind.operator_category() {
+        Some(
+            OperatorCategory::Comparison
+            | OperatorCategory::Logical
+            | OperatorCategory::Arithmetic
+            | OperatorCategory::Assignment,
+        ) => true,
+        Some(OperatorCategory::Bitwise) => !matches!(kind, TokenKind::Ampersand | TokenKind::Pipe),
+        Some(OperatorCategory::Other) => matches!(
+            kind,
+            TokenKind::Arrow | TokenKind::FatArrow | TokenKind::DotDotLt | TokenKind::DotDotEq
+        ),
+        None => false,
+    }
 }
 
 /// Classify an identifier by its resolved symbol kind.
