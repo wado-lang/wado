@@ -71,6 +71,34 @@ export fn run() with Stdout {
 }
 
 #[test]
+fn static_method_call_missing_effect_is_reported() {
+    let source = r#"
+use { println, Stdout } from "core:cli";
+
+struct Logger {}
+
+impl Logger {
+    fn log(message: String) with Stdout {
+        println(message);
+    }
+}
+
+fn bad() {
+    Logger::log("Hello");
+}
+
+export fn run() with Stdout {
+    println("ok");
+}
+"#;
+    let v = violations(source);
+    assert!(
+        v.iter().any(|s| s.contains("Stdout")),
+        "expected a missing-Stdout violation for the static call in `bad`, got {v:?}"
+    );
+}
+
+#[test]
 fn effect_free_program_has_no_violations() {
     let source = r#"
 fn add(a: i32, b: i32) -> i32 {

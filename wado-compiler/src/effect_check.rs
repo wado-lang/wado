@@ -1697,9 +1697,18 @@ fn check_function_effects_sem(
         .into_iter()
         .collect();
 
+    // Per-module annotations carry the dispatch facts that have no flattened
+    // `Semantics` mirror (static-method / operator / `?` / for-of).
+    let annotations = sem
+        .state
+        .as_ref()
+        .and_then(|state| state.module_semantics.get(module))
+        .map(|module_sem| &module_sem.types);
+
     let mut walker = SemEffectWalker {
         module,
         sem,
+        annotations,
         fn_effects,
         mangled_index,
         resource_names,
@@ -1709,10 +1718,19 @@ fn check_function_effects_sem(
     ast::walk_block(&mut walker, body);
 }
 
+/// Best-effort display name for a call's callee, for the diagnostic message.
+fn callee_name(callee: &Expr) -> &str {
+    match callee {
+        Expr::Ident(ident) => &ident.name,
+        _ => "(call)",
+    }
+}
+
 /// Walks a function body, checking that each call's required effects are held.
 struct SemEffectWalker<'a> {
     module: &'a ModuleSource,
     sem: &'a Semantics,
+    annotations: Option<&'a crate::elaborator::sem::types::TypeAnnotations>,
     fn_effects: &'a IndexMap<SymbolKey, Vec<EffectRef>>,
     mangled_index: &'a IndexMap<(ModuleSource, String), Vec<EffectRef>>,
     resource_names: &'a IndexSet<(ModuleSource, String)>,
@@ -1783,14 +1801,34 @@ impl AstVisitor for SemEffectWalker<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Call(call) => {
-                if let Expr::Ident(ident) = &call.callee {
-                    let use_key = SymbolKey::new(self.module.clone(), ident.id);
-                    if let Some(def) = self.sem.references.get(&use_key)
-                        && let Some(effects) = self.fn_effects.get(def)
-                    {
-                        let effects = effects.clone();
-                        self.report_missing(&effects, &ident.name, call.span);
-                    }
+                // Free calls resolve through `references` on the callee
+                // identifier. `Type::method(...)` / `Self::method(...)` parse as
+                // a `Call` with a path callee whose identifier has no free-
+                // function reference; they resolve through
+                // `static_method_dispatch` keyed by the call id. (Free
+                // functions also appear in `static_method_dispatch`, so try
+                // `references` first — it is the authoritative free-call edge.)
+                let free = if let Expr::Ident(ident) = &call.callee {
+                    self.sem
+                        .references
+                        .get(&SymbolKey::new(self.module.clone(), ident.id))
+                        .and_then(|def| self.fn_effects.get(def))
+                        .map(|effects| (effects.clone(), ident.name.clone()))
+                } else {
+                    None
+                };
+                if let Some((effects, name)) = free {
+                    self.report_missing(&effects, &name, call.span);
+                } else if let Some(func_ref) = self
+                    .annotations
+                    .and_then(|ann| {
+                        ann.static_method_dispatch
+                            .get(&SymbolKey::new(self.module.clone(), call.id))
+                    })
+                    .map(|dispatch| dispatch.function_ref.clone())
+                {
+                    let effects = self.method_effects(&func_ref);
+                    self.report_missing(&effects, callee_name(&call.callee), call.span);
                 }
             }
             Expr::MethodCall(method_call) => {
@@ -1799,6 +1837,17 @@ impl AstVisitor for SemEffectWalker<'_> {
                     let func_ref = dispatch.function_ref.clone();
                     let effects = self.method_effects(&func_ref);
                     self.report_missing(&effects, &method_call.method, method_call.span);
+                }
+            }
+            Expr::StaticMethodCall(static_call) => {
+                let call_key = SymbolKey::new(self.module.clone(), static_call.id);
+                if let Some(func_ref) = self
+                    .annotations
+                    .and_then(|ann| ann.static_method_dispatch.get(&call_key))
+                    .map(|dispatch| dispatch.function_ref.clone())
+                {
+                    let effects = self.method_effects(&func_ref);
+                    self.report_missing(&effects, &static_call.method, static_call.span);
                 }
             }
             _ => {}
