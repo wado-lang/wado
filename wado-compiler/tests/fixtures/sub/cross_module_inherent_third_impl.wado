@@ -1,0 +1,15 @@
+// Module B: a same-package module that adds an inherent method to module A's
+// `Gadget`. Coherence allows this (Gadget is user-owned, not foreign), so the
+// method must be resolvable from any module — including ones that import
+// neither this module's nor the type's declaration directly.
+use { Gadget } from "./cross_module_inherent_third_type.wado";
+
+impl Gadget {
+    pub fn doubled(&self) -> i32 {
+        return self.n * 2;
+    }
+}
+
+pub fn make(n: i32) -> Gadget {
+    return Gadget { n };
+}

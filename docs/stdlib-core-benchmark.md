@@ -24,7 +24,7 @@ use { Benchmark } from "core:benchmark";
 test "benchmark" { run(); }
 
 export fn run() with Stdout, MonotonicClock {
-    let mut b = Benchmark::new("count-prime");
+    let mut b = Benchmark { name: "count-prime" };
     b.work_per_iter = Option::Some(10_000_000.0);  // numbers screened
     b.unit = "numbers";
     let count = b.run("", || count_primes(10_000_000));
@@ -36,7 +36,7 @@ For multi-phase benchmarks, call `run` once per phase. A byte-sized input
 reports `MB/s` automatically:
 
 ```wado
-let mut b = Benchmark::new("zlib");
+let mut b = Benchmark { name: "zlib" };
 b.input_size = Option::Some(data.len());  // → MB/s
 let compressed = b.run("compress", || zlib_compress(&data));
 let _ = b.run("decompress", || inflate_zlib(&compressed).unwrap());
@@ -100,20 +100,16 @@ Unit label for the throughput figure when `work_per_iter` is set
 (e.g. `"conversions"`, `"px"`, `"numbers"`). Ignored when throughput
 falls back to a byte rate or to `ops/s`.
 
-#### `pub fn new(name: String) -> Benchmark`
-
-Create a benchmark with default settings (auto-calibrated to ~1s,
-no input size).
-
 #### `pub fn run<T>(&mut self, label: String, f: fn mut() -> T) -> T with Stdout, MonotonicClock`
 
 Run a single phase and report its throughput.
 
 In auto mode (`iterations == 0`) the iteration count is calibrated so
 the timed loop runs for about `target_ms` milliseconds. In fixed mode
-(`iterations > 0`) it performs `warmup` unmeasured runs then exactly
-`iterations` timed runs. Prints the header on first call. Returns the
-final timed iteration's value.
+(`iterations > 0`) it performs `warmup` unmeasured runs (the `-1`
+default auto-derives to 1 when `iterations >= 2`, otherwise 0) then
+exactly `iterations` timed runs. Prints the header on first call.
+Returns the final timed iteration's value.
 
 `label` may be empty for an unlabeled single-phase benchmark.
 

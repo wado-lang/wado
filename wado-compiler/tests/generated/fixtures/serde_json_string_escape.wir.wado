@@ -1419,7 +1419,14 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
                     continue l144;
                 };
             };
+<<<<<<< HEAD
             chunk_len = __hfs_pos_60 - chunk_start;
+||||||| 788d2f0a
+            chunk_len = __hfs_pos_50 - chunk_start;
+=======
+            __hfs_pos_50 = self.pos;
+            chunk_len = __hfs_pos_50 - chunk_start;
+>>>>>>> origin/main
             if chunk_len > 0 {
                 __match_20 = "core:prelude/string.wado/String::from_utf8_slice"("core:prelude/slice.wado/ArraySlice<u8>::slice"(self.input, chunk_start, __hfs_pos_60));
                 if builtin::likely(ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(__match_20)) {
@@ -1434,9 +1441,17 @@ fn "core:json/JsonDeserializer::read_json_string"(self) {
             }
             if builtin::unlikely(__hfs_pos_60 >= (self.input.end - self.input.start)) {
                 cold_path;
+<<<<<<< HEAD
                 __hfs_call_61 = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(offset_41 = builtin::i64_extend_i32_s(__hfs_pos_60); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_41 }) };
                 self.pos = __hfs_pos_60;
                 return __hfs_call_61;
+||||||| 788d2f0a
+                __hfs_call_51 = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(offset_33 = builtin::i64_extend_i32_s(__hfs_pos_50); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_33 }) };
+                self.pos = __hfs_pos_50;
+                return __hfs_call_51;
+=======
+                return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(offset_33 = builtin::i64_extend_i32_s(__hfs_pos_50); struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: offset_33 }) };
+>>>>>>> origin/main
             }
             index_43 = __hfs_pos_60;
             b_14 = builtin::array_get<u8>(self.input.repr, self.input.start + index_43);

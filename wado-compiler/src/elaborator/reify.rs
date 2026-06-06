@@ -4198,8 +4198,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let lookup = self.type_lookup();
         // Decl field shape: (name, index, raw_type, default_expr).
         // Cloned out of the lookup so the borrow ends before reifying.
+        // `struct_module` is the struct's declaring module, consulted by the
+        // omitted-default loop below.
+        let info = lookup.struct_fields(&struct_name);
+        let struct_module = info
+            .map(|info| info.module_source.clone())
+            .unwrap_or_else(|| self.current_module_source.clone());
         let decl_fields: Vec<(String, u32, TypeId, Option<ast::Expr>)> = {
-            let info = lookup.struct_fields(&struct_name);
             info.map(|info| {
                 info.fields
                     .iter()
@@ -4275,7 +4280,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             if let Some(default_expr) = default {
                 let expected_field_ty = substitute(self, *raw_ty);
-                let value = self.reify_expr(default_expr, ctx, Some(expected_field_ty));
+                // Reify a foreign default under its owning module's
+                // perspective so every per-`AstId` annotation lookup hits the
+                // module the combined walk recorded the default's facts under
+                // (it keyed them via `ann_module_override`). Resolving under
+                // the construction module would read this module's colliding
+                // node and mis-type the synthesized value.
+                let value = if struct_module == self.current_module_source {
+                    self.reify_expr(default_expr, ctx, Some(expected_field_ty))
+                } else {
+                    self.with_const_module_perspective(&struct_module, |this| {
+                        this.reify_expr(default_expr, ctx, Some(expected_field_ty))
+                    })
+                };
                 fields.push(TirStructField {
                     name: name.clone(),
                     value,

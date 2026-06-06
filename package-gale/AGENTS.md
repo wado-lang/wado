@@ -101,14 +101,24 @@ Leaf / Ambiguous, mirroring `build_prediction` in `parser_gen.wado`),
 repeat strategies, follow-variants, and inlined prediction warnings —
 followed by a summary of every warning. It reflects what the emitter
 sees, not the raw surface IR. ATN-class decisions where static
-prediction cannot disambiguate surface as `Ambiguous([alt N, alt M])`
-under the relevant rule's `prediction:` section. There are no options;
-multiple files are merged the same as `gale gen`.
+prediction cannot disambiguate surface as `Ambiguous([alt N, alt M]) —
+<reason>` under the relevant rule's `prediction:` section, where
+`<reason>` names _why_ the static path halted (`opaque rule-ref
+prefix`, `at-end vs branch conflict`, `lookahead exhausted (k=5)`,
+`config-set explosion`, `multiple alts end together`) — see
+`AmbiguityReason` in `prediction.wado`. Two more per-site fields aid
+ATN-class triage: left-recursive rules print a `loop-entry:` section
+(per-alt `conflict-min` precedence plus the suffix-first overlap groups,
+flagging the precedence-disambiguated — not token-led — loop entry that
+goes ATN-class in `DropLoopEntryBranchInLRRule_4`), and a follow-variant
+gated by a multi-token `(X Y)*`-style Repeat prints its `k-prefix=[@0=…
+@1=…]` per-depth mask beside the (empty) 1-token `mask`. There are no
+options; multiple files are merged the same as `gale gen`.
 
 (note: each `wado` command is actually `cargo run --bin wado`)
 
 ```sh
-wado run package-gale -- dump path/to/Grammar.g4
+wado run package-gale dump path/to/Grammar.g4
 ```
 
 ## Tracing a parse with the `trace` option

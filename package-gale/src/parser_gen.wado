@@ -5207,9 +5207,9 @@ fn gen_prediction_code_inner(w: &mut CodeWriter, node: &PredictionNode, fn_name:
         }
         return;
     }
-    if let Ambiguous(indices) = node {
+    if let Ambiguous(a) = node {
         // Sort by element count for proper ordering (single RuleRef first, etc.)
-        let mut sorted_indices = indices.sorted();
+        let mut sorted_indices = a.alts.sorted();
         sort_group_by_element_count(&mut sorted_indices, alts);
         if skip == 0 {
             // Check if any alternatives have scan functions available.

@@ -21,21 +21,22 @@
 //! mechanical and gates drift back toward the God-Object pattern that
 //! motivated the WEP.
 //!
-//! # Deferred fields
+//! # Removed caches
 //!
-//! Two [`super::Elaborator`] fields are marked
-//! `MIGRATION: → TypeSystem` but **stay on `Elaborator` through Stage 2**:
-//! `indexing_trait_cache` and `method_info_cache`. They are genuine
-//! type-system caches (lookup `(TypeId, name) → MethodInfo` or
-//! `(struct_name, base_type, trait, method, assoc_type) → impl info`)
-//! whose keys live entirely in the shared type domain, so they belong on
-//! `TypeSystem` in spirit. But they carry per-Elaborator mutable state
-//! today (constructed fresh per module, populated by the body walk), and
-//! moving them to a shared `TypeSystem` requires either making them
-//! pipeline-wide caches (a behaviour change) or interior-mutability
-//! plumbing. The migration markers on those fields point at this future
-//! home; the move itself is deferred to a later stage where the cache
-//! lifetime story is settled.
+//! Method and indexing-trait lookup used to carry two per-`Elaborator`
+//! caches, `method_info_cache` and `indexing_trait_cache`. Both only
+//! masked an underlying scan: `lookup_method_info` swept every item in
+//! every loaded module for inherent impls (`O(modules × items)`), and
+//! `find_indexing_trait_impl` re-derived its answer from the same impl
+//! scan. Once both lookups became index-driven — inherent impls via
+//! [`super::trait_env::TraitEnv::inherent_impl_index`], trait impls via
+//! the existing `impl_index` — the caches were pure overhead. Each also
+//! carried a latent staleness hazard: `method_info_cache` keyed on
+//! `(TypeId, name)` with no module-visibility component, and
+//! `indexing_trait_cache`'s key omitted the `trait_ctx.assoc_type_bindings`
+//! its result actually depends on. The prebuilt, immutable indices are
+//! themselves the shared memo, so both caches were removed rather than
+//! migrated to `TypeSystem`.
 //!
 //! [`super::Elaborator::trait_check_stack`] looks superficially similar
 //! — `RefCell<Vec<…>>` mutable state on `Elaborator` — but is **not** a

@@ -138,14 +138,6 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Used to record use→def edges for effect parameter references in `with` clauses.
     // MIGRATION: transient annotate-time scope (per-function, not per-module).
     current_effect_param_decls: IndexMap<String, crate::ast::AstId>,
-    /// Cache for `find_indexing_trait_impl` results.
-    /// Key: (`struct_name`, `base_type_id`, `trait_base_name`, `method_name`, `assoc_type_name`)
-    // MIGRATION: → TypeSystem (type-system cache); deferred — needs the
-    //   pipeline-wide cache lifetime story (currently per-Elaborator).
-    indexing_trait_cache: IndexMap<
-        (String, TypeId, String, String, String),
-        Option<(TypeId, ast::SelfKind, String, ModuleSource)>,
-    >,
     /// Recursion guard for `type_implements_trait` to avoid infinite recursion
     /// on recursive types (e.g., variant Elem containing struct `RepeatElem` with field Elem).
     /// Frames are pushed on entry and popped on return; the stack is empty
@@ -161,11 +153,6 @@ pub struct Elaborator<'a, H: CompilerHost> {
     //   `TypeSystem`. See `tysys.rs` module docs ("Deferred fields") for
     //   the full rationale.
     trait_check_stack: RefCell<Vec<(TypeId, String)>>,
-    /// Cache for `lookup_method_info` results.
-    /// Key: (`base_type_id`, `method_name`) → cached `MethodInfo`
-    // MIGRATION: → TypeSystem (type-system cache); deferred — needs the
-    //   pipeline-wide cache lifetime story.
-    method_info_cache: IndexMap<(TypeId, String), Option<types::MethodInfo>>,
     /// When resolving a default-expression AST at a call site, fall back to
     /// looking up unresolved identifiers in this module's global scope. This
     /// preserves the callee's lexical scope for defaults that reference
@@ -1190,8 +1177,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // module on `tysys.loaded_module_func_indices` during annotate;
         // `lookup_current_func` consults it through
         // `self.current_module_source` so no per-resolve rebuild here.
-        // Clear trait lookup caches (current_module_items changed)
-        self.indexing_trait_cache.clear();
         // Build effect source map from imports
         self.sem.imports.effect_sources = Self::build_effect_sources(
             &mut self.interner.borrow_mut(),

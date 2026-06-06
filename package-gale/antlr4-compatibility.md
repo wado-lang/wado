@@ -404,7 +404,7 @@ When the descriptor extractor surfaces a previously-unseen failure:
    level — those are testsuite-only, not real `.g4`, and belong in
    `[skip]`.
 2. **Reproduce locally** to confirm Gale's parse error:
-   `wado run package-gale -- dump tests/antlr4-compat/grammars/<Category>/<Name>.g4`.
+   `wado run package-gale dump tests/antlr4-compat/grammars/<Category>/<Name>.g4`.
 3. **Decide on the bucket:**
    - Real Gale gap → `[todo]` (or `[stage_b_todo]`) with a one-line
      reason. Mirror the gap in `TODO.md` so it is tracked alongside

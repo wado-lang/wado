@@ -179,9 +179,21 @@ fn parse_statuses<B: AsByteSlice>(json_data: B) -> i32 {
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {
+<<<<<<< HEAD
     let json_data = read_file_bytes("json_twitter/twitter.json");
     let mut b = Benchmark::new("json-twitter");
     b.input_size = Option::Some(json_data.len());
+||||||| 788d2f0a
+    let json_data = read_file("json_twitter/twitter.json");
+    let mut b = Benchmark::new("json-twitter");
+    b.input_size = Option::Some(json_data.len());
+=======
+    let json_data = read_file("json_twitter/twitter.json");
+    let mut b = Benchmark {
+        name: "json-twitter",
+        input_size: Option::Some(json_data.len()),
+    };
+>>>>>>> origin/main
 
     let count = b.run("", || parse_statuses(json_data));
     assert count == 100;

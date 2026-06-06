@@ -1,0 +1,20 @@
+// Regression: a cross-module struct literal that omits a field defaulted to a
+// module-private `global` of the struct's declaring module must resolve that
+// default in the declaring module's lexical scope — the same callee-scope
+// fallback (`default_scope_module`) that function default arguments use.
+//
+// Before the wiring, the default's `SEED` reference was resolved in the
+// construction site's scope and failed with `unknown identifier 'SEED'`.
+use { println, Stdout } from "core:cli";
+use { Config, config_threshold } from "./sub/struct_default_private_global_lib.wado";
+
+export fn run() with Stdout {
+    // `threshold` omitted → its default `SEED + 23` (= 123) is synthesized
+    // here but resolved in the declaring module, where `SEED` is visible.
+    let c = Config { name: "cfg" };
+    assert config_threshold(c) == 123;
+    println(`{config_threshold(c)}`);
+}
+
+__DATA__
+{ "stdout": "123\n" }

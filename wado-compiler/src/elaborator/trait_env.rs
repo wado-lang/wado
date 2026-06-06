@@ -139,6 +139,17 @@ pub(crate) type TraitImplModuleIndex = IndexMap<(String, String), Vec<ModuleSour
 pub struct TraitEnv {
     /// Type name → impl blocks that implement traits for that type.
     pub(super) impl_index: TraitImplIndex,
+    /// Type name → **inherent** impl blocks (`impl Type { … }`, no trait) for
+    /// that type. The inherent counterpart of [`Self::impl_index`]. Lets
+    /// instance-method lookup fetch only the candidate impls for a receiver
+    /// type instead of scanning every item in every loaded module — the
+    /// dominant cost for module-less receivers (primitives, `Array<T>`,
+    /// `unit`) whose inherent methods previously triggered a full
+    /// `O(modules × items)` sweep. Keyed by the same bare type name as
+    /// `impl_index` (via `get_type_name_static`), so two same-named types in
+    /// different modules share a bucket and are disambiguated by the
+    /// per-entry `ModuleSource` at the call site.
+    pub(super) inherent_impl_index: TraitImplIndex,
     /// Trait name → trait declaration location.
     pub(super) decl_index: TraitDeclIndex,
     /// Effect name → effect declaration location.
@@ -271,6 +282,7 @@ impl TraitEnv {
         symbols: &SymbolTable,
     ) -> (Arc<Self>, Vec<TypeError>) {
         let mut impl_index: TraitImplIndex = IndexMap::default();
+        let mut inherent_impl_index: TraitImplIndex = IndexMap::default();
         let mut decl_index: TraitDeclIndex = IndexMap::default();
         let mut effect_decl_index: EffectDeclIndex = IndexMap::default();
         let mut resource_decl_index: ResourceDeclIndex = IndexMap::default();
@@ -487,7 +499,14 @@ impl TraitEnv {
                         }
                     }
                 } else {
-                    // Non-trait (inherent) impl block: index static methods.
+                    // Non-trait (inherent) impl block: index the block by its
+                    // receiver type name so instance-method lookup can fetch
+                    // just these candidates instead of scanning all modules.
+                    inherent_impl_index
+                        .entry(type_name.clone())
+                        .or_default()
+                        .push((module_source.clone(), item_idx));
+                    // Also index static methods.
                     let recv_key = canonical_key(module_source, &type_name);
                     for (method_idx, method) in impl_block.methods.iter().enumerate() {
                         let has_self = method
@@ -515,6 +534,7 @@ impl TraitEnv {
         (
             Arc::new(Self {
                 impl_index,
+                inherent_impl_index,
                 decl_index,
                 effect_decl_index,
                 resource_decl_index,
