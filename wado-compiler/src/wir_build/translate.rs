@@ -1150,10 +1150,10 @@ impl FunctionTranslator<'_, '_> {
     /// Lower a `ExprKind::ArrayLiteral` to the `Array<T>` struct shape
     /// `struct.new List<T> { repr: array.new_fixed<T>(e0, …, eN-1), used: N }`.
     ///
-    /// `List<T>` is `{ repr: builtin::array<T>, used: i32 }` (see
+    /// `List<T>` is `{ repr: Array<T>, used: i32 }` (see
     /// `lib/core/prelude/list.wado`); this mirrors `translate_string_literal`,
     /// which builds the structurally identical `String { repr, used }`. The
-    /// raw `builtin::array<T>` type is read from the struct's `repr` field, so
+    /// raw `Array<T>` type is read from the struct's `repr` field, so
     /// no element-type bookkeeping is duplicated on the NIR node. The resulting
     /// `ArrayNewFixed` is what `wir_optimize::array::{promote_constant_arrays_to_data,
     /// split_large_array_literals}` already consume.
@@ -1168,7 +1168,7 @@ impl FunctionTranslator<'_, '_> {
                 "[WIR] ArrayLiteral expected Ref WirType for List<T> struct, got {wir_type:?} (type_id={array_type_id:?})"
             );
         };
-        // The `repr` field is a non-nullable ref to the raw `builtin::array<T>`.
+        // The `repr` field is a non-nullable ref to the raw `Array<T>`.
         let WirType::Ref {
             type_id: raw_array_type_id,
             ..

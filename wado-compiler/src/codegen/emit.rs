@@ -2433,7 +2433,7 @@ impl<'a> WirEmitter<'a> {
                 // Allocate a fresh array the same length as `src` and copy
                 // every element with a JIT-compiled loop. This was the
                 // per-array-field code path inside the former
-                // `emit_value_copy` for raw `builtin::array<T>` fields and is
+                // `emit_value_copy` for raw `Array<T>` fields and is
                 // now reachable only via the synthesized `$value_copy$`
                 // helpers' explicit `builtin::array_clone::<T>(...)` calls.
                 //

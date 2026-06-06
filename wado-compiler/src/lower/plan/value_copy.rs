@@ -92,7 +92,7 @@ pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
         // Its synthesized helper is `array_clone::<T>(&v)` (see
         // `synthesize::build_copy_body`), the same intrinsic that
         // deep-copies the `repr` field of `List<T>` / `String`. This
-        // is the only thing that makes `builtin::array` value-semantic
+        // is the only thing that makes `Array<T>` value-semantic
         // rather than reference-semantic (WEP-2026-06-02 Phase 2).
         ResolvedType::BuiltinArray(_) => true,
         // `&T` / `&mut T` are reference types: assignment copies the
@@ -101,7 +101,7 @@ pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
         // value with the original, not duplicate it. Stdlib types
         // that need deep-copy semantics use `List<T>` / `String`
         // (which deep-copy via `array_clone` on their internal
-        // `builtin::array`), not `&mut T`.
+        // `Array<T>`), not `&mut T`.
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => false,
         // Variants and resources are reference-shaped at WIR level;
         // their copy body is identity (`return v;`).

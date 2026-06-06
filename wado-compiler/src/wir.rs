@@ -1490,7 +1490,7 @@ pub enum WirInstr {
         value: Box<WirInstr>,
         len: Box<WirInstr>,
     },
-    /// Deep-copy a `builtin::array<T>`: allocates a new array the same
+    /// Deep-copy an `Array<T>`: allocates a new array the same
     /// length as `src` and copies every element. Emitted by codegen as the
     /// same JIT-compiled loop that previously lived inside `emit_value_copy`
     /// for raw array struct fields.
