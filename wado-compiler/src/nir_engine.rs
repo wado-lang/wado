@@ -186,6 +186,25 @@ impl<'a> Engine<'a> {
         self.uses.get(&local).and_then(|u| u.def)
     }
 
+    /// Whether `local` is read anywhere — i.e. has any mention that is not the
+    /// bare-`Local` target of an `Assign`. A bare `local = value` writes the
+    /// local without observing it; `&local`, `local.field = …`, and every
+    /// value-position `Local` are reads. This is the liveness signal the
+    /// write-only-local elimination rule keys on.
+    pub fn is_local_read(&self, local: u32) -> bool {
+        self.local_reads(local)
+            .iter()
+            .any(|&mention| !self.is_assign_target(mention))
+    }
+
+    /// Whether `mention` is the bare-`Local` target slot of an `Assign`.
+    fn is_assign_target(&self, mention: ExprId) -> bool {
+        let Some(NodeRef::Expr(parent)) = self.parent_of(NodeRef::Expr(mention)) else {
+            return false;
+        };
+        matches!(&self.body.exprs[parent].kind, ExprKind::Assign { target, .. } if *target == mention)
+    }
+
     fn set_parent(&mut self, child: NodeRef, parent: Option<NodeRef>) {
         match child {
             NodeRef::Expr(id) => self.expr_parent[id.index()] = parent,
@@ -945,6 +964,78 @@ mod tests {
         assert_eq!(kept.len(), 2);
         assert!(matches!(body.stmts[kept[0]].kind, StmtKind::Let { .. }));
         assert!(matches!(body.stmts[kept[1]].kind, StmtKind::Return { .. }));
+    }
+
+    #[test]
+    fn is_local_read_ignores_bare_assign_targets() {
+        // `{ let x = 1 + 2; x = 7; }` — local 0 is written but never read, so
+        // `is_local_read(0)` is false (its only mention is the assign target).
+        let sp = Span::default();
+        let ty = TypeTable::UNIT;
+        let mk = |k| NirExpr::new(k, ty, sp);
+        let lit = |n: u64| NirExprKind::IntLiteral {
+            value: n,
+            repr: n.to_string(),
+        };
+        let add = mk(NirExprKind::Binary {
+            left: Box::new(mk(lit(1))),
+            op: NirBinaryOp::Add,
+            right: Box::new(mk(lit(2))),
+        });
+        let let_stmt = NirStmt::new(
+            NirStmtKind::Let {
+                name: "x".to_string(),
+                local_index: 0,
+                is_mut: true,
+                is_reactive: false,
+                type_id: ty,
+                value: add,
+                skip_value_copy: false,
+            },
+            sp,
+        );
+        let assign = mk(NirExprKind::Assign {
+            target: Box::new(mk(NirExprKind::Local {
+                index: 0,
+                name: "x".to_string(),
+            })),
+            value: Box::new(mk(lit(7))),
+        });
+        let assign_stmt = NirStmt::new(NirStmtKind::Expr(assign), sp);
+        let mut body = Body::from_block(&NirBlock::new(vec![let_stmt, assign_stmt], sp));
+        let eng = Engine::new(&mut body);
+        assert!(!eng.is_local_read(0));
+
+        // The same body with a trailing `return x` makes local 0 read.
+        let add2 = mk(NirExprKind::Binary {
+            left: Box::new(mk(lit(1))),
+            op: NirBinaryOp::Add,
+            right: Box::new(mk(lit(2))),
+        });
+        let let2 = NirStmt::new(
+            NirStmtKind::Let {
+                name: "x".to_string(),
+                local_index: 0,
+                is_mut: true,
+                is_reactive: false,
+                type_id: ty,
+                value: add2,
+                skip_value_copy: false,
+            },
+            sp,
+        );
+        let ret = NirStmt::new(
+            NirStmtKind::Return {
+                value: Some(mk(NirExprKind::Local {
+                    index: 0,
+                    name: "x".to_string(),
+                })),
+            },
+            sp,
+        );
+        let mut body2 = Body::from_block(&NirBlock::new(vec![let2, ret], sp));
+        let eng2 = Engine::new(&mut body2);
+        assert!(eng2.is_local_read(0));
     }
 
     #[test]
