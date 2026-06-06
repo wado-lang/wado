@@ -353,12 +353,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        // Canonicalize `<ns>::<member>` to its `ns$member` alias (prefix is a
-        // namespace import alias). Every registry below is keyed by these
-        // aliases, which keep the namespace baked in so two namespaces
-        // exporting the same member never collide. The rewritten ident keeps
-        // the original `id` so use→def edges still resolve back to the user's
-        // text.
+        // Canonicalize `ns::member` to its `ns$member` alias; the registries
+        // below are keyed by these aliases. The rewritten ident keeps the
+        // original `id` so use→def edges still resolve back to the user's text.
         let canonical_ident;
         let ident = if let Some(canon) = self.sem.imports.canonical_ns_ref(&ident.name) {
             canonical_ident = ast::IdentExpr {
@@ -2840,10 +2837,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(raw_name) = &struct_lit.name else {
             return self.resolve_anonymous_struct_literal(struct_lit, ctx);
         };
-        // `<ns>::<Struct>` canonicalizes to its `ns$Struct` alias for all the
-        // registry lookups below (struct_fields, symbols, …), so a struct
-        // literal of a namespace-imported type resolves to that namespace's
-        // own module.
+        // `ns::Struct` canonicalizes to its `ns$Struct` alias for the registry
+        // lookups below (struct_fields, symbols, …).
         let canonical_name;
         let name = if let Some(canon) = self.sem.imports.canonical_ns_ref(raw_name) {
             canonical_name = canon;

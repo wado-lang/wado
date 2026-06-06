@@ -853,13 +853,9 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         }
                         UseItem::Namespace { name: ns } => {
                             // Namespace import: register every public symbol
-                            // under its canonical `ns$member` alias. The
-                            // elaborator canonicalizes `ns::member` to the same
-                            // `ns$member` form at lookup time (see
-                            // `ModuleImports::canonical_ns_ref`), so the symbol
-                            // is reachable as `ns::member` and — because the
-                            // alias keeps the namespace — two namespaces
-                            // exporting the same member never collide.
+                            // under its `ns$member` alias, matching how the
+                            // elaborator canonicalizes `ns::member` at lookup
+                            // time (`ModuleImports::canonical_ns_ref`).
                             let symbols: Vec<(String, SymbolKey)> = self
                                 .symbols
                                 .get_module_symbols(&module_source)

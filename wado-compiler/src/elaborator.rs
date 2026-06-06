@@ -1218,12 +1218,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     &self.invocations,
                 );
 
-                // Look up the source module to find global declarations.
                 // Collect `(local_name, source_global_name)` pairs to import:
                 // a `Simple` import names one global; a `Namespace` import
-                // (`use ns from "..."`) brings every public global into scope
-                // under its bare name, so `ns::G` (canonicalized to `G` at
-                // lookup time) and the directly-available `G` both resolve.
+                // brings every public global into scope under its `ns$global`
+                // alias.
                 if let Some(source_module) = self.loaded_modules.get(&source_module_source) {
                     let mut to_import: Vec<(String, String)> = Vec::new();
                     for use_item in &use_decl.items {
@@ -1241,8 +1239,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             }
                             ast::UseItem::Namespace { name: ns } => {
                                 // Each public global is imported under its
-                                // `ns$member` alias (qualified `ns::member`
-                                // access only), keeping namespaces distinct.
+                                // `ns$global` alias.
                                 for src_item in &source_module.items {
                                     if let Item::Global(global_decl) = src_item
                                         && global_decl.is_pub
@@ -1330,12 +1327,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .collect::<Vec<_>>()
             })
             .collect();
-        // Snapshot the namespace aliases so each constant can also be
-        // registered under its `ns$Type::member` form. `ns::Type::CONST`
-        // canonicalizes to `ns$Type::CONST`, and because that alias keeps the
-        // namespace it resolves to the constant in that specific namespace's
-        // module — even when two namespaces export the same `Type::CONST`
-        // (whose bare key would otherwise collapse to a single entry).
+        // Also register each constant reachable through a namespace import
+        // under its `ns$Type::member` alias, so `ns::Type::CONST` (which
+        // canonicalizes to `ns$Type::CONST`) resolves to the constant in that
+        // namespace's module.
         let ns_aliases: Vec<(String, ModuleSource)> = self
             .sem
             .imports

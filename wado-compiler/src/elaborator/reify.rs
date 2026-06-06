@@ -7426,12 +7426,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::TirExprKind;
 
-        // Canonicalize `<ns>::<member>` to its `ns$member` alias, exactly as
-        // `resolve_ident` does at annotate time (expr.rs). Every registry
-        // consulted below is keyed by these aliases; keeping the rewrite here
-        // in lock-step with annotate is what makes namespace-imported globals
-        // / functions / cases reify the same node the elaborator resolved. The
-        // original `id` / `span` are preserved.
+        // Canonicalize `ns::member` to its `ns$member` alias, matching
+        // `resolve_ident` at annotate time (expr.rs) so reify consults the
+        // same alias-keyed registries. The original `id` / `span` are kept.
         let canonical_ident;
         let ident = if let Some(canon) = self.sem.imports.canonical_ns_ref(&ident.name) {
             canonical_ident = ast::IdentExpr {
@@ -7682,12 +7679,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         // 5b. Imported free function reference resolved through the symbol
-        //     table. Namespace imports (`use ns from "..."`) bring functions
-        //     into scope under their bare names without recording them in
-        //     `imported_type_sources`, so the branch above misses them. Mirror
-        //     annotate's `resolve_func_ref_ident` → `lookup_func_ast_for_ref`,
-        //     which also resolves via the symbol table, and emit a `FuncRef`
-        //     keyed by the function's defining module + original name.
+        //     table (covers namespace-import functions, whose `ns$fn` aliases
+        //     are not in `imported_type_sources`). Mirrors annotate's
+        //     `resolve_func_ref_ident` → `lookup_func_ast_for_ref` and emits a
+        //     `FuncRef` keyed by the function's defining module + original name.
         if self.sem.decls.imported_functions.contains(&ident.name)
             && let Some(symbol) = self
                 .symbols

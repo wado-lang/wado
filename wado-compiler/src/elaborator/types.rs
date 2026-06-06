@@ -1628,12 +1628,11 @@ pub(crate) struct TypeLookup<'a> {
     pub(crate) current_module_source: &'a ModuleSource,
     pub(crate) imported_type_sources: &'a IndexMap<String, ModuleSource>,
     pub(crate) import_original_names: &'a IndexMap<String, String>,
-    /// Namespace-import aliases (`use ns from "..."`). A type written as
-    /// `ns::Type` in type position is canonicalized to the bare `Type`
-    /// before any registry lookup, so namespace-imported newtypes / structs
-    /// / variants / enums / flags resolve the same as a directly-imported
-    /// `Type`. Collection passes that have no import context pass an empty
-    /// map (ns-qualified type references only appear in resolved bodies).
+    /// Namespace-import aliases (`use ns from "..."`). A `ns::Type` reference
+    /// in type position is canonicalized to its `ns$Type` alias before any
+    /// registry lookup (see `lookup_ref`). Collection passes that have no
+    /// import context pass an empty map (ns-qualified type references only
+    /// appear in resolved bodies).
     pub(crate) namespace_imports: &'a IndexMap<String, ModuleSource>,
     pub(crate) all_newtypes: &'a IndexMap<ModuleSource, IndexMap<String, TypeId>>,
     pub(crate) all_struct_fields: &'a IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>,
@@ -1661,11 +1660,10 @@ impl<'a> TypeLookup<'a> {
         local: Option<&'a IndexMap<String, V>>,
         all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
     ) -> Option<&'a V> {
-        // Canonicalize a `<ns>::<Type>` reference to its `ns$Type` alias
-        // (prefix is a namespace-import alias). This is the single chokepoint
-        // for every type-name lookup; the alias resolves through the
-        // `imported_type_sources` branch below to the namespace's own module,
-        // so two namespaces exporting the same type stay distinct.
+        // Canonicalize a `ns::Type` reference to its `ns$Type` alias — the
+        // single chokepoint for every type-name lookup. The alias resolves
+        // through the `imported_type_sources` branch below to the namespace's
+        // own module.
         let canon = super::sem::imports::canonical_ns_ref(self.namespace_imports, name);
         let name = canon.as_deref().unwrap_or(name);
         if let Some(local) = local

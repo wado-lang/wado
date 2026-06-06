@@ -1241,12 +1241,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 }
                             }
                             crate::ast::UseItem::Namespace { name: ns } => {
-                                // Namespace import: every public symbol becomes
-                                // available as `ns::member`, canonicalized to
-                                // the `ns$member` alias. Register each alias in
-                                // the same per-name maps that back `use { X as
-                                // Y }`, so two namespaces exporting the same
-                                // member stay distinct (keyed `a$X` vs `b$X`).
+                                // Namespace import: register every public
+                                // symbol under its `ns$member` alias in the
+                                // per-name maps that back `use { X as Y }` —
+                                // types in `imported_type_sources`, functions
+                                // in `imported_functions`.
                                 let source = crate::name::resolve_import_with_invocations(
                                     &mut state.interner.borrow_mut(),
                                     module_source,
