@@ -3,10 +3,11 @@
 This is the follow-up the
 [Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md)
 WEP promised: it specifies the engine, the worklist discipline, and the
-migration steps before code lands. It builds on the
-[NIR Skeleton Arena](./wep-2026-06-05-nir-skeleton-arena.md) (Layer 1), whose
-stage-1 is done — `Body` is the canonical `NirFunction.body` and the optimize
-passes bridge to it per function. This WEP is "Phase 4" of the arena migration.
+migration. It builds on the
+[NIR Skeleton Arena](./wep-2026-06-05-nir-skeleton-arena.md) (Layer 1) — `Body`
+is the canonical `NirFunction.body`. This WEP is "Phase 4" of the arena
+migration, now complete: the engine is implemented, every optimizer pass runs
+on the arena, and the `body_block` bridge is gone (see Migration → Outcome).
 
 ## Context
 
@@ -68,8 +69,10 @@ keeps `parent` / `uses` coherent and pushes affected nodes into `dirty`:
 - `splice(block, range, stmts)`: statement-list edit; fix parents and uses for
   the spliced range.
 
-Dead nodes are not freed mid-run (liveness is reachability from `root`); a
-compaction folds into the arena → tree lowering the bridges already do.
+Dead nodes are not freed mid-run (liveness is reachability from `root`). This
+design assumed the per-pass bridge's arena → tree lowering would compact them
+for free; with the bridge now gone, compaction is an open follow-up (see
+Migration → Follow-ups).
 
 ### Rules
 
@@ -123,157 +126,83 @@ terminates.
 
 The old fixed-point loop and the engine co-exist during the port.
 
-- [x] A. Substrate — `Engine` session (`nir_engine.rs`): `parent` + `uses`
-      builders, the dedup worklist seeded post-order, `NodeRef` +
-      `Body::for_each_child`. Additive, not wired into the loop; unit tests
-      cover the use index, parent links, and worklist seeding.
-- [x] B. Engine core — `replace_expr_kind` (in-place edit keeping the use
-      index coherent, re-parenting new children, re-enqueuing parent + new
-      children), the `Rule` trait, and `run()` (worklist to a local fixed
-      point with per-node rule retry). A demo `FoldAddMulConst` rule + unit
-      test drives the full loop bottom-up (`(1+2)*4 → 12`). Still additive.
-      - Correction: `const_fold` is a poor _first production_ rule. The
-      `const_folding` pass is not a pure peephole — it threads a per-function
-      `env` of constant locals and field knowledge through a flow-sensitive
-      walk (`niri::reduce_local` is the single-node part, but the pass does
-      more). Replacing it with a `reduce_local`-only rule would fold _less_
-      and break golden / `wir_expect` fixtures. So the env-driven part stays a
-      flow-sensitive pass; the first production rule in C is a genuinely-local
-      one (`select_lowering` or `match_to_switch`).
-- C. Migrate the passes off the `body_block()` bridge one at a time, e2e
-  bit-identical at every step. Genuinely-local peephole passes become engine
-  `Rule`s; whole-function / flow-sensitive passes keep their own walkers but
-  read and mutate the arena `Body` directly. A shared `optimize/arena_query`
-  module holds the arena counterparts of the tree helpers (`is_local`,
-  `expr_mentions_local`, `stmt_mentions_local`, `is_pure_expr`); the tree
-  helpers stay for the not-yet-ported tree consumers. The engine gained an
-  `apply_block` entry point + `set_block_stmts` (statement-list edits),
-  `is_local_read` (use-index liveness), and a `build_uses` that walks live
-  nodes from the root so dead nodes left by a prior in-place pass are not
-  counted once two arena passes run back-to-back.
-  - Ported so far:
-  - [x] `select_lowering` — expr `Rule` (`If` → `builtin::select`).
-  - [x] `match_to_switch` — expr `Rule` (dense `Match` → `Switch`);
-        param/global/struct-field defaults reuse it via a wrap-in-`Body`
-        helper.
-  - [x] `string_push` — block `Rule` (`push_str("…")` → per-byte `push`).
-  - [x] `array_literal` — block `Rule` (builder window → `ArrayLiteral`).
-  - [x] `elide_local` — block `Rule` on `is_local_read`.
-  - [x] `value_copy_elide` — direct arena walk (single-pass strip).
-  - [x] `drve` — direct arena walks (bodies); globals stay tree.
-  - [x] `dae` — arena dead-param detection / validation / renumber / rewrite;
-        globals via a wrap-in-`Body` helper. Last consumer of the tree
-        `is_pure_expr` / `collect_reads_in_block`, now removed; arena
-        counterparts live in `optimize/arena_query`.
-  - [x] `cse` — direct arena walk (loop-level CSE).
-  - [x] `ref_elim` — direct arena walks; lazy referent resolution, single-use
-        deref source moved.
-  - [x] `const_object_globalization` — arena read-only gate + read rewrite;
-        globals via wrap-in-`Body`.
-  - [x] `const_branch_prune` — bottom-up arena walk; last user of the shared
-        `visit_project_functions` tree bridge.
-  - [x] `sroa_param` — arena validation + callee / call-site rewrite; globals
-        via wrap-in-`Body`.
-  - [x] `multi_value_return` — pure arena classification (sets `return_abi`).
-  - [x] `elide_box_local` — arena body traversal; `ModRef` + the
-        leftmost-walker run on materialized subtrees (`Body::to_tree_*`).
-  - [x] `sroa` — arena candidate / escape analysis + decomposition rewrite.
-  - [x] `copy_prop` — arena binding/usage analysis + substitute-and-remove.
-  - [x] `store_load_forward` — arena flow-sensitive forwarding; modified-locals
-        cache keyed by `BlockId`.
-  - [x] `value_copy_demote` — arena element-immutability proof
-        (`ElementClean` / `ElementImmutable` recurse via `for_each_child`);
-        callee bodies cloned per `verify`; shallow sibling synthesized by
-        cloning the function and renaming `array_clone` in its arena body.
-  - [x] `tmpl_hoist` — arena escape analysis + buffer/Formatter hoisting;
-        new nodes (hoisted `Let`, field-reset `Assign`, normalized Formatter
-        literal) pushed straight into the arena; rename walks navigate by id.
-  - [x] `condition_implication` — arena taint/DefMap analysis; the three
-        eliminators drive a local `ArenaOptVisitor` (mirrors `NirOptVisitor`'s
-        default walk); a guard-implied condition is rewritten to `false`
-        in place. DefMap-resolution helpers are value-typed and unchanged.
-  - [x] `container_sroa` — arena candidate collection + whitelist escape
-        analysis (fixpoint) + per-field rewrite. Synthesized per-field
-        calls are pushed into the arena; duplicated sub-expressions
-        (capacity, index) deep-clone via the new `Body::clone_expr`.
-  - [x] `licm` — arena modified-var / ref-binding / hoist-candidate
-        analysis and in-place field-access replacement; hoist `Let`s pushed
-        into the arena. The hoist/replace/ref walks share a `*_child_nodes`
-        enumerator that reproduces the tree walk's pattern-excluding child set
-        (so hoist-local numbering stays identical).
-  - [x] `dce` — the body-touching helpers (array-clone-elem / bytes-literal /
-        inspect-signature collectors, the `DceWalker` fact walk, and dead
-        `GlobalVarSet` removal) read/mutate the arena; the reachability /
-        type / function / global graph machinery is body-independent and
-        unchanged. Global initializers (still tree NIR) wrap in a one-stmt
-        `Body` for the walk.
-  - [x] `labeled_block_fusion` — arena precondition checks (break-shape /
-        use counts / loop-exit), and the fusion rewrite that moves the
-        labeled block's statements (reusing ids) and deep-clones the
-        THEN/ELSE blocks per break site via `Body::clone_block`. Added a
-        public `Body::clone_block`.
-  - [x] `inline` — the caller body walk and entry are arena: call sites are
-        found in the arena, the inlined labeled block is built by the existing
-        tree remap (callee materialized as a deliberate read-only clone) and
-        lowered back into the caller arena via the new `Body::lower_expr`. The
-        cost / recursion / remap analysis stays tree-shaped over the callee
-        clones. `Body`'s tree→arena `Lower` now borrows the target maps so
-        `from_block` and `lower_expr` share it.
-  - [x] `field_scalarize` — arena driver (loop discovery + nested recursion);
-        each loop's hot-field scalarization runs the tree state machine on a
-        materialized copy of the loop body (subtree materialization) and lowers
-        the transformed body + pre/post sync statements back via the new
-        `Body::lower_block` / `to_tree_block`. The dataflow lattice / sync /
-        convergence logic stays tree-shaped over the per-loop materialization;
-        the function body itself flows as arena.
-  - [x] `const_folding` (niri) — the last pass, and the only one that drives
-        the whole `niri` interpreter over the body with flow-sensitive env
-        threading. Ported in three staged steps, e2e bit-identical at each:
-        (1) an arena evaluator (`expr_to_lattice_a` / `try_fold_a` /
-        `block_lattice_a` / `match_lattice_a` / `pattern_matches_a`), (2) an
-        arena rewriter (`reduce_local_a` / `reduce_local_block_a` /
-        `rewrite_if_expr_a` / `rewrite_match_expr_a` / `try_call_fold_a`, plus
-        `reduce_to_lattice_a` which skips the tree path's defensive
-        `reduce_in_place` because the visitor folds every child bottom-up
-        first), and (3) the `ConstFoldVisitor` itself, walking arena ids with
-        the branch-aware field-env snapshot/restore/join intact. CTFE callee
-        tails stay tree (small read-only materialized clones); `build_alias_info`
-        runs on a read-only materialization of the arena body; global
-        initializers stay tree-shaped. Added `Value::from_arena_literal` and
-        `alias::recognize_value_copy_a`.
-  - All passes are ported. **The `body_block` bridge is gone from the
-    optimizer** — the only remaining `body_block()` callers are the read-only
-    diagnostics tools (`nir_unparse`, `remarks`).
-  - Added `Body::clone_expr` (structural arena deep-clone) — the
-    non-engine counterpart of `Engine::clone_expr`, for rewrites that
-    duplicate a subtree.
-  - Flow-sensitive (keep walkers, read arena): `const_folding`'s env walk,
-    `copy_prop`, `licm`, `field_scalarize`, `store_load_forward`.
-  - The last bridge is gone: the per-pass `Body ↔ tree` round-trips
-    (`body_block()` mutate `set_body_block()`) have vanished and the arena
-    flows lower → optimize → wir_build with no converter (`wir_build` reads
-    `body.exprs` directly) — completing Phase 3's goal. The single remaining
-    tree→arena conversion is the one-time `from_block` at the lower boundary
-    (`lower::translate` still builds a tree, then converts once); making
-    `lower` emit the arena directly is a separate future cleanup.
-  - Measured speed win (A/B: peak-bridge `05b532fc` — every optimizer pass on
-    `body_block`/`set_body_block` — vs the arena-direct HEAD; byte-identical
-    input since the target sources and the `include_str!`-embedded `lib/`
-    stdlib are unchanged between the two commits; median of 9 runs, dev
-    profile). The isolated NIR optimize phase:
+- [x] A+B. Engine substrate + core (`nir_engine.rs`): the per-function session
+      (`parent` map, local `uses` index, post-order worklist, `Body::for_each_child`),
+      the coherent edit API (`replace_expr_kind`, `set_block_stmts` / `apply_block`,
+      `alloc_*`, `clone_expr`, `is_local_read`), the `Rule` trait, and the `run`
+      driver. `build_uses` walks live-from-root, so dead nodes a prior in-place pass
+      left are not counted when two arena passes run back-to-back.
+  - Learning: `const_fold` is a poor _first_ rule — it is not a pure peephole
+    (it threads a flow-sensitive env of constant locals + field knowledge), so a
+    `reduce_local`-only rule would fold _less_ and break `wir_expect` fixtures.
+    The first production rules were genuinely-local (`select_lowering`,
+    `match_to_switch`).
+- [x] C. Every optimizer pass (≈30) moved off the `body_block()` bridge, e2e
+      bit-identical at every step, using one of four patterns:
+  - Engine `Rule` (local peepholes): `select_lowering`, `match_to_switch`,
+    `string_push`, `array_literal`, `elide_local`.
+  - Direct arena walk (whole-function analysis + in-place rewrite): `drve`,
+    `dae`, `cse`, `ref_elim`, `const_object_globalization`, `const_branch_prune`,
+    `sroa`, `sroa_param`, `multi_value_return`, `container_sroa`,
+    `condition_implication`, `dce`, `value_copy_elide`, `value_copy_demote`,
+    `tmpl_hoist`, `labeled_block_fusion`.
+  - Flow-sensitive (own dataflow walker, reads/mutates the arena): `copy_prop`,
+    `licm`, `store_load_forward`, and `const_folding`'s env walk.
+  - Subtree materialization (tree-shaped transform on a read-only clone, lowered
+    back): `inline` (callee remap), `field_scalarize` (per-loop state machine),
+    `elide_box_local`, and `const_folding`'s CTFE callee tails.
+  - Shared infrastructure: `optimize/arena_query` (arena `is_local`,
+    `expr_mentions_local`, `is_pure_expr`, `collect_reads`, `has_break_to`);
+    `Body::{for_each_child, clone_expr, clone_block, lower_expr, lower_block,
+    to_tree_*}`. NIR positions that are still tree (param / global / struct-field
+    defaults, global initializers) reuse a pass's own logic via a
+    wrap-in-`Body` helper.
+  - `const_folding` (niri), the last and hardest pass, drives the whole
+    interpreter with flow-sensitive env threading. Ported in three bit-identical
+    stages: an arena evaluator (`*_lattice_a` / `try_fold_a`), an arena rewriter
+    (`reduce_local_a` / `rewrite_*_a` / `reduce_to_lattice_a` — which skips the
+    tree path's defensive `reduce_in_place` since the visitor folds every child
+    bottom-up first), then the `ConstFoldVisitor` walking arena ids with the
+    branch-aware field-env snapshot/restore/join intact. `build_alias_info` runs
+    on a read-only materialization; `Value::from_arena_literal` and
+    `alias::recognize_value_copy_a` were added.
 
-    | module          | bridge  | arena   | speedup |
-    | --------------- | ------- | ------- | ------- |
-    | zlib            | 75 ms   | 67 ms   | 1.12×   |
-    | fts             | 327 ms  | 220 ms  | 1.49×   |
-    | json_catalog_v2 | 909 ms  | 593 ms  | 1.53×   |
-    | sqlite_parse    | 7455 ms | 4469 ms | 1.67×   |
+### Outcome
 
-    The win scales with optimizer load: the bridge cost (a `to_block` +
-    `from_block` per pass per fixpoint iteration) grows with body size and
-    iteration count, so a small module (zlib, 67 ms) sees ~11 % while a
-    heavy one (sqlite_parse) is cut 40 % — a 3 s saving that flows through
-    to a 24 % shorter total compile for that module.
+The `body_block` bridge is gone from the optimizer — the only remaining
+`body_block()` callers are the read-only diagnostics (`nir_unparse`, `remarks`).
+The per-pass `Body ↔ tree` round-trips have vanished and the arena flows
+lower → optimize → wir_build with no converter (`wir_build` reads `body.exprs`
+directly) — completing Phase 3's goal. The single remaining tree→arena
+conversion is the one-time `from_block` at the lower boundary
+(`lower::translate` still builds a tree, then converts once).
+
+Measured speed win (A/B: peak-bridge `05b532fc` — every optimizer pass on the
+bridge — vs the arena-direct HEAD; byte-identical input, since the target
+sources and the `include_str!`-embedded `lib/` stdlib are unchanged between the
+two commits; median of 9 runs, dev profile). The isolated NIR optimize phase:
+
+| module          | bridge  | arena   | speedup |
+| --------------- | ------- | ------- | ------- |
+| zlib            | 75 ms   | 67 ms   | 1.12×   |
+| fts             | 327 ms  | 220 ms  | 1.49×   |
+| json_catalog_v2 | 909 ms  | 593 ms  | 1.53×   |
+| sqlite_parse    | 7455 ms | 4469 ms | 1.67×   |
+
+The win scales with optimizer load — the bridge cost is a `to_block` +
+`from_block` per pass per fixpoint iteration — so a small module sees ~11 %
+while a heavy one is cut 40 % (~3 s, flowing to a 24 % shorter total compile).
+
+### Follow-ups
+
+- [ ] Arena compaction. Passes now mutate in place and leave orphaned (dead)
+      nodes in `Body`; nothing reclaims them (the old `set_body_block` re-lowering
+      used to densify). Every consumer traverses from `root` and `build_uses`
+      already ignores orphans, so this is correct, but a heavy module's maps carry
+      several× the live node set. A from-`root` re-lowering (or mark-sweep) at the
+      end of optimize would reclaim it if memory becomes a concern.
+- [ ] `lower::translate` emits the arena directly, dropping the one-time
+      tree-build + `from_block` at the lower boundary.
 
 ## Out of scope
 
