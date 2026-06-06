@@ -1,0 +1,14 @@
+// Namespace-imported flags members (`ns::Flags::Member`) must lower to their
+// bitmask literal, both in annotate and reify.
+use h from "./sub/ns_robust_helper.wado";
+
+test "namespace flags members" {
+    let rw = h::Perms::Read | h::Perms::Write;
+    assert rw as u32 == 3;
+    let masked = rw & h::Perms::Read;
+    assert masked as u32 == 1;
+    assert h::Perms::Execute as u32 == 4;
+}
+
+__DATA__
+{"test": {}}

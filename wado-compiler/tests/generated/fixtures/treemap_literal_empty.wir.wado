@@ -165,8 +165,7 @@ fn "wado-compiler/tests/fixtures/treemap_literal_empty.wado/run"() with Stdout {
     let f_31: ref "core:prelude/format.wado//Formatter";
     let f_36: ref "core:prelude/format.wado//Formatter";
     drop(struct.new "core:collections//TreeMap<core:prelude/string.wado/String,i32>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: ref.as_non_null(__b_12 = struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(0), used: 0 }; __b_12), entries: ref.as_non_null(__b_13 = struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>">(0), used: 0 }; __b_13), size: 0, deleted_count: 0 });
-    __v0_2 = 0;
-    __cond_3 = __v0_2 == 0;
+    __cond_3 = local.tee __v0_2(0) == 0;
     if __cond_3 == 0 {
         "core:internal/panic"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(124), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 117); "core:prelude/string.wado/String::push"(__local_6, 110); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/treemap_literal_empty.wado"), used: 55 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_19 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(8, f_19); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: m.len() == 0
@@ -300,8 +299,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
     let ptr: i32;
     let raw_len: i32;
     let result: i32;
-    packed = "core:internal/cm_lower_list_u8"(data, len);
-    ptr = builtin::i32_wrap_i64(packed);
+    ptr = builtin::i32_wrap_i64(local.tee packed("core:internal/cm_lower_list_u8"(data, len)));
     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
@@ -360,8 +358,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let offset: i32;
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
-    abs_val = select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self));
-    digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
+    digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
@@ -376,10 +373,7 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    a_7 = capacity * 2;
-    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
-    new_capacity = select i32(a_5 > 8, a_5, 8);
-    new_repr = builtin::array_new<u8>(new_capacity);
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

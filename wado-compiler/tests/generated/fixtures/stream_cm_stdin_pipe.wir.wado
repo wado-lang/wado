@@ -60,8 +60,7 @@ fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdin_r
     let __outptr: i32;
     let __lifted_result_1: i32;
     let __lifted_result_2: i32;
-    __outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:cli/Stdin::read_via_stream"(__outptr);
+    "wasi/wasi:cli/Stdin::read_via_stream"(local.tee __outptr("mem/realloc"(0, 0, 4, 8)));
     __lifted_result_1 = builtin::load_i32(__outptr + 0);
     __lifted_result_2 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
@@ -73,8 +72,7 @@ fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_export__run"() {
     let subtask: i32;
     let __pattern_temp_0: ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";
     __pattern_temp_0 = "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdin_read_via_stream"();
-    stdin_stream = __pattern_temp_0.0;
-    subtask = "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream"(stdin_stream);
+    subtask = "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream"(local.tee stdin_stream(__pattern_temp_0.0));
     let __fr_ptr_1: i32;
     let __fr_result_1: i32;
     __fr_ptr_1 = "mem/realloc"(0, 0, 8, 40);

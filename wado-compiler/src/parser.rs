@@ -884,6 +884,21 @@ impl Parser {
             (first_type, second_name, second_span)
         };
 
+        if self.check(&TokenKind::LBrace) {
+            // `ns::Type { ... }` struct destructuring pattern: a qualified path
+            // followed by struct-pattern braces. The qualified path is the
+            // struct type name; the elaborator strips a namespace prefix when
+            // matching (`Pattern::Struct` → `strip_ns_prefix`). Mirrors the
+            // `ns::Type { ... }` struct *literal* path in the expression parser.
+            let prefix = match &qualifier {
+                Type::Named(t) => t.name.clone(),
+                Type::Generic(g) => g.name.clone(),
+                Type::NamespacedGeneric(n) => format!("{}::{}", n.namespace, n.name),
+                _ => unreachable!("qualifier is always a named/generic path"),
+            };
+            let type_name = format!("{prefix}::{case_name}");
+            return self.parse_struct_pattern_fields(Some(type_name));
+        }
         let case_id = self.alloc_ast_id();
         if self.check(&TokenKind::LParen) {
             return self.parse_variant_pattern(
@@ -3632,10 +3647,23 @@ impl Parser {
             qualified_name = format!("{qualified_name}::{seg_name}");
             end_span = seg_span;
         }
+        let path_span = start_span.merge(&end_span);
+        // `ns::Type { ... }` struct literal: a namespace-qualified path
+        // followed by struct-literal braces. The qualified path is the type
+        // name; the elaborator canonicalizes the `ns::` prefix at resolution
+        // time (`resolve_struct_literal`). Restricted in the same contexts as
+        // a bare-name struct literal (if/while/match conditions) to avoid the
+        // `{`-introduces-a-block ambiguity.
+        if self.check(&TokenKind::LBrace)
+            && !self.restrict_struct_literals
+            && self.looks_like_struct_literal_content()
+        {
+            return self.parse_struct_literal(Some(qualified_name), path_span);
+        }
         Ok(Expr::Ident(IdentExpr {
             id: self.alloc_ast_id(),
             name: qualified_name,
-            span: start_span.merge(&end_span),
+            span: path_span,
             segments,
             type_args: Vec::new(),
         }))

@@ -273,11 +273,18 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/run"() with 
     if dirs.used == 0 {
         return;
     }
-    dir = if builtin::unlikely(0 >= dirs.used) {
+    file_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding__Descriptor_open_at"(local.tee dir(if builtin::unlikely(0 >= dirs.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
+<<<<<<< HEAD
     }; builtin::array_get<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0).0;
     file_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("append_test.txt"), used: 15 }, 9, 3));
+||||||| d3d2fb33
+    }; builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0).0;
+    file_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding__Descriptor_open_at"(dir, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("append_test.txt"), used: 15 }, 9, 3));
+=======
+    }; builtin::array_get<ref "tuple//[Descriptor, String]">(dirs.repr, 0).0), 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("append_test.txt"), used: 15 }, 9, 3));
+>>>>>>> origin/main
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(file_result) {
         file = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(file_result).payload_0;
         let __pair_temp_1: i64;
@@ -347,19 +354,24 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding
     let ptr: i32;
     let len_10: i32;
     let arr: ref Array<u8>;
-    __outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:filesystem/Preopens::get_directories"(__outptr);
+    "wasi/wasi:filesystem/Preopens::get_directories"(local.tee __outptr("mem/realloc"(0, 0, 4, 8)));
     __base = builtin::load_i32(__outptr);
+<<<<<<< HEAD
     __count = builtin::load_i32(__outptr + 4);
     __result = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(__count), used: 0 };
+||||||| d3d2fb33
+    __count = builtin::load_i32(__outptr + 4);
+    __result = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "tuple//[Descriptor, String]">(__count), used: 0 };
+=======
+    __result = struct.new "core:prelude//List<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "tuple//[Descriptor, String]">(local.tee __count(builtin::load_i32(__outptr + 4))), used: 0 };
+>>>>>>> origin/main
     __i = 0;
     b6: block {
         l7: loop {
             if __i >= __count {
                 break b6;
             }
-            __elem_addr = __base + (__i * 12);
-            __lifted_result_6 = builtin::load_i32(__elem_addr + 0);
+            __lifted_result_6 = builtin::load_i32(local.tee __elem_addr(__base + (__i * 12)) + 0);
             ptr = builtin::load_i32(__elem_addr + 4);
             len_10 = builtin::load_i32((__elem_addr + 4) + 4);
             arr = "core:internal/memory_to_gc_array"(ptr, len_10);
@@ -384,15 +396,13 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding
     let __subtask_packed: i32;
     __path_packed = "core:internal/cm_lower_string"(path);
     __async_outptr = "mem/realloc"(0, 0, 4, 20);
-    __params_buf = "mem/realloc"(0, 0, 4, 20);
-    builtin::store_i32(__params_buf, self);
+    builtin::store_i32(local.tee __params_buf("mem/realloc"(0, 0, 4, 20)), self);
     builtin::store_u8(__params_buf + 4, path_flags);
     builtin::store_i32(__params_buf + 8, builtin::i32_wrap_i64(__path_packed));
     builtin::store_i32(__params_buf + 12, builtin::i32_wrap_i64(__path_packed >> 32_i64));
     builtin::store_u8(__params_buf + 16, open_flags);
     builtin::store_u8(__params_buf + 17, flags);
-    __subtask_packed = "wasi/wasi:filesystem/Descriptor::open_at"(__params_buf, __async_outptr);
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado//__Closure_2" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__closure_wrapper_0" } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>" { __cm_packed: local.tee __subtask_packed("wasi/wasi:filesystem/Descriptor::open_at"(__params_buf, __async_outptr)), __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado//__Closure_2" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__closure_wrapper_0" } };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding__Descriptor_write_via_stream"(self, data, offset) with Descriptor {
@@ -421,8 +431,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_binding
     let __subtask_packed: i32;
     __path_packed = "core:internal/cm_lower_string"(path);
     __async_outptr = "mem/realloc"(0, 0, 4, 20);
-    __subtask_packed = "wasi/wasi:filesystem/Descriptor::unlink_file_at"(self, builtin::i32_wrap_i64(__path_packed), builtin::i32_wrap_i64(__path_packed >> 32_i64), __async_outptr);
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_1" { env: struct.new "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado//__Closure_3" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__closure_wrapper_1" } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>" { __cm_packed: local.tee __subtask_packed("wasi/wasi:filesystem/Descriptor::unlink_file_at"(self, builtin::i32_wrap_i64(__path_packed), builtin::i32_wrap_i64(__path_packed >> 32_i64), __async_outptr)), __cm_outptr: __async_outptr, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_1" { env: struct.new "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado//__Closure_3" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__closure_wrapper_1" } };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_filesystem_append_stream.wado/__cm_lift__Descriptor_open_at"(__outptr) {
@@ -758,10 +767,7 @@ fn "core:internal/cm_stream_write_u8"(handle, data) {
     let result: i32;
     let data_9: ref Array<u8>;
     let len_10: i32;
-    data_9 = data.repr;
-    len_10 = data.used;
-    packed = "core:internal/cm_lower_list_u8"(data_9, len_10);
-    ptr = builtin::i32_wrap_i64(packed);
+    ptr = builtin::i32_wrap_i64(local.tee packed(data_9 = data.repr; len_10 = data.used; "core:internal/cm_lower_list_u8"(data_9, len_10)));
     len_4 = builtin::i32_wrap_i64(packed >> 32_i64);
     result = "wasi/stream-write"(handle, ptr, len_4);
     if result == -1 {
@@ -775,8 +781,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
     let ptr: i32;
     let raw_len: i32;
     let result: i32;
-    packed = "core:internal/cm_lower_list_u8"(data, len);
-    ptr = builtin::i32_wrap_i64(packed);
+    ptr = builtin::i32_wrap_i64(local.tee packed("core:internal/cm_lower_list_u8"(data, len)));
     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
@@ -878,10 +883,20 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<wasi:filesystem/ty
     let new_repr: ref "Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>";
     let a: i32;
     capacity = builtin::array_len(self.repr);
+<<<<<<< HEAD
     a = capacity * 2;
     new_capacity = select i32(a > 4, a, 4);
     new_repr = builtin::array_new<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(new_capacity);
     builtin::array_copy<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(new_repr, 0, self.repr, 0, self.used);
+||||||| d3d2fb33
+    a = capacity * 2;
+    new_capacity = select i32(a > 4, a, 4);
+    new_repr = builtin::array_new<ref "tuple//[Descriptor, String]">(new_capacity);
+    builtin::array_copy<ref "tuple//[Descriptor, String]">(new_repr, 0, self.repr, 0, self.used);
+=======
+    new_repr = builtin::array_new<ref "tuple//[Descriptor, String]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    builtin::array_copy<ref "tuple//[Descriptor, String]">(new_repr, 0, self.repr, 0, self.used);
+>>>>>>> origin/main
     self.repr = new_repr;
 }
 

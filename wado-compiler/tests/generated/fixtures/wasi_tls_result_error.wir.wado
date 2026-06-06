@@ -115,8 +115,7 @@ import fn wasi/subtask-drop from "wasi/subtask-drop";
 fn "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/run"() with Stdout, Connector, Error {
     let conn: i32;
     let __match_1: ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";
-    conn = "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_binding__Connector_new"();
-    __match_1 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"("wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_binding__Connector_connect"(conn, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("example.com"), used: 11 }));
+    __match_1 = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"("wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_binding__Connector_connect"(local.tee conn("wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_binding__Connector_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("example.com"), used: 11 }));
     if __match_1.discriminant == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("connected"), used: 9 });
     } else {
@@ -138,8 +137,7 @@ fn "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_binding__Connec
     let __subtask_packed: i32;
     __server_name_packed = "core:internal/cm_lower_string"(server_name);
     __async_outptr = "mem/realloc"(0, 0, 4, 8);
-    __subtask_packed = "wasi/wasi:tls/Connector::connect"(this, builtin::i32_wrap_i64(__server_name_packed), builtin::i32_wrap_i64(__server_name_packed >> 32_i64), __async_outptr);
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>" { __cm_packed: __subtask_packed, __cm_outptr: __async_outptr, __cm_size: 8, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/wasi_tls_result_error.wado//__Closure_2" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__closure_wrapper_0" } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>" { __cm_packed: local.tee __subtask_packed("wasi/wasi:tls/Connector::connect"(this, builtin::i32_wrap_i64(__server_name_packed), builtin::i32_wrap_i64(__server_name_packed >> 32_i64), __async_outptr)), __cm_outptr: __async_outptr, __cm_size: 8, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/wasi_tls_result_error.wado//__Closure_2" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__closure_wrapper_0" } };
 }
 
 fn "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_lift__Connector_connect"(__outptr) {
@@ -241,8 +239,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
     let ptr: i32;
     let raw_len: i32;
     let result: i32;
-    packed = "core:internal/cm_lower_list_u8"(data, len);
-    ptr = builtin::i32_wrap_i64(packed);
+    ptr = builtin::i32_wrap_i64(local.tee packed("core:internal/cm_lower_list_u8"(data, len)));
     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {

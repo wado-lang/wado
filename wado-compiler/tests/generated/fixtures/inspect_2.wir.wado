@@ -1078,8 +1078,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
     let ptr: i32;
     let raw_len: i32;
     let result: i32;
-    packed = "core:internal/cm_lower_list_u8"(data, len);
-    ptr = builtin::i32_wrap_i64(packed);
+    ptr = builtin::i32_wrap_i64(local.tee packed("core:internal/cm_lower_list_u8"(data, len)));
     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
@@ -1164,8 +1163,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/write_array_inspect<i32>"(
                 s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
                 "core:prelude/string.wado/String::push_str"(f.buf, s_11);
             }
-            __sroa_self_value = builtin::array_get<i32>(_licm_repr_26, i);
-            "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value, f);
+            "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee __sroa_self_value(builtin::array_get<i32>(_licm_repr_26, i)), f);
             shown = shown + 1;
             i = i + 1;
             continue l56;
@@ -1596,8 +1594,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let offset: i32;
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
-    abs_val = select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self));
-    digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
+    digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
@@ -1612,10 +1609,7 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    a_7 = capacity * 2;
-    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
-    new_capacity = select i32(a_5 > 8, a_5, 8);
-    new_repr = builtin::array_new<u8>(new_capacity);
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1751,14 +1745,12 @@ fn "wado-compiler/tests/fixtures/inspect_2.wado/InspPoint^Inspect::inspect"(self
     "core:prelude/string.wado/String::push_str"(f.buf, s_3);
     s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 58, 32), used: 3 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_5);
-    __sroa_self_value_20 = self.x;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_20, f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee __sroa_self_value_20(self.x), f);
     s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_11);
     s_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121, 58, 32), used: 3 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_13);
-    __sroa_self_value_21 = self.y;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_21, f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee __sroa_self_value_21(self.y), f);
     s_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_19);
 }
@@ -1820,8 +1812,7 @@ fn "wado-compiler/tests/fixtures/inspect_2.wado/InspMatrix^Inspect::inspect"(sel
     "core:prelude/string.wado/String::push_str"(f.buf, s_10);
     s_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("rows: "), used: 6 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_12);
-    __sroa_self_value = self.rows;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value, f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee __sroa_self_value(self.rows), f);
     s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_18);
 }
@@ -1843,8 +1834,7 @@ fn "wado-compiler/tests/fixtures/inspect_2.wado/InspUser^Inspect::inspect"(self,
     "core:prelude/string.wado/String::push_str"(f.buf, s_7);
     s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("age: "), used: 5 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_9);
-    __sroa_self_value = self.age;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value, f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee __sroa_self_value(self.age), f);
     s_15 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32, 46, 46), used: 4 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_15);
     s_17 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 };
@@ -2140,8 +2130,7 @@ fn "wado-compiler/tests/fixtures/inspect_2.wado/InspBox<i32>^Inspect::inspect"(s
     "core:prelude/string.wado/String::push_str"(f.buf, s_3);
     s_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value: "), used: 7 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_5);
-    __sroa_self_value = self.value;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value, f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee __sroa_self_value(self.value), f);
     s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_11);
 }
@@ -2174,8 +2163,7 @@ fn "core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String>^Inspect::
     let s_18: ref "core:prelude/string.wado//String";
     s_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(91), used: 1 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_8);
-    v_5 = self.0;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(v_5, f);
+    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee v_5(self.0), f);
     v_6 = self.1;
     s_16 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
     "core:prelude/string.wado/String::push_str"(f.buf, s_16);
