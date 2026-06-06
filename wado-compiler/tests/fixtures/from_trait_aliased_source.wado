@@ -1,0 +1,29 @@
+// Regression: a `From` impl whose source type is reached through an import
+// alias must resolve at the call site.
+//
+// `impl From<Aliased>` is mangled with the written name `Aliased`, but the call
+// `Target::from(v)` disambiguates `From` by the argument's *canonical* type name
+// (`Source`). The matcher compared the alias verbatim against the canonical
+// name, missed the impl, and fell back to a non-existent inherent `Target::from`
+// — failing at WIR with "unresolved Call". The fix canonicalises the impl's
+// source-type name before comparing.
+
+use { Source as Aliased } from "./sub/from_trait_aliased_source_lib.wado";
+
+pub struct Target {
+    pub v: i32,
+}
+
+impl From<Aliased> for Target {
+    fn from(value: Aliased) -> Target {
+        return Target { v: value.v };
+    }
+}
+
+test "From resolves through an import alias on the source type" {
+    let t = Target::from(Aliased { v: 7 });
+    assert t.v == 7;
+}
+
+__DATA__
+{"test": {}}

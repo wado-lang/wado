@@ -1,0 +1,32 @@
+// Regression: a `From` impl converting *from* a Component-Model record type
+// (`wasi:clocks` `instant`) into a local struct that happens to share its name
+// (`Instant`) must resolve and run.
+//
+// The reflexive-`From` short-circuit compared bare type names, so
+// `Instant::from(clockReading)` was wrongly treated as an identity conversion
+// (both named `Instant`) and returned the `wasi:clocks` value unchanged; and the
+// impl was reached through the `Instant as ClockInstant` alias, which the
+// matcher did not canonicalise. Both are now compared by canonical decl
+// identity (module + name).
+
+use { Instant as ClockInstant } from "wasi:clocks";
+
+pub struct Instant {
+    pub seconds: i64,
+    pub nanoseconds: u32,
+}
+
+impl From<ClockInstant> for Instant {
+    fn from(value: ClockInstant) -> Instant {
+        return Instant { seconds: value.seconds, nanoseconds: value.nanoseconds };
+    }
+}
+
+test "From converts a wasi:clocks instant into a same-named local Instant" {
+    let t = Instant::from(ClockInstant { seconds: 1_700_000_000, nanoseconds: 123 });
+    assert t.seconds == 1_700_000_000;
+    assert t.nanoseconds == 123;
+}
+
+__DATA__
+{"test": {}}

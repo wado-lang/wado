@@ -2469,7 +2469,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let ast::Type::Generic(g) = trait_type
                 && let Some(arg) = g.args.first()
             {
-                return Self::get_type_name_static(arg) == expected;
+                // Canonicalise the impl's source-type name before comparing:
+                // it may be an import alias (`impl From<ClockInstant>` where
+                // `ClockInstant` is `use { Instant as ClockInstant }`), whereas
+                // the call site's `expected` is the resolved type's real name.
+                // Comparing the alias verbatim would miss the impl and fall
+                // back to a (non-existent) inherent `Type::from`.
+                let arg_name = Self::get_type_name_static(arg);
+                let canonical = self.canonical_decl_key(&arg_name).1;
+                return canonical == expected;
             }
             !is_from_or_try_from(&base)
         };

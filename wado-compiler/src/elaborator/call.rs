@@ -507,7 +507,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // never built. The inner argument's `expression_types`
                     // entry survives because it was recorded by the
                     // `resolve_expr` wrapper for the argument itself.
-                    if arg_type_name == prefix {
+                    //
+                    // Compare by canonical decl identity, not bare name: two
+                    // distinct types from different modules can share a name
+                    // (`core:temporal::Instant` vs `wasi:clocks::Instant`), and a
+                    // bare-name match here would wrongly collapse a real
+                    // `From<OtherInstant>` conversion into an identity. Types
+                    // without a declaring module (primitives) fall back to name
+                    // equality.
+                    let is_reflexive = match self.type_decl_key(arg_type) {
+                        Some(arg_key) => arg_key == self.canonical_decl_key(prefix),
+                        None => arg_type_name == prefix,
+                    };
+                    if is_reflexive {
                         self.record_desugar(
                             call.id,
                             super::sem::types::DesugarKind::NewtypeFromCollapse,
