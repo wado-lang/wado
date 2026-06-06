@@ -9,27 +9,27 @@ Language service engine for the Wado compiler toolchain.
 
 ## Architecture
 
-| File                        | Role                                                                                                                      |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `src/lib.rs`                | `Engine` struct: document state + per-document `Semantics` snapshot cache + query dispatch                                |
-| `src/host.rs`               | `FilesystemCompilerHost`: default `CompilerHost` for disk-backed source loading                                           |
-| `src/uri.rs`                | Typed `Uri` + `UriScheme` for parsing `file:` / `core:` / `wasi:` / `kiln:` URIs once instead of inline string splitting  |
-| `src/text.rs`               | `PositionEncoding` and LSP `Position` ↔ compiler 1-based codepoint `(line, col)` conversion                               |
-| `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion (re-encodes spans in the negotiated position encoding)    |
-| `src/semantic_tokens.rs`    | Semantic token computation (lexer + AST classification). Re-encodes start/length at delta-encode time.                    |
-| `src/definition.rs`         | Go-to-definition via `Cursor::{def_key, def_span}` and a file-path matcher for `use`/`#include` paths                     |
-| `src/hover.rs`              | Hover info; `Cursor::def_symbol` selects the binding, locals render from the AST node, items via `wado_compiler::unparse` |
-| `src/inlay_hints.rs`        | Inlay hints: inferred-type hints on `let` / closure / `for-of` bindings, plus parameter-name hints at call sites          |
-| `src/references.rs`         | Find-references via `Cursor::references_to_def`                                                                           |
-| `src/document_highlight.rs` | Document highlight; Read/Write classification consults `Semantics::is_write_target`                                       |
-| `src/location.rs`           | URI / span helpers for translating compiler `ModuleSource` to LSP URIs                                                    |
-| `src/query.rs`              | `QueryContext`: per-query bundle (`&Semantics` + source + URI + encoding) consumed by every position-bearing feature      |
-| `src/server.rs`             | `run_stdio()`: blocking stdin/stdout loop feeding the async dispatcher                                                    |
-| `src/server/transport.rs`   | Content-Length framing + typed JSON-RPC send/receive helpers                                                              |
-| `src/server/dispatch.rs`    | LSP method routing, position-encoding negotiation, and server-lifecycle enforcement                                       |
-| `src/server/rpc.rs`         | LSP wire types (params, capabilities, notifications)                                                                      |
-| `src/bin/wado-lsp.rs`       | Binary entrypoint; drives `run_stdio()` via `futures::executor::block_on`                                                 |
-| `src/test_support.rs`       | Shared in-memory `MapHost` for unit + integration tests (`#[doc(hidden)] pub`); replaces per-file `TestHost` duplication  |
+| File                        | Role                                                                                                                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/lib.rs`                | `Engine` struct: document state + per-document `Semantics` snapshot cache + query dispatch                                                                                                       |
+| `src/host.rs`               | `FilesystemCompilerHost`: default `CompilerHost` for disk-backed source loading                                                                                                                  |
+| `src/uri.rs`                | Typed `Uri` + `UriScheme` for parsing `file:` / `core:` / `wasi:` / `kiln:` URIs once instead of inline string splitting                                                                         |
+| `src/text.rs`               | `PositionEncoding` and LSP `Position` ↔ compiler 1-based codepoint `(line, col)` conversion                                                                                                      |
+| `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion (re-encodes spans in the negotiated position encoding)                                                                           |
+| `src/semantic_tokens.rs`    | Semantic token computation. Classifies identifiers by resolved `SymbolKind` from the `Semantics` snapshot, falling back to lexer + AST heuristics. Re-encodes start/length at delta-encode time. |
+| `src/definition.rs`         | Go-to-definition via `Cursor::{def_key, def_span}` and a file-path matcher for `use`/`#include` paths                                                                                            |
+| `src/hover.rs`              | Hover info; `Cursor::def_symbol` selects the binding, locals render from the AST node, items via `wado_compiler::unparse`                                                                        |
+| `src/inlay_hints.rs`        | Inlay hints: inferred-type hints on `let` / closure / `for-of` bindings, plus parameter-name hints at call sites                                                                                 |
+| `src/references.rs`         | Find-references via `Cursor::references_to_def`                                                                                                                                                  |
+| `src/document_highlight.rs` | Document highlight; Read/Write classification consults `Semantics::is_write_target`                                                                                                              |
+| `src/location.rs`           | URI / span helpers for translating compiler `ModuleSource` to LSP URIs                                                                                                                           |
+| `src/query.rs`              | `QueryContext`: per-query bundle (`&Semantics` + source + URI + encoding) consumed by every position-bearing feature                                                                             |
+| `src/server.rs`             | `run_stdio()`: blocking stdin/stdout loop feeding the async dispatcher                                                                                                                           |
+| `src/server/transport.rs`   | Content-Length framing + typed JSON-RPC send/receive helpers                                                                                                                                     |
+| `src/server/dispatch.rs`    | LSP method routing, position-encoding negotiation, and server-lifecycle enforcement                                                                                                              |
+| `src/server/rpc.rs`         | LSP wire types (params, capabilities, notifications)                                                                                                                                             |
+| `src/bin/wado-lsp.rs`       | Binary entrypoint; drives `run_stdio()` via `futures::executor::block_on`                                                                                                                        |
+| `src/test_support.rs`       | Shared in-memory `MapHost` for unit + integration tests (`#[doc(hidden)] pub`); replaces per-file `TestHost` duplication                                                                         |
 
 ### Engine
 
@@ -66,9 +66,13 @@ only remaining hard failure: if a missing/broken import or a
 downstream phase bails, `build_semantics` (`src/lib.rs`) emits the
 failure diagnostic via the host and returns [`Semantics::empty`],
 and every position-bearing query returns `None` / `[]` for that
-snapshot. Semantic-token highlighting still works in that case
-because `semantic_tokens::compute` falls back to lexer-only
-classification. The recovery behaviour is pinned by
+snapshot. Semantic-token highlighting still works in that case:
+`Engine::semantic_tokens` passes `None` semantics to
+`semantic_tokens::compute`, which falls back to lexer + AST
+classification. When a snapshot _is_ available, identifiers are
+classified by their resolved `SymbolKind` instead, with the same
+heuristic path as the per-token fallback for names the elaborator
+recorded no use→def edge for. The recovery behaviour is pinned by
 `tests/parse_error.rs`.
 
 ### Position encoding
