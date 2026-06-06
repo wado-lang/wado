@@ -127,6 +127,23 @@ test "intern_kind_set: stored tokens are sorted" {
     assert toks[2] == "TK_C";
 }
 
+test "intern_follow_mask: same mask returns same id, empty returns null" {
+    let mut ctx = mk_ctx();
+    let m1: List<List<String>> = [["TK_X"], ["TK_Y"]];
+    let m2: List<List<String>> = [["TK_X"], ["TK_Z"]];
+    let id1 = ctx.intern_follow_mask(&m1);
+    let id2 = ctx.intern_follow_mask(&m2);
+    let id1_again = ctx.intern_follow_mask(&m1);
+    assert id1 matches { Some(0) }, "first mask gets id 0";
+    assert id2 matches { Some(1) }, "distinct mask gets id 1";
+    assert id1_again == id1, "same mask reuses its id";
+    // A mask whose every depth-set is empty never gates → no global.
+    let empty_depths: List<List<String>> = [[], []];
+    let id_empty = ctx.intern_follow_mask(&empty_depths);
+    assert id_empty matches { None }, "all-empty mask interns to null";
+    assert ctx.follow_masks().len() == 2, "only the two real masks are registered";
+}
+
 test "kind_sets: returns entries in insertion order" {
     let mut ctx = mk_ctx();
     let xy: List<String> = ["TK_X", "TK_Y"];

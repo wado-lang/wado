@@ -21,6 +21,21 @@ pub struct KindSetEntry {
     pub tokens: List<String>,
 }
 
+/// A runtime FOLLOW-continuation mask interned during parser codegen.
+/// Each distinct K-prefix mask is emitted once as a
+/// `global FOLLOW_MASK_<id>: List<List<i32>> = [[TK_X], [TK_Y], …]` and
+/// passed by reference to `follow_yields` at repair call sites — the
+/// runtime-threaded replacement for the per-(rule, mask) cloned
+/// `__follow_<id>` variant bodies. Interning the MASK (not rule×mask)
+/// keeps the generated-parser growth proportional to the number of
+/// distinct continuations, not the call graph.
+pub struct FollowMaskEntry {
+    pub id: i32,
+    /// Canonical per-depth token sets. `mask[d]` lists the `TK_*`
+    /// constants valid at depth `d` of the caller's continuation.
+    pub mask: List<List<String>>,
+}
+
 /// Maximum K-prefix depth carried into `intern_follow_variant` for the
 /// multi-token follow-mask path. Bounds the variant body's runtime
 /// peek; deeper continuations are truncated (the deepest tokens are
@@ -81,6 +96,11 @@ pub struct GenContext {
     /// with `|`) representation. IDs are assigned in insertion order so
     /// the same input grammar always produces the same helper names.
     kind_set_registry: TreeMap<String, KindSetEntry>,
+    /// Registry of runtime FOLLOW-continuation masks keyed by canonical
+    /// per-depth representation. IDs are assigned in insertion order so
+    /// `FOLLOW_MASK_<id>` global names are stable across runs. See
+    /// `FollowMaskEntry`.
+    follow_mask_registry: TreeMap<String, FollowMaskEntry>,
     /// Cache of `tail_greedy_first(rule)` keyed by rule name.
     tail_greedy_cache: TreeMap<String, List<String>>,
     /// Cache of `tail_greedy_k_prefix(rule, max_k)`. Outer array is
@@ -128,6 +148,7 @@ impl GenContext {
             scannable_cache: TreeMap::<String, bool>::new(),
             single_alt_owner,
             kind_set_registry: TreeMap::<String, KindSetEntry>::new(),
+            follow_mask_registry: TreeMap::<String, FollowMaskEntry>::new(),
             tail_greedy_cache: TreeMap::<String, List<String>>::new(),
             tail_greedy_k_prefix_cache: [],
             follow_variant_registry: TreeMap::<String, FollowVariantEntry>::new(),
@@ -904,6 +925,46 @@ impl GenContext {
     /// Consumed by `gen_kind_set_helpers` to emit the helper functions.
     pub fn kind_sets(&self) -> List<KindSetEntry> {
         return self.kind_set_registry.values();
+    }
+
+    /// Intern a runtime FOLLOW-continuation mask. The same canonical mask
+    /// maps to a single `id`; `FOLLOW_MASK_<id>` globals are assigned in
+    /// first-seen order across the codegen pass. Returns `null` for an
+    /// effectively-empty mask (no depth carries a constraint) — such a
+    /// mask never gates, so callers should pass `&EMPTY_FOLLOW` instead
+    /// of interning a dead global.
+    pub fn intern_follow_mask(&mut self, mask: &List<List<String>>) -> Option<i32> {
+        // Trim trailing depth-sets that carry no constraint: `follow_yields`
+        // skips empty depths, so `[[X], []]` gates identically to `[[X]]`
+        // and a mask whose depths are all empty never gates at all (→ null,
+        // caller passes `&EMPTY_FOLLOW`).
+        let sorted = canonicalize_k_prefix(mask);
+        let mut last_constrained: i32 = -1;
+        for let mut d = 0; d < sorted.len(); d += 1 {
+            if !sorted[d].is_empty() {
+                last_constrained = d;
+            }
+        }
+        if last_constrained < 0 {
+            return null;
+        }
+        let mut canonical: List<List<String>> = [];
+        for let mut d = 0; d <= last_constrained; d += 1 {
+            canonical.push(sorted[d]);
+        }
+        let key = canonical_k_prefix_key(&canonical);
+        if let Some(entry) = self.follow_mask_registry.get(key) {
+            return Option::<i32>::Some(entry.id);
+        }
+        let id = self.follow_mask_registry.len();
+        self.follow_mask_registry[key] = FollowMaskEntry { id, mask: canonical };
+        return Option::<i32>::Some(id);
+    }
+
+    /// All interned FOLLOW masks in `FOLLOW_MASK_<id>` order (insertion
+    /// order). Consumed by the global-emit pass.
+    pub fn follow_masks(&self) -> List<FollowMaskEntry> {
+        return self.follow_mask_registry.values();
     }
 
     /// Render a token-set membership check on `expr`.

@@ -83,6 +83,20 @@ use {
 use { unwrap_label } from "./lr_util.wado";
 use { compute_shapes_for_alt, shape_lookahead_signature_for_alt, rebind_op_field } from "./lower.wado";
 
+/// Append the defaulted runtime FOLLOW-continuation argument to a
+/// parse/scan/LR function signature. Added LAST (after any `min_prec`)
+/// so existing positional call sites are unaffected; non-repair callers
+/// rely on the `&EMPTY_FOLLOW` default. Repair call sites (wired in a
+/// later redesign phase) pass a `FOLLOW_MASK_<id>` constant or forward
+/// their own `follow`. See `follow_yields` in `runtime.wado`.
+fn add_follow_param(f: &mut FnSpec) {
+    f.add_param_spec(ParamSpec {
+        name: "follow",
+        type_str: "&List<List<i32>>",
+        default_value: Option::<String>::Some("&EMPTY_FOLLOW"),
+    });
+}
+
 pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
     // Phase 3 — `lowered` mirrors `grammar.parser_rules` rule-for-rule
     // by name and order. emit still consumes surface IR for the body
@@ -5590,6 +5604,25 @@ pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &
             let entry = &entries[idx];
             gen_kind_set_helper_raw(w, entry.id, &entry.tokens);
         }
+    }
+}
+
+/// Emit `global FOLLOW_MASK_<id>: List<List<i32>> = [[TK_X], …]` for
+/// every interned runtime FOLLOW mask, in `FollowMaskEntry` id order.
+/// Repair call sites pass `&FOLLOW_MASK_<id>` to `follow_yields`. Emits
+/// nothing while the registry is empty (the common case until the
+/// runtime-follow conversion wires call sites).
+pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext) {
+    let entries = ctx.follow_masks();
+    for let entry of &entries {
+        let mut depths: List<String> = [];
+        for let depth_set of &entry.mask {
+            depths.push(`[{join_kinds(depth_set)}]`);
+        }
+        w.line(&`global FOLLOW_MASK_{entry.id}: List<List<i32>> = [{join_kinds(&depths)}];`);
+    }
+    if !entries.is_empty() {
+        w.blank();
     }
 }
 

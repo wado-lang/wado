@@ -1,7 +1,7 @@
 use { Grammar, OptionValue, LexerRule, normalize_caches } from "./ir.wado";
 use { rule_type_name } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
-use { gen_parser, gen_kind_set_helpers } from "./parser_gen.wado";
+use { gen_parser, gen_kind_set_helpers, gen_follow_mask_globals } from "./parser_gen.wado";
 use { gen_visitor } from "./visitor_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext } from "./gen_context.wado";
@@ -89,6 +89,10 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // intern its set. Visitor and highlight do not emit `matches { TK_* }`
     // checks so this ordering is safe.
     gen_kind_set_helpers(&mut w, &lowered, &ctx);
+    // Runtime FOLLOW-mask globals (`FOLLOW_MASK_<id>`). Emitted after all
+    // lowering/emit has had a chance to intern masks; nothing is emitted
+    // until the runtime-follow conversion wires repair call sites.
+    gen_follow_mask_globals(&mut w, &ctx);
     return GeneratedOutput {
         source: w.to_string(),
         diagnostics: lowered.diagnostics,
