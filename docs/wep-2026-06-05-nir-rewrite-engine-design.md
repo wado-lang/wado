@@ -226,21 +226,33 @@ The old fixed-point loop and the engine co-exist during the port.
         `Body::lower_block` / `to_tree_block`. The dataflow lattice / sync /
         convergence logic stays tree-shaped over the per-loop materialization;
         the function body itself flows as arena.
-  - All nine remaining passes are ported. The only pass still on the
-    `body_block` bridge is the deferred `const_folding` (niri-blocked).
+  - [x] `const_folding` (niri) — the last pass, and the only one that drives
+        the whole `niri` interpreter over the body with flow-sensitive env
+        threading. Ported in three staged steps, e2e bit-identical at each:
+        (1) an arena evaluator (`expr_to_lattice_a` / `try_fold_a` /
+        `block_lattice_a` / `match_lattice_a` / `pattern_matches_a`), (2) an
+        arena rewriter (`reduce_local_a` / `reduce_local_block_a` /
+        `rewrite_if_expr_a` / `rewrite_match_expr_a` / `try_call_fold_a`, plus
+        `reduce_to_lattice_a` which skips the tree path's defensive
+        `reduce_in_place` because the visitor folds every child bottom-up
+        first), and (3) the `ConstFoldVisitor` itself, walking arena ids with
+        the branch-aware field-env snapshot/restore/join intact. CTFE callee
+        tails stay tree (small read-only materialized clones); `build_alias_info`
+        runs on a read-only materialization of the arena body; global
+        initializers stay tree-shaped. Added `Value::from_arena_literal` and
+        `alias::recognize_value_copy_a`.
+  - All passes are ported. **The `body_block` bridge is gone from the
+    optimizer** — the only remaining `body_block()` callers are the read-only
+    diagnostics tools (`nir_unparse`, `remarks`).
   - Added `Body::clone_expr` (structural arena deep-clone) — the
     non-engine counterpart of `Engine::clone_expr`, for rewrites that
     duplicate a subtree.
-  - Deferred: `const_folding` — unlike the others it drives the whole `niri`
-    interpreter (tree-shaped) over the body with flow-sensitive env threading,
-    so it stays on the bridge until `niri` itself is ported to the arena
-    (a dedicated effort). The subtree-materialization trick does not apply (the
-    interpreter consumes the _whole_ body, not a small leaf subtree).
   - Flow-sensitive (keep walkers, read arena): `const_folding`'s env walk,
     `copy_prop`, `licm`, `field_scalarize`, `store_load_forward`.
-  - When the last bridge is gone the per-pass `Body ↔ tree` conversions
-    vanish and the arena flows lower → optimize → wir_build with no
-    converter — completing Phase 3's goal. Measure the speed win here.
+  - The last bridge is gone: the per-pass `Body ↔ tree` round-trips
+    (`body_block()` mutate `set_body_block()`) have vanished and the arena
+    flows lower → optimize → wir_build with no converter — completing
+    Phase 3's goal. Measure the speed win here.
 
 ## Out of scope
 

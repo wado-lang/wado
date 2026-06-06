@@ -1974,12 +1974,14 @@ impl<'a> Interpreter<'a> {
             ExprKind::BoolLiteral(b) => Lattice::Const(Value::Bool(*b)),
             ExprKind::CharLiteral(c) => Lattice::Const(Value::Char(*c)),
             ExprKind::IntLiteral { value, .. } => {
-                let Some(prim) =
-                    prim_of(node.type_id, self.type_table).filter(|p| is_int_prim(*p))
+                let Some(prim) = prim_of(node.type_id, self.type_table).filter(|p| is_int_prim(*p))
                 else {
                     return Lattice::Unevaluated;
                 };
-                Lattice::Const(Value::Int { value: *value, prim })
+                Lattice::Const(Value::Int {
+                    value: *value,
+                    prim,
+                })
             }
             ExprKind::FloatLiteral { value, .. } => {
                 let prim = if is_f32_type(node.type_id, self.type_table) {
@@ -1987,7 +1989,10 @@ impl<'a> Interpreter<'a> {
                 } else {
                     PrimitiveType::F64
                 };
-                Lattice::Const(Value::Float { value: *value, prim })
+                Lattice::Const(Value::Float {
+                    value: *value,
+                    prim,
+                })
             }
             ExprKind::Local { index, .. } => {
                 self.env.get(index).copied().unwrap_or(Lattice::Unevaluated)
@@ -2117,7 +2122,8 @@ impl<'a> Interpreter<'a> {
                 } else {
                     self.pattern_matches_a(body, &scrut_v, arm.pattern)
                 };
-                let body_lat = arm_lattice_for_feasible_join(self.expr_to_lattice_a(body, arm.body));
+                let body_lat =
+                    arm_lattice_for_feasible_join(self.expr_to_lattice_a(body, arm.body));
                 match pm {
                     PatternMatch::No => {}
                     PatternMatch::Yes => {
@@ -2169,7 +2175,9 @@ impl<'a> Interpreter<'a> {
                     | NirLiteralPattern::Char(_),
                     _,
                 ) => PatternMatch::No,
-                (NirLiteralPattern::String(_) | NirLiteralPattern::Null, _) => PatternMatch::Unknown,
+                (NirLiteralPattern::String(_) | NirLiteralPattern::Null, _) => {
+                    PatternMatch::Unknown
+                }
             },
             PatKind::Or(alts) => {
                 let mut any_unknown = false;
@@ -2415,9 +2423,10 @@ impl<'a> Interpreter<'a> {
         };
         let arms_data: Vec<(Option<ExprId>, PatId, ExprId, crate::token::Span)> =
             match &body.exprs[e].kind {
-                ExprKind::Match { arms, .. } => {
-                    arms.iter().map(|a| (a.guard, a.pattern, a.body, a.span)).collect()
-                }
+                ExprKind::Match { arms, .. } => arms
+                    .iter()
+                    .map(|a| (a.guard, a.pattern, a.body, a.span))
+                    .collect(),
                 _ => unreachable!(),
             };
 
@@ -2558,8 +2567,6 @@ impl<'a> Interpreter<'a> {
             Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
         }
     }
-
-
 
     /// Look up a `(module_source, name)` global in the installed
     /// [`GlobalEnv`]. Absent keys default to [`Lattice::Unevaluated`]
@@ -3075,8 +3082,6 @@ fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
         _ => false,
     }
 }
-
-
 
 /// Identity simplifications for short-circuit operators that *preserve*
 /// every subexpression. `false || X → X`, `true && X → X`, and the RHS

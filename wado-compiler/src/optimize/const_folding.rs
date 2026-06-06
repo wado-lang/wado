@@ -37,7 +37,9 @@ use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirExpr, NirExprKind, NirStmtKind, NirUnaryOp};
-use crate::nir_arena::{ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, StmtId, StmtKind};
+use crate::nir_arena::{
+    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, StmtId, StmtKind,
+};
 use crate::nir_package::NirPackage;
 use crate::niri::{
     Arm, CalleeMap, FieldSnapshot, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter, Lattice,
@@ -213,13 +215,15 @@ fn const_seq_len_a(body: &Body, e: ExprId) -> Option<i32> {
         ExprKind::ArrayLiteral { elements } => i32::try_from(elements.len()).ok(),
         ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
             let block = *b;
-            body.blocks[block].stmts.iter().rev().find_map(|s| {
-                match &body.stmts[*s].kind {
+            body.blocks[block]
+                .stmts
+                .iter()
+                .rev()
+                .find_map(|s| match &body.stmts[*s].kind {
                     StmtKind::Let { value, .. } => const_seq_len_a(body, *value),
                     StmtKind::Expr(ex) => const_seq_len_a(body, *ex),
                     _ => None,
-                }
-            })
+                })
         }
         ExprKind::StructLiteral { fields, .. } => fields.iter().find_map(|f| {
             if f.name == SeqField::Len.field_name()
