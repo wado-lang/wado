@@ -207,7 +207,12 @@ The old fixed-point loop and the engine co-exist during the port.
         type / function / global graph machinery is body-independent and
         unchanged. Global initializers (still tree NIR) wrap in a one-stmt
         `Body` for the walk.
-  - Remaining: `labeled_block_fusion`, `inline`, `field_scalarize`.
+  - [x] `labeled_block_fusion` — arena precondition checks (break-shape /
+        use counts / loop-exit), and the fusion rewrite that moves the
+        labeled block's statements (reusing ids) and deep-clones the
+        THEN/ELSE blocks per break site via `Body::clone_block`. Added a
+        public `Body::clone_block`.
+  - Remaining: `inline`, `field_scalarize`.
   - Added `Body::clone_expr` (structural arena deep-clone) — the
     non-engine counterpart of `Engine::clone_expr`, for rewrites that
     duplicate a subtree.

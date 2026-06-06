@@ -789,7 +789,9 @@ impl Body {
         })
     }
 
-    fn clone_block(&mut self, id: BlockId) -> BlockId {
+    /// Deep-copy a block subtree into fresh arena nodes, returning the new
+    /// block id. The block-level counterpart of [`Body::clone_expr`].
+    pub fn clone_block(&mut self, id: BlockId) -> BlockId {
         let node = self.blocks[id].clone();
         let stmts = node.stmts.iter().map(|s| self.clone_stmt(*s)).collect();
         self.blocks.push(BlockNode {
