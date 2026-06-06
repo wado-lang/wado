@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780730657489,
+  "lastUpdate": 1780734652475,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30637,6 +30637,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b3921cb519f66edd45fcc7ce6e218956eb8cd12d"
         },
         "date": 1780730657017,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8780,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16583,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 456150,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b17e0b2e1288df678644c320cea29328284d851a",
+          "message": "Merge pull request #1314 from wado-lang/claude/elaborator-coverage-gaps-ZJLqT\n\nelaborator/monomorphize: coverage cleanup, soundness audit, and variadic for-of P0 fixes",
+          "timestamp": "2026-06-06T17:23:25+09:00",
+          "tree_id": "5a187107e5796756708fb935e436e78b62cbfd72",
+          "url": "https://github.com/wado-lang/wado/commit/b17e0b2e1288df678644c320cea29328284d851a"
+        },
+        "date": 1780734652053,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
