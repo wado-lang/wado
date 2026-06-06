@@ -1893,8 +1893,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // not in the call site's module). Using the caller's
             // `resolve_type` would fail to canonicalise a return type
             // the caller never `use`'d.
-            // Bind `Self` to the impl's concrete type (see the inherent-impl
-            // branch above), only when the return mentions `Self`.
+            // Bind `Self` to the impl's concrete type (see the branch above),
+            // only when the return mentions `Self`.
             if method
                 .return_type
                 .as_ref()
@@ -2446,11 +2446,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `FunctionRef` gets the correct `module_source` — especially when a
     /// user defines `impl From<MyType> for i32` in the entry module (or
     /// another module), so DCE and WIR building can find it.
-    /// The un-aliased declaration name `name` refers to *within `module`* — its
+    /// The original (un-aliased) name `name` resolves to *within `module`* — its
     /// `use { Original as name }` original, or `name` itself when not aliased.
-    /// Resolving in the type's defining module (not the call site) makes
-    /// `From`-impl matching independent of whatever alias the caller happens to
-    /// use for the source type.
+    /// Resolving in the impl's own module (not the call site) makes `From`-impl
+    /// matching independent of whatever alias the caller uses for the source
+    /// type.
     fn import_original_name(&self, name: &str, module: &ModuleSource) -> String {
         let fallback = || name.to_string();
         if module == &self.current_module_source {

@@ -1585,10 +1585,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Resolve the impl's module from the receiver's *actual* type, not its
         // bare name: same-named structs in different modules each have their own
-        // auto-derived `Eq`/`Ord`, and a by-name lookup would route every `==`
-        // to whichever registered first. Peel newtypes to the base that owns the
-        // inherited impl; fall back to the by-name lookup when the receiver
-        // carries no declaring module.
+        // operator impls (e.g. auto-derived `Eq`/`Ord`), and a by-name lookup
+        // would route every call to whichever registered first. Peel newtypes to
+        // the base that owns the inherited impl; fall back to the by-name lookup
+        // when the receiver carries no declaring module.
         let receiver_base = self
             .tysys
             .type_table

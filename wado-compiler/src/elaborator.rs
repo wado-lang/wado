@@ -1057,8 +1057,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `type_id` (refs peeled), or `None` for primitives / tuples / functions
     /// and other types that carry no declaring module. Unlike a bare
     /// `type_name`, this keeps two same-named types from different modules
-    /// (e.g. `core:temporal::Instant` vs `wasi:clocks::Instant`) distinct, so
-    /// it is the right key for "is this the same type?" comparisons.
+    /// (e.g. `core:temporal::Instant` vs `wasi:clocks::Instant`) distinct.
+    /// For a generic instance it is the *base* type's identity — type arguments
+    /// are dropped, so it cannot tell `Foo<A>` from `Foo<B>`.
     pub(crate) fn type_decl_key(&self, type_id: tir::TypeId) -> Option<(ModuleSource, String)> {
         use crate::tir::ResolvedType;
         let tt = self.tysys.type_table.borrow();
