@@ -279,12 +279,6 @@ test "tail_greedy_first: transitive via tail RuleRef" {
 }
 
 
-fn empty_k_prefix() -> List<List<String>> {
-    return [];
-}
-
-
-
 test "tail_greedy_first: tail Optional with multi-token inner is excluded" {
     // `(A B)?` is tail-position but the inner consumes 2 tokens per
     // iteration. Suppressing it via a follow mask would conflict with
@@ -437,22 +431,14 @@ test "position_first_sets_from: start at end returns empty" {
     assert r.is_empty(), `expected empty (start past end), got {r.len()}`;
 }
 
-// `tail_greedy_k_prefix_of_rule`: K-token prefix that a rule's
-// tail-greedy `Repeat` consumes per iteration. Multi-token analog of
-// `tail_greedy_first_of_rule` — admits inners that
-// `element_is_single_token` rejects (multi-element sequences, Groups)
-// PROVIDED the inner is `element_is_first_exact` (deterministic
-// k-token prefix). The caller intersects this with its K-prefix follow
-// to decide whether to register a multi-token follow variant.
-
 // `deep_position_first_sets_from`: K-prefix that recurses through
 // single-alt non-recursive `RuleRef`s. Generalises
 // `position_first_sets_from` to see "into" the rule body when computing
-// a caller's K-prefix mask. For our `r : a c EOF` fixture, calling
+// a caller's FOLLOW mask. For our `r : a c EOF` fixture, calling
 // `position_first_sets_from` at start=1 only sees `c` as one
-// non-single-token element (K=1); the deep variant walks `c`'s body so
-// the mask captures `[{X}, {Y}, {Z}]` — exactly what the variant body's
-// K-prefix gate needs to disambiguate multi-iter inputs.
+// non-single-token element (K=1); the deep walk descends into `c`'s
+// body so the mask captures `[{X}, {Y}, {Z}]` — exactly what the
+// runtime gate needs to disambiguate multi-iter inputs.
 
 test "deep_position_first_sets_from: recurses into single-alt RuleRef" {
     // r : a c ; c : X Y Z ;

@@ -10,8 +10,8 @@
 //!
 //! `Grammar` mirrors the .g4 syntax. `LoweredGrammar` is the form
 //! parser emit consumes after every analysis decision (rule shape,
-//! multi-alt dispatch, LR precedence, follow variants, group shape,
-//! repeat strategy, field deduplication, scan/parse symmetry) is
+//! multi-alt dispatch, LR precedence, per-call-site FOLLOW args, group
+//! shape, repeat strategy, field deduplication, scan/parse symmetry) is
 //! committed at lower time. emit becomes a structural translation
 //! that does not consult `Grammar`.
 //!
@@ -423,9 +423,9 @@ pub variant Op {
     /// `LIT_<id>` constant assigned by `lower`'s literal collection
     /// pass.
     Literal(LiteralOp),
-    /// Call into another rule. Carries the resolved variant id,
+    /// Call into another rule. Carries the per-call-site `FollowArg`,
     /// min-prec arg, and dedupped binding name so emit doesn't
-    /// reproduce the variant interning logic.
+    /// re-derive the FOLLOW continuation.
     RuleCall(RuleCallOp),
     /// `.` wildcard. Consumes one token of any kind (matches
     /// `match_any` at runtime).
@@ -486,8 +486,8 @@ pub struct LiteralOp {
 }
 
 /// How a `RuleCall` supplies the runtime FOLLOW continuation to the
-/// callee (redesign: replaces the per-(rule, mask) `__follow_<id>`
-/// variant selection). Exactly one of three forms:
+/// callee, replacing the per-(rule, mask) `__follow_<id>` variant
+/// selection. Exactly one of four forms:
 ///
 /// - `NoFollow` — non-repair call: emit passes nothing, the callee's
 ///   defaulted `&EMPTY_FOLLOW` disables its tail-greedy gate.
@@ -496,6 +496,9 @@ pub struct LiteralOp {
 /// - `Forward` — the callee sits at THIS rule's tail, so its
 ///   continuation is whatever the current rule was itself called with;
 ///   emit forwards the current function's `follow` argument unchanged.
+/// - `Combined(id)` — the callee is at this rule's tail but a nullable
+///   local suffix precedes it; emit prepends `FOLLOW_MASK_<id>` to the
+///   forwarded `follow` (see the variant doc below).
 pub variant FollowArg {
     NoFollow,
     Mask(i32),
@@ -643,7 +646,7 @@ pub struct RepeatOp {
     /// `peek_at(1)` disambiguation arm so emit doesn't re-walk the
     /// surface inner.
     pub body_second_position_first: List<String>,
-    /// Redesign: emit a runtime caller-FOLLOW yield gate
+    /// Emit a runtime caller-FOLLOW yield gate
     /// (`if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break }`)
     /// at this iteration's entry. Set by lower when the Repeat sits at a
     /// deep-nullable-suffix tail position — i.e. exactly where the

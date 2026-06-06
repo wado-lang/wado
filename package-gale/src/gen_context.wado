@@ -41,14 +41,14 @@ pub struct FollowMaskEntry {
 /// continuations are truncated (the deepest tokens are the cheapest to
 /// disambiguate at runtime via the existing 1-token dispatch, so
 /// truncation hurts precision rather than correctness).
-pub global FOLLOW_VARIANT_MAX_K: i32 = 4;
+pub global FOLLOW_MASK_MAX_K: i32 = 4;
 
 /// Codegen-time context shared across emit walkers. Holds the
 /// first / nullable / single-token / scannable caches, the
 /// `single_alt_owner` and `kind_set` registries, and the
 /// follow-mask registry. No walker-mutable state — every
-/// per-walk value (per-outer-position mask, current rule name, etc.)
-/// is threaded as an explicit parameter through the lowering and
+/// per-walk value (caller follow, current rule name, etc.) is
+/// threaded as an explicit parameter through the lowering and
 /// emission call chains.
 pub struct GenContext {
     pub parser_rules: List<ParserRule>,
@@ -257,12 +257,12 @@ impl GenContext {
         return self.position_first_sets_from(&alt.elements, 0, max_depth);
     }
 
-    /// K-prefix variant of [`position_first_sets_from`] that expands
-    /// `RuleRef` elements into the referenced rule's body. Used by the
-    /// multi-token follow-mask path to compute a caller's deep
-    /// continuation prefix — `position_first_sets_from` halts at a
-    /// `RuleRef` to a multi-token rule, hiding the bytes the variant
-    /// body's gate needs to disambiguate iter vs. exit.
+    /// Deep version of [`position_first_sets_from`] that expands
+    /// `RuleRef` elements into the referenced rule's body. Used by
+    /// `compute_follow_arg` to build a caller's multi-depth FOLLOW mask
+    /// — `position_first_sets_from` halts at a `RuleRef` to a
+    /// multi-token rule, hiding the depths the runtime gate needs to
+    /// disambiguate iter vs. exit.
     ///
     /// Only single-alt non-cyclic `RuleRef`s are expanded; multi-alt
     /// `RuleRef`s halt accumulation (per-depth union of multi-alt
@@ -274,9 +274,8 @@ impl GenContext {
     /// walk fully traversed (not the same as `prefix.len()` — a
     /// single-alt `RuleRef` consumes one surface element but its
     /// expanded body may contribute multiple depths). Callers needing
-    /// to follow the suffix past the walk (e.g.
-    /// [`compute_call_site_k_prefix_mask`]'s tail-nullable check)
-    /// must use the element count, not the depth count.
+    /// to follow the suffix past the walk must use the element count,
+    /// not the depth count.
     pub fn deep_position_first_sets_from(&mut self, elements: &List<Element>, start: i32, max_depth: i32, visiting: &mut List<String>) -> [List<List<String>>, i32] {
         let mut result: List<List<String>> = [];
         let final_cursor = self.deep_position_walk(elements, start, max_depth, &mut result, visiting);
@@ -582,49 +581,30 @@ impl GenContext {
     }
 
     /// Per-call-site caller-FOLLOW for the element at index `i` in
-    /// `elements`. Single source of truth for the `lower` pre-pass
-    /// (variant interning at `lower_scan_element` / `lower_op` RuleRef
-    /// sites).
+    /// `elements`. Single source of truth for the `FollowArg` mask
+    /// `lower` builds at each `RuleRef` site (`compute_follow_arg`).
     ///
     /// Three cases:
     ///
     /// - Suffix is non-nullable: the immediate suffix's `first` set is
-    ///   the only thing that can follow. Drop the outer follow.
+    ///   the only thing that can follow.
     /// - Suffix is deep-nullable AND first-exact (every walked element's
     ///   first uniquely predicts that element matching, see
-    ///   `element_is_first_exact`): the outer follow propagates through.
-    ///   Union the suffix's first with `outer_follow`. This closes
-    ///   `ll_nullable_suffix`'s gap.
+    ///   `element_is_first_exact`): keep the suffix's `first`. This
+    ///   closes `ll_nullable_suffix`'s gap.
     /// - Suffix is deep-nullable but NOT first-exact: drop the suffix's
-    ///   first and propagate only `outer_follow`. This is the
-    ///   "first-exact deep-nullable suffix" soundness invariant — see
-    ///   `CLAUDE.md` "Failed Approaches" #3 for the rationale.
-    ///
-    /// `outer_follow` is the surrounding variant's mask (`[]` for
-    /// regular non-variant bodies). Threaded from `lower`'s call chain
-    /// rather than read from walker state.
-    pub fn compute_call_site_follow(&mut self, elements: &List<Element>, i: i32, outer_follow: &List<String>) -> List<String> {
-        return self.compute_call_site_follow_and_mask(elements, i, outer_follow).0;
-    }
-
-    /// Fused `(elem_follow, position_mask)` for the element at index
-    /// `i`. `elem_follow` follows the same three-case logic as
-    /// `compute_call_site_follow`; `position_mask` is `outer_follow`
-    /// when the suffix at `i + 1` is deep-nullable and `[]` otherwise.
-    /// Sharing the `tail_is_nullable_deep` call avoids walking the
-    /// suffix twice in `lower`'s per-position loop (which would
-    /// otherwise call `inner_follow_at` + `position_mask_at`
-    /// back-to-back).
-    pub fn compute_call_site_follow_and_mask(&mut self, elements: &List<Element>, i: i32, outer_follow: &List<String>) -> [List<String>, List<String>] {
-        let empty: List<String> = [];
+    ///   first and return empty. This is the "first-exact deep-nullable
+    ///   suffix" soundness invariant — see `CLAUDE.md` "Failed
+    ///   Approaches" #3 for the rationale.
+    pub fn compute_call_site_follow(&mut self, elements: &List<Element>, i: i32) -> List<String> {
         let first = self.first_of_elements_from(elements, i + 1);
         if !self.tail_is_nullable_deep(elements, i + 1) {
-            return [first, empty];
+            return first;
         }
         if self.deep_suffix_is_first_exact(elements, i + 1) {
-            return [union_kind_arrays(&first, outer_follow), *outer_follow];
+            return first;
         }
-        return [*outer_follow, *outer_follow];
+        return [] as List<String>;
     }
 
     pub fn rule_is_single_token(&mut self, name: &String, visiting: &mut List<String>) -> bool {
@@ -873,10 +853,10 @@ impl GenContext {
     /// `Optional` / `Star` / `Plus` element which has no required element
     /// after it in the alt.
     ///
-    /// Used to filter follow-aware variant generation: if a `RuleRef`
-    /// call site's caller-local `FOLLOW` does not intersect this set,
-    /// the callee's tail-greedy elements cannot collide with the
-    /// caller's expectations and no variant is needed.
+    /// Used to gate the caller-FOLLOW repair: if a `RuleRef` call
+    /// site's caller-local `FOLLOW` does not intersect this set, the
+    /// callee's tail-greedy elements cannot collide with the caller's
+    /// expectations and no FOLLOW argument is needed.
     pub fn tail_greedy_first_of_rule(&mut self, name: &String, visiting: &mut List<String>) -> List<String> {
         let cached = self.tail_greedy_cache.get(*name);
         if let Some(result) = cached {
