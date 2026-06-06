@@ -58,7 +58,7 @@ type "functype//wado-compiler/tests/fixtures/int128_large_literal.wado/__cm_bind
 
 type "functype//wado-compiler/tests/fixtures/int128_large_literal.wado/__cm_export__run" = fn();  // TypeId(18)
 
-type "functype//wado-compiler/tests/fixtures/int128_large_literal.wado/$value_copy$T86" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(19)
+type "functype//wado-compiler/tests/fixtures/int128_large_literal.wado/$value_copy$T92" = fn(ref "core:prelude/int128.wado//u128") -> ref "core:prelude/int128.wado//u128";  // TypeId(19)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(20)
 
@@ -184,7 +184,7 @@ fn "wado-compiler/tests/fixtures/int128_large_literal.wado/__cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "wado-compiler/tests/fixtures/int128_large_literal.wado/$value_copy$T86"(v) {
+fn "wado-compiler/tests/fixtures/int128_large_literal.wado/$value_copy$T92"(v) {
     return struct.new "core:prelude/int128.wado//u128" { low: v.low, high: v.high };
 }
 
@@ -292,8 +292,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
     let ptr: i32;
     let raw_len: i32;
     let result: i32;
-    packed = "core:internal/cm_lower_list_u8"(data, len);
-    ptr = builtin::i32_wrap_i64(packed);
+    ptr = builtin::i32_wrap_i64(local.tee packed("core:internal/cm_lower_list_u8"(data, len)));
     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
@@ -401,9 +400,9 @@ fn "core:prelude/int128.wado/u128::fmt_decimal"(self, f) {
         return;
     }
     ten = struct.new "core:prelude/int128.wado//u128" { low: 10_i64, high: 0_i64 };
-    drop("wado-compiler/tests/fixtures/int128_large_literal.wado/$value_copy$T86"(self));
+    drop("wado-compiler/tests/fixtures/int128_large_literal.wado/$value_copy$T92"(self));
     digit_count = 0;
-    temp_7 = "wado-compiler/tests/fixtures/int128_large_literal.wado/$value_copy$T86"(self);
+    temp_7 = "wado-compiler/tests/fixtures/int128_large_literal.wado/$value_copy$T92"(self);
     b20: block {
         l21: loop {
             if "core:prelude/int128.wado/u128^Ord::cmp"(temp_7, struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }) != 2 {
@@ -422,7 +421,7 @@ fn "core:prelude/int128.wado/u128::fmt_decimal"(self, f) {
     self_22 = f.buf;
     arr_9 = self_22.repr;
     pos = offset_8 + digit_count;
-    temp_11 = "wado-compiler/tests/fixtures/int128_large_literal.wado/$value_copy$T86"(self);
+    temp_11 = "wado-compiler/tests/fixtures/int128_large_literal.wado/$value_copy$T92"(self);
     b23: block {
         l24: loop {
             if "core:prelude/int128.wado/u128^Ord::cmp"(temp_11, struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }) != 2 {
@@ -532,9 +531,9 @@ fn "core:prelude/int128.wado/i128::fmt_decimal"(self, f) {
         return;
     }
     ten = struct.new "core:prelude/int128.wado//u128" { low: 10_i64, high: 0_i64 };
-    drop("wado-compiler/tests/fixtures/int128_large_literal.wado/$value_copy$T86"(abs_val));
+    drop("wado-compiler/tests/fixtures/int128_large_literal.wado/$value_copy$T92"(abs_val));
     digit_count = 0;
-    temp_9 = "wado-compiler/tests/fixtures/int128_large_literal.wado/$value_copy$T86"(abs_val);
+    temp_9 = "wado-compiler/tests/fixtures/int128_large_literal.wado/$value_copy$T92"(abs_val);
     b36: block {
         l37: loop {
             if "core:prelude/int128.wado/u128^Ord::cmp"(temp_9, struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }) != 2 {
@@ -553,7 +552,7 @@ fn "core:prelude/int128.wado/i128::fmt_decimal"(self, f) {
     self_22 = f.buf;
     arr_11 = self_22.repr;
     pos = offset_10 + digit_count;
-    temp_13 = "wado-compiler/tests/fixtures/int128_large_literal.wado/$value_copy$T86"(abs_val);
+    temp_13 = "wado-compiler/tests/fixtures/int128_large_literal.wado/$value_copy$T92"(abs_val);
     b39: block {
         l40: loop {
             if "core:prelude/int128.wado/u128^Ord::cmp"(temp_13, struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }) != 2 {
@@ -582,10 +581,7 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    a_7 = capacity * 2;
-    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
-    new_capacity = select i32(a_5 > 8, a_5, 8);
-    new_repr = builtin::array_new<u8>(new_capacity);
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

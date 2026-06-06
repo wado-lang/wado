@@ -1,0 +1,32 @@
+// Two namespace imports exporting the same member names must stay distinct:
+// `a::X` and `b::X` resolve to their respective modules, never colliding on a
+// shared bare-name registry.
+use a from "./sub/ns_collide_a.wado";
+use b from "./sub/ns_collide_b.wado";
+
+test "namespace collision: globals" {
+    assert a::VALUE == 100;
+    assert b::VALUE == 200;
+}
+
+test "namespace collision: function refs" {
+    let fa = a::pick;
+    let fb = b::pick;
+    assert fa() == 100;
+    assert fb() == 200;
+}
+
+test "namespace collision: types and struct literals" {
+    let ta: a::Thing = a::Thing { n: 1 };
+    let tb: b::Thing = b::Thing { n: 2 };
+    assert ta.n == 1;
+    assert tb.n == 2;
+}
+
+test "namespace collision: associated constants" {
+    assert a::Thing::TAG == 11;
+    assert b::Thing::TAG == 22;
+}
+
+__DATA__
+{"test": {}}

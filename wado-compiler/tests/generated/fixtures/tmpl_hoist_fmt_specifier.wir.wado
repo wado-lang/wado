@@ -402,8 +402,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
     let ptr: i32;
     let raw_len: i32;
     let result: i32;
-    packed = "core:internal/cm_lower_list_u8"(data, len);
-    ptr = builtin::i32_wrap_i64(packed);
+    ptr = builtin::i32_wrap_i64(local.tee packed("core:internal/cm_lower_list_u8"(data, len)));
     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {
@@ -420,8 +419,7 @@ fn "core:prelude/fpfmt.wado/unpack64"(f) {
     let s: u64;
     let m_12: u64;
     let e_13: i32;
-    bits = builtin::i64_reinterpret_f64(f);
-    raw_mantissa = bits & 4503599627370495_i64;
+    raw_mantissa = local.tee bits(builtin::i64_reinterpret_f64(f)) & 4503599627370495_i64;
     raw_exp = builtin::i32_wrap_i64((bits >>u 52_i64) & 2047_i64);
     if raw_exp == 0 {
         if raw_mantissa == 0_i64 {
@@ -681,8 +679,7 @@ fn "core:prelude/fpfmt.wado/mul_pow10"(p) {
     let __mv_lo_2: i64;
     let __mv_hi_2: i64;
     multivalue_bind [__mv_lo_2, __mv_hi_2] = i64.mul_wide_u(c_lo_raw, f);
-    sum_lo = __mv_lo_1 + __mv_hi_2;
-    carry1 = builtin::i64_extend_i32_u(sum_lo <u __mv_lo_1);
+    carry1 = builtin::i64_extend_i32_u(local.tee sum_lo(__mv_lo_1 + __mv_hi_2) <u __mv_lo_1);
     top_lo = sum_lo;
     top_hi = __mv_hi_1 + carry1;
     if __mv_lo_2 != 0_i64 {
@@ -752,51 +749,41 @@ fn "core:prelude/fpfmt.wado/fixed_width_for_prec"(f, precision) {
     let unpack_mv_mantissa: u64;
     let unpack_mv_exponent: i32;
     multivalue_bind [unpack_mv_mantissa, unpack_mv_exponent] = "core:prelude/fpfmt.wado/unpack64"(f);
-    x_27 = unpack_mv_exponent + 63;
-    log10_e63 = (x_27 * 78913) >> 18;
-    p1 = 0 - log10_e63;
-    lp1 = (p1 * 108853) >> 15;
+    log10_e63 = (local.tee x_27(unpack_mv_exponent + 63) * 78913) >> 18;
+    lp1 = (local.tee p1(0 - log10_e63) * 108853) >> 15;
     let pm1_mv_hi: u64;
     let pm1_mv_lo: u64;
     multivalue_bind [pm1_mv_hi, pm1_mv_lo] = "core:prelude/fpfmt.wado/mul_pow10"(p1);
     s1 = 0 - ((unpack_mv_exponent + lp1) + 3);
-    u1 = "core:prelude/fpfmt.wado/uscale"(unpack_mv_mantissa, pm1_mv_hi, pm1_mv_lo, s1);
-    d1_floor = (u1 + 0_i64) >>u 2_i64;
-    decimal_pos = select i32(d1_floor >=u 10_i64, 2 - p1, 1 - p1);
-    total_digits = decimal_pos + precision;
+    d1_floor = (local.tee u1("core:prelude/fpfmt.wado/uscale"(unpack_mv_mantissa, pm1_mv_hi, pm1_mv_lo, s1)) + 0_i64) >>u 2_i64;
+    total_digits = local.tee decimal_pos(select i32(d1_floor >=u 10_i64, 2 - p1, 1 - p1)) + precision;
     if total_digits <= 0 {
         if total_digits < 0 {
             return 0_i64, 0 - precision;
         }
-        p_14 = 0 - log10_e63;
-        lp_15 = (p_14 * 108853) >> 15;
+        lp_15 = (local.tee p_14(0 - log10_e63) * 108853) >> 15;
         let pm_16_mv_hi: u64;
         let pm_16_mv_lo: u64;
         multivalue_bind [pm_16_mv_hi, pm_16_mv_lo] = "core:prelude/fpfmt.wado/mul_pow10"(p_14);
         s_17 = 0 - ((unpack_mv_exponent + lp_15) + 3);
         u_18 = "core:prelude/fpfmt.wado/uscale"(unpack_mv_mantissa, pm_16_mv_hi, pm_16_mv_lo, s_17);
-        u_33 = "core:prelude/fpfmt.wado/unrounded_div"(u_18, n_34 = p_14 - precision; self_40 = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(n_34 >= self_40.used) {
+        d_19 = ((local.tee u_33("core:prelude/fpfmt.wado/unrounded_div"(u_18, n_34 = p_14 - precision; self_40 = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(n_34 >= self_40.used) {
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
-        }; builtin::array_get<u64>(self_40.repr, n_34));
-        d_19 = ((u_33 + 1_i64) + ((u_33 >>u 2_i64) & 1_i64)) >>u 2_i64;
+        }; builtin::array_get<u64>(self_40.repr, n_34))) + 1_i64) + ((u_33 >>u 2_i64) & 1_i64)) >>u 2_i64;
         return d_19, 0 - precision;
     }
-    n_20 = select i32(total_digits > 18, 18, total_digits);
-    p_21 = (n_20 - 1) - log10_e63;
-    lp_22 = (p_21 * 108853) >> 15;
+    lp_22 = (local.tee p_21((local.tee n_20(select i32(total_digits > 18, 18, total_digits)) - 1) - log10_e63) * 108853) >> 15;
     let pm_23_mv_hi: u64;
     let pm_23_mv_lo: u64;
     multivalue_bind [pm_23_mv_hi, pm_23_mv_lo] = "core:prelude/fpfmt.wado/mul_pow10"(p_21);
     s_24 = 0 - ((unpack_mv_exponent + lp_22) + 3);
-    u_25 = "core:prelude/fpfmt.wado/uscale"(unpack_mv_mantissa, pm_23_mv_hi, pm_23_mv_lo, s_24);
-    d_26 = ((u_25 + 1_i64) + ((u_25 >>u 2_i64) & 1_i64)) >>u 2_i64;
+    d_26 = ((local.tee u_25("core:prelude/fpfmt.wado/uscale"(unpack_mv_mantissa, pm_23_mv_hi, pm_23_mv_lo, s_24)) + 1_i64) + ((u_25 >>u 2_i64) & 1_i64)) >>u 2_i64;
     if d_26 >=u self_42 = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(n_20 >= self_42.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<u64>(self_42.repr, n_20) {
-        u_39 = "core:prelude/fpfmt.wado/unrounded_div"(u_25, 10_i64);
-        d_26 = ((u_39 + 1_i64) + ((u_39 >>u 2_i64) & 1_i64)) >>u 2_i64;
+        d_26 = ((local.tee u_39("core:prelude/fpfmt.wado/unrounded_div"(u_25, 10_i64)) + 1_i64) + ((u_39 >>u 2_i64) & 1_i64)) >>u 2_i64;
         return d_26, (0 - p_21) + 1;
     }
     return d_26, 0 - p_21;
@@ -852,15 +839,8 @@ fn "core:prelude/fpfmt.wado/short"(f) {
     let pm_mv_lo: u64;
     multivalue_bind [pm_mv_hi, pm_mv_lo] = "core:prelude/fpfmt.wado/mul_pow10"(p_7);
     s = 0 - ((unpack_mv_exponent + lp) + 3);
-    u_27 = "core:prelude/fpfmt.wado/uscale"(min_m, pm_mv_hi, pm_mv_lo, s);
-    u_26 = u_27 + builtin::i64_extend_i32_s(odd);
-    dmin = (u_26 + 3_i64) >>u 2_i64;
-    u_30 = "core:prelude/fpfmt.wado/uscale"(max_m, pm_mv_hi, pm_mv_lo, s);
-    delta_31 = 0 - odd;
-    u_29 = u_30 + builtin::i64_extend_i32_s(delta_31);
-    dmax = (u_29 + 0_i64) >>u 2_i64;
-    d_div_10 = dmax /u 10_i64;
-    can_trim = (d_div_10 * 10_i64) >=u dmin;
+    dmin = (local.tee u_26(local.tee u_27("core:prelude/fpfmt.wado/uscale"(min_m, pm_mv_hi, pm_mv_lo, s)) + builtin::i64_extend_i32_s(odd)) + 3_i64) >>u 2_i64;
+    can_trim = (local.tee d_div_10(local.tee dmax((local.tee u_29(u_30 = "core:prelude/fpfmt.wado/uscale"(max_m, pm_mv_hi, pm_mv_lo, s); delta_31 = 0 - odd; u_30 + builtin::i64_extend_i32_s(delta_31)) + 0_i64) >>u 2_i64) /u 10_i64) * 10_i64) >=u dmin;
     if can_trim {
         let __pattern_temp_0_mv_0: u64;
         let __pattern_temp_0_mv_1: i32;
@@ -869,8 +849,7 @@ fn "core:prelude/fpfmt.wado/short"(f) {
     }
     d = dmin;
     if dmin <u dmax {
-        u_32 = "core:prelude/fpfmt.wado/uscale"(unpack_mv_mantissa, pm_mv_hi, pm_mv_lo, s);
-        d = ((u_32 + 1_i64) + ((u_32 >>u 2_i64) & 1_i64)) >>u 2_i64;
+        d = ((local.tee u_32("core:prelude/fpfmt.wado/uscale"(unpack_mv_mantissa, pm_mv_hi, pm_mv_lo, s)) + 1_i64) + ((u_32 >>u 2_i64) & 1_i64)) >>u 2_i64;
     }
     return d, 0 - p_7;
 }
@@ -883,46 +862,36 @@ fn "core:prelude/fpfmt.wado/trim_zeros"(x, p) {
     let d4: u64;
     let d2: u64;
     let d1b: u64;
+    let x_17: u64;
+    let x_22: u64;
+    let x_27: u64;
+    let x_32: u64;
+    let x_37: u64;
     xv = x;
     pv = p;
-    let __mv_lo_1: i64;
-    let __mv_hi_1: i64;
-    multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.mul_wide_u(xv, -3689348814741910323_i64);
-    d1 = (__mv_lo_1 >>u 1_i64) | (__mv_lo_1 << 63_i64);
+    d1 = (local.tee x_17(let __mv_lo_1: i64; let __mv_hi_1: i64; multivalue_bind [__mv_lo_1, __mv_hi_1] = i64.mul_wide_u(xv, -3689348814741910323_i64); __mv_lo_1) >>u 1_i64) | (x_17 << 63_i64);
     if d1 <=u 1844674407370955161_i64 {
         xv = d1;
         pv = pv + 1;
     } else {
         return xv, pv;
     }
-    let __mv_lo_2: i64;
-    let __mv_hi_2: i64;
-    multivalue_bind [__mv_lo_2, __mv_hi_2] = i64.mul_wide_u(xv, -4078282918271054303_i64);
-    d8 = (__mv_lo_2 >>u 8_i64) | (__mv_lo_2 << 56_i64);
+    d8 = (local.tee x_22(let __mv_lo_2: i64; let __mv_hi_2: i64; multivalue_bind [__mv_lo_2, __mv_hi_2] = i64.mul_wide_u(xv, -4078282918271054303_i64); __mv_lo_2) >>u 8_i64) | (x_22 << 56_i64);
     if d8 <=u 184467440737_i64 {
         xv = d8;
         pv = pv + 8;
     }
-    let __mv_lo_3: i64;
-    let __mv_hi_3: i64;
-    multivalue_bind [__mv_lo_3, __mv_hi_3] = i64.mul_wide_u(xv, -3276141747490816367_i64);
-    d4 = (__mv_lo_3 >>u 4_i64) | (__mv_lo_3 << 60_i64);
+    d4 = (local.tee x_27(let __mv_lo_3: i64; let __mv_hi_3: i64; multivalue_bind [__mv_lo_3, __mv_hi_3] = i64.mul_wide_u(xv, -3276141747490816367_i64); __mv_lo_3) >>u 4_i64) | (x_27 << 60_i64);
     if d4 <=u 1844674407370955_i64 {
         xv = d4;
         pv = pv + 4;
     }
-    let __mv_lo_4: i64;
-    let __mv_hi_4: i64;
-    multivalue_bind [__mv_lo_4, __mv_hi_4] = i64.mul_wide_u(xv, -8116567392432202711_i64);
-    d2 = (__mv_lo_4 >>u 2_i64) | (__mv_lo_4 << 62_i64);
+    d2 = (local.tee x_32(let __mv_lo_4: i64; let __mv_hi_4: i64; multivalue_bind [__mv_lo_4, __mv_hi_4] = i64.mul_wide_u(xv, -8116567392432202711_i64); __mv_lo_4) >>u 2_i64) | (x_32 << 62_i64);
     if d2 <=u 184467440737095516_i64 {
         xv = d2;
         pv = pv + 2;
     }
-    let __mv_lo_5: i64;
-    let __mv_hi_5: i64;
-    multivalue_bind [__mv_lo_5, __mv_hi_5] = i64.mul_wide_u(xv, -3689348814741910323_i64);
-    d1b = (__mv_lo_5 >>u 1_i64) | (__mv_lo_5 << 63_i64);
+    d1b = (local.tee x_37(let __mv_lo_5: i64; let __mv_hi_5: i64; multivalue_bind [__mv_lo_5, __mv_hi_5] = i64.mul_wide_u(xv, -3689348814741910323_i64); __mv_lo_5) >>u 1_i64) | (x_37 << 63_i64);
     if d1b <=u 1844674407370955161_i64 {
         xv = d1b;
         pv = pv + 1;
@@ -1253,8 +1222,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
     let offset: i32;
     let self_6: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
-    abs_val = select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self));
-    digit_count = "core:prelude/primitive.wado/count_digits_i64"(abs_val);
+    digit_count = "core:prelude/primitive.wado/count_digits_i64"(local.tee abs_val(select i64(is_negative, 0_i64 - builtin::i64_extend_i32_s(self), builtin::i64_extend_i32_s(self))));
     offset = "core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_6 = f.buf; self_6.repr, offset, abs_val, digit_count);
 }
@@ -1292,9 +1260,7 @@ fn "core:prelude/primitive.wado/f64::fmt_into"(self, f) {
     let result_mv_digits: u64;
     let result_mv_exponent: i32;
     multivalue_bind [result_mv_digits, result_mv_exponent] = "core:prelude/fpfmt.wado/short"(abs_f);
-    x_15 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(result_mv_digits));
-    nd_14 = (x_15 * 78913) >> 18;
-    nd_10 = nd_14 + (result_mv_digits >=u self_22 = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(nd_14 >= self_22.used) {
+    nd_10 = local.tee nd_14((local.tee x_15(64 - builtin::i32_wrap_i64(builtin::i64_clz(result_mv_digits))) * 78913) >> 18) + (result_mv_digits >=u self_22 = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(nd_14 >= self_22.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<u64>(self_22.repr, nd_14));
@@ -1351,9 +1317,7 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
     let result_mv_digits: u64;
     let result_mv_exponent: i32;
     multivalue_bind [result_mv_digits, result_mv_exponent] = "core:prelude/fpfmt.wado/fixed_width_for_prec"(abs_f, precision);
-    x_21 = 64 - builtin::i32_wrap_i64(builtin::i64_clz(result_mv_digits));
-    nd_20 = (x_21 * 78913) >> 18;
-    nd_12 = nd_20 + (result_mv_digits >=u self_28 = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(nd_20 >= self_28.used) {
+    nd_12 = local.tee nd_20((local.tee x_21(64 - builtin::i32_wrap_i64(builtin::i64_clz(result_mv_digits))) * 78913) >> 18) + (result_mv_digits >=u self_28 = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(nd_20 >= self_28.used) {
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<u64>(self_28.repr, nd_20));
@@ -1372,20 +1336,16 @@ fn "core:prelude/primitive.wado/i32^LowerHex::fmt"(self, f) {
     let v: i32;
     let is_neg: bool;
     let abs_val: i64;
-    v = self.value;
-    is_neg = v < 0;
-    abs_val = select i64(is_neg, 0_i64 - builtin::i64_extend_i32_s(v), builtin::i64_extend_i32_s(v));
-    "core:prelude/primitive.wado/i64::fmt_base"(abs_val, is_neg, f, 16, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
+    is_neg = local.tee v(self.value) < 0;
+    "core:prelude/primitive.wado/i64::fmt_base"(local.tee abs_val(select i64(is_neg, 0_i64 - builtin::i64_extend_i32_s(v), builtin::i64_extend_i32_s(v))), is_neg, f, 16, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
 }
 
 fn "core:prelude/primitive.wado/i32^LowerHexAlt::fmt_alt"(self, f) {
     let v: i32;
     let is_neg: bool;
     let abs_val: i64;
-    v = self.value;
-    is_neg = v < 0;
-    abs_val = select i64(is_neg, 0_i64 - builtin::i64_extend_i32_s(v), builtin::i64_extend_i32_s(v));
-    "core:prelude/primitive.wado/i64::fmt_base"(abs_val, is_neg, f, 16, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 });
+    is_neg = local.tee v(self.value) < 0;
+    "core:prelude/primitive.wado/i64::fmt_base"(local.tee abs_val(select i64(is_neg, 0_i64 - builtin::i64_extend_i32_s(v), builtin::i64_extend_i32_s(v))), is_neg, f, 16, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 });
 }
 
 fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
@@ -1398,10 +1358,7 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     if min_capacity <= capacity {
         return;
     }
-    a_7 = capacity * 2;
-    a_5 = select i32(a_7 > min_capacity, a_7, min_capacity);
-    new_capacity = select i32(a_5 > 8, a_5, 8);
-    new_repr = builtin::array_new<u8>(new_capacity);
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

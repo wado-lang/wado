@@ -410,6 +410,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
                 let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
                 let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
+                let empty_ns: IndexMap<String, ModuleSource> = IndexMap::default();
                 for item in &module.items {
                     let Item::Newtype(newtype_decl) = item else {
                         continue;
@@ -426,6 +427,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             current_module_source: module_source,
                             imported_type_sources: &imported_type_sources,
                             import_original_names: &import_original_names,
+                            namespace_imports: &empty_ns,
                             all_newtypes: &all_newtypes,
                             all_struct_fields: &all_struct_fields,
                             all_variant_cases: &all_variant_cases,
@@ -510,12 +512,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
             let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
             let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
+            let empty_ns: IndexMap<String, ModuleSource> = IndexMap::default();
 
             for item in &module.items {
                 let lookup = TypeLookup {
                     current_module_source: module_source,
                     imported_type_sources: &imported_type_sources,
                     import_original_names: &import_original_names,
+                    namespace_imports: &empty_ns,
                     all_newtypes: &all_newtypes,
                     all_struct_fields: &all_struct_fields,
                     all_variant_cases: &all_variant_cases,
@@ -1158,13 +1162,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let module = modules.get(module_source).expect("module should exist");
 
             // Build imported type sources and module-specific flat maps for this module
-            let (imported_type_sources, import_original_names) = Self::build_imported_type_sources(
-                &mut state.interner.borrow_mut(),
-                module,
-                module_source,
-                Some(&entry_module_source),
-                &state.invocations,
-            );
+            let (mut imported_type_sources, mut import_original_names) =
+                Self::build_imported_type_sources(
+                    &mut state.interner.borrow_mut(),
+                    module,
+                    module_source,
+                    Some(&entry_module_source),
+                    &state.invocations,
+                );
             // Build function_return_types for this module only
             // (functions defined in this module). The lookup borrows the
             // shared `all_*` tables; no per-module flat-map cloning.
@@ -1176,10 +1181,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
                 let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
                 let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
+                let empty_ns: IndexMap<String, ModuleSource> = IndexMap::default();
                 let lookup = TypeLookup {
                     current_module_source: module_source,
                     imported_type_sources: &imported_type_sources,
                     import_original_names: &import_original_names,
+                    namespace_imports: &empty_ns,
                     all_newtypes: &state.tysys.all_newtypes,
                     all_struct_fields: &state.tysys.all_struct_fields,
                     all_variant_cases: &state.tysys.all_variant_cases,
@@ -1233,8 +1240,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     }
                                 }
                             }
-                            crate::ast::UseItem::Namespace { name } => {
-                                // Namespace import: all symbols from source module are available
+                            crate::ast::UseItem::Namespace { name: ns } => {
+                                // Namespace import: register every public
+                                // symbol under its `ns$member` alias in the
+                                // per-name maps that back `use { X as Y }` —
+                                // types in `imported_type_sources`, functions
+                                // in `imported_functions`.
                                 let source = crate::name::resolve_import_with_invocations(
                                     &mut state.interner.borrow_mut(),
                                     module_source,
@@ -1243,9 +1254,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     &state.invocations,
                                 );
                                 for sym in symbols.get_module_symbols(&source) {
-                                    imported_functions.insert(sym.name.clone());
+                                    let alias = crate::name::namespace_member_alias(ns, &sym.name);
+                                    match sym.kind {
+                                        crate::symbol::SymbolKind::Function(_) => {
+                                            imported_functions.insert(alias);
+                                        }
+                                        crate::symbol::SymbolKind::Struct(_)
+                                        | crate::symbol::SymbolKind::Enum(_)
+                                        | crate::symbol::SymbolKind::Flags(_)
+                                        | crate::symbol::SymbolKind::Variant(_)
+                                        | crate::symbol::SymbolKind::Newtype(_)
+                                        | crate::symbol::SymbolKind::Resource(_)
+                                        | crate::symbol::SymbolKind::BuiltinType => {
+                                            imported_type_sources
+                                                .insert(alias.clone(), source.clone());
+                                            import_original_names.insert(alias, sym.name.clone());
+                                        }
+                                        _ => {}
+                                    }
                                 }
-                                namespace_imports.insert(name.clone(), source);
+                                namespace_imports.insert(ns.clone(), source);
                             }
                             crate::ast::UseItem::Wildcard => {
                                 // Wildcard import: no individual function names to collect
@@ -2869,6 +2897,39 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         namespaced.name.clone(),
                         vec![],
                         vec![],
+                    );
+                }
+                // `ns::Type` namespace-import alias in type position: resolve
+                // the `ns$Type` alias via the `Named` / `Generic` arms, which
+                // route through `imported_type_sources` to the namespace's own
+                // module. Mirrors the dynamic resolver's namespace-alias branch.
+                if lookup
+                    .namespace_imports
+                    .contains_key(namespaced.namespace.as_str())
+                {
+                    let alias = crate::name::namespace_member_alias(
+                        &namespaced.namespace,
+                        &namespaced.name,
+                    );
+                    let aliased = if namespaced.args.is_empty() {
+                        Type::Named(crate::ast::NamedType::new(
+                            namespaced.id,
+                            alias,
+                            namespaced.span,
+                        ))
+                    } else {
+                        Type::Generic(crate::ast::GenericType {
+                            id: namespaced.id,
+                            name: alias,
+                            args: namespaced.args.clone(),
+                            span: namespaced.span,
+                        })
+                    };
+                    return Self::resolve_type_static_with_params(
+                        &aliased,
+                        type_table,
+                        lookup,
+                        type_params,
                     );
                 }
                 TypeTable::UNKNOWN

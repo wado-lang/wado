@@ -1,0 +1,33 @@
+// Test: fold a redundant byte mask under a sign extension.
+//
+// `(x as u8) as i8` lowers to `i32.extend8_s(x & 0xFF)`. The mask only keeps
+// the low 8 bits, which is exactly what `extend8_s` already reads, so the
+// peephole drops it to `i32.extend8_s(x)`.
+//
+// At O0: `i32_extend8_s(x & 255)`
+// At O2: `i32_extend8_s(x)` (mask elided)
+
+#[inline(never)]
+fn to_i8(x: i32) -> i8 {
+    return (x as u8) as i8;
+}
+
+#[inline(never)]
+fn to_i16(x: i32) -> i16 {
+    return (x as u16) as i16;
+}
+
+test {
+    assert to_i8(300) == 44;
+    assert to_i8(200) == -56;
+    assert to_i16(70000) == 4464;
+    assert to_i16(40000) == -25536;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_expect:O0": ["i32_extend8_s(x & 255)", "i32_extend16_s(x & 65535)"],
+    "wir_not_expect:O2": ["i32_extend8_s(x & 255)", "i32_extend16_s(x & 65535)"],
+    "wir_expect:O2": ["i32_extend8_s(x)", "i32_extend16_s(x)"]
+}

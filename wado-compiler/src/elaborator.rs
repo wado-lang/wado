@@ -238,6 +238,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             current_module_source: &self.current_module_source,
             imported_type_sources: &self.sem.imports.imported_type_sources,
             import_original_names: &self.sem.imports.import_original_names,
+            namespace_imports: &self.sem.imports.namespace_imports,
             all_newtypes: &self.tysys.all_newtypes,
             all_struct_fields: &self.tysys.all_struct_fields,
             all_variant_cases: &self.tysys.all_variant_cases,
@@ -265,16 +266,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `imported_globals`, struct registries, etc. see the canonical form
     /// they were populated with.
     pub(super) fn strip_ns_prefix<'s>(&self, name: &'s str) -> Option<&'s str> {
-        let pos = name.find("::")?;
-        let prefix = &name[..pos];
-        let suffix = &name[pos + 2..];
-        if suffix.contains("::") {
-            return None;
-        }
-        if !self.sem.imports.namespace_imports.contains_key(prefix) {
-            return None;
-        }
-        Some(suffix)
+        self.sem.imports.strip_ns_prefix(name)
     }
 
     pub(super) fn lookup_struct_fields(&self, name: &str) -> Option<&StructFieldInfo> {
@@ -1226,34 +1218,63 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     &self.invocations,
                 );
 
-                // Look up the source module to find global declarations
+                // Collect `(local_name, source_global_name)` pairs to import:
+                // a `Simple` import names one global; a `Namespace` import
+                // brings every public global into scope under its `ns$global`
+                // alias.
                 if let Some(source_module) = self.loaded_modules.get(&source_module_source) {
+                    let mut to_import: Vec<(String, String)> = Vec::new();
                     for use_item in &use_decl.items {
-                        if let ast::UseItem::Simple { name, alias, .. } = use_item {
-                            // Check if this import refers to a global variable
-                            if let Some(symbol) =
-                                self.symbols.lookup_in_module(&source_module_source, name)
-                                && let crate::symbol::SymbolKind::Global(global_sym) = &symbol.kind
-                            {
-                                // Find the global declaration in the source module to get its type
+                        match use_item {
+                            ast::UseItem::Simple { name, alias, .. } => {
+                                if let Some(symbol) =
+                                    self.symbols.lookup_in_module(&source_module_source, name)
+                                    && matches!(symbol.kind, crate::symbol::SymbolKind::Global(_))
+                                {
+                                    to_import.push((
+                                        alias.as_ref().unwrap_or(name).clone(),
+                                        name.clone(),
+                                    ));
+                                }
+                            }
+                            ast::UseItem::Namespace { name: ns } => {
+                                // Each public global is imported under its
+                                // `ns$global` alias.
                                 for src_item in &source_module.items {
                                     if let Item::Global(global_decl) = src_item
-                                        && &global_decl.name == name
+                                        && global_decl.is_pub
                                     {
-                                        let ty = self.resolve_type(&global_decl.ty);
-                                        let local_name = alias.as_ref().unwrap_or(name).clone();
-                                        self.sem.decls.imported_globals.insert(
-                                            local_name,
-                                            (
-                                                source_module_source.clone(),
-                                                name.clone(),
-                                                ty,
-                                                global_sym.is_mut,
+                                        to_import.push((
+                                            crate::name::namespace_member_alias(
+                                                ns,
+                                                &global_decl.name,
                                             ),
-                                        );
-                                        break;
+                                            global_decl.name.clone(),
+                                        ));
                                     }
                                 }
+                            }
+                            ast::UseItem::InterfaceFunctions { .. } | ast::UseItem::Wildcard => {}
+                        }
+                    }
+                    for (local_name, source_name) in to_import {
+                        // Find the global declaration in the source module to
+                        // resolve its type and mutability.
+                        for src_item in &source_module.items {
+                            if let Item::Global(global_decl) = src_item
+                                && global_decl.name == source_name
+                            {
+                                let ty = self.resolve_type(&global_decl.ty);
+                                self.sem.decls.imported_globals.insert(
+                                    local_name,
+                                    (
+                                        source_module_source.clone(),
+                                        source_name,
+                                        ty,
+                                        global_decl.mutable,
+                                    ),
+                                );
+                                break;
                             }
                         }
                     }
@@ -1306,8 +1327,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .collect::<Vec<_>>()
             })
             .collect();
+        // Also register each constant reachable through a namespace import
+        // under its `ns$Type::member` alias, so `ns::Type::CONST` (which
+        // canonicalizes to `ns$Type::CONST`) resolves to the constant in that
+        // namespace's module.
+        let ns_aliases: Vec<(String, ModuleSource)> = self
+            .sem
+            .imports
+            .namespace_imports
+            .iter()
+            .map(|(ns, src)| (ns.clone(), src.clone()))
+            .collect();
         for (src, key, ty, value) in assoc_const_inputs {
             let type_id = self.resolve_type(&ty);
+            for (ns, ns_src) in &ns_aliases {
+                if *ns_src == src {
+                    self.sem.decls.associated_constants.insert(
+                        name::namespace_member_alias(ns, &key),
+                        (src.clone(), type_id, value.clone()),
+                    );
+                }
+            }
             self.sem
                 .decls
                 .associated_constants

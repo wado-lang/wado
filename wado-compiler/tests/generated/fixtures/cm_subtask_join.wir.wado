@@ -141,7 +141,7 @@ struct wasi:http/types.wado//ErrorCode::InternalError {  // TypeId(20)
     payload_0: ref null "core:prelude/string.wado//String",
 }
 
-struct tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(21)
+struct tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>] {  // TypeId(21)
     mut 0: i32,
     mut 1: i32,
 }
@@ -223,7 +223,7 @@ type "functype//wado-compiler/tests/fixtures/cm_subtask_join.wado/handle" = fn(i
 
 type "functype//wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(40)
 
-type "functype//wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(41)
+type "functype//wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(41)
 
 type "functype//wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_export__handle" = fn(i32);  // TypeId(42)
 
@@ -392,14 +392,13 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
     let __local_154: i64;
     let __local_155: i32;
     let __local_156: i32;
-    let __pattern_temp_1: ref "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    let __pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let __pair_temp_1: i64;
     __pair_temp_1 = "wasi/future-new"();
     let __mv_lo_1: i32;
     let __mv_hi_1: i32;
     multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    headers = "wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_binding__Fields_new"();
-    __pattern_temp_1 = "wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __mv_lo_1);
+    __pattern_temp_1 = "wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_binding__Response_new"(local.tee headers("wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<Stream<u8>>" { 1 }, __mv_lo_1);
     response = __pattern_temp_1.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     __tv_1 = 0;
@@ -424,8 +423,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_22 = 0;
             __local_23 = 0;
             if __local_21 != 0 {
-                __local_24 = "core:internal/cm_lower_string"(ref.as_non_null(__local_20));
-                __local_25 = builtin::i32_wrap_i64(__local_24);
+                __local_25 = builtin::i32_wrap_i64(local.tee __local_24("core:internal/cm_lower_string"(ref.as_non_null(__local_20))));
                 __local_26 = builtin::i32_wrap_i64(__local_24 >> 32_i64);
                 __local_22 = __local_25;
                 __local_23 = __local_26;
@@ -434,8 +432,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_28 = ref.test "core:prelude/types.wado//Option<u16>::Some"(__local_27);
             __local_29 = 0;
             if __local_28 != 0 {
-                __local_30 = ref.cast "core:prelude/types.wado//Option<u16>::Some"(__local_27).payload_0;
-                __local_29 = __local_30;
+                __local_29 = local.tee __local_30(ref.cast "core:prelude/types.wado//Option<u16>::Some"(__local_27).payload_0);
             }
             __tv_2 = __local_21;
             __tv_3 = builtin::i64_extend_i32_s(__local_22);
@@ -460,16 +457,14 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_34 = ref.test "core:prelude/types.wado//Option<u8>::Some"(__local_33);
             __local_35 = 0;
             if __local_34 != 0 {
-                __local_36 = ref.cast "core:prelude/types.wado//Option<u8>::Some"(__local_33).payload_0;
-                __local_35 = __local_36;
+                __local_35 = local.tee __local_36(ref.cast "core:prelude/types.wado//Option<u8>::Some"(__local_33).payload_0);
             }
             __local_37 = __local_31.alert_message;
             __local_38 = ref.is_null(__local_37) == 0;
             __local_39 = 0;
             __local_40 = 0;
             if __local_38 != 0 {
-                __local_41 = "core:internal/cm_lower_string"(ref.as_non_null(__local_37));
-                __local_42 = builtin::i32_wrap_i64(__local_41);
+                __local_42 = builtin::i32_wrap_i64(local.tee __local_41("core:internal/cm_lower_string"(ref.as_non_null(__local_37))));
                 __local_43 = builtin::i32_wrap_i64(__local_41 >> 32_i64);
                 __local_39 = __local_42;
                 __local_40 = __local_43;
@@ -486,8 +481,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_46 = ref.test "core:prelude/types.wado//Option<u64>::Some"(__local_44);
             __local_47 = 0_i64;
             if __local_46 != 0 {
-                __local_48 = ref.cast "core:prelude/types.wado//Option<u64>::Some"(__local_44).payload_0;
-                __local_47 = __local_48;
+                __local_47 = local.tee __local_48(ref.cast "core:prelude/types.wado//Option<u64>::Some"(__local_44).payload_0);
             }
             __tv_2 = __local_46;
             __tv_3 = __local_47;
@@ -499,8 +493,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_51 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_49);
             __local_52 = 0;
             if __local_51 != 0 {
-                __local_53 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_49).payload_0;
-                __local_52 = __local_53;
+                __local_52 = local.tee __local_53(ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_49).payload_0);
             }
             __tv_2 = __local_51;
             __tv_3 = builtin::i64_extend_i32_s(__local_52);
@@ -519,8 +512,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
                 __local_65 = 0;
                 __local_66 = 0;
                 if __local_64 != 0 {
-                    __local_67 = "core:internal/cm_lower_string"(ref.as_non_null(__local_63));
-                    __local_68 = builtin::i32_wrap_i64(__local_67);
+                    __local_68 = builtin::i32_wrap_i64(local.tee __local_67("core:internal/cm_lower_string"(ref.as_non_null(__local_63))));
                     __local_69 = builtin::i32_wrap_i64(__local_67 >> 32_i64);
                     __local_65 = __local_68;
                     __local_66 = __local_69;
@@ -529,8 +521,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
                 __local_71 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_70);
                 __local_72 = 0;
                 if __local_71 != 0 {
-                    __local_73 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_70).payload_0;
-                    __local_72 = __local_73;
+                    __local_72 = local.tee __local_73(ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_70).payload_0);
                 }
                 __local_57 = __local_64;
                 __local_58 = __local_65;
@@ -549,8 +540,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_76 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_74);
             __local_77 = 0;
             if __local_76 != 0 {
-                __local_78 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_74).payload_0;
-                __local_77 = __local_78;
+                __local_77 = local.tee __local_78(ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_74).payload_0);
             }
             __tv_2 = __local_76;
             __tv_3 = builtin::i64_extend_i32_s(__local_77);
@@ -561,8 +551,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_83 = 0;
             __local_84 = 0;
             if __local_82 != 0 {
-                __local_85 = "core:internal/cm_lower_string"(ref.as_non_null(__local_81));
-                __local_86 = builtin::i32_wrap_i64(__local_85);
+                __local_86 = builtin::i32_wrap_i64(local.tee __local_85("core:internal/cm_lower_string"(ref.as_non_null(__local_81))));
                 __local_87 = builtin::i32_wrap_i64(__local_85 >> 32_i64);
                 __local_83 = __local_86;
                 __local_84 = __local_87;
@@ -571,8 +560,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_89 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_88);
             __local_90 = 0;
             if __local_89 != 0 {
-                __local_91 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_88).payload_0;
-                __local_90 = __local_91;
+                __local_90 = local.tee __local_91(ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_88).payload_0);
             }
             __tv_2 = __local_82;
             __tv_3 = builtin::i64_extend_i32_s(__local_83);
@@ -585,8 +573,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_94 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_92);
             __local_95 = 0;
             if __local_94 != 0 {
-                __local_96 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_92).payload_0;
-                __local_95 = __local_96;
+                __local_95 = local.tee __local_96(ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_92).payload_0);
             }
             __tv_2 = __local_94;
             __tv_3 = builtin::i64_extend_i32_s(__local_95);
@@ -597,8 +584,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_101 = 0;
             __local_102 = 0;
             if __local_100 != 0 {
-                __local_103 = "core:internal/cm_lower_string"(ref.as_non_null(__local_99));
-                __local_104 = builtin::i32_wrap_i64(__local_103);
+                __local_104 = builtin::i32_wrap_i64(local.tee __local_103("core:internal/cm_lower_string"(ref.as_non_null(__local_99))));
                 __local_105 = builtin::i32_wrap_i64(__local_103 >> 32_i64);
                 __local_101 = __local_104;
                 __local_102 = __local_105;
@@ -607,8 +593,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_107 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_106);
             __local_108 = 0;
             if __local_107 != 0 {
-                __local_109 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_106).payload_0;
-                __local_108 = __local_109;
+                __local_108 = local.tee __local_109(ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_106).payload_0);
             }
             __tv_2 = __local_100;
             __tv_3 = builtin::i64_extend_i32_s(__local_101);
@@ -620,8 +605,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_112 = ref.test "core:prelude/types.wado//Option<u64>::Some"(__local_110);
             __local_113 = 0_i64;
             if __local_112 != 0 {
-                __local_114 = ref.cast "core:prelude/types.wado//Option<u64>::Some"(__local_110).payload_0;
-                __local_113 = __local_114;
+                __local_113 = local.tee __local_114(ref.cast "core:prelude/types.wado//Option<u64>::Some"(__local_110).payload_0);
             }
             __tv_2 = __local_112;
             __tv_3 = __local_113;
@@ -630,8 +614,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_117 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_115);
             __local_118 = 0;
             if __local_117 != 0 {
-                __local_119 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_115).payload_0;
-                __local_118 = __local_119;
+                __local_118 = local.tee __local_119(ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_115).payload_0);
             }
             __tv_2 = __local_117;
             __tv_3 = builtin::i64_extend_i32_s(__local_118);
@@ -642,8 +625,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_124 = 0;
             __local_125 = 0;
             if __local_123 != 0 {
-                __local_126 = "core:internal/cm_lower_string"(ref.as_non_null(__local_122));
-                __local_127 = builtin::i32_wrap_i64(__local_126);
+                __local_127 = builtin::i32_wrap_i64(local.tee __local_126("core:internal/cm_lower_string"(ref.as_non_null(__local_122))));
                 __local_128 = builtin::i32_wrap_i64(__local_126 >> 32_i64);
                 __local_124 = __local_127;
                 __local_125 = __local_128;
@@ -652,8 +634,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_130 = ref.test "core:prelude/types.wado//Option<u32>::Some"(__local_129);
             __local_131 = 0;
             if __local_130 != 0 {
-                __local_132 = ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_129).payload_0;
-                __local_131 = __local_132;
+                __local_131 = local.tee __local_132(ref.cast "core:prelude/types.wado//Option<u32>::Some"(__local_129).payload_0);
             }
             __tv_2 = __local_123;
             __tv_3 = builtin::i64_extend_i32_s(__local_124);
@@ -666,8 +647,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_136 = 0;
             __local_137 = 0;
             if __local_135 != 0 {
-                __local_138 = "core:internal/cm_lower_string"(ref.as_non_null(__local_133));
-                __local_139 = builtin::i32_wrap_i64(__local_138);
+                __local_139 = builtin::i32_wrap_i64(local.tee __local_138("core:internal/cm_lower_string"(ref.as_non_null(__local_133))));
                 __local_140 = builtin::i32_wrap_i64(__local_138 >> 32_i64);
                 __local_136 = __local_139;
                 __local_137 = __local_140;
@@ -681,8 +661,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_144 = 0;
             __local_145 = 0;
             if __local_143 != 0 {
-                __local_146 = "core:internal/cm_lower_string"(ref.as_non_null(__local_141));
-                __local_147 = builtin::i32_wrap_i64(__local_146);
+                __local_147 = builtin::i32_wrap_i64(local.tee __local_146("core:internal/cm_lower_string"(ref.as_non_null(__local_141))));
                 __local_148 = builtin::i32_wrap_i64(__local_146 >> 32_i64);
                 __local_144 = __local_147;
                 __local_145 = __local_148;
@@ -701,8 +680,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
             __local_152 = 0;
             __local_153 = 0;
             if __local_151 != 0 {
-                __local_154 = "core:internal/cm_lower_string"(ref.as_non_null(__local_149));
-                __local_155 = builtin::i32_wrap_i64(__local_154);
+                __local_155 = builtin::i32_wrap_i64(local.tee __local_154("core:internal/cm_lower_string"(ref.as_non_null(__local_149))));
                 __local_156 = builtin::i32_wrap_i64(__local_154 >> 32_i64);
                 __local_152 = __local_155;
                 __local_153 = __local_156;
@@ -715,8 +693,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/handle"(request) {
     }
     let __fw_write_ptr_2: i32;
     let __fw_result_2: i32;
-    __fw_write_ptr_2 = "mem/realloc"(0, 0, 8, 40);
-    builtin::store_i64(__fw_write_ptr_2, 0_i64);
+    builtin::store_i64(local.tee __fw_write_ptr_2("mem/realloc"(0, 0, 8, 40)), 0_i64);
     builtin::store_i64[8](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[16](__fw_write_ptr_2, 0_i64);
     builtin::store_i64[24](__fw_write_ptr_2, 0_i64);
@@ -748,8 +725,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_binding__Response_new
     __contents_disc = ref.test "core:prelude/types.wado//Option<Stream<u8>>::Some"(contents);
     __contents_inner0 = 0;
     if ref.test "core:prelude/types.wado//Option<Stream<u8>>::Some"(contents) {
-        __local_6 = ref.cast "core:prelude/types.wado//Option<Stream<u8>>::Some"(contents).payload_0;
-        __contents_inner0 = __local_6;
+        __contents_inner0 = local.tee __local_6(ref.cast "core:prelude/types.wado//Option<Stream<u8>>::Some"(contents).payload_0);
     } else {
     }
     __outptr = "mem/realloc"(0, 0, 4, 8);
@@ -757,7 +733,7 @@ fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_binding__Response_new
     __lifted_result_8 = builtin::load_i32(__outptr + 0);
     __lifted_result_9 = builtin::load_i32(__outptr + 4);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_8, 1: __lifted_result_9 };
+    return struct.new "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_8, 1: __lifted_result_9 };
 }
 
 fn "wado-compiler/tests/fixtures/cm_subtask_join.wado/__cm_export__handle"(request) {

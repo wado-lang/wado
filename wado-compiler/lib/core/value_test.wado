@@ -1,4 +1,4 @@
-use { Value } from "core:json_value";
+use { Value } from "core:value";
 use { to_string, from_string } from "core:json";
 use { DeserializeError } from "core:serde";
 use { TreeMap } from "core:collections";
@@ -29,20 +29,20 @@ test "Value::Bool false serialize" {
     assert r matches { Ok(s) && s == "false" };
 }
 
-test "Value::Number integer serialize" {
-    let v = Value::Number(42.0);
+test "Value::Float integer serialize" {
+    let v = Value::Float(42.0);
     let r = to_string(&v);
     assert r matches { Ok(s) && s == "42" };
 }
 
-test "Value::Number float serialize" {
-    let v = Value::Number(3.14);
+test "Value::Float float serialize" {
+    let v = Value::Float(3.14);
     let r = to_string(&v);
     assert r matches { Ok(s) && s == "3.14" };
 }
 
-test "Value::Number negative serialize" {
-    let v = Value::Number(-7.0);
+test "Value::Float negative serialize" {
+    let v = Value::Float(-7.0);
     let r = to_string(&v);
     assert r matches { Ok(s) && s == "-7" };
 }
@@ -67,9 +67,9 @@ test "Value::List empty serialize" {
 
 test "Value::List serialize" {
     let v = Value::List([
-        Value::Number(1.0),
-        Value::Number(2.0),
-        Value::Number(3.0),
+        Value::Float(1.0),
+        Value::Float(2.0),
+        Value::Float(3.0),
     ]);
     let r = to_string(&v);
     assert r matches { Ok(s) && s == "[1,2,3]" };
@@ -100,7 +100,7 @@ test "Value::Object serialize" {
 
 test "Value::Object multiple keys serialize" {
     let v = Value::Object(obj([
-        ["a", Value::Number(1.0)],
+        ["a", Value::Float(1.0)],
         ["b", Value::Bool(false)],
     ]));
     let r = to_string(&v);
@@ -122,19 +122,19 @@ test "Value::Bool false deserialize" {
     assert r matches { Ok(v) && v == Value::Bool(false) };
 }
 
-test "Value::Number integer deserialize" {
+test "Value::Float integer deserialize" {
     let r: Result<Value, DeserializeError> = from_string("42");
-    assert r matches { Ok(v) && v == Value::Number(42.0) };
+    assert r matches { Ok(v) && v == Value::Float(42.0) };
 }
 
-test "Value::Number float deserialize" {
+test "Value::Float float deserialize" {
     let r: Result<Value, DeserializeError> = from_string("3.14");
-    assert r matches { Ok(v) && v == Value::Number(3.14) };
+    assert r matches { Ok(v) && v == Value::Float(3.14) };
 }
 
-test "Value::Number negative deserialize" {
+test "Value::Float negative deserialize" {
     let r: Result<Value, DeserializeError> = from_string("-7");
-    assert r matches { Ok(v) && v == Value::Number(-7.0) };
+    assert r matches { Ok(v) && v == Value::Float(-7.0) };
 }
 
 test "Value::String deserialize" {
@@ -155,9 +155,9 @@ test "Value::List empty deserialize" {
 test "Value::List deserialize" {
     let r: Result<Value, DeserializeError> = from_string("[1,2,3]");
     assert r matches { Ok(v) && v == Value::List([
-        Value::Number(1.0),
-        Value::Number(2.0),
-        Value::Number(3.0),
+        Value::Float(1.0),
+        Value::Float(2.0),
+        Value::Float(3.0),
     ]) };
 }
 
@@ -179,8 +179,8 @@ test "Value nested object with array deserialize" {
         let expected = Value::Object(obj([
             [
                 "nums", Value::List([
-                    Value::Number(1.0),
-                    Value::Number(2.0),
+                    Value::Float(1.0),
+                    Value::Float(2.0),
                 ]),
             ],
             ["flag", Value::Bool(true)],
@@ -201,7 +201,7 @@ test "Value round-trip null" {
 test "Value round-trip nested" {
     let original = Value::Object(obj([
         ["name", Value::String("Alice")],
-        ["age", Value::Number(30.0)],
+        ["age", Value::Float(30.0)],
         [
             "tags", Value::List([
                 Value::String("admin"),
@@ -223,7 +223,7 @@ test "Value round-trip nested" {
 test "Value whitespace tolerance" {
     let r: Result<Value, DeserializeError> = from_string("  {  \"x\"  :  1  }  ");
     assert r matches { Ok(v) && v == Value::Object(obj([
-        ["x", Value::Number(1.0)],
+        ["x", Value::Float(1.0)],
     ])) };
 }
 
@@ -236,9 +236,9 @@ test "inspect bool" {
     assert `{Value::Bool(false):?}` == "false";
 }
 
-test "inspect number" {
-    assert `{Value::Number(42.0):?}` == "42.0";
-    assert `{Value::Number(3.14):?}` == "3.14";
+test "inspect float" {
+    assert `{Value::Float(42.0):?}` == "42.0";
+    assert `{Value::Float(3.14):?}` == "3.14";
 }
 
 test "inspect string" {
@@ -247,7 +247,7 @@ test "inspect string" {
 
 test "inspect array" {
     let v = Value::List([
-        Value::Number(1.0),
+        Value::Float(1.0),
         Value::Bool(true), Value::Null,
     ]);
     assert `{v:?}` == "[1.0, true, null]";
@@ -259,7 +259,7 @@ test "inspect empty array" {
 
 test "inspect object" {
     let v = Value::Object(obj([
-        ["a", Value::Number(1.0)],
+        ["a", Value::Float(1.0)],
     ]));
     assert `{v:?}` == "{\"a\": 1.0}";
 }
@@ -271,7 +271,7 @@ test "inspect empty object" {
 test "pretty-print object" {
     let v = Value::Object(obj([
         ["name", Value::String("Alice")],
-        ["age", Value::Number(30.0)],
+        ["age", Value::Float(30.0)],
     ]));
     assert `{v:#?}` == "{
   \"name\": \"Alice\",
@@ -283,8 +283,8 @@ test "pretty-print nested" {
     let v = Value::Object(obj([
         [
             "items", Value::List([
-                Value::Number(1.0),
-                Value::Number(2.0),
+                Value::Float(1.0),
+                Value::Float(2.0),
             ]),
         ],
     ]));
@@ -307,9 +307,9 @@ test "Value eq bool" {
     assert !(Value::Bool(true) == Value::Null);
 }
 
-test "Value eq number" {
-    assert Value::Number(1.0) == Value::Number(1.0);
-    assert !(Value::Number(1.0) == Value::Number(2.0));
+test "Value eq float" {
+    assert Value::Float(1.0) == Value::Float(1.0);
+    assert !(Value::Float(1.0) == Value::Float(2.0));
 }
 
 test "Value eq string" {
@@ -319,9 +319,9 @@ test "Value eq string" {
 
 test "Value eq array" {
     assert Value::List([]) == Value::List([]);
-    assert Value::List([Value::Number(1.0)]) == Value::List([Value::Number(1.0)]);
-    assert !(Value::List([Value::Number(1.0)]) == Value::List([Value::Number(2.0)]));
-    assert !(Value::List([Value::Number(1.0)]) == Value::List([]));
+    assert Value::List([Value::Float(1.0)]) == Value::List([Value::Float(1.0)]);
+    assert !(Value::List([Value::Float(1.0)]) == Value::List([Value::Float(2.0)]));
+    assert !(Value::List([Value::Float(1.0)]) == Value::List([]));
 }
 
 test "Value eq object" {

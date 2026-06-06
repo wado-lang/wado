@@ -1,0 +1,16 @@
+// Test that namespace-imported types in function return types resolve
+// correctly during the collection phase (before full elaboration).
+use h from "./sub/ns_robust_helper.wado";
+
+pub fn get_point() -> h::Point {
+    return h::Point::new(5, 6);
+}
+
+test "collect namespace type in return" {
+    let p = get_point();
+    assert p.x == 5;
+    assert p.y == 6;
+}
+
+__DATA__
+{"test": {}}
