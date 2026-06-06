@@ -307,9 +307,12 @@ inside reify and broke two contracts, both now understood:
 
 Gating is therefore disabled until both are addressed:
 
-- [ ] 1b. Port `check_effects` to operate on `Semantics` (AST + facts)
-      instead of `TirModule`; run it after `annotate_bodies` for both
-      batch and LSP.
+- [x] 1b. `check_effects_semantic(&Semantics)` (AST + facts) landed and
+      wired into the LSP (`Engine::diagnostics`). Covers free / method /
+      static / indirect calls, declared effects, signature resources
+      (incl. struct-nested), resource injection, the propagation
+      closure, effect-parameter resolution, and `#[benign]`. Batch still
+      runs the TIR `check_effects` (see "Batch switch — blocked" below).
 - [ ] 1c. Port `check_stores` likewise.
 - [ ] 1d. Port `check_default_purity` likewise.
 - [ ] 1a. Move the world-export conformance check (`export`-required,
@@ -327,6 +330,37 @@ Gating is therefore disabled until both are addressed:
 - [ ] The optimize-time DCE never carried a user-facing diagnostic role,
       so there is nothing to retire — it stays as silent cleanup as
       designed.
+
+Batch switch — blocked:
+
+Replacing the batch TIR `check_effects` with `check_effects_semantic`
+was attempted and reverted. Running it over the full E2E suite surfaced
+false positives in the effect-propagation fixtures: e.g.
+`effect_propagation_signature_param` reported a bogus "missing resource
+'StreamWritable'" on a `Stream::new()` / `.drop()` sequence. Root cause:
+the Semantics propagation closure is built from the `effect_ops` facts,
+but stdlib effect / resource declarations that are rehydrated from the
+snapshot (the `Core` / `Wasi` variants) do not carry `effect_ops` in
+`module_semantics`, so the closure misses stdlib effect→resource
+propagation (`Stdout → Stream`, `Stream → StreamWritable`, …). The
+TIR-based closure does not have this gap because it is built from the
+rehydrated `TirModule`s, which are complete.
+
+The same gap is a known limitation of the LSP effect diagnostics today:
+user code that directly drives resource-propagation APIs (rather than
+going through `println`-style wrappers) can see a spurious "missing
+resource". Typical effect usage (`with Stdout` + `println`) is
+unaffected.
+
+- [ ] Make stdlib `effect_ops` available to `build_propagation_closure_sem`
+      (seed them into the snapshot, or build the closure from a source
+      that includes the rehydrated stdlib), then re-attempt the batch
+      switch and validate the full E2E suite.
+
+(While diagnosing this, a separate bug was fixed: bundled stdlib `.wado`
+files load as `ModuleSource::Local` with a `wasi:` / `core:` scheme
+path, so `is_user_authored` wrongly treated them as user code. They are
+now excluded, which also removes stdlib false positives from the LSP.)
 
 #### Phase 1b design — effect check on `Semantics`
 
