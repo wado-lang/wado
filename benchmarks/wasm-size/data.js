@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780747526144,
+  "lastUpdate": 1780750567727,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30813,6 +30813,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/55e6bcf99b0009815c6c87080b2ef5da549e03ca"
         },
         "date": 1780747525792,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8780,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15232,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 456150,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0b274004a83084d46bddce88e465af68d66cbd13",
+          "message": "Merge pull request #1318 from wado-lang/claude/wado-lsp-token-type-HSfLI\n\nLSP: classify semantic tokens by resolved symbol kind; unify keyword/operator registry",
+          "timestamp": "2026-06-06T21:47:37+09:00",
+          "tree_id": "70bce8a4a51956b2344e114db15a174b25c9fe8e",
+          "url": "https://github.com/wado-lang/wado/commit/0b274004a83084d46bddce88e465af68d66cbd13"
+        },
+        "date": 1780750567191,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
