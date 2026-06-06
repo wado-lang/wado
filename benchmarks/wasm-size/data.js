@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780734652475,
+  "lastUpdate": 1780742014228,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30696,6 +30696,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 16583,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 456150,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f36249639d2515fa6df1347ba1d08640275e335c",
+          "message": "Merge pull request #1316 from wado-lang/claude/zlib-decompress-perf-XAtB2\n\nperf(zlib): speed up inflate by removing redundant sliding window",
+          "timestamp": "2026-06-06T19:25:08+09:00",
+          "tree_id": "7eb7025fa308d0f6d2c7dae7f3168cf336516d37",
+          "url": "https://github.com/wado-lang/wado/commit/f36249639d2515fa6df1347ba1d08640275e335c"
+        },
+        "date": 1780742013683,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8780,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15232,
             "unit": "bytes"
           },
           {
