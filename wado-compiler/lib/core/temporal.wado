@@ -68,3 +68,192 @@ pub struct ZonedDateTime {
     /// which is also a string after the removal of `Temporal.TimeZone`.
     pub time_zone: String,
 }
+
+// Display / DisplayAlt — ISO 8601 / RFC 3339 stringification.
+//
+// The format specifier's precision selects how many sub-second digits to print
+// (truncated, not rounded). With no precision given, `Display` (`{x}`) prints
+// whole seconds and `DisplayAlt` (`{x:#}`) prints milliseconds. `Inspect`
+// (`{x:?}`) is left as the auto-derived structural form.
+
+impl Display for Instant {
+    fn fmt(&self, f: &mut Formatter) {
+        let digits = resolve_fraction_digits(f, 0);
+        f.pad(render_iso8601(self.seconds, self.nanoseconds, 0, digits, "Z"));
+    }
+}
+
+impl DisplayAlt for Instant {
+    fn fmt_alt(&self, f: &mut Formatter) {
+        let digits = resolve_fraction_digits(f, 3);
+        f.pad(render_iso8601(self.seconds, self.nanoseconds, 0, digits, "Z"));
+    }
+}
+
+impl Display for ZonedDateTime {
+    fn fmt(&self, f: &mut Formatter) {
+        format_zoned(self, f, 0);
+    }
+}
+
+impl DisplayAlt for ZonedDateTime {
+    fn fmt_alt(&self, f: &mut Formatter) {
+        format_zoned(self, f, 3);
+    }
+}
+
+/// Resolve the formatter's precision into a sub-second digit count in `0..=9`,
+/// falling back to `default_digits` when no precision was given.
+fn resolve_fraction_digits(f: &Formatter, default_digits: i32) -> i32 {
+    let p = f.precision;
+    if p == Formatter::PRECISION_DEFAULT {
+        return default_digits;
+    }
+    if p == Formatter::PRECISION_INFINITE {
+        return 9;
+    }
+    if p < 0 {
+        return 0;
+    }
+    if p > 9 {
+        return 9;
+    }
+    return p;
+}
+
+/// Render an instant as an ISO 8601 / RFC 3339 string in the civil time given
+/// by `offset_seconds` (0 for UTC), with `digits` truncated sub-second digits
+/// and the given zone `suffix` (e.g. `"Z"` or `"+09:00"`).
+fn render_iso8601(seconds: i64, nanoseconds: u32, offset_seconds: i64, digits: i32, suffix: String) -> String {
+    let local = seconds + offset_seconds;
+    let [days, second_of_day] = epoch_days_and_seconds(local);
+    let [year, month, day] = civil_from_days(days);
+    let hour = second_of_day / 3600;
+    let minute = second_of_day % 3600 / 60;
+    let second = second_of_day % 60;
+    let year_str = format_iso_year(year);
+    let fraction = format_fraction(nanoseconds, digits);
+    return `{year_str}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}{fraction}{suffix}`;
+}
+
+/// Split an epoch-second count into whole days since 1970-01-01 and the
+/// second-of-day, flooring toward negative infinity so instants before the
+/// epoch land on the correct civil day.
+fn epoch_days_and_seconds(epoch_seconds: i64) -> [i64, i64] {
+    let seconds_per_day: i64 = 86400;
+    let mut days = epoch_seconds / seconds_per_day;
+    let mut rem = epoch_seconds % seconds_per_day;
+    if rem < 0 {
+        days = days - 1;
+        rem = rem + seconds_per_day;
+    }
+    return [days, rem];
+}
+
+/// Convert a day count since 1970-01-01 into a proleptic Gregorian (ISO 8601)
+/// `[year, month, day]`. Howard Hinnant's `civil_from_days` algorithm, valid
+/// for any day count, including negatives.
+fn civil_from_days(days: i64) -> [i64, i64, i64] {
+    let z = days + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let year = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let civil_year = if month <= 2 { year + 1 } else { year };
+    return [civil_year, month, day];
+}
+
+/// Format the year per ISO 8601 / Temporal `PadISOYear`: four digits in
+/// `0..=9999`, otherwise a sign followed by six digits.
+fn format_iso_year(year: i64) -> String {
+    if year >= 0 && year <= 9999 {
+        return `{year:04}`;
+    }
+    if year > 9999 {
+        return `+{year:06}`;
+    }
+    let magnitude = -year;
+    return `-{magnitude:06}`;
+}
+
+/// Format the `.fff…` fractional-second suffix, truncated to `digits`
+/// most-significant digits of the nanosecond field. Returns `""` for 0 digits.
+fn format_fraction(nanoseconds: u32, digits: i32) -> String {
+    if digits <= 0 {
+        return "";
+    }
+    let mut divisor: u32 = 1;
+    let mut i = digits;
+    while i < 9 {
+        divisor = divisor * 10;
+        i = i + 1;
+    }
+    let value = nanoseconds / divisor;
+    let value_str = `{value}`;
+    let zeros = digits - value_str.len();
+    let padding = if zeros > 0 { "0".repeat(zeros) } else { "" };
+    return `.{padding}{value_str}`;
+}
+
+/// Render a `ZonedDateTime` for `Display`/`DisplayAlt`. Only fixed UTC offsets
+/// are supported; an IANA zone name traps, because resolving its offset needs
+/// a time-zone database this MVP does not bundle.
+fn format_zoned(zdt: &ZonedDateTime, f: &mut Formatter, default_digits: i32) {
+    let digits = resolve_fraction_digits(f, default_digits);
+    let offset = parse_fixed_offset(&zdt.time_zone);
+    let suffix = format_offset_suffix(offset);
+    f.pad(render_iso8601(zdt.instant.seconds, zdt.instant.nanoseconds, offset, digits, suffix));
+}
+
+/// Parse a fixed UTC offset zone string into a signed second count. Accepts
+/// `"Z"`/`"z"`, `"UTC"`, and `±HH:MM`. Any other value (notably an IANA zone
+/// name) traps with a clear message.
+fn parse_fixed_offset(zone: &String) -> i64 {
+    let b: List<u8> = zone.bytes().collect();
+    let n = b.len();
+    if n == 1 && (b[0] == 0x5A || b[0] == 0x7A) {
+        return 0;
+    }
+    if n == 3 && b[0] == 0x55 && b[1] == 0x54 && b[2] == 0x43 {
+        return 0;
+    }
+    let well_formed = n == 6
+        && (b[0] == 0x2B || b[0] == 0x2D)
+        && is_ascii_digit(b[1])
+        && is_ascii_digit(b[2])
+        && b[3] == 0x3A
+        && is_ascii_digit(b[4])
+        && is_ascii_digit(b[5]);
+    if !well_formed {
+        panic(
+            `core:temporal: cannot Display a ZonedDateTime whose time zone "{zone}" is not a fixed UTC offset; only "Z", "UTC", and ±HH:MM are supported (IANA zone offset resolution is future work)`,
+        );
+    }
+    let hours = (b[1] - 0x30) as i64 * 10 + (b[2] - 0x30) as i64;
+    let minutes = (b[4] - 0x30) as i64 * 10 + (b[5] - 0x30) as i64;
+    let magnitude = hours * 3600 + minutes * 60;
+    if b[0] == 0x2D {
+        return -magnitude;
+    }
+    return magnitude;
+}
+
+fn is_ascii_digit(byte: u8) -> bool {
+    return byte >= 0x30 && byte <= 0x39;
+}
+
+/// Format a signed offset second count as `"Z"` (when zero) or `±HH:MM`.
+fn format_offset_suffix(offset_seconds: i64) -> String {
+    if offset_seconds == 0 {
+        return "Z";
+    }
+    let sign = if offset_seconds < 0 { "-" } else { "+" };
+    let magnitude = if offset_seconds < 0 { -offset_seconds } else { offset_seconds };
+    let hours = magnitude / 3600;
+    let minutes = magnitude % 3600 / 60;
+    return `{sign}{hours:02}:{minutes:02}`;
+}

@@ -83,3 +83,71 @@ test "ZonedDateTime Ord compares instant first, then time zone" {
     let d = ZonedDateTime { instant: earlier, time_zone: "UTC" };
     assert c < d;
 }
+
+test "Instant Display renders the epoch in UTC, whole seconds by default" {
+    let epoch = Instant { seconds: 0, nanoseconds: 0 };
+    assert `{epoch}` == "1970-01-01T00:00:00Z";
+
+    let t = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    // No precision: whole seconds, sub-second part dropped.
+    assert `{t}` == "2023-11-14T22:13:20Z";
+}
+
+test "Instant DisplayAlt defaults to milliseconds" {
+    let t = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    assert `{t:#}` == "2023-11-14T22:13:20.123Z";
+}
+
+test "Instant Display precision selects sub-second digits, truncating" {
+    let t = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    assert `{t:.0}` == "2023-11-14T22:13:20Z";
+    assert `{t:.3}` == "2023-11-14T22:13:20.123Z";
+    assert `{t:.6}` == "2023-11-14T22:13:20.123456Z";
+    assert `{t:.9}` == "2023-11-14T22:13:20.123456789Z";
+}
+
+test "Instant Display pads sub-second digits with leading zeros" {
+    let t = Instant { seconds: 0, nanoseconds: 5 };
+    assert `{t:.9}` == "1970-01-01T00:00:00.000000005Z";
+    assert `{t:.3}` == "1970-01-01T00:00:00.000Z";
+}
+
+test "Instant Display handles instants before the epoch" {
+    // One nanosecond before the epoch.
+    let t = Instant { seconds: -1, nanoseconds: 999_999_999 };
+    assert `{t}` == "1969-12-31T23:59:59Z";
+    assert `{t:.9}` == "1969-12-31T23:59:59.999999999Z";
+}
+
+test "ZonedDateTime Display applies a fixed positive offset" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 1_700_000_000, nanoseconds: 0 },
+        time_zone: "+09:00",
+    };
+    // 22:13:20Z + 09:00 rolls over to the next civil day.
+    assert `{zdt}` == "2023-11-15T07:13:20+09:00";
+}
+
+test "ZonedDateTime Display applies a fixed negative offset" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 1_700_000_000, nanoseconds: 0 },
+        time_zone: "-05:00",
+    };
+    assert `{zdt}` == "2023-11-14T17:13:20-05:00";
+}
+
+test "ZonedDateTime Display renders zero offset as Z" {
+    let i = Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+    assert `{ZonedDateTime { instant: i, time_zone: "Z" }}` == "2023-11-14T22:13:20Z";
+    assert `{ZonedDateTime { instant: i, time_zone: "UTC" }}` == "2023-11-14T22:13:20Z";
+}
+
+#[expect_trap]
+test "ZonedDateTime Display traps on an IANA zone name" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 1_700_000_000, nanoseconds: 0 },
+        time_zone: "America/New_York",
+    };
+    // Resolving an IANA offset needs a tz database this MVP does not bundle.
+    let _ = `{zdt}`;
+}

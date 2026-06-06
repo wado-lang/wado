@@ -59,6 +59,14 @@ Sub-second component, always in `0..1_000_000_000`. Incrementing
 (e.g. one nanosecond before the epoch is
 `Instant { seconds: -1, nanoseconds: 999_999_999 }`).
 
+#### `impl Display for Instant`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+#### `impl DisplayAlt for Instant`
+
+##### `fn fmt_alt(&self, f: &mut Formatter)`
+
 ### `pub struct ZonedDateTime`
 
 An exact instant together with the time zone it is interpreted in.
@@ -82,3 +90,11 @@ The exact instant.
 IANA time-zone identifier (e.g. `"America/New_York"`, `"UTC"`) or a
 fixed UTC offset (e.g. `"+09:00"`). Mirrors the Temporal time-zone slot,
 which is also a string after the removal of `Temporal.TimeZone`.
+
+#### `impl Display for ZonedDateTime`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+#### `impl DisplayAlt for ZonedDateTime`
+
+##### `fn fmt_alt(&self, f: &mut Formatter)`
