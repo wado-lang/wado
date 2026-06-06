@@ -8,7 +8,20 @@
 //! converge onto.
 
 use crate::hashmap::IndexSet;
+use crate::nir::NirUnaryOp;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+
+/// Strip outer auto-ref / deref wrappers (`&`, `&mut`, `*`) from an expression,
+/// returning the inner value's id. Arena counterpart of `nir_visitor::strip_refs`.
+pub(super) fn strip_refs(body: &Body, id: ExprId) -> ExprId {
+    match &body.exprs[id].kind {
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
+            expr: inner,
+        } => strip_refs(body, *inner),
+        _ => id,
+    }
+}
 
 /// Collect every local index that is *read* — every `Local` mention except the
 /// bare-`Local` target of an `Assign` (a write). `&local` / `&mut local`,
