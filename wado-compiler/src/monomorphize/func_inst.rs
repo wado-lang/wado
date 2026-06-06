@@ -185,10 +185,27 @@ struct LocalIndexRewriter {
 
 impl TirMutVisitor for LocalIndexRewriter {
     fn visit_expr(&mut self, expr: &mut TirExpr) {
-        if let TirExprKind::Local { index, .. } = &mut expr.kind
-            && *index == self.old_idx
-        {
-            *index = self.new_idx;
+        match &mut expr.kind {
+            TirExprKind::Local { index, .. } if *index == self.old_idx => {
+                *index = self.new_idx;
+            }
+            TirExprKind::Closure { captures, .. } => {
+                // A capture's `outer_index` lives in the *parent* frame, so it
+                // is rewritten like any other parent-local reference (this is
+                // what makes a for-of binding captured by a closure follow the
+                // per-iteration rename). The closure *body*, by contrast, uses
+                // its own local-index namespace and reaches the parent only
+                // through these captures, so it must NOT be descended into —
+                // doing so would rewrite a closure-scoped local that happens to
+                // share `old_idx`.
+                for cap in captures {
+                    if cap.outer_index == self.old_idx {
+                        cap.outer_index = self.new_idx;
+                    }
+                }
+                return;
+            }
+            _ => {}
         }
         self.walk_expr(expr);
     }
