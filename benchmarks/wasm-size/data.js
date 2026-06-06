@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780758072718,
+  "lastUpdate": 1780764544348,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30921,6 +30921,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 456150,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8d5d5b7551caf44ac08656886132370b2542dc8c",
+          "message": "Merge pull request #1321 from wado-lang/claude/builtin-likely-unlikely-review-DSklW\n\nRemove builtin::likely/unlikely; consolidate on builtin::cold_path",
+          "timestamp": "2026-06-07T01:40:15+09:00",
+          "tree_id": "04bc0cdea345d47d1b9cad184d9ffbd30214dd46",
+          "url": "https://github.com/wado-lang/wado/commit/8d5d5b7551caf44ac08656886132370b2542dc8c"
+        },
+        "date": 1780764543803,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8780,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15232,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 459983,
             "unit": "bytes"
           }
         ]
