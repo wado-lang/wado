@@ -353,15 +353,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        // Canonicalize `<ns>::<member>` (single `::`, prefix is a namespace
-        // import alias) to the bare `<member>` form. Every lookup table below
-        // is keyed by canonical names; the rewritten ident keeps the original
-        // `id` so use→def edges still resolve back to the user's text.
+        // Canonicalize `ns::member` to its `ns$member` alias; the registries
+        // below are keyed by these aliases. The rewritten ident keeps the
+        // original `id` so use→def edges still resolve back to the user's text.
         let canonical_ident;
-        let ident = if let Some(stripped) = self.strip_ns_prefix(&ident.name) {
+        let ident = if let Some(canon) = self.sem.imports.canonical_ns_ref(&ident.name) {
             canonical_ident = ast::IdentExpr {
                 id: ident.id,
-                name: stripped.to_string(),
+                name: canon,
                 segments: ident.segments.clone(),
                 type_args: ident.type_args.clone(),
                 span: ident.span,
@@ -545,115 +544,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.record_qualified_case(ident, prefix, &flags_info.module_source, member.ast_id);
                 // Stage 7-B: reify rebuilds the flags-member `IntLiteral`.
                 return flags_info.type_id;
-            }
-
-            // Check for namespace import: ns::Type::Case or ns::Enum::Case
-            if let Some(ns_source) = self.sem.imports.namespace_imports.get(prefix).cloned()
-                && let Some(inner_pos) = suffix.find("::")
-            {
-                let type_name = &suffix[..inner_pos];
-                let case_name = &suffix[inner_pos + 2..];
-
-                // Check variant cases — namespace imports always look up by
-                // canonical name in the source module, so we can read directly
-                // from the shared `all_*` table without any per-module cache.
-                let ns_variant = self
-                    .tysys
-                    .all_variant_cases
-                    .get(&ns_source)
-                    .and_then(|m| m.get(type_name))
-                    .cloned();
-                if let Some(variant_info) = ns_variant
-                    && let Some((_case_index, case_data)) = variant_info
-                        .cases
-                        .iter()
-                        .enumerate()
-                        .find(|(_, c)| c.name == case_name)
-                        .map(|(i, c)| (i, c.clone()))
-                {
-                    self.record_namespaced_case(
-                        ident,
-                        &variant_info.module_source,
-                        case_data.ast_id,
-                    );
-                    let payload_is_unit = matches!(
-                        self.tysys.type_table.borrow().get(case_data.payload),
-                        ResolvedType::Unit
-                    );
-                    if !payload_is_unit {
-                        let _ = self.logger.error(TypeError::ArgumentCountMismatch {
-                            expected: 1,
-                            found: 0,
-                            span: ident.span,
-                        });
-                        return TypeTable::ERROR;
-                    }
-                    let variant_type = if variant_info.type_params.is_empty() {
-                        self.tysys.type_table.borrow_mut().make_variant(
-                            variant_info.name.clone(),
-                            variant_info.module_source.clone(),
-                        )
-                    } else {
-                        self.infer_variant_type_args(
-                            type_name,
-                            &variant_info,
-                            &case_data,
-                            None,
-                            expected_type,
-                        )
-                    };
-                    // Stage 5 (Gap 1): record generic type args for
-                    // namespace-qualified payload-less variant references.
-                    let type_args = match self.tysys.type_table.borrow().get(variant_type) {
-                        ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
-                        _ => Vec::new(),
-                    };
-                    self.record_generic_instantiation(ident.id, type_args, variant_type);
-                    // Stage 7-B: reify rebuilds the namespace-qualified
-                    // payload-less `VariantConstruct`. Not an l-value.
-                    return variant_type;
-                }
-
-                // Check enum cases
-                let ns_enum = self
-                    .tysys
-                    .all_enum_cases
-                    .get(&ns_source)
-                    .and_then(|m| m.get(type_name))
-                    .cloned();
-                if let Some(enum_info) = ns_enum
-                    && let Some(case_data) = enum_info.find_case(case_name).cloned()
-                {
-                    self.record_namespaced_case(ident, &enum_info.module_source, case_data.ast_id);
-                    let enum_type = self
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_enum(enum_info.name.clone(), enum_info.module_source);
-                    // Stage 7-B: reify rebuilds the namespace-qualified
-                    // `EnumConstruct`. Not an l-value.
-                    return enum_type;
-                }
-
-                // Check flags members
-                let ns_flags = self
-                    .tysys
-                    .all_flags_cases
-                    .get(&ns_source)
-                    .and_then(|m| m.get(type_name))
-                    .cloned();
-                if let Some(flags_info) = ns_flags
-                    && let Some(member) = flags_info
-                        .members
-                        .iter()
-                        .find(|m| m.name == case_name)
-                        .cloned()
-                {
-                    self.record_namespaced_case(ident, &flags_info.module_source, member.ast_id);
-                    // Stage 7-B: reify rebuilds the namespace flags-member
-                    // `IntLiteral`.
-                    return flags_info.type_id;
-                }
             }
         }
 
@@ -2947,11 +2837,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(raw_name) = &struct_lit.name else {
             return self.resolve_anonymous_struct_literal(struct_lit, ctx);
         };
-        // `<ns>::<Struct>` canonicalizes to bare `<Struct>` for all the
-        // registry lookups below (struct_fields, symbols, …).
+        // `ns::Struct` canonicalizes to its `ns$Struct` alias for the registry
+        // lookups below (struct_fields, symbols, …).
         let canonical_name;
-        let name = if let Some(stripped) = self.strip_ns_prefix(raw_name) {
-            canonical_name = stripped.to_string();
+        let name = if let Some(canon) = self.sem.imports.canonical_ns_ref(raw_name) {
+            canonical_name = canon;
             &canonical_name
         } else {
             raw_name
