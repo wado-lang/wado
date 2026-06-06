@@ -3042,6 +3042,15 @@ impl Monomorphizer {
             //     reallocated to a fresh local (also typed concretely) to avoid
             //     sharing one slot across heterogeneous element types. This also
             //     covers `?`-expansion temporaries (`__qm_v`, `__qm_e`).
+            //
+            // The retype in (1) must live HERE, after reallocation, not in
+            // `substitute_types_in_stmt`'s `Let` arm: every cloned iteration is
+            // substituted against the same shared `locals` table, so syncing the
+            // slot at substitution time would let iteration 2's element type
+            // clobber the slot iteration 1 still points at (until (2) moves it).
+            // Ordinary (non-for-of) instantiation does sync locals at
+            // substitution time — but it does so on a fresh per-function table
+            // in `instantiate_function`, where no such sharing exists.
             let mut body_locals: Vec<u32> = Vec::new();
             Self::collect_locals_in_block(&elem_body, &mut body_locals);
             // A single local can be collected more than once (an or-pattern
