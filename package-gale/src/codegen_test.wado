@@ -928,12 +928,19 @@ b : 'y' ;
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"pub fn parse_a(input: &String)");
     assert str_contains(&output, &"pub fn parse_b(input: &String)");
-    // The entry captures the result so a deeper recovery error (recorded in
-    // `parser.pending` by a scan-gated repetition over a malformed element)
-    // can be preferred over the shallow top-level failure.
+    // Per-rule entries share the type-independent prologue/epilogue via two
+    // helpers emitted once (`_gale_new_parser` builds the Parser;
+    // `_gale_pick_error` prefers a deeper recovery error recorded in
+    // `parser.pending` by a scan-gated repetition over a malformed element,
+    // over the shallow top-level failure). The wrapper keeps only the typed
+    // inner call and the typed `Err` reconstruction.
+    assert str_contains(&output, &"let mut parser = _gale_new_parser(input);");
     assert str_contains(&output, &"let _result = _parse_a(&mut parser);");
     assert str_contains(&output, &"let _result = _parse_b(&mut parser);");
-    assert str_contains(&output, &"if let Some(_d) = parser.pending");
+    assert str_contains(&output, &"_gale_pick_error(&parser, _e)");
+    assert str_contains(&output, &"fn _gale_new_parser(input: &String) -> Parser");
+    assert str_contains(&output, &"fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError");
+    assert str_contains(&output, &"if let Some(_d) = &parser.pending");
     assert str_contains(&output, &"return parse_a(input);");
 }
 

@@ -5266,6 +5266,7 @@ fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, emit_follow: bo
     if lowered.parser_rules.len() == 0 {
         return;
     }
+    gen_parse_entry_helpers(w);
     for let rule of &lowered.parser_rules {
         gen_parse_rule_input_entry(w, rule, emit_follow);
     }
@@ -5280,21 +5281,25 @@ fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, emit_follow: bo
     w.blank();
 }
 
-fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule, emit_follow: bool) {
-    let header = rule_header(rule);
-    let mut f = FnSpec::new(&`parse_{header.snake_name}`);
-    f.set_pub();
-    f.add_param(&"input", &"&String");
-    f.set_return_type(&`Result<{header.type_name}, ParseError>`);
-    f.emit_begin(w);
+/// Emit the two type-independent helpers shared by every per-rule input
+/// entry, once per generated parser. Factoring the prologue (build a
+/// `Parser`) and the error-selection epilogue out of every
+/// `parse_<rule>` wrapper removes ~9 lines of identical boilerplate per
+/// rule (the wrappers differ only in their node type and inner callee).
+/// The helpers are cold — called once per top-level parse — so the extra
+/// call is free; the `_gale_` prefix keeps them clear of any
+/// `parse_<rule>` the grammar might name.
+fn gen_parse_entry_helpers(w: &mut CodeWriter) {
+    let mut np = FnSpec::new("_gale_new_parser");
+    np.add_param(&"input", &"&String");
+    np.set_return_type(&"Parser");
+    np.emit_begin(w);
     w.line(&"let tokens = tokenize(input);");
     w.line(&"let chars: List<char> = input.chars().collect();");
-    w.line(&"let mut parser = Parser::new(tokens, chars);");
-    if rule_takes_min_prec(rule) {
-        w.line(&`let _result = _parse_{header.snake_name}(&mut parser{empty_follow_sep(emit_follow)}, 0);`);
-    } else {
-        w.line(&`let _result = _parse_{header.snake_name}(&mut parser);`);
-    }
+    w.line(&"return Parser::new(tokens, chars);");
+    w.end();
+    w.blank();
+
     // Prefer a deeper recovery error (a malformed element inside a scan-gated
     // repetition) over the shallower "expected <closer>" error the top-level
     // failure carries — see `emit_rep_break_with_recovery`. The comparison is
@@ -5303,13 +5308,36 @@ fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule, emit_follow: bool
     // repeated `item` and a following `trailer` that share a first token both
     // fail at the same position), and the malformed element is the more useful
     // diagnostic. Regression fixture: tests/grammars/tie_recovery.g4.
+    let mut pe = FnSpec::new("_gale_pick_error");
+    pe.add_param(&"parser", &"&Parser");
+    pe.add_param(&"e", &"ParseError");
+    pe.set_return_type(&"ParseError");
+    pe.emit_begin(w);
+    w.begin(&"if let Some(_d) = &parser.pending");
+    w.begin(&"if _d.span.start >= e.span.start");
+    w.line(&"return *_d;");
+    w.end();
+    w.end();
+    w.line(&"return e;");
+    w.end();
+    w.blank();
+}
+
+fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule, emit_follow: bool) {
+    let header = rule_header(rule);
+    let mut f = FnSpec::new(&`parse_{header.snake_name}`);
+    f.set_pub();
+    f.add_param(&"input", &"&String");
+    f.set_return_type(&`Result<{header.type_name}, ParseError>`);
+    f.emit_begin(w);
+    w.line(&"let mut parser = _gale_new_parser(input);");
+    if rule_takes_min_prec(rule) {
+        w.line(&`let _result = _parse_{header.snake_name}(&mut parser{empty_follow_sep(emit_follow)}, 0);`);
+    } else {
+        w.line(&`let _result = _parse_{header.snake_name}(&mut parser);`);
+    }
     w.begin(&"if let Err(_e) = _result");
-    w.begin(&"if let Some(_d) = parser.pending");
-    w.begin(&"if _d.span.start >= _e.span.start");
-    w.line(&`return Result::<{header.type_name}, ParseError>::Err(_d);`);
-    w.end();
-    w.end();
-    w.line(&`return Result::<{header.type_name}, ParseError>::Err(_e);`);
+    w.line(&`return Result::<{header.type_name}, ParseError>::Err(_gale_pick_error(&parser, _e));`);
     w.end();
     w.line(&"return _result;");
     w.end();
