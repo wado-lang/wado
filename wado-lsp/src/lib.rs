@@ -187,10 +187,14 @@ impl Engine {
         // InvocationIndex through without the LSP having to know the
         // loader's source-based entry point.
         let sem = build_semantics(&doc.text, &filename, &collecting_host).await;
-        let snapshot = Rc::new(Snapshot {
-            sem,
-            diagnostics: collecting_host.take_diagnostics(),
-        });
+        // Effect diagnostics are produced from `Semantics` (the LSP builds no
+        // TIR, so the batch-only TIR effect check never runs here). Appending
+        // them to the collected set surfaces effect errors in the editor.
+        let mut diagnostics = collecting_host.take_diagnostics();
+        for error in wado_compiler::check_effects_semantic(&sem) {
+            diagnostics.push(error.into());
+        }
+        let snapshot = Rc::new(Snapshot { sem, diagnostics });
         *doc.snapshot.borrow_mut() = Some(snapshot.clone());
         Some(snapshot)
     }

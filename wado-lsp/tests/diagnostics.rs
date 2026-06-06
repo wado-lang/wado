@@ -145,3 +145,32 @@ fn user_module_with_no_prelude_can_redefine_option() {
         );
     });
 }
+
+/// Effect diagnostics are produced from `Semantics`, so they surface in the
+/// editor even though the LSP path builds no TIR. A call that needs an effect
+/// the caller does not declare is reported, even in an uncalled function.
+#[test]
+fn effect_violation_is_reported() {
+    futures::executor::block_on(async {
+        let source = r#"
+use { println, Stdout } from "core:cli";
+
+fn greet() with Stdout {
+    println("hi");
+}
+
+fn bad() {
+    greet();
+}
+
+export fn run() with Stdout {
+    println("ok");
+}
+"#;
+        let diags = diagnostics_for("/work/effect.wado", source).await;
+        assert!(
+            diags.iter().any(|d| d.message.contains("missing effect")),
+            "expected an effect diagnostic, got {diags:#?}"
+        );
+    });
+}
