@@ -1002,6 +1002,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             module_semantics.entry(ms.clone()).or_default();
         }
         if let Some(snap) = snapshot {
+            // Seed each stdlib module's per-module `types` facts from the
+            // snapshot's annotate state. The flattened `snap` maps below carry
+            // only the facts `semantics_of` drains into `Semantics`
+            // (references, local_*, expression_types, method_dispatch,
+            // coercions, desugars — all empty in `snap_state` after the drain).
+            // The rest — `function_effects`, `effect_ops`, `fn_param_types`,
+            // `fn_return_types`, `method_names`, static / operator / from / for-of
+            // dispatch, `struct_field_types`, … — live only here, and the
+            // Semantics-based effect check needs them for stdlib (callee
+            // effects and the effect→resource propagation closure). Cloning the
+            // whole `types` keeps the two sources in sync; the drained fields
+            // are then re-seeded from the flattened `snap` maps below.
+            if let Some(snap_state) = snapshot_state {
+                for (ms, snap_sem) in &snap_state.module_semantics {
+                    if let Some(sem) = module_semantics.get_mut(ms) {
+                        sem.types = snap_sem.types.clone();
+                    }
+                }
+            }
             // Snapshot keys must always reference modules in the current
             // compile's `modules` set — the loader's implicit-modules pass
             // pulls in the snapshot's stdlib closure on every compile. Use

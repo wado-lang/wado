@@ -197,6 +197,37 @@ export fn run() with Stdout {
 }
 
 #[test]
+fn stdlib_resource_propagation_is_not_a_false_positive() {
+    // `consume` takes `Stream<u8>` (granting Stream by signature) and uses the
+    // Stream API; `run` has `with Stdout` and uses Stream via propagation
+    // (`Stdout → Stream → StreamWritable`). Both must compile clean — this
+    // requires the stdlib `effect_ops` to be seeded so the propagation closure
+    // is complete. (Regression guard for the snapshot-seeding fix.)
+    let source = r#"
+use { println, Stdout } from "core:cli";
+
+pub fn consume(rx: Stream<u8>) {
+    let [rx2, tx2] = Stream::<u8>::new();
+    tx2.drop();
+    rx2.drop();
+    rx.drop();
+}
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    consume(rx);
+    println("ok");
+}
+"#;
+    assert!(
+        violations(source).is_empty(),
+        "stdlib effect/resource propagation must not false-positive: {:?}",
+        violations(source)
+    );
+}
+
+#[test]
 fn effect_free_program_has_no_violations() {
     let source = r#"
 fn add(a: i32, b: i32) -> i32 {
