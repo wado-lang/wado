@@ -243,6 +243,15 @@ test "ZonedDateTime accessors trap on an IANA zone name" {
     let _ = zdt.year();
 }
 
+#[expect_trap]
+test "ZonedDateTime::months_in_year also traps on an IANA zone name" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 0, nanoseconds: 0 },
+        time_zone: "Asia/Tokyo",
+    };
+    let _ = zdt.months_in_year();
+}
+
 test "Instant exposes epoch convenience accessors" {
     let t = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
     assert t.epoch_milliseconds() == 1_700_000_000_123;

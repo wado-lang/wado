@@ -59,7 +59,8 @@ Whole seconds since the Unix epoch. Negative values are before it.
 Sub-second component, always in `0..1_000_000_000`. Incrementing
 `nanoseconds` always moves forward in time, even when `seconds < 0`
 (e.g. one nanosecond before the epoch is
-`Instant { seconds: -1, nanoseconds: 999_999_999 }`).
+`Instant { seconds: -1, nanoseconds: 999_999_999 }`). Use `Instant::new`
+to normalize an arbitrary count into this range; the accessors assume it.
 
 #### `pub fn new(seconds: i64, nanoseconds: i64) -> Instant`
 
@@ -148,7 +149,9 @@ The exact instant.
 
 IANA time-zone identifier (e.g. `"America/New_York"`, `"UTC"`) or a
 fixed UTC offset (e.g. `"+09:00"`). Mirrors the Temporal time-zone slot,
-which is also a string after the removal of `Temporal.TimeZone`.
+which is also a string after the removal of `Temporal.TimeZone`. Only
+`"UTC"`/`"Z"` and fixed `±HH:MM` offsets are interpretable today; every
+operation traps on an IANA name until a tz database is bundled.
 
 #### `pub fn parse_rfc3339(text: String) -> Result<ZonedDateTime, DeserializeError>`
 

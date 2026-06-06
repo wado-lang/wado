@@ -49,7 +49,8 @@ pub struct Instant {
     /// Sub-second component, always in `0..1_000_000_000`. Incrementing
     /// `nanoseconds` always moves forward in time, even when `seconds < 0`
     /// (e.g. one nanosecond before the epoch is
-    /// `Instant { seconds: -1, nanoseconds: 999_999_999 }`).
+    /// `Instant { seconds: -1, nanoseconds: 999_999_999 }`). Use `Instant::new`
+    /// to normalize an arbitrary count into this range; the accessors assume it.
     pub nanoseconds: u32,
 }
 
@@ -69,7 +70,9 @@ pub struct ZonedDateTime {
     pub instant: Instant,
     /// IANA time-zone identifier (e.g. `"America/New_York"`, `"UTC"`) or a
     /// fixed UTC offset (e.g. `"+09:00"`). Mirrors the Temporal time-zone slot,
-    /// which is also a string after the removal of `Temporal.TimeZone`.
+    /// which is also a string after the removal of `Temporal.TimeZone`. Only
+    /// `"UTC"`/`"Z"` and fixed `±HH:MM` offsets are interpretable today; every
+    /// operation traps on an IANA name until a tz database is bundled.
     pub time_zone: String,
 }
 
@@ -217,30 +220,32 @@ fn format_zoned(zdt: &ZonedDateTime, f: &mut Formatter, default_digits: i32) {
 /// `"Z"`/`"z"`, `"UTC"`, and `±HH:MM`. Any other value (notably an IANA zone
 /// name) traps with a clear message.
 fn parse_fixed_offset(zone: &String) -> i64 {
-    let b: List<u8> = zone.bytes().collect();
-    let n = b.len();
-    if n == 1 && (b[0] == 0x5A || b[0] == 0x7A) {
+    let n = zone.len();
+    if n == 1 && (zone.get_byte_unchecked(0) == 'Z' as u8 || zone.get_byte_unchecked(0) == 'z' as u8) {
         return 0;
     }
-    if n == 3 && b[0] == 0x55 && b[1] == 0x54 && b[2] == 0x43 {
+    if n == 3
+        && zone.get_byte_unchecked(0) == 'U' as u8
+        && zone.get_byte_unchecked(1) == 'T' as u8
+        && zone.get_byte_unchecked(2) == 'C' as u8 {
         return 0;
     }
     let well_formed = n == 6
-        && (b[0] == 0x2B || b[0] == 0x2D)
-        && is_ascii_digit(b[1])
-        && is_ascii_digit(b[2])
-        && b[3] == 0x3A
-        && is_ascii_digit(b[4])
-        && is_ascii_digit(b[5]);
+        && (zone.get_byte_unchecked(0) == '+' as u8 || zone.get_byte_unchecked(0) == '-' as u8)
+        && is_ascii_digit(zone.get_byte_unchecked(1))
+        && is_ascii_digit(zone.get_byte_unchecked(2))
+        && zone.get_byte_unchecked(3) == ':' as u8
+        && is_ascii_digit(zone.get_byte_unchecked(4))
+        && is_ascii_digit(zone.get_byte_unchecked(5));
     if !well_formed {
         panic(
             `core:temporal: cannot Display a ZonedDateTime whose time zone "{zone}" is not a fixed UTC offset; only "Z", "UTC", and ±HH:MM are supported (IANA zone offset resolution is future work)`,
         );
     }
-    let hours = (b[1] - 0x30) as i64 * 10 + (b[2] - 0x30) as i64;
-    let minutes = (b[4] - 0x30) as i64 * 10 + (b[5] - 0x30) as i64;
+    let hours = (zone.get_byte_unchecked(1) - '0' as u8) as i64 * 10 + (zone.get_byte_unchecked(2) - '0' as u8) as i64;
+    let minutes = (zone.get_byte_unchecked(4) - '0' as u8) as i64 * 10 + (zone.get_byte_unchecked(5) - '0' as u8) as i64;
     let magnitude = hours * 3600 + minutes * 60;
-    if b[0] == 0x2D {
+    if zone.get_byte_unchecked(0) == '-' as u8 {
         return -magnitude;
     }
     return magnitude;
@@ -551,6 +556,9 @@ impl ZonedDateTime {
 
     /// Number of months in this year — always `12` for ISO 8601.
     pub fn months_in_year(&self) -> i32 {
+        // Validate the zone for consistency with the other accessors (all of
+        // which trap on an unresolvable zone); the ISO 8601 answer is 12.
+        let _ = parse_fixed_offset(&self.time_zone);
         return 12;
     }
 
