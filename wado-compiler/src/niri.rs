@@ -1937,25 +1937,6 @@ impl<'a> Interpreter<'a> {
                     other => other,
                 }
             }
-            // `builtin::likely(c)` / `builtin::unlikely(c)` are value-
-            // preserving branch-hint wrappers: their runtime result is
-            // exactly `c`. Pass the inner lattice through so a const-
-            // folded condition (`1 >= 16` → `false`) collapses the call
-            // to a bool literal and the surrounding `if` is pruned by
-            // `rewrite_if_expr` / `prune_constant_branches`. Without
-            // this, the inner Binary folds to `false` but the wrapper
-            // keeps the panic branch alive all the way through WIR
-            // (seen in hot `core:zlib` bounds checks at -O2).
-            //
-            // Inclusion criteria are funnelled through
-            // [`FunctionRef::is_branch_hint_call`] so this matcher,
-            // `condition_implication::peel_branch_hint`, and the WIR
-            // builder's `BranchHint` lowering stay in sync.
-            NirExprKind::Call { func, args, .. }
-                if args.len() == 1 && func.is_branch_hint_call() =>
-            {
-                self.expr_to_lattice(&args[0].expr)
-            }
             _ => Lattice::Unevaluated,
         }
     }
@@ -2087,9 +2068,6 @@ impl<'a> Interpreter<'a> {
                     Lattice::Const(v) => option_to_lattice(eval_cast(v, target)),
                     other => other,
                 }
-            }
-            ExprKind::Call { func, args, .. } if args.len() == 1 && func.is_branch_hint_call() => {
-                self.expr_to_lattice_a(body, args[0].expr)
             }
             _ => Lattice::Unevaluated,
         }

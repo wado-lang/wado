@@ -509,6 +509,7 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/__test_5_iterator_chain"() {
     __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), used: 10 };
     result = "core:prelude/traits.wado/IterMap<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/ArrayIter<i32>>,i32>^Iterator::collect"(repr_165 = __b.repr; end_167 = __b.used; self_56 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_165, index: 0, end: end_167 }; pred = struct.new "canonical//CanonicalClosure_2" { env: struct.new "wado-compiler/tests/fixtures/closure_3.wado//__Closure_6" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/closure_3.wado/__closure_wrapper_3" }; self_58 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/ArrayIter<i32>>" { inner: self_56, pred: pred }; f_59 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/closure_3.wado//__Closure_7" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/closure_3.wado/__closure_wrapper_4" }; struct.new "core:prelude/traits.wado//IterMap<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/ArrayIter<i32>>,i32>" { inner: self_58, f: f_59 });
     __cond_4 = local.tee __v0_3(if builtin::unlikely(0 >= result.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(result.repr, 0)) == 4;
@@ -519,6 +520,7 @@ condition: result[0] == 4
         unreachable;
     }
     __cond_6 = local.tee __v0_5(if builtin::unlikely(1 >= result.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(result.repr, 1)) == 16;
@@ -529,6 +531,7 @@ condition: result[1] == 16
         unreachable;
     }
     __cond_8 = local.tee __v0_7(if builtin::unlikely(2 >= result.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(result.repr, 2)) == 36;
@@ -539,6 +542,7 @@ condition: result[2] == 36
         unreachable;
     }
     __cond_10 = local.tee __v0_9(if builtin::unlikely(3 >= result.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(result.repr, 3)) == 64;
@@ -549,6 +553,7 @@ condition: result[3] == 64
         unreachable;
     }
     __cond_12 = local.tee __v0_11(if builtin::unlikely(4 >= result.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(result.repr, 4)) == 100;
@@ -643,6 +648,7 @@ condition: evens.len() == 5
         unreachable;
     }
     __cond_6 = local.tee __v0_5(if builtin::unlikely(0 >= evens.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(evens.repr, 0)) == 2;
@@ -653,6 +659,7 @@ condition: evens[0] == 2
         unreachable;
     }
     __cond_8 = local.tee __v0_7(if builtin::unlikely(4 >= evens.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(evens.repr, 4)) == 10;
@@ -671,6 +678,7 @@ condition: large.len() == 5
         unreachable;
     }
     __cond_14 = local.tee __v0_13(if builtin::unlikely(0 >= large.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(large.repr, 0)) == 6;
@@ -681,6 +689,7 @@ condition: large[0] == 6
         unreachable;
     }
     __cond_16 = local.tee __v0_15(if builtin::unlikely(4 >= large.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(large.repr, 4)) == 10;
@@ -866,6 +875,7 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/__test_8_iterator_map"() {
     __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
     doubled = "core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayIter<i32>,i32>^Iterator::collect"(repr_100 = __b.repr; end_102 = __b.used; self_35 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_100, index: 0, end: end_102 }; f_36 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/closure_3.wado//__Closure_16" {  }, func: ref.func "closure/wado-compiler/tests/fixtures/closure_3.wado/__closure_wrapper_8" }; struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/ArrayIter<i32>,i32>" { inner: self_35, f: f_36 });
     __cond_4 = local.tee __v0_3(if builtin::unlikely(0 >= doubled.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(doubled.repr, 0)) == 2;
@@ -876,6 +886,7 @@ condition: doubled[0] == 2
         unreachable;
     }
     __cond_6 = local.tee __v0_5(if builtin::unlikely(4 >= doubled.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(doubled.repr, 4)) == 10;
@@ -887,6 +898,7 @@ condition: doubled[4] == 10
     }
     tripled = "core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayIter<i32>,i32>^Iterator::collect"(repr_103 = __b.repr; end_105 = __b.used; self_64 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_103, index: 0, end: end_105 }; f_65 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "wado-compiler/tests/fixtures/closure_3.wado//__Closure_17" { __capture_0: 3 }, func: ref.func "closure/wado-compiler/tests/fixtures/closure_3.wado/__closure_wrapper_9" }; struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/ArrayIter<i32>,i32>" { inner: self_64, f: f_65 });
     __cond_10 = local.tee __v0_9(if builtin::unlikely(0 >= tripled.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(tripled.repr, 0)) == 3;
@@ -897,6 +909,7 @@ condition: tripled[0] == 3
         unreachable;
     }
     __cond_12 = local.tee __v0_11(if builtin::unlikely(4 >= tripled.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(tripled.repr, 4)) == 15;
@@ -931,6 +944,7 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/__test_9_sort_by_ascending"() {
     __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(5, 3, 8, 1, 9, 2, 7, 4, 6), used: 9 };
     "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sort_by$__Closure_18"(__b);
     __cond_3 = local.tee __v0_2(if builtin::unlikely(0 >= __b.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__b.repr, 0)) == 1;
@@ -941,6 +955,7 @@ condition: nums[0] == 1
         unreachable;
     }
     __cond_5 = local.tee __v0_4(if builtin::unlikely(1 >= __b.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__b.repr, 1)) == 2;
@@ -951,6 +966,7 @@ condition: nums[1] == 2
         unreachable;
     }
     __cond_7 = local.tee __v0_6(if builtin::unlikely(8 >= __b.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__b.repr, 8)) == 9;
@@ -985,6 +1001,7 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/__test_10_sort_by_descending"() 
     __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(5, 3, 8, 1, 9, 2, 7, 4, 6), used: 9 };
     "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sort_by$__Closure_19"(__b);
     __cond_3 = local.tee __v0_2(if builtin::unlikely(0 >= __b.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__b.repr, 0)) == 9;
@@ -995,6 +1012,7 @@ condition: nums[0] == 9
         unreachable;
     }
     __cond_5 = local.tee __v0_4(if builtin::unlikely(1 >= __b.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__b.repr, 1)) == 8;
@@ -1005,6 +1023,7 @@ condition: nums[1] == 8
         unreachable;
     }
     __cond_7 = local.tee __v0_6(if builtin::unlikely(8 >= __b.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__b.repr, 8)) == 1;
@@ -1038,6 +1057,7 @@ fn "wado-compiler/tests/fixtures/closure_3.wado/__test_11_sorted_by"() {
     let f_70: ref "core:prelude/format.wado//Formatter";
     asc = "wado-compiler/tests/fixtures/closure_3.wado/List<i32>::sorted_by$__Closure_20"(global:__const_obj_0, struct.new "wado-compiler/tests/fixtures/closure_3.wado//__Closure_20" {  });
     __cond_4 = local.tee __v0_3(if builtin::unlikely(0 >= asc.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(asc.repr, 0)) == 1;
@@ -1048,6 +1068,7 @@ condition: asc[0] == 1
         unreachable;
     }
     __cond_6 = local.tee __v0_5(if builtin::unlikely(1 >= asc.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(asc.repr, 1)) == 1;
@@ -1058,6 +1079,7 @@ condition: asc[1] == 1
         unreachable;
     }
     __cond_8 = local.tee __v0_7(if builtin::unlikely(7 >= asc.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(asc.repr, 7)) == 9;
@@ -1291,6 +1313,7 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let start: i32;
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     start = self.used;
@@ -1307,6 +1330,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -1315,6 +1339,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 
 fn "core:prelude/string.wado/String::push"(self, c) {
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
@@ -1634,6 +1659,7 @@ fn "core:prelude/list.wado/List<i32>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<i32>::grow"(self);
     }
     builtin::array_set<i32>(self.repr, used, value);

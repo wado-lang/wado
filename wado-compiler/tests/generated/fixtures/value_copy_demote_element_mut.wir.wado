@@ -92,10 +92,12 @@ fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/shout_first"
     let x: ref "core:prelude//List<core:prelude/string.wado/String>";
     x = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T32*/ words.repr)), used: words.used };
     "core:prelude/string.wado/String::push"(if builtin::unlikely(0 >= x.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "core:prelude/string.wado//String">(x.repr, 0), 33);
     return if builtin::unlikely(0 >= x.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }, builtin::array_get<ref "core:prelude/string.wado//String">(x.repr, 0);
@@ -108,6 +110,7 @@ fn "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/run"() with 
     __b_0 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121, 111), used: 2 }), used: 2 };
     s = "wado-compiler/tests/fixtures/value_copy_demote_element_mut.wado/shout_first"(__b_0);
     "core:cli/println"(__local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_3, s); "core:prelude/string.wado/String::push"(__local_3, 32); "core:prelude/string.wado/String::push_str"(__local_3, if builtin::unlikely(0 >= __b_0.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "core:prelude/string.wado//String">(__b_0.repr, 0)); __local_3);
@@ -263,6 +266,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -271,6 +275,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 
 fn "core:prelude/string.wado/String::push"(self, c) {
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {

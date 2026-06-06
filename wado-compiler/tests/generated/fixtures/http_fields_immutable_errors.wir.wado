@@ -1145,6 +1145,7 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding_
             }
             __value_addr = __value_base + (__value_i * 8);
             if builtin::unlikely(__value_i >= _licm_used_28) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
@@ -1621,6 +1622,7 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let start: i32;
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     start = self.used;
@@ -1637,6 +1639,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -1670,6 +1673,7 @@ fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
 
 fn "core:prelude/string.wado/String::push"(self, c) {
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
@@ -1794,6 +1798,7 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/strin
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>::grow"(self);
     }
     builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(self.repr, used, value);
@@ -1804,6 +1809,7 @@ fn "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(self, va
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"(self);
     }
     builtin::array_set<ref "core:prelude//List<u8>">(self.repr, used, value);
@@ -1814,6 +1820,7 @@ fn "core:prelude/list.wado/List<u8>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<u8>::grow"(self);
     }
     builtin::array_set_u8(self.repr, used, value);

@@ -81,6 +81,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30)), used: 3 };
 
 fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_preserved_wir.wado/run"() with Stdout {
+    cold_path;
     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
     unreachable;
     drop(builtin::array_get<i32>(global:__const_obj_0.repr, 3));

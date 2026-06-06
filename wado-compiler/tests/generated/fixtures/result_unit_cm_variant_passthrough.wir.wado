@@ -247,6 +247,7 @@ fn "wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado/run"() 
         return;
     }
     result = "wado-compiler/tests/fixtures/result_unit_cm_variant_passthrough.wado/write_helper"(if builtin::unlikely(0 >= dirs.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0).0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("never_actually_opened.txt"), used: 25 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
@@ -594,6 +595,7 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<wasi:filesystem/ty
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>::grow"(self);
     }
     builtin::array_set<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(self.repr, used, value);
@@ -636,6 +638,7 @@ fn "core:prelude/list.wado/List<u8>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<u8>::grow"(self);
     }
     builtin::array_set_u8(self.repr, used, value);

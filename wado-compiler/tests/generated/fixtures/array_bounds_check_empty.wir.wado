@@ -71,6 +71,7 @@ fn "wado-compiler/tests/fixtures/array_bounds_check_empty.wado/__cm_export__run"
     let __b_1: ref "core:prelude//List<i32>";
     __b_1 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     if builtin::unlikely(1) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }

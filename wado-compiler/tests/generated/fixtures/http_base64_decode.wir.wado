@@ -936,6 +936,7 @@ fn "core:base64/build_decode_table"() {
             index_8 = 65 + i_1;
             value_9 = i_1 & 255;
             if builtin::unlikely(index_8 >= 256) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
@@ -954,6 +955,7 @@ fn "core:base64/build_decode_table"() {
             index_11 = 97 + i_2;
             value_12 = (26 + i_2) & 255;
             if builtin::unlikely(index_11 >= 256) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
@@ -972,6 +974,7 @@ fn "core:base64/build_decode_table"() {
             index_14 = 48 + i_3;
             value_15 = (52 + i_3) & 255;
             if builtin::unlikely(index_14 >= 256) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
@@ -1034,6 +1037,7 @@ fn "core:base64/decode_impl"(input, input_len) {
         l81: loop {
             if (if end > 0 -> i32 {
                 index_19 = end - 1; if builtin::unlikely(index_19 >= _licm_used_58) {
+                    cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;
                 }; builtin::array_get<u8>(_licm_repr_59, index_19) == 61;
@@ -1071,43 +1075,51 @@ fn "core:base64/decode_impl"(input, input_len) {
                 break b88;
             }
             if builtin::unlikely(i >= _licm_used_60) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             index_24 = builtin::array_get<u8>(_licm_repr_61, i);
             if builtin::unlikely(index_24 >= _licm_used_62) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             v0_9 = builtin::array_get<u8>(_licm_repr_63, index_24);
             index_26 = i + 1;
             if builtin::unlikely(index_26 >= _licm_used_60) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             index_28 = builtin::array_get<u8>(_licm_repr_61, index_26);
             if builtin::unlikely(index_28 >= _licm_used_62) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             v1_10 = builtin::array_get<u8>(_licm_repr_63, index_28);
             index_30 = i + 2;
             if builtin::unlikely(index_30 >= _licm_used_60) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             index_32 = builtin::array_get<u8>(_licm_repr_61, index_30);
             if builtin::unlikely(index_32 >= _licm_used_62) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             v2_11 = builtin::array_get<u8>(_licm_repr_63, index_32);
             if builtin::unlikely(__cse_57 >= _licm_used_60) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
             index_36 = builtin::array_get<u8>(_licm_repr_61, __cse_57);
             if builtin::unlikely(index_36 >= _licm_used_62) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
@@ -1136,22 +1148,26 @@ fn "core:base64/decode_impl"(input, input_len) {
     };
     if remainder == 2 {
         if builtin::unlikely(i >= input.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         index_40 = builtin::array_get<u8>(input.repr, i);
         if builtin::unlikely(index_40 >= table.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         v0_13 = builtin::array_get<u8>(table.repr, index_40);
         index_42 = i + 1;
         if builtin::unlikely(index_42 >= input.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         index_44 = builtin::array_get<u8>(input.repr, index_42);
         if builtin::unlikely(index_44 >= table.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
@@ -1166,33 +1182,39 @@ fn "core:base64/decode_impl"(input, input_len) {
         "core:prelude/list.wado/List<u8>::push"(out, ((v0_13 << 2) | (v1_14 >> 4)) & 255);
     } else if remainder == 3 {
         if builtin::unlikely(i >= input.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         index_48 = builtin::array_get<u8>(input.repr, i);
         if builtin::unlikely(index_48 >= table.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         v0_15 = builtin::array_get<u8>(table.repr, index_48);
         index_50 = i + 1;
         if builtin::unlikely(index_50 >= input.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         index_52 = builtin::array_get<u8>(input.repr, index_50);
         if builtin::unlikely(index_52 >= table.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         v1_16 = builtin::array_get<u8>(table.repr, index_52);
         index_54 = i + 2;
         if builtin::unlikely(index_54 >= input.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
         index_56 = builtin::array_get<u8>(input.repr, index_54);
         if builtin::unlikely(index_56 >= table.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }
@@ -1535,6 +1557,7 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let start: i32;
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     start = self.used;
@@ -1551,6 +1574,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -1584,6 +1608,7 @@ fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
 
 fn "core:prelude/string.wado/String::push"(self, c) {
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
@@ -1790,6 +1815,7 @@ fn "core:prelude/list.wado/List<u8>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<u8>::grow"(self);
     }
     builtin::array_set_u8(self.repr, used, value);

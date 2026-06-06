@@ -4,7 +4,7 @@
 // does NOT fold to the pre-loop literal value.
 //
 // Without proper write tracking, a stale `c.size = 16` binding would
-// let `unlikely(99 >= c.size)` const-fold to `false` and silently
+// let `99 >= c.size` const-fold to `false` and silently
 // remove the panic — even though `c.size` was mutated to 0 inside
 // the loop, which should make the bounds check fire at runtime.
 
@@ -26,7 +26,7 @@ fn check_mut_borrowed() -> i32 {
         mutate_size(&mut c);
     }
     // c.size is now 0 at runtime. The bounds check must NOT fold.
-    if builtin::unlikely(99 >= c.size) {
+    if 99 >= c.size {
         return -1;
     }
     return c.size;
@@ -40,7 +40,7 @@ fn check_written_fields() -> i32 {
     }
     // c.size is now 5 at runtime. The bounds check must NOT fold
     // away because the loop wrote the field.
-    if builtin::unlikely(99 >= c.size) {
+    if 99 >= c.size {
         return -2;
     }
     return c.size;

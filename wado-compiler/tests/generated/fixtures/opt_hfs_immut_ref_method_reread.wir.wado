@@ -328,6 +328,7 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let start: i32;
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     start = self.used;
@@ -344,6 +345,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -438,6 +440,7 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::collect"(self) {
 
 fn "core:prelude/string.wado/String::push"(self, c) {
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
@@ -486,6 +489,7 @@ fn "wado-compiler/tests/fixtures/opt_hfs_immut_ref_method_reread.wado/Lexer::rea
             }
             index_6 = __hfs_pos_16;
             if builtin::unlikely(index_6 >= _licm_used_11) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }
@@ -495,6 +499,7 @@ fn "wado-compiler/tests/fixtures/opt_hfs_immut_ref_method_reread.wado/Lexer::rea
                 "core:prelude/string.wado/String::push"(text, c);
                 if __hfs_pos_16 < _licm_used_15 {
                     "core:prelude/string.wado/String::push"(text, index_9 = __hfs_pos_16; if builtin::unlikely(index_9 >= _licm_used_11) {
+                        cold_path;
                         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                         unreachable;
                     }; builtin::array_get<char>(_licm_repr_12, index_9));
@@ -679,6 +684,7 @@ fn "core:prelude/list.wado/List<char>::push"(self, value) {
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<char>::grow"(self);
     }
     builtin::array_set<char>(self.repr, used, value);

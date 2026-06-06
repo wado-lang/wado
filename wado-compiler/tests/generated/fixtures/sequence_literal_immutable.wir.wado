@@ -165,6 +165,7 @@ condition: v.len() == 5
         unreachable;
     }
     __cond_5 = local.tee __v0_4(if builtin::unlikely(0) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__sroa_v_items.repr, 0)) == 1;
@@ -175,6 +176,7 @@ condition: v.get(0) == 1
         unreachable;
     }
     __cond_7 = local.tee __v0_6(if builtin::unlikely(0) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__sroa_v_items.repr, 2)) == 3;
@@ -185,6 +187,7 @@ condition: v.get(2) == 3
         unreachable;
     }
     __cond_9 = local.tee __v0_8(if builtin::unlikely(0) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__sroa_v_items.repr, 4)) == 5;
@@ -204,6 +207,7 @@ condition: v2.len() == 2
         unreachable;
     }
     __cond_15 = local.tee __v0_14(self_122 = v2.items; if builtin::unlikely(1 >= self_122.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(self_122.repr, 1)) == 20;
@@ -413,6 +417,7 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let start: i32;
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     start = self.used;
@@ -429,6 +434,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -437,6 +443,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 
 fn "core:prelude/string.wado/String::push"(self, c) {
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {

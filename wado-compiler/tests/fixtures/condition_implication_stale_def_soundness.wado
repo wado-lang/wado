@@ -33,13 +33,13 @@ fn check_stale_def(_unused: bool) -> i32 {
     // Mutate the field. Pre-fix, `DefMap` records `c.size = Const(16)`
     // from the StructLit and does NOT update for this Assign.
     c.size = 99;
-    // Bounds-check shape: `unlikely(50 >= c.size)`. Pre-fix would
+    // Bounds-check shape: `50 >= c.size`. Pre-fix would
     // numerically compare `50 >= 16` (stale) and constant-fold the
     // `if` to always-taken — wrong. Post-fix the `size` field is
     // taint-filtered from the StructLit recording, the eliminator
     // bails, and the runtime comparison runs (and returns false at
     // `c.size == 99`).
-    if builtin::unlikely(50 >= c.size) {
+    if 50 >= c.size {
         return -1;
     }
     return c.size;

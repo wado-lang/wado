@@ -1253,8 +1253,8 @@ fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {
                     effects.mut_borrowed.insert(*index);
                 }
             }
-            // Builtin intrinsics (`array_*`, `select`, `likely` /
-            // `unlikely`, `memory_*`, `store_*`, `load_*`,
+            // Builtin intrinsics (`array_*`, `select`, `cold_path`,
+            // `memory_*`, `store_*`, `load_*`,
             // `copy_value`, the i64-128 helpers, …) never mutate
             // user-level struct fields tracked by `field_env`:
             // `array_set` writes an array element, `memory_grow`

@@ -216,6 +216,7 @@ fn "wado-compiler/tests/fixtures/closure_field_mutation.wado/__test_2_index_assi
     __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(set_first);
     call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env);
     __cond = local.tee __v0(if builtin::unlikely(0 >= __b.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<i32>(__b.repr, 0)) == 99;
@@ -429,6 +430,7 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let start: i32;
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     start = self.used;
@@ -445,6 +447,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -453,6 +456,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 
 fn "core:prelude/string.wado/String::push"(self, c) {
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
@@ -585,6 +589,7 @@ fn "wado-compiler/tests/fixtures/closure_field_mutation.wado/__Closure_4::__call
     let self_1: ref "core:prelude//List<i32>";
     self_1 = self.__capture_0;
     if builtin::unlikely(0 >= self_1.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }

@@ -129,9 +129,11 @@ fn "wado-compiler/tests/fixtures/array_literal_side_effect_element.wado/run"() w
     __b_2 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(x.value = 11; 11, x.value = x.value + 100; x.value), used: 2 };
     after = x.value;
     "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(67), used: 0 }; __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_22 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(1, f_22); "core:prelude/string.wado/String::push"(__local_5, 44); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; if builtin::unlikely(0 >= __b_2.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; __sroa_self_value_46 = builtin::array_get<i32>(__b_2.repr, 0); f_27 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_46, f_27); "core:prelude/string.wado/String::push"(__local_5, 44); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; if builtin::unlikely(1 >= __b_2.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; __sroa_self_value_45 = builtin::array_get<i32>(__b_2.repr, 1); f_34 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_45, f_34); "core:prelude/string.wado/String::push"(__local_5, 44); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_41 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(after, f_41); __local_5);
@@ -334,6 +336,7 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let start: i32;
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     start = self.used;
@@ -350,6 +353,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -358,6 +362,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 
 fn "core:prelude/string.wado/String::push"(self, c) {
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {

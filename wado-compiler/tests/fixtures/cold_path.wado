@@ -1,9 +1,9 @@
 // `builtin::cold_path()` marks the branch that contains it as cold: codegen
 // wraps the enclosing `if` condition in a branch hint (rendered as
-// `builtin::likely` / `builtin::unlikely` in the WIR) and the inliner excludes
-// the branch from its cost estimate. Unlike `likely` / `unlikely`, it needs no
-// boolean condition, so it works inside `if let` / `match` arms — which is the
-// whole point. Mirrors Rust's `std::hint::cold_path`.
+// `builtin::likely` / `builtin::unlikely` in the WIR, denoting the hinted
+// direction) and the inliner excludes the branch from its cost estimate. It
+// needs no boolean condition, so it works inside `if let` / `match` arms too.
+// Mirrors Rust's `std::hint::cold_path`.
 
 variant Cmd {
     Go,

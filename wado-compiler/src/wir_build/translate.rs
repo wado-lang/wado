@@ -712,8 +712,7 @@ fn instr_has_cold_path(i: &WirInstr) -> bool {
 ///
 /// `cold_path()` lowers to a side-effect-free [`WirInstr::ColdPath`] left in
 /// the branch body. This pass finds the enclosing conditional and wraps its
-/// condition in [`WirInstr::BranchHint`] — the same node `builtin::likely` /
-/// `builtin::unlikely` produce — so the existing emitter records a
+/// condition in [`WirInstr::BranchHint`] so the emitter records a
 /// `metadata.code.branch_hint` entry. Two shapes are recognized:
 ///
 ///  - **In-branch**: an `if` whose then/else body carries the marker. A cold

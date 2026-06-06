@@ -231,8 +231,8 @@ pub fn engine() -> &'static Engine {
         config.wasm_gc(true);
         config.wasm_function_references(true);
         // Honor the `metadata.code.branch_hint` custom section the compiler
-        // emits for `builtin::likely`/`builtin::unlikely`, matching the wado
-        // CLI runtime so the e2e suite validates the hints it produces.
+        // emits for `builtin::cold_path()`, matching the wado CLI runtime so
+        // the e2e suite validates the hints it produces.
         config.wasm_branch_hinting(true);
         // Match the wado CLI's default collector so the e2e suite exercises
         // the collector users actually get (see `runtime::DEFAULT_COLLECTOR`).

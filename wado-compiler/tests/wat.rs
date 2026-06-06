@@ -22,25 +22,6 @@ fn compile_fixture(fixture: &str) -> wado_compiler::CompileResult {
     compile_fixture_opt(fixture, OptLevel::O0)
 }
 
-/// Test that branch hints are correctly emitted for likely/unlikely builtins
-#[test]
-fn test_branch_hints_emitted() {
-    let result = compile_fixture("likely_unlikely.wado");
-    let wasm = result.wasm;
-
-    // The branch hints should be in a custom section named "metadata.code.branch_hint"
-    let section_name = b"metadata.code.branch_hint";
-    let has_branch_hints = wasm
-        .windows(section_name.len())
-        .any(|window| window == section_name);
-
-    assert!(
-        has_branch_hints,
-        "Branch hints custom section not found in wasm output. \
-         Expected 'metadata.code.branch_hint' section to be present."
-    );
-}
-
 /// Decode an unsigned LEB128 at `bytes[i]`, returning (value, `next_index`).
 fn read_uleb(bytes: &[u8], mut i: usize) -> (u64, usize) {
     let mut result: u64 = 0;
@@ -83,30 +64,6 @@ fn collect_branch_hint_values(wasm: &[u8]) -> Vec<u8> {
         }
     }
     values
-}
-
-/// Test that branch hints are not only present but carry the expected values:
-/// `likely_unlikely.wado` emits a `likely` (1) hint in `check_likely` and an
-/// `unlikely` (0) hint in `check_unlikely`. Parsing the actual custom-section
-/// payload guards against `emit.rs` regressing to an empty or malformed
-/// section (which the byte-substring presence check alone would not catch).
-#[test]
-fn test_branch_hints_values() {
-    let result = compile_fixture("likely_unlikely.wado");
-    let values = collect_branch_hint_values(&result.wasm);
-
-    assert!(
-        !values.is_empty(),
-        "No branch-hint entries decoded from the wasm custom section"
-    );
-    assert!(
-        values.contains(&1),
-        "Expected a `likely` (value 1) branch hint; decoded values: {values:?}"
-    );
-    assert!(
-        values.contains(&0),
-        "Expected an `unlikely` (value 0) branch hint; decoded values: {values:?}"
-    );
 }
 
 /// Test that `builtin::cold_path()` markers reach the actual

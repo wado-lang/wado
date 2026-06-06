@@ -2887,6 +2887,7 @@ condition: n <= 18
     s = 0 - ((unpack_mv_exponent + lp) + 3);
     d = ((local.tee u_11("core:prelude/fpfmt.wado/uscale"(unpack_mv_mantissa, pm_mv_hi, pm_mv_lo, s)) + 1_i64) + ((u_11 >>u 2_i64) & 1_i64)) >>u 2_i64;
     if d >=u self_34 = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(n >= self_34.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<u64>(self_34.repr, n) {
@@ -2944,6 +2945,7 @@ fn "core:prelude/fpfmt.wado/fixed_width_for_prec"(f, precision) {
         s_17 = 0 - ((unpack_mv_exponent + lp_15) + 3);
         u_18 = "core:prelude/fpfmt.wado/uscale"(unpack_mv_mantissa, pm_16_mv_hi, pm_16_mv_lo, s_17);
         d_19 = ((local.tee u_33("core:prelude/fpfmt.wado/unrounded_div"(u_18, n_34 = p_14 - precision; self_40 = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(n_34 >= self_40.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }; builtin::array_get<u64>(self_40.repr, n_34))) + 1_i64) + ((u_33 >>u 2_i64) & 1_i64)) >>u 2_i64;
@@ -2956,6 +2958,7 @@ fn "core:prelude/fpfmt.wado/fixed_width_for_prec"(f, precision) {
     s_24 = 0 - ((unpack_mv_exponent + lp_22) + 3);
     d_26 = ((local.tee u_25("core:prelude/fpfmt.wado/uscale"(unpack_mv_mantissa, pm_23_mv_hi, pm_23_mv_lo, s_24)) + 1_i64) + ((u_25 >>u 2_i64) & 1_i64)) >>u 2_i64;
     if d_26 >=u self_42 = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(n_20 >= self_42.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<u64>(self_42.repr, n_20) {
@@ -4001,6 +4004,7 @@ fn "core:prelude/primitive.wado/f32::fmt_into"(self, f) {
     let result_mv_exponent: i32;
     multivalue_bind [result_mv_digits, result_mv_exponent] = "core:prelude/fpfmt.wado/short32"(abs_f);
     nd_9 = local.tee nd_17((local.tee x_18(64 - builtin::i32_wrap_i64(builtin::i64_clz(result_mv_digits))) * 78913) >> 18) + (result_mv_digits >=u self_25 = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(nd_17 >= self_25.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<u64>(self_25.repr, nd_17));
@@ -4040,6 +4044,7 @@ fn "core:prelude/primitive.wado/f64::fmt_into"(self, f) {
     let result_mv_exponent: i32;
     multivalue_bind [result_mv_digits, result_mv_exponent] = "core:prelude/fpfmt.wado/short"(abs_f);
     nd_10 = local.tee nd_14((local.tee x_15(64 - builtin::i32_wrap_i64(builtin::i64_clz(result_mv_digits))) * 78913) >> 18) + (result_mv_digits >=u self_22 = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(nd_14 >= self_22.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<u64>(self_22.repr, nd_14));
@@ -4097,6 +4102,7 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed"(self, precision, f) {
     let result_mv_exponent: i32;
     multivalue_bind [result_mv_digits, result_mv_exponent] = "core:prelude/fpfmt.wado/fixed_width_for_prec"(abs_f, precision);
     nd_12 = local.tee nd_20((local.tee x_21(64 - builtin::i32_wrap_i64(builtin::i64_clz(result_mv_digits))) * 78913) >> 18) + (result_mv_digits >=u self_28 = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(nd_20 >= self_28.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<u64>(self_28.repr, nd_20));
@@ -4182,6 +4188,7 @@ fn "core:prelude/primitive.wado/f64::fmt_exp"(self, precision, upper, f) {
         let result_14_mv_exponent: i32;
         multivalue_bind [result_14_mv_digits, result_14_mv_exponent] = "core:prelude/fpfmt.wado/fixed_width"(abs_f, clamped);
         nd_17 = local.tee nd_32((local.tee x_33(64 - builtin::i32_wrap_i64(builtin::i64_clz(result_14_mv_digits))) * 78913) >> 18) + (result_14_mv_digits >=u self_41 = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(nd_32 >= self_41.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }; builtin::array_get<u64>(self_41.repr, nd_32));
@@ -4191,6 +4198,7 @@ fn "core:prelude/primitive.wado/f64::fmt_exp"(self, precision, upper, f) {
         let result_18_mv_exponent: i32;
         multivalue_bind [result_18_mv_digits, result_18_mv_exponent] = "core:prelude/fpfmt.wado/short"(abs_f);
         nd_21 = local.tee nd_37((local.tee x_38(64 - builtin::i32_wrap_i64(builtin::i64_clz(result_18_mv_digits))) * 78913) >> 18) + (result_18_mv_digits >=u self_43 = global:core::prelude/fpfmt.wado::POW10; if builtin::unlikely(nd_37 >= self_43.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }; builtin::array_get<u64>(self_43.repr, nd_37));
@@ -4309,6 +4317,7 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let start: i32;
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     start = self.used;
@@ -4323,6 +4332,7 @@ fn "core:prelude/string.wado/String::append_byte_filled"(self, byte, n) {
     }
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_fill<u8>(self.repr, self.used, byte, n);
@@ -4338,6 +4348,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -4413,6 +4424,7 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
 
 fn "core:prelude/string.wado/String::push"(self, c) {
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {

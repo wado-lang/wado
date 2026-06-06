@@ -174,6 +174,7 @@ fn "wado-compiler/tests/fixtures/template_string_option_loop.wado/run"() {
     };
     p0 = __inline_Option_core_prelude_string_wado_String___unwrap_13: block -> ref "core:prelude/string.wado//String" {
         self_35 = if builtin::unlikely(0 >= __b_0.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }; builtin::array_get<ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case">(__b_0.repr, 0).payload;
@@ -187,6 +188,7 @@ fn "wado-compiler/tests/fixtures/template_string_option_loop.wado/run"() {
     };
     p1 = __inline_Option_core_prelude_string_wado_String___unwrap_15: block -> ref "core:prelude/string.wado//String" {
         self_40 = if builtin::unlikely(1 >= __b_0.used) {
+            cold_path;
             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
             unreachable;
         }; builtin::array_get<ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case">(__b_0.repr, 1).payload;
@@ -378,6 +380,7 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let start: i32;
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     start = self.used;
@@ -394,6 +397,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -469,6 +473,7 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
 
 fn "core:prelude/string.wado/String::push"(self, c) {
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
@@ -656,6 +661,7 @@ fn "core:prelude/list.wado/List<wado-compiler/tests/fixtures/template_string_opt
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<wado-compiler/tests/fixtures/template_string_option_loop.wado/Case>::grow"(self);
     }
     builtin::array_set<ref "wado-compiler/tests/fixtures/template_string_option_loop.wado//Case">(self.repr, used, value);

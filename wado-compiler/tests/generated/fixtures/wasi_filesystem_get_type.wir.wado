@@ -319,6 +319,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_get_type.wado/run"() with Stdou
         return;
     }
     dir_type_result = "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorType,wasi:filesystem/types.wado/ErrorCode>>::wait"("wado-compiler/tests/fixtures/wasi_filesystem_get_type.wado/__cm_binding__Descriptor_get_type"(local.tee dir(if builtin::unlikely(0 >= dirs.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0).0)));
@@ -983,6 +984,7 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<wasi:filesystem/ty
     let used: i32;
     used = self.used;
     if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>::grow"(self);
     }
     builtin::array_set<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(self.repr, used, value);

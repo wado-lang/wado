@@ -168,12 +168,15 @@ fn "wado-compiler/tests/fixtures/array_literal_coerce_u8.wado/run"() with Stdout
     __b_6 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(4, 5, 6), used: 3 };
     d = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(builtin::array_clone<u8>(__b_6.repr)), used: 3 };
     "core:cli/println"(__local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 }; __local_15 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_14 }; if builtin::unlikely(0 >= d.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; __sroa_self_value_144 = builtin::array_get<u8>(d.repr, 0); f_123 = __local_15; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_144, f_123); "core:prelude/string.wado/String::push"(__local_14, 44); "core:prelude/string.wado/String::push"(__local_14, 32); __local_15 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_14 }; if builtin::unlikely(1 >= d.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; __sroa_self_value_143 = builtin::array_get<u8>(d.repr, 1); f_130 = __local_15; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_143, f_130); "core:prelude/string.wado/String::push"(__local_14, 44); "core:prelude/string.wado/String::push"(__local_14, 32); __local_15 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_14 }; if builtin::unlikely(2 >= d.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; __sroa_self_value_142 = builtin::array_get<u8>(d.repr, 2); f_137 = __local_15; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_self_value_142, f_137); __local_14);
@@ -402,6 +405,7 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let start: i32;
     new_used = self.used + n;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     start = self.used;
@@ -418,6 +422,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
     }
     new_used = self.used + other_len;
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -426,6 +431,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 
 fn "core:prelude/string.wado/String::push"(self, c) {
     if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
