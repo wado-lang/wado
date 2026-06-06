@@ -526,6 +526,29 @@ pub struct LiteralOp {
     pub dedup_base: String,
 }
 
+/// How a `RuleCall` supplies the runtime FOLLOW continuation to the
+/// callee (redesign: replaces the per-(rule, mask) `__follow_<id>`
+/// variant selection). Exactly one of three forms:
+///
+/// - `NoFollow` — non-repair call: emit passes nothing, the callee's
+///   defaulted `&EMPTY_FOLLOW` disables its tail-greedy gate.
+/// - `Mask(id)` — the caller's continuation past the callee is a
+///   statically-known K-prefix; emit passes `&FOLLOW_MASK_<id>`.
+/// - `Forward` — the callee sits at THIS rule's tail, so its
+///   continuation is whatever the current rule was itself called with;
+///   emit forwards the current function's `follow` argument unchanged.
+pub variant FollowArg {
+    NoFollow,
+    Mask(i32),
+    Forward,
+    /// The callee sits at this rule's tail but a NULLABLE local suffix
+    /// precedes the tail (e.g. `… callee X? <end>`): the continuation is
+    /// the local prefix `FOLLOW_MASK_<id>` followed by whatever the
+    /// current rule was called with. Emit passes
+    /// `&follow_prepend(&FOLLOW_MASK_<id>, follow)`.
+    Combined(i32),
+}
+
 pub struct RuleCallOp {
     /// Target rule name as it appears in `.g4`. Drives parser-rule
     /// lookup at lower time; emit uses `target_snake` for the
@@ -533,8 +556,13 @@ pub struct RuleCallOp {
     pub target_name: String,
     /// `to_snake_case(target_name)` cached at lowering.
     pub target_snake: String,
-    /// `Some(id)` when this call site selected a follow-aware
-    /// variant; emit appends `__follow_<id>` to the function name.
+    /// Runtime FOLLOW continuation passed to the callee. See `FollowArg`.
+    /// Replaces the `variant_id` / `__follow_<id>` mechanism: the mask is
+    /// threaded as data at runtime rather than baked into a cloned callee.
+    pub follow_arg: FollowArg,
+    /// DEPRECATED (redesign): superseded by `follow_arg`. Retained during
+    /// the migration so the not-yet-converted variant emit paths still
+    /// compile; removed once `emit_follow_variant` is deleted (P4).
     pub variant_id: Option<i32>,
     /// `Some(p)` when the call should pass `p` as the `min_prec`
     /// argument. Set for self-recursive calls inside prefix LR alts.
@@ -685,6 +713,18 @@ pub struct RepeatOp {
     /// `peek_at(1)` disambiguation arm so emit doesn't re-walk the
     /// surface inner.
     pub body_second_position_first: List<String>,
+    /// Redesign: emit a runtime caller-FOLLOW yield gate
+    /// (`if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break }`)
+    /// at this iteration's entry. Set by lower when the Repeat sits at a
+    /// deep-nullable-suffix tail position — i.e. exactly where the
+    /// caller's continuation can collide with another iteration. The
+    /// gate is inert when the runtime `follow` is empty (non-repair
+    /// callers), so it is sound to emit unconditionally at such
+    /// positions; it subsumes BOTH the old 1-token follow subtraction
+    /// and the K-prefix `__follow_<id>` variant gate. The actual mask is
+    /// no longer baked here — it arrives at runtime via the `follow`
+    /// argument the caller threads in.
+    pub gate_caller_follow: bool,
 }
 
 pub struct GroupOp {
@@ -901,6 +941,9 @@ pub struct ScanTokenElem {
 
 pub struct ScanRuleCallElem {
     pub target_snake: String,
+    /// Scan-side mirror of `RuleCallOp.follow_arg`. See `FollowArg`.
+    pub follow_arg: FollowArg,
+    /// DEPRECATED (redesign): see `RuleCallOp.variant_id`.
     pub variant_id: Option<i32>,
     /// Scan-side mirror of `RuleCallOp.min_prec_arg`. `Some(p)` when
     /// the call should pass `p` as the `min_prec` argument — set by
@@ -941,6 +984,11 @@ pub struct ScanRepeatElem {
     /// peek so scan-driven dispatch stays consistent with the parse-side
     /// variant body's yield decision.
     pub k_prefix_mask: List<List<String>>,
+    /// Scan-side mirror of `RepeatOp.gate_caller_follow`: emit
+    /// `if follow_yields(tokens, pos, follow, TK_EOF) { ... }` at iter
+    /// entry so the longest-match tournament yields to the caller in
+    /// lockstep with the parse side.
+    pub gate_caller_follow: bool,
 }
 
 pub variant ScanRepeatStrategy {

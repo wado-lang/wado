@@ -166,6 +166,25 @@ impl Token {
 /// lockstep with parse.
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
+/// Prepend a static local prefix to an inherited FOLLOW continuation.
+/// Used for the `FollowArg::Combined` case: a callee at the current
+/// rule's tail whose preceding local suffix is nullable, so its
+/// continuation is `prefix` (the optional local elements' per-depth
+/// first sets) followed by the caller's own `follow`. Bounded by
+/// `FOLLOW_VARIANT_MAX_K` so the result stays small; the only
+/// allocating point on a repaired path (the common Static/Forward
+/// cases pass a reference directly).
+pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
+    let mut combined: List<List<i32>> = [];
+    for let depth of prefix {
+        combined.push(*depth);
+    }
+    for let depth of follow {
+        combined.push(*depth);
+    }
+    return combined;
+}
+
 pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;

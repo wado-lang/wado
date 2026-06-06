@@ -129,8 +129,55 @@ use {
     FieldKind,
     KindSet,
     FollowVariant,
+    FollowArg,
     DiagnosticKind,
 } from "./gir.wado";
+
+/// Redesign: compute the runtime FOLLOW argument a `RuleRef` call at
+/// index `i` in `elements` must supply to its callee. Replaces the
+/// per-call-site `intern_follow_variant` selection — instead of cloning
+/// the callee per mask, the caller threads the mask as data.
+///
+/// The callee's continuation past the call is the local suffix
+/// `elements[i+1..]`:
+///
+///   - non-nullable suffix → a fully-local, statically-known prefix:
+///     `Mask(id)` (or `NoFollow` when the prefix carries no constraint);
+///   - nullable suffix → the local prefix followed by whatever the
+///     CURRENT rule was called with (the runtime `follow`):
+///       · empty local prefix (callee strictly at this rule's tail)
+///         → `Forward`;
+///       · non-empty local prefix → `Combined(id)` (runtime prepend).
+///
+/// The continuation is computed once per call site here, against the
+/// regular (single) rule body — there are no variant clones, so no
+/// surrounding `variant_k_prefix_mask` is threaded.
+fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) -> FollowArg {
+    let mut visiting: List<String> = [];
+    let [local, _consumed] = ctx.deep_position_first_sets_from(elements, i + 1, FOLLOW_VARIANT_MAX_K, &mut visiting);
+    if !ctx.tail_is_nullable_deep(elements, i + 1) {
+        if let Some(id) = ctx.intern_follow_mask(&local) {
+            return FollowArg::Mask(id);
+        }
+        return FollowArg::NoFollow;
+    }
+    if let Some(id) = ctx.intern_follow_mask(&local) {
+        return FollowArg::Combined(id);
+    }
+    return FollowArg::Forward;
+}
+
+/// Redesign: whether a tail-greedy `Repeat` at index `i` in `elements`
+/// should emit the runtime caller-FOLLOW yield gate. True exactly when
+/// the suffix after the Repeat is deep-nullable — i.e. the loop sits at
+/// the rule's tail, where another iteration competes with the caller's
+/// continuation (threaded in via the runtime `follow`). The gate is
+/// inert when `follow` is empty, so emitting it here is sound for every
+/// caller and subsumes both the old 1-token subtraction and the
+/// K-prefix variant gate.
+fn compute_gate_caller_follow(ctx: &mut GenContext, elements: &List<Element>, i: i32) -> bool {
+    return ctx.tail_is_nullable_deep(elements, i + 1);
+}
 
 /// Lower a `Grammar` to `LoweredGrammar`. The returned value is the
 /// only input parser-side codegen needs; lexer / visitor / highlight

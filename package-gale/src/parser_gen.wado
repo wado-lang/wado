@@ -54,6 +54,7 @@ use {
     TokenOp,
     LiteralOp,
     RuleCallOp,
+    FollowArg,
     WildcardOp,
     ExcludedOp,
     RepeatOp,
@@ -3697,6 +3698,40 @@ fn emit_k_prefix_yield_gate(w: &mut CodeWriter, mask: &List<List<String>>, ctx: 
     w.line(&`if {condition} \{ break; \}`);
 }
 
+/// Redesign: runtime caller-FOLLOW yield gate at a tail-greedy Repeat's
+/// iteration entry. Replaces the baked-mask `emit_k_prefix_yield_gate`:
+/// the mask is no longer compiled into the body, it arrives at runtime
+/// through the function's `follow` argument. Inert when `follow` is
+/// empty (`&EMPTY_FOLLOW`), so non-repair callers see no behaviour
+/// change; a repair caller that threaded in a `FOLLOW_MASK_<id>` makes
+/// the loop yield its caller's continuation. Emitted only when lower
+/// marked the Repeat tail-position (`gate_caller_follow`).
+fn emit_caller_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp) {
+    if rep_op.gate_caller_follow {
+        w.line(&"if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }");
+    }
+}
+
+/// Redesign: scan-side mirror of `emit_caller_follow_gate`. Keeps the
+/// longest-match tournament's yield decision in lockstep with parse.
+fn emit_caller_follow_gate_scan(w: &mut CodeWriter, gate: bool, fail_or_break: &String) {
+    if gate {
+        w.line(&`if follow_yields(tokens, pos, follow, TK_EOF) \{ {*fail_or_break} \}`);
+    }
+}
+
+/// Redesign: render the runtime FOLLOW argument expression for a
+/// `RuleCall` per its `FollowArg`. Passed as the callee's `follow`
+/// parameter (parse and scan share the spelling — both bind `follow`).
+fn follow_arg_expr(arg: &FollowArg) -> String {
+    return match arg {
+        NoFollow => "&EMPTY_FOLLOW",
+        Mask(id) => `&FOLLOW_MASK_{id}`,
+        Forward => "follow",
+        Combined(id) => `&follow_prepend(&FOLLOW_MASK_{id}, follow)`,
+    };
+}
+
 /// Greedy `*` / `+` Repeat dispatcher. Splits on `body_shape`:
 /// `TransparentGroup` walks the loop without a list (each iteration
 /// inlines the inner alt); the storable shapes (`LeafRuleCall`,
@@ -3744,7 +3779,7 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
             // Mirror `gen_op_repeat_star_plus_storable`'s Star arm: yield
             // to the caller on K-prefix match before the scan guard.
             // No-op for empty mask.
-            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+            emit_caller_follow_gate(w, rep_op);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(&`if {scan_pos} < 0 \{ break; \}`);
             let mut nc: List<[String, i32]> = [];
@@ -3752,7 +3787,7 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
             w.end();
         } else {
             w.begin(&`while {ctx.first_check_str(&loop_first)}`);
-            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+            emit_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
             w.end();
@@ -3767,7 +3802,7 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
             w.begin(&`if !{plus_flag}`);
             // Mandatory first iter is unconditional; subsequent iters
             // get the K-prefix yield gate before the scan guard.
-            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+            emit_caller_follow_gate(w, rep_op);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             w.line(&`if {scan_pos} < 0 \{ break; \}`);
             w.end();
@@ -3783,7 +3818,7 @@ fn gen_op_repeat_star_plus_non_storable_group(w: &mut CodeWriter, rep: &RepeatEl
             gen_op_group(w, g_op, inner, ctx, name_counts);
             w.begin(&`while {ctx.first_check_str(&inner_first)}`);
             if !rep_op.k_prefix_mask.is_empty() {
-                emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+                emit_caller_follow_gate(w, rep_op);
             }
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
@@ -3881,7 +3916,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             // K-prefix matches at iter entry, exit the loop so the
             // caller can consume those tokens. No-op for empty mask
             // (non-variant body or no K-prefix at this position).
-            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+            emit_caller_follow_gate(w, rep_op);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             emit_rep_break_with_recovery(w, &scan_pos, rep_op, ctx, &loop_first);
             let mut nc: List<[String, i32]> = [];
@@ -3891,7 +3926,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
         } else {
             w.begin(&`while {ctx.first_check_str(&loop_first)}`);
             // Same K-prefix gate for the non-scannable while loop.
-            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+            emit_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
             w.line(&`{list_field}.push({inner_field});`);
@@ -3911,7 +3946,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             // deterministic K-prefix (multi-token follow-mask path).
             // No-op when `k_prefix_mask` is empty (non-variant body or
             // caller without a K-prefix at this position).
-            emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+            emit_caller_follow_gate(w, rep_op);
             let scan_pos = emit_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
             emit_rep_break_with_recovery(w, &scan_pos, rep_op, ctx, &loop_first);
             w.end();
@@ -3930,7 +3965,7 @@ fn gen_op_repeat_star_plus_storable(w: &mut CodeWriter, rep: &RepeatElement, rep
             // nothing (the if-block is dead-stripped at codegen).
             if !rep_op.k_prefix_mask.is_empty() {
                 w.begin(&`if !{plus_flag}`);
-                emit_k_prefix_yield_gate(w, &rep_op.k_prefix_mask, ctx);
+                emit_caller_follow_gate(w, rep_op);
                 w.end();
             }
             w.line(&`{plus_flag} = false;`);
