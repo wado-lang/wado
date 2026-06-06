@@ -3508,6 +3508,17 @@ Returns Ok(String) on success, or Err(String) with an error message on failure.
 
 Accepts any `IntoIterator` whose item is `u8`: `List<u8>`, `StrUtf8ByteIter`, etc.
 
+#### `pub fn from_utf8_slice(bytes: ByteSlice) -> Result<String, String>`
+
+Validate a contiguous byte slice as UTF-8 and wrap it as a `String` with
+a single bulk copy — no per-codepoint decode-and-re-encode.
+
+The validation core that `from_utf8` and the JSON deserializer route
+through: one forward pass over `decode_utf8_scalar`, then one `to_array`
+copy wrapped via `internal_from_utf8_raw`. Cheaper than `from_utf8`'s old
+codepoint-by-codepoint rebuild whenever the bytes already live in one
+buffer (e.g. a JSON string token sliced out of the borrowed input).
+
 #### `pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String`
 
 Build a String from any iterable of bytes, replacing invalid UTF-8 sequences with U+FFFD.
@@ -3829,11 +3840,13 @@ Joins elements into a string with the given separator.
 
 #### `pub fn get_byte_unchecked(&self, index: i32) -> u8`
 
-Returns the byte at `index` without bounds checking.
+Returns the byte at `index` without bounds checking — the `List<u8>`
+parallel to `String::get_byte_unchecked`.
 
-The caller must guarantee `0 <= index < len()`. Used by the byte-based
-deserializers (`core:json`, `core:json_nsd`) whose scanning loops have
-already range-checked `index`.
+The caller must guarantee `0 <= index < len()`; an out-of-range `index`
+reads past the buffer or traps. Intended for hot byte-scanning loops that
+have already range-checked `index` (e.g. a forthcoming `core:cbor`
+decoder over an owned `ByteList`).
 
 #### `pub fn to_hex(&self) -> String`
 

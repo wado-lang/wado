@@ -67,14 +67,12 @@ fn locate_offset_function(wasm: &[u8], offset: usize) -> Option<(u32, Option<Str
     for payload in Parser::new(0).parse_all(wasm) {
         match payload.ok()? {
             Payload::ImportSection(reader) => {
-                for imports in reader {
-                    if let Ok(imports) = imports {
-                        for entry in imports {
-                            if let Ok((_, imp)) = entry
-                                && matches!(imp.ty, wasmparser::TypeRef::Func(_))
-                            {
-                                import_funcs += 1;
-                            }
+                for imports in reader.into_iter().flatten() {
+                    for entry in imports {
+                        if let Ok((_, imp)) = entry
+                            && matches!(imp.ty, wasmparser::TypeRef::Func(_))
+                        {
+                            import_funcs += 1;
                         }
                     }
                 }
