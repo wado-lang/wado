@@ -169,6 +169,25 @@ impl Token {
 /// lockstep with parse.
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
+/// Prepend a static local prefix to an inherited FOLLOW continuation.
+/// Used for the `FollowArg::Combined` case: a callee at the current
+/// rule's tail whose preceding local suffix is nullable, so its
+/// continuation is `prefix` (the optional local elements' per-depth
+/// first sets) followed by the caller's own `follow`. Bounded by
+/// `FOLLOW_VARIANT_MAX_K` so the result stays small; the only
+/// allocating point on a repaired path (the common Static/Forward
+/// cases pass a reference directly).
+pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
+    let mut combined: List<List<i32>> = [];
+    for let depth of prefix {
+        combined.push(*depth);
+    }
+    for let depth of follow {
+        combined.push(*depth);
+    }
+    return combined;
+}
+
 pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
@@ -1026,7 +1045,7 @@ impl Parser {
     }
 }
 
-fn scan_r(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_r(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -1035,15 +1054,15 @@ fn scan_r(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         sg_0: {
             pos = gp_0;
             sg_0_0: {
-                pos = scan_a__follow_0(tokens, pos, 0);
+                pos = scan_a(tokens, pos, &FOLLOW_MASK_1, 0);
                 if pos < 0 { break sg_0_0; }
-                pos = scan_b(tokens, pos, 0);
+                pos = scan_b(tokens, pos, follow, 0);
                 if pos < 0 { break sg_0_0; }
                 if pos > sg_0_best { sg_0_best = pos; }
             }
             pos = gp_0;
             sg_0_1: {
-                pos = scan_a(tokens, pos, 0);
+                pos = scan_a(tokens, pos, follow, 0);
                 if pos < 0 { break sg_0_1; }
                 if pos > sg_0_best { sg_0_best = pos; }
             }
@@ -1056,7 +1075,7 @@ fn scan_r(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -1066,7 +1085,7 @@ fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             try_0: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_X { break try_0; }
                 pos += 1;
-                if pos < tokens.len() && tokens[pos].kind == TK_Y {
+                if pos < tokens.len() && tokens[pos].kind == TK_Y && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     if pos >= tokens.len() || tokens[pos].kind != TK_Y { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; }
@@ -1089,14 +1108,14 @@ fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_b(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_b(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_Y { return -1; }
     pos += 1;
     return pos;
 }
 
-fn _parse_r__inner(p: &mut Parser) -> Result<RNode, ParseError> {
+fn _parse_r__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RNode, ParseError> {
     let start = p.peek().span.start;
     let mut group_0_inner: Option<RGroup0> = null;
     let grp_kind = p.peek_kind();
@@ -1106,23 +1125,23 @@ fn _parse_r__inner(p: &mut Parser) -> Result<RNode, ParseError> {
             gd_scan: {
                 let tokens = &p.tokens;
                 let mut pos: i32 = p.pos;
-                pos = scan_a__follow_0(tokens, pos, 0);
+                pos = scan_a(tokens, pos, &FOLLOW_MASK_1, 0);
                 if pos < 0 { break gd_scan; }
-                pos = scan_b(tokens, pos, 0);
+                pos = scan_b(tokens, pos, follow, 0);
                 if pos < 0 { break gd_scan; }
                 gd_winner = 0;
                 break gd_dispatch;
             }
         }
         if gd_winner == 0 {
-            let a = _parse_a__follow_0(p)?;
-            let b = _parse_b(p)?;
+            let a = _parse_a(p, &FOLLOW_MASK_1)?;
+            let b = _parse_b(p, follow)?;
             group_0_inner = Option::<RGroup0>::Some(RGroup0::Alt0(RGroup0Alt0 {
                 a,
                 b,
             }));
         } else {
-            let a = _parse_a(p)?;
+            let a = _parse_a(p, follow)?;
             group_0_inner = Option::<RGroup0>::Some(RGroup0::Alt1(RGroup0Alt1 {
                 a,
             }));
@@ -1137,8 +1156,8 @@ fn _parse_r__inner(p: &mut Parser) -> Result<RNode, ParseError> {
     });
 }
 
-fn _parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
-    let r = _parse_r__inner(p);
+fn _parse_r(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RNode, ParseError> {
+    let r = _parse_r__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("r");
         return Result::<RNode, ParseError>::Err(e);
@@ -1146,12 +1165,14 @@ fn _parse_r(p: &mut Parser) -> Result<RNode, ParseError> {
     return r;
 }
 
-fn _parse_a__inner(p: &mut Parser) -> Result<ANode, ParseError> {
+fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_X {
         let x = p.expect(TK_X)?;
-        let y: Option<Token> = if p.peek_kind() == TK_Y {
+        let y: Option<Token> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+            null
+        } else if p.peek_kind() == TK_Y {
             let y = p.expect(TK_Y)?;
             Option::<Token>::Some(y)
         } else {
@@ -1177,8 +1198,8 @@ fn _parse_a__inner(p: &mut Parser) -> Result<ANode, ParseError> {
     ));
 }
 
-fn _parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
-    let r = _parse_a__inner(p);
+fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
+    let r = _parse_a__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("a");
         return Result::<ANode, ParseError>::Err(e);
@@ -1186,7 +1207,7 @@ fn _parse_a(p: &mut Parser) -> Result<ANode, ParseError> {
     return r;
 }
 
-fn _parse_b__inner(p: &mut Parser) -> Result<BNode, ParseError> {
+fn _parse_b__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<BNode, ParseError> {
     let start = p.peek().span.start;
     let y = p.expect(TK_Y)?;
     return Result::<BNode, ParseError>::Ok(BNode {
@@ -1195,74 +1216,11 @@ fn _parse_b__inner(p: &mut Parser) -> Result<BNode, ParseError> {
     });
 }
 
-fn _parse_b(p: &mut Parser) -> Result<BNode, ParseError> {
-    let r = _parse_b__inner(p);
+fn _parse_b(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<BNode, ParseError> {
+    let r = _parse_b__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("b");
         return Result::<BNode, ParseError>::Err(e);
-    }
-    return r;
-}
-
-fn scan_a__follow_0(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_X {
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_X { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_Z {
-            pos = start;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_Z { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
-        }
-    }
-    return pos;
-}
-
-fn _parse_a__follow_0__inner(p: &mut Parser) -> Result<ANode, ParseError> {
-    let start = p.peek().span.start;
-    let kind = p.peek_kind();
-    if kind == TK_X {
-        let x = p.expect(TK_X)?;
-        let y: Option<Token> = null;
-        return Result::<ANode, ParseError>::Ok(ANode::Alt0(AAlt0 {
-            span: Span::new(start, i32::max(start, p.last_end())),
-            x,
-            y,
-        }));
-    }
-    if kind == TK_Z {
-        let z = p.expect(TK_Z)?;
-        return Result::<ANode, ParseError>::Ok(ANode::Alt1(AAlt1 {
-            span: Span::new(start, i32::max(start, p.last_end())),
-            z,
-        }));
-    }
-    return Result::<ANode, ParseError>::Err(p.error(
-        "expected a",
-        p.peek().span,
-        ["TK_X", "TK_Z"],
-    ));
-}
-
-fn _parse_a__follow_0(p: &mut Parser) -> Result<ANode, ParseError> {
-    let r = _parse_a__follow_0__inner(p);
-    if let Err(mut e) = r {
-        e.rule_stack.push("a");
-        return Result::<ANode, ParseError>::Err(e);
     }
     return r;
 }
@@ -1369,4 +1327,7 @@ pub fn to_tree(node: &RNode) -> CstNode {
 fn _gale_kind_set_0(k: i32) -> bool {
     return k matches { TK_X | TK_Z };
 }
+
+global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
+global FOLLOW_MASK_1: List<List<i32>> = [[TK_Y]];
 

@@ -169,6 +169,25 @@ impl Token {
 /// lockstep with parse.
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
+/// Prepend a static local prefix to an inherited FOLLOW continuation.
+/// Used for the `FollowArg::Combined` case: a callee at the current
+/// rule's tail whose preceding local suffix is nullable, so its
+/// continuation is `prefix` (the optional local elements' per-depth
+/// first sets) followed by the caller's own `follow`. Bounded by
+/// `FOLLOW_VARIANT_MAX_K` so the result stays small; the only
+/// allocating point on a repaired path (the common Static/Forward
+/// cases pass a reference directly).
+pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
+    let mut combined: List<List<i32>> = [];
+    for let depth of prefix {
+        combined.push(*depth);
+    }
+    for let depth of follow {
+        combined.push(*depth);
+    }
+    return combined;
+}
+
 pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
@@ -1000,11 +1019,11 @@ impl Parser {
     }
 }
 
-fn scan_program(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_program(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_action(tokens, pos, 0);
+        pos = scan_action(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -1013,14 +1032,14 @@ fn scan_program(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_action(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_action(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         return pos + 1;
     }
     return -1;
 }
 
-fn _parse_program__inner(p: &mut Parser) -> Result<ProgramNode, ParseError> {
+fn _parse_program__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ProgramNode, ParseError> {
     let start = p.peek().span.start;
     let mut action_list: List<ActionNode> = [];
     loop {
@@ -1028,7 +1047,7 @@ fn _parse_program__inner(p: &mut Parser) -> Result<ProgramNode, ParseError> {
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            pos = scan_action(tokens, pos, 0);
+            pos = scan_action(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -1036,12 +1055,12 @@ fn _parse_program__inner(p: &mut Parser) -> Result<ProgramNode, ParseError> {
         if rep_scan_pos < 0 {
             if _gale_kind_set_0(p.peek_kind()) {
                 let _rec_pos = p.pos;
-                if let Err(_rec_e) = _parse_action(p) { p.record_deeper(_rec_e); }
+                if let Err(_rec_e) = _parse_action(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
                 p.pos = _rec_pos;
             }
             break;
         }
-        let action = _parse_action(p)?;
+        let action = _parse_action(p, &EMPTY_FOLLOW)?;
         action_list.push(action);
     }
     let eof = p.expect(TK_EOF)?;
@@ -1052,8 +1071,8 @@ fn _parse_program__inner(p: &mut Parser) -> Result<ProgramNode, ParseError> {
     });
 }
 
-fn _parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
-    let r = _parse_program__inner(p);
+fn _parse_program(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ProgramNode, ParseError> {
+    let r = _parse_program__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("program");
         return Result::<ProgramNode, ParseError>::Err(e);
@@ -1061,7 +1080,7 @@ fn _parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
     return r;
 }
 
-fn _parse_action__inner(p: &mut Parser) -> Result<ActionNode, ParseError> {
+fn _parse_action__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ActionNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_BREAKSEMI {
@@ -1092,8 +1111,8 @@ fn _parse_action__inner(p: &mut Parser) -> Result<ActionNode, ParseError> {
     ));
 }
 
-fn _parse_action(p: &mut Parser) -> Result<ActionNode, ParseError> {
-    let r = _parse_action__inner(p);
+fn _parse_action(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ActionNode, ParseError> {
+    let r = _parse_action__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("action");
         return Result::<ActionNode, ParseError>::Err(e);
@@ -1175,4 +1194,6 @@ pub fn to_tree(node: &ProgramNode) -> CstNode {
 fn _gale_kind_set_0(k: i32) -> bool {
     return k matches { TK_LIT_BREAKSEMI | TK_LIT_CONTINUESEMI | TK_LIT_RETURNSEMI };
 }
+
+global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
 

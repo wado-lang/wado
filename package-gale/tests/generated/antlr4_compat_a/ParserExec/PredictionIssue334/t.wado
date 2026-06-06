@@ -169,6 +169,25 @@ impl Token {
 /// lockstep with parse.
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
+/// Prepend a static local prefix to an inherited FOLLOW continuation.
+/// Used for the `FollowArg::Combined` case: a callee at the current
+/// rule's tail whose preceding local suffix is nullable, so its
+/// continuation is `prefix` (the optional local elements' per-depth
+/// first sets) followed by the caller's own `follow`. Bounded by
+/// `FOLLOW_VARIANT_MAX_K` so the result stays small; the only
+/// allocating point on a repaired path (the common Static/Forward
+/// cases pass a reference directly).
+pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
+    let mut combined: List<List<i32>> = [];
+    for let depth of prefix {
+        combined.push(*depth);
+    }
+    for let depth of follow {
+        combined.push(*depth);
+    }
+    return combined;
+}
+
 pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
@@ -1034,9 +1053,9 @@ impl Parser {
     }
 }
 
-fn scan_file_(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_file_(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_item(tokens, pos, 0);
+    pos = scan_item(tokens, pos, &FOLLOW_MASK_0, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos].kind == TK_SEMICOLON {
         let sp = pos;
@@ -1044,7 +1063,7 @@ fn scan_file_(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
             sg_0: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_SEMICOLON { break sg_0; }
                 pos += 1;
-                pos = scan_item(tokens, pos, 0);
+                pos = scan_item(tokens, pos, follow, 0);
                 if pos < 0 { break sg_0; }
                 break sg_0_done;
             }
@@ -1063,11 +1082,11 @@ fn scan_file_(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_item(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_item(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_A { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens[pos].kind == TK_B {
+    if pos < tokens.len() && tokens[pos].kind == TK_B && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         if pos >= tokens.len() || tokens[pos].kind != TK_B { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
@@ -1075,9 +1094,9 @@ fn scan_item(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn _parse_file___inner(p: &mut Parser) -> Result<FileNode, ParseError> {
+fn _parse_file___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<FileNode, ParseError> {
     let start = p.peek().span.start;
-    let item = _parse_item(p)?;
+    let item = _parse_item(p, &FOLLOW_MASK_0)?;
     let mut semicolon_item_list: List<SemicolonItemItem> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -1088,7 +1107,7 @@ fn _parse_file___inner(p: &mut Parser) -> Result<FileNode, ParseError> {
                 sg_1: {
                     if pos >= tokens.len() || tokens[pos].kind != TK_SEMICOLON { break sg_1; }
                     pos += 1;
-                    pos = scan_item(tokens, pos, 0);
+                    pos = scan_item(tokens, pos, follow, 0);
                     if pos < 0 { break sg_1; }
                     break sg_1_done;
                 }
@@ -1099,7 +1118,7 @@ fn _parse_file___inner(p: &mut Parser) -> Result<FileNode, ParseError> {
         }
         if rep_scan_pos < 0 { break; }
         let semicolon = p.expect(TK_SEMICOLON)?;
-        let item = _parse_item(p)?;
+        let item = _parse_item(p, follow)?;
         let semicolon_item = SemicolonItemItem {
             semicolon,
             item,
@@ -1122,8 +1141,8 @@ fn _parse_file___inner(p: &mut Parser) -> Result<FileNode, ParseError> {
     });
 }
 
-fn _parse_file_(p: &mut Parser) -> Result<FileNode, ParseError> {
-    let r = _parse_file___inner(p);
+fn _parse_file_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<FileNode, ParseError> {
+    let r = _parse_file___inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("file_");
         return Result::<FileNode, ParseError>::Err(e);
@@ -1131,10 +1150,12 @@ fn _parse_file_(p: &mut Parser) -> Result<FileNode, ParseError> {
     return r;
 }
 
-fn _parse_item__inner(p: &mut Parser) -> Result<ItemNode, ParseError> {
+fn _parse_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
     let a = p.expect(TK_A)?;
-    let b: Option<Token> = if p.peek_kind() == TK_B {
+    let b: Option<Token> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        null
+    } else if p.peek_kind() == TK_B {
         let b = p.expect(TK_B)?;
         Option::<Token>::Some(b)
     } else {
@@ -1147,8 +1168,8 @@ fn _parse_item__inner(p: &mut Parser) -> Result<ItemNode, ParseError> {
     });
 }
 
-fn _parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
-    let r = _parse_item__inner(p);
+fn _parse_item(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ItemNode, ParseError> {
+    let r = _parse_item__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("item");
         return Result::<ItemNode, ParseError>::Err(e);
@@ -1220,4 +1241,9 @@ pub fn to_tree(node: &FileNode) -> CstNode {
     walk_file_(&mut recorder, node);
     return recorder.build();
 }
+
+global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF, TK_SEMICOLON]];
+global FOLLOW_MASK_1: List<List<i32>> = [[TK_A]];
+global FOLLOW_MASK_2: List<List<i32>> = [[TK_EOF]];
+global FOLLOW_MASK_3: List<List<i32>> = [[TK_B]];
 

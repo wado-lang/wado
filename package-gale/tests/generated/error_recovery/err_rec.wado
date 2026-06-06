@@ -169,6 +169,25 @@ impl Token {
 /// lockstep with parse.
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
+/// Prepend a static local prefix to an inherited FOLLOW continuation.
+/// Used for the `FollowArg::Combined` case: a callee at the current
+/// rule's tail whose preceding local suffix is nullable, so its
+/// continuation is `prefix` (the optional local elements' per-depth
+/// first sets) followed by the caller's own `follow`. Bounded by
+/// `FOLLOW_VARIANT_MAX_K` so the result stays small; the only
+/// allocating point on a repaired path (the common Static/Forward
+/// cases pass a reference directly).
+pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
+    let mut combined: List<List<i32>> = [];
+    for let depth of prefix {
+        combined.push(*depth);
+    }
+    for let depth of follow {
+        combined.push(*depth);
+    }
+    return combined;
+}
+
 pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
@@ -1067,11 +1086,11 @@ impl Parser {
     }
 }
 
-fn scan_prog(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_prog(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_item(tokens, pos, 0);
+        pos = scan_item(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -1080,7 +1099,7 @@ fn scan_prog(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_item(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_item(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -1104,7 +1123,7 @@ fn scan_item(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         } else if alt_kind == TK_LIT_LBRACE {
             pos = start;
             try_1: {
-                pos = scan_block(tokens, pos, 0);
+                pos = scan_block(tokens, pos, follow, 0);
                 if pos < 0 { break try_1; }
                 break scan_alts;
             }
@@ -1116,13 +1135,13 @@ fn scan_item(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_block(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_block(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACE { return -1; }
     pos += 1;
     while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_item(tokens, pos, 0);
+        pos = scan_item(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -1131,7 +1150,7 @@ fn scan_block(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn _parse_prog__inner(p: &mut Parser) -> Result<ProgNode, ParseError> {
+fn _parse_prog__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ProgNode, ParseError> {
     let start = p.peek().span.start;
     let mut item_list: List<ItemNode> = [];
     loop {
@@ -1139,7 +1158,7 @@ fn _parse_prog__inner(p: &mut Parser) -> Result<ProgNode, ParseError> {
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            pos = scan_item(tokens, pos, 0);
+            pos = scan_item(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -1147,12 +1166,12 @@ fn _parse_prog__inner(p: &mut Parser) -> Result<ProgNode, ParseError> {
         if rep_scan_pos < 0 {
             if _gale_kind_set_0(p.peek_kind()) {
                 let _rec_pos = p.pos;
-                if let Err(_rec_e) = _parse_item(p) { p.record_deeper(_rec_e); }
+                if let Err(_rec_e) = _parse_item(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
                 p.pos = _rec_pos;
             }
             break;
         }
-        let item = _parse_item(p)?;
+        let item = _parse_item(p, &EMPTY_FOLLOW)?;
         item_list.push(item);
     }
     let eof = p.expect(TK_EOF)?;
@@ -1163,8 +1182,8 @@ fn _parse_prog__inner(p: &mut Parser) -> Result<ProgNode, ParseError> {
     });
 }
 
-fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
-    let r = _parse_prog__inner(p);
+fn _parse_prog(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ProgNode, ParseError> {
+    let r = _parse_prog__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("prog");
         return Result::<ProgNode, ParseError>::Err(e);
@@ -1172,7 +1191,7 @@ fn _parse_prog(p: &mut Parser) -> Result<ProgNode, ParseError> {
     return r;
 }
 
-fn _parse_item__inner(p: &mut Parser) -> Result<ItemNode, ParseError> {
+fn _parse_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ItemNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_LET {
@@ -1191,7 +1210,7 @@ fn _parse_item__inner(p: &mut Parser) -> Result<ItemNode, ParseError> {
         }));
     }
     if kind == TK_LIT_LBRACE {
-        let block = _parse_block(p)?;
+        let block = _parse_block(p, follow)?;
         return Result::<ItemNode, ParseError>::Ok(ItemNode::Alt1(ItemAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             block,
@@ -1204,8 +1223,8 @@ fn _parse_item__inner(p: &mut Parser) -> Result<ItemNode, ParseError> {
     ));
 }
 
-fn _parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
-    let r = _parse_item__inner(p);
+fn _parse_item(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ItemNode, ParseError> {
+    let r = _parse_item__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("item");
         return Result::<ItemNode, ParseError>::Err(e);
@@ -1213,7 +1232,7 @@ fn _parse_item(p: &mut Parser) -> Result<ItemNode, ParseError> {
     return r;
 }
 
-fn _parse_block__inner(p: &mut Parser) -> Result<BlockNode, ParseError> {
+fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<BlockNode, ParseError> {
     let start = p.peek().span.start;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let mut item_list: List<ItemNode> = [];
@@ -1222,7 +1241,7 @@ fn _parse_block__inner(p: &mut Parser) -> Result<BlockNode, ParseError> {
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            pos = scan_item(tokens, pos, 0);
+            pos = scan_item(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -1230,12 +1249,12 @@ fn _parse_block__inner(p: &mut Parser) -> Result<BlockNode, ParseError> {
         if rep_scan_pos < 0 {
             if _gale_kind_set_0(p.peek_kind()) {
                 let _rec_pos = p.pos;
-                if let Err(_rec_e) = _parse_item(p) { p.record_deeper(_rec_e); }
+                if let Err(_rec_e) = _parse_item(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
                 p.pos = _rec_pos;
             }
             break;
         }
-        let item = _parse_item(p)?;
+        let item = _parse_item(p, &EMPTY_FOLLOW)?;
         item_list.push(item);
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
@@ -1247,8 +1266,8 @@ fn _parse_block__inner(p: &mut Parser) -> Result<BlockNode, ParseError> {
     });
 }
 
-fn _parse_block(p: &mut Parser) -> Result<BlockNode, ParseError> {
-    let r = _parse_block__inner(p);
+fn _parse_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<BlockNode, ParseError> {
+    let r = _parse_block__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("block");
         return Result::<BlockNode, ParseError>::Err(e);
@@ -1355,4 +1374,12 @@ pub fn to_tree(node: &ProgNode) -> CstNode {
 fn _gale_kind_set_0(k: i32) -> bool {
     return k matches { TK_LIT_LBRACE | TK_LIT_LET };
 }
+
+global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
+global FOLLOW_MASK_1: List<List<i32>> = [[TK_ID], [TK_LIT_EQ], [TK_ID], [TK_LIT_SEMI]];
+global FOLLOW_MASK_2: List<List<i32>> = [[TK_LIT_EQ], [TK_ID], [TK_LIT_SEMI]];
+global FOLLOW_MASK_3: List<List<i32>> = [[TK_ID], [TK_LIT_SEMI]];
+global FOLLOW_MASK_4: List<List<i32>> = [[TK_LIT_SEMI]];
+global FOLLOW_MASK_5: List<List<i32>> = [[TK_LIT_LBRACE, TK_LIT_LET, TK_LIT_RBRACE]];
+global FOLLOW_MASK_6: List<List<i32>> = [[TK_LIT_RBRACE]];
 

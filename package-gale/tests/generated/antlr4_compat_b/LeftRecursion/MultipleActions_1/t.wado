@@ -169,6 +169,25 @@ impl Token {
 /// lockstep with parse.
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
+/// Prepend a static local prefix to an inherited FOLLOW continuation.
+/// Used for the `FollowArg::Combined` case: a callee at the current
+/// rule's tail whose preceding local suffix is nullable, so its
+/// continuation is `prefix` (the optional local elements' per-depth
+/// first sets) followed by the caller's own `follow`. Bounded by
+/// `FOLLOW_VARIANT_MAX_K` so the result stays small; the only
+/// allocating point on a repaired path (the common Static/Forward
+/// cases pass a reference directly).
+pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
+    let mut combined: List<List<i32>> = [];
+    for let depth of prefix {
+        combined.push(*depth);
+    }
+    for let depth of follow {
+        combined.push(*depth);
+    }
+    return combined;
+}
+
 pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
@@ -1045,14 +1064,14 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_s(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_e(tokens, pos, 0);
+    pos = scan_e(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e_atom(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_e_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -1070,7 +1089,7 @@ fn scan_e_atom(tokens: &List<Token>, pos: i32) -> i32 {
             try_1: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_1; }
                 pos += 1;
-                pos = scan_e(tokens, pos, 0);
+                pos = scan_e(tokens, pos, &FOLLOW_MASK_1, 0);
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_1; }
                 pos += 1;
@@ -1084,7 +1103,7 @@ fn scan_e_atom(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_e_lr_0(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_e_lr_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     sg_0: {
@@ -1102,20 +1121,20 @@ fn scan_e_lr_0(tokens: &List<Token>, pos: i32) -> i32 {
         }
         return -1;
     }
-    pos = scan_e(tokens, pos, 2);
+    pos = scan_e(tokens, pos, follow, 2);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_e_atom(tokens, pos);
+fn scan_e(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_e_atom(tokens, pos, follow);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
         if _gale_kind_set_0(suffix_kind) {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_0(tokens, pos);
+                pos = scan_e_lr_0(tokens, pos, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -1127,17 +1146,17 @@ fn scan_e(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn _parse_s__inner(p: &mut Parser) -> Result<SNode, ParseError> {
+fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SNode, ParseError> {
     let start = p.peek().span.start;
-    let e = _parse_e(p)?;
+    let e = _parse_e(p, follow)?;
     return Result::<SNode, ParseError>::Ok(SNode {
         span: Span::new(start, i32::max(start, p.last_end())),
         e,
     });
 }
 
-fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
-    let r = _parse_s__inner(p);
+fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SNode, ParseError> {
+    let r = _parse_s__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("s");
         return Result::<SNode, ParseError>::Err(e);
@@ -1145,7 +1164,7 @@ fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     return r;
 }
 
-fn _parse_e__inner_atom(p: &mut Parser) -> Result<ENode, ParseError> {
+fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_INT {
@@ -1157,7 +1176,7 @@ fn _parse_e__inner_atom(p: &mut Parser) -> Result<ENode, ParseError> {
     }
     if kind == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;
-        let x = _parse_e(p)?;
+        let x = _parse_e(p, &FOLLOW_MASK_1)?;
         let rparen = p.expect(TK_LIT_RPAREN)?;
         return Result::<ENode, ParseError>::Ok(ENode::Alt2(EAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -1173,10 +1192,10 @@ fn _parse_e__inner_atom(p: &mut Parser) -> Result<ENode, ParseError> {
     ));
 }
 
-fn _parse_e__inner_lr_0(p: &mut Parser, left: ENode, start: i32) -> Result<ENode, ParseError> {
+fn _parse_e__inner_lr_0(p: &mut Parser, left: ENode, start: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ENode, ParseError> {
     let star_or_slash = p.match_set([TK_LIT_STAR, TK_LIT_SLASH])?;
     let op = star_or_slash;
-    let e = _parse_e__inner(p, 2)?;
+    let e = _parse_e__inner(p, follow, 2)?;
     let b = e;
     return Result::<ENode, ParseError>::Ok(ENode::Alt0(EAlt0 {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1186,9 +1205,9 @@ fn _parse_e__inner_lr_0(p: &mut Parser, left: ENode, start: i32) -> Result<ENode
     }));
 }
 
-fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseError> {
+fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
-    let mut result = _parse_e__inner_atom(p)?;
+    let mut result = _parse_e__inner_atom(p, follow)?;
     loop {
         let suffix_kind = p.peek_kind();
         if _gale_kind_set_0(suffix_kind) {
@@ -1196,7 +1215,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseErro
                 if scan_e_lr_0(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = _parse_e__inner_lr_0(p, result, start)?;
+                result = _parse_e__inner_lr_0(p, result, start, follow)?;
             } else {
                 break;
             }
@@ -1207,8 +1226,8 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseErro
     return Result::<ENode, ParseError>::Ok(result);
 }
 
-fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseError> {
-    let r = _parse_e__inner(p, min_prec);
+fn _parse_e(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> Result<ENode, ParseError> {
+    let r = _parse_e__inner(p, follow, min_prec);
     if let Err(mut e) = r {
         e.rule_stack.push("e");
         return Result::<ENode, ParseError>::Err(e);
@@ -1236,7 +1255,7 @@ pub fn parse_e(input: &String) -> Result<ENode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    let _result = _parse_e(&mut parser, 0);
+    let _result = _parse_e(&mut parser, &EMPTY_FOLLOW, 0);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
             if _d.span.start >= _e.span.start {
@@ -1291,4 +1310,7 @@ pub fn to_tree(node: &SNode) -> CstNode {
 fn _gale_kind_set_0(k: i32) -> bool {
     return k matches { TK_LIT_SLASH | TK_LIT_STAR };
 }
+
+global FOLLOW_MASK_0: List<List<i32>> = [[TK_INT, TK_LIT_LPAREN]];
+global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_RPAREN]];
 

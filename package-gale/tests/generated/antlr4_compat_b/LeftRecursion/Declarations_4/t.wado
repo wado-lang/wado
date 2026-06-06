@@ -169,6 +169,25 @@ impl Token {
 /// lockstep with parse.
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
+/// Prepend a static local prefix to an inherited FOLLOW continuation.
+/// Used for the `FollowArg::Combined` case: a callee at the current
+/// rule's tail whose preceding local suffix is nullable, so its
+/// continuation is `prefix` (the optional local elements' per-depth
+/// first sets) followed by the caller's own `follow`. Bounded by
+/// `FOLLOW_VARIANT_MAX_K` so the result stays small; the only
+/// allocating point on a repaired path (the common Static/Forward
+/// cases pass a reference directly).
+pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
+    let mut combined: List<List<i32>> = [];
+    for let depth of prefix {
+        combined.push(*depth);
+    }
+    for let depth of follow {
+        combined.push(*depth);
+    }
+    return combined;
+}
+
 pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
@@ -1110,16 +1129,16 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_s(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_declarator(tokens, pos, 0);
+    pos = scan_declarator(tokens, pos, &FOLLOW_MASK_0, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_declarator_atom(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_declarator_atom(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -1129,7 +1148,7 @@ fn scan_declarator_atom(tokens: &List<Token>, pos: i32) -> i32 {
             try_0: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_STAR { break try_0; }
                 pos += 1;
-                pos = scan_declarator(tokens, pos, 0);
+                pos = scan_declarator(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }
@@ -1139,7 +1158,7 @@ fn scan_declarator_atom(tokens: &List<Token>, pos: i32) -> i32 {
             try_1: {
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { break try_1; }
                 pos += 1;
-                pos = scan_declarator(tokens, pos, 0);
+                pos = scan_declarator(tokens, pos, &FOLLOW_MASK_2, 0);
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RPAREN { break try_1; }
                 pos += 1;
@@ -1161,18 +1180,18 @@ fn scan_declarator_atom(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_declarator_lr_0(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_declarator_lr_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { return -1; }
     pos += 1;
-    pos = scan_e(tokens, pos, 0);
+    pos = scan_e(tokens, pos, &FOLLOW_MASK_4, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_RBRACKET { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_declarator_lr_1(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_declarator_lr_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LBRACKET { return -1; }
     pos += 1;
@@ -1181,7 +1200,7 @@ fn scan_declarator_lr_1(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_declarator_lr_2(tokens: &List<Token>, pos: i32) -> i32 {
+fn scan_declarator_lr_2(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIT_LPAREN { return -1; }
     pos += 1;
@@ -1190,8 +1209,8 @@ fn scan_declarator_lr_2(tokens: &List<Token>, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_declarator(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_declarator_atom(tokens, pos);
+fn scan_declarator(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_declarator_atom(tokens, pos, follow);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -1201,7 +1220,7 @@ fn scan_declarator(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 if second_kind == TK_INT {
                     if 3 >= min_prec {
                         let lr_saved_pos = pos;
-                        pos = scan_declarator_lr_0(tokens, pos);
+                        pos = scan_declarator_lr_0(tokens, pos, follow);
                         if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
@@ -1209,7 +1228,7 @@ fn scan_declarator(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
                 } else {
                     if 2 >= min_prec {
                         let lr_saved_pos = pos;
-                        pos = scan_declarator_lr_1(tokens, pos);
+                        pos = scan_declarator_lr_1(tokens, pos, follow);
                         if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
@@ -1219,7 +1238,7 @@ fn scan_declarator(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         } else if suffix_kind == TK_LIT_LPAREN {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_declarator_lr_2(tokens, pos);
+                pos = scan_declarator_lr_2(tokens, pos, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -1231,16 +1250,16 @@ fn scan_declarator(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_e(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_e(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_INT { return -1; }
     pos += 1;
     return pos;
 }
 
-fn _parse_s__inner(p: &mut Parser) -> Result<SNode, ParseError> {
+fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SNode, ParseError> {
     let start = p.peek().span.start;
-    let declarator = _parse_declarator(p)?;
+    let declarator = _parse_declarator(p, &FOLLOW_MASK_0)?;
     let eof = p.expect(TK_EOF)?;
     return Result::<SNode, ParseError>::Ok(SNode {
         span: Span::new(start, i32::max(start, p.last_end())),
@@ -1249,8 +1268,8 @@ fn _parse_s__inner(p: &mut Parser) -> Result<SNode, ParseError> {
     });
 }
 
-fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
-    let r = _parse_s__inner(p);
+fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SNode, ParseError> {
+    let r = _parse_s__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("s");
         return Result::<SNode, ParseError>::Err(e);
@@ -1258,12 +1277,12 @@ fn _parse_s(p: &mut Parser) -> Result<SNode, ParseError> {
     return r;
 }
 
-fn _parse_declarator__inner_atom(p: &mut Parser) -> Result<DeclaratorNode, ParseError> {
+fn _parse_declarator__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<DeclaratorNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_LIT_STAR {
         let star = p.expect(TK_LIT_STAR)?;
-        let declarator = _parse_declarator(p, 1)?;
+        let declarator = _parse_declarator(p, follow, 1)?;
         return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt3(DeclaratorAlt3 {
             span: Span::new(start, i32::max(start, p.last_end())),
             star,
@@ -1272,7 +1291,7 @@ fn _parse_declarator__inner_atom(p: &mut Parser) -> Result<DeclaratorNode, Parse
     }
     if kind == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;
-        let declarator = _parse_declarator(p)?;
+        let declarator = _parse_declarator(p, &FOLLOW_MASK_2)?;
         let rparen = p.expect(TK_LIT_RPAREN)?;
         return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt4(DeclaratorAlt4 {
             span: Span::new(start, i32::max(start, p.last_end())),
@@ -1295,7 +1314,7 @@ fn _parse_declarator__inner_atom(p: &mut Parser) -> Result<DeclaratorNode, Parse
     ));
 }
 
-fn _parse_declarator__inner_lr_0(p: &mut Parser, left: DeclaratorNode, start: i32) -> Result<DeclaratorNode, ParseError> {
+fn _parse_declarator__inner_lr_0(p: &mut Parser, left: DeclaratorNode, start: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<DeclaratorNode, ParseError> {
     let lbracket = p.expect(TK_LIT_LBRACKET)?;
     let e = _parse_e(p)?;
     let rbracket = p.expect(TK_LIT_RBRACKET)?;
@@ -1308,7 +1327,7 @@ fn _parse_declarator__inner_lr_0(p: &mut Parser, left: DeclaratorNode, start: i3
     }));
 }
 
-fn _parse_declarator__inner_lr_1(p: &mut Parser, left: DeclaratorNode, start: i32) -> Result<DeclaratorNode, ParseError> {
+fn _parse_declarator__inner_lr_1(p: &mut Parser, left: DeclaratorNode, start: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<DeclaratorNode, ParseError> {
     let lbracket = p.expect(TK_LIT_LBRACKET)?;
     let rbracket = p.expect(TK_LIT_RBRACKET)?;
     return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt1(DeclaratorAlt1 {
@@ -1319,7 +1338,7 @@ fn _parse_declarator__inner_lr_1(p: &mut Parser, left: DeclaratorNode, start: i3
     }));
 }
 
-fn _parse_declarator__inner_lr_2(p: &mut Parser, left: DeclaratorNode, start: i32) -> Result<DeclaratorNode, ParseError> {
+fn _parse_declarator__inner_lr_2(p: &mut Parser, left: DeclaratorNode, start: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<DeclaratorNode, ParseError> {
     let lparen = p.expect(TK_LIT_LPAREN)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
     return Result::<DeclaratorNode, ParseError>::Ok(DeclaratorNode::Alt2(DeclaratorAlt2 {
@@ -1330,9 +1349,9 @@ fn _parse_declarator__inner_lr_2(p: &mut Parser, left: DeclaratorNode, start: i3
     }));
 }
 
-fn _parse_declarator__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<DeclaratorNode, ParseError> {
+fn _parse_declarator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> Result<DeclaratorNode, ParseError> {
     let start = p.peek().span.start;
-    let mut result = _parse_declarator__inner_atom(p)?;
+    let mut result = _parse_declarator__inner_atom(p, follow)?;
     loop {
         let suffix_kind = p.peek_kind();
         if suffix_kind == TK_LIT_LBRACKET {
@@ -1342,7 +1361,7 @@ fn _parse_declarator__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Declara
                         if scan_declarator_lr_0(&p.tokens, p.pos) < 0 {
                             break;
                         }
-                        result = _parse_declarator__inner_lr_0(p, result, start)?;
+                        result = _parse_declarator__inner_lr_0(p, result, start, follow)?;
                     } else {
                         break;
                     }
@@ -1351,7 +1370,7 @@ fn _parse_declarator__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Declara
                         if scan_declarator_lr_1(&p.tokens, p.pos) < 0 {
                             break;
                         }
-                        result = _parse_declarator__inner_lr_1(p, result, start)?;
+                        result = _parse_declarator__inner_lr_1(p, result, start, follow)?;
                     } else {
                         break;
                     }
@@ -1362,7 +1381,7 @@ fn _parse_declarator__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Declara
                 if scan_declarator_lr_2(&p.tokens, p.pos) < 0 {
                     break;
                 }
-                result = _parse_declarator__inner_lr_2(p, result, start)?;
+                result = _parse_declarator__inner_lr_2(p, result, start, follow)?;
             } else {
                 break;
             }
@@ -1373,8 +1392,8 @@ fn _parse_declarator__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Declara
     return Result::<DeclaratorNode, ParseError>::Ok(result);
 }
 
-fn _parse_declarator(p: &mut Parser, min_prec: i32 = 0) -> Result<DeclaratorNode, ParseError> {
-    let r = _parse_declarator__inner(p, min_prec);
+fn _parse_declarator(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> Result<DeclaratorNode, ParseError> {
+    let r = _parse_declarator__inner(p, follow, min_prec);
     if let Err(mut e) = r {
         e.rule_stack.push("declarator");
         return Result::<DeclaratorNode, ParseError>::Err(e);
@@ -1382,7 +1401,7 @@ fn _parse_declarator(p: &mut Parser, min_prec: i32 = 0) -> Result<DeclaratorNode
     return r;
 }
 
-fn _parse_e__inner(p: &mut Parser) -> Result<ENode, ParseError> {
+fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ENode, ParseError> {
     let start = p.peek().span.start;
     let int = p.expect(TK_INT)?;
     return Result::<ENode, ParseError>::Ok(ENode {
@@ -1391,8 +1410,8 @@ fn _parse_e__inner(p: &mut Parser) -> Result<ENode, ParseError> {
     });
 }
 
-fn _parse_e(p: &mut Parser) -> Result<ENode, ParseError> {
-    let r = _parse_e__inner(p);
+fn _parse_e(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ENode, ParseError> {
+    let r = _parse_e__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("e");
         return Result::<ENode, ParseError>::Err(e);
@@ -1420,7 +1439,7 @@ pub fn parse_declarator(input: &String) -> Result<DeclaratorNode, ParseError> {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
     let mut parser = Parser::new(tokens, chars);
-    let _result = _parse_declarator(&mut parser, 0);
+    let _result = _parse_declarator(&mut parser, &EMPTY_FOLLOW, 0);
     if let Err(_e) = _result {
         if let Some(_d) = parser.pending {
             if _d.span.start >= _e.span.start {
@@ -1515,4 +1534,10 @@ pub fn to_tree(node: &SNode) -> CstNode {
     walk_s(&mut recorder, node);
     return recorder.build();
 }
+
+global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
+global FOLLOW_MASK_1: List<List<i32>> = [[TK_ID, TK_LIT_LPAREN, TK_LIT_STAR]];
+global FOLLOW_MASK_2: List<List<i32>> = [[TK_LIT_RPAREN]];
+global FOLLOW_MASK_3: List<List<i32>> = [[TK_INT], [TK_LIT_RBRACKET]];
+global FOLLOW_MASK_4: List<List<i32>> = [[TK_LIT_RBRACKET]];
 

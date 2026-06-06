@@ -169,6 +169,25 @@ impl Token {
 /// lockstep with parse.
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
+/// Prepend a static local prefix to an inherited FOLLOW continuation.
+/// Used for the `FollowArg::Combined` case: a callee at the current
+/// rule's tail whose preceding local suffix is nullable, so its
+/// continuation is `prefix` (the optional local elements' per-depth
+/// first sets) followed by the caller's own `follow`. Bounded by
+/// `FOLLOW_VARIANT_MAX_K` so the result stays small; the only
+/// allocating point on a repaired path (the common Static/Forward
+/// cases pass a reference directly).
+pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
+    let mut combined: List<List<i32>> = [];
+    for let depth of prefix {
+        combined.push(*depth);
+    }
+    for let depth of follow {
+        combined.push(*depth);
+    }
+    return combined;
+}
+
 pub fn follow_yields(tokens: &List<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
@@ -1179,11 +1198,11 @@ impl Parser {
     }
 }
 
-fn scan_program(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_program(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
         let sp = pos;
-        pos = scan_stmt(tokens, pos, 0);
+        pos = scan_stmt(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -1192,7 +1211,7 @@ fn scan_program(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_stmt(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
@@ -1200,7 +1219,7 @@ fn scan_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         if alt_kind == TK_ID {
             pos = start;
             try_0: {
-                pos = scan_assign_stmt(tokens, pos, 0);
+                pos = scan_assign_stmt(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }
@@ -1208,7 +1227,7 @@ fn scan_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         } else if alt_kind == TK_PAIR {
             pos = start;
             try_1: {
-                pos = scan_pair_stmt(tokens, pos, 0);
+                pos = scan_pair_stmt(tokens, pos, follow, 0);
                 if pos < 0 { break try_1; }
                 break scan_alts;
             }
@@ -1216,7 +1235,7 @@ fn scan_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
         } else if alt_kind == TK_LIST {
             pos = start;
             try_2: {
-                pos = scan_mix_stmt(tokens, pos, 0);
+                pos = scan_mix_stmt(tokens, pos, follow, 0);
                 if pos < 0 { break try_2; }
                 break scan_alts;
             }
@@ -1228,7 +1247,7 @@ fn scan_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_assign_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_assign_stmt(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
@@ -1241,11 +1260,11 @@ fn scan_assign_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_pair_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_pair_stmt(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_PAIR { return -1; }
     pos += 1;
-    pos = scan_key_rule(tokens, pos, 0);
+    pos = scan_key_rule(tokens, pos, &FOLLOW_MASK_5, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos].kind != TK_COLON { return -1; }
     pos += 1;
@@ -1256,14 +1275,14 @@ fn scan_pair_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_key_rule(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_key_rule(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_mix_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_mix_stmt(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_LIST { return -1; }
     pos += 1;
@@ -1289,7 +1308,7 @@ fn scan_mix_stmt(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn _parse_program__inner(p: &mut Parser) -> Result<ProgramNode, ParseError> {
+fn _parse_program__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ProgramNode, ParseError> {
     let start = p.peek().span.start;
     let mut stmt_list: List<StmtNode> = [];
     loop {
@@ -1297,7 +1316,7 @@ fn _parse_program__inner(p: &mut Parser) -> Result<ProgramNode, ParseError> {
         rep_scan: {
             let tokens = &p.tokens;
             let mut pos: i32 = p.pos;
-            pos = scan_stmt(tokens, pos, 0);
+            pos = scan_stmt(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -1305,12 +1324,12 @@ fn _parse_program__inner(p: &mut Parser) -> Result<ProgramNode, ParseError> {
         if rep_scan_pos < 0 {
             if _gale_kind_set_0(p.peek_kind()) {
                 let _rec_pos = p.pos;
-                if let Err(_rec_e) = _parse_stmt(p) { p.record_deeper(_rec_e); }
+                if let Err(_rec_e) = _parse_stmt(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
                 p.pos = _rec_pos;
             }
             break;
         }
-        let stmt = _parse_stmt(p)?;
+        let stmt = _parse_stmt(p, &EMPTY_FOLLOW)?;
         stmt_list.push(stmt);
     }
     let eof = p.expect(TK_EOF)?;
@@ -1321,8 +1340,8 @@ fn _parse_program__inner(p: &mut Parser) -> Result<ProgramNode, ParseError> {
     });
 }
 
-fn _parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
-    let r = _parse_program__inner(p);
+fn _parse_program(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ProgramNode, ParseError> {
+    let r = _parse_program__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("program");
         return Result::<ProgramNode, ParseError>::Err(e);
@@ -1330,25 +1349,25 @@ fn _parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
     return r;
 }
 
-fn _parse_stmt__inner(p: &mut Parser) -> Result<StmtNode, ParseError> {
+fn _parse_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StmtNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_ID {
-        let assign_stmt = _parse_assign_stmt(p)?;
+        let assign_stmt = _parse_assign_stmt(p, follow)?;
         return Result::<StmtNode, ParseError>::Ok(StmtNode::Alt0(StmtAlt0 {
             span: Span::new(start, i32::max(start, p.last_end())),
             assign_stmt,
         }));
     }
     if kind == TK_PAIR {
-        let pair_stmt = _parse_pair_stmt(p)?;
+        let pair_stmt = _parse_pair_stmt(p, follow)?;
         return Result::<StmtNode, ParseError>::Ok(StmtNode::Alt1(StmtAlt1 {
             span: Span::new(start, i32::max(start, p.last_end())),
             pair_stmt,
         }));
     }
     if kind == TK_LIST {
-        let mix_stmt = _parse_mix_stmt(p)?;
+        let mix_stmt = _parse_mix_stmt(p, follow)?;
         return Result::<StmtNode, ParseError>::Ok(StmtNode::Alt2(StmtAlt2 {
             span: Span::new(start, i32::max(start, p.last_end())),
             mix_stmt,
@@ -1361,8 +1380,8 @@ fn _parse_stmt__inner(p: &mut Parser) -> Result<StmtNode, ParseError> {
     ));
 }
 
-fn _parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
-    let r = _parse_stmt__inner(p);
+fn _parse_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StmtNode, ParseError> {
+    let r = _parse_stmt__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("stmt");
         return Result::<StmtNode, ParseError>::Err(e);
@@ -1370,7 +1389,7 @@ fn _parse_stmt(p: &mut Parser) -> Result<StmtNode, ParseError> {
     return r;
 }
 
-fn _parse_assign_stmt__inner(p: &mut Parser) -> Result<AssignStmtNode, ParseError> {
+fn _parse_assign_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AssignStmtNode, ParseError> {
     let start = p.peek().span.start;
     let key = p.expect(TK_ID)?;
     let eq = p.expect(TK_EQ)?;
@@ -1385,8 +1404,8 @@ fn _parse_assign_stmt__inner(p: &mut Parser) -> Result<AssignStmtNode, ParseErro
     });
 }
 
-fn _parse_assign_stmt(p: &mut Parser) -> Result<AssignStmtNode, ParseError> {
-    let r = _parse_assign_stmt__inner(p);
+fn _parse_assign_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<AssignStmtNode, ParseError> {
+    let r = _parse_assign_stmt__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("assign_stmt");
         return Result::<AssignStmtNode, ParseError>::Err(e);
@@ -1394,10 +1413,10 @@ fn _parse_assign_stmt(p: &mut Parser) -> Result<AssignStmtNode, ParseError> {
     return r;
 }
 
-fn _parse_pair_stmt__inner(p: &mut Parser) -> Result<PairStmtNode, ParseError> {
+fn _parse_pair_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PairStmtNode, ParseError> {
     let start = p.peek().span.start;
     let pair = p.expect(TK_PAIR)?;
-    let k = _parse_key_rule(p)?;
+    let k = _parse_key_rule(p, &FOLLOW_MASK_5)?;
     let colon = p.expect(TK_COLON)?;
     let id = p.expect(TK_ID)?;
     let semi = p.expect(TK_SEMI)?;
@@ -1411,8 +1430,8 @@ fn _parse_pair_stmt__inner(p: &mut Parser) -> Result<PairStmtNode, ParseError> {
     });
 }
 
-fn _parse_pair_stmt(p: &mut Parser) -> Result<PairStmtNode, ParseError> {
-    let r = _parse_pair_stmt__inner(p);
+fn _parse_pair_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PairStmtNode, ParseError> {
+    let r = _parse_pair_stmt__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("pair_stmt");
         return Result::<PairStmtNode, ParseError>::Err(e);
@@ -1420,7 +1439,7 @@ fn _parse_pair_stmt(p: &mut Parser) -> Result<PairStmtNode, ParseError> {
     return r;
 }
 
-fn _parse_key_rule__inner(p: &mut Parser) -> Result<KeyRuleNode, ParseError> {
+fn _parse_key_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<KeyRuleNode, ParseError> {
     let start = p.peek().span.start;
     let id = p.expect(TK_ID)?;
     return Result::<KeyRuleNode, ParseError>::Ok(KeyRuleNode {
@@ -1429,8 +1448,8 @@ fn _parse_key_rule__inner(p: &mut Parser) -> Result<KeyRuleNode, ParseError> {
     });
 }
 
-fn _parse_key_rule(p: &mut Parser) -> Result<KeyRuleNode, ParseError> {
-    let r = _parse_key_rule__inner(p);
+fn _parse_key_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<KeyRuleNode, ParseError> {
+    let r = _parse_key_rule__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("key_rule");
         return Result::<KeyRuleNode, ParseError>::Err(e);
@@ -1438,7 +1457,7 @@ fn _parse_key_rule(p: &mut Parser) -> Result<KeyRuleNode, ParseError> {
     return r;
 }
 
-fn _parse_mix_stmt__inner(p: &mut Parser) -> Result<MixStmtNode, ParseError> {
+fn _parse_mix_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<MixStmtNode, ParseError> {
     let start = p.peek().span.start;
     let list = p.expect(TK_LIST)?;
     let head = p.expect(TK_ID)?;
@@ -1482,8 +1501,8 @@ fn _parse_mix_stmt__inner(p: &mut Parser) -> Result<MixStmtNode, ParseError> {
     });
 }
 
-fn _parse_mix_stmt(p: &mut Parser) -> Result<MixStmtNode, ParseError> {
-    let r = _parse_mix_stmt__inner(p);
+fn _parse_mix_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<MixStmtNode, ParseError> {
+    let r = _parse_mix_stmt__inner(p, follow);
     if let Err(mut e) = r {
         e.rule_stack.push("mix_stmt");
         return Result::<MixStmtNode, ParseError>::Err(e);
@@ -1668,4 +1687,14 @@ pub fn to_tree(node: &ProgramNode) -> CstNode {
 fn _gale_kind_set_0(k: i32) -> bool {
     return k matches { TK_ID | TK_LIST | TK_PAIR };
 }
+
+global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
+global FOLLOW_MASK_1: List<List<i32>> = [[TK_EQ], [TK_STRING], [TK_SEMI]];
+global FOLLOW_MASK_2: List<List<i32>> = [[TK_STRING], [TK_SEMI]];
+global FOLLOW_MASK_3: List<List<i32>> = [[TK_SEMI]];
+global FOLLOW_MASK_4: List<List<i32>> = [[TK_ID], [TK_COLON], [TK_ID], [TK_SEMI]];
+global FOLLOW_MASK_5: List<List<i32>> = [[TK_COLON], [TK_ID], [TK_SEMI]];
+global FOLLOW_MASK_6: List<List<i32>> = [[TK_ID], [TK_SEMI]];
+global FOLLOW_MASK_7: List<List<i32>> = [[TK_ID]];
+global FOLLOW_MASK_8: List<List<i32>> = [[TK_COMMA, TK_SEMI]];
 

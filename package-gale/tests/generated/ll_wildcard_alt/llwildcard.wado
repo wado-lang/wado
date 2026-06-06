@@ -1066,13 +1066,13 @@ impl Parser {
     }
 }
 
-fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_a(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     sg_0: {
         pos = gp_0;
         sg_0_0: {
-            pos = scan_assign(tokens, pos, 0, follow);
+            pos = scan_assign(tokens, pos, follow, 0);
             if pos < 0 { break sg_0_0; }
             break sg_0;
         }
@@ -1090,7 +1090,7 @@ fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0, follow: &List<List<
         sg_1: {
             pos = gp_1;
             sg_1_0: {
-                pos = scan_assign(tokens, pos, 0, follow);
+                pos = scan_assign(tokens, pos, follow, 0);
                 if pos < 0 { break sg_1_0; }
                 break sg_1;
             }
@@ -1110,7 +1110,7 @@ fn scan_a(tokens: &List<Token>, pos: i32, min_prec: i32 = 0, follow: &List<List<
     return pos;
 }
 
-fn scan_assign(tokens: &List<Token>, pos: i32, min_prec: i32 = 0, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_assign(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
     pos += 1;
@@ -1137,7 +1137,7 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
                 sg_2: {
                     pos = gp_2;
                     sg_2_0: {
-                        pos = scan_assign(tokens, pos, 0, follow);
+                        pos = scan_assign(tokens, pos, follow, 0);
                         if pos < 0 { break sg_2_0; }
                         break sg_2;
                     }
@@ -1163,7 +1163,7 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
                 gd_scan: {
                     let tokens = &p.tokens;
                     let mut pos: i32 = p.pos;
-                    pos = scan_assign(tokens, pos, 0, follow);
+                    pos = scan_assign(tokens, pos, follow, 0);
                     if pos < 0 { break gd_scan; }
                     gd_winner = 0;
                     break gd_dispatch;
