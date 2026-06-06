@@ -1625,17 +1625,33 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
     }
 
     let mut resource_names: IndexSet<(ModuleSource, String)> = IndexSet::default();
+    // `(module, struct name)` → field type ids, so resource detection follows
+    // resources nested in struct fields of a signature / operation type.
+    let mut struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
     for (src, module) in &sem.modules {
+        let annotations = state.module_semantics.get(src).map(|m| &m.types);
         for item in &module.items {
-            if let Item::Resource(resource) = item {
-                resource_names.insert((src.clone(), resource.name.clone()));
+            match item {
+                Item::Resource(resource) => {
+                    resource_names.insert((src.clone(), resource.name.clone()));
+                }
+                Item::Struct(struct_decl) => {
+                    if let Some(field_types) = annotations.and_then(|ann| {
+                        ann.struct_field_types
+                            .get(&SymbolKey::new(src.clone(), struct_decl.id))
+                    }) {
+                        struct_fields
+                            .insert((src.clone(), struct_decl.name.clone()), field_types.clone());
+                    }
+                }
+                _ => {}
             }
         }
     }
 
     // Effect / resource propagation closure: holding effect `E` admits the
     // resources `E`'s operations reference (e.g. `Stdout` → `Stream`).
-    let closure = build_propagation_closure_sem(sem, state);
+    let closure = build_propagation_closure_sem(sem, state, &struct_fields);
 
     // Name → resolved `EffectRef` for every declared effect / resource, used to
     // resolve `#[benign(E)]` names (the closure has a key per declaration).
@@ -1654,6 +1670,7 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
         mangled_index: &mangled_index,
         mangled_params: &mangled_params,
         resource_names: &resource_names,
+        struct_fields: &struct_fields,
         closure: &closure,
         effect_by_name: &effect_by_name,
     };
@@ -1696,6 +1713,8 @@ struct EffectIndex<'a> {
     mangled_params: &'a IndexMap<(ModuleSource, String), Vec<TypeId>>,
     /// Declared resources, for resource injection and effect classification.
     resource_names: &'a IndexSet<(ModuleSource, String)>,
+    /// `(module, struct name)` → field type ids, for nested-resource detection.
+    struct_fields: &'a IndexMap<(ModuleSource, String), Vec<TypeId>>,
     /// Effect → implied resources propagation closure.
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
     /// Declared effect / resource name → resolved `EffectRef` (`#[benign]`).
@@ -1739,7 +1758,7 @@ fn check_function_effects_sem(
         .into_iter()
         .collect();
     if let Some(ann) = annotations {
-        add_signature_resources(ann, &caller_key, &sem.types, &mut current);
+        add_signature_resources(ann, &caller_key, &sem.types, index.struct_fields, &mut current);
     }
     // `#[benign(E)]` admits `E` in the body without a `with E` clause.
     for name in benign_effect_names(&func.attrs) {
@@ -1771,9 +1790,9 @@ fn check_function_effects_sem(
 fn build_propagation_closure_sem(
     sem: &Semantics,
     state: &crate::elaborator::orchestration::AnnotateState,
+    struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
 ) -> IndexMap<EffectRef, IndexSet<EffectRef>> {
     let type_table = &sem.types;
-    let empty_struct: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
     let empty_variant: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
     let mut direct: IndexMap<EffectRef, IndexSet<EffectRef>> = IndexMap::default();
 
@@ -1799,7 +1818,7 @@ fn build_propagation_closure_sem(
                     collect_resource_refs(
                         param.type_id,
                         type_table,
-                        &empty_struct,
+                        struct_fields,
                         &empty_variant,
                         &mut refs,
                         &mut TypeSet::default(),
@@ -1808,7 +1827,7 @@ fn build_propagation_closure_sem(
                 collect_resource_refs(
                     op.return_type,
                     type_table,
-                    &empty_struct,
+                    struct_fields,
                     &empty_variant,
                     &mut refs,
                     &mut TypeSet::default(),
@@ -1882,23 +1901,24 @@ fn expand_through_closure(
 /// signature that already exposes a resource does not also require an explicit
 /// `with R`. Mirrors the TIR-based `signature_resources`.
 ///
-/// Resources nested inside struct fields / variant payloads are not yet
-/// followed here (the empty field/payload maps below); direct and
-/// container-nested resources (`Option<R>`, `List<R>`, `&R`, `fn() -> R`) are.
+/// Resources nested inside struct fields are followed via `struct_fields`;
+/// direct and container-nested resources (`Option<R>`, `List<R>`, `&R`,
+/// `fn() -> R`) are too. Variant-payload nesting is a documented follow-up
+/// (empty payload map).
 fn add_signature_resources(
     annotations: &crate::elaborator::sem::types::TypeAnnotations,
     fn_key: &SymbolKey,
     type_table: &TypeTable,
+    struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
     out: &mut IndexSet<EffectRef>,
 ) {
-    let empty_struct: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
     let empty_variant: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
     let mut visited = TypeSet::default();
     for &type_id in annotations.fn_param_types.get(fn_key).into_iter().flatten() {
         collect_resource_refs(
             type_id,
             type_table,
-            &empty_struct,
+            struct_fields,
             &empty_variant,
             out,
             &mut visited,
@@ -1908,7 +1928,7 @@ fn add_signature_resources(
         collect_resource_refs(
             return_type,
             type_table,
-            &empty_struct,
+            struct_fields,
             &empty_variant,
             out,
             &mut visited,
@@ -1918,7 +1938,7 @@ fn add_signature_resources(
         collect_resource_refs(
             task_return,
             type_table,
-            &empty_struct,
+            struct_fields,
             &empty_variant,
             out,
             &mut visited,
