@@ -538,7 +538,8 @@ export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i
     }
     let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
     let new_offset: i32 = (aligned + newsize);
-    if core::builtin::unlikely((new_offset > (core::builtin::memory_size() * 65536))) {
+    if (new_offset > (core::builtin::memory_size() * 65536)) {
+        core::builtin::cold_path();
         core::allocator::grow_memory(new_offset);
     }
     core::allocator::heap_offset = new_offset;
@@ -554,7 +555,8 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
     }
     let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
     let new_offset: i32 = (aligned + newsize);
-    if core::builtin::unlikely((new_offset > (core::builtin::memory_size() * 65536))) {
+    if (new_offset > (core::builtin::memory_size() * 65536)) {
+        core::builtin::cold_path();
         core::allocator::grow_memory(new_offset);
     }
     core::allocator::heap_offset = new_offset;
@@ -695,7 +697,8 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
     }
     let block: i32 = core::allocator::heap_offset;
     let new_offset: i32 = (block + size);
-    if core::builtin::unlikely((new_offset > (core::builtin::memory_size() * 65536))) {
+    if (new_offset > (core::builtin::memory_size() * 65536)) {
+        core::builtin::cold_path();
         core::allocator::grow_memory(new_offset);
     }
     core::allocator::heap_offset = new_offset;
@@ -998,10 +1001,6 @@ fn i32_reinterpret_f32(f: f32) -> i32;
 fn f32_reinterpret_i32(i: i32) -> f32;
 
 fn unreachable() -> !;
-
-fn likely(cond: bool) -> bool;
-
-fn unlikely(cond: bool) -> bool;
 
 fn cold_path();
 
@@ -2133,6 +2132,7 @@ pub fn i32_clamp(value: i32, lo: i32, hi: i32) -> i32 {
         let __v1: i32 = hi;
         let __cond: bool = (__v0 <= __v1);
         if !__cond {
+            core::builtin::cold_path();
             core::internal::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(154);
                 __r.String::push_str(&"Assertion failed in ");
@@ -3868,6 +3868,7 @@ pub fn fixed_width(f: f64, n: i32) -> FormatResult {
         let __v0: i32 = n;
         let __cond: bool = (__v0 <= 18);
         if !__cond {
+            core::builtin::cold_path();
             core::internal::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(131);
                 __r.String::push_str(&"Assertion failed in ");
@@ -10455,14 +10456,17 @@ fn decode_utf8_scalar(bytes: ArraySlice<u8>, start: i32, len: i32) -> Utf8Scalar
         return Utf8Scalar { code: b0 as u32, advance: 1, valid: true };
     }
     if (b0 < 0xC2) {
+        core::builtin::cold_path();
         return Utf8Scalar { code: 0, advance: 1, valid: false };
     }
     if (b0 < 0xE0) {
         if ((start + 1) >= len) {
+            core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
         let b1: u8 = bytes."ArraySlice<u8>::get_unchecked"((start + 1));
         if ((b1 < 0x80) || (b1 > 0xBF)) {
+            core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
         let code: u32 = (((b0 as u32 & 0x1F) << 6) | (b1 as u32 & 0x3F));
@@ -10470,17 +10474,21 @@ fn decode_utf8_scalar(bytes: ArraySlice<u8>, start: i32, len: i32) -> Utf8Scalar
     }
     if (b0 < 0xF0) {
         if ((start + 1) >= len) {
+            core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
         let b1: u8 = bytes."ArraySlice<u8>::get_unchecked"((start + 1));
         if ((((b1 < 0x80) || (b1 > 0xBF)) || ((b0 == 0xE0) && (b1 < 0xA0))) || ((b0 == 0xED) && (b1 >= 0xA0))) {
+            core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
         if ((start + 2) >= len) {
+            core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 2, valid: false };
         }
         let b2: u8 = bytes."ArraySlice<u8>::get_unchecked"((start + 2));
         if ((b2 < 0x80) || (b2 > 0xBF)) {
+            core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 2, valid: false };
         }
         let code: u32 = ((((b0 as u32 & 0x0F) << 12) | ((b1 as u32 & 0x3F) << 6)) | (b2 as u32 & 0x3F));
@@ -10488,29 +10496,36 @@ fn decode_utf8_scalar(bytes: ArraySlice<u8>, start: i32, len: i32) -> Utf8Scalar
     }
     if (b0 < 0xF5) {
         if ((start + 1) >= len) {
+            core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
         let b1: u8 = bytes."ArraySlice<u8>::get_unchecked"((start + 1));
         if ((((b1 < 0x80) || (b1 > 0xBF)) || ((b0 == 0xF0) && (b1 < 0x90))) || ((b0 == 0xF4) && (b1 > 0x8F))) {
+            core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
         if ((start + 2) >= len) {
+            core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 2, valid: false };
         }
         let b2: u8 = bytes."ArraySlice<u8>::get_unchecked"((start + 2));
         if ((b2 < 0x80) || (b2 > 0xBF)) {
+            core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 2, valid: false };
         }
         if ((start + 3) >= len) {
+            core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 3, valid: false };
         }
         let b3: u8 = bytes."ArraySlice<u8>::get_unchecked"((start + 3));
         if ((b3 < 0x80) || (b3 > 0xBF)) {
+            core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 3, valid: false };
         }
         let code: u32 = (((((b0 as u32 & 0x07) << 18) | ((b1 as u32 & 0x3F) << 12)) | ((b2 as u32 & 0x3F) << 6)) | (b3 as u32 & 0x3F));
         return Utf8Scalar { code: code, advance: 4, valid: true };
     }
+    core::builtin::cold_path();
     return Utf8Scalar { code: 0, advance: 1, valid: false };
 }
 
@@ -10566,7 +10581,8 @@ pub fn String::internal_append_from_memory(self: &mut String, ptr: i32, len: i32
         return;
     }
     let new_used: i32 = (self.used + len);
-    if core::builtin::unlikely((new_used > core::builtin::array_len(&self.repr))) {
+    if (new_used > core::builtin::array_len(&self.repr)) {
+        core::builtin::cold_path();
         self.String::grow(new_used);
     }
     let mut i: i32 = 0;
@@ -10584,7 +10600,8 @@ pub fn String::internal_append_from_memory(self: &mut String, ptr: i32, len: i32
 
 pub fn String::internal_reserve_uninit(self: &mut String, n: i32) -> i32 {
     let new_used: i32 = (self.used + n);
-    if core::builtin::unlikely((new_used > core::builtin::array_len(&self.repr))) {
+    if (new_used > core::builtin::array_len(&self.repr)) {
+        core::builtin::cold_path();
         self.String::grow(new_used);
     }
     let start: i32 = self.used;
@@ -10597,7 +10614,8 @@ pub fn String::append_byte_filled(self: &mut String, byte: u8, n: i32) {
         return;
     }
     let new_used: i32 = (self.used + n);
-    if core::builtin::unlikely((new_used > core::builtin::array_len(&self.repr))) {
+    if (new_used > core::builtin::array_len(&self.repr)) {
+        core::builtin::cold_path();
         self.String::grow(new_used);
     }
     "core::builtin::core/builtin/array_fill<u8>"(&mut self.repr, self.used, byte, n);
@@ -10610,7 +10628,8 @@ pub fn String::push_str(self: &mut String, other: &String) {
         return;
     }
     let new_used: i32 = (self.used + other_len);
-    if core::builtin::unlikely((new_used > core::builtin::array_len(&self.repr))) {
+    if (new_used > core::builtin::array_len(&self.repr)) {
+        core::builtin::cold_path();
         self.String::grow(new_used);
     }
     "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr, self.used, &other.String::internal_raw_bytes(), 0, other_len);
@@ -10623,7 +10642,8 @@ pub fn String::push_bytes_unchecked(self: &mut String, bytes: List<u8>) {
         return;
     }
     let new_used: i32 = (self.used + n);
-    if core::builtin::unlikely((new_used > core::builtin::array_len(&self.repr))) {
+    if (new_used > core::builtin::array_len(&self.repr)) {
+        core::builtin::cold_path();
         self.String::grow(new_used);
     }
     "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr, self.used, &bytes."List<u8>::internal_raw_data"(), 0, n);
@@ -10636,7 +10656,8 @@ pub fn String::push_str_range_unchecked(self: &mut String, s: String, start: i32
         return;
     }
     let new_used: i32 = (self.used + n);
-    if core::builtin::unlikely((new_used > core::builtin::array_len(&self.repr))) {
+    if (new_used > core::builtin::array_len(&self.repr)) {
+        core::builtin::cold_path();
         self.String::grow(new_used);
     }
     "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr, self.used, &s.String::internal_raw_bytes(), start, n);
@@ -11189,7 +11210,8 @@ pub fn String::char_at_byte_unchecked(self: &String, byte_index: i32) -> char {
 
 pub fn String::push(self: &mut String, c: char) {
     let code: u32 = c as u32;
-    if core::builtin::unlikely(((self.used + 4) > core::builtin::array_len(&self.repr))) {
+    if ((self.used + 4) > core::builtin::array_len(&self.repr)) {
+        core::builtin::cold_path();
         self.String::grow((self.used + 4));
     }
     if (code < 0x80) {
@@ -11225,6 +11247,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
         let __v0: i32 = byte_len;
         let __cond: bool = (__v0 >= 0);
         if !__cond {
+            core::builtin::cold_path();
             core::internal::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(144);
                 __r.String::push_str(&"Assertion failed in ");
@@ -11233,7 +11256,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 558 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 582 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"negative length");
                 __r.String::push_str(&"\ncondition: byte_len >= 0\n");
@@ -11249,6 +11272,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
         let __v0: bool = self.String::is_char_boundary(byte_len);
         let __cond: bool = __v0;
         if !__cond {
+            core::builtin::cold_path();
             core::internal::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(185);
                 __r.String::push_str(&"Assertion failed in ");
@@ -11257,7 +11281,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 559 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 583 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"not on a UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_len)\n");
@@ -11531,6 +11555,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
         let __v8: bool = (__v6 <= __v7);
         let __cond: bool = (__v5 && __v8);
         if !__cond {
+            core::builtin::cold_path();
             core::internal::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(410);
                 __r.String::push_str(&"Assertion failed in ");
@@ -11539,7 +11564,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 802 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 826 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"byte range out of bounds");
                 __r.String::push_str(&"\ncondition: 0 <= start && start <= end && end <= self.used\n");
@@ -11588,6 +11613,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
         let __v1: bool = self.String::is_char_boundary(end);
         let __cond: bool = (__v0 && __v1);
         if !__cond {
+            core::builtin::cold_path();
             core::internal::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(254);
                 __r.String::push_str(&"Assertion failed in ");
@@ -11596,7 +11622,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 803 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 827 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"byte range not on UTF-8 character boundaries");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(start) && self.is_char_boundary(end)\n");
@@ -11797,6 +11823,7 @@ pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
         let __v0: bool = self.String::is_char_boundary(byte_index);
         let __cond: bool = __v0;
         if !__cond {
+            core::builtin::cold_path();
             core::internal::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(189);
                 __r.String::push_str(&"Assertion failed in ");
@@ -11805,7 +11832,7 @@ pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 939 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 963 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"insert index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -11855,6 +11882,7 @@ pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
         let __v0: bool = self.String::is_char_boundary(byte_index);
         let __cond: bool = __v0;
         if !__cond {
+            core::builtin::cold_path();
             core::internal::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(189);
                 __r.String::push_str(&"Assertion failed in ");
@@ -11863,7 +11891,7 @@ pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 980 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1004 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"insert_str index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -11901,6 +11929,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
         let __v4: bool = (__v2 < __v3);
         let __cond: bool = (__v1 && __v4);
         if !__cond {
+            core::builtin::cold_path();
             core::internal::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(306);
                 __r.String::push_str(&"Assertion failed in ");
@@ -11909,7 +11938,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1008 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1032 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"index out of bounds");
                 __r.String::push_str(&"\ncondition: byte_index >= 0 && byte_index < self.used\n");
@@ -11941,6 +11970,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
         let __v0: bool = self.String::is_char_boundary(byte_index);
         let __cond: bool = __v0;
         if !__cond {
+            core::builtin::cold_path();
             core::internal::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(189);
                 __r.String::push_str(&"Assertion failed in ");
@@ -11949,7 +11979,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1009 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1033 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"remove index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -12106,6 +12136,7 @@ pub fn String::from_utf8_slice(bytes: ArraySlice<u8>) -> Result<String, String> 
         }
         let scalar: Utf8Scalar = "core::prelude/string.wado::decode_utf8_scalar"(bytes, i, len);
         if !scalar.valid {
+            core::builtin::cold_path();
             return Result<String, String>::Err("invalid UTF-8");
         }
         i = (i + scalar.advance);
@@ -17488,6 +17519,7 @@ fn multiline_assert_stmt(items: List<i32>) {
         let __v0: i32 = items."List<i32>::len"();
         let __cond: bool = (__v0 > 0);
         if !__cond {
+            core::builtin::cold_path();
             core::internal::panic(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(131);
                 __r.String::push_str(&"Assertion failed in ");
@@ -19090,7 +19122,8 @@ pub fn "List<core:prelude/string.wado/String>::with_capacity"(capacity: i32) -> 
 
 pub fn "List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::push"(self: &mut List<[String, String]>, value: [String, String]) with stores[value] {
     let used: i32 = self.used;
-    if core::builtin::unlikely((used >= core::builtin::array_len(&self.repr))) {
+    if (used >= core::builtin::array_len(&self.repr)) {
+        core::builtin::cold_path();
         self."List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow"();
     }
     core::builtin::array_set::<[String, String]>(&mut self.repr, used, value);
@@ -19175,7 +19208,8 @@ pub fn "List<i32>::len"(self: &List<i32>) -> i32 {
 
 pub fn "List<core:prelude/types.wado/Tuple<i32,char>>::push"(self: &mut List<[i32, char]>, value: [i32, char]) with stores[value] {
     let used: i32 = self.used;
-    if core::builtin::unlikely((used >= core::builtin::array_len(&self.repr))) {
+    if (used >= core::builtin::array_len(&self.repr)) {
+        core::builtin::cold_path();
         self."List<core:prelude/types.wado/Tuple<i32,char>>::grow"();
     }
     core::builtin::array_set::<[i32, char]>(&mut self.repr, used, value);
@@ -19192,7 +19226,8 @@ fn "List<core:prelude/types.wado/Tuple<i32,char>>^SequenceLiteralBuilder::new_li
 
 pub fn "List<core:prelude/string.wado/String>::push"(self: &mut List<String>, value: String) with stores[value] {
     let used: i32 = self.used;
-    if core::builtin::unlikely((used >= core::builtin::array_len(&self.repr))) {
+    if (used >= core::builtin::array_len(&self.repr)) {
+        core::builtin::cold_path();
         self."List<core:prelude/string.wado/String>::grow"();
     }
     core::builtin::array_set::<String>(&mut self.repr, used, value);
@@ -19245,7 +19280,8 @@ pub fn "String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.w
 
 pub fn "List<char>::push"(self: &mut List<char>, value: char) with stores[value] {
     let used: i32 = self.used;
-    if core::builtin::unlikely((used >= core::builtin::array_len(&self.repr))) {
+    if (used >= core::builtin::array_len(&self.repr)) {
+        core::builtin::cold_path();
         self."List<char>::grow"();
     }
     core::builtin::array_set::<char>(&mut self.repr, used, value);
@@ -19286,7 +19322,8 @@ fn "core/builtin/select<i8>"(cond: bool, if_true: i8, if_false: i8) -> i8;
 
 pub fn "List<u8>::push"(self: &mut List<u8>, value: u8) with stores[value] {
     let used: i32 = self.used;
-    if core::builtin::unlikely((used >= core::builtin::array_len(&self.repr))) {
+    if (used >= core::builtin::array_len(&self.repr)) {
+        core::builtin::cold_path();
         self."List<u8>::grow"();
     }
     core::builtin::array_set::<u8>(&mut self.repr, used, value);
@@ -19319,7 +19356,8 @@ pub fn "Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"(self: Box<R
 }
 
 fn "List<u64>^IndexValue<i32>::index_value"(self: &List<u64>, index: i32) -> u64 {
-    if core::builtin::unlikely((index >= self.used)) {
+    if (index >= self.used) {
+        core::builtin::cold_path();
         core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<u64>(&self.repr, index);
@@ -19411,7 +19449,8 @@ pub fn "List<u8>::internal_raw_data"(self: &List<u8>) -> Array<u8> {
 fn "core/builtin/select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
 
 fn "List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>^IndexValue<i32>::index_value"(self: &List<[String, String]>, index: i32) -> [String, String] {
-    if core::builtin::unlikely((index >= self.used)) {
+    if (index >= self.used) {
+        core::builtin::cold_path();
         core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<[String, String]>(&self.repr, index);
@@ -19570,7 +19609,8 @@ pub fn "List<u64>::with_capacity"(capacity: i32) -> List<u64> {
 
 pub fn "List<u64>::push"(self: &mut List<u64>, value: u64) with stores[value] {
     let used: i32 = self.used;
-    if core::builtin::unlikely((used >= core::builtin::array_len(&self.repr))) {
+    if (used >= core::builtin::array_len(&self.repr)) {
+        core::builtin::cold_path();
         self."List<u64>::grow"();
     }
     core::builtin::array_set::<u64>(&mut self.repr, used, value);
@@ -19590,7 +19630,8 @@ pub fn "List<u8>::is_empty"(self: &List<u8>) -> bool {
 }
 
 fn "List<u8>^IndexValue<i32>::index_value"(self: &List<u8>, index: i32) -> u8 {
-    if core::builtin::unlikely((index >= self.used)) {
+    if (index >= self.used) {
+        core::builtin::cold_path();
         core::internal::panic("index out of bounds");
     }
     return "core::builtin::core/builtin/array_get<u8>"(&self.repr, index);
