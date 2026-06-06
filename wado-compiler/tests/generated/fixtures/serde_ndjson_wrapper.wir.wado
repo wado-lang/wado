@@ -394,9 +394,10 @@ fn "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_ndjson_wrap
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
     ser = struct.new "core:json//JsonSerializer" { buf: buf };
     __match_5 = "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/ErrorMessage^Serialize::serialize<core:json/JsonSerializer>"(value, ser);
-    if ref.is_null(__match_5) {
+    if builtin::likely(ref.is_null(__match_5)) {
     } else {
         __qm_e = ref.as_non_null(__match_5);
+        cold_path;
         return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Err" { discriminant: 1, payload_0: __qm_e };
     }
     return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: buf };
@@ -410,9 +411,10 @@ fn "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_ndjson_wrap
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
     ser = struct.new "core:json//JsonSerializer" { buf: buf };
     __match_5 = "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/Message^Serialize::serialize<core:json/JsonSerializer>"(value, ser);
-    if ref.is_null(__match_5) {
+    if builtin::likely(ref.is_null(__match_5)) {
     } else {
         __qm_e = ref.as_non_null(__match_5);
+        cold_path;
         return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Err" { discriminant: 1, payload_0: __qm_e };
     }
     return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: buf };

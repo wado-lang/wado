@@ -34,77 +34,125 @@ fn is_cold_path_call(expr: &NirExpr) -> bool {
     )
 }
 
-/// True when a branch block is on a cold path, i.e. it directly contains a
-/// `cold_path()` marker statement. Such a block is excluded from the inline
-/// cost estimate.
-fn block_is_cold(block: &NirBlock) -> bool {
-    block
-        .stmts
-        .iter()
-        .any(|s| matches!(&s.kind, NirStmtKind::Expr(e) if is_cold_path_call(e)))
+/// True when `type_id` is the never type `!` — i.e. an expression of this type
+/// diverges and never produces a value (`panic`, `unreachable`, …).
+fn is_never(type_id: TypeId, type_table: &TypeTable) -> bool {
+    matches!(type_table.get(type_id), ResolvedType::Never)
 }
 
-/// Inline cost of a branch block: zero when the block is cold (see
-/// [`block_is_cold`]), otherwise its expression count.
-fn branch_block_cost(block: &NirBlock) -> usize {
-    if block_is_cold(block) {
-        0
-    } else {
-        count_block_exprs(block)
+/// How a statement ends the reachable, hot portion of its block, for the inline
+/// cost walk in [`count_block_exprs`].
+enum BlockCut {
+    /// Not a cut — keep accumulating cost.
+    None,
+    /// A `cold_path()` marker: this statement and everything after it is cold,
+    /// so neither contributes (counted as zero).
+    Cold,
+    /// An unconditional divergence (a `return` / `break` / `continue`, or a call
+    /// to a `-> !` function such as `panic`): the statement itself is counted,
+    /// but the unreachable tail after it is not.
+    Diverges,
+}
+
+/// Classify whether a statement cuts off the rest of its block from the inline
+/// cost estimate.
+fn block_cut(stmt: &NirStmt, type_table: &TypeTable) -> BlockCut {
+    match &stmt.kind {
+        NirStmtKind::Expr(e) if is_cold_path_call(e) => BlockCut::Cold,
+        NirStmtKind::Return { .. } | NirStmtKind::Break { .. } | NirStmtKind::Continue => {
+            BlockCut::Diverges
+        }
+        NirStmtKind::Expr(e) if is_never(e.type_id, type_table) => BlockCut::Diverges,
+        _ => BlockCut::None,
     }
 }
 
-/// Inline cost of a `match` arm body: zero when the arm is a cold block.
-fn match_arm_body_cost(arm: &crate::nir::NirMatchArm) -> usize {
-    match &arm.body.kind {
-        NirExprKind::Block(block) if block_is_cold(block) => 0,
-        _ => count_expr(&arm.body),
+/// Inline cost of a single statement (its own expression count).
+fn count_stmt(stmt: &NirStmt, type_table: &TypeTable) -> usize {
+    match &stmt.kind {
+        NirStmtKind::Expr(expr) => count_expr(expr, type_table),
+        NirStmtKind::Let { value, .. } => count_expr(value, type_table),
+        NirStmtKind::LetDestructure { value, .. } => count_expr(value, type_table),
+        NirStmtKind::Return { value } => value.as_ref().map_or(0, |v| count_expr(v, type_table)),
+        NirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+            ..
+        } => {
+            count_expr(condition, type_table)
+                + count_block_exprs(then_block, type_table)
+                + else_block
+                    .as_ref()
+                    .map_or(0, |b| count_block_exprs(b, type_table))
+        }
+        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
+            count_block_exprs(body, type_table)
+        }
+        NirStmtKind::Break { .. } | NirStmtKind::Continue => 0,
     }
 }
 
 /// Count expressions in a NIR expression (recursive)
-fn count_expr(expr: &NirExpr) -> usize {
+fn count_expr(expr: &NirExpr, type_table: &TypeTable) -> usize {
     1 + match &expr.kind {
-        NirExprKind::Binary { left, right, .. } => count_expr(left) + count_expr(right),
-        NirExprKind::Unary { expr, .. } => count_expr(expr),
-        NirExprKind::Call { args, .. } => args.iter().map(|a| count_expr(&a.expr)).sum(),
+        NirExprKind::Binary { left, right, .. } => {
+            count_expr(left, type_table) + count_expr(right, type_table)
+        }
+        NirExprKind::Unary { expr, .. } => count_expr(expr, type_table),
+        NirExprKind::Call { args, .. } => {
+            args.iter().map(|a| count_expr(&a.expr, type_table)).sum()
+        }
         NirExprKind::MethodCall { receiver, args, .. } => {
-            count_expr(receiver) + args.iter().map(|a| count_expr(&a.expr)).sum::<usize>()
+            count_expr(receiver, type_table)
+                + args
+                    .iter()
+                    .map(|a| count_expr(&a.expr, type_table))
+                    .sum::<usize>()
         }
-        NirExprKind::FieldAccess { expr, .. } => count_expr(expr),
-        NirExprKind::Index { expr, index, .. } => count_expr(expr) + count_expr(index),
+        NirExprKind::FieldAccess { expr, .. } => count_expr(expr, type_table),
+        NirExprKind::Index { expr, index, .. } => {
+            count_expr(expr, type_table) + count_expr(index, type_table)
+        }
         NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            elements.iter().map(count_expr).sum()
+            elements.iter().map(|e| count_expr(e, type_table)).sum()
         }
-        NirExprKind::StructLiteral { fields, .. } => {
-            fields.iter().map(|f| count_expr(&f.value)).sum()
-        }
+        NirExprKind::StructLiteral { fields, .. } => fields
+            .iter()
+            .map(|f| count_expr(&f.value, type_table))
+            .sum(),
         NirExprKind::VariantConstruct { payload, .. } => {
-            payload.as_ref().map_or(0, |p| count_expr(p))
+            payload.as_ref().map_or(0, |p| count_expr(p, type_table))
         }
-        NirExprKind::Assign { target, value } => count_expr(target) + count_expr(value),
+        NirExprKind::Assign { target, value } => {
+            count_expr(target, type_table) + count_expr(value, type_table)
+        }
         NirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            // A cold branch does not contribute to inline cost: a branch body
-            // carrying a `cold_path()` marker costs zero (handled by
-            // `branch_block_cost`).
-            count_expr(condition)
-                + branch_block_cost(then_branch)
-                + else_branch.as_ref().map_or(0, branch_block_cost)
+            // Cold branches contribute nothing: `count_block_exprs` stops at a
+            // `cold_path()` marker or a diverging statement within each arm.
+            count_expr(condition, type_table)
+                + count_block_exprs(then_branch, type_table)
+                + else_branch
+                    .as_ref()
+                    .map_or(0, |b| count_block_exprs(b, type_table))
         }
         NirExprKind::Match { expr, arms } => {
-            count_expr(expr)
+            count_expr(expr, type_table)
                 + arms
                     .iter()
-                    .map(|arm| arm.guard.as_ref().map_or(0, count_expr) + match_arm_body_cost(arm))
+                    .map(|arm| {
+                        arm.guard.as_ref().map_or(0, |g| count_expr(g, type_table))
+                            + count_expr(&arm.body, type_table)
+                    })
                     .sum::<usize>()
         }
-        NirExprKind::Block(block) => count_block_exprs(block),
-        NirExprKind::Cast { expr, .. } => count_expr(expr),
-        NirExprKind::GlobalVarSet { value, .. } => count_expr(value),
+        NirExprKind::Block(block) => count_block_exprs(block, type_table),
+        NirExprKind::Cast { expr, .. } => count_expr(expr, type_table),
+        NirExprKind::GlobalVarSet { value, .. } => count_expr(value, type_table),
         // Leaf expressions (no children)
         NirExprKind::IntLiteral { .. }
         | NirExprKind::FloatLiteral { .. }
@@ -118,57 +166,55 @@ fn count_expr(expr: &NirExpr) -> usize {
         | NirExprKind::Null => 0,
         // Closure and effect-related expressions
         NirExprKind::EnumConstruct { .. } => 0,
-        NirExprKind::CmRawCall { args, .. } => args.iter().map(count_expr).sum(),
+        NirExprKind::CmRawCall { args, .. } => args.iter().map(|a| count_expr(a, type_table)).sum(),
         NirExprKind::IndirectCall { callee, args } => {
-            count_expr(callee) + args.iter().map(count_expr).sum::<usize>()
+            count_expr(callee, type_table)
+                + args
+                    .iter()
+                    .map(|a| count_expr(a, type_table))
+                    .sum::<usize>()
         }
-        NirExprKind::ClosureToCanonical { functor, .. } => count_expr(functor),
+        NirExprKind::ClosureToCanonical { functor, .. } => count_expr(functor, type_table),
         NirExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
         } => {
-            count_expr(scrutinee)
-                + arms.iter().map(branch_block_cost).sum::<usize>()
-                + branch_block_cost(default)
+            count_expr(scrutinee, type_table)
+                + arms
+                    .iter()
+                    .map(|a| count_block_exprs(a, type_table))
+                    .sum::<usize>()
+                + count_block_exprs(default, type_table)
         }
         // Lowered pattern matching nodes - count inner expressions
         NirExprKind::VariantTag { expr }
         | NirExprKind::VariantTest { expr, .. }
-        | NirExprKind::VariantPayload { expr, .. } => count_expr(expr),
-        NirExprKind::LabeledBlock { block, .. } => count_block_exprs(block),
+        | NirExprKind::VariantPayload { expr, .. } => count_expr(expr, type_table),
+        NirExprKind::LabeledBlock { block, .. } => count_block_exprs(block, type_table),
     }
 }
 
-/// Count expressions in a NIR block (recursive)
-fn count_block_exprs(block: &NirBlock) -> usize {
-    block
-        .stmts
-        .iter()
-        .map(|s| match &s.kind {
-            NirStmtKind::Expr(expr) => count_expr(expr),
-            NirStmtKind::Let { value, .. } => count_expr(value),
-            NirStmtKind::LetDestructure { value, .. } => count_expr(value),
-            NirStmtKind::Return { value } => value.as_ref().map_or(0, count_expr),
-            NirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-                ..
-            } => {
-                // Skip a cold arm: a branch body carrying a `cold_path()`
-                // marker costs zero (handled by `branch_block_cost`).
-                count_expr(condition)
-                    + branch_block_cost(then_block)
-                    + else_block.as_ref().map_or(0, branch_block_cost)
+/// Count expressions in a NIR block (recursive), stopping once the rest of the
+/// block becomes cold or unreachable. The walk ends at the first statement that
+/// [`block_cut`] flags: a `cold_path()` marker drops the marker and everything
+/// after it, while a diverging statement (`return` / `break` / `continue` or a
+/// `-> !` call such as `panic`) is itself counted but cuts off its unreachable
+/// tail.
+fn count_block_exprs(block: &NirBlock, type_table: &TypeTable) -> usize {
+    let mut total = 0;
+    for stmt in &block.stmts {
+        match block_cut(stmt, type_table) {
+            BlockCut::Cold => break,
+            BlockCut::Diverges => {
+                total += count_stmt(stmt, type_table);
+                break;
             }
-            NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-                count_block_exprs(body)
-            }
-            NirStmtKind::Break { .. } | NirStmtKind::Continue => 0,
-        })
-        .sum()
+            BlockCut::None => total += count_stmt(stmt, type_table),
+        }
+    }
+    total
 }
 
 /// Build the canonical inliner key for a function identity.
@@ -425,7 +471,7 @@ fn is_inline_eligible(
     };
 
     // Small enough (based on expression count)
-    count_block_exprs(body) <= effective_threshold
+    count_block_exprs(body, type_table) <= effective_threshold
 }
 
 /// Detect recursive functions using call graph analysis

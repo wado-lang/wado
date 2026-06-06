@@ -252,6 +252,24 @@ fn build_switch(
     let default_block = if let Some(default_idx) = analysis.default_arm {
         arm_body_block(engine, arms[default_idx].body)
     } else {
+        // The default of an exhaustive match is the unreachable arm. Mark it
+        // `cold_path()` so the inliner skips it and codegen hints it unlikely,
+        // matching the other compiler-synthesized cold branches.
+        let cold_call = engine.alloc_expr(
+            ExprKind::Call {
+                func: FunctionRef {
+                    module_source: ModuleSource::builtin(),
+                    name: "cold_path".to_string(),
+                    monomorph_info: None,
+                    method_info: None,
+                },
+                args: vec![],
+                type_args: vec![],
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        let cold_stmt = engine.alloc_stmt(StmtKind::Expr(cold_call), span);
         // Call `builtin::unreachable` rather than
         // `core:internal/unreachable`: the former lowers to
         // `WirInstr::Unreachable` directly in `wir_build::calls.rs`
@@ -273,7 +291,7 @@ fn build_switch(
             span,
         );
         let stmt = engine.alloc_stmt(StmtKind::Expr(call), span);
-        engine.alloc_block(vec![stmt], span)
+        engine.alloc_block(vec![cold_stmt, stmt], span)
     };
 
     ExprKind::Switch {

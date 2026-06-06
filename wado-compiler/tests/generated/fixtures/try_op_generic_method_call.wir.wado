@@ -138,9 +138,10 @@ fn "wado-compiler/tests/fixtures/try_op_generic_method_call.wado/write_values"(s
             if __sroa___match_6_discriminant == 0 {
                 v = struct.new "core:prelude/types.wado//Box<i32>" { value: __sroa___match_6_payload_0 };
                 __local_7 = "wado-compiler/tests/fixtures/try_op_generic_method_call.wado/StringSink^Sink::put<i32>"(s, v);
-                if ref.is_null(__local_7) {
+                if builtin::likely(ref.is_null(__local_7)) {
                 } else {
                     __qm_e = ref.as_non_null(__local_7);
+                    cold_path;
                     return __qm_e;
                 }
             } else {

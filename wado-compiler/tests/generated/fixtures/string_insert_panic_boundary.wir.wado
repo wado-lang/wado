@@ -72,21 +72,19 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/string.wado/String::is_char_boundary" = fn(ref "core:prelude/string.wado//String", i32) -> bool;  // TypeId(28)
 
-type "functype//core:prelude/string.wado/String::insert" = fn(ref "core:prelude/string.wado//String", i32, char);  // TypeId(29)
+type "functype//core:prelude/string.wado/String::insert_unchecked" = fn(ref "core:prelude/string.wado//String", i32, char);  // TypeId(29)
 
-type "functype//core:prelude/string.wado/String::insert_unchecked" = fn(ref "core:prelude/string.wado//String", i32, char);  // TypeId(30)
+type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(30)
 
-type "functype//core:prelude/format.wado/Formatter::write_char_n" = fn(ref "core:prelude/format.wado//Formatter", char, i32);  // TypeId(31)
+type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(31)
 
-type "functype//core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(32)
+type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(32)
 
-type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(33)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(34)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(36)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(35)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -103,22 +101,39 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/string_insert_panic_boundary.wado/__cm_export__run"() {
     let s: ref "core:prelude/string.wado//String";
+    let __v0: bool;
+    let __local_5: ref "core:prelude/string.wado//String";
+    let __local_6: ref "core:prelude/format.wado//Formatter";
+    let f_13: ref "core:prelude/format.wado//Formatter";
+    let f_18: ref "core:prelude/format.wado//Formatter";
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("日本語"), used: 9 };
-    "core:prelude/string.wado/String::insert"(s, 1, 88);
+    __v0 = "core:prelude/string.wado/String::is_char_boundary"(s, 1);
+    if builtin::unlikely(__v0 == 0) {
+        cold_path;
+        "core:internal/panic"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(189), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("String::insert"), used: 14 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado"), used: 24 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_13 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(963, f_13); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("insert index not on UTF-8 character boundary"), used: 44 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+condition: self.is_char_boundary(byte_index)
+"), used: 46 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self.is_char_boundary(byte_index): "), used: 35 }); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_18 = __local_6; "core:prelude/format.wado/Formatter::pad"(f_18, (if __v0 -> ref "core:prelude/string.wado//String" {
+            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
+        } else {
+            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
+        })); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
+        unreachable;
+    }
+    "core:prelude/string.wado/String::insert_unchecked"(s, 1, 88);
     "wasi/task-return"(0);
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b0: block {
-        l1: loop {
+    b2: block {
+        l3: loop {
             if i >= len {
-                break b0;
+                break b2;
             }
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l1;
+            continue l3;
         };
     };
 }
@@ -200,14 +215,14 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b6: block {
-        l7: loop {
+    b8: block {
+        l9: loop {
             if t <= 0_i64 {
-                break b6;
+                break b8;
             }
             n = n + 1;
             t = t / 10_i64;
-            continue l7;
+            continue l9;
         };
     };
     return n;
@@ -221,15 +236,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b10: block {
-            l11: loop {
+        b12: block {
+            l13: loop {
                 if temp <= 0_i64 {
-                    break b10;
+                    break b12;
                 }
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l11;
+                continue l13;
             };
         };
     }
@@ -352,26 +367,6 @@ fn "core:prelude/string.wado/String::is_char_boundary"(self, byte_index) {
     } else {
         b >=u 192;
     });
-}
-
-fn "core:prelude/string.wado/String::insert"(self, byte_index, ch) {
-    let __v0: bool;
-    let __local_5: ref "core:prelude/string.wado//String";
-    let __local_6: ref "core:prelude/format.wado//Formatter";
-    let f_10: ref "core:prelude/format.wado//Formatter";
-    let f_15: ref "core:prelude/format.wado//Formatter";
-    __v0 = "core:prelude/string.wado/String::is_char_boundary"(self, byte_index);
-    if __v0 == 0 {
-        "core:internal/panic"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(189), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("String::insert"), used: 14 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado"), used: 24 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_10 = __local_6; "core:prelude/primitive.wado/i32::fmt_decimal"(946, f_10); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("insert index not on UTF-8 character boundary"), used: 44 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-condition: self.is_char_boundary(byte_index)
-"), used: 46 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self.is_char_boundary(byte_index): "), used: 35 }); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; f_15 = __local_6; "core:prelude/format.wado/Formatter::pad"(f_15, (if __v0 -> ref "core:prelude/string.wado//String" {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
-        } else {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
-        })); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
-        unreachable;
-    }
-    "core:prelude/string.wado/String::insert_unchecked"(self, byte_index, ch);
 }
 
 fn "core:prelude/string.wado/String::insert_unchecked"(self, byte_index, ch) {
