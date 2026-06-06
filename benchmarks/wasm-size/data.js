@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780702228679,
+  "lastUpdate": 1780704116555,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30373,6 +30373,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/aab4d044143477f668a3a10d4f16b2630e94f79c"
         },
         "date": 1780702228220,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1767,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8808,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16641,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 456413,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d3d2fb33719dc3c3b568553d976550384fd222b5",
+          "message": "Merge pull request #1305 from wado-lang/claude/wado-elaborator-method-resolution-agsx4\n\nelaborator: index-driven, cache-free method resolution (+ cross-module inherent fix)",
+          "timestamp": "2026-06-06T08:53:29+09:00",
+          "tree_id": "40c6beb72b6258b0bf3df11ea80f019bb88e97fc",
+          "url": "https://github.com/wado-lang/wado/commit/d3d2fb33719dc3c3b568553d976550384fd222b5"
+        },
+        "date": 1780704116095,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
