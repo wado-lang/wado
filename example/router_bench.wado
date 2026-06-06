@@ -140,14 +140,14 @@ export fn run() with Stdout, MonotonicClock {
     verify_engines_agree(&linear, &radix, &dfa, &pattern);
 
     // Build cost (one-shot, mainly informational).
-    let mut bbuild = Benchmark::new("build cost (one-shot)");
+    let mut bbuild = Benchmark { name: "build cost (one-shot)" };
     bbuild.run("linear build", || LinearRouter::build(&routes));
     bbuild.run("radix  build", || RadixRouter::build(&routes));
     bbuild.run("dfa    build", || DfaRouter::build(&routes));
 
     // Mixed access pattern (9 hits + 1 miss) for the engines that
     // realistically share work across patterns.
-    let mut bmix = Benchmark::new(`mixed pattern x {OUTER_ITERATIONS} outer iter (10 lookups each)`);
+    let mut bmix = Benchmark { name: `mixed pattern x {OUTER_ITERATIONS} outer iter (10 lookups each)` };
     let acc_l = bmix.run("linear (mixed)", || run_mixed_linear(&linear, &pattern));
     let acc_r = bmix.run("radix         ", || run_mixed_radix(&radix, &pattern));
     let acc_d = bmix.run("dfa           ", || run_mixed_dfa(&dfa, &pattern));
@@ -159,7 +159,7 @@ export fn run() with Stdout, MonotonicClock {
     // Linear-only best/worst spread.
     let best_path = "/health";  // first route in build_routes()
     let worst_path = "/api/v1/does/not/exist";  // miss => full N-route walk
-    let mut blin = Benchmark::new(`linear best/worst x {LINEAR_REPEAT} iter`);
+    let mut blin = Benchmark { name: `linear best/worst x {LINEAR_REPEAT} iter` };
     let acc_b = blin.run("linear (best ) ", || run_linear_one(&linear, Method::Get, &best_path, LINEAR_REPEAT));
     let acc_w = blin.run("linear (worst) ", || run_linear_one(&linear, Method::Get, &worst_path, LINEAR_REPEAT));
     blin.println(`accumulators: best={acc_b} worst={acc_w}`);

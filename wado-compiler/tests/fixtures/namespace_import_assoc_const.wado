@@ -1,0 +1,14 @@
+// A namespace-imported associated constant (`ns::Type::CONST`) routes through
+// the dedicated namespace path, mirroring `ns::Type::Case`.
+use h from "./sub/ns_robust_helper.wado";
+
+test "namespace associated constant" {
+    assert h::Config::MAX_LIMIT == 100;
+    let m = h::Config::MAX_LIMIT;
+    assert m == 100;
+    let c = h::Config::make();
+    assert c.limit == 1;
+}
+
+__DATA__
+{"test": {}}

@@ -34,6 +34,11 @@ impl ArraySlice<T> {
     }
 
     /// Returns the number of elements in the slice.
+    ///
+    /// Also the byte-length anchor for the synthesised `FieldSchema::lookup`
+    /// (on `ArraySlice<u8>`), routed through `#[compiler_item]` so a rename
+    /// here cannot silently break code generation.
+    #[compiler_item("byte_slice_len")]
     pub fn len(&self) -> i32 {
         return self.end - self.start;
     }
@@ -49,6 +54,19 @@ impl ArraySlice<T> {
             return null;
         }
         return Option::Some(builtin::array_get(self.repr, self.start + index));
+    }
+
+    /// Returns the element at `index` without bounds checking.
+    ///
+    /// The caller must guarantee `0 <= index < len()`; an out-of-range
+    /// `index` reads past the view into the backing array or traps.
+    ///
+    /// Also the byte-read anchor for the synthesised `FieldSchema::lookup`
+    /// (on `ArraySlice<u8>`), routed through `#[compiler_item]` for the same
+    /// rename-safety reason as `len`.
+    #[compiler_item("byte_slice_get_unchecked")]
+    pub fn get_unchecked(&self, index: i32) -> T {
+        return builtin::array_get(self.repr, self.start + index);
     }
 
     /// Returns a sub-slice over `[start, end)` relative to this slice, clamped

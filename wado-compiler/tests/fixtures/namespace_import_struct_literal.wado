@@ -1,0 +1,13 @@
+// A namespace-qualified struct literal (`ns::Struct { ... }`) must parse and
+// resolve like a bare struct literal.
+use h from "./sub/ns_robust_helper.wado";
+
+test "namespace struct literal" {
+    let p = h::Point { x: 10, y: 20 };
+    assert p.x == 10;
+    assert p.y == 20;
+    assert p.sum() == 30;
+}
+
+__DATA__
+{"test": {}}

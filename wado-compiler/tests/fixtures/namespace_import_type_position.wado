@@ -1,0 +1,19 @@
+// A namespace import alias may appear in type position (`ns::Type`), resolving
+// to the bare type the registries are keyed by.
+use h from "./sub/ns_robust_helper.wado";
+
+fn origin() -> h::Point {
+    return h::Point::new(0, 0);
+}
+
+test "namespace type in annotations" {
+    let m: h::Meters = 1.5;
+    assert m as f64 == 1.5;
+    let p: h::Point = h::Point::new(3, 4);
+    assert p.sum() == 7;
+    let o: h::Point = origin();
+    assert o.x == 0;
+}
+
+__DATA__
+{"test": {}}

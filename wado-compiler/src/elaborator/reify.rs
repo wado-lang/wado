@@ -338,6 +338,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             current_module_source: &self.current_module_source,
             imported_type_sources: &self.sem.imports.imported_type_sources,
             import_original_names: &self.sem.imports.import_original_names,
+            namespace_imports: &self.sem.imports.namespace_imports,
             all_newtypes: &self.tysys.all_newtypes,
             all_struct_fields: &self.tysys.all_struct_fields,
             all_variant_cases: &self.tysys.all_variant_cases,
@@ -4198,8 +4199,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let lookup = self.type_lookup();
         // Decl field shape: (name, index, raw_type, default_expr).
         // Cloned out of the lookup so the borrow ends before reifying.
+        // `struct_module` is the struct's declaring module, consulted by the
+        // omitted-default loop below.
+        let info = lookup.struct_fields(&struct_name);
+        let struct_module = info
+            .map(|info| info.module_source.clone())
+            .unwrap_or_else(|| self.current_module_source.clone());
         let decl_fields: Vec<(String, u32, TypeId, Option<ast::Expr>)> = {
-            let info = lookup.struct_fields(&struct_name);
             info.map(|info| {
                 info.fields
                     .iter()
@@ -4275,7 +4281,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             if let Some(default_expr) = default {
                 let expected_field_ty = substitute(self, *raw_ty);
-                let value = self.reify_expr(default_expr, ctx, Some(expected_field_ty));
+                // Reify a foreign default under its owning module's
+                // perspective so every per-`AstId` annotation lookup hits the
+                // module the combined walk recorded the default's facts under
+                // (it keyed them via `ann_module_override`). Resolving under
+                // the construction module would read this module's colliding
+                // node and mis-type the synthesized value.
+                let value = if struct_module == self.current_module_source {
+                    self.reify_expr(default_expr, ctx, Some(expected_field_ty))
+                } else {
+                    self.with_const_module_perspective(&struct_module, |this| {
+                        this.reify_expr(default_expr, ctx, Some(expected_field_ty))
+                    })
+                };
                 fields.push(TirStructField {
                     name: name.clone(),
                     value,
@@ -7408,6 +7426,23 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::TirExprKind;
 
+        // Canonicalize `ns::member` to its `ns$member` alias, matching
+        // `resolve_ident` at annotate time (expr.rs) so reify consults the
+        // same alias-keyed registries. The original `id` / `span` are kept.
+        let canonical_ident;
+        let ident = if let Some(canon) = self.sem.imports.canonical_ns_ref(&ident.name) {
+            canonical_ident = ast::IdentExpr {
+                id: ident.id,
+                name: canon,
+                segments: ident.segments.clone(),
+                type_args: ident.type_args.clone(),
+                span: ident.span,
+            };
+            &canonical_ident
+        } else {
+            ident
+        };
+
         // 1. Local / capture lookup, mirroring `resolve_ident`
         //    (expr.rs:534+). Use the local's stored type instead of
         //    `recorded_type`: template-string sub-parsers restart
@@ -7643,6 +7678,32 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
+        // 5b. Imported free function reference resolved through the symbol
+        //     table (covers namespace-import functions, whose `ns$fn` aliases
+        //     are not in `imported_type_sources`). Mirrors annotate's
+        //     `resolve_func_ref_ident` → `lookup_func_ast_for_ref` and emits a
+        //     `FuncRef` keyed by the function's defining module + original name.
+        if self.sem.decls.imported_functions.contains(&ident.name)
+            && let Some(symbol) = self
+                .symbols
+                .lookup(&self.current_module_source, &ident.name)
+            && matches!(symbol.kind, crate::symbol::SymbolKind::Function(_))
+        {
+            let type_args = self
+                .ann_generic_instantiations(ident.id)
+                .map(|gi| gi.type_args)
+                .unwrap_or_default();
+            return TirExpr::new(
+                TirExprKind::FuncRef {
+                    module_source: symbol.module_source().clone(),
+                    name: symbol.name.clone(),
+                    type_args,
+                },
+                recorded_type,
+                ident.span,
+            );
+        }
+
         // 6. Qualified case path `Type::Case`. Variant / enum / flags
         //    are checked in the same priority order as
         //    `Elaborator::resolve_ident` (expr.rs:607+). The
@@ -7724,83 +7785,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             repr: member.bitmask.to_string(),
                         },
                         flags_info.type_id,
-                        ident.span,
-                    );
-                }
-            }
-        }
-
-        // 7. Namespace-imported path `ns::Type::Case` (and variants
-        //    with type args). The `ns::` prefix maps via
-        //    `sem.imports.namespace_imports` to the namespace's
-        //    source module; reify then resolves against the
-        //    namespace's `tysys.all_*` tables (rather than the
-        //    current module's).
-        if let Some(double_colon) = ident.name.find("::") {
-            let ns_prefix = &ident.name[..double_colon];
-            let rest = &ident.name[double_colon + 2..];
-            if let Some(ns_source) = self.sem.imports.namespace_imports.get(ns_prefix).cloned()
-                && let Some(inner_double_colon) = rest.find("::")
-            {
-                let type_name = &rest[..inner_double_colon];
-                let case_name = &rest[inner_double_colon + 2..];
-
-                // Variant case in the namespace's module.
-                if let Some(variant_info) = self
-                    .tysys
-                    .all_variant_cases
-                    .get(&ns_source)
-                    .and_then(|m| m.get(type_name))
-                    .cloned()
-                    && let Some((case_index, case_data)) = variant_info
-                        .cases
-                        .iter()
-                        .enumerate()
-                        .find(|(_, c)| c.name == case_name)
-                        .map(|(i, c)| (i, c.clone()))
-                {
-                    let variant_type = self
-                        .ann_generic_instantiations(ident.id)
-                        .map(|gi| gi.instance_type)
-                        .unwrap_or_else(|| {
-                            self.tysys.type_table.borrow_mut().make_variant(
-                                variant_info.name.clone(),
-                                variant_info.module_source.clone(),
-                            )
-                        });
-                    return TirExpr::new(
-                        TirExprKind::VariantConstruct {
-                            variant_type,
-                            case_index: case_index as u32,
-                            case_name: case_data.name,
-                            payload: None,
-                        },
-                        variant_type,
-                        ident.span,
-                    );
-                }
-
-                // Enum case in the namespace's module.
-                if let Some(enum_info) = self
-                    .tysys
-                    .all_enum_cases
-                    .get(&ns_source)
-                    .and_then(|m| m.get(type_name))
-                    .cloned()
-                    && let Some(case_data) = enum_info.find_case(case_name).cloned()
-                {
-                    let enum_type = self
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_enum(enum_info.name.clone(), enum_info.module_source);
-                    return TirExpr::new(
-                        TirExprKind::EnumConstruct {
-                            enum_type,
-                            case_index: case_data.index,
-                            case_name: case_data.name,
-                        },
-                        enum_type,
                         ident.span,
                     );
                 }

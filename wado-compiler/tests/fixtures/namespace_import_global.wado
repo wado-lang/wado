@@ -1,0 +1,17 @@
+// Namespace-imported globals are accessed with the `ns::` prefix. Two
+// namespaces exporting the same global name stay distinct (collision-free).
+use h from "./sub/ns_robust_helper.wado";
+
+test "namespace global read" {
+    assert h::ANSWER == 42;
+}
+
+test "namespace mutable global write" {
+    h::COUNTER = 7;
+    assert h::COUNTER == 7;
+    h::COUNTER = h::COUNTER + 1;
+    assert h::COUNTER == 8;
+}
+
+__DATA__
+{"test": {}}

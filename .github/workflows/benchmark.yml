@@ -10,6 +10,16 @@ on:
     paths-ignore:
       - '**/*.md'
 
+# Only push events write to gh-pages, and two runs writing concurrently race on
+# the branch tip (the store steps and the deploy push). Serialize all push runs
+# under one group so they land one at a time; cancel-in-progress: false lets the
+# in-progress run finish and push its data instead of being killed mid-write.
+# Pull-request runs only read gh-pages, so give each its own group (keyed by
+# run id) to keep them fully independent.
+concurrency:
+  group: benchmark-gh-pages-${{ github.event_name == 'push' && 'main' || github.run_id }}
+  cancel-in-progress: false
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
@@ -82,11 +92,13 @@ jobs:
         run: |
           git worktree add /tmp/gh-pages gh-pages
           mkdir -p /tmp/gh-pages/benchmarks/runtime-throughput
+          mkdir -p /tmp/gh-pages/benchmarks/wasm-size
           cp .github/pages/runtime-index.html /tmp/gh-pages/benchmarks/runtime-throughput/index.html
+          cp .github/pages/wasm-size-index.html /tmp/gh-pages/benchmarks/wasm-size/index.html
           cd /tmp/gh-pages
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add benchmarks/runtime-throughput/index.html
+          git add benchmarks/runtime-throughput/index.html benchmarks/wasm-size/index.html
           git diff --cached --quiet || {
             git commit -m "Deploy combined benchmark graphs"
             git push origin gh-pages

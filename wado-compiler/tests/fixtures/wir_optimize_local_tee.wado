@@ -1,0 +1,28 @@
+// Test: fuse `local.set` + first `local.get` into `local.tee`.
+//
+// `let t = a * b + 1; return t * t` lowers to a `local.set t` followed by a
+// `return` whose first-evaluated leaf is `local.get t`. The peephole fuses the
+// pair into a single `local.tee t`, dropping one `local.get`.
+//
+// At O0: `t = (a * b) + 1` then `return t * t`
+// At O2: `return local.tee t((a * b) + 1) * t`
+
+#[inline(never)]
+fn square_of(a: i32, b: i32) -> i32 {
+    let t = a * b + 1;
+    return t * t;
+}
+
+test {
+    assert square_of(3, 4) == 169;
+    assert square_of(0, 0) == 1;
+    assert square_of(-2, 5) == 81;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_expect:O0": ["t = (a * b) + 1"],
+    "wir_not_expect:O2": ["t = (a * b) + 1"],
+    "wir_expect:O2": ["local.tee t((a * b) + 1)"]
+}

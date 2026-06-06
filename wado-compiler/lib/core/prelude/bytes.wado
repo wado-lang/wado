@@ -11,6 +11,7 @@
 use { Array } from "core:prelude/array.wado";
 use { List } from "core:prelude/list.wado";
 use { ArraySlice } from "core:prelude/slice.wado";
+use { String } from "core:prelude/string.wado";
 
 /// An owned, fixed-length byte buffer.
 pub type ByteArray = Array<u8>;
@@ -23,9 +24,9 @@ pub type ByteSlice = ArraySlice<u8>;
 
 /// Zero-copy conversion to a `ByteSlice`.
 ///
-/// Implemented by `ByteArray`, `ByteList`, and `ByteSlice`, so byte-reading
-/// APIs (e.g. `core:cbor` / `core:json` `from_bytes`) accept any of them
-/// without copying.
+/// Implemented by `ByteArray`, `ByteList`, and `ByteSlice` (and `String`, whose
+/// UTF-8 bytes view directly), so byte-reading APIs (e.g. `core:cbor` /
+/// `core:json` `from_bytes`) accept any of them without copying.
 pub trait AsByteSlice {
     fn as_byte_slice(&self) -> ByteSlice with stores[self];
 }
@@ -45,5 +46,14 @@ impl AsByteSlice for ByteList {
 impl AsByteSlice for ByteArray {
     fn as_byte_slice(&self) -> ByteSlice with stores[self] {
         return self.slice(0, self.len()) as ByteSlice;
+    }
+}
+
+// A `String` is a UTF-8 byte buffer, so it views as a `ByteSlice` directly.
+// This lets `from_bytes("...")` accept a string literal with no copy, even
+// though `String` still serializes as text (`serialize_string`), not bytes.
+impl AsByteSlice for String {
+    fn as_byte_slice(&self) -> ByteSlice with stores[self] {
+        return self.as_bytes() as ByteSlice;
     }
 }

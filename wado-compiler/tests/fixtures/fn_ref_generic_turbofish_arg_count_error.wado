@@ -1,0 +1,18 @@
+// Negative test: turbofish on a generic function reference must supply exactly
+// as many type arguments as the function declares. `identity<T>` has one type
+// parameter, so `identity::<i32, i32>` over-specifies it. The elaborator
+// reports the arg-count mismatch on the reference itself, distinct from the
+// arity-mismatch path that fires when an expected `fn(...)` type disagrees on
+// the number of value parameters.
+
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+test "turbofish with too many type arguments is rejected" {
+    let f = identity::<i32, i32>;
+    assert f(42) == 42;
+}
+
+__DATA__
+{"compile_error": "wrong number of type arguments for generic function 'identity': expected 1, found 2"}

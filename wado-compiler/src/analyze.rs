@@ -851,25 +851,25 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             // Wildcard import: module is loaded for side effects only,
                             // no symbols to register
                         }
-                        UseItem::Namespace { .. } => {
-                            // Namespace import: register all pub symbols from
-                            // source module by their bare names. The elaborator
-                            // canonicalizes `<ns>::<member>` to `<member>` at
-                            // lookup time (see `Elaborator::strip_ns_prefix`),
-                            // so a symbol registered under its bare name is
-                            // reachable both as `member` and as `ns::member`.
+                        UseItem::Namespace { name: ns } => {
+                            // Namespace import: register every public symbol
+                            // under its `ns$member` alias, matching how the
+                            // elaborator canonicalizes `ns::member` at lookup
+                            // time (`ModuleImports::canonical_ns_ref`).
                             let symbols: Vec<(String, SymbolKey)> = self
                                 .symbols
                                 .get_module_symbols(&module_source)
                                 .into_iter()
-                                .map(|s| (s.name.clone(), s.defined_at.clone()))
+                                .map(|s| {
+                                    (
+                                        crate::name::namespace_member_alias(ns, &s.name),
+                                        s.defined_at.clone(),
+                                    )
+                                })
                                 .collect();
-                            for (sym_name, sym_key) in symbols {
-                                self.symbols.register_import(
-                                    from_module_source,
-                                    &sym_name,
-                                    sym_key,
-                                );
+                            for (alias, sym_key) in symbols {
+                                self.symbols
+                                    .register_import(from_module_source, &alias, sym_key);
                             }
                         }
                     }

@@ -64,8 +64,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 
 fn "wado-compiler/tests/fixtures/allocator_freelist_double_free.wado/run"() with Stdout {
     let ptr: i32;
-    ptr = "mem/realloc"(0, 0, 4, 64);
-    drop("mem/realloc"(ptr, 64, 4, 0));
+    drop("mem/realloc"(local.tee ptr("mem/realloc"(0, 0, 4, 64)), 64, 4, 0));
     drop("mem/realloc"(ptr, 64, 4, 0));
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("should not reach here"), used: 21 });
 }
@@ -149,8 +148,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
     let ptr: i32;
     let raw_len: i32;
     let result: i32;
-    packed = "core:internal/cm_lower_list_u8"(data, len);
-    ptr = builtin::i32_wrap_i64(packed);
+    ptr = builtin::i32_wrap_i64(local.tee packed("core:internal/cm_lower_list_u8"(data, len)));
     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {

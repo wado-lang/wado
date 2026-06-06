@@ -406,7 +406,7 @@ fn contains_variant_recursive(
         } => {
             // Generic-variant instance (`Option<T>` / `Result<T, E>` /
             // user-defined recursive variants like `Value` from
-            // `core:json_value`): treat as a variant boundary, since
+            // `core:value`): treat as a variant boundary, since
             // its monomorphised registration in WIR may still be an
             // `AbstractRef(Struct)` placeholder when the helper body
             // is translated.

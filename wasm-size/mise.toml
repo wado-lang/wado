@@ -173,16 +173,31 @@ depends = ["gen-test-data", "build-rust", "build-zig", "build-moonbit", "build-c
 
 [tasks.validate]
 description = "Validate built Wasm files with wasmtime"
+# Must run after every target is built — otherwise mise schedules `validate`
+# concurrently with `build-all` and it races against not-yet-built binaries
+# (e.g. an empty zlib decompress because the Wasm file is still being written).
+depends = ["build-all"]
 run = """
 #!/usr/bin/env bash
 WADO_CLI="cargo run --quiet --manifest-path ../wado-cli/Cargo.toml --"
 FAIL=0
 
+# `wasmtime` is the vendored CLI on PATH, built by `mise run build-wasmtime`.
+# When it is absent, validate only what the Wado CLI can run on its own and
+# skip the wasmtime-backed checks — reporting them as failures would be
+# misleading (the binaries are fine; the runtime is missing).
+if command -v "${WASMTIME%% *}" >/dev/null 2>&1; then
+    HAVE_WASMTIME=1
+else
+    HAVE_WASMTIME=0
+    echo "NOTE: '$WASMTIME' not found — skipping non-Wado validation (run 'mise run build-wasmtime')."
+fi
+
 echo ""
 echo "=== Validation (running with wasmtime) ==="
 # WASI Preview 1 programs (non-zlib)
 for f in "$OUT_DIR"/hello_world_*.wasm "$OUT_DIR"/pi_approx_*.wasm; do
-    if [ -f "$f" ] && [[ "$f" != *_wado.wasm ]]; then
+    if [ -f "$f" ] && [[ "$f" != *_wado.wasm ]] && [ "$HAVE_WASMTIME" = 1 ]; then
         printf "%-40s " "$f:"
         $WASMTIME "$f" 2>&1 | head -1 || echo "(failed)"
     fi
@@ -206,8 +221,11 @@ for f in "$OUT_DIR"/zlib_*.wasm; do
     # Run decompressor
     if [[ "$f" == *_wado.wasm ]]; then
         $WADO_CLI run zlib/zlib.wado < "$OUT_DIR/test.gz" > "$OUT_DIR/zlib_${lang}_out.bin" 2>/dev/null
-    else
+    elif [ "$HAVE_WASMTIME" = 1 ]; then
         $WASMTIME "$f" < "$OUT_DIR/test.gz" > "$OUT_DIR/zlib_${lang}_out.bin" 2>/dev/null
+    else
+        echo "SKIP (wasmtime not found)"
+        continue
     fi
 
     # Diff against original
@@ -236,8 +254,11 @@ for f in "$OUT_DIR"/sqlite_highlight_*.wasm; do
 
     if [[ "$f" == *_wado.wasm ]]; then
         $WADO_CLI run sqlite_highlight/sqlite_highlight.wado < "$OUT_DIR/sample.sql" > "$OUT_DIR/sqlite_highlight_${lang}_out.html" 2>/dev/null
-    else
+    elif [ "$HAVE_WASMTIME" = 1 ]; then
         $WASMTIME "$f" < "$OUT_DIR/sample.sql" > "$OUT_DIR/sqlite_highlight_${lang}_out.html" 2>/dev/null
+    else
+        echo "SKIP (wasmtime not found)"
+        continue
     fi
 
     if [ -s "$OUT_DIR/sqlite_highlight_${lang}_out.html" ]; then
@@ -257,7 +278,9 @@ fi
 
 [tasks.report-wasm-size]
 description = "Build all and report Wasm sizes"
-depends = ["build-all", "validate"]
+# `validate` already depends on `build-all`, so listing it here is enough to
+# order build → validate → report without racing.
+depends = ["validate"]
 run = """
 #!/usr/bin/env bash
 PROGRAMS="hello_world pi_approx zlib sqlite_highlight"

@@ -1790,6 +1790,11 @@ impl WirInstr {
             | Self::ArrayGet { result_ty, .. }
             | Self::ArrayGetS { result_ty, .. }
             | Self::ArrayGetU { result_ty, .. } => result_ty.is_nonnull_ref(),
+            // A non-nullable `ref.cast` yields `(ref $T)` (or traps), so the
+            // value is statically non-null.
+            Self::RefCast {
+                nullable: false, ..
+            } => true,
             _ => matches!(
                 self,
                 Self::StructNew { .. }

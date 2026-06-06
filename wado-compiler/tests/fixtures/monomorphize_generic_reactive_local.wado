@@ -1,0 +1,18 @@
+// A generic function with a `reactive let` binding whose value type is the
+// type parameter `T`. Monomorphization must substitute `T` through the
+// reactive local just like any other local. This pins that generic reactive
+// locals instantiate correctly for multiple concrete types.
+
+fn identity_reactive<T: Eq>(x: T) -> T {
+    reactive let r = x;
+    return r;
+}
+
+test "generic reactive local monomorphizes per concrete type" {
+    assert identity_reactive(7) == 7;
+    assert identity_reactive("hi") == "hi";
+    assert identity_reactive(true) == true;
+}
+
+__DATA__
+{"test": {}}

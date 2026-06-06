@@ -1,0 +1,406 @@
+use { Instant, ZonedDateTime } from "core:temporal";
+use { to_string, from_string } from "core:json";
+
+test "Instant construction and field access" {
+    let i = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    assert i.seconds == 1_700_000_000;
+    assert i.nanoseconds == 123_456_789;
+}
+
+test "Instant auto-derives Eq" {
+    let a = Instant { seconds: 5, nanoseconds: 7 };
+    let b = Instant { seconds: 5, nanoseconds: 7 };
+    let c = Instant { seconds: 5, nanoseconds: 8 };
+    assert a == b;
+    assert a != c;
+}
+
+test "Instant Ord is chronological, including before the epoch" {
+    // One nanosecond before the epoch is { -1, 999_999_999 }; incrementing
+    // nanoseconds always moves forward in time.
+    let one_ns_before = Instant { seconds: -1, nanoseconds: 999_999_999 };
+    let one_sec_before = Instant { seconds: -1, nanoseconds: 0 };
+    let epoch = Instant { seconds: 0, nanoseconds: 0 };
+    assert one_sec_before < one_ns_before;
+    assert one_ns_before < epoch;
+}
+
+test "Instant sorts chronologically" {
+    let mut xs: List<Instant> = [
+        Instant { seconds: 1, nanoseconds: 0 },
+        Instant { seconds: -1, nanoseconds: 999_999_999 },
+        Instant { seconds: 0, nanoseconds: 0 },
+        Instant { seconds: -1, nanoseconds: 0 },
+    ];
+    xs.sort();
+    assert xs[0] == Instant { seconds: -1, nanoseconds: 0 };
+    assert xs[1] == Instant { seconds: -1, nanoseconds: 999_999_999 };
+    assert xs[2] == Instant { seconds: 0, nanoseconds: 0 };
+    assert xs[3] == Instant { seconds: 1, nanoseconds: 0 };
+}
+
+test "Instant auto-derives Inspect" {
+    let i = Instant { seconds: 5, nanoseconds: 7 };
+    assert `{i:?}` == "Instant { seconds: 5, nanoseconds: 7 }";
+}
+
+test "ZonedDateTime construction and nested field access" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 1_700_000_000, nanoseconds: 0 },
+        time_zone: "America/New_York",
+    };
+    assert zdt.instant.seconds == 1_700_000_000;
+    assert zdt.time_zone == "America/New_York";
+}
+
+test "ZonedDateTime accepts a fixed UTC offset as the zone" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 0, nanoseconds: 0 },
+        time_zone: "+09:00",
+    };
+    assert zdt.time_zone == "+09:00";
+}
+
+test "ZonedDateTime auto-derives Eq" {
+    let i = Instant { seconds: 0, nanoseconds: 0 };
+    let a = ZonedDateTime { instant: i, time_zone: "UTC" };
+    let b = ZonedDateTime { instant: i, time_zone: "UTC" };
+    let c = ZonedDateTime { instant: i, time_zone: "Asia/Tokyo" };
+    assert a == b;
+    assert a != c;
+}
+
+test "ZonedDateTime Ord compares instant first, then time zone" {
+    let earlier = Instant { seconds: 0, nanoseconds: 0 };
+    let later = Instant { seconds: 1, nanoseconds: 0 };
+
+    // Different instants order by instant regardless of zone.
+    let a = ZonedDateTime { instant: earlier, time_zone: "UTC" };
+    let b = ZonedDateTime { instant: later, time_zone: "Asia/Tokyo" };
+    assert a < b;
+
+    // Same instant orders by time zone lexically ("Asia/Tokyo" < "UTC").
+    let c = ZonedDateTime { instant: earlier, time_zone: "Asia/Tokyo" };
+    let d = ZonedDateTime { instant: earlier, time_zone: "UTC" };
+    assert c < d;
+}
+
+test "Instant Display renders the epoch in UTC, whole seconds by default" {
+    let epoch = Instant { seconds: 0, nanoseconds: 0 };
+    assert `{epoch}` == "1970-01-01T00:00:00Z";
+
+    let t = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    // No precision: whole seconds, sub-second part dropped.
+    assert `{t}` == "2023-11-14T22:13:20Z";
+}
+
+test "Instant DisplayAlt defaults to milliseconds" {
+    let t = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    assert `{t:#}` == "2023-11-14T22:13:20.123Z";
+}
+
+test "Instant Display precision selects sub-second digits, truncating" {
+    let t = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    assert `{t:.0}` == "2023-11-14T22:13:20Z";
+    assert `{t:.3}` == "2023-11-14T22:13:20.123Z";
+    assert `{t:.6}` == "2023-11-14T22:13:20.123456Z";
+    assert `{t:.9}` == "2023-11-14T22:13:20.123456789Z";
+}
+
+test "Instant Display pads sub-second digits with leading zeros" {
+    let t = Instant { seconds: 0, nanoseconds: 5 };
+    assert `{t:.9}` == "1970-01-01T00:00:00.000000005Z";
+    assert `{t:.3}` == "1970-01-01T00:00:00.000Z";
+}
+
+test "Instant Display handles instants before the epoch" {
+    // One nanosecond before the epoch.
+    let t = Instant { seconds: -1, nanoseconds: 999_999_999 };
+    assert `{t}` == "1969-12-31T23:59:59Z";
+    assert `{t:.9}` == "1969-12-31T23:59:59.999999999Z";
+}
+
+test "ZonedDateTime Display applies a fixed positive offset" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 1_700_000_000, nanoseconds: 0 },
+        time_zone: "+09:00",
+    };
+    // 22:13:20Z + 09:00 rolls over to the next civil day.
+    assert `{zdt}` == "2023-11-15T07:13:20+09:00";
+}
+
+test "ZonedDateTime Display applies a fixed negative offset" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 1_700_000_000, nanoseconds: 0 },
+        time_zone: "-05:00",
+    };
+    assert `{zdt}` == "2023-11-14T17:13:20-05:00";
+}
+
+test "ZonedDateTime Display renders zero offset as Z" {
+    let i = Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+    assert `{ZonedDateTime { instant: i, time_zone: "Z" }}` == "2023-11-14T22:13:20Z";
+    assert `{ZonedDateTime { instant: i, time_zone: "UTC" }}` == "2023-11-14T22:13:20Z";
+}
+
+#[expect_trap]
+test "ZonedDateTime Display traps on an IANA zone name" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 1_700_000_000, nanoseconds: 0 },
+        time_zone: "America/New_York",
+    };
+    // Resolving an IANA offset needs a tz database this MVP does not bundle.
+    let _ = `{zdt}`;
+}
+
+test "ZonedDateTime exposes clock-field accessors" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 },
+        time_zone: "UTC",
+    };
+    assert zdt.year() == 2023;
+    assert zdt.month() == 11;
+    assert zdt.day() == 14;
+    assert zdt.hour() == 22;
+    assert zdt.minute() == 13;
+    assert zdt.second() == 20;
+    assert zdt.millisecond() == 123;
+    assert zdt.microsecond() == 456;
+    assert zdt.nanosecond() == 789;
+}
+
+test "ZonedDateTime accessors apply the fixed offset" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 1_700_000_000, nanoseconds: 0 },
+        time_zone: "+09:00",
+    };
+    // 2023-11-14T22:13:20Z is 2023-11-15T07:13:20+09:00.
+    assert zdt.year() == 2023;
+    assert zdt.month() == 11;
+    assert zdt.day() == 15;
+    assert zdt.hour() == 7;
+    assert zdt.day_of_week() == 3;
+}
+
+test "ZonedDateTime calendar-derived accessors" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 1_700_000_000, nanoseconds: 0 },
+        time_zone: "UTC",
+    };
+    assert zdt.day_of_week() == 2;
+    assert zdt.day_of_year() == 318;
+    assert zdt.days_in_month() == 30;
+    assert zdt.days_in_year() == 365;
+    assert !zdt.in_leap_year();
+    assert zdt.months_in_year() == 12;
+}
+
+test "ZonedDateTime accessors handle leap years" {
+    // 2024-01-01T00:00:00Z (a Monday).
+    let jan1 = ZonedDateTime {
+        instant: Instant { seconds: 1_704_067_200, nanoseconds: 0 },
+        time_zone: "UTC",
+    };
+    assert jan1.year() == 2024;
+    assert jan1.month() == 1;
+    assert jan1.day() == 1;
+    assert jan1.day_of_week() == 1;
+    assert jan1.in_leap_year();
+    assert jan1.days_in_year() == 366;
+
+    // 2024-02-29T00:00:00Z exists only in a leap year.
+    let leap_day = ZonedDateTime {
+        instant: Instant { seconds: 1_709_164_800, nanoseconds: 0 },
+        time_zone: "UTC",
+    };
+    assert leap_day.month() == 2;
+    assert leap_day.day() == 29;
+    assert leap_day.days_in_month() == 29;
+    assert leap_day.day_of_year() == 60;
+}
+
+test "ZonedDateTime accessors handle instants before the epoch" {
+    // 1969-12-31T23:59:59Z (a Wednesday).
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: -1, nanoseconds: 0 },
+        time_zone: "UTC",
+    };
+    assert zdt.year() == 1969;
+    assert zdt.month() == 12;
+    assert zdt.day() == 31;
+    assert zdt.hour() == 23;
+    assert zdt.minute() == 59;
+    assert zdt.second() == 59;
+    assert zdt.day_of_week() == 3;
+}
+
+#[expect_trap]
+test "ZonedDateTime accessors trap on an IANA zone name" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 0, nanoseconds: 0 },
+        time_zone: "Asia/Tokyo",
+    };
+    let _ = zdt.year();
+}
+
+#[expect_trap]
+test "ZonedDateTime::months_in_year also traps on an IANA zone name" {
+    let zdt = ZonedDateTime {
+        instant: Instant { seconds: 0, nanoseconds: 0 },
+        time_zone: "Asia/Tokyo",
+    };
+    let _ = zdt.months_in_year();
+}
+
+test "Instant exposes epoch convenience accessors" {
+    let t = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    assert t.epoch_milliseconds() == 1_700_000_000_123;
+    assert t.epoch_nanoseconds() == 1_700_000_000_123_456_789;
+
+    // One nanosecond before the epoch.
+    let before = Instant { seconds: -1, nanoseconds: 999_999_999 };
+    assert before.epoch_milliseconds() == -1;
+    assert before.epoch_nanoseconds() == -1;
+}
+
+test "Instant::new normalizes the sub-second part" {
+    // Carry an overflowing nanosecond count into seconds.
+    assert Instant::new(10, 2_500_000_000) == Instant { seconds: 12, nanoseconds: 500_000_000 };
+    // Borrow for a negative nanosecond count.
+    assert Instant::new(0, -1) == Instant { seconds: -1, nanoseconds: 999_999_999 };
+    assert Instant::new(5, 0) == Instant { seconds: 5, nanoseconds: 0 };
+}
+
+test "Instant epoch constructors invert the epoch accessors" {
+    assert Instant::from_epoch_seconds(1_700_000_000) == Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+
+    let from_ms = Instant::from_epoch_milliseconds(1_700_000_000_123);
+    assert from_ms == Instant { seconds: 1_700_000_000, nanoseconds: 123_000_000 };
+    assert from_ms.epoch_milliseconds() == 1_700_000_000_123;
+
+    let from_ns = Instant::from_epoch_nanoseconds(1_700_000_000_123_456_789);
+    assert from_ns == Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    assert from_ns.epoch_nanoseconds() == 1_700_000_000_123_456_789;
+
+    // Negative milliseconds floor toward the epoch's past.
+    assert Instant::from_epoch_milliseconds(-1) == Instant { seconds: -1, nanoseconds: 999_000_000 };
+}
+
+test "Instant::from_unix_seconds splits fractional seconds" {
+    assert Instant::from_unix_seconds(1_700_000_000.5) == Instant { seconds: 1_700_000_000, nanoseconds: 500_000_000 };
+    assert Instant::from_unix_seconds(0.0) == Instant { seconds: 0, nanoseconds: 0 };
+    // Half a second before the epoch.
+    assert Instant::from_unix_seconds(-0.5) == Instant { seconds: -1, nanoseconds: 500_000_000 };
+}
+
+test "ZonedDateTime::parse_rfc3339 parses a UTC timestamp" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20Z").unwrap();
+    assert zdt.instant == Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+    assert zdt.year() == 2023;
+    assert zdt.month() == 11;
+    assert zdt.day() == 14;
+    assert zdt.hour() == 22;
+    assert zdt.minute() == 13;
+    assert zdt.second() == 20;
+    assert zdt.time_zone == "Z";
+}
+
+test "ZonedDateTime::parse_rfc3339 preserves a fixed offset" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-15T07:13:20+09:00").unwrap();
+    // Same instant as 2023-11-14T22:13:20Z.
+    assert zdt.instant == Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+    assert zdt.time_zone == "+09:00";
+    // Local wall-clock fields reflect the offset.
+    assert zdt.day() == 15;
+    assert zdt.hour() == 7;
+}
+
+test "ZonedDateTime::parse_rfc3339 reads fractional seconds, truncating" {
+    let zdt = ZonedDateTime::parse_rfc3339("1970-01-01T00:00:00.123456789Z").unwrap();
+    assert zdt.instant == Instant { seconds: 0, nanoseconds: 123_456_789 };
+
+    // A short fraction is padded; an over-long one is truncated.
+    let half = ZonedDateTime::parse_rfc3339("1970-01-01T00:00:00.5Z").unwrap();
+    assert half.instant == Instant { seconds: 0, nanoseconds: 500_000_000 };
+    let over = ZonedDateTime::parse_rfc3339("1970-01-01T00:00:00.1234567899Z").unwrap();
+    assert over.instant == Instant { seconds: 0, nanoseconds: 123_456_789 };
+}
+
+test "ZonedDateTime::parse_rfc3339 accepts a negative offset and lowercase separators" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-14t17:13:20-05:00").unwrap();
+    assert zdt.instant == Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+    assert zdt.time_zone == "-05:00";
+}
+
+test "ZonedDateTime::parse_rfc3339 round-trips through Display" {
+    let original = "2023-11-15T07:13:20+09:00";
+    let zdt = ZonedDateTime::parse_rfc3339(original).unwrap();
+    assert `{zdt}` == original;
+
+    // A negative pre-epoch instant also round-trips.
+    let pre = ZonedDateTime::parse_rfc3339("1969-12-31T23:59:59Z").unwrap();
+    assert pre.instant == Instant { seconds: -1, nanoseconds: 0 };
+    assert `{pre}` == "1969-12-31T23:59:59Z";
+}
+
+test "ZonedDateTime::parse_rfc3339 parses extended ISO 8601 years" {
+    let big = ZonedDateTime::parse_rfc3339("+012023-11-14T22:13:20Z").unwrap();
+    assert big.year() == 12023;
+
+    let neg = ZonedDateTime::parse_rfc3339("-000001-01-01T00:00:00Z").unwrap();
+    assert neg.year() == -1;
+}
+
+test "ZonedDateTime::parse_rfc3339 returns Err without an offset or on malformed input" {
+    assert ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("2023/11/14 22:13:20Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("not-a-timestamp") matches { Err(_) };
+}
+
+test "ZonedDateTime::parse_rfc3339 range-checks the calendar fields" {
+    assert ZonedDateTime::parse_rfc3339("2023-13-01T00:00:00Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("2023-02-30T00:00:00Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("2023-01-01T24:00:00Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("2023-01-01T00:60:00Z") matches { Err(_) };
+    assert ZonedDateTime::parse_rfc3339("2023-01-01T00:00:00+24:00") matches { Err(_) };
+
+    // Feb 29 is valid only in a leap year.
+    assert ZonedDateTime::parse_rfc3339("2024-02-29T00:00:00Z") matches { Ok(_) };
+    assert ZonedDateTime::parse_rfc3339("2023-02-29T00:00:00Z") matches { Err(_) };
+}
+
+test "Instant serializes as an RFC 3339 string with minimal precision" {
+    let whole = Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+    assert to_string(&whole) matches { Ok(s) && s == `"2023-11-14T22:13:20Z"` };
+
+    let millis = Instant { seconds: 1_700_000_000, nanoseconds: 123_000_000 };
+    assert to_string(&millis) matches { Ok(s) && s == `"2023-11-14T22:13:20.123Z"` };
+
+    let nanos = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    assert to_string(&nanos) matches { Ok(s) && s == `"2023-11-14T22:13:20.123456789Z"` };
+}
+
+test "Instant round-trips through JSON serde" {
+    let t = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    let json = to_string(&t).unwrap();
+    let back = from_string::<Instant>(json).unwrap();
+    assert back == t;
+}
+
+test "ZonedDateTime round-trips through JSON serde, preserving the offset" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-15T07:13:20.5+09:00").unwrap();
+    let json = to_string(&zdt).unwrap();
+    assert json == `"2023-11-15T07:13:20.500+09:00"`;
+    let back = from_string::<ZonedDateTime>(json).unwrap();
+    assert back == zdt;
+}
+
+test "Instant deserializes from any offset, normalizing to the instant" {
+    // A non-UTC string still decodes to the correct absolute Instant.
+    let t = from_string::<Instant>(`"2023-11-15T07:13:20+09:00"`).unwrap();
+    assert t == Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+}
+
+test "Deserializing a malformed timestamp surfaces a DeserializeError" {
+    assert from_string::<Instant>(`"2023-13-01T00:00:00Z"`) matches { Err(_) };
+}

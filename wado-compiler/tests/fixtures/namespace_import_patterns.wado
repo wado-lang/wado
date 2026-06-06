@@ -1,0 +1,33 @@
+// Namespace-qualified patterns: variant cases (`ns::Case`), enum cases, and
+// struct destructuring (`ns::Struct { ... }`).
+use h from "./sub/ns_robust_helper.wado";
+
+test "namespace variant pattern" {
+    let s = h::Shape::Circle(2.5);
+    let r = match s {
+        h::Circle(radius) => radius,
+        h::Square(side) => side,
+    };
+    assert r == 2.5;
+    assert s matches { h::Circle(_) };
+}
+
+test "namespace enum pattern" {
+    let c = h::Color::Green;
+    let n = match c {
+        h::Red => 0,
+        h::Green => 1,
+        h::Blue => 2,
+    };
+    assert n == 1;
+}
+
+test "namespace struct destructuring" {
+    let p = h::Point::new(5, 6);
+    let h::Point { x, y } = p;
+    assert x == 5;
+    assert y == 6;
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,56 @@
+// Regression: a closure DEFINED INSIDE a variadic for-of body, with its own
+// internal `let`, must not have its closure-scoped locals collected or
+// reallocated by the per-iteration body reconciliation. Closure bodies allocate
+// locals in a separate index namespace; descending into them while reconciling
+// the enclosing function's frame corrupts unrelated slots (silently produced a
+// wrong result before the collectors stopped at closure boundaries).
+
+trait Foo { fn val(&self) -> i32; }
+impl Foo for i32 { fn val(&self) -> i32 { return *self; } }
+impl Foo for String { fn val(&self) -> i32 { return 100; } }
+impl Foo for bool { fn val(&self) -> i32 { return 1; } }
+
+fn sum_with_closure<..T: Foo>(items: [..T]) -> i32 {
+    let mut acc = 0;
+    for let v of items {
+        let g = |n: i32| {
+            let y = n + 1;
+            return y;
+        };
+        acc = acc + g(v.val());
+    }
+    return acc;
+}
+
+// A closure that *captures* the for-of binding `v`, whose type differs per
+// iteration. The capture's `outer_index` must follow the per-iteration rename
+// of the binding (it used to keep pointing at the stale original binding local,
+// so the closure captured a value of the wrong type and the WIR pipeline
+// rejected it: "expected i32, found (ref ...)").
+fn sum_capturing<..T: Foo>(items: [..T]) -> i32 {
+    let mut acc = 0;
+    for let v of items {
+        let f = || {
+            let x = v;
+            return x.val();
+        };
+        acc = acc + f();
+    }
+    return acc;
+}
+
+test "closure with internal let inside variadic for-of" {
+    // 3 elements; each adds g(elem.val()) = elem.val() + 1.
+    let homo = [10, 20, 30];          // (10+1)+(20+1)+(30+1) = 63
+    assert sum_with_closure(homo) == 63;
+    let het = [5, "x"];               // (5+1)+(100+1) = 107
+    assert sum_with_closure(het) == 107;
+}
+
+test "closure capturing the per-iteration binding inside variadic for-of" {
+    assert sum_capturing([10, 20, 30]) == 60;       // 10+20+30
+    assert sum_capturing([5, "x", true]) == 106;    // 5+100+1
+}
+
+__DATA__
+{"test": {}}

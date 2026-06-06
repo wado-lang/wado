@@ -1,0 +1,23 @@
+// Negative test: `with E => h do` requires the handler value `h` to implement
+// effect `E`. Here `Greeting` is a real effect, but the handler `NotImpl` has
+// no `impl Greeting for NotImpl` block, so there is nothing to dispatch the
+// effect's operations to. The elaborator reports `HandlerEffectNotImplemented`
+// rather than emitting a handler that calls into a missing method.
+
+interface Greeting {
+    fn hello() -> i32;
+}
+
+struct NotImpl {
+    n: i32,
+}
+
+export fn run() {
+    let h = NotImpl { n: 0 };
+    with Greeting => &h do {
+        let _ = Greeting::hello();
+    }
+}
+
+__DATA__
+{"compile_error": "handler value of type 'NotImpl' does not implement interface 'Greeting'"}

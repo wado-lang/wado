@@ -2386,8 +2386,28 @@ fn walk_nested_loop(
     // Post-loop state: JOIN(entry_states, body_exit_pre_sync). The
     // outer scope sees the conservative over-approximation; subsequent
     // scalar reads emit re-reads when break could leave `FieldOnly`.
+    //
+    // A nested loop's post-state can never soundly be `ScalarOnly`: the
+    // zero-iteration path exits at `entry_states`, which the pre-recurse
+    // commit above forced to `{Both, FieldOnly}` (field canonical, never
+    // scalar-only). Every other exit also leaves the field canonical —
+    // the body-end back-edge sync drives `body_exit` back to `entry`, and
+    // `commit_scalar_for_escape` writes the scalar back before any
+    // `break`/`return`. So if the linear `body_exit_pre_sync` pushes the
+    // JOIN to `ScalarOnly` (the `{ScalarOnly, FieldOnly}` branch-join
+    // heuristic, sound only when each arm gets convergence sync — which
+    // the un-syncable zero-iteration path does not), the scalar may in
+    // fact be stale at runtime. Demote to `FieldOnly` so the next scalar
+    // read re-reads from the canonical field instead of trusting a stale
+    // `__hfs`. (Regression: a `&mut self` push run followed by an empty
+    // inner loop, e.g. `gale dump`'s `render_follow_variants`, otherwise
+    // wrote the stale length back and dropped the pushed bytes.)
     for i in 0..states.len() {
-        states[i] = pick_join_target_for_candidate(&[entry_states[i], body_exit_pre_sync[i]]);
+        let joined = pick_join_target_for_candidate(&[entry_states[i], body_exit_pre_sync[i]]);
+        states[i] = match joined {
+            CanonState::ScalarOnly => CanonState::FieldOnly,
+            other => other,
+        };
     }
 }
 

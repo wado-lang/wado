@@ -116,8 +116,7 @@ fn "wado-compiler/tests/fixtures/resource_method_instance.wado/run"() with Stdou
     let family: "wasi:sockets/types.wado//enum:IpAddressFamily";
     let result: ref "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";
     let socket: i32;
-    family = 0;
-    result = "wado-compiler/tests/fixtures/resource_method_instance.wado/__cm_binding__TcpSocket_create"(family);
+    result = "wado-compiler/tests/fixtures/resource_method_instance.wado/__cm_binding__TcpSocket_create"(local.tee family(0));
     if ref.test "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(result) {
         socket = ref.cast "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(result).payload_0;
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Resource extracted from Result"), used: 30 });
@@ -287,8 +286,7 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
     let ptr: i32;
     let raw_len: i32;
     let result: i32;
-    packed = "core:internal/cm_lower_list_u8"(data, len);
-    ptr = builtin::i32_wrap_i64(packed);
+    ptr = builtin::i32_wrap_i64(local.tee packed("core:internal/cm_lower_list_u8"(data, len)));
     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
     result = "wasi/stream-write"(handle, ptr, raw_len);
     if result == -1 {

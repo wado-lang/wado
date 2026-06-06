@@ -20,7 +20,47 @@ pub variant PredictionNode {
     Leaf(i32),
     Dispatch(PredictionDispatch),
     Consume(ConsumeNode),
-    Ambiguous(List<i32>),
+    Ambiguous(AmbiguousNode),
+}
+
+/// Why static prediction could not isolate a single alternative at an
+/// `Ambiguous` leaf. Surfaced by `gale dump` so an ATN-class gap can be
+/// triaged without re-deriving the halt condition by hand. The codegen
+/// ignores it — every reason lowers to the same longest-match scan
+/// tournament — but the label tells a human which edge of the static
+/// path was hit.
+pub enum AmbiguityReason {
+    /// Lookahead reached the static depth ceiling (k = max_depth) without
+    /// isolating one alt: genuinely ATN-class, needs unbounded lookahead.
+    MaxDepth,
+    /// The SLL config set exceeded the explosion guard (>200 configs), so
+    /// the simulator bailed before resolving.
+    ConfigExplosion,
+    /// A multi-token `RuleRef` prefix shared by the alts could not be
+    /// expanded statically — the disambiguating tokens are hidden inside
+    /// the sub-rule (the `DropLoopEntryBranchInLRRule_4` shape).
+    OpaqueRuleRef,
+    /// One alt ends (returns to the caller) while another continues past
+    /// the same lookahead. A token-led branch is unsafe because the
+    /// continuing alt's body may still fail; ANTLR4 resolves it with
+    /// adaptive prediction.
+    AtEndConflict,
+    /// Two or more alts end simultaneously at this position — true
+    /// ambiguity with no remaining input to separate them.
+    MultiAtEnd,
+    /// No alternative survived to this position (degenerate fall-through).
+    NoViableAlt,
+}
+
+pub struct AmbiguousNode {
+    pub alts: List<i32>,
+    pub reason: AmbiguityReason,
+}
+
+/// Build an `Ambiguous` node carrying its halt reason. Keeps the many
+/// construction sites in `build_sll_node` terse and uniform.
+fn ambiguous(alts: List<i32>, reason: AmbiguityReason) -> PredictionNode {
+    return PredictionNode::Ambiguous(AmbiguousNode { alts, reason });
 }
 
 pub struct ConsumeNode {
@@ -76,7 +116,9 @@ fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
             if prediction_contains_ambiguous(&child) {
                 let mut indices: List<i32> = [];
                 prediction_collect_all_indices(&child, &mut indices);
-                PredictionNode::Ambiguous(indices);
+                // Preserve the halt reason from the collapsed subtree: the
+                // consume itself isn't the cause, the inner Ambiguous is.
+                ambiguous(indices, prediction_first_ambiguous_reason(&child));
             } else {
                 PredictionNode::Consume(ConsumeNode { element: c.element, child });
             }
@@ -113,8 +155,8 @@ fn prediction_contains_ambiguous(node: &PredictionNode) -> bool {
 
 fn prediction_collect_all_indices(node: &PredictionNode, out: &mut List<i32>) {
     match *node {
-        Ambiguous(indices) => {
-            for let i of &indices {
+        Ambiguous(a) => {
+            for let i of &a.alts {
                 if !out.iter().any(|x: i32| x == *i) {
                     out.push(*i);
                 }
@@ -132,6 +174,28 @@ fn prediction_collect_all_indices(node: &PredictionNode, out: &mut List<i32>) {
             }
         },
     }
+}
+
+/// First `AmbiguityReason` found in a pre-order walk. Used when a
+/// Consume → Ambiguous chain is collapsed: the cause is the deepest
+/// Ambiguous, not the consume that fed it. Falls back to `NoViableAlt`
+/// only if there is no Ambiguous at all (the caller has already checked
+/// `prediction_contains_ambiguous`, so that branch is unreachable in
+/// practice).
+fn prediction_first_ambiguous_reason(node: &PredictionNode) -> AmbiguityReason {
+    return match *node {
+        Ambiguous(a) => a.reason,
+        Consume(c) => prediction_first_ambiguous_reason(&c.child),
+        Dispatch(d) => {
+            for let b of &d.branches {
+                if prediction_contains_ambiguous(&b.child) {
+                    return prediction_first_ambiguous_reason(&b.child);
+                }
+            }
+            AmbiguityReason::NoViableAlt;
+        },
+        Leaf(_) => AmbiguityReason::NoViableAlt,
+    };
 }
 
 
@@ -527,7 +591,7 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
     // Guard: if too many configs, fall back to Ambiguous (codegen scan-dispatches) to avoid explosion.
     if closed.len() > 200 {
         let alts = sll_unique_alts(&closed);
-        return PredictionNode::Ambiguous(alts);
+        return ambiguous(alts, AmbiguityReason::ConfigExplosion);
     }
 
     // Check unique alternatives.
@@ -535,8 +599,11 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
     if alts.len() == 1 {
         return PredictionNode::Leaf(alts[0]);
     }
-    if alts.len() == 0 || depth >= max_depth {
-        return PredictionNode::Ambiguous(alts);
+    if alts.len() == 0 {
+        return ambiguous(alts, AmbiguityReason::NoViableAlt);
+    }
+    if depth >= max_depth {
+        return ambiguous(alts, AmbiguityReason::MaxDepth);
     }
 
     // Check for common prefix: if all configs are at a terminal element
@@ -620,7 +687,7 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
             if let Some(node) = expanded {
                 node;
             } else {
-                PredictionNode::Ambiguous(next_alts);
+                ambiguous(next_alts, AmbiguityReason::OpaqueRuleRef);
             }
         } else {
             // Still ambiguous: recurse with deeper lookahead.
@@ -661,14 +728,19 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
     }
 
     if at_end_alts.len() >= 1 && branches.len() >= 1 {
-        return PredictionNode::Ambiguous(alts);
+        return ambiguous(alts, AmbiguityReason::AtEndConflict);
     }
 
     if branches.len() == 0 {
         if at_end_alts.len() == 1 {
             return PredictionNode::Leaf(at_end_alts[0]);
         }
-        return PredictionNode::Ambiguous(alts);
+        let reason = if at_end_alts.len() >= 2 {
+            AmbiguityReason::MultiAtEnd;
+        } else {
+            AmbiguityReason::NoViableAlt;
+        };
+        return ambiguous(alts, reason);
     }
     return PredictionNode::Dispatch(PredictionDispatch { depth, branches });
 }
@@ -779,7 +851,7 @@ fn try_expand_opaque(original_configs: &List<SllConfig>, token: &String, non_opa
             has_improvement = true;
             PredictionNode::Leaf(token_alts[0]);
         } else {
-            PredictionNode::Ambiguous(token_alts.sorted());
+            ambiguous(token_alts.sorted(), AmbiguityReason::OpaqueRuleRef);
         };
         let idx = find_merge_branch(&branches, &child);
         if idx >= 0 {
@@ -864,11 +936,16 @@ fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
     return match [*a, *b] {
         [Leaf(ai), Leaf(bi)] => ai == bi,
         [Ambiguous(aa), Ambiguous(ba)] => {
-            if aa.len() != ba.len() {
+            // Compare only the alt set, not the halt reason: dispatch
+            // branch merging (`find_merge_branch`) must keep folding
+            // same-alt Ambiguous children together regardless of which
+            // edge produced them, or the tree shape — and the codegen
+            // that reads it — would change.
+            if aa.alts.len() != ba.alts.len() {
                 return false;
             }
-            for let mut i = 0; i < aa.len(); i += 1 {
-                if aa[i] != ba[i] {
+            for let mut i = 0; i < aa.alts.len(); i += 1 {
+                if aa.alts[i] != ba.alts[i] {
                     return false;
                 }
             }
