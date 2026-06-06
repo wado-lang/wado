@@ -1125,13 +1125,6 @@ fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, stru
     let outer_follow: List<String> = [];
     for let mut i = 1; i < alt.elements.len(); i += 1 {
         let [elem_follow, position_mask] = ctx.compute_call_site_follow_and_mask(&alt.elements, i, variant_mask);
-        let elem_k_prefix = ctx.compute_call_site_k_prefix_mask(
-            &alt.elements,
-            i,
-            FOLLOW_VARIANT_MAX_K,
-            variant_k_prefix_mask,
-        );
-        let elem_k_prefix_position_mask = ctx.compute_k_prefix_position_mask(&alt.elements, i, variant_k_prefix_mask);
         let elem_follow_arg = compute_follow_arg(ctx, &alt.elements, i);
         let elem_gate = compute_gate_caller_follow(ctx, &alt.elements, i);
         let mut op = lower_op(
@@ -1141,11 +1134,11 @@ fn lower_lr_alt_suffix(rule: &ParserRule, alt_idx: i32, case_name: &String, stru
             ctx,
             &mut group_counter,
             &elem_follow,
-            &elem_k_prefix,
+            &empty_k_prefix(),
             variant_mask,
             variant_k_prefix_mask,
             &position_mask,
-            &elem_k_prefix_position_mask,
+            &empty_k_prefix(),
             elem_follow_arg,
             elem_gate,
         );
@@ -1938,12 +1931,6 @@ fn lower_alt_scan_element(alt_elements: &List<Element>, i: i32, ctx: &mut GenCon
     // scan-side would intern a separate variant with an empty
     // K-prefix mask and the parse-side variant body's references to
     // `scan_X__follow_<id>_*` would dangle.
-    let elem_k_prefix = ctx.compute_call_site_k_prefix_mask(
-        alt_elements,
-        i,
-        FOLLOW_VARIANT_MAX_K,
-        variant_k_prefix_mask,
-    );
     // K-prefix position mask: variant's k_prefix_mask propagates into
     // this element when the suffix at i+1 is deep-nullable, mirroring
     // the parse-side `compute_k_prefix_position_mask`. Without this,
@@ -1951,17 +1938,16 @@ fn lower_alt_scan_element(alt_elements: &List<Element>, i: i32, ctx: &mut GenCon
     // K-prefix gate at `gen_scan_op_repeat` is never emitted — the
     // scan tournament then over-counts the iter and rejects the alt
     // that parse-side's gated variant body would have accepted.
-    let elem_k_prefix_position_mask = ctx.compute_k_prefix_position_mask(alt_elements, i, variant_k_prefix_mask);
     let elem_follow_arg = compute_follow_arg(ctx, alt_elements, i);
     let elem_gate = compute_gate_caller_follow(ctx, alt_elements, i);
     let mut se = lower_scan_element(
         &alt_elements[i],
         ctx,
         &elem_follow,
-        &elem_k_prefix,
+        &empty_k_prefix(),
         variant_mask,
         variant_k_prefix_mask,
-        &elem_k_prefix_position_mask,
+        &empty_k_prefix(),
         elem_follow_arg,
         elem_gate,
     );
@@ -2254,13 +2240,6 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
         let [elem_follow, position_mask] = ctx.compute_call_site_follow_and_mask(&alt.elements, i, variant_mask);
-        let elem_k_prefix = ctx.compute_call_site_k_prefix_mask(
-            &alt.elements,
-            i,
-            FOLLOW_VARIANT_MAX_K,
-            variant_k_prefix_mask,
-        );
-        let elem_k_prefix_position_mask = ctx.compute_k_prefix_position_mask(&alt.elements, i, variant_k_prefix_mask);
         // Redesign: the runtime FOLLOW argument for a RuleRef at this
         // position, and whether a tail Repeat here gates on the caller's
         // continuation. Computed against the alt's surface elements,
@@ -2275,11 +2254,11 @@ fn lower_alt_body(alt: &Alternative, idx: i32, rule: &ParserRule, ctx: &mut GenC
             ctx,
             &mut group_counter,
             &elem_follow,
-            &elem_k_prefix,
+            &empty_k_prefix(),
             variant_mask,
             variant_k_prefix_mask,
             &position_mask,
-            &elem_k_prefix_position_mask,
+            &empty_k_prefix(),
             elem_follow_arg,
             elem_gate,
         );
@@ -2598,12 +2577,6 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut List<[String, i32
         // computed from the inner alt's suffix — the outer position's
         // mask doesn't carry through (the inner sits at a different
         // input depth than the outer alt position).
-        let elem_k_prefix = ctx.compute_call_site_k_prefix_mask(
-            &alt.elements,
-            i,
-            FOLLOW_VARIANT_MAX_K,
-            variant_k_prefix_mask,
-        );
         // Inner elements inherit the outer position's mask — `(a? b)?`
         // inside `outer ... (a? b)? rest` reads the same mask emit used
         // to install on `ctx.current_follow_mask` at the OUTER position.
@@ -2616,7 +2589,7 @@ fn lower_single_alt_group(alt: &Alternative, name_counts: &mut List<[String, i32
             ctx,
             group_counter,
             &elem_follow,
-            &elem_k_prefix,
+            &empty_k_prefix(),
             variant_mask,
             variant_k_prefix_mask,
             outer_position_mask,
@@ -2972,12 +2945,6 @@ fn lower_general_group(alts: &List<Alternative>, name_counts: &mut List<[String,
             // Fresh per-position K-prefix from the inner alt's suffix —
             // the outer K-prefix doesn't propagate into per-alt inner
             // positions (each alt's inner sits at its own input depth).
-            let elem_k_prefix = ctx.compute_call_site_k_prefix_mask(
-                &alt.elements,
-                ei,
-                FOLLOW_VARIANT_MAX_K,
-                variant_k_prefix_mask,
-            );
             // See `lower_single_alt_group` — inner elements inherit
             // the outer position's mask, mirroring emit's inner-walker
             // semantics on the retired `ctx.current_follow_mask`.
@@ -2990,7 +2957,7 @@ fn lower_general_group(alts: &List<Alternative>, name_counts: &mut List<[String,
                 ctx,
                 group_counter,
                 &elem_follow,
-                &elem_k_prefix,
+                &empty_k_prefix(),
                 variant_mask,
                 variant_k_prefix_mask,
                 outer_position_mask,
