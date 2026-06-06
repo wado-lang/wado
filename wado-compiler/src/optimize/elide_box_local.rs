@@ -319,8 +319,7 @@ fn describe_candidate(
     }
     let inner_value = fields[0].value;
     let field_name = s.field_names.iter().next().unwrap().clone();
-    // ModRef is still a tree analysis; run it on the materialized inner subtree.
-    let inner_mr = ModRef::of_expr(&body.to_tree_expr(inner_value));
+    let inner_mr = ModRef::of_expr(body, inner_value);
     Some((local_index, field_name, inner_mr))
 }
 
@@ -361,8 +360,8 @@ fn find_use_site(
             k += 1;
             continue;
         }
-        // The leftmost-walker and ModRef are still tree analyses; run them on
-        // the materialized statement subtree.
+        // The leftmost-walker is still a tree analysis; run it on the
+        // materialized statement subtree. ModRef reads the arena directly.
         let tree = body.to_tree_stmt(stmt);
         if matches!(
             walk_stmt_for_leftmost(&tree, candidate, field_name),
@@ -370,7 +369,7 @@ fn find_use_site(
         ) {
             return Some(k);
         }
-        let int_mr = ModRef::of_stmt(&tree);
+        let int_mr = ModRef::of_stmt(body, stmt);
         if !can_move_past(inner_mr, &int_mr, candidate) {
             return None;
         }
