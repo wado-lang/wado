@@ -11,11 +11,9 @@
 //! (`copy_prop` / `const_fold` / `dce`), which the WIR-level pass cannot.
 
 use crate::hashmap::IndexSet;
-use crate::nir::{NirBlock, NirExpr, NirExprKind, NirStmtKind};
 use crate::nir_arena::{BlockId, ExprId, ExprKind, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::NirRefVisitor;
 
 use super::arena_query;
 
@@ -133,106 +131,4 @@ fn classify(engine: &Engine, stmt: StmtId, stores_aliased: &IndexSet<u32>) -> Ac
 /// alias, or it is read anywhere in the body.
 fn is_kept(engine: &Engine, local: u32, stores_aliased: &IndexSet<u32>) -> bool {
     stores_aliased.contains(&local) || engine.is_local_read(local)
-}
-
-/// Tree-walking read collector: inserts every local that is read, treating a
-/// bare-`Local` `Assign` target as a write (not a read) but recursing into
-/// nested write places (`a.field = …`, `a[i] = …`) and the assigned value.
-/// `&local` / `&mut local` count as reads via the default walk. Kept for the
-/// tree consumers (`dae`); the engine rule above uses `Engine::is_local_read`.
-struct ReadCollector<'a> {
-    kept: &'a mut IndexSet<u32>,
-}
-
-impl NirRefVisitor for ReadCollector<'_> {
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        match &expr.kind {
-            NirExprKind::Local { index, .. } => {
-                self.kept.insert(*index);
-                return;
-            }
-            NirExprKind::Assign { target, value } => {
-                if !matches!(target.kind, NirExprKind::Local { .. }) {
-                    self.visit_expr(target);
-                }
-                self.visit_expr(value);
-                return;
-            }
-            _ => {}
-        }
-        self.walk_expr(expr);
-    }
-}
-
-/// Public helper used by `dae` to collect locals that the function body reads
-/// (or whose addresses escape via captures). Insertion is done by `ReadCollector`.
-pub(super) fn collect_reads_in_block(block: &NirBlock, out: &mut IndexSet<u32>) {
-    let mut collector = ReadCollector { kept: out };
-    collector.visit_block(block);
-}
-
-/// True when `expr` and every sub-expression has no observable effect.
-///
-/// Conservative — calls, global writes, assignments, closure construction,
-/// and control-flow constructs whose branches are themselves impure are
-/// treated as impure. Pure reads (`Local`, `GlobalVarGet`, `FieldAccess`,
-/// `Index`), arithmetic, and reference-taking (`&x` / `&mut x`) are pure
-/// since the *act* of taking a reference does not mutate; only writing
-/// through the resulting reference would, and that shows up as a separate
-/// `Assign` / call. Mirrors the WIR-level `is_side_effect_free` contract.
-pub(super) fn is_pure_expr(expr: &NirExpr) -> bool {
-    match &expr.kind {
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => true,
-        NirExprKind::Binary { left, right, .. } => is_pure_expr(left) && is_pure_expr(right),
-        NirExprKind::Unary { expr: inner, op } => {
-            // `&mut x` is a pure root by itself, but only meaningful when the
-            // resulting reference is used; an unused MutRef has no observable
-            // effect on the local because nothing reads/writes through it.
-            let _ = op;
-            is_pure_expr(inner)
-        }
-        NirExprKind::Cast { expr: inner, .. }
-        | NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::VariantTag { expr: inner }
-        | NirExprKind::VariantTest { expr: inner, .. }
-        | NirExprKind::VariantPayload { expr: inner, .. } => is_pure_expr(inner),
-        NirExprKind::Index { expr: e, index: i } => is_pure_expr(e) && is_pure_expr(i),
-        NirExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| is_pure_expr(&f.value)),
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            elements.iter().all(is_pure_expr)
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            payload.as_ref().is_none_or(|p| is_pure_expr(p))
-        }
-        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => is_pure_block(block),
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            is_pure_expr(condition)
-                && is_pure_block(then_branch)
-                && else_branch.as_ref().is_none_or(is_pure_block)
-        }
-        // Calls, mutations, closures, control-flow exits, and anything that
-        // could suspend are conservatively impure.
-        _ => false,
-    }
-}
-
-fn is_pure_block(block: &NirBlock) -> bool {
-    block.stmts.iter().all(|s| match &s.kind {
-        NirStmtKind::Expr(e) | NirStmtKind::Let { value: e, .. } => is_pure_expr(e),
-        _ => false,
-    })
 }

@@ -154,23 +154,23 @@ The old fixed-point loop and the engine co-exist during the port.
   - Ported so far:
   - [x] `select_lowering` — expr `Rule` (`If` → `builtin::select`).
   - [x] `match_to_switch` — expr `Rule` (dense `Match` → `Switch`);
-  param/global/struct-field defaults reuse it via a wrap-in-`Body`
-  helper.
+        param/global/struct-field defaults reuse it via a wrap-in-`Body`
+        helper.
   - [x] `string_push` — block `Rule` (`push_str("…")` → per-byte `push`).
   - [x] `array_literal` — block `Rule` (builder window → `ArrayLiteral`).
   - [x] `elide_local` — block `Rule` on `is_local_read`.
   - [x] `value_copy_elide` — direct arena walk (single-pass strip).
   - [x] `drve` — direct arena walks (bodies); globals stay tree.
   - Remaining local / whole-function passes: `ref_elim`, `elide_box_local`,
-  `dae`, `cse`, `sroa`, `sroa_param`, `const_object_globalization`,
-  `multi_value_return`, `labeled_block_fusion`, `container_sroa`,
-  `branch_prune`, `condition_implication`, `dce`, `inline`.
+    `dae`, `cse`, `sroa`, `sroa_param`, `const_object_globalization`,
+    `multi_value_return`, `labeled_block_fusion`, `container_sroa`,
+    `branch_prune`, `condition_implication`, `dce`, `inline`.
   - Flow-sensitive (keep walkers, read arena): `const_folding`'s env walk,
-  `copy_prop`, `licm`, `field_scalarize`, `store_load_forward`,
-  `value_copy_demote`, `tmpl_hoist`.
+    `copy_prop`, `licm`, `field_scalarize`, `store_load_forward`,
+    `value_copy_demote`, `tmpl_hoist`.
   - When the last bridge is gone the per-pass `Body ↔ tree` conversions
-  vanish and the arena flows lower → optimize → wir_build with no
-  converter — completing Phase 3's goal. Measure the speed win here.
+    vanish and the arena flows lower → optimize → wir_build with no
+    converter — completing Phase 3's goal. Measure the speed win here.
 
 ## Out of scope
 

@@ -7,7 +7,44 @@
 //! that have not yet ported; this module is the single arena counterpart they
 //! converge onto.
 
+use crate::hashmap::IndexSet;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+
+/// Collect every local index that is *read* — every `Local` mention except the
+/// bare-`Local` target of an `Assign` (a write). `&local` / `&mut local`,
+/// `local.field = …`, and every value-position `Local` count as reads. The
+/// arena counterpart of `elide_local`'s tree `ReadCollector` /
+/// `collect_reads_in_block`.
+pub(super) fn collect_reads(body: &Body, out: &mut IndexSet<u32>) {
+    collect_reads_node(body, NodeRef::Block(body.root), out);
+}
+
+fn collect_reads_node(body: &Body, node: NodeRef, out: &mut IndexSet<u32>) {
+    if let NodeRef::Expr(id) = node {
+        match &body.exprs[id].kind {
+            ExprKind::Local { index, .. } => {
+                out.insert(*index);
+                return;
+            }
+            ExprKind::Assign { target, value } => {
+                let (target, value) = (*target, *value);
+                // The bare-`Local` target is a write, not a read; nested write
+                // places (`a.field`, `a[i]`) and the assigned value are reads.
+                if !matches!(&body.exprs[target].kind, ExprKind::Local { .. }) {
+                    collect_reads_node(body, NodeRef::Expr(target), out);
+                }
+                collect_reads_node(body, NodeRef::Expr(value), out);
+                return;
+            }
+            _ => {}
+        }
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    for c in kids {
+        collect_reads_node(body, c, out);
+    }
+}
 
 /// Whether `id` is a bare `Local(idx)` reference.
 pub(super) fn is_local(body: &Body, id: ExprId, idx: u32) -> bool {
