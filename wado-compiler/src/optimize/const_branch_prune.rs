@@ -11,8 +11,8 @@
 //!
 //! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
 //! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): a bottom-up simplifier,
-//! so it walks the arena `Body` children-first (mirroring the old
-//! `NirOptVisitor`) and mutates in place — block-stmt flattening rebuilds the
+//! so it walks the arena `Body` children-first (a default bottom-up visitor
+//! walk) and mutates in place — block-stmt flattening rebuilds the
 //! statement-id list, expression simplification rewrites node kinds, and the
 //! break-target queries use the arena `arena_query::has_break_to`.
 

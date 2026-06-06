@@ -12,8 +12,8 @@
 //! and inclusive `<=` guard patterns.
 //!
 //! The pass reads and mutates the arena [`Body`] directly. The eliminators
-//! drive a small [`ArenaOptVisitor`] that mirrors `NirOptVisitor`'s default
-//! walk over the arena; condition replacement is an in-place `kind` rewrite.
+//! drive a small [`ArenaOptVisitor`] whose default `visit_*` recurse into every
+//! child; condition replacement is an in-place `kind` rewrite.
 
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
@@ -1785,10 +1785,9 @@ fn is_panic_call(body: &Body, e: ExprId) -> bool {
 // Arena opt-visitor
 // ---------------------------------------------------------------------------
 
-/// Arena counterpart of [`crate::nir_visitor::NirOptVisitor`]: a mutating walk
-/// that returns `true` when any node changed. The default `visit_*` delegate to
-/// [`arena_opt_walk`], which recurses into every id-bearing child (the same set
-/// and order as `opt_walk_*`); the eliminators override the nodes they rewrite.
+/// A mutating arena walk that returns `true` when any node changed. The default
+/// `visit_*` delegate to [`arena_opt_walk`], which recurses into every
+/// id-bearing child; the eliminators override the nodes they rewrite.
 trait ArenaOptVisitor {
     fn visit_stmt(&mut self, body: &mut Body, s: StmtId) -> bool
     where

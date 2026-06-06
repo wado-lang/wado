@@ -92,7 +92,7 @@ fn elide_in_function(func: &mut NirFunction) -> bool {
 }
 
 /// Visit nested blocks bottom-up (inner first), then sibling-scan this block —
-/// the arena analog of the old `Elider`'s `opt_walk_block`-then-scan order.
+/// the old `Elider`'s bottom-up-then-scan order.
 fn elide_block(
     body: &mut Body,
     block: BlockId,

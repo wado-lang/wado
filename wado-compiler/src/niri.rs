@@ -1103,8 +1103,8 @@ impl<'a> Interpreter<'a> {
     ///
     /// Internal: the only public entry points are [`reduce`] and
     /// [`reduce_local`]. `reduce` clones into `reduce_in_place`; visitor
-    /// drivers that already walk every NIR kind via
-    /// `nir_visitor::opt_walk_expr` should call `reduce_local` directly.
+    /// drivers that already walk every NIR node should call `reduce_local`
+    /// directly.
     ///
     /// [`reduce`]: Self::reduce
     /// [`reduce_local`]: Self::reduce_local
@@ -1196,8 +1196,8 @@ impl<'a> Interpreter<'a> {
     /// into children. Returns `true` when `expr` was rewritten.
     ///
     /// This is the right entry point when the caller is already driving a
-    /// NIR walk (for example via `nir_visitor::opt_walk_expr`) and wants
-    /// to slot niri's local rewrites into each visited node. The rules
+    /// NIR walk and wants to slot niri's local rewrites into each visited
+    /// node. The rules
     /// are constant folding for Binary / Unary / Cast, short-circuit
     /// identity simplifications for `&&` / `||`, pure-call inlining,
     /// constant-condition or both-arms-equal `if` collapse, and the

@@ -33,7 +33,7 @@ pub(super) fn has_break_to(body: &Body, node: NodeRef, label: &str) -> bool {
 }
 
 /// Strip outer auto-ref / deref wrappers (`&`, `&mut`, `*`) from an expression,
-/// returning the inner value's id. Arena counterpart of `nir_visitor::strip_refs`.
+/// returning the inner value's id.
 pub(super) fn strip_refs(body: &Body, id: ExprId) -> ExprId {
     match &body.exprs[id].kind {
         ExprKind::Unary {
