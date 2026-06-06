@@ -1866,7 +1866,7 @@ fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext, variant_mask: &List<
     return ScanBody { elements };
 }
 
-fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &List<String>, outer_k_prefix: &List<List<String>>, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>, outer_k_prefix_position_mask: &List<List<String>>) -> ScanElement {
+fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &List<String>, outer_k_prefix: &List<List<String>>, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>, outer_k_prefix_position_mask: &List<List<String>>, follow_arg: FollowArg, gate_caller_follow: bool) -> ScanElement {
     return match *elem {
         TokenRef(t) => ScanElement::Token(ScanTokenElem { kind: `TK_{t.name}` }),
         Literal(l) => ScanElement::Token(ScanTokenElem {
@@ -1874,7 +1874,8 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &List<
         }),
         RuleRef(r) => ScanElement::RuleCall(ScanRuleCallElem {
             target_snake: r.snake_name,
-            variant_id: ctx.intern_follow_variant(&r.name, outer_follow, outer_k_prefix, true),
+            follow_arg: follow_arg,
+            variant_id: null,
             min_prec_arg: null,
         }),
         Wildcard(_) => ScanElement::Wildcard,
@@ -1889,6 +1890,8 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &List<
             variant_mask,
             variant_k_prefix_mask,
             outer_k_prefix_position_mask,
+            follow_arg,
+            gate_caller_follow,
         ),
         Repeat(rep) => lower_scan_repeat(
             &rep,
@@ -1897,6 +1900,7 @@ fn lower_scan_element(elem: &Element, ctx: &mut GenContext, outer_follow: &List<
             variant_mask,
             variant_k_prefix_mask,
             outer_k_prefix_position_mask,
+            gate_caller_follow,
         ),
         Group(g) => lower_scan_group(
             &g,
@@ -2039,7 +2043,7 @@ fn lower_general_scan_group(alts: &List<Alternative>, ctx: &mut GenContext, oute
 
 /// Scan-side twin of `lower_repeat_op`. Same restrictions: greedy
 /// `Star` / `Plus` with a leaf inner only.
-fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &List<String>, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>, outer_k_prefix_position_mask: &List<List<String>>) -> ScanElement {
+fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &List<String>, variant_mask: &List<String>, variant_k_prefix_mask: &List<List<String>>, outer_k_prefix_position_mask: &List<List<String>>, gate_caller_follow: bool) -> ScanElement {
     // Greedy Optional + Group inner with nested optional sub-elements
     // is the shape-based-lookahead case: lower produces
     // `ScanElement::OptionalLookahead` so emit reads per-shape sigs
@@ -2090,6 +2094,8 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &L
         variant_mask,
         variant_k_prefix_mask,
         &empty_k_prefix(),
+        FollowArg::NoFollow,
+        false,
     );
     return ScanElement::Repeat(ScanRepeatElem {
         kind: rep.kind,
@@ -2098,6 +2104,7 @@ fn lower_scan_repeat(rep: &RepeatElement, ctx: &mut GenContext, outer_follow: &L
         inner_first: inner_first,
         caller_follow_first: *outer_follow,
         k_prefix_mask: *outer_k_prefix_position_mask,
+        gate_caller_follow: gate_caller_follow,
     });
 }
 
@@ -2153,6 +2160,8 @@ fn lower_alt_scan_element(alt_elements: &List<Element>, i: i32, ctx: &mut GenCon
     // scan tournament then over-counts the iter and rejects the alt
     // that parse-side's gated variant body would have accepted.
     let elem_k_prefix_position_mask = ctx.compute_k_prefix_position_mask(alt_elements, i, variant_k_prefix_mask);
+    let elem_follow_arg = compute_follow_arg(ctx, alt_elements, i);
+    let elem_gate = compute_gate_caller_follow(ctx, alt_elements, i);
     let mut se = lower_scan_element(
         &alt_elements[i],
         ctx,
@@ -2161,6 +2170,8 @@ fn lower_alt_scan_element(alt_elements: &List<Element>, i: i32, ctx: &mut GenCon
         variant_mask,
         variant_k_prefix_mask,
         &elem_k_prefix_position_mask,
+        elem_follow_arg,
+        elem_gate,
     );
     if let Repeat(_) = &se {
         let basic_follow = ctx.first_of_elements_from(alt_elements, i + 1);
@@ -3839,6 +3850,7 @@ fn patch_repeat_op_caller_follow(rep_op: &RepeatOp, caller_follow_first: List<St
         body_is_single_alt_group: rep_op.body_is_single_alt_group,
         body_second_position_first: rep_op.body_second_position_first,
         body_shape: rep_op.body_shape,
+        gate_caller_follow: rep_op.gate_caller_follow,
     };
 }
 
