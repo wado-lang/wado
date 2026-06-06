@@ -144,7 +144,7 @@ fn "wado-compiler/tests/fixtures/const_object_globalization.wado/lookup"(n) {
             if i >= n {
                 break b0;
             }
-            sum = sum + index = i % 4; if builtin::unlikely(index >= _licm_used_18) {
+            sum = sum + index = i % 4; if @unlikely(index >= _licm_used_18) {
                 cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
@@ -159,21 +159,21 @@ fn "wado-compiler/tests/fixtures/const_object_globalization.wado/lookup"(n) {
 fn "wado-compiler/tests/fixtures/const_object_globalization.wado/mutated"() {
     let __b: ref "core:prelude//List<i32>";
     __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    if builtin::unlikely(0) {
+    if @unlikely(0) {
         cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
     builtin::array_set<i32>(__b.repr, 0, 99);
-    return (if builtin::unlikely(0) {
+    return (if @unlikely(0) {
         cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<i32>(__b.repr, 0) + if builtin::unlikely(0) {
+    }; builtin::array_get<i32>(__b.repr, 0) + if @unlikely(0) {
         cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<i32>(__b.repr, 1)) + if builtin::unlikely(0) {
+    }; builtin::array_get<i32>(__b.repr, 1)) + if @unlikely(0) {
         cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -196,7 +196,7 @@ fn "wado-compiler/tests/fixtures/const_object_globalization.wado/stored_then_mut
                 break b8;
             }
             ec = struct.new "wado-compiler/tests/fixtures/const_object_globalization.wado//EncCode" { code: 0, len: 8 };
-            if builtin::unlikely(i >= _licm_used_24) {
+            if @unlikely(i >= _licm_used_24) {
                 cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
@@ -206,20 +206,20 @@ fn "wado-compiler/tests/fixtures/const_object_globalization.wado/stored_then_mut
             continue l9;
         };
     };
-    if builtin::unlikely(0) {
+    if @unlikely(0) {
         cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "wado-compiler/tests/fixtures/const_object_globalization.wado//EncCode">(__b.repr, 0).code = 7;
-    return (if builtin::unlikely(0) {
+    return (if @unlikely(0) {
         cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "wado-compiler/tests/fixtures/const_object_globalization.wado//EncCode">(__b.repr, 0).code + if builtin::unlikely(0) {
+    }; builtin::array_get<ref "wado-compiler/tests/fixtures/const_object_globalization.wado//EncCode">(__b.repr, 0).code + if @unlikely(0) {
         cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "wado-compiler/tests/fixtures/const_object_globalization.wado//EncCode">(__b.repr, 1).code) + if builtin::unlikely(0) {
+    }; builtin::array_get<ref "wado-compiler/tests/fixtures/const_object_globalization.wado//EncCode">(__b.repr, 1).code) + if @unlikely(0) {
         cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -434,7 +434,7 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let new_used: i32;
     let start: i32;
     new_used = self.used + n;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
@@ -451,7 +451,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
         return;
     }
     new_used = self.used + other_len;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
@@ -460,7 +460,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+    if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }

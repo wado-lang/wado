@@ -69,9 +69,16 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
+global mut global:__modules_initialized: bool = 0;
 global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(10, 20, 30)), used: 3 };
 
 fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_simple.wado/run"() {
+    __inline___initialize_modules_0: block {
+        if @likely(global:__modules_initialized) {
+            break __inline___initialize_modules_0;
+        }
+        global:__modules_initialized = 1;
+    };
     cold_path;
     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
     unreachable;
@@ -79,6 +86,12 @@ fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_simple.wado/run"() {
 }
 
 fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_simple.wado/__cm_export__run"() {
+    __inline___initialize_modules_0: block {
+        if global:__modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        global:__modules_initialized = 1;
+    };
     "wado-compiler/tests/fixtures/array_bounds_elim_oob_simple.wado/run"();
     "wasi/task-return"(0);
 }
@@ -86,14 +99,14 @@ fn "wado-compiler/tests/fixtures/array_bounds_elim_oob_simple.wado/__cm_export__
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b0: block {
-        l1: loop {
+    b2: block {
+        l3: loop {
             if i >= len {
-                break b0;
+                break b2;
             }
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l1;
+            continue l3;
         };
     };
 }

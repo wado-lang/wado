@@ -394,7 +394,7 @@ fn "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_ndjson_wrap
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
     ser = struct.new "core:json//JsonSerializer" { buf: buf };
     __match_5 = "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/ErrorMessage^Serialize::serialize<core:json/JsonSerializer>"(value, ser);
-    if builtin::likely(ref.is_null(__match_5)) {
+    if @likely(ref.is_null(__match_5)) {
     } else {
         __qm_e = ref.as_non_null(__match_5);
         cold_path;
@@ -411,7 +411,7 @@ fn "core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_ndjson_wrap
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
     ser = struct.new "core:json//JsonSerializer" { buf: buf };
     __match_5 = "wado-compiler/tests/fixtures/serde_ndjson_wrapper.wado/Message^Serialize::serialize<core:json/JsonSerializer>"(value, ser);
-    if builtin::likely(ref.is_null(__match_5)) {
+    if @likely(ref.is_null(__match_5)) {
     } else {
         __qm_e = ref.as_non_null(__match_5);
         cold_path;
@@ -456,7 +456,7 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let new_used: i32;
     let start: i32;
     new_used = self.used + n;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
@@ -473,7 +473,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
         return;
     }
     new_used = self.used + other_len;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
@@ -531,7 +531,7 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+    if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }

@@ -356,7 +356,7 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let new_used: i32;
     let start: i32;
     new_used = self.used + n;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
@@ -373,7 +373,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
         return;
     }
     new_used = self.used + other_len;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
@@ -423,7 +423,7 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+    if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
@@ -597,7 +597,7 @@ fn "wado-compiler/tests/fixtures/array_index_inline_method.wado/Container<core:p
             if i >= _licm_used_9 {
                 break b54;
             }
-            count = count + (if builtin::unlikely(i >= _licm_used_10) {
+            count = count + (if @unlikely(i >= _licm_used_10) {
                 cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
@@ -621,7 +621,7 @@ fn "wado-compiler/tests/fixtures/array_index_inline_method.wado/Container<core:p
     b58: block {
         l59: loop {
             if (if i < _licm_used_7 -> i32 {
-                "core:prelude/string.wado/String^Ord::cmp"(if builtin::unlikely(i >= _licm_used_7) {
+                "core:prelude/string.wado/String^Ord::cmp"(if @unlikely(i >= _licm_used_7) {
                     cold_path;
                     "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                     unreachable;

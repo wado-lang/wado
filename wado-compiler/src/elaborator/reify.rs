@@ -2530,21 +2530,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// cold branch (an `assert` failure, a `?` error propagation, …). Codegen
     /// then hints the enclosing branch unlikely and the inliner skips the branch.
     fn make_cold_path_stmt(&self, span: crate::token::Span) -> TirStmt {
-        use crate::tir::{FunctionRef, TirExprKind, TirStmtKind, TypeTable};
-        let call = TirExpr::new(
-            TirExprKind::Call {
-                func: FunctionRef {
-                    module_source: crate::module_source::ModuleSource::builtin(),
-                    name: "cold_path".to_string(),
-                    monomorph_info: None,
-                    method_info: None,
-                },
-                type_args: Vec::new(),
-                args: Vec::new(),
-            },
-            TypeTable::UNIT,
-            span,
-        );
+        use crate::synthesis::common::builtin_call;
+        use crate::tir::{TirStmtKind, TypeTable};
+        let call = builtin_call("cold_path", Vec::new(), TypeTable::UNIT);
         TirStmt::new(TirStmtKind::Expr(call), span)
     }
 

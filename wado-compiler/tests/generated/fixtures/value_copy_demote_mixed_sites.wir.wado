@@ -101,20 +101,20 @@ fn "wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/process"(a, 
     sorted = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone<ref "core:prelude/string.wado//String">(a.repr)), used: a.used };
     "wado-compiler/tests/fixtures/value_copy_demote_mixed_sites.wado/List<core:prelude/string.wado/String>::sort_by$__Closure_2"(sorted);
     victim = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: ref.as_non_null(builtin::array_clone_deep<ref "core:prelude/string.wado//String">(/*via $value_copy$T32*/ b.repr)), used: b.used };
-    "core:prelude/string.wado/String::push"(if builtin::unlikely(0 >= victim.used) {
+    "core:prelude/string.wado/String::push"(if @unlikely(0 >= victim.used) {
         cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "core:prelude/string.wado//String">(victim.repr, 0), 33);
-    return __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_4, if builtin::unlikely(0 >= sorted.used) {
+    return __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_4, if @unlikely(0 >= sorted.used) {
         cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "core:prelude/string.wado//String">(sorted.repr, 0)), "core:prelude/string.wado/String::push"(__local_4, 32), "core:prelude/string.wado/String::push_str"(__local_4, if builtin::unlikely(0 >= victim.used) {
+    }; builtin::array_get<ref "core:prelude/string.wado//String">(sorted.repr, 0)), "core:prelude/string.wado/String::push"(__local_4, 32), "core:prelude/string.wado/String::push_str"(__local_4, if @unlikely(0 >= victim.used) {
         cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
-    }; builtin::array_get<ref "core:prelude/string.wado//String">(victim.repr, 0)), "core:prelude/string.wado/String::push"(__local_4, 32), "core:prelude/string.wado/String::push_str"(__local_4, if builtin::unlikely(0 >= b.used) {
+    }; builtin::array_get<ref "core:prelude/string.wado//String">(victim.repr, 0)), "core:prelude/string.wado/String::push"(__local_4, 32), "core:prelude/string.wado/String::push_str"(__local_4, if @unlikely(0 >= b.used) {
         cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
@@ -278,7 +278,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
         return;
     }
     new_used = self.used + other_len;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
@@ -328,7 +328,7 @@ fn "core:prelude/string.wado/String^Ord::cmp"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+    if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }

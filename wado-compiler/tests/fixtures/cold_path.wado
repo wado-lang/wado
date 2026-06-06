@@ -1,9 +1,9 @@
 // `builtin::cold_path()` marks the branch that contains it as cold: codegen
-// wraps the enclosing `if` condition in a branch hint (rendered as
-// `builtin::likely` / `builtin::unlikely` in the WIR, denoting the hinted
-// direction) and the inliner excludes the branch from its cost estimate. It
-// needs no boolean condition, so it works inside `if let` / `match` arms too.
-// Mirrors Rust's `std::hint::cold_path`.
+// wraps the enclosing `if` condition in a branch hint (rendered as `@likely` /
+// `@unlikely` in the WIR, denoting the hinted direction) and the inliner
+// excludes the branch from its cost estimate. It needs no boolean condition, so
+// it works inside `if let` / `match` arms too. Mirrors Rust's
+// `std::hint::cold_path`.
 
 variant Cmd {
     Go,
@@ -40,7 +40,7 @@ fn handle(c: Cmd) -> i32 {
 }
 
 // `if`-then arm: the marker is in the taken branch, so the condition is hinted
-// unlikely-true (`builtin::unlikely`). Exercises the opposite hint direction.
+// unlikely-true (`@unlikely`). Exercises the opposite hint direction.
 fn guard_then(x: i32) -> i32 {
     if x < 0 {
         builtin::cold_path();
@@ -62,5 +62,5 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_expect:O0": ["cold_path", "builtin::likely(ref.test", "builtin::unlikely(x < 0)"]
+    "wir_expect:O0": ["cold_path", "@likely(ref.test", "@unlikely(x < 0)"]
 }

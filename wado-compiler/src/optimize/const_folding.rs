@@ -45,7 +45,7 @@ use crate::niri::{
     Arm, CalleeMap, FieldSnapshot, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter, Lattice,
     Value, is_ctfe_eligible,
 };
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
 use super::alias::{build_alias_info, build_value_copy_helpers, recognize_value_copy_a};
 use super::arena_query::has_break_to;
@@ -1088,7 +1088,7 @@ fn stmt_falls_through(body: &Body, s: StmtId, type_table: &TypeTable) -> bool {
 /// definitely do not produce a value (`panic(…)`, `unreachable()`,
 /// `loop { }`, calls whose return type is `!`).
 fn is_never_type(type_id: TypeId, type_table: &TypeTable) -> bool {
-    matches!(type_table.get(type_id), ResolvedType::Never)
+    type_table.is_never(type_id)
 }
 
 /// True when a `Call`'s callee is a compiler builtin that cannot

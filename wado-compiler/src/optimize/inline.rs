@@ -34,12 +34,6 @@ fn is_cold_path_call(expr: &NirExpr) -> bool {
     )
 }
 
-/// True when `type_id` is the never type `!` — i.e. an expression of this type
-/// diverges and never produces a value (`panic`, `unreachable`, …).
-fn is_never(type_id: TypeId, type_table: &TypeTable) -> bool {
-    matches!(type_table.get(type_id), ResolvedType::Never)
-}
-
 /// How a statement ends the reachable, hot portion of its block, for the inline
 /// cost walk in [`count_block_exprs`].
 enum BlockCut {
@@ -62,7 +56,7 @@ fn block_cut(stmt: &NirStmt, type_table: &TypeTable) -> BlockCut {
         NirStmtKind::Return { .. } | NirStmtKind::Break { .. } | NirStmtKind::Continue => {
             BlockCut::Diverges
         }
-        NirStmtKind::Expr(e) if is_never(e.type_id, type_table) => BlockCut::Diverges,
+        NirStmtKind::Expr(e) if type_table.is_never(e.type_id) => BlockCut::Diverges,
         _ => BlockCut::None,
     }
 }
@@ -444,7 +438,7 @@ fn is_inline_eligible(
 
     // Don't inline functions that return Never (!)
     // These are error/abort paths that are never hot, so no performance benefit to inlining
-    if matches!(type_table.get(func.return_type), ResolvedType::Never) {
+    if type_table.is_never(func.return_type) {
         return false;
     }
 
