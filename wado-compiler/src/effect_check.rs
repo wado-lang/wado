@@ -1649,9 +1649,21 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
         }
     }
 
+    // `(module, variant name)` → case payload type ids, so resource detection
+    // descends into variant case payloads (e.g. `Maybe::Just(Future<i32>)`).
+    let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
+    for (module, variants) in state.tysys.all_variant_cases.iter() {
+        for (variant_name, info) in variants {
+            variant_payloads.insert(
+                (module.clone(), variant_name.clone()),
+                info.cases.iter().map(|case| case.payload).collect(),
+            );
+        }
+    }
+
     // Effect / resource propagation closure: holding effect `E` admits the
     // resources `E`'s operations reference (e.g. `Stdout` → `Stream`).
-    let closure = build_propagation_closure_sem(sem, state, &struct_fields);
+    let closure = build_propagation_closure_sem(sem, state, &struct_fields, &variant_payloads);
 
     // Name → resolved `EffectRef` for every declared effect / resource, used to
     // resolve `#[benign(E)]` names (the closure has a key per declaration).
@@ -1671,6 +1683,7 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
         mangled_params: &mangled_params,
         resource_names: &resource_names,
         struct_fields: &struct_fields,
+        variant_payloads: &variant_payloads,
         closure: &closure,
         effect_by_name: &effect_by_name,
     };
@@ -1715,6 +1728,8 @@ struct EffectIndex<'a> {
     resource_names: &'a IndexSet<(ModuleSource, String)>,
     /// `(module, struct name)` → field type ids, for nested-resource detection.
     struct_fields: &'a IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    /// `(module, variant name)` → case payload type ids.
+    variant_payloads: &'a IndexMap<(ModuleSource, String), Vec<TypeId>>,
     /// Effect → implied resources propagation closure.
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
     /// Declared effect / resource name → resolved `EffectRef` (`#[benign]`).
@@ -1763,6 +1778,7 @@ fn check_function_effects_sem(
             &caller_key,
             &sem.types,
             index.struct_fields,
+            index.variant_payloads,
             &mut current,
         );
     }
@@ -1772,16 +1788,31 @@ fn check_function_effects_sem(
             current.insert(effect.clone());
         }
     }
-    // Expand through the propagation closure: a function holding `Stdout` may
-    // call operations that internally need `Stream`, etc.
+    // Canonicalise before expanding so the closure keys (built from the
+    // declarations, i.e. canonical) match, then expand: a function holding
+    // `Stdout` may call operations that internally need `Stream`, etc.
+    let current: IndexSet<EffectRef> = current
+        .iter()
+        .map(|effect| canonicalize_effect(effect, index.effect_by_name))
+        .collect();
     let current = expand_through_closure(&current, index.closure);
+
+    // Parameter name → type id (aligned with the recorded signature types),
+    // for resolving indirect calls through function-typed parameters.
+    let mut param_types: IndexMap<String, TypeId> = IndexMap::default();
+    if let Some(type_ids) = annotations.and_then(|ann| ann.fn_param_types.get(&caller_key)) {
+        for (param, type_id) in func.params.iter().zip(type_ids.iter()) {
+            param_types.insert(param.name.clone(), *type_id);
+        }
+    }
 
     let mut walker = SemEffectWalker {
         module,
         sem,
         annotations,
         index,
-        current: &current,
+        current,
+        param_types,
         out,
     };
     ast::walk_block(&mut walker, body);
@@ -1797,9 +1828,9 @@ fn build_propagation_closure_sem(
     sem: &Semantics,
     state: &crate::elaborator::orchestration::AnnotateState,
     struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    variant_payloads: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
 ) -> IndexMap<EffectRef, IndexSet<EffectRef>> {
     let type_table = &sem.types;
-    let empty_variant: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
     let mut direct: IndexMap<EffectRef, IndexSet<EffectRef>> = IndexMap::default();
 
     for (src, module) in &sem.modules {
@@ -1825,7 +1856,7 @@ fn build_propagation_closure_sem(
                         param.type_id,
                         type_table,
                         struct_fields,
-                        &empty_variant,
+                        variant_payloads,
                         &mut refs,
                         &mut TypeSet::default(),
                     );
@@ -1834,7 +1865,7 @@ fn build_propagation_closure_sem(
                     op.return_type,
                     type_table,
                     struct_fields,
-                    &empty_variant,
+                    variant_payloads,
                     &mut refs,
                     &mut TypeSet::default(),
                 );
@@ -1883,6 +1914,26 @@ fn build_propagation_closure_sem(
     direct
 }
 
+/// Canonicalise an effect by name through the declaration index. The raw
+/// `EffectRef::Concrete.module_source` recorded in `function_effects` reflects
+/// the recording module's import perspective, so two references to the same
+/// effect can carry different module sources (user entry vs `wasi:cli`). The
+/// declaration index (built from the propagation-closure keys) holds one
+/// canonical `EffectRef` per name; mapping through it makes cross-module
+/// effect comparison and closure lookups consistent. Effect parameters and
+/// names without a declaration are returned unchanged.
+fn canonicalize_effect(
+    effect: &EffectRef,
+    effect_by_name: &IndexMap<String, EffectRef>,
+) -> EffectRef {
+    match effect {
+        EffectRef::Concrete { name, .. } => {
+            effect_by_name.get(name).cloned().unwrap_or_else(|| effect.clone())
+        }
+        EffectRef::Param { .. } => effect.clone(),
+    }
+}
+
 /// Expand an effect set through the propagation closure.
 fn expand_through_closure(
     effects: &IndexSet<EffectRef>,
@@ -1907,25 +1958,25 @@ fn expand_through_closure(
 /// signature that already exposes a resource does not also require an explicit
 /// `with R`. Mirrors the TIR-based `signature_resources`.
 ///
-/// Resources nested inside struct fields are followed via `struct_fields`;
-/// direct and container-nested resources (`Option<R>`, `List<R>`, `&R`,
-/// `fn() -> R`) are too. Variant-payload nesting is a documented follow-up
-/// (empty payload map).
+/// Resources nested inside struct fields and variant case payloads are
+/// followed via `struct_fields` / `variant_payloads`; direct and
+/// container-nested resources (`Option<R>`, `List<R>`, `&R`, `fn() -> R`) are
+/// too.
 fn add_signature_resources(
     annotations: &crate::elaborator::sem::types::TypeAnnotations,
     fn_key: &SymbolKey,
     type_table: &TypeTable,
     struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    variant_payloads: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
     out: &mut IndexSet<EffectRef>,
 ) {
-    let empty_variant: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
     let mut visited = TypeSet::default();
     for &type_id in annotations.fn_param_types.get(fn_key).into_iter().flatten() {
         collect_resource_refs(
             type_id,
             type_table,
             struct_fields,
-            &empty_variant,
+            variant_payloads,
             out,
             &mut visited,
         );
@@ -1935,7 +1986,7 @@ fn add_signature_resources(
             return_type,
             type_table,
             struct_fields,
-            &empty_variant,
+            variant_payloads,
             out,
             &mut visited,
         );
@@ -1945,7 +1996,7 @@ fn add_signature_resources(
             task_return,
             type_table,
             struct_fields,
-            &empty_variant,
+            variant_payloads,
             out,
             &mut visited,
         );
@@ -1976,7 +2027,15 @@ struct SemEffectWalker<'a> {
     sem: &'a Semantics,
     annotations: Option<&'a crate::elaborator::sem::types::TypeAnnotations>,
     index: &'a EffectIndex<'a>,
-    current: &'a IndexSet<EffectRef>,
+    /// Effects available at the current point: the function's declared +
+    /// signature + benign + propagated set, plus any effects granted by an
+    /// enclosing `with H => … do { … }` handler scope (pushed / popped as the
+    /// walk enters / leaves the do-block body).
+    current: IndexSet<EffectRef>,
+    /// This function's parameter name → type id, for resolving the callee of an
+    /// indirect call through a function-typed parameter (which leaves no
+    /// `references` edge or recorded expression type at the call site).
+    param_types: IndexMap<String, TypeId>,
     out: &'a mut Vec<EffectError>,
 }
 
@@ -2092,11 +2151,18 @@ impl SemEffectWalker<'_> {
 
     fn report_missing(&mut self, effects: &[EffectRef], callee: &str, span: Span) {
         for effect in effects {
+            // Canonicalise: `EffectRef::Concrete.module_source` reflects the
+            // recording module's import perspective (a user `with Stdout`
+            // records `Stdout` against the entry module, while stdlib records
+            // it against `wasi:cli`), so compare through the declaration's
+            // canonical form rather than by raw `module_source`.
+            let effect = canonicalize_effect(effect, self.index.effect_by_name);
             // Any `Param` left after resolution did not bind to a concrete
             // effect; skip it rather than report a spurious miss.
-            if effect.is_param() || self.current.contains(effect) {
+            if effect.is_param() || self.current.contains(&effect) {
                 continue;
             }
+            let effect = &effect;
             let kind = match effect {
                 EffectRef::Concrete {
                     name,
@@ -2162,17 +2228,11 @@ impl AstVisitor for SemEffectWalker<'_> {
                     let resolved =
                         self.resolve_effect_params(&effects, &params, is_method, &call.args);
                     self.report_missing(&resolved, callee_name(&call.callee), call.span);
-                } else if let Some(callee_type) = self
-                    .sem
-                    .expression_types
-                    .get(&SymbolKey::new(self.module.clone(), call.callee.id()))
-                    .copied()
-                {
+                } else if let Some(callee_type) = self.indirect_callee_type(call) {
                     // Indirect call: the callee is a function-typed value (a
                     // closure or `fn(...)` parameter). Its type carries the
                     // effects it performs when invoked.
-                    if let ResolvedType::Function { effects, .. } = self.sem.types.get(callee_type)
-                    {
+                    if let ResolvedType::Function { effects, .. } = self.sem.types.get(callee_type) {
                         let effects = effects.to_vec();
                         self.report_missing(&effects, "(indirect call)", call.span);
                     }
@@ -2204,6 +2264,35 @@ impl AstVisitor for SemEffectWalker<'_> {
                     self.report_missing(&resolved, &static_call.method, static_call.span);
                 }
             }
+            Expr::WithHandler(with_handler) => {
+                // `with H => h do { body }` installs handlers, granting each
+                // handled effect to the body (calls inside it — directly or via
+                // helpers — observe the installed handler). The handler
+                // expressions themselves run outside the grant.
+                for binding in &with_handler.handlers {
+                    ast::walk_expr(self, &binding.handler);
+                }
+                let granted: Vec<EffectRef> = with_handler
+                    .handlers
+                    .iter()
+                    .filter_map(|b| b.effect.as_ref())
+                    .filter_map(|ty| match ty {
+                        crate::ast::Type::Named(named) => {
+                            self.index.effect_by_name.get(&named.name).cloned()
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                let added: Vec<EffectRef> = granted
+                    .into_iter()
+                    .filter(|effect| self.current.insert(effect.clone()))
+                    .collect();
+                ast::walk_block(self, &with_handler.body);
+                for effect in added {
+                    self.current.shift_remove(&effect);
+                }
+                return;
+            }
             _ => {}
         }
         ast::walk_expr(self, expr);
@@ -2217,5 +2306,33 @@ impl SemEffectWalker<'_> {
             .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
             .cloned()
             .unwrap_or_default()
+    }
+
+    /// Type of an indirect call's callee. When the callee is an identifier
+    /// bound to a local or parameter, its type lives in `local_types` keyed by
+    /// the binding's def (resolved through `references`); function-typed
+    /// parameters are recorded there, not in `expression_types`. Other callee
+    /// shapes fall back to the expression's recorded type.
+    fn indirect_callee_type(&self, call: &crate::ast::CallExpr) -> Option<TypeId> {
+        if let Expr::Ident(ident) = &call.callee {
+            // A function-typed parameter callee leaves no `references` edge or
+            // recorded expression type at the call, so resolve it against the
+            // enclosing function's parameter types by name first.
+            if let Some(type_id) = self.param_types.get(&ident.name) {
+                return Some(*type_id);
+            }
+            if let Some(type_id) = self
+                .sem
+                .references
+                .get(&SymbolKey::new(self.module.clone(), ident.id))
+                .and_then(|def| self.sem.local_types.get(def))
+            {
+                return Some(*type_id);
+            }
+        }
+        self.sem
+            .expression_types
+            .get(&SymbolKey::new(self.module.clone(), call.callee.id()))
+            .copied()
     }
 }

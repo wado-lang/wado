@@ -438,6 +438,22 @@ fn compile_after_load<H: CompilerHost>(
         emit_unused_diagnostics(&sem, logger);
     }
 
+    // === Phase 6b: Effect Check (Design B) ===
+    // Produced from `Semantics` (AST + recorded facts), not the emitted TIR,
+    // so it sees every source function regardless of what reify emits and
+    // shares its logic with the LSP.
+    {
+        let _span = logger.span("effect-check");
+        let mut had_effect_error = false;
+        for error in effect_check::check_effects_semantic(&sem) {
+            had_effect_error = true;
+            let _ = logger.error(error);
+        }
+        if had_effect_error {
+            return Err(Bail);
+        }
+    }
+
     // === Phase 6c: Kiln `Options` descriptor extraction ===
     // For the `core:kiln/generator` target world, walk the entry module's
     // `pub struct Options` and produce a structural descriptor that the CLI
@@ -654,15 +670,6 @@ fn compile_after_load<H: CompilerHost>(
             Bail
         })?
     };
-
-    // === Phase 8a: Effect Check ===
-    // Runs after synthesis so synthesized functions (trait impls, Inspect, Display, serde, etc.)
-    // are also validated. Runs before monomorphize so effect params are still present.
-    // CM bindings are skipped (they are boundary code with special effect semantics).
-    {
-        let _span = logger.span("effect-check");
-        check_effects(&package.tir_modules, logger)?;
-    }
 
     // === Phase 8b: Stores Check ===
     // Runs after synthesis so synthesized functions are also checked.
