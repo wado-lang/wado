@@ -11,6 +11,26 @@ use crate::hashmap::IndexSet;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 
+/// Whether the subtree at `node` contains a `Break` targeting `label`. Arena
+/// counterpart of `nir_visitor::{block,stmt,expr}_has_break_to` (a full subtree
+/// search, so nested blocks that rebind the same label are still searched — the
+/// conservative behaviour the tree helpers have).
+pub(super) fn has_break_to(body: &Body, node: NodeRef, label: &str) -> bool {
+    if let NodeRef::Stmt(s) = node
+        && let StmtKind::Break { label: Some(l), .. } = &body.stmts[s].kind
+        && l == label
+    {
+        return true;
+    }
+    let mut found = false;
+    body.for_each_child(node, |c| {
+        if !found {
+            found = has_break_to(body, c, label);
+        }
+    });
+    found
+}
+
 /// Strip outer auto-ref / deref wrappers (`&`, `&mut`, `*`) from an expression,
 /// returning the inner value's id. Arena counterpart of `nir_visitor::strip_refs`.
 pub(super) fn strip_refs(body: &Body, id: ExprId) -> ExprId {
