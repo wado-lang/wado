@@ -252,3 +252,101 @@ test "Instant exposes epoch convenience accessors" {
     assert before.epoch_milliseconds() == -1;
     assert before.epoch_nanoseconds() == -1;
 }
+
+test "Instant::new normalizes the sub-second part" {
+    // Carry an overflowing nanosecond count into seconds.
+    assert Instant::new(10, 2_500_000_000) == Instant { seconds: 12, nanoseconds: 500_000_000 };
+    // Borrow for a negative nanosecond count.
+    assert Instant::new(0, -1) == Instant { seconds: -1, nanoseconds: 999_999_999 };
+    assert Instant::new(5, 0) == Instant { seconds: 5, nanoseconds: 0 };
+}
+
+test "Instant epoch constructors invert the epoch accessors" {
+    assert Instant::from_epoch_seconds(1_700_000_000) == Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+
+    let from_ms = Instant::from_epoch_milliseconds(1_700_000_000_123);
+    assert from_ms == Instant { seconds: 1_700_000_000, nanoseconds: 123_000_000 };
+    assert from_ms.epoch_milliseconds() == 1_700_000_000_123;
+
+    let from_ns = Instant::from_epoch_nanoseconds(1_700_000_000_123_456_789);
+    assert from_ns == Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
+    assert from_ns.epoch_nanoseconds() == 1_700_000_000_123_456_789;
+
+    // Negative milliseconds floor toward the epoch's past.
+    assert Instant::from_epoch_milliseconds(-1) == Instant { seconds: -1, nanoseconds: 999_000_000 };
+}
+
+test "Instant::from_unix_seconds splits fractional seconds" {
+    assert Instant::from_unix_seconds(1_700_000_000.5) == Instant { seconds: 1_700_000_000, nanoseconds: 500_000_000 };
+    assert Instant::from_unix_seconds(0.0) == Instant { seconds: 0, nanoseconds: 0 };
+    // Half a second before the epoch.
+    assert Instant::from_unix_seconds(-0.5) == Instant { seconds: -1, nanoseconds: 500_000_000 };
+}
+
+test "ZonedDateTime::parse_rfc3339 parses a UTC timestamp" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20Z");
+    assert zdt.instant == Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+    assert zdt.year() == 2023;
+    assert zdt.month() == 11;
+    assert zdt.day() == 14;
+    assert zdt.hour() == 22;
+    assert zdt.minute() == 13;
+    assert zdt.second() == 20;
+    assert zdt.time_zone == "Z";
+}
+
+test "ZonedDateTime::parse_rfc3339 preserves a fixed offset" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-15T07:13:20+09:00");
+    // Same instant as 2023-11-14T22:13:20Z.
+    assert zdt.instant == Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+    assert zdt.time_zone == "+09:00";
+    // Local wall-clock fields reflect the offset.
+    assert zdt.day() == 15;
+    assert zdt.hour() == 7;
+}
+
+test "ZonedDateTime::parse_rfc3339 reads fractional seconds, truncating" {
+    let zdt = ZonedDateTime::parse_rfc3339("1970-01-01T00:00:00.123456789Z");
+    assert zdt.instant == Instant { seconds: 0, nanoseconds: 123_456_789 };
+
+    // A short fraction is padded; an over-long one is truncated.
+    let half = ZonedDateTime::parse_rfc3339("1970-01-01T00:00:00.5Z");
+    assert half.instant == Instant { seconds: 0, nanoseconds: 500_000_000 };
+    let over = ZonedDateTime::parse_rfc3339("1970-01-01T00:00:00.1234567899Z");
+    assert over.instant == Instant { seconds: 0, nanoseconds: 123_456_789 };
+}
+
+test "ZonedDateTime::parse_rfc3339 accepts a negative offset and lowercase separators" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-14t17:13:20-05:00");
+    assert zdt.instant == Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+    assert zdt.time_zone == "-05:00";
+}
+
+test "ZonedDateTime::parse_rfc3339 round-trips through Display" {
+    let original = "2023-11-15T07:13:20+09:00";
+    let zdt = ZonedDateTime::parse_rfc3339(original);
+    assert `{zdt}` == original;
+
+    // A negative pre-epoch instant also round-trips.
+    let pre = ZonedDateTime::parse_rfc3339("1969-12-31T23:59:59Z");
+    assert pre.instant == Instant { seconds: -1, nanoseconds: 0 };
+    assert `{pre}` == "1969-12-31T23:59:59Z";
+}
+
+test "ZonedDateTime::parse_rfc3339 parses extended ISO 8601 years" {
+    let big = ZonedDateTime::parse_rfc3339("+012023-11-14T22:13:20Z");
+    assert big.year() == 12023;
+
+    let neg = ZonedDateTime::parse_rfc3339("-000001-01-01T00:00:00Z");
+    assert neg.year() == -1;
+}
+
+#[expect_trap]
+test "ZonedDateTime::parse_rfc3339 traps without an offset" {
+    let _ = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20");
+}
+
+#[expect_trap]
+test "ZonedDateTime::parse_rfc3339 traps on a malformed timestamp" {
+    let _ = ZonedDateTime::parse_rfc3339("2023/11/14 22:13:20Z");
+}

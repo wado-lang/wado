@@ -4,10 +4,11 @@
 //! This is the MVP described in `docs/wep-2026-06-05-core-temporal.md`: it
 //! provides only the two value types every temporal API is built around, an
 //! exact point on the timeline (`Instant`) and that instant paired with a
-//! time-zone interpretation (`ZonedDateTime`). Methods, arithmetic,
-//! parsing/formatting, `now()`, civil field accessors, and `Duration` are
-//! deferred to follow-up work; the types exist now so `core:cbor` has a
-//! concrete Wado type to deserialize timestamps into.
+//! time-zone interpretation (`ZonedDateTime`). They carry ISO 8601 / RFC 3339
+//! formatting (`Display`), civil field accessors, RFC 3339 parsing, and epoch
+//! constructors; arithmetic, `now()`, and `Duration` are deferred to follow-up
+//! work. The types exist so `core:cbor` has a concrete Wado type to deserialize
+//! timestamps into.
 //!
 //! Relationship to `wasi:clocks`: `wasi:clocks` exposes its own `Instant`
 //! record (`{ seconds, nanoseconds }`) for the system clock. That type is a
@@ -54,8 +55,8 @@ pub struct Instant {
 /// Corresponds to `Temporal.ZonedDateTime` — the only "complete" temporal
 /// value (an instant plus a wall-clock interpretation). The calendar is always
 /// ISO 8601 and therefore not stored. The broken-down wall-clock fields (year,
-/// month, day, hour, …) are a function of `instant` + `time_zone`, computed by
-/// accessors that are future work, not stored state.
+/// month, day, hour, …) are a function of `instant` + `time_zone`, computed on
+/// demand by accessors rather than stored state.
 ///
 /// `Ord` is auto-derived and orders by `instant` first, then `time_zone`
 /// lexically. That is _not_ a meaningful chronological order across different
@@ -265,6 +266,49 @@ fn format_offset_suffix(offset_seconds: i64) -> String {
 // exposes only epoch-based convenience values. The calendar is always ISO 8601.
 
 impl Instant {
+    /// Construct an instant `nanoseconds` after `seconds` since the Unix epoch,
+    /// normalizing so the stored sub-second part lands in `0..1_000_000_000`
+    /// even when `nanoseconds` is negative or `>= 1_000_000_000`. This is the
+    /// canonical funnel that upholds the field invariant the accessors rely on.
+    pub fn new(seconds: i64, nanoseconds: i64) -> Instant {
+        let mut whole = seconds + nanoseconds / 1_000_000_000;
+        let mut sub = nanoseconds % 1_000_000_000;
+        if sub < 0 {
+            whole = whole - 1;
+            sub = sub + 1_000_000_000;
+        }
+        return Instant { seconds: whole, nanoseconds: sub as u32 };
+    }
+
+    /// Construct an instant from whole seconds since the Unix epoch (CBOR tag 1
+    /// integer form).
+    pub fn from_epoch_seconds(seconds: i64) -> Instant {
+        return Instant { seconds: seconds, nanoseconds: 0 };
+    }
+
+    /// Construct an instant from milliseconds since the Unix epoch. The inverse
+    /// of `epoch_milliseconds`.
+    pub fn from_epoch_milliseconds(milliseconds: i64) -> Instant {
+        return Instant::new(milliseconds / 1000, milliseconds % 1000 * 1_000_000);
+    }
+
+    /// Construct an instant from nanoseconds since the Unix epoch. The inverse
+    /// of `epoch_nanoseconds`, and like it limited to the i64 range
+    /// (≈ ±292 years).
+    pub fn from_epoch_nanoseconds(nanoseconds: i64) -> Instant {
+        return Instant::new(0, nanoseconds);
+    }
+
+    /// Construct an instant from fractional seconds since the Unix epoch (CBOR
+    /// tag 1 floating-point form). The fraction is rounded to the nearest
+    /// nanosecond; `f64` precision limits sub-microsecond accuracy near the
+    /// present.
+    pub fn from_unix_seconds(seconds: f64) -> Instant {
+        let whole = f64::floor(seconds);
+        let nanos = f64::floor((seconds - whole) * 1000000000.0 + 0.5);
+        return Instant::new(whole as i64, nanos as i64);
+    }
+
     /// Milliseconds since the Unix epoch (`Temporal.Instant.epochMilliseconds`).
     pub fn epoch_milliseconds(&self) -> i64 {
         return self.seconds * 1000 + self.nanoseconds as i64 / 1_000_000;
@@ -282,6 +326,101 @@ impl Instant {
 }
 
 impl ZonedDateTime {
+    /// Parse an RFC 3339 / ISO 8601 timestamp such as
+    /// `"2023-11-14T22:13:20.5+09:00"` or `"1970-01-01T00:00:00Z"`, preserving
+    /// the offset as a fixed-offset zone (so it round-trips through `Display`).
+    ///
+    /// The grammar is `[±]Y…Y-MM-DDThh:mm:ss[.fraction](Z|±hh:mm)`: the year is
+    /// four or more digits with an optional sign (ISO 8601 extended years), the
+    /// date/time separator may be `T`, `t`, or a space, the fraction is
+    /// truncated to nanosecond precision, and the offset is mandatory. `"Z"` and
+    /// `"+00:00"` both normalize to a `"Z"` zone. Malformed input traps; a
+    /// fallible parser returning a `Result` is future work.
+    pub fn parse_rfc3339(text: String) -> ZonedDateTime {
+        let len = text.len();
+        let mut i: i32 = 0;
+
+        // Year: an optional sign followed by one or more digits.
+        let mut year_sign: i64 = 1;
+        if i < len {
+            let c = text.get_byte_unchecked(i);
+            if c == '+' as u8 || c == '-' as u8 {
+                if c == '-' as u8 {
+                    year_sign = -1;
+                }
+                i += 1;
+            }
+        }
+        let year_start = i;
+        while i < len && is_ascii_digit(text.get_byte_unchecked(i)) {
+            i += 1;
+        }
+        if i == year_start {
+            rfc3339_error(&text);
+        }
+        let mut year: i64 = 0;
+        let mut yi = year_start;
+        while yi < i {
+            year = year * 10 + (text.get_byte_unchecked(yi) - '0' as u8) as i64;
+            yi += 1;
+        }
+        year = year * year_sign;
+
+        i = expect_byte(&text, i, '-' as u8);
+        let month = read_two_digits(&text, i);
+        i += 2;
+        i = expect_byte(&text, i, '-' as u8);
+        let day = read_two_digits(&text, i);
+        i += 2;
+
+        // Date/time separator: 'T', 't', or a space.
+        if i >= len {
+            rfc3339_error(&text);
+        }
+        let sep = text.get_byte_unchecked(i);
+        if sep != 'T' as u8 && sep != 't' as u8 && sep != ' ' as u8 {
+            rfc3339_error(&text);
+        }
+        i += 1;
+
+        let hour = read_two_digits(&text, i);
+        i += 2;
+        i = expect_byte(&text, i, ':' as u8);
+        let minute = read_two_digits(&text, i);
+        i += 2;
+        i = expect_byte(&text, i, ':' as u8);
+        let second = read_two_digits(&text, i);
+        i += 2;
+
+        // Optional fractional seconds, truncated to nanosecond precision.
+        let mut nanoseconds: i64 = 0;
+        if i < len && text.get_byte_unchecked(i) == '.' as u8 {
+            i += 1;
+            let frac_start = i;
+            let mut scale: i64 = 100_000_000;
+            while i < len && is_ascii_digit(text.get_byte_unchecked(i)) {
+                if scale >= 1 {
+                    nanoseconds = nanoseconds + (text.get_byte_unchecked(i) - '0' as u8) as i64 * scale;
+                    scale = scale / 10;
+                }
+                i += 1;
+            }
+            if i == frac_start {
+                rfc3339_error(&text);
+            }
+        }
+
+        // Mandatory zone designator: 'Z'/'z' or ±hh:mm.
+        let offset = parse_zone_designator(&text, i, len);
+
+        let days = days_from_civil(year, month, day);
+        let local_seconds = days * 86400 + hour * 3600 + minute * 60 + second;
+        return ZonedDateTime {
+            instant: Instant { seconds: local_seconds - offset, nanoseconds: nanoseconds as u32 },
+            time_zone: format_offset_suffix(offset),
+        };
+    }
+
     /// ISO year in the zone's local time. May be negative or beyond four digits.
     pub fn year(&self) -> i32 {
         let [_, year, _, _, _] = self.local_parts();
@@ -421,4 +560,62 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
     let doy = (153 * mp + 2) / 5 + day - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     return era * 146097 + doe - 719468;
+}
+
+/// Require byte `byte` at index `i` of `text`, returning the next index. Traps
+/// on mismatch or end of input.
+fn expect_byte(text: &String, i: i32, byte: u8) -> i32 {
+    if i >= text.len() || text.get_byte_unchecked(i) != byte {
+        rfc3339_error(text);
+    }
+    return i + 1;
+}
+
+/// Read exactly two ASCII digits at index `i` of `text` as an integer, trapping
+/// if either is missing or non-numeric.
+fn read_two_digits(text: &String, i: i32) -> i64 {
+    if i + 1 >= text.len()
+        || !is_ascii_digit(text.get_byte_unchecked(i))
+        || !is_ascii_digit(text.get_byte_unchecked(i + 1)) {
+        rfc3339_error(text);
+    }
+    let tens = (text.get_byte_unchecked(i) - '0' as u8) as i64;
+    let ones = (text.get_byte_unchecked(i + 1) - '0' as u8) as i64;
+    return tens * 10 + ones;
+}
+
+/// Parse the mandatory RFC 3339 zone designator in `text[start..end]` into a
+/// signed second offset: `"Z"`/`"z"` yields 0, `±hh:mm` its offset. Traps
+/// otherwise (an absent or malformed offset).
+fn parse_zone_designator(text: &String, start: i32, end: i32) -> i64 {
+    let span = end - start;
+    if span == 1 {
+        let c = text.get_byte_unchecked(start);
+        if c == 'Z' as u8 || c == 'z' as u8 {
+            return 0;
+        }
+        rfc3339_error(text);
+    }
+    let well_formed = span == 6
+        && (text.get_byte_unchecked(start) == '+' as u8 || text.get_byte_unchecked(start) == '-' as u8)
+        && is_ascii_digit(text.get_byte_unchecked(start + 1))
+        && is_ascii_digit(text.get_byte_unchecked(start + 2))
+        && text.get_byte_unchecked(start + 3) == ':' as u8
+        && is_ascii_digit(text.get_byte_unchecked(start + 4))
+        && is_ascii_digit(text.get_byte_unchecked(start + 5));
+    if !well_formed {
+        rfc3339_error(text);
+    }
+    let hours = (text.get_byte_unchecked(start + 1) - '0' as u8) as i64 * 10 + (text.get_byte_unchecked(start + 2) - '0' as u8) as i64;
+    let minutes = (text.get_byte_unchecked(start + 4) - '0' as u8) as i64 * 10 + (text.get_byte_unchecked(start + 5) - '0' as u8) as i64;
+    let magnitude = hours * 3600 + minutes * 60;
+    if text.get_byte_unchecked(start) == '-' as u8 {
+        return -magnitude;
+    }
+    return magnitude;
+}
+
+/// Trap with a uniform diagnostic for a malformed RFC 3339 timestamp.
+fn rfc3339_error(text: &String) -> ! {
+    panic(`core:temporal: malformed RFC 3339 timestamp "{text}"`);
 }

@@ -8,10 +8,11 @@ Minimal date and time types, modelled on TC39 Temporal.
 This is the MVP described in `docs/wep-2026-06-05-core-temporal.md`: it
 provides only the two value types every temporal API is built around, an
 exact point on the timeline (`Instant`) and that instant paired with a
-time-zone interpretation (`ZonedDateTime`). Methods, arithmetic,
-parsing/formatting, `now()`, civil field accessors, and `Duration` are
-deferred to follow-up work; the types exist now so `core:cbor` has a
-concrete Wado type to deserialize timestamps into.
+time-zone interpretation (`ZonedDateTime`). They carry ISO 8601 / RFC 3339
+formatting (`Display`), civil field accessors, RFC 3339 parsing, and epoch
+constructors; arithmetic, `now()`, and `Duration` are deferred to follow-up
+work. The types exist so `core:cbor` has a concrete Wado type to deserialize
+timestamps into.
 
 Relationship to `wasi:clocks`: `wasi:clocks` exposes its own `Instant`
 record (`{ seconds, nanoseconds }`) for the system clock. That type is a
@@ -59,6 +60,36 @@ Sub-second component, always in `0..1_000_000_000`. Incrementing
 (e.g. one nanosecond before the epoch is
 `Instant { seconds: -1, nanoseconds: 999_999_999 }`).
 
+#### `pub fn new(seconds: i64, nanoseconds: i64) -> Instant`
+
+Construct an instant `nanoseconds` after `seconds` since the Unix epoch,
+normalizing so the stored sub-second part lands in `0..1_000_000_000`
+even when `nanoseconds` is negative or `>= 1_000_000_000`. This is the
+canonical funnel that upholds the field invariant the accessors rely on.
+
+#### `pub fn from_epoch_seconds(seconds: i64) -> Instant`
+
+Construct an instant from whole seconds since the Unix epoch (CBOR tag 1
+integer form).
+
+#### `pub fn from_epoch_milliseconds(milliseconds: i64) -> Instant`
+
+Construct an instant from milliseconds since the Unix epoch. The inverse
+of `epoch_milliseconds`.
+
+#### `pub fn from_epoch_nanoseconds(nanoseconds: i64) -> Instant`
+
+Construct an instant from nanoseconds since the Unix epoch. The inverse
+of `epoch_nanoseconds`, and like it limited to the i64 range
+(≈ ±292 years).
+
+#### `pub fn from_unix_seconds(seconds: f64) -> Instant`
+
+Construct an instant from fractional seconds since the Unix epoch (CBOR
+tag 1 floating-point form). The fraction is rounded to the nearest
+nanosecond; `f64` precision limits sub-microsecond accuracy near the
+present.
+
 #### `pub fn epoch_milliseconds(&self) -> i64`
 
 Milliseconds since the Unix epoch (`Temporal.Instant.epochMilliseconds`).
@@ -87,8 +118,8 @@ An exact instant together with the time zone it is interpreted in.
 Corresponds to `Temporal.ZonedDateTime` — the only "complete" temporal
 value (an instant plus a wall-clock interpretation). The calendar is always
 ISO 8601 and therefore not stored. The broken-down wall-clock fields (year,
-month, day, hour, …) are a function of `instant` + `time_zone`, computed by
-accessors that are future work, not stored state.
+month, day, hour, …) are a function of `instant` + `time_zone`, computed on
+demand by accessors rather than stored state.
 
 `Ord` is auto-derived and orders by `instant` first, then `time_zone`
 lexically. That is _not_ a meaningful chronological order across different
@@ -103,6 +134,19 @@ The exact instant.
 IANA time-zone identifier (e.g. `"America/New_York"`, `"UTC"`) or a
 fixed UTC offset (e.g. `"+09:00"`). Mirrors the Temporal time-zone slot,
 which is also a string after the removal of `Temporal.TimeZone`.
+
+#### `pub fn parse_rfc3339(text: String) -> ZonedDateTime`
+
+Parse an RFC 3339 / ISO 8601 timestamp such as
+`"2023-11-14T22:13:20.5+09:00"` or `"1970-01-01T00:00:00Z"`, preserving
+the offset as a fixed-offset zone (so it round-trips through `Display`).
+
+The grammar is `[±]Y…Y-MM-DDThh:mm:ss[.fraction](Z|±hh:mm)`: the year is
+four or more digits with an optional sign (ISO 8601 extended years), the
+date/time separator may be `T`, `t`, or a space, the fraction is
+truncated to nanosecond precision, and the offset is mandatory. `"Z"` and
+`"+00:00"` both normalize to a `"Z"` zone. Malformed input traps; a
+fallible parser returning a `Result` is future work.
 
 #### `pub fn year(&self) -> i32`
 
