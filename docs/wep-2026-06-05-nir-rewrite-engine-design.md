@@ -168,10 +168,13 @@ The old fixed-point loop and the engine co-exist during the port.
   - [x] `cse` — direct arena walk (loop-level CSE).
   - [x] `ref_elim` — direct arena walks; lazy referent resolution, single-use
         deref source moved.
+  - [x] `const_object_globalization` — arena read-only gate + read rewrite;
+        globals via wrap-in-`Body`.
+  - [x] `const_branch_prune` — bottom-up arena walk; last user of the shared
+        `visit_project_functions` tree bridge.
   - Remaining local / whole-function passes: `elide_box_local`, `sroa`,
-    `sroa_param`, `const_object_globalization`, `multi_value_return`,
-    `labeled_block_fusion`, `container_sroa`, `branch_prune`,
-    `condition_implication`, `dce`, `inline`.
+    `sroa_param`, `multi_value_return`, `labeled_block_fusion`,
+    `container_sroa`, `condition_implication`, `dce`, `inline`.
   - Flow-sensitive (keep walkers, read arena): `const_folding`'s env walk,
     `copy_prop`, `licm`, `field_scalarize`, `store_load_forward`,
     `value_copy_demote`, `tmpl_hoist`.
