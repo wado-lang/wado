@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780750567727,
+  "lastUpdate": 1780758072718,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30857,6 +30857,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0b274004a83084d46bddce88e465af68d66cbd13"
         },
         "date": 1780750567191,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8780,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15232,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 456150,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "36b1c5948831eb021faf5fc7128d82aaa50c1446",
+          "message": "Merge pull request #1319 from wado-lang/claude/remove-builtin-array-qunaQ\n\nRemove legacy `builtin::array` type spelling in favor of `Array<T>`",
+          "timestamp": "2026-06-06T23:52:26+09:00",
+          "tree_id": "6b525c2fac70e07e4ba48f20dc979a47631be733",
+          "url": "https://github.com/wado-lang/wado/commit/36b1c5948831eb021faf5fc7128d82aaa50c1446"
+        },
+        "date": 1780758072370,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
