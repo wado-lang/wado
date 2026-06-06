@@ -16,7 +16,7 @@ Language service engine for the Wado compiler toolchain.
 | `src/uri.rs`                | Typed `Uri` + `UriScheme` for parsing `file:` / `core:` / `wasi:` / `kiln:` URIs once instead of inline string splitting  |
 | `src/text.rs`               | `PositionEncoding` and LSP `Position` ↔ compiler 1-based codepoint `(line, col)` conversion                               |
 | `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion (re-encodes spans in the negotiated position encoding)    |
-| `src/semantic_tokens.rs`    | Semantic token computation (lexer + AST classification). Re-encodes start/length at delta-encode time.                    |
+| `src/semantic_tokens.rs`    | Semantic token computation. Classifies identifiers by resolved `SymbolKind` from the `Semantics` snapshot, falling back to lexer + AST heuristics. Re-encodes start/length at delta-encode time. |
 | `src/definition.rs`         | Go-to-definition via `Cursor::{def_key, def_span}` and a file-path matcher for `use`/`#include` paths                     |
 | `src/hover.rs`              | Hover info; `Cursor::def_symbol` selects the binding, locals render from the AST node, items via `wado_compiler::unparse` |
 | `src/inlay_hints.rs`        | Inlay hints: inferred-type hints on `let` / closure / `for-of` bindings, plus parameter-name hints at call sites          |
@@ -66,9 +66,13 @@ only remaining hard failure: if a missing/broken import or a
 downstream phase bails, `build_semantics` (`src/lib.rs`) emits the
 failure diagnostic via the host and returns [`Semantics::empty`],
 and every position-bearing query returns `None` / `[]` for that
-snapshot. Semantic-token highlighting still works in that case
-because `semantic_tokens::compute` falls back to lexer-only
-classification. The recovery behaviour is pinned by
+snapshot. Semantic-token highlighting still works in that case:
+`Engine::semantic_tokens` passes `None` semantics to
+`semantic_tokens::compute`, which falls back to lexer + AST
+classification. When a snapshot *is* available, identifiers are
+classified by their resolved `SymbolKind` instead, with the same
+heuristic path as the per-token fallback for names the elaborator
+recorded no use→def edge for. The recovery behaviour is pinned by
 `tests/parse_error.rs`.
 
 ### Position encoding

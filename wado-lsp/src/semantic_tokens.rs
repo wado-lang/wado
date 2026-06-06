@@ -1,11 +1,17 @@
-use indexmap::IndexMap;
-use wado_compiler::ast::{self, Expr, Item, Stmt, Type};
+use indexmap::{IndexMap, IndexSet};
+use wado_compiler::ast::{self, AstId, Expr, Item, Stmt, Type};
 use wado_compiler::lexer::lex;
+use wado_compiler::semantics::Semantics;
+use wado_compiler::symbol::SymbolKind;
 use wado_compiler::token::{Token, TokenKind};
 
 use crate::text::{PositionEncoding, codepoints_to_code_units, line_without_terminator};
 
 /// LSP semantic token type indices (must match `TOKEN_TYPES` order).
+///
+/// Indices `0..=13` are append-only history: keep them stable so the legend
+/// stays comparable across versions. New kinds (`14..`) map Wado-specific
+/// declarations onto standard LSP scopes that ship in common themes.
 pub mod token_type {
     pub const NAMESPACE: u32 = 0;
     pub const TYPE: u32 = 1;
@@ -21,6 +27,10 @@ pub mod token_type {
     pub const STRING: u32 = 11;
     pub const NUMBER: u32 = 12;
     pub const OPERATOR: u32 = 13;
+    pub const STRUCT: u32 = 14;
+    pub const ENUM: u32 = 15;
+    pub const INTERFACE: u32 = 16;
+    pub const CLASS: u32 = 17;
 }
 
 /// Token type legend for LSP capability declaration.
@@ -39,7 +49,18 @@ pub const TOKEN_TYPES: &[&str] = &[
     "string",
     "number",
     "operator",
+    "struct",
+    "enum",
+    "interface",
+    "class",
 ];
+
+/// LSP semantic token modifier bit positions (must match `TOKEN_MODIFIERS`).
+pub mod token_modifier {
+    pub const DECLARATION: u32 = 1 << 0;
+    pub const DEFINITION: u32 = 1 << 1;
+    pub const READONLY: u32 = 1 << 2;
+}
 
 /// Token modifier legend for LSP capability declaration.
 pub const TOKEN_MODIFIERS: &[&str] = &["declaration", "definition", "readonly"];
@@ -56,24 +77,35 @@ pub struct SemanticToken {
 
 /// Compute semantic tokens for a Wado source string.
 ///
+/// When `sem` is `Some`, identifiers are classified by their resolved symbol
+/// kind (variable / parameter / function / type / …) — accurate even where the
+/// lexer-and-AST heuristics would misclassify (e.g. a bare function reference
+/// with no trailing `(`). Tokens that do not resolve to a symbol, and every
+/// token when `sem` is `None` (loader failed, so no semantics), fall back to
+/// the heuristic classifier so highlighting degrades gracefully rather than
+/// disappearing.
+///
 /// The returned tokens carry `start_char` as a 0-based **codepoint** column
 /// (matching `Span::column - 1` from the lexer) and `length` as a codepoint
 /// count. [`delta_encode`] later converts both into the negotiated LSP
 /// position encoding.
-pub fn compute(source: &str) -> Vec<SemanticToken> {
+pub fn compute(source: &str, sem: Option<&Semantics>) -> Vec<SemanticToken> {
     // 1. Lex (resilient — always succeeds; malformed input simply yields
     // recovery tokens which classify_token treats as plain).
     let lex_result = lex(source);
     let tokens = lex_result.tokens;
     let comments = lex_result.comments;
 
-    // 2. Parse (best-effort — resilient, always produces an AST).
+    // 2. Parse (best-effort — resilient, always produces an AST). The AST
+    // drives the heuristic fallback (type-position spans) and the set of
+    // parameter-binding ids used to split `Variable` symbols into
+    // `parameter` vs `variable`.
     let ast_types = collect_type_spans(&wado_compiler::parse(source).ast);
 
     // 3. Classify lexer tokens
     let mut result = Vec::new();
     for i in 0..tokens.len() {
-        if let Some(st) = classify_token(source, &tokens, i, &ast_types) {
+        if let Some(st) = classify_token(source, &tokens, i, &ast_types, sem) {
             result.push(st);
         }
     }
@@ -177,6 +209,12 @@ pub fn delta_encode(
 struct TypeSpans {
     /// byte start → token type for identifiers that are types/params/etc.
     map: IndexMap<usize, u32>,
+    /// `AstId` of every function / closure parameter binding. A resolved
+    /// `Variable` symbol whose definition id is in this set is a parameter
+    /// (the symbol table records no parameter/local distinction, so it is
+    /// recovered structurally here). Declaration and use sites share the
+    /// binding's definition id, so one set covers both.
+    param_ids: IndexSet<AstId>,
 }
 
 impl TypeSpans {
@@ -187,9 +225,18 @@ impl TypeSpans {
     fn get(&self, start: usize) -> Option<u32> {
         self.map.get(&start).copied()
     }
+
+    fn mark_param(&mut self, id: AstId) {
+        self.param_ids.insert(id);
+    }
+
+    fn is_param(&self, id: AstId) -> bool {
+        self.param_ids.contains(&id)
+    }
 }
 
-/// Walk the AST and collect spans for type names, type parameters, etc.
+/// Walk the AST and collect spans for type names, type parameters, etc.,
+/// plus the id of every parameter binding (see [`TypeSpans::param_ids`]).
 fn collect_type_spans(module: &ast::Module) -> TypeSpans {
     let mut spans = TypeSpans::default();
     for item in &module.items {
@@ -269,6 +316,7 @@ fn visit_item(spans: &mut TypeSpans, item: &Item) {
 fn visit_function(spans: &mut TypeSpans, f: &ast::Function) {
     visit_generic_params(spans, &f.type_params);
     for param in &f.params {
+        spans.mark_param(param.id);
         visit_type(spans, &param.ty);
     }
     if let Some(ret) = &f.return_type {
@@ -483,6 +531,7 @@ fn visit_expr(spans: &mut TypeSpans, expr: &Expr) {
         Expr::Matches(m) => visit_expr(spans, &m.expr),
         Expr::Closure(c) => {
             for param in &c.params {
+                spans.mark_param(param.id);
                 if let Some(ty) = &param.ty {
                     visit_type(spans, ty);
                 }
@@ -535,6 +584,7 @@ fn classify_token(
     tokens: &[Token],
     index: usize,
     ast_types: &TypeSpans,
+    sem: Option<&Semantics>,
 ) -> Option<SemanticToken> {
     let token = &tokens[index];
     if token.kind == TokenKind::Eof {
@@ -562,8 +612,11 @@ fn classify_token(
         // Keywords
         k if k.as_keyword_str().is_some() => (token_type::KEYWORD, 0),
 
-        // Identifiers
-        TokenKind::Ident(_) => classify_ident(tokens, index, ast_types),
+        // Identifiers: prefer the resolved symbol kind when semantics are
+        // available, otherwise fall back to the lexer/AST heuristics.
+        TokenKind::Ident(_) => sem
+            .and_then(|sem| classify_ident_semantic(sem, ast_types, token))
+            .unwrap_or_else(|| classify_ident(tokens, index, ast_types)),
 
         // Literals
         TokenKind::NumberLit(_) => (token_type::NUMBER, 0),
@@ -617,6 +670,60 @@ fn classify_token(
         token_type,
         modifiers,
     })
+}
+
+/// Classify an identifier by its resolved symbol kind.
+///
+/// Resolves the token's position to a [`Cursor`](wado_compiler::Cursor) over
+/// the entry module and follows the use→def edge to the defining symbol.
+/// Returns `None` when the cursor lands on no recognised name (e.g. a field
+/// access, an unresolved method receiver, or any identifier the elaborator
+/// recorded no edge for) so the caller can fall back to the heuristics.
+fn classify_ident_semantic(
+    sem: &Semantics,
+    ast_types: &TypeSpans,
+    token: &Token,
+) -> Option<(u32, u32)> {
+    let entry = &sem.entry_module_source;
+    let cursor = sem.cursor_at(entry, token.span.line, token.span.column)?;
+    let def_key = cursor.def_key()?;
+    let symbol = sem.symbol_at(&def_key)?;
+
+    let mut modifiers = 0;
+    let token_type = match &symbol.kind {
+        SymbolKind::Function(_) => token_type::FUNCTION,
+        SymbolKind::Struct(_) => token_type::STRUCT,
+        SymbolKind::Enum(_) | SymbolKind::Flags(_) | SymbolKind::Variant(_) => token_type::ENUM,
+        SymbolKind::Effect(_) | SymbolKind::Trait(_) => token_type::INTERFACE,
+        SymbolKind::Resource(_) => token_type::CLASS,
+        SymbolKind::Newtype(_) | SymbolKind::BuiltinType | SymbolKind::World(_) => token_type::TYPE,
+        SymbolKind::Variable(v) => {
+            if !v.is_mut {
+                modifiers |= token_modifier::READONLY;
+            }
+            // Parameters live in the entry module (the cursor resolves there),
+            // so a same-module id in the parameter set distinguishes them from
+            // ordinary locals.
+            if def_key.module == *entry && ast_types.is_param(def_key.ast_id) {
+                token_type::PARAMETER
+            } else {
+                token_type::VARIABLE
+            }
+        }
+        SymbolKind::Global(g) => {
+            if !g.is_mut {
+                modifiers |= token_modifier::READONLY;
+            }
+            token_type::VARIABLE
+        }
+    };
+
+    // No use→def edge means the cursor sits on the binding's own declaration.
+    if def_key == *cursor.key() {
+        modifiers |= token_modifier::DECLARATION | token_modifier::DEFINITION;
+    }
+
+    Some((token_type, modifiers))
 }
 
 /// Classify an identifier using AST type spans + lexer context heuristics.
@@ -690,15 +797,22 @@ fn next_is(tokens: &[Token], index: usize, kind: &TokenKind) -> bool {
 mod tests {
     use super::*;
 
+    /// Build a `Semantics` snapshot for `source` so the semantic
+    /// classification path can be exercised in unit tests.
+    fn sem_of(source: &str) -> Semantics {
+        let host = crate::test_support::MapHost::single("/test.wado", source);
+        futures::executor::block_on(wado_compiler::semantics(source, &host, Some("/test.wado")))
+    }
+
     #[test]
     fn test_empty_source() {
-        let tokens = compute("");
+        let tokens = compute("", None);
         assert!(tokens.is_empty());
     }
 
     #[test]
     fn test_keyword_classification() {
-        let tokens = compute("fn foo() {}");
+        let tokens = compute("fn foo() {}", None);
         // `fn` should be keyword
         assert_eq!(tokens[0].token_type, token_type::KEYWORD);
         // `foo` should be function
@@ -707,11 +821,12 @@ mod tests {
 
     #[test]
     fn test_type_annotation() {
-        let tokens = compute("fn foo(x: i32) {}");
+        let tokens = compute("fn foo(x: i32) {}", None);
         // `i32` at char 10 should be TYPE (from AST NamedType span)
         let i32_token = tokens.iter().find(|t| t.start_char == 10).unwrap();
         assert_eq!(i32_token.token_type, token_type::TYPE);
-        // `x` at char 7 should be VARIABLE (parameter, but no separate param detection yet)
+        // `x` at char 7 should be VARIABLE under the heuristic path (no
+        // separate parameter detection without semantics).
         let x_token = tokens.iter().find(|t| t.start_char == 7).unwrap();
         assert!(
             x_token.token_type == token_type::VARIABLE
@@ -721,9 +836,92 @@ mod tests {
 
     #[test]
     fn test_string_literal() {
-        let tokens = compute("let s = \"hello\";");
+        let tokens = compute("let s = \"hello\";", None);
         let string_token = tokens.iter().find(|t| t.token_type == token_type::STRING);
         assert!(string_token.is_some());
+    }
+
+    #[test]
+    fn semantic_parameter_classification() {
+        // With semantics, both the declaration and the use site of a
+        // parameter resolve to PARAMETER — the heuristic path cannot tell a
+        // parameter use from any other variable.
+        let src = "fn foo(x: i32) -> i32 { return x; }";
+        let sem = sem_of(src);
+        let tokens = compute(src, Some(&sem));
+
+        // `x` parameter declaration at char 7.
+        let decl = tokens.iter().find(|t| t.start_char == 7).unwrap();
+        assert_eq!(decl.token_type, token_type::PARAMETER);
+        assert_ne!(decl.modifiers & token_modifier::DECLARATION, 0);
+        assert_ne!(decl.modifiers & token_modifier::READONLY, 0);
+
+        // `x` use site inside `return x` — not a declaration.
+        let use_site = tokens
+            .iter()
+            .find(|t| t.token_type == token_type::PARAMETER && t.start_char != 7)
+            .unwrap();
+        assert_eq!(use_site.modifiers & token_modifier::DECLARATION, 0);
+    }
+
+    #[test]
+    fn semantic_function_reference_without_call() {
+        // A bare function reference (no trailing `(`) is the canonical case
+        // the heuristic gets wrong — it would classify `g` as a variable.
+        let src = "fn g() {}\nfn f() { let h = g; }";
+        let sem = sem_of(src);
+        let tokens = compute(src, Some(&sem));
+
+        // `g` on the second line, used as a value (line 1, after `= `).
+        let g_ref = tokens
+            .iter()
+            .find(|t| t.line == 1 && t.token_type == token_type::FUNCTION && t.start_char > 10)
+            .unwrap();
+        assert_eq!(g_ref.token_type, token_type::FUNCTION);
+    }
+
+    #[test]
+    fn semantic_local_is_readonly_unless_mut() {
+        let src = "fn f() { let a = 1; let mut b = 2; }";
+        let sem = sem_of(src);
+        let tokens = compute(src, Some(&sem));
+
+        // `a` is an immutable local → VARIABLE + readonly + declaration.
+        let a = tokens.iter().find(|t| t.start_char == 13).unwrap();
+        assert_eq!(a.token_type, token_type::VARIABLE);
+        assert_ne!(a.modifiers & token_modifier::READONLY, 0);
+        assert_ne!(a.modifiers & token_modifier::DECLARATION, 0);
+
+        // `b` is `let mut` → not readonly.
+        let b = tokens
+            .iter()
+            .find(|t| t.token_type == token_type::VARIABLE && t.start_char > 25)
+            .unwrap();
+        assert_eq!(b.modifiers & token_modifier::READONLY, 0);
+    }
+
+    #[test]
+    fn semantic_struct_is_struct_kind() {
+        let src = "struct Point { x: i32 }\nfn f() { let p = Point { x: 1 }; }";
+        let sem = sem_of(src);
+        let tokens = compute(src, Some(&sem));
+
+        // `Point` in the struct literal on line 1 resolves to a struct symbol.
+        let point_use = tokens
+            .iter()
+            .find(|t| t.line == 1 && t.token_type == token_type::STRUCT)
+            .unwrap();
+        assert_eq!(point_use.token_type, token_type::STRUCT);
+    }
+
+    #[test]
+    fn falls_back_to_heuristics_without_semantics() {
+        // No semantics: a bare function reference degrades to VARIABLE rather
+        // than disappearing. This pins the graceful-degradation contract.
+        let src = "fn g() {}\nfn f() { let h = g; }";
+        let tokens = compute(src, None);
+        let g_ref = tokens.iter().find(|t| t.line == 1 && t.start_char > 10);
+        assert!(g_ref.is_some(), "identifier must still be classified");
     }
 
     #[test]
@@ -737,7 +935,7 @@ mod tests {
         // line tokens around it (`fn`, `f`, etc.) must still appear,
         // but no COMMENT token may be produced.
         let src = "fn f() {\n    /* multi\n    line */\n    let _ = 1;\n}\n";
-        let tokens = compute(src);
+        let tokens = compute(src, None);
         for tok in &tokens {
             // No token may span lines under any circumstances.
             assert_eq!(

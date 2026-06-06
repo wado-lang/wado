@@ -328,13 +328,19 @@ impl Engine {
     /// Compute semantic tokens for the given document.
     ///
     /// Returns delta-encoded token data for LSP `textDocument/semanticTokens/full`.
-    /// This is a lightweight operation (lex + parse only, no compilation).
-    #[must_use]
-    pub fn semantic_tokens(&self, uri: &str) -> Vec<u32> {
+    /// Reuses the cached [`Semantics`] snapshot so identifiers are classified by
+    /// their resolved symbol kind. When the snapshot cannot be built (loader
+    /// failure), classification falls back to lexer/AST heuristics so
+    /// highlighting still appears — see [`semantic_tokens::compute`].
+    pub async fn semantic_tokens<H: CompilerHost>(&self, uri: &str, host: &H) -> Vec<u32> {
+        // Take the snapshot first (an owned `Rc`) so no borrow of `self` is
+        // held across the `.await`; then borrow the document text.
+        let snapshot = self.snapshot(uri, host).await;
         let Some(doc) = self.documents.get(uri) else {
             return Vec::new();
         };
-        let tokens = semantic_tokens::compute(&doc.text);
+        let sem = snapshot.as_ref().map(|s| &s.sem);
+        let tokens = semantic_tokens::compute(&doc.text, sem);
         semantic_tokens::delta_encode(&tokens, &doc.text, self.position_encoding)
     }
 

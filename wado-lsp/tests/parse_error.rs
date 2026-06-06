@@ -112,19 +112,20 @@ fn position_queries_resolve_in_healthy_regions() {
 /// Highlighting must keep working even with a syntax error present.
 #[test]
 fn semantic_tokens_survive_parse_error() {
-    let mut engine = Engine::new();
-    engine.open_document(&uri(), BROKEN_SOURCE.to_string());
-    let tokens = engine.semantic_tokens(&uri());
-    assert!(
-        !tokens.is_empty(),
-        "semantic_tokens should still produce lexer-based highlights",
-    );
-    // LSP delta-encoded form: every token is 5 u32s.
-    assert_eq!(
-        tokens.len() % 5,
-        0,
-        "semantic_tokens must be a multiple of 5 (deltaLine, deltaStart, length, type, mods)",
-    );
+    futures::executor::block_on(async {
+        let (engine, host) = engine_with_broken_source();
+        let tokens = engine.semantic_tokens(&uri(), &host).await;
+        assert!(
+            !tokens.is_empty(),
+            "semantic_tokens should still produce lexer-based highlights",
+        );
+        // LSP delta-encoded form: every token is 5 u32s.
+        assert_eq!(
+            tokens.len() % 5,
+            0,
+            "semantic_tokens must be a multiple of 5 (deltaLine, deltaStart, length, type, mods)",
+        );
+    });
 }
 
 /// A stray character is now a recovered *lexer* error, not a fatal one. The
