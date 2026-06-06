@@ -773,6 +773,18 @@ impl Lower {
 
 /// Arena -> tree lowering.
 impl Body {
+    /// Materialize a single expression subtree to its tree form. Used by passes
+    /// whose leaf analyses (e.g. `mod_ref::ModRef`) are still tree-shaped and
+    /// are invoked on a materialized subtree pending a full arena port.
+    pub fn to_tree_expr(&self, id: ExprId) -> NirExpr {
+        self.expr_to_tree(id)
+    }
+
+    /// Materialize a single statement subtree to its tree form.
+    pub fn to_tree_stmt(&self, id: StmtId) -> NirStmt {
+        self.stmt_to_tree(id)
+    }
+
     fn block_to_tree(&self, id: BlockId) -> NirBlock {
         let node = &self.blocks[id];
         NirBlock {
