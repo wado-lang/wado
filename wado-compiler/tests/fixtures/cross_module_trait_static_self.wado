@@ -1,0 +1,25 @@
+// Regression: a trait associated function that returns `Self`, called as
+// `Type::method(..)` from a module other than the one defining the trait and
+// impl, must resolve to the concrete type — not `unknown`.
+//
+// The static-method return-type lookup walks the impl AST in the defining
+// module but did not bind `Self`, so `resolve_named_type` saw no
+// `trait_ctx.self_type` and returned `unknown`. Anything downstream (here, the
+// `==` and field access) then failed to type-check. Same-module calls and
+// concrete (non-`Self`) return types were unaffected, so this only reproduces
+// across a module boundary.
+
+use { Point } from "./sub/cross_module_trait_static_self_lib.wado";
+
+test "cross-module trait associated fn returning Self" {
+    let p = Point::make(3, 4);
+    assert p.x == 3;
+    assert p.y == 4;
+
+    // A `-> Self` constructor that itself calls another `-> Self` associated fn.
+    let o = Point::origin();
+    assert o == Point { x: 0, y: 0 };
+}
+
+__DATA__
+{"test": {}}

@@ -1730,6 +1730,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                         .insert(tp.name.clone(), (idx, type_id));
                                 }
 
+                                // Bind `Self` to the impl's concrete type so a
+                                // `-> Self` return type resolves: a cross-module
+                                // trait associated fn (`fn make() -> Self`) is
+                                // resolved here from the impl AST, where
+                                // `resolve_named_type` reads `Self` off
+                                // `trait_ctx.self_type` rather than the now-gone
+                                // impl context.
+                                scope.trait_ctx.self_type = Some(
+                                    scope.resolve_return_type_in_module(
+                                        struct_module,
+                                        Some(&impl_block.ty),
+                                    ),
+                                );
                                 let result = scope.resolve_return_type_in_module(
                                     struct_module,
                                     method.return_type.as_ref(),
@@ -1876,6 +1889,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // not in the call site's module). Using the caller's
             // `resolve_type` would fail to canonicalise a return type
             // the caller never `use`'d.
+            // Bind `Self` to the impl's concrete type (see the inherent-impl
+            // branch above) so a `-> Self` return type resolves here too.
+            scope.trait_ctx.self_type =
+                Some(scope.resolve_return_type_in_module(&ms, Some(&impl_ty)));
             let result = scope.resolve_return_type_in_module(&ms, method.return_type.as_ref());
 
             drop(scope);
