@@ -149,7 +149,8 @@ fn "wado-compiler/tests/fixtures/newtype_generic_container_return.wado/run"() wi
     __b_26 = struct.new "core:prelude//List<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>" { repr: builtin::array_new<ref "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point">(0), used: 0 };
     "core:prelude/list.wado/List<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>::push"(__b_26, struct.new "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point" { x: loc.x, y: loc.y });
     "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array len: "), used: 11 }); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee __sroa_self_value_53(__b_26.used), __local_8); __local_7);
-    if builtin::unlikely(0 >= __b_26.used) {
+    if @unlikely(0 >= __b_26.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }
@@ -353,7 +354,8 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let new_used: i32;
     let start: i32;
     new_used = self.used + n;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     start = self.used;
@@ -369,7 +371,8 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
         return;
     }
     new_used = self.used + other_len;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -377,7 +380,8 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+    if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {
@@ -501,7 +505,8 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "core:prelude/list.wado/List<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>::push"(self, value) {
     let used: i32;
     used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+    if @unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<wado-compiler/tests/fixtures/newtype_generic_container_return.wado/Point>::grow"(self);
     }
     builtin::array_set<ref "wado-compiler/tests/fixtures/newtype_generic_container_return.wado//Point">(self.repr, used, value);

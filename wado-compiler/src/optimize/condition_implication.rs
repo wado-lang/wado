@@ -1158,7 +1158,6 @@ impl ShortCircuitGuard {
 
     /// Check if `check_var >= check_bound` is implied false by this guard.
     fn implies_false(&self, body: &Body, condition: ExprId, defs: &DefMap) -> bool {
-        let condition = peel_branch_hint(body, condition);
         let ExprKind::Binary { left, op, right } = &body.exprs[condition].kind else {
             return false;
         };
@@ -1354,7 +1353,6 @@ enum ScStmt {
 ///
 /// `(x & MASK) >= BOUND` is false when `MASK >= 0` and `BOUND > MASK`.
 fn is_bitmask_bounded(body: &Body, condition: ExprId, defs: &DefMap) -> bool {
-    let condition = peel_branch_hint(body, condition);
     let ExprKind::Binary { left, op, right } = &body.exprs[condition].kind else {
         return false;
     };
@@ -1464,7 +1462,6 @@ fn resolve_constant_through_struct(
 ///   `check_var >= check_bound` is false when `check_var` resolves to var
 ///   AND `check_bound` resolves to `limit + 1`.
 fn is_implied_false(body: &Body, condition: ExprId, guard: &LoopGuard, defs: &DefMap) -> bool {
-    let condition = peel_branch_hint(body, condition);
     let ExprKind::Binary { left, op, right } = &body.exprs[condition].kind else {
         return false;
     };
@@ -1497,26 +1494,6 @@ fn is_implied_false(body: &Body, condition: ExprId, guard: &LoopGuard, defs: &De
     check_bound_implied_false(&check_bound, &guard.bound, guard.is_strict, defs)
 }
 
-/// Peel a `builtin::likely` / `builtin::unlikely` branch-hint wrapper so the
-/// underlying condition can be analyzed. The hint annotates branch prediction
-/// without changing the condition's value, so a guarded bounds check written as
-/// `if builtin::unlikely(i >= len) { panic }` must be seen through to reach the
-/// `i >= len` comparison.
-///
-/// Inclusion criteria are funnelled through
-/// [`FunctionRef::is_branch_hint_call`] so this matcher, niri's
-/// `try_fold` peel, and the WIR builder's `BranchHint` lowering stay
-/// in sync.
-fn peel_branch_hint(body: &Body, condition: ExprId) -> ExprId {
-    if let ExprKind::Call { func, args, .. } = &body.exprs[condition].kind
-        && args.len() == 1
-        && func.is_branch_hint_call()
-    {
-        return peel_branch_hint(body, args[0].expr);
-    }
-    condition
-}
-
 /// Check if a condition is implied false by the loop guard OR any dominating guard.
 fn is_implied_false_by_any(
     body: &Body,
@@ -1547,7 +1524,6 @@ fn is_implied_by_dominating_guard(
     dg: &DominatingGuard,
     defs: &DefMap,
 ) -> bool {
-    let condition = peel_branch_hint(body, condition);
     let ExprKind::Binary { left, op, right } = &body.exprs[condition].kind else {
         return false;
     };

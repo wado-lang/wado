@@ -47,7 +47,8 @@ export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i
     let aligned = builtin::i32_and(heap_offset + align - 1, 0 - align);
     let new_offset = aligned + newsize;
 
-    if builtin::unlikely(new_offset > builtin::memory_size() * 65536) {
+    if new_offset > builtin::memory_size() * 65536 {
+        builtin::cold_path();
         grow_memory(new_offset);
     }
 
@@ -72,7 +73,8 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
     let aligned = builtin::i32_and(heap_offset + align - 1, 0 - align);
     let new_offset = aligned + newsize;
 
-    if builtin::unlikely(new_offset > builtin::memory_size() * 65536) {
+    if new_offset > builtin::memory_size() * 65536 {
+        builtin::cold_path();
         grow_memory(new_offset);
     }
 
@@ -294,7 +296,8 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
     // No fit: bump-allocate a fresh block at the heap frontier.
     let block = heap_offset;
     let new_offset = block + size;
-    if builtin::unlikely(new_offset > builtin::memory_size() * 65536) {
+    if new_offset > builtin::memory_size() * 65536 {
+        builtin::cold_path();
         grow_memory(new_offset);
     }
     heap_offset = new_offset;

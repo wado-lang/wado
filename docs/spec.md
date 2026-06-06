@@ -767,6 +767,52 @@ if opt matches { Some(x) } && x > 0 { }  // ERROR: x not in scope
 if opt matches { Some(x) && x > 0 } { }  // OK
 ```
 
+### Branch Hints
+
+`builtin::cold_path()` marks the code path that contains it as cold (rarely
+executed). It is a statement with no runtime effect: it changes only code
+generation. The branch that syntactically contains the call is annotated with a
+Wasm branch hint so the engine lays out the other side as the predicted-taken
+path, and the cold path is excluded from the inliner's cost estimate (a small
+hot function stays inlinable even when it guards a large error path).
+
+Because it is a plain statement rather than a condition wrapper, `cold_path()`
+works anywhere a branch body does — including an `if let` or `match` arm, where
+no boolean condition is available:
+
+```wado
+// Error/abort guard: the taken branch is cold.
+fn get(self, i: i32) -> T {
+    if i >= self.len {
+        builtin::cold_path();
+        panic("index out of bounds");
+    }
+    return self.data[i];
+}
+
+// `match` arm with no boolean condition.
+match command {
+    Command::Run => execute(),
+    Command::Crash => {
+        builtin::cold_path();
+        panic("crashed");
+    }
+}
+```
+
+Placed on the fall-through after a guard whose taken branch diverges, it hints
+the guard as likely-taken — the guard-clause idiom:
+
+```wado
+fn lookup(self, key: String) -> i32 {
+    if let Some(v) = self.fast_path(key) {
+        return v;
+    }
+    builtin::cold_path(); // the slow path below is rarely reached
+    return self.slow_path(key);
+}
+```
+
 ## Memory Model
 
 ### Core Principles

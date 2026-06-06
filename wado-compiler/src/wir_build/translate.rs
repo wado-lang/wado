@@ -708,22 +708,34 @@ fn instr_has_cold_path(i: &WirInstr) -> bool {
     }
 }
 
+/// True when an `if` has no meaningful `else` — either no else block, or one
+/// whose only instructions are `nop`s. `if let` / `while let` desugaring lowers
+/// to `if <test> { … } else { nop }`, which is semantically the implicit-else
+/// (fall-through) shape, so guard-clause hinting must treat it like a bare `if`.
+fn else_is_empty(else_body: &Option<Vec<WirInstr>>) -> bool {
+    match else_body {
+        None => true,
+        Some(body) => body.iter().all(|i| matches!(i, WirInstr::Nop)),
+    }
+}
+
 /// Finalize `builtin::cold_path()` markers into Wasm branch hints.
 ///
 /// `cold_path()` lowers to a side-effect-free [`WirInstr::ColdPath`] left in
 /// the branch body. This pass finds the enclosing conditional and wraps its
-/// condition in [`WirInstr::BranchHint`] — the same node `builtin::likely` /
-/// `builtin::unlikely` produce — so the existing emitter records a
+/// condition in [`WirInstr::BranchHint`] so the emitter records a
 /// `metadata.code.branch_hint` entry. Two shapes are recognized:
 ///
 ///  - **In-branch**: an `if` whose then/else body carries the marker. A cold
 ///    then-branch hints the condition unlikely-true (`likely = false`); a cold
 ///    else-branch hints it likely-true (`likely = true`).
 ///  - **Fall-through / implicit-else**: an `if cond { <diverges> }` with no
-///    `else` whose fall-through path unconditionally reaches a marker later in
-///    the same block. The condition-false side is cold, so the condition is
-///    hinted likely-true. This covers the guard-clause idiom
-///    `if ok { return v } cold_path(); return err`.
+///    `else` (or a `nop`-only else, as `if let` / `while let` lower to) whose
+///    fall-through path unconditionally reaches a marker later in the same
+///    block. The condition-false side is cold, so the condition is hinted
+///    likely-true. This covers the guard-clause idiom
+///    `if ok { return v } cold_path(); return err`, including its
+///    `if let Some(v) = … { return v } cold_path(); …` form.
 ///
 /// The marker itself stays in place and emits nothing. Runs unconditionally at
 /// WIR finalization, so the hint is independent of the optimization level.
@@ -731,34 +743,47 @@ fn apply_cold_path_hints(instrs: &mut [WirInstr]) {
     for instr in instrs.iter_mut() {
         apply_cold_path_hints_instr(instr);
     }
+    hint_guard_fall_through(instrs, false);
+}
 
-    // Fall-through pass: walk the block backwards, tracking whether the path
-    // *after* the current statement unconditionally reaches a `cold_path()`
-    // marker before any non-cold divergence (`reaches_cold`). A guard `if cond {
-    // <diverges> }` (no else) sitting in front of such a path has a cold
-    // fall-through, so its taken branch is the hot one.
-    let mut reaches_cold = false;
+/// Backward fall-through pass for the guard-clause idiom. `reaches_cold` is
+/// whether the path immediately *after* this slice unconditionally reaches a
+/// `cold_path()` marker before any non-cold divergence; the return value is the
+/// same predicate for the path *before* the slice.
+///
+/// A guard `if cond { <diverges> }` (with no/empty else) sitting in front of a
+/// cold path has a cold fall-through, so its taken branch is hinted likely. The
+/// walk descends transparent `Seq`/`Block` tails so a guard inside an `if let` /
+/// `while let` desugaring — which lowers to a `Seq`-wrapped `if … else { nop }`
+/// whose `cold_path()` sibling lives in the enclosing block — is still reached.
+fn hint_guard_fall_through(instrs: &mut [WirInstr], mut reaches_cold: bool) -> bool {
     for i in (0..instrs.len()).rev() {
         if reaches_cold
             && let WirInstr::If {
                 condition,
                 then_body,
-                else_body: None,
+                else_body,
                 ..
             } = &mut instrs[i]
+            && else_is_empty(else_body)
             && then_body.iter().any(WirInstr::always_diverges)
             && !block_has_cold_path(then_body)
         {
             wrap_condition_hint(condition, true);
         }
-        // A bare marker (possibly under transparent `Block`/`Seq`) makes the
-        // path cold; an unconditional non-cold divergence ends it.
-        if instr_has_cold_path(&instrs[i]) {
-            reaches_cold = true;
-        } else if instrs[i].always_diverges() {
-            reaches_cold = false;
+        // Update `reaches_cold` for the position before `instrs[i]`. A bare
+        // marker makes the path cold; a transparent group propagates through its
+        // own backward pass; any other unconditional divergence ends it.
+        match &mut instrs[i] {
+            WirInstr::ColdPath => reaches_cold = true,
+            WirInstr::Seq(body) | WirInstr::Block { body, .. } => {
+                reaches_cold = hint_guard_fall_through(body, reaches_cold);
+            }
+            other if other.always_diverges() => reaches_cold = false,
+            _ => {}
         }
     }
+    reaches_cold
 }
 
 /// Wrap an `if` condition in a `BranchHint`, unless it already carries an

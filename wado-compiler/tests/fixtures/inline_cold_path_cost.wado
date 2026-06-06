@@ -1,14 +1,16 @@
-// `cold_path()` excludes its branch from the inliner's cost estimate, the same
-// way `builtin::unlikely(..)` does for a hinted condition. `probe_cold` is tiny
-// on its hot path but guards a large cold path; counting that path would push
-// it past the inline threshold. Because the branch carries a `cold_path()`
-// marker, the cost is skipped and the function stays inlinable: at -O2 it is
-// inlined into `run` and DCE'd, so its name disappears from the WIR.
+// `cold_path()` excludes its branch from the inliner's cost estimate. Each
+// probe is tiny on its hot path but guards a large cold path; counting that
+// path would push it past the inline threshold. Because the cold branch carries
+// a `cold_path()` marker, the cost is skipped and the function stays inlinable:
+// at -O2 each probe is inlined into `run` and DCE'd, so its name disappears from
+// the WIR.
 //
-// Without the cost exclusion, `probe_cold` is not inlined and the name
-// survives — that is what `wir_not_expect:O2` guards.
+// `probe_then` marks the then-branch cold; `probe_else` marks the else-branch
+// cold — covering both arms of the cost heuristic. Without the cost exclusion
+// neither is inlined and the name survives, which is what `wir_not_expect:O2`
+// guards.
 
-fn probe_cold(x: i32) -> i32 {
+fn probe_then(x: i32) -> i32 {
     let r = x + 1;
     if x < 0 {
         builtin::cold_path();
@@ -27,12 +29,33 @@ fn probe_cold(x: i32) -> i32 {
     return r;
 }
 
+fn probe_else(x: i32) -> i32 {
+    let r = x + 1;
+    if x >= 0 {
+        return r;
+    } else {
+        builtin::cold_path();
+        let a = x + 2;
+        let b = a + 3;
+        let c = b + 4;
+        let d = c + 5;
+        let e = d + 6;
+        let f = e + 7;
+        let g = f + 8;
+        let h = g + 9;
+        let i = h + 10;
+        let j = i + 11;
+        panic(`cold {j}`);
+    }
+}
+
 export fn run() {
-    assert probe_cold(5) == 6;
+    assert probe_then(5) == 6;
+    assert probe_else(7) == 8;
 }
 
 __DATA__
 {
     "stdout": "",
-    "wir_not_expect:O2": ["probe_cold"]
+    "wir_not_expect:O2": ["probe_then", "probe_else"]
 }

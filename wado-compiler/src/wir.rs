@@ -1552,9 +1552,10 @@ pub enum WirInstr {
         then_body: Vec<WirInstr>,
         else_body: Option<Vec<WirInstr>>,
     },
-    /// Branch hint annotation (from `builtin::likely`/`builtin::unlikely`).
-    /// Wraps a condition expression; consumed by the emitter when it appears
-    /// as the condition of an `If` instruction.
+    /// Branch hint annotation synthesized from `builtin::cold_path()` by
+    /// `apply_cold_path_hints` during WIR finalization. Wraps a condition
+    /// expression; consumed by the emitter when it appears as the condition of
+    /// an `If` instruction, which records a `metadata.code.branch_hint` entry.
     BranchHint {
         likely: bool,
         expr: Box<WirInstr>,

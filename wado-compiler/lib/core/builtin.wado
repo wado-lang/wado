@@ -189,19 +189,23 @@ fn f32_reinterpret_i32(i: i32) -> f32;
 /// Traps unconditionally, marking unreachable code.
 fn unreachable() -> !;
 
-/// Branch prediction hints. `likely(cond)` / `unlikely(cond)` return `cond`
-/// unchanged but annotate the enclosing branch so codegen emits a Wasm
-/// branch hint (`metadata.code.branch_hint`). Use them as the condition of an
-/// `if`: `if unlikely(error) { ... }`.
-fn likely(cond: bool) -> bool;
-fn unlikely(cond: bool) -> bool;
-
-/// Marks the enclosing code path as cold (rarely executed). Unlike
-/// `likely` / `unlikely`, which wrap an `if` condition, `cold_path()` is a
-/// statement placed inside a branch body — so it works where no boolean
-/// condition is available, e.g. an `if let` / `match` arm. The branch that
-/// syntactically contains the call is hinted unlikely, and the path is
-/// excluded from the inliner's cost estimate. Mirrors `std::hint::cold_path`.
+/// Marks the enclosing code path as cold (rarely executed). `cold_path()` is a
+/// statement placed inside a branch body, so it works anywhere — an `if` /
+/// `if let` / `match` arm, or as the cold fall-through after a guard clause —
+/// without needing a boolean condition to wrap. The branch that syntactically
+/// contains the call (or, for a diverging guard, the fall-through past it) is
+/// hinted unlikely via a Wasm branch hint (`metadata.code.branch_hint`), and
+/// the path is excluded from the inliner's cost estimate. Mirrors Rust's
+/// `std::hint::cold_path`.
+///
+/// To hint a hot guard whose taken branch diverges, place `cold_path()` on the
+/// cold fall-through:
+///
+/// ```wado
+/// if ok { return value }
+/// cold_path();
+/// return error
+/// ```
 fn cold_path();
 
 // =========================================================================

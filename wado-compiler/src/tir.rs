@@ -773,6 +773,12 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
+    /// True when `id` resolves to the never type `!`. An expression of this type
+    /// diverges and never yields a value (`panic`, `unreachable`, …).
+    pub fn is_never(&self, id: TypeId) -> bool {
+        matches!(self.get(id), ResolvedType::Never)
+    }
+
     /// Erase all newtypes from the `TypeTable`.
     /// Look up the ultimate base type name for a newtype by its name.
     /// Returns `None` if the name is not a known newtype.

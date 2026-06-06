@@ -147,7 +147,8 @@ fn "wado-compiler/tests/fixtures/cross_module_struct_field_type.wado/run"() {
     w = struct.new "./sub/cross_module_struct_field_type_lib.wado//Wrapper" { name: name, items: ref.as_non_null(__b_10 = struct.new "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>" { repr: builtin::array_new<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(0), used: 0 }; __b_10) };
     expected = struct.new "./sub/cross_module_struct_field_type_lib.wado//Wrapper" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116), used: 4 }, items: ref.as_non_null(__b_1 = struct.new "core:prelude//List<./sub/cross_module_struct_field_type_lib.wado/Inner>" { repr: builtin::array_new<ref "./sub/cross_module_struct_field_type_lib.wado//Inner">(0), used: 0 }; __b_1) };
     __cond = "./sub/cross_module_struct_field_type_lib.wado/Wrapper^Eq::eq"(w, expected);
-    if __cond == 0 {
+    if @unlikely(__cond == 0) {
+        cold_path;
         "core:internal/panic"(__local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(146), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 117); "core:prelude/string.wado/String::push"(__local_6, 110); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/cross_module_struct_field_type.wado"), used: 64 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; f_20 = __local_7; "core:prelude/primitive.wado/i32::fmt_decimal"(6, f_20); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: w == expected
 "), used: 26 }); "core:prelude/string.wado/String::push"(__local_6, 119); "core:prelude/string.wado/String::push"(__local_6, 58); "core:prelude/string.wado/String::push"(__local_6, 32); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; "./sub/cross_module_struct_field_type_lib.wado/Wrapper^Inspect::inspect"(w, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected: "), used: 10 }); __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 }; "./sub/cross_module_struct_field_type_lib.wado/Wrapper^Inspect::inspect"(expected, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); __local_6);
@@ -372,7 +373,8 @@ fn "core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
     let new_used: i32;
     let start: i32;
     new_used = self.used + n;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     start = self.used;
@@ -388,7 +390,8 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
         return;
     }
     new_used = self.used + other_len;
-    if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+    if @unlikely(new_used > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, new_used);
     }
     builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
@@ -463,7 +466,8 @@ fn "core:prelude/string.wado/StrCharIter^Iterator::next"(self) {
 }
 
 fn "core:prelude/string.wado/String::push"(self, c) {
-    if builtin::unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+    if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/string.wado/String::grow"(self, self.used + 4);
     }
     if c <u 128 {

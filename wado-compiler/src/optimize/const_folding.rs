@@ -45,7 +45,7 @@ use crate::niri::{
     Arm, CalleeMap, FieldSnapshot, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter, Lattice,
     Value, is_ctfe_eligible,
 };
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
 use super::alias::{build_alias_info, build_value_copy_helpers, recognize_value_copy_a};
 use super::arena_query::has_break_to;
@@ -1088,7 +1088,7 @@ fn stmt_falls_through(body: &Body, s: StmtId, type_table: &TypeTable) -> bool {
 /// definitely do not produce a value (`panic(…)`, `unreachable()`,
 /// `loop { }`, calls whose return type is `!`).
 fn is_never_type(type_id: TypeId, type_table: &TypeTable) -> bool {
-    matches!(type_table.get(type_id), ResolvedType::Never)
+    type_table.is_never(type_id)
 }
 
 /// True when a `Call`'s callee is a compiler builtin that cannot
@@ -1253,8 +1253,8 @@ fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {
                     effects.mut_borrowed.insert(*index);
                 }
             }
-            // Builtin intrinsics (`array_*`, `select`, `likely` /
-            // `unlikely`, `memory_*`, `store_*`, `load_*`,
+            // Builtin intrinsics (`array_*`, `select`, `cold_path`,
+            // `memory_*`, `store_*`, `load_*`,
             // `copy_value`, the i64-128 helpers, …) never mutate
             // user-level struct fields tracked by `field_env`:
             // `array_set` writes an array element, `memory_grow`

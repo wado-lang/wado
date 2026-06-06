@@ -2526,6 +2526,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// [`super::sem::types::AssertCaptureInfo`] (annotate's
     /// `CaptureScanner` already chose them); the hook in `reify_expr`
     /// emits the `let __vK = …;` bindings during the condition walk.
+    /// Build a `builtin::cold_path()` marker statement for a compiler-synthesized
+    /// cold branch (an `assert` failure, a `?` error propagation, …). Codegen
+    /// then hints the enclosing branch unlikely and the inliner skips the branch.
+    fn make_cold_path_stmt(&self, span: crate::token::Span) -> TirStmt {
+        use crate::synthesis::common::builtin_call;
+        use crate::tir::{TirStmtKind, TypeTable};
+        let call = builtin_call("cold_path", Vec::new(), TypeTable::UNIT);
+        TirStmt::new(TirStmtKind::Expr(call), span)
+    }
+
     fn reify_assert(
         &mut self,
         assert_stmt: &ast::AssertStmt,
@@ -2725,7 +2735,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
 
         let then_block = TirBlock::new(
-            vec![TirStmt::new(TirStmtKind::Expr(panic_call), span)],
+            vec![
+                self.make_cold_path_stmt(span),
+                TirStmt::new(TirStmtKind::Expr(panic_call), span),
+            ],
             span,
         );
         inner_stmts.push(TirStmt::new(
@@ -4582,12 +4595,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             guard: None,
             body: TirExpr::new(
                 TirExprKind::Block(TirBlock::new(
-                    vec![TirStmt::new(
-                        TirStmtKind::Return {
-                            value: Some(TirExpr::new(TirExprKind::Null, inner_type, span)),
-                        },
-                        span,
-                    )],
+                    vec![
+                        self.make_cold_path_stmt(span),
+                        TirStmt::new(
+                            TirStmtKind::Return {
+                                value: Some(TirExpr::new(TirExprKind::Null, inner_type, span)),
+                            },
+                            span,
+                        ),
+                    ],
                     span,
                 )),
                 TypeTable::NEVER,
@@ -4722,12 +4738,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             guard: None,
             body: TirExpr::new(
                 TirExprKind::Block(TirBlock::new(
-                    vec![TirStmt::new(
-                        TirStmtKind::Return {
-                            value: Some(err_variant),
-                        },
-                        span,
-                    )],
+                    vec![
+                        self.make_cold_path_stmt(span),
+                        TirStmt::new(
+                            TirStmtKind::Return {
+                                value: Some(err_variant),
+                            },
+                            span,
+                        ),
+                    ],
                     span,
                 )),
                 crate::tir::TypeTable::NEVER,

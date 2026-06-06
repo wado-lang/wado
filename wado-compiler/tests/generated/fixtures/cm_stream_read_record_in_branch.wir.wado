@@ -185,7 +185,8 @@ fn "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/run"() wit
         "core:cli/eprintln"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no preopened directories available"), used: 34 });
         return;
     }
-    __pattern_temp_0 = "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_binding__Descriptor_read_directory"(local.tee dir(if builtin::unlikely(0 >= dirs.used) {
+    __pattern_temp_0 = "wado-compiler/tests/fixtures/cm_stream_read_record_in_branch.wado/__cm_binding__Descriptor_read_directory"(local.tee dir(if @unlikely(0 >= dirs.used) {
+        cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
         unreachable;
     }; builtin::array_get<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0).0));
@@ -534,7 +535,8 @@ fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
 fn "core:prelude/list.wado/List<wasi:filesystem/types.wado/DirectoryEntry>::push"(self, value) {
     let used: i32;
     used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+    if @unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<wasi:filesystem/types.wado/DirectoryEntry>::grow"(self);
     }
     builtin::array_set<ref "wasi:filesystem/types.wado//DirectoryEntry">(self.repr, used, value);
@@ -544,7 +546,8 @@ fn "core:prelude/list.wado/List<wasi:filesystem/types.wado/DirectoryEntry>::push
 fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>::push"(self, value) {
     let used: i32;
     used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+    if @unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>::grow"(self);
     }
     builtin::array_set<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(self.repr, used, value);

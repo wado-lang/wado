@@ -38,7 +38,8 @@ export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i
     }
     let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
     let new_offset: i32 = (aligned + newsize);
-    if core::builtin::unlikely((new_offset > (core::builtin::memory_size() * 65536))) {
+    if (new_offset > (core::builtin::memory_size() * 65536)) {
+        core::builtin::cold_path();
         core::allocator::grow_memory(new_offset);
     }
     core::allocator::heap_offset = new_offset;
@@ -54,7 +55,8 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
     }
     let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
     let new_offset: i32 = (aligned + newsize);
-    if core::builtin::unlikely((new_offset > (core::builtin::memory_size() * 65536))) {
+    if (new_offset > (core::builtin::memory_size() * 65536)) {
+        core::builtin::cold_path();
         core::allocator::grow_memory(new_offset);
     }
     core::allocator::heap_offset = new_offset;
@@ -191,7 +193,8 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
     }
     let block: i32 = core::allocator::heap_offset;
     let new_offset: i32 = (block + size);
-    if core::builtin::unlikely((new_offset > (core::builtin::memory_size() * 65536))) {
+    if (new_offset > (core::builtin::memory_size() * 65536)) {
+        core::builtin::cold_path();
         core::allocator::grow_memory(new_offset);
     }
     core::allocator::heap_offset = new_offset;
@@ -217,7 +220,7 @@ fn i32_clz(x: i32) -> i32;
 
 fn unreachable() -> !;
 
-fn unlikely(cond: bool) -> bool;
+fn cold_path();
 
 export fn __cm_export__run() {
     __inline___initialize_modules_0: {

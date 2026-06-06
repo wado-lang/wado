@@ -493,7 +493,8 @@ fn "wado-compiler/tests/fixtures/http_echo_headers.wado/handle"(request) {
     if "wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_has"(req_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-echo"), used: 6 }) {
         values = "wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_get"(req_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-echo"), used: 6 });
         if values.used > 0 {
-            drop("wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_append"(resp_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-echoed"), used: 8 }, if builtin::unlikely(0 >= values.used) {
+            drop("wado-compiler/tests/fixtures/http_echo_headers.wado/__cm_binding__Fields_append"(resp_headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-echoed"), used: 8 }, if @unlikely(0 >= values.used) {
+                cold_path;
                 "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
                 unreachable;
             }; builtin::array_get<ref "core:prelude//List<u8>">(values.repr, 0)));
@@ -1072,7 +1073,8 @@ fn "core:internal/cm_stream_write_raw_u8"(handle, data, len) {
 fn "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(self, value) {
     let used: i32;
     used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+    if @unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"(self);
     }
     builtin::array_set<ref "core:prelude//List<u8>">(self.repr, used, value);
@@ -1082,7 +1084,8 @@ fn "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push"(self, va
 fn "core:prelude/list.wado/List<u8>::push"(self, value) {
     let used: i32;
     used = self.used;
-    if builtin::unlikely(used >= builtin::array_len(self.repr)) {
+    if @unlikely(used >= builtin::array_len(self.repr)) {
+        cold_path;
         "core:prelude/list.wado/List<u8>::grow"(self);
     }
     builtin::array_set_u8(self.repr, used, value);
