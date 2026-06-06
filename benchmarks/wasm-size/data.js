@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780764544348,
+  "lastUpdate": 1780780445580,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -30965,6 +30965,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 459983,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1d50cb3991bc73362d34a1c72ba752a1afa2d872",
+          "message": "Merge pull request #1320 from wado-lang/claude/ll-prediction-gaps-lJDuj\n\ngale: thread the LL FOLLOW repair at runtime instead of cloning callees",
+          "timestamp": "2026-06-07T06:04:55+09:00",
+          "tree_id": "231a87718720c2fb16dcf63b5202c554db3bb118",
+          "url": "https://github.com/wado-lang/wado/commit/1d50cb3991bc73362d34a1c72ba752a1afa2d872"
+        },
+        "date": 1780780445042,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8780,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15232,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 469113,
             "unit": "bytes"
           }
         ]
