@@ -33,9 +33,8 @@ use crate::token::Span;
 /// diagnostic emitter.
 #[derive(Default, Clone)]
 pub(crate) struct Liveness {
-    /// Read by reify gating in the next slice; populated now so the
-    /// reachability result is observable and testable.
-    #[expect(dead_code, reason = "reify gating consumes this in the next slice")]
+    /// Reachable items. Reify gates free-function / global emission on this;
+    /// `dead_items` is its user-authored complement.
     pub(crate) live_items: IndexSet<SymbolKey>,
     pub(crate) dead_items: Vec<SymbolKey>,
 }
@@ -221,8 +220,10 @@ impl AstVisitor for IdCollector {
 
 /// User-authored modules are the entry point and the files / URLs it
 /// transitively imports. Stdlib (`Core` / `Wasi` / `Wasm` / `Builtin`) is
-/// never reported.
-fn is_user_authored(source: &ModuleSource) -> bool {
+/// never reported — and never reify-gated: stdlib functions reached only
+/// through compiler synthesis (CM bindings, effect dispatch) have no
+/// source-level caller, so the optimize-time DCE removes their dead ones.
+pub(crate) fn is_user_authored(source: &ModuleSource) -> bool {
     matches!(
         source,
         ModuleSource::EntryPoint { .. }

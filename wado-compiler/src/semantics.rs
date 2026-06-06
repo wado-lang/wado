@@ -1015,14 +1015,10 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // so the result is never "complete" even if later phases ran clean.
     let no_syntax_errors = load_result.modules.values().all(|m| !m.has_syntax_errors());
 
-    // Source-level liveness: reachability from the export boundary over the
-    // call graph the elaborator recorded in `references`. Runs between
-    // `annotate_bodies` and `reify`; both the diagnostic emitter and (in a
-    // later slice) reify gating read the result off `Semantics`.
-    let liveness = {
-        let _span = logger.span("elaborate/liveness");
-        crate::elaborator::liveness::compute(&load_result.modules, &references)
-    };
+    // Source-level liveness was computed inside `build_tir_from_state`
+    // (between `annotate_bodies` and `reify`, so reify can gate on it). Move
+    // it onto `Semantics` for the diagnostic emitter and LSP.
+    let liveness = std::mem::take(&mut state.liveness);
 
     Semantics {
         entry_module_source: load_result.entry_module_source,
