@@ -28,7 +28,7 @@ with `ClockInstant::from`. Merely naming the `wasi:clocks` record in these
 impls is not a runtime use of the clock, so it pulls in no WASI import for a
 component that never calls one.
 
-Both types are ISO 8601 only and so store no calendar.
+Both `core:temporal` types are ISO 8601 only and so store no calendar.
 
 ```
 use { Instant, ZonedDateTime } from "core:temporal";

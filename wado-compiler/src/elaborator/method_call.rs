@@ -2537,46 +2537,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             !is_from_or_try_from(&base)
         };
 
-        let check_impl = |impl_block: &ast::ImplBlock, impl_module: &ModuleSource| -> Option<String> {
-            let trait_type = impl_block.trait_type.as_ref()?;
-            if Self::get_type_name_static(&impl_block.ty) != struct_name
-                || !matches_arg_type(trait_type, impl_module)
-            {
-                return None;
-            }
-            for method in &impl_block.methods {
-                let has_self = method
-                    .params
-                    .iter()
-                    .any(|p| p.self_kind != ast::SelfKind::None);
-                if method.name == method_name && !has_self {
-                    return Some(resolve_trait_name(trait_type));
+        let check_impl =
+            |impl_block: &ast::ImplBlock, impl_module: &ModuleSource| -> Option<String> {
+                let trait_type = impl_block.trait_type.as_ref()?;
+                if Self::get_type_name_static(&impl_block.ty) != struct_name
+                    || !matches_arg_type(trait_type, impl_module)
+                {
+                    return None;
                 }
-            }
-            // Fall back to the trait declaration's default methods: when
-            // `impl Trait for Type` does not override a defaulted static
-            // method, the trait still provides the body, so `Type::method`
-            // (called concretely, not via a generic bound) must resolve to
-            // the trait's default. This mirrors how generic dispatch
-            // (`T::method()`) already finds default methods in
-            // `find_method_type_param_names`.
-            let trait_name_base = Self::get_type_name_static(trait_type);
-            if let Some(trait_methods) = self.find_trait_decl_methods(&trait_name_base) {
-                for default_method in &trait_methods {
-                    if default_method.name != method_name || default_method.body.is_none() {
-                        continue;
-                    }
-                    let has_self = default_method
+                for method in &impl_block.methods {
+                    let has_self = method
                         .params
                         .iter()
                         .any(|p| p.self_kind != ast::SelfKind::None);
-                    if !has_self {
+                    if method.name == method_name && !has_self {
                         return Some(resolve_trait_name(trait_type));
                     }
                 }
-            }
-            None
-        };
+                // Fall back to the trait declaration's default methods: when
+                // `impl Trait for Type` does not override a defaulted static
+                // method, the trait still provides the body, so `Type::method`
+                // (called concretely, not via a generic bound) must resolve to
+                // the trait's default. This mirrors how generic dispatch
+                // (`T::method()`) already finds default methods in
+                // `find_method_type_param_names`.
+                let trait_name_base = Self::get_type_name_static(trait_type);
+                if let Some(trait_methods) = self.find_trait_decl_methods(&trait_name_base) {
+                    for default_method in &trait_methods {
+                        if default_method.name != method_name || default_method.body.is_none() {
+                            continue;
+                        }
+                        let has_self = default_method
+                            .params
+                            .iter()
+                            .any(|p| p.self_kind != ast::SelfKind::None);
+                        if !has_self {
+                            return Some(resolve_trait_name(trait_type));
+                        }
+                    }
+                }
+                None
+            };
 
         for item in self.current_module_items {
             if let Item::Impl(impl_block) = item
