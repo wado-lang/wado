@@ -636,13 +636,13 @@ block-result-type reader.
 - [x] **Stage 7a** — routing removed; the combined walk survives only as the
       (still TIR-building) `annotate` fact-recorder.
 - [~] **Stage 6** — Liveness / DCE. Landed: `elaborator/liveness.rs`
-      and the `Liveness` field on `Semantics`, computed in the WEP phase
-      order (`build_tir_from_state` runs all `annotate_bodies` →
-      `liveness::compute` → all `reify`); the `DeadFunction` /
-      `DeadGlobal` diagnostics consume `dead_items`. Reify gating is
-      wired but disabled (`None` live set) pending the
-      diagnostics-from-`Semantics` move (see "Prerequisite" above) and
-      cross-module graph completeness. Independent of Stage 7.
+  and the `Liveness` field on `Semantics`, computed in the WEP phase
+  order (`build_tir_from_state` runs all `annotate_bodies` →
+  `liveness::compute` → all `reify`); the `DeadFunction` /
+  `DeadGlobal` diagnostics consume `dead_items`. Reify gating is
+  wired but disabled (`None` live set) pending the
+  diagnostics-from-`Semantics` move (see "Prerequisite" above) and
+  cross-module graph completeness. Independent of Stage 7.
 - [x] **Stage 7-A** — reify is mechanical. Every decision-bearing read goes
       through a recorded fact:
   - [x] Function / method signatures — params, return, type params, impl

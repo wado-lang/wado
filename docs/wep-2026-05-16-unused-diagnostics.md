@@ -317,11 +317,13 @@ Gating is therefore disabled until both are addressed:
       module's AST / `Semantics` in `compile_with_options` (where the
       target world is known). Record the world-export root set on
       `Semantics` for the liveness roots.
-- [ ] 2. Close the liveness graph's cross-module gaps (foreign-keyed
-      `references` from `with_module_perspective`, inlined-foreign-AST,
-      namespace imports, test-world roots).
-- [ ] 3. Re-enable reify gating on `Liveness::live_items` and validate
-      the full E2E suite green (fail-loud: a dropped-live item ICEs).
+-
+  2. [ ] Close the liveness graph's cross-module gaps (foreign-keyed
+         `references` from `with_module_perspective`, inlined-foreign-AST,
+         namespace imports, test-world roots).
+-
+  3. [ ] Re-enable reify gating on `Liveness::live_items` and validate
+         the full E2E suite green (fail-loud: a dropped-live item ICEs).
 - [ ] The optimize-time DCE never carried a user-facing diagnostic role,
       so there is nothing to retire — it stays as silent cleanup as
       designed.
