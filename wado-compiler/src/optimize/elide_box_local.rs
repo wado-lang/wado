@@ -463,13 +463,15 @@ fn walk_expr_for_leftmost(
             walk_children_observable(body, args.into_iter(), candidate, field_name)
         }
         ExprKind::MethodCall { receiver, args, .. } => {
-            let children: Vec<ExprId> =
-                std::iter::once(*receiver).chain(args.iter().map(|a| a.expr)).collect();
+            let children: Vec<ExprId> = std::iter::once(*receiver)
+                .chain(args.iter().map(|a| a.expr))
+                .collect();
             walk_children_observable(body, children.into_iter(), candidate, field_name)
         }
         ExprKind::IndirectCall { callee, args } => {
-            let children: Vec<ExprId> =
-                std::iter::once(*callee).chain(args.iter().copied()).collect();
+            let children: Vec<ExprId> = std::iter::once(*callee)
+                .chain(args.iter().copied())
+                .collect();
             walk_children_observable(body, children.into_iter(), candidate, field_name)
         }
         ExprKind::CmRawCall { args, .. } => {
@@ -810,10 +812,7 @@ mod tests {
     #[test]
     fn walker_finds_left_field_access() {
         let expr = binary(NirBinaryOp::Add, field(local(7), "v"), int(0));
-        assert!(matches!(
-            leftmost(expr, 7, "v"),
-            LeftmostWalk::Found
-        ));
+        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Found));
     }
 
     /// Use site `arr[idx] + boxed.v` — `arr[idx]` is observable
@@ -831,10 +830,7 @@ mod tests {
             index(local(1), local(2)),
             field(local(7), "v"),
         );
-        assert!(matches!(
-            leftmost(expr, 7, "v"),
-            LeftmostWalk::Blocked
-        ));
+        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Blocked));
     }
 
     /// Use site `(other.f) + boxed.v` — non-target `FieldAccess` may
@@ -847,20 +843,14 @@ mod tests {
             field(local(2), "other"),
             field(local(7), "v"),
         );
-        assert!(matches!(
-            leftmost(expr, 7, "v"),
-            LeftmostWalk::Blocked
-        ));
+        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Blocked));
     }
 
     /// Use site `(x as i32) + boxed.v` — `Cast` may trap, observable.
     #[test]
     fn walker_blocks_when_cast_precedes_field() {
         let expr = binary(NirBinaryOp::Add, cast(local(2), ty()), field(local(7), "v"));
-        assert!(matches!(
-            leftmost(expr, 7, "v"),
-            LeftmostWalk::Blocked
-        ));
+        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Blocked));
     }
 
     /// Use site `*p + boxed.v` — `Unary::Deref` may trap, observable.
@@ -871,10 +861,7 @@ mod tests {
             unary(NirUnaryOp::Deref, local(2)),
             field(local(7), "v"),
         );
-        assert!(matches!(
-            leftmost(expr, 7, "v"),
-            LeftmostWalk::Blocked
-        ));
+        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Blocked));
     }
 
     /// Use site `(a / b) + boxed.v` — `Binary::Div` may trap on zero
@@ -886,10 +873,7 @@ mod tests {
             binary(NirBinaryOp::Div, local(1), local(2)),
             field(local(7), "v"),
         );
-        assert!(matches!(
-            leftmost(expr, 7, "v"),
-            LeftmostWalk::Blocked
-        ));
+        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Blocked));
     }
 
     /// Use site `boxed.v + arr[idx]` — observable on RIGHT side
@@ -903,10 +887,7 @@ mod tests {
             field(local(7), "v"),
             index(local(1), local(2)),
         );
-        assert!(matches!(
-            leftmost(expr, 7, "v"),
-            LeftmostWalk::Found
-        ));
+        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Found));
     }
 
     /// Use site `Cast(boxed.v)` — `FieldAccess` inside an observable
@@ -915,10 +896,7 @@ mod tests {
     #[test]
     fn walker_finds_when_field_is_inside_observable() {
         let expr = cast(field(local(7), "v"), ty());
-        assert!(matches!(
-            leftmost(expr, 7, "v"),
-            LeftmostWalk::Found
-        ));
+        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Found));
     }
 
     /// Use site `cond && boxed.v` — the right operand of `&&` is
@@ -927,9 +905,6 @@ mod tests {
     #[test]
     fn walker_blocks_field_in_right_of_and() {
         let expr = binary(NirBinaryOp::And, local(2), field(local(7), "v"));
-        assert!(matches!(
-            leftmost(expr, 7, "v"),
-            LeftmostWalk::Blocked
-        ));
+        assert!(matches!(leftmost(expr, 7, "v"), LeftmostWalk::Blocked));
     }
 }

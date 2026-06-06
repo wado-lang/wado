@@ -391,7 +391,9 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             // Calls with mut args may stash the reference — alias.
             ExprKind::Call { args, .. } => {
                 for arg in args {
-                    if arg.is_mut && let Some(index) = local(arg.expr) {
+                    if arg.is_mut
+                        && let Some(index) = local(arg.expr)
+                    {
                         out.insert(index);
                     }
                 }
@@ -402,7 +404,9 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
                     out.insert(index);
                 }
                 for arg in args {
-                    if arg.is_mut && let Some(index) = local(arg.expr) {
+                    if arg.is_mut
+                        && let Some(index) = local(arg.expr)
+                    {
                         out.insert(index);
                     }
                 }

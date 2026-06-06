@@ -672,7 +672,11 @@ pub struct MonomorphInfo {
 pub struct NirGlobal {
     pub name: String,
     pub ty: TypeId,
-    pub initializer: NirExpr,
+    /// Initializer expression, wrapped in a single-`Expr`-statement
+    /// [`crate::nir_arena::Body`] (use [`crate::nir_arena::Body::sole_expr`] to
+    /// read it). Arena-shaped like function bodies so the optimizer passes
+    /// share one representation.
+    pub initializer: crate::nir_arena::Body,
     pub mutable: bool,
     /// Whether the user declared this global as `global mut`.
     /// Preserved across lowering so the optimizer can promote lazy-init globals

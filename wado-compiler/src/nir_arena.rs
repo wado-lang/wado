@@ -407,6 +407,42 @@ impl Body {
     pub fn to_block(&self) -> NirBlock {
         self.block_to_tree(self.root)
     }
+
+    /// Build a global-initializer-shaped body: one fresh expression node of
+    /// `kind`, wrapped in a root block holding a single `Expr` statement.
+    pub fn wrapping_expr(kind: ExprKind, type_id: TypeId, span: Span) -> Self {
+        let mut body = Self::empty();
+        let e = body.exprs.push(ExprNode {
+            kind,
+            type_id,
+            span,
+        });
+        let s = body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(e),
+            span,
+        });
+        body.root = body.blocks.push(BlockNode {
+            stmts: vec![s],
+            span,
+        });
+        body
+    }
+
+    /// The expression id of a body that wraps a single expression — the form
+    /// global initializers take, whose root block holds exactly one `Expr`
+    /// statement. Panics if the body is not in that shape.
+    pub fn sole_expr(&self) -> ExprId {
+        let block = &self.blocks[self.root];
+        assert_eq!(
+            block.stmts.len(),
+            1,
+            "expr-wrapper body must hold exactly one statement"
+        );
+        match self.stmts[block.stmts[0]].kind {
+            StmtKind::Expr(e) => e,
+            _ => panic!("expr-wrapper body statement must be an Expr"),
+        }
+    }
 }
 
 /// Tree -> arena lowering. Pushes children before parents so ids are dense and

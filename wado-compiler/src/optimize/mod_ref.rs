@@ -1477,22 +1477,14 @@ mod tests {
     #[test]
     fn known_effectful_variants_are_explicit() {
         assert!(mr_expr(local(0)).local_reads.contains(&0));
-        assert!(
-            mr_stmt(let_stmt(0, int(0)))
-                .local_writes
-                .contains(&0)
-        );
+        assert!(mr_stmt(let_stmt(0, int(0))).local_writes.contains(&0));
         assert!(
             mr_expr(global_get("G"))
                 .global_reads
                 .contains(&(ModuleSource::prelude(), "G".to_string()))
         );
         assert!(mr_expr(field_access(local(0))).heap.reads);
-        assert!(
-            mr_expr(assign(field_access(local(0)), int(0)))
-                .heap
-                .writes
-        );
+        assert!(mr_expr(assign(field_access(local(0)), int(0))).heap.writes);
         assert!(mr_expr(struct_literal(vec![int(0)])).allocates);
         assert!(mr_expr(call(vec![])).calls);
         assert_eq!(

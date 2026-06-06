@@ -574,7 +574,14 @@ fn register_globals(ctx: &mut WirContext<'_>) {
         }
 
         // Convert the initializer to a WIR constant instruction
-        let init = translate_global_init(&global.initializer, type_table);
+        let init_body = &global.initializer;
+        let init_id = init_body.sole_expr();
+        let init = translate_global_init(
+            init_body,
+            init_id,
+            init_body.exprs[init_id].type_id,
+            type_table,
+        );
 
         let idx = u32::try_from(ctx.globals.len()).expect("too many globals");
         ctx.global_map.insert(global_name.clone(), idx);
@@ -594,17 +601,22 @@ fn register_globals(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// Convert a TIR global initializer to a WIR constant instruction.
+/// Convert a NIR global initializer expression (in arena form) to a WIR
+/// constant instruction. `type_id` is the type to interpret a literal as,
+/// propagated downward unchanged through enclosing casts (the outermost cast's
+/// type wins), matching the previous tree-shaped translator.
 fn translate_global_init(
-    init: &crate::nir::NirExpr,
+    body: &crate::nir_arena::Body,
+    id: crate::nir_arena::ExprId,
+    type_id: crate::tir::TypeId,
     type_table: &TypeTable,
 ) -> crate::wir::WirInstr {
-    use crate::nir::NirExprKind;
+    use crate::nir_arena::ExprKind;
     use crate::tir::{PrimitiveType, ResolvedType};
     use crate::wir::WirInstr;
 
-    match &init.kind {
-        NirExprKind::IntLiteral { value, .. } => match type_table.get(init.type_id) {
+    match &body.exprs[id].kind {
+        ExprKind::IntLiteral { value, .. } => match type_table.get(type_id) {
             ResolvedType::Primitive(prim) => match prim {
                 PrimitiveType::I8
                 | PrimitiveType::I16
@@ -617,26 +629,29 @@ fn translate_global_init(
             },
             _ => WirInstr::I32Const(*value as i32),
         },
-        NirExprKind::FloatLiteral { value, .. } => match type_table.get(init.type_id) {
+        ExprKind::FloatLiteral { value, .. } => match type_table.get(type_id) {
             ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(*value as f32),
             _ => WirInstr::F64Const(*value),
         },
-        NirExprKind::BoolLiteral(b) => WirInstr::I32Const(i32::from(*b)),
-        NirExprKind::CharLiteral(c) => WirInstr::I32Const(*c as i32),
-        NirExprKind::Null | NirExprKind::Unit => WirInstr::RefNull {
+        ExprKind::BoolLiteral(b) => WirInstr::I32Const(i32::from(*b)),
+        ExprKind::CharLiteral(c) => WirInstr::I32Const(*c as i32),
+        ExprKind::Null | ExprKind::Unit => WirInstr::RefNull {
             heap_type: crate::wir::WirAbstractHeapType::None,
         },
-        NirExprKind::Cast { expr: inner, .. } => {
-            // For casts, evaluate the inner expression with the cast's target type
-            let typed_inner = crate::nir::NirExpr::new(inner.kind.clone(), init.type_id, init.span);
-            translate_global_init(&typed_inner, type_table)
+        ExprKind::Cast { expr: inner, .. } => {
+            // For casts, evaluate the inner expression with the cast's target
+            // type (propagate the current `type_id` downward).
+            translate_global_init(body, *inner, type_id, type_table)
         }
-        NirExprKind::Unary {
+        ExprKind::Unary {
             op: crate::nir::NirUnaryOp::Neg,
             expr: inner,
         } => {
-            // Negation of constant (normally folded by elaborator, but handle for robustness)
-            let inner_wir = translate_global_init(inner, type_table);
+            // Negation of constant (normally folded by elaborator, but handle
+            // for robustness). The inner literal uses its own type.
+            let inner = *inner;
+            let inner_wir =
+                translate_global_init(body, inner, body.exprs[inner].type_id, type_table);
             match inner_wir {
                 WirInstr::I32Const(v) => WirInstr::I32Const(v.wrapping_neg()),
                 WirInstr::I64Const(v) => WirInstr::I64Const(v.wrapping_neg()),

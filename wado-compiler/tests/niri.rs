@@ -3214,7 +3214,6 @@ fn make_pure_fn(
             #[allow(clippy::cast_possible_truncation)]
             local_index: i as u32,
             is_mut: false,
-            default_expr: None,
             span,
         })
         .collect();

@@ -20,8 +20,8 @@ use crate::lower::plan::{LowerPlan, closure, value_copy};
 use crate::name::{LocalMethodName, MethodName};
 use crate::nir;
 use crate::nir::{
-    NirCapture, NirEnum, NirEnumCase, NirExpr, NirField, NirFlags, NirFlagsMember, NirFunction,
-    NirGlobal, NirImport, NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest, NirTypeParam,
+    NirCapture, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember, NirFunction, NirGlobal,
+    NirImport, NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest, NirTypeParam,
     NirVariantCase, NirVariantDecl,
 };
 use crate::nir_arena::{
@@ -188,11 +188,9 @@ struct FunctionTranslator<'a, 'p> {
     extra: Option<ExtraLocals>,
     immutable_locals: IndexSet<u32>,
     address_taken: IndexSet<u32>,
-    /// The arena every converter pushes nodes into. `convert_function`
-    /// takes it (`into_inner`) as the function's `Body`; tree-typed NIR
-    /// positions (param / field defaults, global initializers) borrow a
-    /// scratch arena through [`Self::convert_expr_to_tree`] so the body
-    /// arena keeps only body-reachable nodes.
+    /// The arena every converter pushes nodes into. `convert_function` takes it
+    /// (`into_inner`) as the function's `Body`; `convert_global` wraps the
+    /// initializer it builds into a single-statement global-init `Body`.
     arena: RefCell<Body>,
 }
 
@@ -284,18 +282,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
     /// The span of an already-built expression node.
     fn expr_span(&self, id: ExprId) -> Span {
         self.arena.borrow().exprs[id].span
-    }
-
-    /// Convert a TIR expression that lands in a tree-typed NIR position
-    /// (param / struct-field defaults, global initializers — never part of a
-    /// function `Body`). Converts into a scratch arena, swapped in for the
-    /// duration, so the function body arena keeps only body-reachable nodes,
-    /// then materializes the result to an owned tree.
-    fn convert_expr_to_tree(&self, expr: &TirExpr) -> NirExpr {
-        let saved = self.arena.replace(Body::empty());
-        let id = self.convert_expr(expr);
-        let scratch = self.arena.replace(saved);
-        scratch.to_tree_expr(id)
     }
 
     fn specialized_for_local(&self, local_index: u32) -> Option<&'p closure::SpecializedLocal> {
@@ -391,10 +377,22 @@ impl Translator<'_> {
 
     fn convert_global(&self, global: &TirGlobal) -> NirGlobal {
         let fctx = FunctionTranslator::for_top_level(self);
+        // Build the initializer directly into the arena, wrapped in a
+        // single-`Expr`-statement block — the canonical global-init `Body`
+        // shape the optimizer and `wir_build` read via `Body::sole_expr`.
+        let span = global.initializer.span;
+        let init_id = fctx.convert_expr(&global.initializer);
+        let init_stmt = fctx.alloc_stmt(StmtKind::Expr(init_id), span);
+        let init_root = fctx.alloc_block(vec![init_stmt], span);
+        let initializer = {
+            let mut body = fctx.arena.into_inner();
+            body.root = init_root;
+            body
+        };
         NirGlobal {
             name: global.name.clone(),
             ty: global.ty,
-            initializer: fctx.convert_expr_to_tree(&global.initializer),
+            initializer,
             mutable: global.mutable,
             wado_mutable: global.wado_mutable,
             is_pub: global.is_pub,

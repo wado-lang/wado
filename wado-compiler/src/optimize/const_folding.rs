@@ -36,7 +36,7 @@ use crate::compiler_item::SeqField;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, NirExpr, NirExprKind, NirStmtKind, NirUnaryOp};
+use crate::nir::{FunctionRef, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, StmtId, StmtKind,
 };
@@ -96,13 +96,8 @@ pub fn fold_constants(project: &mut NirPackage) -> bool {
             // body walk for transient inlined-in copies). The interpreter
             // consults these every time the visitor calls `bind_field` /
             // `invalidate_field` / `invalidate_aliased_fields`.
-            let alias_info = build_alias_info(
-                body,
-                &locals,
-                &address_taken,
-                &stores_aliased,
-                &type_table,
-            );
+            let alias_info =
+                build_alias_info(body, &locals, &address_taken, &stores_aliased, &type_table);
             visitor.interpreter.set_alias_info(alias_info);
             let root = body.root;
             changed |= visitor.visit_block(body, root);
@@ -162,44 +157,14 @@ fn build_global_env(
             let mut interp = Interpreter::new(type_table);
             interp.with_callees(callees);
             interp.with_globals(&env);
-            interp.reduce_to_lattice(&global.initializer)
+            let init = &global.initializer;
+            interp.reduce_to_lattice_a(init, init.sole_expr())
         };
         if !matches!(lattice, Lattice::Unevaluated) {
             env.insert(key, lattice);
         }
     }
     env
-}
-
-/// The statically-known [`SeqField::Len`] length of a constant `List` /
-/// `String` value: the element count of its backing array literal (directly or
-/// through the `{ let __b = <array>; *__b }` builder block an array literal
-/// leaves) or the explicit `used` field of a `{ repr, used: N }` struct literal.
-///
-/// Operates on the tree-shaped global initializer.
-fn const_seq_len(value: &NirExpr) -> Option<i32> {
-    match &value.kind {
-        NirExprKind::ArrayLiteral { elements } => i32::try_from(elements.len()).ok(),
-        NirExprKind::Block(b) | NirExprKind::LabeledBlock { block: b, .. } => {
-            b.stmts.iter().rev().find_map(|s| match &s.kind {
-                NirStmtKind::Let { value, .. } => const_seq_len(value),
-                NirStmtKind::Expr(e) => const_seq_len(e),
-                _ => None,
-            })
-        }
-        NirExprKind::StructLiteral { fields, .. } => fields.iter().find_map(|f| {
-            if f.name == SeqField::Len.field_name()
-                && let NirExprKind::IntLiteral { value, .. } = &f.value.kind
-            {
-                return i32::try_from(*value).ok();
-            }
-            None
-        }),
-        NirExprKind::Unary { expr: inner, .. } | NirExprKind::Cast { expr: inner, .. } => {
-            const_seq_len(inner)
-        }
-        _ => None,
-    }
 }
 
 /// Arena counterpart of [`const_seq_len`]: the statically-known
@@ -255,10 +220,10 @@ fn build_global_field_env(project: &NirPackage) -> GlobalFieldEnv {
         return env;
     }
     // A non-placeholder const initializer (a user const sequence global) is a
-    // direct source. Global initializers are tree-shaped.
+    // direct source.
     for global in &project.globals {
         if !global.wado_mutable
-            && let Some(n) = const_seq_len(&global.initializer)
+            && let Some(n) = const_seq_len_a(&global.initializer, global.initializer.sole_expr())
         {
             record_seq_len(
                 &mut env,

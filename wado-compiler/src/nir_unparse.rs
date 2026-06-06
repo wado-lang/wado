@@ -196,7 +196,11 @@ impl<'a> NirUnparser<'a> {
         self.output.push_str(": ");
         self.output.push_str(&self.type_table.type_name(g.ty));
         self.output.push_str(" = ");
-        self.unparse_expr(&g.initializer);
+        // The unparser is still tree-shaped; materialize the arena
+        // initializer's sole expression to a tree for it (group 5 ports the
+        // unparser itself).
+        let init_tree = g.initializer.to_tree_expr(g.initializer.sole_expr());
+        self.unparse_expr(&init_tree);
         self.output.push_str(";\n");
     }
 

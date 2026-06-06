@@ -27,15 +27,14 @@
 //! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
 //! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): the function-body
 //! walks (purity check, call-site validation, void rewrite, call retype) read
-//! and mutate the arena `Body` directly. Globals are tree-shaped NIR (not part
-//! of the arena migration), so their use-scan and retype keep the tree
-//! visitors.
+//! and mutate the arena `Body` directly. Global initializers are arena `Body`s
+//! too (Phase 5 group 1a), so their use-scan (`scan_node`) and retype
+//! (`retype_calls`) reuse the same arena routines.
 
 use crate::hashmap::IndexSet;
-use crate::nir::{FunctionKind, NirExpr, NirExprKind, NirFunction};
+use crate::nir::{FunctionKind, NirFunction};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::{NirMutVisitor, NirRefVisitor};
 use crate::tir::{ResolvedType, TypeTable};
 
 use super::arena_query;
@@ -179,15 +178,11 @@ fn validate_call_sites(project: &NirPackage, mut candidates: IndexSet<FnKey>) ->
             ctx.block(body, body.root);
         }
     }
-    // Globals are tree-shaped and can never be `_ = call(...)` drop sites —
-    // any appearance of a candidate in a global initializer consumes its
-    // result, disqualifying it.
+    // A global initializer can never be a `_ = call(...)` drop site — any
+    // appearance of a candidate there consumes its result, disqualifying it.
+    // `scan_node` rejects every candidate used as a `Call` / `MethodCall`.
     for global in &project.globals {
-        UseScanner {
-            candidates: &candidates,
-            rejected: &mut ctx.rejected,
-        }
-        .visit_expr(&global.initializer);
+        ctx.scan_node(&global.initializer, NodeRef::Block(global.initializer.root));
     }
     let ValidateCtx {
         rejected, observed, ..
@@ -282,25 +277,6 @@ impl ValidateCtx<'_> {
     }
 }
 
-/// Tree walk over a global initializer: rejects every candidate that appears
-/// as a `Call` / `MethodCall` (always a use in a global).
-struct UseScanner<'a> {
-    candidates: &'a IndexSet<FnKey>,
-    rejected: &'a mut IndexSet<FnKey>,
-}
-
-impl NirRefVisitor for UseScanner<'_> {
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        if let NirExprKind::Call { func, .. } | NirExprKind::MethodCall { func, .. } = &expr.kind {
-            let key = (func.module_source.clone(), func.name.clone());
-            if self.candidates.contains(&key) {
-                self.rejected.insert(key);
-            }
-        }
-        self.walk_expr(expr);
-    }
-}
-
 // ──────────────────────────────────────────────────────────────────────────────
 // Application
 // ──────────────────────────────────────────────────────────────────────────────
@@ -331,9 +307,8 @@ fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) {
             retype_calls(body, confirmed);
         }
     }
-    let mut retyper = CallRetyper { confirmed };
     for global in &mut project.globals {
-        retyper.visit_expr(&mut global.initializer);
+        retype_calls(&mut global.initializer, confirmed);
     }
 }
 
@@ -373,24 +348,5 @@ fn retype_calls(body: &mut Body, confirmed: &IndexSet<FnKey>) {
     }
     for id in targets {
         body.exprs[id].type_id = TypeTable::UNIT;
-    }
-}
-
-/// Tree retyper for global initializers. (Confirmed candidates never appear in
-/// a global — any global appearance would have rejected them in validation —
-/// so this is effectively a no-op, kept for faithfulness with the body retype.)
-struct CallRetyper<'a> {
-    confirmed: &'a IndexSet<FnKey>,
-}
-
-impl NirMutVisitor for CallRetyper<'_> {
-    fn visit_expr(&mut self, expr: &mut NirExpr) {
-        if let NirExprKind::Call { func, .. } | NirExprKind::MethodCall { func, .. } = &expr.kind {
-            let key = (func.module_source.clone(), func.name.clone());
-            if self.confirmed.contains(&key) {
-                expr.type_id = TypeTable::UNIT;
-            }
-        }
-        self.walk_expr(expr);
     }
 }

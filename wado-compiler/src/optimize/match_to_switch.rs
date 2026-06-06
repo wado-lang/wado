@@ -23,9 +23,7 @@
 //! no-op.
 
 use crate::module_source::ModuleSource;
-use crate::nir::{
-    FunctionRef, NirBlock, NirExpr, NirExprKind, NirLiteralPattern, NirStmt, NirStmtKind,
-};
+use crate::nir::{FunctionRef, NirLiteralPattern};
 use crate::nir_arena::{ArmData, BlockId, Body, ExprId, ExprKind, PatKind, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
@@ -58,36 +56,10 @@ pub fn match_to_switch(project: &mut NirPackage) -> bool {
         }
     }
     for global in &mut project.globals {
-        changed |= run_rule_on_tree_expr(&mut global.initializer, &rule);
+        // Global initializers are arena bodies; run the rule on each directly.
+        let mut engine = Engine::new(&mut global.initializer);
+        changed |= engine.run(&[&rule]);
     }
-    changed
-}
-
-/// Run an engine rule over a standalone tree-shaped NIR expression by wrapping
-/// it in a temporary single-statement `Body`, running the engine, and
-/// unwrapping the result. Used for the NIR positions that are not yet arena
-/// bodies — param defaults, global initializers, struct-field defaults — so the
-/// rule logic lives in exactly one place.
-fn run_rule_on_tree_expr(expr: &mut NirExpr, rule: &dyn Rule) -> bool {
-    let span = expr.span;
-    let placeholder = NirExpr::new(NirExprKind::Unit, TypeTable::UNIT, span);
-    let owned = std::mem::replace(expr, placeholder);
-    let block = NirBlock::new(vec![NirStmt::new(NirStmtKind::Expr(owned), span)], span);
-    let mut body = Body::from_block(&block);
-    let changed = {
-        let mut engine = Engine::new(&mut body);
-        engine.run(&[rule])
-    };
-    let new_block = body.to_block();
-    let stmt = new_block
-        .stmts
-        .into_iter()
-        .next()
-        .expect("wrapper block has one statement");
-    let NirStmtKind::Expr(new_expr) = stmt.kind else {
-        unreachable!("wrapper statement is an expression statement");
-    };
-    *expr = new_expr;
     changed
 }
 
