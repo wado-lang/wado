@@ -328,6 +328,72 @@ Gating is therefore disabled until both are addressed:
       so there is nothing to retire — it stays as silent cleanup as
       designed.
 
+#### Phase 1b design — effect check on `Semantics`
+
+`effect_check.rs` today walks the emitted TIR. The port reimplements
+the same logic over the parsed AST plus the facts `annotate` already
+records, so it runs after `annotate_bodies` and sees every function —
+dead or live — for both batch and LSP. To keep every commit green, land
+it incrementally:
+
+- First wire the new checker into the LSP path (`Engine::diagnostics`)
+  only; the batch path keeps the TIR-based `check_effects`. No double
+  emission (LSP builds no TIR), existing fixtures unchanged, and the LSP
+  gains effect diagnostics immediately.
+- Once it reaches diagnostic parity (validated against the
+  `effect_check_*` fixtures), switch the batch path over and delete the
+  TIR-based checker. Reify gating (Phase 3b.3) can then turn on.
+
+Data mapping (TIR read → `Semantics` source):
+
+| TIR read (today)                         | `Semantics` source                                          |
+| ---------------------------------------- | ----------------------------------------------------------- |
+| `func.effects`                           | `TypeAnnotations.function_effects[fn_key]`                  |
+| `func.benign_effects`                    | `#[benign(E)]` on the AST `Function.attrs`                  |
+| `func.is_ambient`                        | `#[ambient]` on the AST `Function.attrs`                    |
+| `func.task_return_type`                  | `function_task_returns[fn_key]`                             |
+| `param.type_id`                          | `fn_param_types[fn_key]`                                    |
+| `func.return_type`                       | `fn_return_types[fn_key]`                                   |
+| `is_cm_binding` / `is_dispatch_wrapper`  | n/a — synthesised, not in `Semantics`; skip rule disappears |
+| struct field / variant payload `TypeId`s | `struct_field_types[struct_key]`, variant decls             |
+| resource decls                           | AST `Item::Resource` per module                             |
+| call-site `FunctionRef`                  | the dispatch facts (below)                                  |
+| `ResolvedType` lookups                   | the `TypeTable` snapshot on `Semantics`                     |
+
+Call-site callee resolution (the body walk visits the AST; each call
+kind maps to the fact that names its callee):
+
+| AST call site                 | Fact → callee                                       |
+| ----------------------------- | --------------------------------------------------- |
+| free call `f()`               | `references[callee_ident_id]` → fn `SymbolKey`      |
+| `recv.m()`                    | `method_dispatch[call_id].function_ref`             |
+| `T::m()` / `Self::m()`        | `static_method_dispatch[call_id].function_ref`      |
+| operator / index              | `operator_dispatch` / `index_assign_dispatch`       |
+| `?` / `From`                  | `from_call_facts[expr_id]`                          |
+| `for x of e`                  | `for_of_iterator[for_id]` (`into_iter` / `next`)    |
+| indirect call (closure value) | `ResolvedType::Function.effects` of the callee type |
+
+Algorithm (unchanged from the TIR version, restated on facts):
+
+1. Build the effect index keyed by `(module, mangled_name)` —
+   `mangled_name` from `method_names[method_key].mangled` for methods,
+   the source name for free functions — carrying effects, `is_ambient`,
+   `benign`, `is_method`, and param `TypeId`s.
+2. Build `resource_names`, `struct_fields`, `variant_payloads`, and the
+   propagation closure (`build_propagation_closure`) from the same decl
+   and type data, now read off `Semantics` rather than `TirModule`.
+3. For each user function: `current_effects = expand(declared effects +
+   signature_resources(param/return/task-return types) + benign)`.
+4. Walk the AST body; at each call site resolve the callee via the table
+   above, compute `get_function_effects` (callee effects + resource
+   effect for direct resource methods − benign, with effect-param
+   resolution), and report `EffectError` for any effect not in
+   `current_effects`.
+
+Stores (1c) and purity (1d) follow the same data mapping; stores reuses
+the ref-parameter detection (`ResolvedType::Ref` / `MutRef` over
+`fn_param_types`).
+
 #### Phase 4 — CLI wiring and reference pass
 
 - [ ] `wado-cli`: add `--no-unused` flag for `compile` / `run` / `serve` / `dump`.
