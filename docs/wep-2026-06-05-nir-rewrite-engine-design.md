@@ -177,12 +177,18 @@ The old fixed-point loop and the engine co-exist during the port.
   - [x] `multi_value_return` — pure arena classification (sets `return_abi`).
   - [x] `elide_box_local` — arena body traversal; `ModRef` + the
         leftmost-walker run on materialized subtrees (`Body::to_tree_*`).
-  - Remaining local / whole-function passes: `sroa`, `labeled_block_fusion`,
-    `container_sroa`, `condition_implication`, `dce`, `inline`. The
-    support-analysis-coupled ones (`copy_prop` / `value_copy_demote` /
-    `store_load_forward` / `const_folding` lean on `alias` / `niri`) follow the
-    `elide_box_local` precedent — port the body walk, run the tree analysis on
-    a materialized subtree.
+  - [x] `sroa` — arena candidate / escape analysis + decomposition rewrite.
+  - [x] `copy_prop` — arena binding/usage analysis + substitute-and-remove.
+  - [x] `store_load_forward` — arena flow-sensitive forwarding; modified-locals
+        cache keyed by `BlockId`.
+  - Remaining: `value_copy_demote`, `tmpl_hoist`, `condition_implication`,
+    `container_sroa`, `licm`, `dce`, `labeled_block_fusion`, `inline`,
+    `field_scalarize`.
+  - Deferred: `const_folding` — unlike the others it drives the whole `niri`
+    interpreter (tree-shaped) over the body with flow-sensitive env threading,
+    so it stays on the bridge until `niri` itself is ported to the arena
+    (a dedicated effort). The subtree-materialization trick does not apply (the
+    interpreter consumes the _whole_ body, not a small leaf subtree).
   - Flow-sensitive (keep walkers, read arena): `const_folding`'s env walk,
     `copy_prop`, `licm`, `field_scalarize`, `store_load_forward`,
     `value_copy_demote`, `tmpl_hoist`.
