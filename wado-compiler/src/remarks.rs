@@ -56,7 +56,7 @@ pub fn collect_value_copy_remarks(package: &NirPackage) -> Vec<Remark> {
         if func.module_source != package.entry_module_source || func.is_value_copy() {
             continue;
         }
-        let Some(body) = func.body.as_ref() else {
+        let Some(body) = &func.body_block() else {
             continue;
         };
         let mut collector = Collector {

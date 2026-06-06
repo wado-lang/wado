@@ -19,7 +19,7 @@
 //! transfer field knowledge across the one-level shallow value-copy
 //! helpers (see `lower::plan::value_copy::synthesize`).
 //!
-//! [`recognize_value_copy`] is the single-call recognizer.
+//! [`recognize_value_copy_a`] is the single-call recognizer.
 //!
 //! TODO(optimizer): plumb the callee's `stores` annotation into
 //! `AliasCollector` so a `Ref` / `MutRef` on a local that flows into a
@@ -119,14 +119,15 @@ pub(super) fn build_alias_info(
 }
 
 /// Recognize `Call(helper, [arg])` where `helper` is a synthesized
-/// `$value_copy$T<id>` registered in the helpers map. Returns the
-/// argument expression so the caller can copy `arg`'s field
-/// knowledge to the binding's target.
-pub(super) fn recognize_value_copy<'a>(
-    expr: &'a NirExpr,
+/// `$value_copy$T<id>` registered in the helpers map, reading the arena
+/// body. Returns the argument expression id so the caller can copy
+/// `arg`'s field knowledge to the binding's target.
+pub(super) fn recognize_value_copy_a(
+    body: &crate::nir_arena::Body,
+    e: crate::nir_arena::ExprId,
     helpers: &IndexMap<(ModuleSource, String), TypeId>,
-) -> Option<&'a NirExpr> {
-    let NirExprKind::Call { func, args, .. } = &expr.kind else {
+) -> Option<crate::nir_arena::ExprId> {
+    let crate::nir_arena::ExprKind::Call { func, args, .. } = &body.exprs[e].kind else {
         return None;
     };
     if args.len() != 1 {
@@ -134,7 +135,7 @@ pub(super) fn recognize_value_copy<'a>(
     }
     helpers
         .get(&(func.module_source.clone(), func.name.clone()))
-        .map(|_| &args[0].expr)
+        .map(|_| args[0].expr)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

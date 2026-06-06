@@ -84,6 +84,7 @@ use crate::nir::{
     FunctionRef, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirPattern, NirStmt,
     NirStmtKind, NirUnaryOp,
 };
+use crate::nir_arena::{BlockId, Body, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -151,7 +152,8 @@ fn analyze_function_field_usage(
     func: &NirFunction,
     type_table: &TypeTable,
 ) -> IndexMap<u32, ParamFieldUsage> {
-    let Some(ref body) = func.body else {
+    // Read-only field-usage scan; materialize the callee body to a tree.
+    let Some(body) = &func.body.as_ref().map(crate::nir_arena::Body::to_block) else {
         return IndexMap::default();
     };
 
@@ -750,33 +752,39 @@ fn scalarize_function(
     type_table: &TypeTable,
     cache: &FieldUsageCache,
 ) -> bool {
-    let Some(ref mut body) = func.body else {
+    if func.body.is_none() {
         return false;
-    };
+    }
     // Function-wide alias scan. Loop-local alias detection in
     // `count_field_accesses_in_expr` only sees the loop body, but
     // `tmpl_hoist`-style passes hoist a local's `&mut` capture out of
-    // the loop (e.g. `let __fmt = Formatter { buf: &mut __tmpl_buf }`
-    // ends up in the function body before the loop). When that happens
-    // the alias is *live* for the duration of the loop and writes
+    // the loop, where the alias is *live* across the loop and writes
     // through it bypass any HFS scalar. Collect every GC-heap local
-    // whose address is taken anywhere in the function (outside of a
-    // direct call-argument position) so loop-level scalarization can
+    // whose address is taken anywhere in the function (read-only; on a
+    // materialized whole-body tree) so loop-level scalarization can
     // refuse those candidates.
-    let aliased_in_function = collect_function_aliased_locals(body, type_table);
+    let aliased_in_function = {
+        let tree = func.body.as_ref().unwrap().to_block();
+        collect_function_aliased_locals(&tree, type_table)
+    };
     let analysis = HfsAnalysis {
         aliased_in_function: &aliased_in_function,
     };
     let mut local_count = func.local_count;
     let mut locals = func.locals.clone();
-    let changed = scalarize_block(
-        body,
-        &mut local_count,
-        &mut locals,
-        type_table,
-        cache,
-        &analysis,
-    );
+    let changed = {
+        let body = func.body.as_mut().unwrap();
+        let root = body.root;
+        scalarize_block(
+            body,
+            root,
+            &mut local_count,
+            &mut locals,
+            type_table,
+            cache,
+            &analysis,
+        )
+    };
     func.local_count = local_count;
     func.locals = locals;
     changed
@@ -789,58 +797,133 @@ struct HfsAnalysis<'a> {
     aliased_in_function: &'a IndexSet<u32>,
 }
 
+/// Arena driver: walk the function body finding loops, recursing into nested
+/// blocks first, then scalarizing each loop. The per-loop transform runs on a
+/// materialized tree of the loop body (the battle-tested tree state machine),
+/// lowered back into the arena afterward.
 fn scalarize_block(
-    block: &mut NirBlock,
+    body: &mut Body,
+    block: BlockId,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
     cache: &FieldUsageCache,
     analysis: &HfsAnalysis<'_>,
 ) -> bool {
+    enum Shape {
+        Loop(BlockId),
+        If(BlockId, Option<BlockId>),
+        Labeled(BlockId),
+        Other,
+    }
     let mut changed = false;
-    let mut new_stmts = Vec::new();
+    let mut new_stmts: Vec<StmtId> = Vec::new();
 
-    for mut stmt in std::mem::take(&mut block.stmts) {
-        match &mut stmt.kind {
-            NirStmtKind::Loop { body } => {
-                // Recurse into inner blocks/loops first.
-                changed |= scalarize_block(body, local_count, locals, type_table, cache, analysis);
-                // Try to scalarize hot fields at this loop level.
-                let result = scalarize_loop(body, local_count, locals, type_table, cache, analysis);
-                if result.pre_stmts.is_empty() {
-                    new_stmts.push(stmt);
-                } else {
-                    changed = true;
-                    new_stmts.extend(result.pre_stmts);
-                    new_stmts.push(stmt);
-                    new_stmts.extend(result.post_stmts);
-                }
-            }
-            NirStmtKind::If {
+    for s in std::mem::take(&mut body.blocks[block].stmts) {
+        let shape = match &body.stmts[s].kind {
+            StmtKind::Loop { body: lb } => Shape::Loop(*lb),
+            StmtKind::If {
                 then_block,
                 else_block,
                 ..
-            } => {
+            } => Shape::If(*then_block, *else_block),
+            StmtKind::LabeledBlock { block: inner, .. } => Shape::Labeled(*inner),
+            _ => Shape::Other,
+        };
+        match shape {
+            Shape::Loop(lb) => {
+                // Recurse into inner blocks/loops first.
                 changed |=
-                    scalarize_block(then_block, local_count, locals, type_table, cache, analysis);
-                if let Some(eb) = else_block {
-                    changed |=
-                        scalarize_block(eb, local_count, locals, type_table, cache, analysis);
+                    scalarize_block(body, lb, local_count, locals, type_table, cache, analysis);
+                // Scalarize hot fields at this loop level.
+                let (pre, post) =
+                    scalarize_loop_at(body, lb, local_count, locals, type_table, cache, analysis);
+                if pre.is_empty() {
+                    new_stmts.push(s);
+                } else {
+                    changed = true;
+                    new_stmts.extend(pre);
+                    new_stmts.push(s);
+                    new_stmts.extend(post);
                 }
-                new_stmts.push(stmt);
             }
-            NirStmtKind::LabeledBlock { block: inner, .. } => {
-                changed |= scalarize_block(inner, local_count, locals, type_table, cache, analysis);
-                new_stmts.push(stmt);
+            Shape::If(then_b, else_b) => {
+                changed |= scalarize_block(
+                    body,
+                    then_b,
+                    local_count,
+                    locals,
+                    type_table,
+                    cache,
+                    analysis,
+                );
+                if let Some(eb) = else_b {
+                    changed |=
+                        scalarize_block(body, eb, local_count, locals, type_table, cache, analysis);
+                }
+                new_stmts.push(s);
             }
-            _ => {
-                new_stmts.push(stmt);
+            Shape::Labeled(inner) => {
+                changed |= scalarize_block(
+                    body,
+                    inner,
+                    local_count,
+                    locals,
+                    type_table,
+                    cache,
+                    analysis,
+                );
+                new_stmts.push(s);
             }
+            Shape::Other => new_stmts.push(s),
         }
     }
 
-    block.stmts = new_stmts;
+    body.blocks[block].stmts = new_stmts;
     changed
+}
+
+/// Run the (tree-shaped) loop scalarizer on a materialized copy of `lb`, lower
+/// the transformed loop body back into the arena, and lower the pre / post
+/// statements that wrap the loop, returning them as arena statement ids.
+#[allow(clippy::too_many_arguments)]
+fn scalarize_loop_at(
+    body: &mut Body,
+    lb: BlockId,
+    local_count: &mut u32,
+    locals: &mut Vec<NirLocal>,
+    type_table: &TypeTable,
+    cache: &FieldUsageCache,
+    analysis: &HfsAnalysis<'_>,
+) -> (Vec<StmtId>, Vec<StmtId>) {
+    let mut tree_lb = body.to_tree_block(lb);
+    let result = scalarize_loop(
+        &mut tree_lb,
+        local_count,
+        locals,
+        type_table,
+        cache,
+        analysis,
+    );
+    // Splice the transformed loop body back into the arena.
+    let lowered = body.lower_block(&tree_lb);
+    let new_stmts = std::mem::take(&mut body.blocks[lowered].stmts);
+    body.blocks[lb].stmts = new_stmts;
+    (
+        lower_tree_stmts(body, result.pre_stmts),
+        lower_tree_stmts(body, result.post_stmts),
+    )
+}
+
+/// Lower a list of tree statements into the arena, returning their ids.
+fn lower_tree_stmts(body: &mut Body, stmts: Vec<NirStmt>) -> Vec<StmtId> {
+    if stmts.is_empty() {
+        return Vec::new();
+    }
+    let span = stmts[0].span;
+    let wrapper = NirBlock { stmts, span };
+    let b = body.lower_block(&wrapper);
+    std::mem::take(&mut body.blocks[b].stmts)
 }
 
 struct ScalarizeResult {

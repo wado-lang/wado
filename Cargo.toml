@@ -19,6 +19,10 @@ glob = { version = "0.3" }
 indexmap = { version = "2", features = ["serde"] }
 rustc-hash = { version = "2" }
 libm = { version = "0.2" }
+# Vendored path dep so it dedupes with the copy wasmtime already pulls (the
+# fork's 0.133 generation) instead of floating a parallel crates.io tree.
+# Pure entity-map data structures; the NIR skeleton arena is built on it.
+cranelift-entity = { path = "vendor/wasmtime/cranelift/entity" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }

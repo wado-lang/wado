@@ -34,14 +34,22 @@
 //! constant arrays this first-class, analyzable shape lets `cse`,
 //! `const_fold`, bounds-check elimination, and constant globalization act on
 //! them; `wir_build` lowers `ArrayLiteral` to `array.new_fixed`.
+//!
+//! Ported to the worklist rewrite engine (Phase 4 stage C; see
+//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a block-level
+//! [`Rule`]: the builder window is a run of sibling statements, so it collapses
+//! a block's statement list (`set_block_stmts`), reusing the existing element
+//! expression ids (their statements are dropped, so the ids are moved, not
+//! cloned). Nested blocks are separate worklist nodes processed bottom-up,
+//! matching the old visitor's recurse-then-collapse order.
 
 use crate::compiler_item::{CompilerItem, SeqField};
 use crate::hashmap::IndexSet;
-use crate::nir::{NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::{
-    NirOptVisitor, expr_mentions_local, is_local, opt_walk_block, stmt_mentions_local,
-};
+
+use super::arena_query::{expr_mentions_local, is_local, is_pure_expr, stmt_mentions_local};
 
 /// The builtin generic name of the raw array allocation (`builtin::array_new`).
 const ARRAY_NEW: &str = "array_new";
@@ -55,14 +63,15 @@ pub fn collapse_array_literals(project: &mut NirPackage) -> bool {
     if push_names.is_empty() {
         return false;
     }
+    let rule = Collapser {
+        push_names: &push_names,
+    };
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        if let Some(body) = &mut func.body {
-            let mut visitor = Collapser {
-                push_names: &push_names,
-            };
-            changed |= visitor.visit_block(body);
+        if let Some(body) = func.body.as_mut() {
+            let mut engine = Engine::new(body);
+            changed |= engine.run(&[&rule]);
         }
     }
     changed
@@ -88,27 +97,16 @@ struct Collapser<'a> {
     push_names: &'a IndexSet<String>,
 }
 
-impl NirOptVisitor for Collapser<'_> {
-    fn visit_block(&mut self, block: &mut NirBlock) -> bool {
-        // Recurse into nested blocks first so inner literals collapse before
-        // the outer statement vector is rewritten.
-        let mut changed = opt_walk_block(self, block);
-        changed |= self.collapse_in_stmts(&mut block.stmts);
-        changed
-    }
-}
-
-impl Collapser<'_> {
-    /// Scan a statement list for `List<T>` builder windows and collapse them
-    /// in place.
-    fn collapse_in_stmts(&self, stmts: &mut Vec<NirStmt>) -> bool {
+impl Rule for Collapser<'_> {
+    fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
+        let mut stmts = engine.body.blocks[id].stmts.clone();
         let mut changed = false;
         let mut i = 0;
         while i < stmts.len() {
             // The window is an init statement whose value embeds one or more
             // `List<T> { array_new(N), used: 0 }` structs, each consumed by a
             // run of `push` calls in the following statements.
-            let consumed = self.try_collapse_at(stmts, i);
+            let consumed = self.try_collapse_at(engine, &stmts, i);
             if consumed > 0 {
                 // Drop the window statements (pushes and resolved element
                 // temps) that followed the init; their data moved into the
@@ -118,17 +116,24 @@ impl Collapser<'_> {
             }
             i += 1;
         }
+        if changed {
+            engine.set_block_stmts(id, stmts);
+        }
         changed
     }
+}
 
+impl Collapser<'_> {
     /// Try to collapse the builder window starting at `stmts[start]` (the init
     /// statement). Returns the number of following statements the window
     /// consumed — pushes plus any interleaved element temps — or 0 if no
     /// window matched. On success, the init statement's embedded `List<T>`
     /// structs are rewritten to `ArrayLiteral` in place.
-    fn try_collapse_at(&self, stmts: &mut [NirStmt], start: usize) -> usize {
+    fn try_collapse_at(&self, engine: &mut Engine, stmts: &[StmtId], start: usize) -> usize {
+        let body = &*engine.body;
+
         // Identify the local bound/assigned by the init statement.
-        let Some(local) = init_local(&stmts[start].kind) else {
+        let Some(local) = init_local(body, stmts[start]) else {
             return 0;
         };
 
@@ -136,8 +141,8 @@ impl Collapser<'_> {
         // the init value, each with the access path (field chain) by which the
         // bound local reaches it. `[]` path = the local itself is the array.
         let mut targets = Vec::new();
-        if let Some(value) = init_value(&stmts[start].kind) {
-            collect_array_targets(value, &mut Vec::new(), &mut targets);
+        if let Some(value) = init_value(body, stmts[start]) {
+            collect_array_targets(body, value, &mut Vec::new(), &mut targets);
         }
         if targets.is_empty() {
             return 0;
@@ -151,8 +156,8 @@ impl Collapser<'_> {
         // Collect each target's push elements *unresolved* (bare `Local(temp)`
         // for inlining's element temps); resolution happens after the window so
         // multi-use temps can be detected first.
-        let mut pushes_per_target: Vec<Vec<NirExpr>> = vec![Vec::new(); targets.len()];
-        let mut bindings: Vec<(u32, NirExpr)> = Vec::new();
+        let mut pushes_per_target: Vec<Vec<ExprId>> = vec![Vec::new(); targets.len()];
+        let mut bindings: Vec<(u32, ExprId)> = Vec::new();
         let mut consumed = 0;
         let mut all_done = false;
         // A single target keeps materialized elements in push order, so an
@@ -161,21 +166,21 @@ impl Collapser<'_> {
         // `temp_binding`).
         let allow_impure = targets.len() == 1;
         while start + 1 + consumed < stmts.len() && !all_done {
-            let stmt = &stmts[start + 1 + consumed];
-            if let Some((path, element)) = self.match_push(&stmt.kind, local) {
+            let stmt = stmts[start + 1 + consumed];
+            if let Some((path, element)) = self.match_push(body, stmt, local) {
                 let Some(idx) = targets.iter().position(|t| t.path == path) else {
                     break;
                 };
-                pushes_per_target[idx].push(element.clone());
+                pushes_per_target[idx].push(element);
                 consumed += 1;
                 all_done = pushes_per_target
                     .iter()
                     .zip(&targets)
                     .all(|(p, t)| p.len() == t.capacity);
-            } else if let Some((local_index, value)) = temp_binding(&stmt.kind, allow_impure) {
+            } else if let Some((local_index, value)) = temp_binding(body, stmt, allow_impure) {
                 // A `let temp = value` for a fresh element temp; remember it so
                 // a following push that reads `temp` resolves to `value`.
-                bindings.push((local_index, value.clone()));
+                bindings.push((local_index, value));
                 consumed += 1;
             } else {
                 break;
@@ -201,12 +206,12 @@ impl Collapser<'_> {
             let uses = pushes_per_target
                 .iter()
                 .flatten()
-                .filter(|e| is_local(e, *idx))
+                .filter(|e| is_local(body, **e, *idx))
                 .count();
             if uses == 1 {
                 for element in pushes_per_target.iter_mut().flatten() {
-                    if is_local(element, *idx) {
-                        *element = value.clone();
+                    if is_local(body, *element, *idx) {
+                        *element = *value;
                     }
                 }
             }
@@ -219,12 +224,12 @@ impl Collapser<'_> {
         // sub-expression rather than a bare `Local`). Either residual read
         // would dangle the dropped binding, so bail.
         let rest = &stmts[start + 1 + consumed..];
-        let reads_after = |idx: u32| rest.iter().any(|s| stmt_mentions_local(s, idx));
+        let reads_after = |idx: u32| rest.iter().any(|s| stmt_mentions_local(body, *s, idx));
         let reads_in_element = |idx: u32| {
             pushes_per_target
                 .iter()
                 .flatten()
-                .any(|e| expr_mentions_local(e, idx))
+                .any(|e| expr_mentions_local(body, *e, idx))
         };
         if bindings
             .iter()
@@ -234,43 +239,40 @@ impl Collapser<'_> {
         }
 
         // Rewrite each `List<T> { array_new(N), used: 0 }` struct to the
-        // materialized `ArrayLiteral`.
-        if let Some(value) = init_value_mut(&mut stmts[start].kind) {
-            let mut elements_by_path: Vec<(Vec<u32>, Vec<NirExpr>)> = targets
-                .iter()
-                .map(|t| t.path.clone())
-                .zip(pushes_per_target)
-                .collect();
-            rewrite_array_targets(value, &mut Vec::new(), &mut elements_by_path);
+        // materialized `ArrayLiteral`, reusing the element expression ids (the
+        // push statements that owned them are dropped with the window). The
+        // `body` immutable borrow ends here; the rewrite mutates the arena.
+        for (target, elements) in targets.iter().zip(pushes_per_target) {
+            let array_lit = ExprKind::ArrayLiteral { elements };
+            engine.replace_expr_kind(target.struct_expr_id, array_lit);
         }
         consumed
     }
 
     /// Match a `PLACE.push(elem)` statement where `PLACE` roots at `local`.
     /// Returns the field path from `local` to the array and the pushed element.
-    fn match_push<'e>(&self, kind: &'e NirStmtKind, local: u32) -> Option<(Vec<u32>, &'e NirExpr)> {
-        let NirStmtKind::Expr(NirExpr {
-            kind:
-                NirExprKind::MethodCall {
-                    receiver,
-                    func,
-                    args,
-                    ..
-                },
+    fn match_push(&self, body: &Body, stmt: StmtId, local: u32) -> Option<(Vec<u32>, ExprId)> {
+        let StmtKind::Expr(e) = &body.stmts[stmt].kind else {
+            return None;
+        };
+        let ExprKind::MethodCall {
+            receiver,
+            func,
+            args,
             ..
-        }) = kind
+        } = &body.exprs[*e].kind
         else {
             return None;
         };
         if !self.push_names.contains(&func.name) || args.len() != 1 {
             return None;
         }
-        let path = place_path(receiver, local)?;
-        Some((path, &args[0].expr))
+        let path = place_path(body, *receiver, local)?;
+        Some((path, args[0].expr))
     }
 }
 
-/// If `kind` is `let temp = value`, return the local index and the bound
+/// If `stmt` is `let temp = value`, return the local index and the bound
 /// value. Used to see through the element temps that inlining
 /// `push_literal(value)` introduces (`let v = <element>; place.push(v)`).
 ///
@@ -281,57 +283,46 @@ impl Collapser<'_> {
 /// multiple interleaved targets (e.g. `Bag { keys, values }`) the per-field
 /// arrays materialize one after another, which would reorder side effects
 /// across fields, so only pure temps may be resolved there.
-fn temp_binding(kind: &NirStmtKind, allow_impure: bool) -> Option<(u32, &NirExpr)> {
-    match kind {
-        NirStmtKind::Let {
+fn temp_binding(body: &Body, stmt: StmtId, allow_impure: bool) -> Option<(u32, ExprId)> {
+    match &body.stmts[stmt].kind {
+        StmtKind::Let {
             local_index, value, ..
-        } if allow_impure || crate::optimize::elide_local::is_pure_expr(value) => {
-            Some((*local_index, value))
-        }
+        } if allow_impure || is_pure_expr(body, *value) => Some((*local_index, *value)),
         _ => None,
     }
 }
 
 /// A detected `List<T> { repr: array_new(N), used: 0 }` struct, with the
-/// field path from the init's bound local and its `array_new` capacity.
+/// arena id of the struct, the field path from the init's bound local, and its
+/// `array_new` capacity.
 struct ArrayTarget {
+    struct_expr_id: ExprId,
     path: Vec<u32>,
     capacity: usize,
 }
 
 /// The local a `Let` binds or an `Assign`-to-local sets.
-fn init_local(kind: &NirStmtKind) -> Option<u32> {
-    match kind {
-        NirStmtKind::Let { local_index, .. } => Some(*local_index),
-        NirStmtKind::Expr(NirExpr {
-            kind: NirExprKind::Assign { target, .. },
-            ..
-        }) => match &target.kind {
-            NirExprKind::Local { index, .. } => Some(*index),
+fn init_local(body: &Body, stmt: StmtId) -> Option<u32> {
+    match &body.stmts[stmt].kind {
+        StmtKind::Let { local_index, .. } => Some(*local_index),
+        StmtKind::Expr(e) => match &body.exprs[*e].kind {
+            ExprKind::Assign { target, .. } => match &body.exprs[*target].kind {
+                ExprKind::Local { index, .. } => Some(*index),
+                _ => None,
+            },
             _ => None,
         },
         _ => None,
     }
 }
 
-fn init_value(kind: &NirStmtKind) -> Option<&NirExpr> {
-    match kind {
-        NirStmtKind::Let { value, .. } => Some(value),
-        NirStmtKind::Expr(NirExpr {
-            kind: NirExprKind::Assign { value, .. },
-            ..
-        }) => Some(value),
-        _ => None,
-    }
-}
-
-fn init_value_mut(kind: &mut NirStmtKind) -> Option<&mut NirExpr> {
-    match kind {
-        NirStmtKind::Let { value, .. } => Some(value),
-        NirStmtKind::Expr(NirExpr {
-            kind: NirExprKind::Assign { value, .. },
-            ..
-        }) => Some(value),
+fn init_value(body: &Body, stmt: StmtId) -> Option<ExprId> {
+    match &body.stmts[stmt].kind {
+        StmtKind::Let { value, .. } => Some(*value),
+        StmtKind::Expr(e) => match &body.exprs[*e].kind {
+            ExprKind::Assign { value, .. } => Some(*value),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -340,33 +331,45 @@ fn init_value_mut(kind: &mut NirStmtKind) -> Option<&mut NirExpr> {
 /// struct with the field path from the value's root. Descends through the
 /// outer block tail (`{ …; *__b }` produced for direct literals) and through
 /// wrapper `StructLiteral` fields.
-fn collect_array_targets(expr: &NirExpr, path: &mut Vec<u32>, out: &mut Vec<ArrayTarget>) {
-    match &expr.kind {
-        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
+fn collect_array_targets(
+    body: &Body,
+    expr: ExprId,
+    path: &mut Vec<u32>,
+    out: &mut Vec<ArrayTarget>,
+) {
+    match &body.exprs[expr].kind {
+        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
             // The direct-literal block binds `__b` to the array and yields it
             // via a `*__b` / `__b` tail; the array struct is the let value.
-            if let Some(value) = block.stmts.iter().find_map(|s| match &s.kind {
-                NirStmtKind::Let { value, .. } => Some(value),
-                _ => None,
-            }) {
-                collect_array_targets(value, path, out);
+            let value = body.blocks[*block]
+                .stmts
+                .iter()
+                .find_map(|s| match &body.stmts[*s].kind {
+                    StmtKind::Let { value, .. } => Some(*value),
+                    _ => None,
+                });
+            if let Some(value) = value {
+                collect_array_targets(body, value, path, out);
             }
         }
-        NirExprKind::StructLiteral { fields, .. } => {
+        ExprKind::StructLiteral { fields, .. } => {
             // Only collapse non-empty literals. A capacity-0 `array_new(0)` is
             // indistinguishable from a growable-array initialization (`let mut
             // v = []; v.push(…)`); collapsing it to a fixed 0-length
             // `array.new_fixed()` would break subsequent growth.
-            if let Some(capacity) = match_list_struct(&expr.kind).filter(|&n| n > 0) {
+            if let Some(capacity) = match_list_struct(body, expr).filter(|&n| n > 0) {
                 out.push(ArrayTarget {
+                    struct_expr_id: expr,
                     path: path.clone(),
                     capacity,
                 });
             } else {
                 // A wrapper struct: recurse into each field, extending the path.
-                for field in fields {
-                    path.push(field.field_index);
-                    collect_array_targets(&field.value, path, out);
+                let fields: Vec<(u32, ExprId)> =
+                    fields.iter().map(|f| (f.field_index, f.value)).collect();
+                for (field_index, value) in fields {
+                    path.push(field_index);
+                    collect_array_targets(body, value, path, out);
                     path.pop();
                 }
             }
@@ -375,9 +378,9 @@ fn collect_array_targets(expr: &NirExpr, path: &mut Vec<u32>, out: &mut Vec<Arra
     }
 }
 
-/// If `kind` is an `List<T> { repr: array_new(N), used: 0 }` struct, return N.
-fn match_list_struct(kind: &NirExprKind) -> Option<usize> {
-    let NirExprKind::StructLiteral { fields, .. } = kind else {
+/// If `expr` is an `List<T> { repr: array_new(N), used: 0 }` struct, return N.
+fn match_list_struct(body: &Body, expr: ExprId) -> Option<usize> {
+    let ExprKind::StructLiteral { fields, .. } = &body.exprs[expr].kind else {
         return None;
     };
     if fields.len() != 2 {
@@ -385,15 +388,15 @@ fn match_list_struct(kind: &NirExprKind) -> Option<usize> {
     }
     let repr = fields.iter().find(|f| f.name == REPR_FIELD)?;
     let used = fields.iter().find(|f| f.name == USED_FIELD)?;
-    if !is_zero_int(&used.value) {
+    if !is_zero_int(body, used.value) {
         return None;
     }
-    array_new_capacity(&repr.value)
+    array_new_capacity(body, repr.value)
 }
 
 /// If `expr` is a `builtin::array_new(N)` call with a constant `N`, return N.
-fn array_new_capacity(expr: &NirExpr) -> Option<usize> {
-    let NirExprKind::Call { func, args, .. } = &expr.kind else {
+fn array_new_capacity(body: &Body, expr: ExprId) -> Option<usize> {
+    let ExprKind::Call { func, args, .. } = &body.exprs[expr].kind else {
         return None;
     };
     // The builtin reaches NIR either as a bare `array_new` (non-generic call)
@@ -407,81 +410,45 @@ fn array_new_capacity(expr: &NirExpr) -> Option<usize> {
     if !is_array_new || args.len() != 1 {
         return None;
     }
-    match &args[0].expr.kind {
-        NirExprKind::IntLiteral { value, .. } => usize::try_from(*value).ok(),
+    match &body.exprs[args[0].expr].kind {
+        ExprKind::IntLiteral { value, .. } => usize::try_from(*value).ok(),
         _ => None,
     }
 }
 
-fn is_zero_int(expr: &NirExpr) -> bool {
-    matches!(&expr.kind, NirExprKind::IntLiteral { value, .. } if *value == 0)
-}
-
-/// Rewrite the `List<T>` structs collected by [`collect_array_targets`] to
-/// `ArrayLiteral`, matching by field path. Consumes the element vectors.
-fn rewrite_array_targets(
-    expr: &mut NirExpr,
-    path: &mut Vec<u32>,
-    elements_by_path: &mut [(Vec<u32>, Vec<NirExpr>)],
-) {
-    let is_array_struct = match_list_struct(&expr.kind).is_some();
-    match &mut expr.kind {
-        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
-            if let Some(value) = block.stmts.iter_mut().find_map(|s| match &mut s.kind {
-                NirStmtKind::Let { value, .. } => Some(value),
-                _ => None,
-            }) {
-                rewrite_array_targets(value, path, elements_by_path);
-            }
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            if is_array_struct {
-                if let Some((_, elements)) = elements_by_path.iter_mut().find(|(p, _)| p == path) {
-                    expr.kind = NirExprKind::ArrayLiteral {
-                        elements: std::mem::take(elements),
-                    };
-                }
-            } else {
-                for field in fields {
-                    path.push(field.field_index);
-                    rewrite_array_targets(&mut field.value, path, elements_by_path);
-                    path.pop();
-                }
-            }
-        }
-        _ => {}
-    }
+fn is_zero_int(body: &Body, expr: ExprId) -> bool {
+    matches!(&body.exprs[expr].kind, ExprKind::IntLiteral { value, .. } if *value == 0)
 }
 
 /// If `receiver` is `local` reached through zero or more field accesses,
 /// return the field-index path (`[]` for the bare local). The builder methods
 /// take `&mut self`, so peel a leading reference.
-fn place_path(receiver: &NirExpr, local: u32) -> Option<Vec<u32>> {
+fn place_path(body: &Body, receiver: ExprId, local: u32) -> Option<Vec<u32>> {
     let mut path = Vec::new();
-    let mut cur = peel_ref(receiver);
+    let mut cur = peel_ref(body, receiver);
     loop {
-        match &cur.kind {
-            NirExprKind::Local { index, .. } if *index == local => {
+        match &body.exprs[cur].kind {
+            ExprKind::Local { index, .. } if *index == local => {
                 path.reverse();
                 return Some(path);
             }
-            NirExprKind::FieldAccess {
+            ExprKind::FieldAccess {
                 expr, field_index, ..
             } => {
                 path.push(*field_index);
-                cur = expr;
+                cur = *expr;
             }
             _ => return None,
         }
     }
 }
 
-fn peel_ref(expr: &NirExpr) -> &NirExpr {
-    match &expr.kind {
-        NirExprKind::Unary {
+fn peel_ref(body: &Body, expr: ExprId) -> ExprId {
+    match &body.exprs[expr].kind {
+        ExprKind::Unary {
             op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
             expr: inner,
-        } => peel_ref(inner),
+        } => peel_ref(body, *inner),
         _ => expr,
     }
 }

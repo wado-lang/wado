@@ -1,14 +1,12 @@
 //! Generic visitor traits for mutable and immutable traversal of NIR trees.
 //!
-//! Provides three visitor traits:
+//! Provides two visitor traits:
 //! - `NirMutVisitor`: mutable traversal (monomorphizer, lowering)
 //! - `NirRefVisitor`: immutable traversal (analysis, collection)
-//! - `NirOptVisitor`: mutable traversal with change tracking (optimization passes)
 //!
 //! Also provides utility functions for common NIR queries like `block_has_break_to`.
 
-use crate::nir::{NirBlock, NirExpr, NirExprKind, NirPattern, NirStmt, NirStmtKind, NirUnaryOp};
-use crate::nir_package::NirPackage;
+use crate::nir::{NirBlock, NirExpr, NirExprKind, NirPattern, NirStmt, NirStmtKind};
 
 /// Trait for mutable traversal of NIR trees.
 ///
@@ -93,9 +91,8 @@ pub trait NirMutVisitor {
             }
             NirPattern::Enum { .. } | NirPattern::Range { .. } => {}
             // `ConstantValue { expr }` carries a sub-expression; recurse so
-            // expression-level visitors see it. Matches
-            // `NirOptVisitor::opt_walk_pattern` (which already does this);
-            // `NirRefVisitor::walk_pattern` mirrors the fix.
+            // expression-level visitors see it. `NirRefVisitor::walk_pattern`
+            // mirrors this.
             NirPattern::ConstantValue { expr } => {
                 self.visit_expr(expr);
             }
@@ -269,9 +266,8 @@ pub trait NirRefVisitor {
             }
             NirPattern::Enum { .. } | NirPattern::Range { .. } => {}
             // `ConstantValue { expr }` carries a sub-expression; recurse so
-            // expression-level visitors see it. Matches
-            // `NirOptVisitor::opt_walk_pattern` (which already does this);
-            // `NirMutVisitor::walk_pattern` mirrors the fix.
+            // expression-level visitors see it. `NirMutVisitor::walk_pattern`
+            // mirrors this.
             NirPattern::ConstantValue { expr } => {
                 self.visit_expr(expr);
             }
@@ -448,242 +444,6 @@ pub trait NirRefVisitor {
     }
 }
 
-/// Trait for visiting and transforming NIR nodes in optimization passes.
-///
-/// All methods return `true` if any changes were made.
-/// Default implementations walk children recursively via the free functions
-/// `opt_walk_block`, `opt_walk_stmt`, and `opt_walk_expr`.
-pub trait NirOptVisitor {
-    /// Visit a statement. Override to add statement-level transformation logic.
-    /// Call `opt_walk_stmt(self, stmt)` to recurse into children.
-    fn visit_stmt(&mut self, stmt: &mut NirStmt) -> bool
-    where
-        Self: Sized,
-    {
-        opt_walk_stmt(self, stmt)
-    }
-
-    /// Visit an expression. Override to add custom transformation logic.
-    /// Call `opt_walk_expr(self, expr)` to recurse into children.
-    fn visit_expr(&mut self, expr: &mut NirExpr) -> bool
-    where
-        Self: Sized,
-    {
-        opt_walk_expr(self, expr)
-    }
-
-    /// Visit a block. Override for block-level transformations (e.g., stmt removal).
-    /// Call `opt_walk_block(self, block)` to recurse into children.
-    fn visit_block(&mut self, block: &mut NirBlock) -> bool
-    where
-        Self: Sized,
-    {
-        opt_walk_block(self, block)
-    }
-
-    /// Visit a pattern. Override to rewrite pattern bindings or constants.
-    /// Call `opt_walk_pattern(self, pattern)` to recurse into children.
-    fn visit_pattern(&mut self, pattern: &mut NirPattern) -> bool
-    where
-        Self: Sized,
-    {
-        opt_walk_pattern(self, pattern)
-    }
-}
-
-/// Walk a pattern's children. Bindings, literals, enum tags, and ranges are
-/// leaves; nested patterns inside `Tuple` / `Variant` / `Struct` / `Or` are
-/// visited recursively, and the `expr` of a `ConstantValue` pattern flows
-/// back through `visit_expr`.
-pub fn opt_walk_pattern(visitor: &mut impl NirOptVisitor, pattern: &mut NirPattern) -> bool {
-    let mut changed = false;
-    match pattern {
-        NirPattern::Wildcard
-        | NirPattern::Binding { .. }
-        | NirPattern::Literal(_)
-        | NirPattern::Enum { .. }
-        | NirPattern::Range { .. } => {}
-        NirPattern::Tuple(patterns, _) | NirPattern::Or(patterns) => {
-            for p in patterns {
-                changed |= visitor.visit_pattern(p);
-            }
-        }
-        NirPattern::Variant { bindings, .. } => {
-            for p in bindings {
-                changed |= visitor.visit_pattern(p);
-            }
-        }
-        NirPattern::Struct { fields, .. } => {
-            for f in fields {
-                changed |= visitor.visit_pattern(&mut f.pattern);
-            }
-        }
-        NirPattern::ConstantValue { expr } => {
-            changed |= visitor.visit_expr(expr);
-        }
-    }
-    changed
-}
-
-/// Walk all statements in a block, visiting each recursively.
-pub fn opt_walk_block(visitor: &mut impl NirOptVisitor, block: &mut NirBlock) -> bool {
-    let mut changed = false;
-    for stmt in &mut block.stmts {
-        changed |= visitor.visit_stmt(stmt);
-    }
-    changed
-}
-
-/// Walk a statement's children.
-pub fn opt_walk_stmt(visitor: &mut impl NirOptVisitor, stmt: &mut NirStmt) -> bool {
-    match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } => visitor.visit_expr(value),
-        NirStmtKind::LetDestructure { pattern, value, .. } => {
-            let mut changed = visitor.visit_pattern(pattern);
-            changed |= visitor.visit_expr(value);
-            changed
-        }
-        NirStmtKind::Expr(expr) => visitor.visit_expr(expr),
-        NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
-            value.as_mut().is_some_and(|v| visitor.visit_expr(v))
-        }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            let mut changed = visitor.visit_expr(condition);
-            changed |= visitor.visit_block(then_block);
-            if let Some(eb) = else_block {
-                changed |= visitor.visit_block(eb);
-            }
-            changed
-        }
-        NirStmtKind::Loop { body } => visitor.visit_block(body),
-        NirStmtKind::LabeledBlock { block, .. } => visitor.visit_block(block),
-        NirStmtKind::Continue => false,
-    }
-}
-
-/// Walk all children of an expression.
-pub fn opt_walk_expr(visitor: &mut impl NirOptVisitor, expr: &mut NirExpr) -> bool {
-    let mut changed = false;
-    match &mut expr.kind {
-        NirExprKind::Binary { left, right, .. } => {
-            changed |= visitor.visit_expr(left);
-            changed |= visitor.visit_expr(right);
-        }
-        NirExprKind::Unary { expr: inner, .. }
-        | NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::Cast { expr: inner, .. }
-        | NirExprKind::VariantTag { expr: inner }
-        | NirExprKind::VariantTest { expr: inner, .. }
-        | NirExprKind::VariantPayload { expr: inner, .. } => {
-            changed |= visitor.visit_expr(inner);
-        }
-        NirExprKind::Assign { target, value } => {
-            changed |= visitor.visit_expr(target);
-            changed |= visitor.visit_expr(value);
-        }
-        NirExprKind::Index { expr: inner, index } => {
-            changed |= visitor.visit_expr(inner);
-            changed |= visitor.visit_expr(index);
-        }
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                changed |= visitor.visit_expr(&mut arg.expr);
-            }
-        }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                changed |= visitor.visit_expr(arg);
-            }
-        }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            changed |= visitor.visit_expr(receiver);
-            for arg in args {
-                changed |= visitor.visit_expr(&mut arg.expr);
-            }
-        }
-        NirExprKind::IndirectCall { callee, args } => {
-            changed |= visitor.visit_expr(callee);
-            for arg in args {
-                changed |= visitor.visit_expr(arg);
-            }
-        }
-        NirExprKind::ClosureToCanonical { functor, .. } => {
-            changed |= visitor.visit_expr(functor);
-        }
-        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
-            changed |= visitor.visit_block(block);
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            changed |= visitor.visit_expr(condition);
-            changed |= visitor.visit_block(then_branch);
-            if let Some(eb) = else_branch {
-                changed |= visitor.visit_block(eb);
-            }
-        }
-        NirExprKind::Match { expr: inner, arms } => {
-            changed |= visitor.visit_expr(inner);
-            for arm in arms {
-                changed |= visitor.visit_pattern(&mut arm.pattern);
-                if let Some(guard) = &mut arm.guard {
-                    changed |= visitor.visit_expr(guard);
-                }
-                changed |= visitor.visit_expr(&mut arm.body);
-            }
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                changed |= visitor.visit_expr(&mut field.value);
-            }
-        }
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            for elem in elements {
-                changed |= visitor.visit_expr(elem);
-            }
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                changed |= visitor.visit_expr(p);
-            }
-        }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            changed |= visitor.visit_expr(value);
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            changed |= visitor.visit_expr(scrutinee);
-            for arm in arms {
-                changed |= visitor.visit_block(arm);
-            }
-            changed |= visitor.visit_block(default);
-        }
-        // Leaf nodes
-        NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::EnumConstruct { .. } => {}
-    }
-    changed
-}
-
 /// Check if any `break` statement in the block targets the given label.
 ///
 /// Recursively traverses all NIR node types to avoid missing breaks nested
@@ -808,67 +568,4 @@ pub fn expr_has_break_to(label: &str, expr: &NirExpr) -> bool {
         | NirExprKind::Unit
         | NirExprKind::EnumConstruct { .. } => false,
     }
-}
-
-/// Whether `expr` is a bare `Local(idx)` reference.
-pub fn is_local(expr: &NirExpr, idx: u32) -> bool {
-    matches!(&expr.kind, NirExprKind::Local { index, .. } if *index == idx)
-}
-
-/// Strip outer auto-ref / deref wrappers (`&`, `&mut`, `*`) from an
-/// expression, e.g. a method-call receiver, to reach the value underneath.
-pub fn strip_refs(expr: &NirExpr) -> &NirExpr {
-    match &expr.kind {
-        NirExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
-            expr: inner,
-        } => strip_refs(inner),
-        _ => expr,
-    }
-}
-
-/// Visitor that records whether `Local(idx)` appears anywhere it traverses.
-struct MentionsLocal {
-    idx: u32,
-    found: bool,
-}
-
-impl NirRefVisitor for MentionsLocal {
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        if is_local(expr, self.idx) {
-            self.found = true;
-        }
-        if !self.found {
-            self.walk_expr(expr);
-        }
-    }
-}
-
-/// Whether `idx` appears anywhere in `expr`'s subtree. Uses the immutable
-/// visitor so every nested statement (including let-values inside
-/// expression-position blocks) is covered.
-pub fn expr_mentions_local(expr: &NirExpr, idx: u32) -> bool {
-    let mut v = MentionsLocal { idx, found: false };
-    v.visit_expr(expr);
-    v.found
-}
-
-/// Whether `idx` appears anywhere in `stmt`'s subtree. The statement-level
-/// counterpart of [`expr_mentions_local`].
-pub fn stmt_mentions_local(stmt: &NirStmt, idx: u32) -> bool {
-    let mut v = MentionsLocal { idx, found: false };
-    v.visit_stmt(stmt);
-    v.found
-}
-
-/// Apply a visitor to all function bodies in a project.
-pub fn visit_project_functions(project: &mut NirPackage, visitor: &mut impl NirOptVisitor) -> bool {
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        if let Some(ref mut body) = func.body {
-            changed |= visitor.visit_block(body);
-        }
-    }
-    changed
 }

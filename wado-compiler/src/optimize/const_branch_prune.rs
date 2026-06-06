@@ -6,441 +6,451 @@
 //! - `label: { let x = y; ... }` → substitute x with y in remaining stmts
 //! - Empty blocks → `()`
 //!
-//! Constant-condition `if` folding (`if true { A } else { B }` → `A`,
-//! both at the expression and statement level) is handled by `niri` via
-//! the `const_folding` pass — see `docs/wep-2026-04-27-tir-interpreter.md`
-//! Stage 2. This pass intentionally does *not* duplicate that logic; if
-//! you find yourself adding an `if`-condition rewrite here, push it into
-//! `niri` instead so the lattice-driven engine stays the single source
-//! of truth.
+//! Constant-condition `if` folding is handled by `niri` via the `const_folding`
+//! pass; this pass intentionally does *not* duplicate that logic.
+//!
+//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
+//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): a bottom-up simplifier,
+//! so it walks the arena `Body` children-first (a default bottom-up visitor
+//! walk) and mutates in place — block-stmt flattening rebuilds the
+//! statement-id list, expression simplification rewrites node kinds, and the
+//! break-target queries use the arena `arena_query::has_break_to`.
 
-use crate::hashmap::IndexMap;
-use crate::nir::{NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind};
+use crate::hashmap::{IndexMap, IndexSet};
+use crate::nir_arena::{
+    BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, StmtId, StmtKind, StmtNode,
+};
 use crate::nir_package::NirPackage;
 
-use crate::nir_visitor::{
-    NirMutVisitor, NirOptVisitor, NirRefVisitor, block_has_break_to, expr_has_break_to,
-    opt_walk_block, opt_walk_expr, stmt_has_break_to, visit_project_functions,
-};
-
-/// Prune constant branches and simplify trivial blocks in all functions.
-///
-/// Inside the optimizer fixpoint loop. `__tmpl:` labeled blocks are
-/// preserved so `tmpl_hoist` can anchor on them later in the same iteration.
-pub fn prune_constant_branches(project: &mut NirPackage) -> bool {
-    let mut visitor = BranchPruner {
-        mode: PruneMode::Fixpoint,
-    };
-    visit_project_functions(project, &mut visitor)
-}
-
-/// Final post-fixpoint pass that flattens any `__tmpl:` wrappers
-/// `tmpl_hoist` already finished processing during the fixpoint loop.
-pub fn prune_template_block_wrappers(project: &mut NirPackage) -> bool {
-    let mut visitor = BranchPruner {
-        mode: PruneMode::PostFixpoint,
-    };
-    visit_project_functions(project, &mut visitor)
-}
+use super::arena_query::has_break_to;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PruneMode {
     /// Run inside the optimizer fixpoint loop — preserve `__tmpl:` blocks
     /// for `tmpl_hoist`.
     Fixpoint,
-    /// Final cleanup after the fixpoint converges — flatten every
-    /// tail-break-only labeled block.
+    /// Final cleanup after the fixpoint converges.
     PostFixpoint,
 }
 
-struct BranchPruner {
-    mode: PruneMode,
+/// Prune constant branches and simplify trivial blocks in all functions.
+pub fn prune_constant_branches(project: &mut NirPackage) -> bool {
+    run(project, PruneMode::Fixpoint)
 }
 
-impl NirOptVisitor for BranchPruner {
-    fn visit_expr(&mut self, expr: &mut NirExpr) -> bool {
-        // Bottom-up: walk children first
-        let mut changed = opt_walk_expr(self, expr);
-        // Inline leading copy bindings inside labeled blocks before pruning
-        changed |= inline_labeled_block_copies(expr);
-        // Then prune this expression
-        changed |= prune_expr(expr, self.mode);
-        changed
-    }
+/// Final post-fixpoint pass that flattens any `__tmpl:` wrappers.
+pub fn prune_template_block_wrappers(project: &mut NirPackage) -> bool {
+    run(project, PruneMode::PostFixpoint)
+}
 
-    fn visit_block(&mut self, block: &mut NirBlock) -> bool {
-        // Bottom-up: walk stmts first
-        let mut changed = opt_walk_block(self, block);
-        // Then eliminate dead stmts
-        changed |= eliminate_dead_stmts(block, self.mode);
-        changed
+fn run(project: &mut NirPackage, mode: PruneMode) -> bool {
+    let mut changed = false;
+    for func_rc in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        if let Some(body) = func.body.as_mut() {
+            let root = body.root;
+            changed |= prune_block(body, root, mode);
+        }
+    }
+    changed
+}
+
+fn block_has_break_to(body: &Body, block: BlockId, label: &str) -> bool {
+    has_break_to(body, NodeRef::Block(block), label)
+}
+
+fn stmt_has_break_to(body: &Body, stmt: StmtId, label: &str) -> bool {
+    has_break_to(body, NodeRef::Stmt(stmt), label)
+}
+
+fn expr_has_break_to(body: &Body, expr: ExprId, label: &str) -> bool {
+    has_break_to(body, NodeRef::Expr(expr), label)
+}
+
+/// Move `src`'s node content into `id` (the arena form of `*expr = src_expr`);
+/// `src` is left as a dead `Unit`.
+fn become_expr(body: &mut Body, id: ExprId, src: ExprId) {
+    if id == src {
+        return;
+    }
+    let ty = body.exprs[src].type_id;
+    let span = body.exprs[src].span;
+    let node = std::mem::replace(
+        &mut body.exprs[src],
+        ExprNode {
+            kind: ExprKind::Unit,
+            type_id: ty,
+            span,
+        },
+    );
+    body.exprs[id] = node;
+}
+
+// ---------------------------------------------------------------------------
+// Bottom-up traversal
+// ---------------------------------------------------------------------------
+
+fn prune_block(body: &mut Body, block: BlockId, mode: PruneMode) -> bool {
+    // Bottom-up: prune each statement's children first.
+    let stmts = body.blocks[block].stmts.clone();
+    let mut changed = false;
+    for s in stmts {
+        changed |= prune_stmt(body, s, mode);
+    }
+    changed |= eliminate_dead_stmts(body, block, mode);
+    changed
+}
+
+fn prune_stmt(body: &mut Body, stmt: StmtId, mode: PruneMode) -> bool {
+    let mut kids = Vec::new();
+    body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
+    let mut changed = false;
+    for c in kids {
+        changed |= prune_node(body, c, mode);
+    }
+    changed
+}
+
+fn prune_node(body: &mut Body, node: NodeRef, mode: PruneMode) -> bool {
+    match node {
+        NodeRef::Expr(id) => prune_expr(body, id, mode),
+        NodeRef::Block(b) => prune_block(body, b, mode),
+        NodeRef::Stmt(s) => prune_stmt(body, s, mode),
+        NodeRef::Pat(_) => {
+            let mut kids = Vec::new();
+            body.for_each_child(node, |c| kids.push(c));
+            let mut changed = false;
+            for c in kids {
+                changed |= prune_node(body, c, mode);
+            }
+            changed
+        }
     }
 }
 
-/// (C2) Recognises a `LabeledBlock { label, inner }` stmt whose only break to
-/// `label` is the trailing statement and carries no value. Such labels add no
-/// control flow over their straight-line body and the labeled wrapper can be
-/// removed by dropping the trailing `break label` and lifting the rest of
-/// `inner.stmts` into the parent stmt list.
-///
-/// `mode` mirrors C3's `PostFixpoint` / Fixpoint distinction: in `Fixpoint`
-/// mode the `__tmpl:` carve-out preserves the anchor `tmpl_hoist` needs.
-fn is_tail_break_only_labeled_block(stmt: &NirStmt, mode: PruneMode) -> bool {
-    let NirStmtKind::LabeledBlock {
-        label,
-        block: inner,
-    } = &stmt.kind
-    else {
-        return false;
-    };
-    if mode == PruneMode::Fixpoint && label == "__tmpl" {
-        return false;
+fn prune_expr(body: &mut Body, id: ExprId, mode: PruneMode) -> bool {
+    // Bottom-up: walk children first.
+    let mut kids = Vec::new();
+    body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
+    let mut changed = false;
+    for c in kids {
+        changed |= prune_node(body, c, mode);
     }
-    let Some(last) = inner.stmts.last() else {
-        return false;
-    };
-    let NirStmtKind::Break {
-        label: Some(brk_label),
-        value: None,
-    } = &last.kind
-    else {
-        return false;
-    };
-    if brk_label != label {
-        return false;
-    }
-    !inner.stmts[..inner.stmts.len() - 1]
-        .iter()
-        .any(|s| stmt_has_break_to(label, s))
+    changed |= inline_labeled_block_copies(body, id);
+    changed |= prune_expr_local(body, id, mode);
+    changed
 }
 
-/// True if the trailing instruction of `stmts` unconditionally exits the
-/// enclosing stmt list (`Break` / `Continue` / `Return`). Used by
-/// `eliminate_dead_stmts` to keep the `terminated` flag accurate after
-/// flatten paths hoist a terminator out of an inner block.
-fn ends_with_terminator_stmt(stmts: &[NirStmt]) -> bool {
-    matches!(
-        stmts.last().map(|s| &s.kind),
-        Some(NirStmtKind::Break { .. } | NirStmtKind::Continue | NirStmtKind::Return { .. })
-    )
-}
+// ---------------------------------------------------------------------------
+// Expression-level simplification
+// ---------------------------------------------------------------------------
 
-/// Simplify trivial blocks at the expression level.
-///
-/// Constant-condition `if` folding lives in `niri` (Stage 2 of the NIR
-/// interpreter); this function deliberately does not handle that case.
-fn prune_expr(expr: &mut NirExpr, mode: PruneMode) -> bool {
+fn prune_expr_local(body: &mut Body, id: ExprId, mode: PruneMode) -> bool {
     let mut changed = false;
 
-    // Simplify `{ expr; }` → `expr` (single-expression unlabeled block)
-    if let NirExprKind::Block(block) = &expr.kind
-        && block.stmts.len() == 1
-        && let NirStmtKind::Expr(_) = &block.stmts[0].kind
-    {
-        let NirExprKind::Block(block) = std::mem::replace(&mut expr.kind, NirExprKind::Unit) else {
-            unreachable!();
-        };
-        let mut stmts = block.stmts;
-        let NirStmtKind::Expr(inner) = stmts.remove(0).kind else {
-            unreachable!();
-        };
-        *expr = inner;
-        changed = true;
-    }
-
-    // (C3) Simplify `label: { stmts...; break label: val; }` → `{ stmts...; val }`.
-    //
-    // When the *only* reference to `label` is the trailing `break label: val`
-    // statement, the labeled block adds no control flow over its straight-line
-    // body and can be unwrapped into a plain block whose tail expression is
-    // `val`. Subsequent `prune_expr` iterations collapse `{ val }` → `val`
-    // when the prefix becomes empty.
-    //
-    // `__tmpl` blocks are preserved: `tmpl_hoist` runs later in the optimize
-    // loop and anchors on the `__tmpl: block` shape to hoist per-iteration
-    // `Formatter` buffer initialisations out of loops. Flattening here would
-    // erase that anchor before `tmpl_hoist` gets to scan it.
-    if let NirExprKind::LabeledBlock { label, block, .. } = &expr.kind
-        && (mode == PruneMode::PostFixpoint || label != "__tmpl")
-        && let Some(last) = block.stmts.last()
-        && let NirStmtKind::Break {
-            label: Some(brk_label),
-            value: Some(brk_value),
-        } = &last.kind
-        && brk_label == label
-        && !expr_has_break_to(label, brk_value)
-        && !block.stmts[..block.stmts.len() - 1]
-            .iter()
-            .any(|s| stmt_has_break_to(label, s))
-    {
-        let NirExprKind::LabeledBlock { block, .. } =
-            std::mem::replace(&mut expr.kind, NirExprKind::Unit)
-        else {
-            unreachable!();
-        };
-        let block_span = block.span;
-        let mut stmts = block.stmts;
-        let last = stmts.pop().unwrap();
-        let NirStmt { kind, .. } = last;
-        let NirStmtKind::Break {
-            value: Some(value), ..
-        } = kind
-        else {
-            unreachable!();
-        };
-        if stmts.is_empty() {
-            *expr = value;
-        } else {
-            // Anchor the synthetic tail Expr stmt on the broken
-            // value's own span so diagnostics / hovers point at the
-            // value's source location, not the `break label: …`
-            // statement.
-            let tail_span = value.span;
-            stmts.push(NirStmt::new(NirStmtKind::Expr(value), tail_span));
-            expr.kind = NirExprKind::Block(NirBlock::new(stmts, block_span));
+    // `{ expr; }` → `expr` (single-expression unlabeled block)
+    if let ExprKind::Block(block) = &body.exprs[id].kind {
+        let block = *block;
+        if body.blocks[block].stmts.len() == 1
+            && let StmtKind::Expr(inner) = body.stmts[body.blocks[block].stmts[0]].kind
+        {
+            become_expr(body, id, inner);
+            changed = true;
         }
-        changed = true;
     }
 
-    // Also keep the single-stmt rule for when the labeled block has only
-    // one break stmt (no prefix). This pattern is structurally identical
-    // to C3 with an empty prefix, but the C3 rule above requires
-    // `value: Some(_)`, so this rule additionally covers the `value: None`
-    // case and any subtle path the N-stmt collapse leaves behind.
-    //
-    // `__tmpl` carve-out mirrors C3: during the fixpoint loop, leave
-    // `__tmpl:` blocks alone so `tmpl_hoist` can still anchor on them
-    // even if some other pass shrinks the body to a single break.
-    if let NirExprKind::LabeledBlock { label, block, .. } = &expr.kind
-        && (mode == PruneMode::PostFixpoint || label != "__tmpl")
-        && block.stmts.len() == 1
-        && let NirStmtKind::Break {
-            label: Some(brk_label),
-            value: brk_value,
-        } = &block.stmts[0].kind
-        && brk_label == label
-        && !brk_value
-            .as_ref()
-            .is_some_and(|v| expr_has_break_to(label, v))
-    {
-        let NirExprKind::LabeledBlock { block, .. } =
-            std::mem::replace(&mut expr.kind, NirExprKind::Unit)
-        else {
-            unreachable!();
-        };
-        let mut stmts = block.stmts;
-        let NirStmtKind::Break { value, .. } = stmts.remove(0).kind else {
-            unreachable!();
-        };
-        if let Some(inner) = value {
-            *expr = inner;
+    // (C3) `label: { stmts...; break label: val; }` → `{ stmts...; val }`.
+    if let ExprKind::LabeledBlock { label, block, .. } = &body.exprs[id].kind {
+        let label = label.clone();
+        let block = *block;
+        let go = (mode == PruneMode::PostFixpoint || label != "__tmpl")
+            && body.blocks[block].stmts.last().is_some_and(|&last| {
+                matches!(
+                    &body.stmts[last].kind,
+                    StmtKind::Break { label: Some(bl), value: Some(_) } if *bl == label
+                )
+            });
+        if go {
+            let last = *body.blocks[block].stmts.last().unwrap();
+            let StmtKind::Break {
+                value: Some(brk_value),
+                ..
+            } = body.stmts[last].kind
+            else {
+                unreachable!();
+            };
+            let prefix = &body.blocks[block].stmts[..body.blocks[block].stmts.len() - 1];
+            let prefix_clean = !expr_has_break_to(body, brk_value, &label)
+                && !prefix.iter().any(|&s| stmt_has_break_to(body, s, &label));
+            if prefix_clean {
+                // Drop the trailing break; the broken value becomes the tail.
+                body.blocks[block].stmts.pop();
+                if body.blocks[block].stmts.is_empty() {
+                    become_expr(body, id, brk_value);
+                } else {
+                    let tail_span = body.exprs[brk_value].span;
+                    let tail = body.stmts.push(StmtNode {
+                        kind: StmtKind::Expr(brk_value),
+                        span: tail_span,
+                    });
+                    body.blocks[block].stmts.push(tail);
+                    body.exprs[id].kind = ExprKind::Block(block);
+                }
+                changed = true;
+            }
         }
-        changed = true;
     }
 
-    // Simplify `[label:] { }` → `()` (empty block, with or without label)
-    if matches!(&expr.kind, NirExprKind::Block(b) | NirExprKind::LabeledBlock { block: b, .. } if b.stmts.is_empty())
-    {
-        expr.kind = NirExprKind::Unit;
+    // Single-`break` labeled block (covers the `value: None` case too).
+    if let ExprKind::LabeledBlock { label, block, .. } = &body.exprs[id].kind {
+        let label = label.clone();
+        let block = *block;
+        let single_break = (mode == PruneMode::PostFixpoint || label != "__tmpl")
+            && body.blocks[block].stmts.len() == 1
+            && matches!(
+                &body.stmts[body.blocks[block].stmts[0]].kind,
+                StmtKind::Break { label: Some(bl), .. } if *bl == label
+            );
+        if single_break {
+            let s0 = body.blocks[block].stmts[0];
+            let StmtKind::Break { value, .. } = body.stmts[s0].kind else {
+                unreachable!();
+            };
+            let value_ok = value.is_none_or(|v| !expr_has_break_to(body, v, &label));
+            if value_ok {
+                if let Some(inner) = value {
+                    become_expr(body, id, inner);
+                }
+                changed = true;
+            }
+        }
+    }
+
+    // `[label:] { }` → `()` (empty block, with or without label)
+    let is_empty = match &body.exprs[id].kind {
+        ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
+            body.blocks[*b].stmts.is_empty()
+        }
+        _ => false,
+    };
+    if is_empty {
+        body.exprs[id].kind = ExprKind::Unit;
         changed = true;
     }
 
     changed
 }
 
-/// Eliminate dead statements from a block:
-/// - `label: { }` (empty labeled block) → remove
-/// - `label: { stmts }` (unused label) → flatten stmts into parent
-/// - Trivial Unit / Block / unused-LabeledBlock expression stmts → flatten
-/// - Anything after a `break` / `continue` / `return` in the same stmt list
-///   is structurally dead and dropped (C1). The terminator itself stays.
-///
-/// Constant-condition `if` statement folding (`if true { … }` →
-/// inline branch) lives in `niri::Interpreter::reduce_local_block`
-/// and runs as part of the `const_folding` pass.
-fn eliminate_dead_stmts(block: &mut NirBlock, mode: PruneMode) -> bool {
-    // In `Fixpoint` mode the unused-label flatten still has to keep `__tmpl:`
-    // wrappers alive: even if no `break __tmpl` survives, `tmpl_hoist` still
-    // anchors on the labeled-block shape itself.
-    let unused_label_flattenable = |label: &str, inner: &NirBlock| {
-        (mode == PruneMode::PostFixpoint || label != "__tmpl")
-            && (inner.stmts.is_empty() || !block_has_break_to(label, inner))
+// ---------------------------------------------------------------------------
+// Statement-list dead-code elimination / flattening
+// ---------------------------------------------------------------------------
+
+fn is_tail_break_only_labeled_block(body: &Body, stmt: StmtId, mode: PruneMode) -> bool {
+    let StmtKind::LabeledBlock {
+        label,
+        block: inner,
+    } = &body.stmts[stmt].kind
+    else {
+        return false;
     };
-    let dominated = |s: &NirStmt| {
-        matches!(
-            &s.kind,
-            NirStmtKind::LabeledBlock { label, block }
-                if unused_label_flattenable(label, block)
-        ) || matches!(
-            &s.kind,
-            NirStmtKind::Expr(e) if matches!(e.kind, NirExprKind::Unit | NirExprKind::Block(_))
-        ) || matches!(
-            &s.kind,
-            NirStmtKind::Expr(e) if matches!(&e.kind, NirExprKind::LabeledBlock { label, block, .. } if unused_label_flattenable(label, block))
-        ) || is_tail_break_only_labeled_block(s, mode)
+    let inner = *inner;
+    if mode == PruneMode::Fixpoint && label == "__tmpl" {
+        return false;
+    }
+    let Some(&last) = body.blocks[inner].stmts.last() else {
+        return false;
     };
-    let has_dead_after_terminator = block.stmts.iter().enumerate().any(|(i, s)| {
-        i + 1 < block.stmts.len()
+    let StmtKind::Break {
+        label: Some(brk_label),
+        value: None,
+    } = &body.stmts[last].kind
+    else {
+        return false;
+    };
+    if brk_label != label {
+        return false;
+    }
+    let label = label.clone();
+    let n = body.blocks[inner].stmts.len();
+    !body.blocks[inner].stmts[..n - 1]
+        .iter()
+        .any(|&s| stmt_has_break_to(body, s, &label))
+}
+
+fn ends_with_terminator_stmt(body: &Body, stmts: &[StmtId]) -> bool {
+    matches!(
+        stmts.last().map(|&s| &body.stmts[s].kind),
+        Some(StmtKind::Break { .. } | StmtKind::Continue | StmtKind::Return { .. })
+    )
+}
+
+fn unused_label_flattenable(body: &Body, label: &str, inner: BlockId, mode: PruneMode) -> bool {
+    (mode == PruneMode::PostFixpoint || label != "__tmpl")
+        && (body.blocks[inner].stmts.is_empty() || !block_has_break_to(body, inner, label))
+}
+
+fn stmt_dominated(body: &Body, stmt: StmtId, mode: PruneMode) -> bool {
+    let base = match &body.stmts[stmt].kind {
+        StmtKind::LabeledBlock { label, block } => {
+            unused_label_flattenable(body, label, *block, mode)
+        }
+        StmtKind::Expr(e) => match &body.exprs[*e].kind {
+            ExprKind::Unit | ExprKind::Block(_) => true,
+            ExprKind::LabeledBlock { label, block, .. } => {
+                unused_label_flattenable(body, label, *block, mode)
+            }
+            _ => false,
+        },
+        _ => false,
+    };
+    base || is_tail_break_only_labeled_block(body, stmt, mode)
+}
+
+fn eliminate_dead_stmts(body: &mut Body, block: BlockId, mode: PruneMode) -> bool {
+    let stmts = body.blocks[block].stmts.clone();
+    let has_dead_after_terminator = stmts.iter().enumerate().any(|(i, &s)| {
+        i + 1 < stmts.len()
             && matches!(
-                &s.kind,
-                NirStmtKind::Break { .. } | NirStmtKind::Continue | NirStmtKind::Return { .. }
+                &body.stmts[s].kind,
+                StmtKind::Break { .. } | StmtKind::Continue | StmtKind::Return { .. }
             )
     });
-    if !has_dead_after_terminator && !block.stmts.iter().any(dominated) {
+    if !has_dead_after_terminator && !stmts.iter().any(|&s| stmt_dominated(body, s, mode)) {
         return false;
     }
 
-    let old_stmts = std::mem::take(&mut block.stmts);
+    let mut new_stmts: Vec<StmtId> = Vec::with_capacity(stmts.len());
     let mut terminated = false;
-    for stmt in old_stmts {
+    for stmt in stmts {
         if terminated {
-            // Drop everything after a terminator in the same stmt list.
             continue;
         }
-        // Labeled block with unused label → flatten stmts into parent
-        if let NirStmtKind::LabeledBlock {
-            ref label,
-            block: ref inner,
-        } = stmt.kind
-            && unused_label_flattenable(label, inner)
+        // Labeled-block statement with unused label → flatten its stmts in.
+        if let StmtKind::LabeledBlock {
+            label,
+            block: inner,
+        } = &body.stmts[stmt].kind
         {
-            let NirStmtKind::LabeledBlock { block: inner, .. } = stmt.kind else {
+            let inner = *inner;
+            if unused_label_flattenable(body, label, inner, mode) {
+                let inner_stmts = body.blocks[inner].stmts.clone();
+                if ends_with_terminator_stmt(body, &inner_stmts) {
+                    terminated = true;
+                }
+                new_stmts.extend(inner_stmts);
+                continue;
+            }
+        }
+        // (C2) Labeled block whose only `break LABEL` is a value-less tail.
+        if is_tail_break_only_labeled_block(body, stmt, mode) {
+            let StmtKind::LabeledBlock { block: inner, .. } = &body.stmts[stmt].kind else {
                 unreachable!();
             };
-            // If the hoisted-out inner stmts end with a terminator, mark the
-            // outer list as terminated so the rest of `old_stmts` is dropped
-            // in this same pass instead of waiting for the next fixpoint
-            // iteration.
-            if ends_with_terminator_stmt(&inner.stmts) {
+            let inner = *inner;
+            let mut inner_stmts = body.blocks[inner].stmts.clone();
+            inner_stmts.pop();
+            if ends_with_terminator_stmt(body, &inner_stmts) {
                 terminated = true;
             }
-            block.stmts.extend(inner.stmts);
+            new_stmts.extend(inner_stmts);
             continue;
         }
-        // (C2) Labeled block whose only `break LABEL` is a value-less tail
-        // statement → drop the trailing break, flatten the rest into parent.
-        if is_tail_break_only_labeled_block(&stmt, mode) {
-            let NirStmtKind::LabeledBlock {
-                block: mut inner, ..
-            } = stmt.kind
-            else {
-                unreachable!();
-            };
-            inner.stmts.pop();
-            if ends_with_terminator_stmt(&inner.stmts) {
-                terminated = true;
-            }
-            block.stmts.extend(inner.stmts);
-            continue;
-        }
-        // Unit expression → drop (side-effect free)
-        if let NirStmtKind::Expr(e) = &stmt.kind
-            && matches!(e.kind, NirExprKind::Unit)
+        // Unit expression statement → drop.
+        if let StmtKind::Expr(e) = &body.stmts[stmt].kind
+            && matches!(body.exprs[*e].kind, ExprKind::Unit)
         {
             continue;
         }
-        // Void block expression → flatten stmts into parent
-        if let NirStmtKind::Expr(e) = &stmt.kind
-            && matches!(e.kind, NirExprKind::Block(_))
+        // Void block expression statement → flatten.
+        if let StmtKind::Expr(e) = &body.stmts[stmt].kind
+            && let ExprKind::Block(inner) = &body.exprs[*e].kind
         {
-            let NirStmtKind::Expr(e) = stmt.kind else {
-                unreachable!();
-            };
-            let NirExprKind::Block(inner) = e.kind else {
-                unreachable!();
-            };
-            if ends_with_terminator_stmt(&inner.stmts) {
+            let inner = *inner;
+            let inner_stmts = body.blocks[inner].stmts.clone();
+            if ends_with_terminator_stmt(body, &inner_stmts) {
                 terminated = true;
             }
-            block.stmts.extend(inner.stmts);
+            new_stmts.extend(inner_stmts);
             continue;
         }
-        if let NirStmtKind::Expr(e) = &stmt.kind
-            && matches!(&e.kind, NirExprKind::LabeledBlock { label, block, .. } if unused_label_flattenable(label, block))
+        // Unused-label labeled-block expression statement → flatten.
+        if let StmtKind::Expr(e) = &body.stmts[stmt].kind
+            && let ExprKind::LabeledBlock {
+                label,
+                block: inner,
+                ..
+            } = &body.exprs[*e].kind
+            && unused_label_flattenable(body, label, *inner, mode)
         {
-            let NirStmtKind::Expr(e) = stmt.kind else {
-                unreachable!();
-            };
-            let NirExprKind::LabeledBlock { block: inner, .. } = e.kind else {
-                unreachable!();
-            };
-            if ends_with_terminator_stmt(&inner.stmts) {
+            let inner = *inner;
+            let inner_stmts = body.blocks[inner].stmts.clone();
+            if ends_with_terminator_stmt(body, &inner_stmts) {
                 terminated = true;
             }
-            block.stmts.extend(inner.stmts);
+            new_stmts.extend(inner_stmts);
             continue;
         }
         if matches!(
-            &stmt.kind,
-            NirStmtKind::Break { .. } | NirStmtKind::Continue | NirStmtKind::Return { .. }
+            &body.stmts[stmt].kind,
+            StmtKind::Break { .. } | StmtKind::Continue | StmtKind::Return { .. }
         ) {
             terminated = true;
         }
-        block.stmts.push(stmt);
+        new_stmts.push(stmt);
     }
+    body.blocks[block].stmts = new_stmts;
     true
 }
 
-/// Inline leading copy bindings inside labeled block expressions.
-///
-/// Pattern: `label: { let x = y; ... break label: expr; }` where `y` is a Local.
-/// When neither `x` nor `y` is assigned within the remaining statements, substitute
-/// all occurrences of `x` with `y` in the block body and remove the let binding.
-///
-/// This handles residual copies left by function inlining (e.g., inlined parameter
-/// bindings like `let index = p`).
-fn inline_labeled_block_copies(expr: &mut NirExpr) -> bool {
-    let NirExprKind::LabeledBlock { block, .. } = &mut expr.kind else {
+// ---------------------------------------------------------------------------
+// Leading copy-binding inlining inside labeled blocks
+// ---------------------------------------------------------------------------
+
+fn inline_labeled_block_copies(body: &mut Body, id: ExprId) -> bool {
+    let ExprKind::LabeledBlock { block, .. } = &body.exprs[id].kind else {
         return false;
     };
+    let block = *block;
 
-    // Collect leading copy bindings: `let x = y` where y is a Local and x is immutable.
-    // Mutable targets must not be propagated because the value copy serves as a snapshot
-    // that may be mutated independently (e.g., `fn f(mut s: String) { s.push_str("!"); }`).
-    let mut copies: Vec<(u32, u32, String)> = Vec::new(); // (target_idx, source_idx, source_name)
-    for stmt in &block.stmts {
-        if let NirStmtKind::Let {
+    // Collect leading copy bindings: `let x = y` (y a Local, x immutable).
+    let mut copies: Vec<(u32, u32, String)> = Vec::new();
+    for &stmt in &body.blocks[block].stmts {
+        if let StmtKind::Let {
             local_index,
             is_mut,
             value,
             ..
-        } = &stmt.kind
-            && !is_mut
-            && let NirExprKind::Local { index, name } = &value.kind
+        } = &body.stmts[stmt].kind
+            && !*is_mut
+            && let ExprKind::Local { index, name } = &body.exprs[*value].kind
         {
             copies.push((*local_index, *index, name.clone()));
         } else {
             break;
         }
     }
-
     if copies.is_empty() {
         return false;
     }
 
-    // Verify safety: neither target nor source is assigned or mutably referenced
-    // within the remaining stmts. Mutable references must also be checked because
-    // modifications through `&mut y` would not be caught as direct assignments.
-    let remaining = &block.stmts[copies.len()..];
-    let mut checker = MutationChecker::default();
+    // Verify safety: neither target nor source is mutated in the remaining stmts.
+    let copy_count = copies.len();
+    let remaining: Vec<StmtId> = body.blocks[block].stmts[copy_count..].to_vec();
+    let mut locals: IndexSet<u32> = IndexSet::default();
     for (target, source, _) in &copies {
-        checker.locals.insert(*target);
-        checker.locals.insert(*source);
+        locals.insert(*target);
+        locals.insert(*source);
     }
-    for stmt in remaining {
-        checker.visit_stmt(stmt);
-    }
-    if checker.found {
+    if remaining
+        .iter()
+        .any(|&s| node_mutates(body, NodeRef::Stmt(s), &locals))
+    {
         return false;
     }
 
     // Build substitution map with transitive resolution.
-    // If copies are [a→x, b→a], resolve b→a to b→x so that removing `a`
-    // doesn't leave dangling references.
-    let copy_count = copies.len();
     let mut subs: IndexMap<u32, (u32, String)> = IndexMap::default();
     for (target, source, source_name) in copies {
-        // Resolve through existing substitutions
         let (final_source, final_name) = if let Some((resolved, resolved_name)) = subs.get(&source)
         {
             (*resolved, resolved_name.clone())
@@ -450,110 +460,88 @@ fn inline_labeled_block_copies(expr: &mut NirExpr) -> bool {
         subs.insert(target, (final_source, final_name));
     }
 
-    block.stmts.drain(..copy_count);
-
-    let mut substituter = LocalSubstituter { subs };
-    substituter.visit_block(block);
-
+    body.blocks[block].stmts.drain(..copy_count);
+    substitute_locals(body, block, &subs);
     true
 }
 
-/// Checks whether any local in `locals` is assigned or mutably referenced
-/// within the visited tree. Catches both:
-/// - Direct assignment: `y = ...`
-/// - Field assignment: `y.field = ...`
-/// - Mutable reference: `&mut y` (could be used to modify y indirectly)
-#[derive(Default)]
-struct MutationChecker {
-    locals: indexmap::IndexSet<u32>,
-    found: bool,
-}
-
-impl NirRefVisitor for MutationChecker {
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        if self.found {
-            return;
-        }
-        match &expr.kind {
-            // Direct assignment: `y = ...`
-            NirExprKind::Assign { target, .. } => {
-                if let NirExprKind::Local { index, .. } = &target.kind
-                    && self.locals.contains(index)
+/// Whether any local in `locals` is assigned or mutably referenced within the
+/// subtree at `node`. Mirrors the tree `MutationChecker`.
+fn node_mutates(body: &Body, node: NodeRef, locals: &IndexSet<u32>) -> bool {
+    if let NodeRef::Expr(id) = node {
+        match &body.exprs[id].kind {
+            ExprKind::Assign { target, .. } => {
+                if let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+                    && locals.contains(index)
                 {
-                    self.found = true;
-                    return;
+                    return true;
                 }
-                // Field assignment: `y.field = ...`
-                if let NirExprKind::FieldAccess { expr: inner, .. } = &target.kind
-                    && let NirExprKind::Local { index, .. } = &inner.kind
-                    && self.locals.contains(index)
+                if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[*target].kind
+                    && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
+                    && locals.contains(index)
                 {
-                    self.found = true;
-                    return;
+                    return true;
                 }
             }
-            // Mutable reference: `&mut y`
-            NirExprKind::Unary {
+            ExprKind::Unary {
                 op: crate::nir::NirUnaryOp::MutRef,
                 expr: inner,
             } => {
-                if let NirExprKind::Local { index, .. } = &inner.kind
-                    && self.locals.contains(index)
+                if let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
+                    && locals.contains(index)
                 {
-                    self.found = true;
-                    return;
+                    return true;
                 }
             }
-            // Method call receiver may be mutated by the callee (`s.push_str(...)`).
-            // Be conservative and treat receiver use as a potential mutation.
-            NirExprKind::MethodCall { receiver, .. } => {
-                if let NirExprKind::Local { index, .. } = &receiver.kind
-                    && self.locals.contains(index)
+            ExprKind::MethodCall { receiver, .. } => {
+                if let ExprKind::Local { index, .. } = &body.exprs[*receiver].kind
+                    && locals.contains(index)
                 {
-                    self.found = true;
-                    return;
+                    return true;
                 }
             }
-            // Mutable call arguments can mutate the tracked local.
-            NirExprKind::Call { args, .. } => {
+            ExprKind::Call { args, .. } => {
                 for arg in args {
                     if arg.is_mut
-                        && let NirExprKind::Local { index, .. } = &arg.expr.kind
-                        && self.locals.contains(index)
+                        && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
+                        && locals.contains(index)
                     {
-                        self.found = true;
-                        return;
+                        return true;
                     }
                 }
             }
             _ => {}
         }
-        self.walk_expr(expr);
     }
-
-    fn visit_stmt(&mut self, stmt: &NirStmt) {
-        if self.found {
-            return;
+    let mut found = false;
+    body.for_each_child(node, |c| {
+        if !found {
+            found = node_mutates(body, c, locals);
         }
-        self.walk_stmt(stmt);
+    });
+    found
+}
+
+/// Replace `Local { index: target }` with `Local { index: source, … }`
+/// throughout the subtree of `block`.
+fn substitute_locals(body: &mut Body, block: BlockId, subs: &IndexMap<u32, (u32, String)>) {
+    let mut targets = Vec::new();
+    let mut stack = vec![NodeRef::Block(block)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(id) = node
+            && let ExprKind::Local { index, .. } = &body.exprs[id].kind
+            && subs.contains_key(index)
+        {
+            targets.push(id);
+        }
+        body.for_each_child(node, |c| stack.push(c));
     }
-}
-
-/// Substitutes local variable references: replaces `Local { index: target }` with
-/// `Local { index: source, name: source_name }`.
-struct LocalSubstituter {
-    subs: IndexMap<u32, (u32, String)>,
-}
-
-impl NirMutVisitor for LocalSubstituter {
-    fn visit_expr(&mut self, expr: &mut NirExpr) {
-        if let NirExprKind::Local { index, name } = &mut expr.kind
-            && let Some((src_idx, src_name)) = self.subs.get(index)
+    for id in targets {
+        if let ExprKind::Local { index, name } = &mut body.exprs[id].kind
+            && let Some((src_idx, src_name)) = subs.get(index)
         {
             *index = *src_idx;
             name.clone_from(src_name);
-            return;
         }
-        self.walk_expr(expr);
     }
 }

@@ -109,6 +109,10 @@ use crate::nir::{
     NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirFunction, NirLiteralPattern, NirMatchArm,
     NirPattern, NirStmt, NirStmtKind, NirUnaryOp,
 };
+use crate::nir_arena::{
+    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, PatId, PatKind, StmtKind,
+    StmtNode,
+};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// Three-state lattice over compile-time evaluation results.
@@ -280,6 +284,34 @@ impl Value {
             }
             NirExprKind::BoolLiteral(b) => Some(Self::Bool(*b)),
             NirExprKind::CharLiteral(c) => Some(Self::Char(*c)),
+            _ => None,
+        }
+    }
+
+    /// Arena counterpart of [`Value::from_literal_expr`]: project an arena
+    /// expression to a `Value` when it's a primitive literal whose type id
+    /// resolves to a tracked primitive.
+    #[must_use]
+    pub fn from_arena_literal(body: &Body, e: ExprId, type_table: &TypeTable) -> Option<Self> {
+        let node = &body.exprs[e];
+        match &node.kind {
+            ExprKind::IntLiteral { value, .. } => {
+                let prim = prim_of(node.type_id, type_table).filter(|p| is_int_prim(*p))?;
+                Some(Self::Int {
+                    value: *value,
+                    prim,
+                })
+            }
+            ExprKind::FloatLiteral { value, .. } => {
+                let prim = prim_of(node.type_id, type_table)
+                    .filter(|p| matches!(p, PrimitiveType::F32 | PrimitiveType::F64))?;
+                Some(Self::Float {
+                    value: *value,
+                    prim,
+                })
+            }
+            ExprKind::BoolLiteral(b) => Some(Self::Bool(*b)),
+            ExprKind::CharLiteral(c) => Some(Self::Char(*c)),
             _ => None,
         }
     }
@@ -1071,8 +1103,8 @@ impl<'a> Interpreter<'a> {
     ///
     /// Internal: the only public entry points are [`reduce`] and
     /// [`reduce_local`]. `reduce` clones into `reduce_in_place`; visitor
-    /// drivers that already walk every NIR kind via
-    /// `nir_visitor::opt_walk_expr` should call `reduce_local` directly.
+    /// drivers that already walk every NIR node should call `reduce_local`
+    /// directly.
     ///
     /// [`reduce`]: Self::reduce
     /// [`reduce_local`]: Self::reduce_local
@@ -1164,8 +1196,8 @@ impl<'a> Interpreter<'a> {
     /// into children. Returns `true` when `expr` was rewritten.
     ///
     /// This is the right entry point when the caller is already driving a
-    /// NIR walk (for example via `nir_visitor::opt_walk_expr`) and wants
-    /// to slot niri's local rewrites into each visited node. The rules
+    /// NIR walk and wants to slot niri's local rewrites into each visited
+    /// node. The rules
     /// are constant folding for Binary / Unary / Cast, short-circuit
     /// identity simplifications for `&&` / `||`, pure-call inlining,
     /// constant-condition or both-arms-equal `if` collapse, and the
@@ -1928,6 +1960,615 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    // ───────────────────────────────────────────────────────────────────────
+    // Arena evaluator (read-only). The arena counterparts of `expr_to_lattice`
+    // / `try_fold` / `block_lattice` / `match_lattice` / `pattern_matches`,
+    // operating on a `Body` the const-fold visitor walks. CTFE (`try_call_fold`)
+    // keeps using the tree path on a materialized callee tail.
+    // ───────────────────────────────────────────────────────────────────────
+
+    /// Arena counterpart of [`Self::expr_to_lattice`].
+    pub fn expr_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
+        let node = &body.exprs[e];
+        match &node.kind {
+            ExprKind::BoolLiteral(b) => Lattice::Const(Value::Bool(*b)),
+            ExprKind::CharLiteral(c) => Lattice::Const(Value::Char(*c)),
+            ExprKind::IntLiteral { value, .. } => {
+                let Some(prim) = prim_of(node.type_id, self.type_table).filter(|p| is_int_prim(*p))
+                else {
+                    return Lattice::Unevaluated;
+                };
+                Lattice::Const(Value::Int {
+                    value: *value,
+                    prim,
+                })
+            }
+            ExprKind::FloatLiteral { value, .. } => {
+                let prim = if is_f32_type(node.type_id, self.type_table) {
+                    PrimitiveType::F32
+                } else {
+                    PrimitiveType::F64
+                };
+                Lattice::Const(Value::Float {
+                    value: *value,
+                    prim,
+                })
+            }
+            ExprKind::Local { index, .. } => {
+                self.env.get(index).copied().unwrap_or(Lattice::Unevaluated)
+            }
+            ExprKind::FieldAccess {
+                expr: inner,
+                field_name,
+                ..
+            } => match &body.exprs[*inner].kind {
+                ExprKind::Local { index, .. } => self
+                    .field_env
+                    .get(index)
+                    .and_then(|m| m.get(field_name.as_str()))
+                    .copied()
+                    .map_or(Lattice::Unevaluated, Lattice::Const),
+                ExprKind::GlobalVarGet {
+                    module_source,
+                    name,
+                } => self
+                    .global_fields
+                    .and_then(|m| m.get(&(module_source.clone(), name.clone())))
+                    .and_then(|m| m.get(field_name.as_str()))
+                    .copied()
+                    .map_or(Lattice::Unevaluated, Lattice::Const),
+                _ => Lattice::Unevaluated,
+            },
+            ExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => self.global_lattice(module_source, name),
+            ExprKind::Block(b) => self.block_lattice_a(body, *b),
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let cond = self.expr_to_lattice_a(body, *condition);
+                match cond {
+                    Lattice::Const(Value::Bool(true)) => self.block_lattice_a(body, *then_branch),
+                    Lattice::Const(Value::Bool(false)) => match else_branch {
+                        Some(eb) => self.block_lattice_a(body, *eb),
+                        None => Lattice::Unevaluated,
+                    },
+                    _ => {
+                        let then_lat =
+                            arm_lattice_for_feasible_join(self.block_lattice_a(body, *then_branch));
+                        let else_lat = match else_branch {
+                            Some(eb) => {
+                                arm_lattice_for_feasible_join(self.block_lattice_a(body, *eb))
+                            }
+                            None => Lattice::NonConst,
+                        };
+                        then_lat.join(else_lat)
+                    }
+                }
+            }
+            ExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => self.match_lattice_a(body, *scrutinee, arms),
+            _ => Lattice::Unevaluated,
+        }
+    }
+
+    /// Arena counterpart of [`Self::try_fold`].
+    pub fn try_fold_a(&self, body: &Body, e: ExprId) -> Lattice {
+        let node = &body.exprs[e];
+        match &node.kind {
+            ExprKind::Binary { left, op, right } => {
+                let l = match self.expr_to_lattice_a(body, *left) {
+                    Lattice::Const(v) => v,
+                    other => return other,
+                };
+                let r = match self.expr_to_lattice_a(body, *right) {
+                    Lattice::Const(v) => v,
+                    other => return other,
+                };
+                option_to_lattice(eval_binary(l, *op, r))
+            }
+            ExprKind::Unary { op, expr: inner } => {
+                let v = match self.expr_to_lattice_a(body, *inner) {
+                    Lattice::Const(v) => v,
+                    other => return other,
+                };
+                option_to_lattice(eval_unary(*op, v))
+            }
+            ExprKind::Cast { expr: inner, .. } => {
+                let Some(target) = prim_of(node.type_id, self.type_table) else {
+                    return Lattice::Unevaluated;
+                };
+                match self.expr_to_lattice_a(body, *inner) {
+                    Lattice::Const(v) => option_to_lattice(eval_cast(v, target)),
+                    other => other,
+                }
+            }
+            ExprKind::Call { func, args, .. } if args.len() == 1 && func.is_branch_hint_call() => {
+                self.expr_to_lattice_a(body, args[0].expr)
+            }
+            _ => Lattice::Unevaluated,
+        }
+    }
+
+    /// Arena counterpart of [`Self::block_lattice`].
+    fn block_lattice_a(&self, body: &Body, b: BlockId) -> Lattice {
+        match body.blocks[b].stmts.as_slice() {
+            [] => Lattice::Unevaluated,
+            [single] => match &body.stmts[*single].kind {
+                StmtKind::Expr(e) => self.expr_to_lattice_a(body, *e),
+                _ => Lattice::Unevaluated,
+            },
+            _ => Lattice::Unevaluated,
+        }
+    }
+
+    /// Arena counterpart of [`Self::match_lattice`].
+    fn match_lattice_a(&self, body: &Body, scrutinee: ExprId, arms: &[ArmData]) -> Lattice {
+        let scrut_const = self.expr_to_lattice_a(body, scrutinee).as_const();
+        if arms.is_empty() {
+            return Lattice::Unevaluated;
+        }
+        if let Some(scrut_v) = scrut_const {
+            let mut candidates = Vec::<Lattice>::new();
+            let mut yes_found = false;
+            for arm in arms {
+                let pm = if arm.guard.is_some() {
+                    PatternMatch::Unknown
+                } else {
+                    self.pattern_matches_a(body, &scrut_v, arm.pattern)
+                };
+                let body_lat =
+                    arm_lattice_for_feasible_join(self.expr_to_lattice_a(body, arm.body));
+                match pm {
+                    PatternMatch::No => {}
+                    PatternMatch::Yes => {
+                        if candidates.is_empty() {
+                            return self.expr_to_lattice_a(body, arm.body);
+                        }
+                        candidates.push(body_lat);
+                        yes_found = true;
+                        break;
+                    }
+                    PatternMatch::Unknown => candidates.push(body_lat),
+                }
+            }
+            if !yes_found {
+                return Lattice::NonConst;
+            }
+            join_all(&candidates)
+        } else {
+            if !is_provably_exhaustive_a(body, arms) {
+                return Lattice::NonConst;
+            }
+            let mut acc = Lattice::Unevaluated;
+            for arm in arms {
+                acc = acc.join(arm_lattice_for_feasible_join(
+                    self.expr_to_lattice_a(body, arm.body),
+                ));
+            }
+            acc
+        }
+    }
+
+    /// Arena counterpart of [`Self::pattern_matches`].
+    fn pattern_matches_a(&self, body: &Body, value: &Value, pat: PatId) -> PatternMatch {
+        match &body.pats[pat].kind {
+            PatKind::Wildcard => PatternMatch::Yes,
+            PatKind::Literal(lit) => match (lit, value) {
+                (NirLiteralPattern::I128(p), Value::Int { value: v, prim }) => {
+                    bool_to_match(int_value_matches_i128(*v, *prim, *p))
+                }
+                (NirLiteralPattern::U128(p), Value::Int { value: v, prim }) => {
+                    bool_to_match(int_value_matches_u128(*v, *prim, *p))
+                }
+                (NirLiteralPattern::Bool(p), Value::Bool(v)) => bool_to_match(p == v),
+                (NirLiteralPattern::Char(p), Value::Char(v)) => bool_to_match(p == v),
+                (
+                    NirLiteralPattern::I128(_)
+                    | NirLiteralPattern::U128(_)
+                    | NirLiteralPattern::Bool(_)
+                    | NirLiteralPattern::Char(_),
+                    _,
+                ) => PatternMatch::No,
+                (NirLiteralPattern::String(_) | NirLiteralPattern::Null, _) => {
+                    PatternMatch::Unknown
+                }
+            },
+            PatKind::Or(alts) => {
+                let mut any_unknown = false;
+                for alt in alts {
+                    match self.pattern_matches_a(body, value, *alt) {
+                        PatternMatch::Yes => return PatternMatch::Yes,
+                        PatternMatch::No => {}
+                        PatternMatch::Unknown => any_unknown = true,
+                    }
+                }
+                if any_unknown {
+                    PatternMatch::Unknown
+                } else {
+                    PatternMatch::No
+                }
+            }
+            PatKind::Range {
+                start,
+                end,
+                inclusive,
+                is_unsigned,
+            } => match value {
+                Value::Int { value: v, prim } => bool_to_match(range_matches_int(
+                    *v,
+                    *prim,
+                    *start,
+                    *end,
+                    *inclusive,
+                    *is_unsigned,
+                )),
+                Value::Char(c) => {
+                    let cp = i128::from(u32::from(*c));
+                    bool_to_match(if *inclusive {
+                        cp >= *start && cp <= *end
+                    } else {
+                        cp >= *start && cp < *end
+                    })
+                }
+                _ => PatternMatch::No,
+            },
+            PatKind::ConstantValue { expr } => {
+                match self.expr_to_lattice_a(body, *expr).as_const() {
+                    Some(v) if &v == value => PatternMatch::Yes,
+                    Some(_) => PatternMatch::No,
+                    None => PatternMatch::Unknown,
+                }
+            }
+            PatKind::Binding { .. }
+            | PatKind::Tuple(_, _)
+            | PatKind::Variant { .. }
+            | PatKind::Enum { .. }
+            | PatKind::Struct { .. } => PatternMatch::Unknown,
+        }
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // Arena rewriter. The arena counterparts of `reduce_local` /
+    // `reduce_local_block` / `rewrite_if_expr` / `rewrite_match_expr` /
+    // `try_call_fold`, mutating the `Body` the const-fold visitor walks.
+    // ───────────────────────────────────────────────────────────────────────
+
+    /// Arena counterpart of [`Self::reduce_local`].
+    pub fn reduce_local_a(&mut self, body: &mut Body, e: ExprId) -> bool {
+        if let Lattice::Const(v) = self.try_fold_a(body, e) {
+            body.exprs[e].kind = value_to_arena_kind(v);
+            return true;
+        }
+        // GlobalVarGet → recorded Const.
+        let global_v = if let ExprKind::GlobalVarGet {
+            module_source,
+            name,
+        } = &body.exprs[e].kind
+        {
+            match self.global_lattice(module_source, name) {
+                Lattice::Const(v) => Some(v),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        if let Some(v) = global_v {
+            body.exprs[e].kind = value_to_arena_kind(v);
+            return true;
+        }
+        // FieldAccess(Local, field) → field_env Const.
+        let field_v = if let ExprKind::FieldAccess {
+            expr: inner,
+            field_name,
+            ..
+        } = &body.exprs[e].kind
+        {
+            if let ExprKind::Local { index, .. } = &body.exprs[*inner].kind {
+                self.field_env
+                    .get(index)
+                    .and_then(|m| m.get(field_name.as_str()))
+                    .copied()
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        if let Some(v) = field_v {
+            body.exprs[e].kind = value_to_arena_kind(v);
+            return true;
+        }
+        if let Lattice::Const(v) = self.try_call_fold_a(body, e) {
+            body.exprs[e].kind = value_to_arena_kind(v);
+            return true;
+        }
+        if rewrite_short_circuit_a(body, e) {
+            return true;
+        }
+        if self.rewrite_if_expr_a(body, e) {
+            return true;
+        }
+        self.rewrite_match_expr_a(body, e)
+    }
+
+    /// Arena counterpart of [`Self::reduce_local_block`].
+    pub fn reduce_local_block_a(&mut self, body: &mut Body, block: BlockId) -> bool {
+        let has_constant_if = body.blocks[block].stmts.iter().any(|s| {
+            matches!(
+                &body.stmts[*s].kind,
+                StmtKind::If { condition, .. }
+                    if matches!(body.exprs[*condition].kind, ExprKind::BoolLiteral(_))
+            )
+        });
+        if !has_constant_if {
+            return false;
+        }
+        let old_stmts = std::mem::take(&mut body.blocks[block].stmts);
+        let mut new_stmts: Vec<crate::nir_arena::StmtId> = Vec::new();
+        for s in old_stmts {
+            let spliced = if let StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } = &body.stmts[s].kind
+            {
+                if let ExprKind::BoolLiteral(value) = body.exprs[*condition].kind {
+                    Some((value, *then_block, *else_block))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            if let Some((value, then_block, else_block)) = spliced {
+                if value {
+                    new_stmts.extend(body.blocks[then_block].stmts.clone());
+                } else if let Some(eb) = else_block {
+                    new_stmts.extend(body.blocks[eb].stmts.clone());
+                }
+                continue;
+            }
+            new_stmts.push(s);
+        }
+        body.blocks[block].stmts = new_stmts;
+        true
+    }
+
+    /// Arena counterpart of [`Self::reduce_to_lattice`]. Unlike the tree
+    /// version, the const-fold visitor has already reduced every child of
+    /// `e` bottom-up before this is called, so there is no separate
+    /// `reduce_in_place` step: `try_fold_a` sees the already-folded
+    /// children directly, and a non-foldable node falls through to
+    /// `expr_to_lattice_a`.
+    pub fn reduce_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
+        match self.try_fold_a(body, e) {
+            Lattice::Unevaluated => self.expr_to_lattice_a(body, e),
+            other => other,
+        }
+    }
+
+    /// Arena counterpart of [`Self::rewrite_if_expr`].
+    fn rewrite_if_expr_a(&mut self, body: &mut Body, e: ExprId) -> bool {
+        let (condition, then_branch, else_branch) = match &body.exprs[e].kind {
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => (*condition, *then_branch, *else_branch),
+            _ => return false,
+        };
+        let cond_lat = self.expr_to_lattice_a(body, condition);
+
+        // (1) Constant condition → splice the chosen arm.
+        if let Lattice::Const(Value::Bool(b)) = cond_lat {
+            body.exprs[e].kind = if b {
+                ExprKind::Block(then_branch)
+            } else if let Some(eb) = else_branch {
+                ExprKind::Block(eb)
+            } else {
+                ExprKind::Unit
+            };
+            return true;
+        }
+
+        // (2)/(3) require both arms Const.
+        let Lattice::Const(t) = self.block_lattice_a(body, then_branch) else {
+            return false;
+        };
+        let Some(eb) = else_branch else {
+            return false;
+        };
+        let Lattice::Const(ev) = self.block_lattice_a(body, eb) else {
+            return false;
+        };
+
+        // (2) Bool-arms collapse.
+        if let (Value::Bool(t_b), Value::Bool(e_b)) = (t, ev)
+            && t_b != e_b
+        {
+            if t_b {
+                let cond_kind = body.exprs[condition].kind.clone();
+                body.exprs[e].kind = cond_kind;
+            } else {
+                body.exprs[e].kind = ExprKind::Unary {
+                    op: NirUnaryOp::Not,
+                    expr: condition,
+                };
+            }
+            return true;
+        }
+
+        // (3) Both-arms-equal collapse.
+        if t != ev {
+            return false;
+        }
+        if !is_speculatable_a(body, condition) {
+            return false;
+        }
+        body.exprs[e].kind = value_to_arena_kind(t);
+        true
+    }
+
+    /// Arena counterpart of [`Self::rewrite_match_expr`].
+    fn rewrite_match_expr_a(&mut self, body: &mut Body, e: ExprId) -> bool {
+        let scrutinee = match &body.exprs[e].kind {
+            ExprKind::Match { expr, arms } if !arms.is_empty() => *expr,
+            _ => return false,
+        };
+        let arms_data: Vec<(Option<ExprId>, PatId, ExprId, crate::token::Span)> =
+            match &body.exprs[e].kind {
+                ExprKind::Match { arms, .. } => arms
+                    .iter()
+                    .map(|a| (a.guard, a.pattern, a.body, a.span))
+                    .collect(),
+                _ => unreachable!(),
+            };
+
+        // Rule 1: const scrutinee → splice the chosen arm.
+        if let Lattice::Const(scrut_v) = self.expr_to_lattice_a(body, scrutinee) {
+            let mut chosen: Option<usize> = None;
+            for (i, (guard, pat, _, _)) in arms_data.iter().enumerate() {
+                if guard.is_some() {
+                    return false;
+                }
+                match self.pattern_matches_a(body, &scrut_v, *pat) {
+                    PatternMatch::Yes => {
+                        chosen = Some(i);
+                        break;
+                    }
+                    PatternMatch::No => {}
+                    PatternMatch::Unknown => return false,
+                }
+            }
+            let Some(idx) = chosen else {
+                return false;
+            };
+            let body_e = arms_data[idx].2;
+            let span = body.exprs[body_e].span;
+            let stmt = body.stmts.push(StmtNode {
+                kind: StmtKind::Expr(body_e),
+                span,
+            });
+            let block = body.blocks.push(BlockNode {
+                stmts: vec![stmt],
+                span,
+            });
+            body.exprs[e].kind = ExprKind::Block(block);
+            return true;
+        }
+
+        // Rule 2: `match X { Pat => true, _ => false } → <discriminator>`.
+        // The scrutinee is preserved inside the synthesised `Binary`, and the
+        // `Match` node `e` keeps its own span — only its `kind` is replaced —
+        // mirroring the tree `EnumEqReplacement::into_kind`.
+        if let Some(replacement) = try_match_bool_discriminator_a(body, &arms_data) {
+            let right = body.exprs.push(ExprNode {
+                kind: ExprKind::EnumConstruct {
+                    enum_type: replacement.enum_type,
+                    case_index: replacement.case_index,
+                    case_name: replacement.case_name,
+                },
+                type_id: replacement.enum_type,
+                span: replacement.span,
+            });
+            body.exprs[e].kind = ExprKind::Binary {
+                left: scrutinee,
+                op: NirBinaryOp::Eq,
+                right,
+            };
+            return true;
+        }
+
+        // Rule 3: non-const speculatable scrutinee, all-arms-equal.
+        if !is_speculatable_a(body, scrutinee) {
+            return false;
+        }
+        if arms_data.iter().any(|(g, _, _, _)| g.is_some()) {
+            return false;
+        }
+        let arms_for_exh: Vec<ArmData> = match &body.exprs[e].kind {
+            ExprKind::Match { arms, .. } => arms.clone(),
+            _ => unreachable!(),
+        };
+        if !is_provably_exhaustive_a(body, &arms_for_exh) {
+            return false;
+        }
+        let mut common: Option<Value> = None;
+        for (_, _, b, _) in &arms_data {
+            let Lattice::Const(v) = self.expr_to_lattice_a(body, *b) else {
+                return false;
+            };
+            match common {
+                None => common = Some(v),
+                Some(c) if c != v => return false,
+                Some(_) => {}
+            }
+        }
+        let v = common.expect("at least one arm");
+        body.exprs[e].kind = value_to_arena_kind(v);
+        true
+    }
+
+    /// Arena counterpart of [`Self::try_call_fold`]: reads the caller's args
+    /// from the arena and evaluates the callee's tail on a materialized tree.
+    fn try_call_fold_a(&mut self, body: &Body, e: ExprId) -> Lattice {
+        let Some(callees) = self.callees else {
+            return Lattice::Unevaluated;
+        };
+        let (func, args): (crate::nir::FunctionRef, Vec<ExprId>) = match &body.exprs[e].kind {
+            ExprKind::Call { func, args, .. } => {
+                (func.clone(), args.iter().map(|a| a.expr).collect())
+            }
+            _ => return Lattice::Unevaluated,
+        };
+        let key: CalleeKey = (func.module_source.clone(), func.full_name());
+        let Some(callee_rc) = callees.get(&key) else {
+            return Lattice::Unevaluated;
+        };
+        if self.call_stack.iter().any(|k| k == &key) {
+            return Lattice::Unevaluated;
+        }
+        let Ok(callee) = callee_rc.try_borrow() else {
+            return Lattice::Unevaluated;
+        };
+        let mut bound: Vec<Value> = Vec::with_capacity(args.len());
+        for arg in &args {
+            match self.expr_to_lattice_a(body, *arg).as_const() {
+                Some(v) => bound.push(v),
+                None => return Lattice::Unevaluated,
+            }
+        }
+        if bound.len() != callee.params.len() {
+            return Lattice::Unevaluated;
+        }
+        let Some(tail) = single_tail_expression(&callee) else {
+            return Lattice::Unevaluated;
+        };
+        if self.step_budget == 0 {
+            return Lattice::Unevaluated;
+        }
+        self.step_budget -= 1;
+        self.call_stack.push(key);
+        let saved_env = std::mem::take(&mut self.env);
+        for (i, v) in bound.iter().enumerate() {
+            #[allow(clippy::cast_possible_truncation)]
+            self.env.insert(i as u32, Lattice::Const(*v));
+        }
+        let result = self.reduce_to_lattice(&tail);
+        self.env = saved_env;
+        self.call_stack.pop();
+        match result {
+            c @ Lattice::Const(_) => c,
+            Lattice::NonConst | Lattice::Unevaluated => Lattice::Unevaluated,
+        }
+    }
+
     /// Look up a `(module_source, name)` global in the installed
     /// [`GlobalEnv`]. Absent keys default to [`Lattice::Unevaluated`]
     /// — the engine simply has no information, same convention as
@@ -2060,7 +2701,7 @@ impl<'a> Interpreter<'a> {
         // projection alone returns Unevaluated for those kinds — only
         // `try_fold` walks them). `reduce_to_lattice` clones internally,
         // so the body inside the still-held `Ref` is not mutated.
-        let result = self.reduce_to_lattice(tail);
+        let result = self.reduce_to_lattice(&tail);
 
         // Restore. The `Ref` (and its dynamic borrow on the callee
         // RefCell) drops when this scope ends.
@@ -2086,13 +2727,13 @@ impl<'a> Interpreter<'a> {
 /// Anything else (zero or multiple stmts, intermediate Let / If / Loop /
 /// Break / Return without value, …) reports `None`. The caller treats
 /// `None` as "do not fold this call", preserving the runtime call.
-fn single_tail_expression(func: &NirFunction) -> Option<&NirExpr> {
-    let body = func.body.as_ref()?;
+fn single_tail_expression(func: &NirFunction) -> Option<NirExpr> {
+    let body = func.body.as_ref().map(crate::nir_arena::Body::to_block)?;
     let [single] = body.stmts.as_slice() else {
         return None;
     };
     match &single.kind {
-        NirStmtKind::Return { value: Some(e) } | NirStmtKind::Expr(e) => Some(e),
+        NirStmtKind::Return { value: Some(e) } | NirStmtKind::Expr(e) => Some(e.clone()),
         _ => None,
     }
 }
@@ -2326,6 +2967,120 @@ fn value_to_expr_kind(v: Value) -> NirExprKind {
         },
         Value::Bool(b) => NirExprKind::BoolLiteral(b),
         Value::Char(c) => NirExprKind::CharLiteral(c),
+    }
+}
+
+/// Arena counterpart of [`value_to_expr_kind`].
+fn value_to_arena_kind(v: Value) -> ExprKind {
+    match v {
+        Value::Int { value, prim } => ExprKind::IntLiteral {
+            repr: format_int_repr(value, prim),
+            value,
+        },
+        Value::Float { value, .. } => ExprKind::FloatLiteral {
+            repr: format_float_repr(value),
+            value,
+        },
+        Value::Bool(b) => ExprKind::BoolLiteral(b),
+        Value::Char(c) => ExprKind::CharLiteral(c),
+    }
+}
+
+/// Arena counterpart of [`is_provably_exhaustive`].
+fn is_provably_exhaustive_a(body: &Body, arms: &[ArmData]) -> bool {
+    arms.iter()
+        .any(|a| a.guard.is_none() && pattern_is_catch_all_a(body, a.pattern))
+}
+
+fn pattern_is_catch_all_a(body: &Body, pat: PatId) -> bool {
+    match &body.pats[pat].kind {
+        PatKind::Wildcard | PatKind::Binding { .. } => true,
+        PatKind::Or(alts) => alts.iter().any(|p| pattern_is_catch_all_a(body, *p)),
+        _ => false,
+    }
+}
+
+/// Arena counterpart of [`rewrite_short_circuit`].
+fn rewrite_short_circuit_a(body: &mut Body, e: ExprId) -> bool {
+    enum Pick {
+        Left,
+        Right,
+    }
+    let pick = match &body.exprs[e].kind {
+        ExprKind::Binary { left, op, right } => {
+            match (&body.exprs[*left].kind, *op, &body.exprs[*right].kind) {
+                (ExprKind::BoolLiteral(false), NirBinaryOp::Or, _)
+                | (ExprKind::BoolLiteral(true), NirBinaryOp::And, _) => (Pick::Right, *right),
+                (_, NirBinaryOp::Or, ExprKind::BoolLiteral(false))
+                | (_, NirBinaryOp::And, ExprKind::BoolLiteral(true)) => (Pick::Left, *left),
+                _ => return false,
+            }
+        }
+        _ => return false,
+    };
+    let (_, keep) = pick;
+    // Become the kept operand. The other operand is left orphaned.
+    let kept = body.exprs[keep].clone();
+    body.exprs[e] = kept;
+    true
+}
+
+/// Arena counterpart of [`try_match_bool_discriminator`], reading arena arm data.
+fn try_match_bool_discriminator_a(
+    body: &Body,
+    arms: &[(Option<ExprId>, PatId, ExprId, crate::token::Span)],
+) -> Option<EnumEqReplacement> {
+    let [yes_arm, no_arm] = arms else {
+        return None;
+    };
+    if yes_arm.0.is_some() || no_arm.0.is_some() {
+        return None;
+    }
+    if !matches!(body.pats[no_arm.1].kind, PatKind::Wildcard) {
+        return None;
+    }
+    if !matches!(body.exprs[yes_arm.2].kind, ExprKind::BoolLiteral(true)) {
+        return None;
+    }
+    if !matches!(body.exprs[no_arm.2].kind, ExprKind::BoolLiteral(false)) {
+        return None;
+    }
+    let PatKind::Enum {
+        enum_type,
+        case_name,
+        case_index,
+    } = &body.pats[yes_arm.1].kind
+    else {
+        return None;
+    };
+    Some(EnumEqReplacement {
+        enum_type: *enum_type,
+        case_index: *case_index,
+        case_name: case_name.clone(),
+        span: yes_arm.3,
+    })
+}
+
+/// Arena counterpart of [`is_speculatable`].
+fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
+    match &body.exprs[e].kind {
+        ExprKind::IntLiteral { .. }
+        | ExprKind::FloatLiteral { .. }
+        | ExprKind::BoolLiteral(_)
+        | ExprKind::CharLiteral(_)
+        | ExprKind::Local { .. }
+        | ExprKind::Unit => true,
+        ExprKind::Binary { left, op, right } => {
+            !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
+                && is_speculatable_a(body, *left)
+                && is_speculatable_a(body, *right)
+        }
+        ExprKind::Unary { op, expr: inner } => {
+            !matches!(op, NirUnaryOp::Deref) && is_speculatable_a(body, *inner)
+        }
+        ExprKind::Cast { expr: inner, .. } => is_speculatable_a(body, *inner),
+        ExprKind::FieldAccess { expr: inner, .. } => is_speculatable_a(body, *inner),
+        _ => false,
     }
 }
 

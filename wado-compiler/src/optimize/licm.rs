@@ -3,15 +3,22 @@
 //! This module hoists loop-invariant computations out of loops to improve performance.
 //! It identifies field accesses on variables that don't change within a loop and moves
 //! those accesses before the loop.
+//!
+//! The pass reads and mutates the arena [`Body`] directly. The hoist-candidate
+//! and replacement walks share a `*_child_nodes` enumerator that mirrors the
+//! tree walk's child set exactly (expression and block children, excluding
+//! patterns); `collect_modified_vars` keeps its own walk because it special-
+//! cases assignments, calls, and pattern bindings.
 
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
-use crate::nir::{
-    NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirPattern, NirStmt, NirStmtKind,
-    NirUnaryOp,
+use crate::nir::{NirFunction, NirLocal, NirUnaryOp};
+use crate::nir_arena::{
+    BlockId, Body, ExprId, ExprKind, ExprNode, PatKind, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::token::Span;
 
 /// Tracks which variables and fields are modified within a loop.
 ///
@@ -131,19 +138,27 @@ pub fn apply_licm(project: &mut NirPackage) -> bool {
 
 /// Apply LICM to a function
 fn licm_function(func: &mut NirFunction, type_table: &TypeTable) -> bool {
-    let Some(ref mut body) = func.body else {
+    if func.body.is_none() {
         return false;
-    };
+    }
     let mut local_count = func.local_count;
+    // The local list is read (original local types) *and* grown (hoist locals,
+    // including second-level ones) during the walk, so thread an owned clone and
+    // write it back once the body borrow ends.
     let mut locals = func.locals.clone();
     let mut outer_aliases: Vec<(u32, u32)> = Vec::new();
-    let changed = licm_block(
-        body,
-        &mut local_count,
-        &mut locals,
-        type_table,
-        &mut outer_aliases,
-    );
+    let changed = {
+        let body = func.body.as_mut().unwrap();
+        let root = body.root;
+        licm_block(
+            body,
+            root,
+            &mut local_count,
+            &mut locals,
+            type_table,
+            &mut outer_aliases,
+        )
+    };
     func.local_count = local_count;
     func.locals = locals;
     changed
@@ -155,12 +170,10 @@ fn licm_function(func: &mut NirFunction, type_table: &TypeTable) -> bool {
 /// or plain-block tail equivalents) pairs from let-statements that
 /// precede each loop. The fixpoint loop in `licm_loop` consumes these so
 /// that a write to one alias inside the loop body invalidates hoist
-/// candidates targeting the other alias — otherwise LICM hoists a snapshot
-/// of `local63.pos` (where `local63` is a `&mut Parser` alias of the real
-/// `local0`) and the body's `local63.pos = local63.pos + 1` write isn't
-/// recognised as invalidating the snapshot.
+/// candidates targeting the other alias.
 fn licm_block(
-    block: &mut NirBlock,
+    body: &mut Body,
+    block: BlockId,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
@@ -169,110 +182,113 @@ fn licm_block(
     let mut changed = false;
     let mut new_stmts = Vec::new();
 
-    for mut stmt in std::mem::take(&mut block.stmts) {
-        match &mut stmt.kind {
-            NirStmtKind::Loop { body } => {
-                // Apply LICM to the loop body
+    for s in std::mem::take(&mut body.blocks[block].stmts) {
+        // Classify without holding the borrow across the mutable recursion.
+        enum Shape {
+            Loop(BlockId),
+            If(BlockId, Option<BlockId>),
+            Labeled(BlockId),
+            Let(u32, ExprId),
+            Other,
+        }
+        let shape = match &body.stmts[s].kind {
+            StmtKind::Loop { body: lb } => Shape::Loop(*lb),
+            StmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => Shape::If(*then_block, *else_block),
+            StmtKind::LabeledBlock { block, .. } => Shape::Labeled(*block),
+            StmtKind::Let {
+                local_index, value, ..
+            } => Shape::Let(*local_index, *value),
+            _ => Shape::Other,
+        };
+
+        match shape {
+            Shape::Loop(lb) => {
                 let empty_set = IndexSet::default();
                 let hoist_stmts = licm_loop(
                     body,
+                    lb,
                     local_count,
                     locals,
                     type_table,
                     &empty_set,
                     outer_aliases,
                 );
-
                 if !hoist_stmts.is_empty() {
                     changed = true;
                 }
-
-                // Prepend hoisting statements
                 new_stmts.extend(hoist_stmts);
-                new_stmts.push(stmt);
+                new_stmts.push(s);
             }
-            NirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => {
-                // Recurse into if branches. The conservative thing is to
-                // clone the alias accumulator so sibling branches don't
-                // see each other's aliases, but since aliasing is
-                // monotone-correct (extra aliases never cause wrong
-                // hoists, only conservative misses), sharing the same
-                // accumulator is safe.
-                changed |= licm_block(then_block, local_count, locals, type_table, outer_aliases);
-                if let Some(eb) = else_block {
-                    changed |= licm_block(eb, local_count, locals, type_table, outer_aliases);
+            Shape::If(then_b, else_b) => {
+                // Sharing the alias accumulator across sibling branches is safe:
+                // aliasing is monotone-correct (extra aliases only cause
+                // conservative misses, never wrong hoists).
+                changed |= licm_block(body, then_b, local_count, locals, type_table, outer_aliases);
+                if let Some(eb) = else_b {
+                    changed |= licm_block(body, eb, local_count, locals, type_table, outer_aliases);
                 }
-                new_stmts.push(stmt);
+                new_stmts.push(s);
             }
-            NirStmtKind::LabeledBlock { block: inner, .. } => {
-                changed |= licm_block(inner, local_count, locals, type_table, outer_aliases);
-                new_stmts.push(stmt);
+            Shape::Labeled(inner) => {
+                changed |= licm_block(body, inner, local_count, locals, type_table, outer_aliases);
+                new_stmts.push(s);
             }
-            NirStmtKind::Let {
-                local_index, value, ..
-            } => {
-                // Track outer-scope aliases so a subsequent loop's LICM
-                // can see them. See `outer_aliases` doc above.
-                if let Some(src_idx) = extract_alias_source(value)
-                    && is_gc_heap_type(value.type_id, type_table)
+            Shape::Let(local_index, value) => {
+                // Track outer-scope aliases so a subsequent loop's LICM can see them.
+                if let Some(src_idx) = extract_alias_source(body, value)
+                    && is_gc_heap_type(body.exprs[value].type_id, type_table)
                 {
-                    outer_aliases.push((*local_index, src_idx));
+                    outer_aliases.push((local_index, src_idx));
                 }
-                new_stmts.push(stmt);
+                new_stmts.push(s);
             }
-            // Other statements don't contain loops at the statement level
-            _ => {
-                new_stmts.push(stmt);
+            Shape::Other => {
+                new_stmts.push(s);
             }
         }
     }
 
-    block.stmts = new_stmts;
+    body.blocks[block].stmts = new_stmts;
     changed
 }
 
-/// Apply LICM to a single loop, returning hoisting statements to prepend
-/// `extra_modified` contains variables that are implicitly modified (e.g., for-of binding)
-/// Runs iteratively until no more candidates are found (for second-level hoisting)
+/// Apply LICM to a single loop, returning hoisting statement ids to prepend.
 fn licm_loop(
-    loop_body: &mut NirBlock,
+    body: &mut Body,
+    loop_body: BlockId,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
     extra_modified: &IndexSet<u32>,
     outer_aliases: &[(u32, u32)],
-) -> Vec<NirStmt> {
+) -> Vec<StmtId> {
     let mut all_hoist_stmts = Vec::new();
 
-    // Run LICM iteratively until no more candidates are found
-    // This enables second-level hoisting (e.g., hoisting _licm_entries.repr after _licm_entries)
-    // Limit iterations to prevent pathological cases
+    // Run LICM iteratively until no more candidates are found (second-level
+    // hoisting), bounded to avoid pathological cases.
     const MAX_LICM_ITERATIONS: usize = 10;
     for _iteration in 0..MAX_LICM_ITERATIONS {
-        // Step 1: Collect all variables modified in the loop
+        // Step 1: Collect all variables modified in the loop.
         let mut modified_vars = ModifiedVars::default();
         modified_vars.extend_full(extra_modified);
-        // Seed with pre-loop aliases (e.g. `let p = &mut outer_p`) so a
-        // write through one alias inside the loop body invalidates hoist
-        // candidates targeting the other.
         for &(a, b) in outer_aliases {
             modified_vars.add_alias(a, b);
         }
-        collect_modified_vars_in_block(loop_body, &mut modified_vars, type_table);
+        collect_modified_vars_in_block(body, loop_body, &mut modified_vars, type_table);
 
-        // Step 2: Collect immutable reference bindings for look-through optimization
-        // This allows hoisting field accesses like `self.field` where `self: &T = &source`
-        let ref_bindings = collect_immutable_ref_bindings(loop_body, type_table);
+        // Step 2: Collect immutable reference bindings for look-through.
+        let ref_bindings = collect_immutable_ref_bindings(body, loop_body, type_table);
 
-        // Step 3: Find field accesses that can be hoisted
+        // Step 3: Find field accesses that can be hoisted.
         let mut candidates = Vec::new();
         let mut seen = IndexSet::default();
         let mut next_local = *local_count;
         find_hoist_candidates_in_block(
+            body,
             loop_body,
             &modified_vars,
             &ref_bindings,
@@ -282,9 +298,7 @@ fn licm_loop(
         );
 
         // Step 3.5: Drop `x.f` candidates where `x` is a reference and that
-        // pointee field is written elsewhere in the loop — an aliasing reference
-        // may write it. Makes the nested-chain relaxation sound and fixes the
-        // pre-existing two-aliased-`&mut` case.
+        // pointee field is written elsewhere in the loop.
         candidates.retain(|c| {
             let root_ty = if (c.local_index as usize) < locals.len() {
                 locals[c.local_index as usize].type_id
@@ -298,50 +312,46 @@ fn licm_loop(
             break;
         }
 
-        // Renumber the surviving hoist locals contiguously from `*local_count`:
-        // dropped candidates left gaps in the indices `find_hoist_candidates`
-        // provisionally assigned, and `locals.push` below appends densely.
+        // Renumber the surviving hoist locals contiguously from `*local_count`.
         next_local = *local_count;
         for candidate in &mut candidates {
             candidate.new_local_index = next_local;
             next_local += 1;
         }
 
-        // Step 4: Create hoisting statements
+        // Step 4: Create hoisting statements.
         for candidate in &candidates {
-            // Get the type of the original local to build the field access expression
             let local_type_id = if (candidate.local_index as usize) < locals.len() {
                 locals[candidate.local_index as usize].type_id
             } else {
-                // Fallback: use the candidate's type_id
                 candidate.type_id
             };
 
-            // Create field access expression: local.field
-            let field_access_expr = NirExpr::new(
-                NirExprKind::FieldAccess {
-                    expr: Box::new(NirExpr::new(
-                        NirExprKind::Local {
-                            index: candidate.local_index,
-                            name: candidate.local_name.clone(),
-                        },
-                        local_type_id,
-                        crate::token::Span::new(0, 0, 0, 0),
-                    )),
+            // Build `local.field` as fresh arena nodes.
+            let local_expr = body.exprs.push(ExprNode {
+                kind: ExprKind::Local {
+                    index: candidate.local_index,
+                    name: candidate.local_name.clone(),
+                },
+                type_id: local_type_id,
+                span: Span::new(0, 0, 0, 0),
+            });
+            let field_access_expr = body.exprs.push(ExprNode {
+                kind: ExprKind::FieldAccess {
+                    expr: local_expr,
                     field_index: candidate.field_index,
                     field_name: candidate.field_name.clone(),
                 },
-                candidate.type_id,
-                crate::token::Span::new(0, 0, 0, 0),
-            );
+                type_id: candidate.type_id,
+                span: Span::new(0, 0, 0, 0),
+            });
 
-            // Create let statement for the hoisted value
             let hoist_name = format!(
                 "_licm_{}_{}",
                 candidate.field_name, candidate.new_local_index
             );
-            let hoist_stmt = NirStmt::new(
-                NirStmtKind::Let {
+            let hoist_stmt = body.stmts.push(StmtNode {
+                kind: StmtKind::Let {
                     name: hoist_name.clone(),
                     local_index: candidate.new_local_index,
                     is_mut: false,
@@ -350,11 +360,11 @@ fn licm_loop(
                     value: field_access_expr,
                     skip_value_copy: true,
                 },
-                crate::token::Span::new(0, 0, 0, 0),
-            );
+                span: Span::new(0, 0, 0, 0),
+            });
             all_hoist_stmts.push(hoist_stmt);
 
-            // Add the local entry mirroring the let above
+            // Add the local entry mirroring the let above.
             locals.push(NirLocal {
                 name: hoist_name,
                 type_id: candidate.type_id,
@@ -362,20 +372,17 @@ fn licm_loop(
             });
         }
 
-        // Update local count
         *local_count = next_local;
 
-        // Step 5: Replace field accesses in the loop body with references to hoisted locals
-        replace_hoisted_in_block(loop_body, &candidates, &ref_bindings);
+        // Step 5: Replace field accesses in the loop body with the hoisted locals.
+        replace_hoisted_in_block(body, loop_body, &candidates, &ref_bindings);
     }
 
-    // Also need to handle nested loops - apply LICM recursively.
-    // The nested loop sees the outer-loop's body as its own outer scope,
-    // so threading `outer_aliases` is unnecessary here — the nested
-    // `licm_block` will accumulate aliases from the outer loop's `let`
-    // statements on its own walk.
+    // Nested loops: recurse. The nested `licm_block` accumulates aliases from
+    // the outer loop's `let` statements on its own walk.
     let mut nested_aliases: Vec<(u32, u32)> = outer_aliases.to_vec();
     licm_block(
+        body,
         loop_body,
         local_count,
         locals,
@@ -386,40 +393,158 @@ fn licm_loop(
     all_hoist_stmts
 }
 
-/// Collect all local variable indices that are modified (assigned) in a block.
-fn collect_modified_vars_in_block(
-    block: &NirBlock,
-    modified: &mut ModifiedVars,
-    type_table: &TypeTable,
-) {
-    for stmt in &block.stmts {
-        collect_modified_vars_in_stmt(stmt, modified, type_table);
+// ---------------------------------------------------------------------------
+// Shared child enumeration (expression + block children, patterns excluded)
+// ---------------------------------------------------------------------------
+
+enum Child {
+    Expr(ExprId),
+    Block(BlockId),
+}
+
+/// The expression / block children of an expression, in walk order, *excluding*
+/// patterns. Mirrors the child set of the tree `find_hoist`/`replace_hoist`/
+/// `collect_licm_ref` walks (a `Match` yields its scrutinee plus each arm's
+/// guard and body, never the arm pattern).
+fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
+    match &body.exprs[e].kind {
+        ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::Unary { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. }
+        | ExprKind::ClosureToCanonical { functor: inner, .. }
+        | ExprKind::GlobalVarSet { value: inner, .. }
+        | ExprKind::VariantTag { expr: inner }
+        | ExprKind::VariantTest { expr: inner, .. }
+        | ExprKind::VariantPayload { expr: inner, .. } => vec![Child::Expr(*inner)],
+        ExprKind::Binary { left, right, .. }
+        | ExprKind::Assign {
+            target: left,
+            value: right,
+        }
+        | ExprKind::Index {
+            expr: left,
+            index: right,
+        } => vec![Child::Expr(*left), Child::Expr(*right)],
+        ExprKind::Call { args, .. } => args.iter().map(|a| Child::Expr(a.expr)).collect(),
+        ExprKind::MethodCall { receiver, args, .. } => std::iter::once(Child::Expr(*receiver))
+            .chain(args.iter().map(|a| Child::Expr(a.expr)))
+            .collect(),
+        ExprKind::CmRawCall { args, .. } => args.iter().map(|a| Child::Expr(*a)).collect(),
+        ExprKind::IndirectCall { callee, args } => std::iter::once(Child::Expr(*callee))
+            .chain(args.iter().map(|a| Child::Expr(*a)))
+            .collect(),
+        ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => vec![Child::Block(*b)],
+        ExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            let mut v = vec![Child::Expr(*condition), Child::Block(*then_branch)];
+            if let Some(eb) = else_branch {
+                v.push(Child::Block(*eb));
+            }
+            v
+        }
+        ExprKind::StructLiteral { fields, .. } => {
+            fields.iter().map(|f| Child::Expr(f.value)).collect()
+        }
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+            elements.iter().map(|e| Child::Expr(*e)).collect()
+        }
+        ExprKind::VariantConstruct { payload, .. } => {
+            payload.iter().map(|p| Child::Expr(*p)).collect()
+        }
+        ExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => std::iter::once(Child::Expr(*scrutinee))
+            .chain(arms.iter().map(|a| Child::Block(*a)))
+            .chain(std::iter::once(Child::Block(*default)))
+            .collect(),
+        ExprKind::Match { expr, arms } => {
+            let mut v = vec![Child::Expr(*expr)];
+            for arm in arms {
+                v.push(Child::Expr(arm.body));
+                if let Some(g) = arm.guard {
+                    v.push(Child::Expr(g));
+                }
+            }
+            v
+        }
+        // Leaves.
+        ExprKind::IntLiteral { .. }
+        | ExprKind::FloatLiteral { .. }
+        | ExprKind::BoolLiteral(_)
+        | ExprKind::CharLiteral(_)
+        | ExprKind::StringLiteral(_)
+        | ExprKind::BytesLiteral(_)
+        | ExprKind::Null
+        | ExprKind::Unit
+        | ExprKind::Local { .. }
+        | ExprKind::GlobalVarGet { .. }
+        | ExprKind::EnumConstruct { .. } => vec![],
     }
 }
 
-/// Mark a local as fully modified if it has a GC struct type and is passed to a function call.
-///
-/// In Wasm GC, struct values are passed by reference. A callee receiving a GC struct
-/// can modify any of its fields (e.g., `String::grow` reassigns `self.repr`).
-/// This prevents LICM from hoisting field accesses on locals that may be mutated
-/// by function calls within the loop.
-///
-/// Exception: locals whose type is `Ref(T)` (immutable reference) are skipped.
-/// No function can modify the underlying struct through an immutable reference,
-/// so field accesses on such locals remain loop-invariant across calls.
-fn mark_gc_local_as_fully_modified(
-    expr: &NirExpr,
+/// The expression / block children of a statement, in walk order, excluding the
+/// `LetDestructure` pattern (matching the tree `find_hoist`/`replace_hoist`/
+/// `collect_licm_ref` statement walks).
+fn stmt_child_nodes(body: &Body, s: StmtId) -> Vec<Child> {
+    match &body.stmts[s].kind {
+        StmtKind::Let { value, .. }
+        | StmtKind::Expr(value)
+        | StmtKind::LetDestructure { value, .. } => vec![Child::Expr(*value)],
+        StmtKind::Return { value } | StmtKind::Break { value, .. } => {
+            value.iter().map(|v| Child::Expr(*v)).collect()
+        }
+        StmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            let mut v = vec![Child::Expr(*condition), Child::Block(*then_block)];
+            if let Some(eb) = else_block {
+                v.push(Child::Block(*eb));
+            }
+            v
+        }
+        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
+            vec![Child::Block(*b)]
+        }
+        StmtKind::Continue => vec![],
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Modified-variable collection (special-cased walk)
+// ---------------------------------------------------------------------------
+
+fn collect_modified_vars_in_block(
+    body: &Body,
+    block: BlockId,
     modified: &mut ModifiedVars,
     type_table: &TypeTable,
 ) {
-    if let NirExprKind::Local { index, .. } = &expr.kind
-        && is_gc_heap_type(expr.type_id, type_table)
+    for s in &body.blocks[block].stmts {
+        collect_modified_vars_in_stmt(body, *s, modified, type_table);
+    }
+}
+
+/// Mark a local as fully modified if it has a GC struct type and is passed to a
+/// function call (callees can mutate any field). Immutable `&T` locals are
+/// skipped — no callee can mutate the pointee through them.
+fn mark_gc_local_as_fully_modified(
+    body: &Body,
+    e: ExprId,
+    modified: &mut ModifiedVars,
+    type_table: &TypeTable,
+) {
+    if let ExprKind::Local { index, .. } = &body.exprs[e].kind
+        && is_gc_heap_type(body.exprs[e].type_id, type_table)
     {
-        // Immutable reference locals (`&T`) cannot be used by a callee to modify
-        // the underlying struct. Skip marking them as modified.
-        // Only skip `Ref(Struct/GenericInstance)` — not `Ref(MutRef(...))` which
-        // could allow modification through the inner mutable reference.
-        if let ResolvedType::Ref(inner) = type_table.get(expr.type_id)
+        if let ResolvedType::Ref(inner) = type_table.get(body.exprs[e].type_id)
             && !matches!(type_table.get(*inner), ResolvedType::MutRef(_))
         {
             return;
@@ -428,52 +553,36 @@ fn mark_gc_local_as_fully_modified(
     }
 }
 
-/// Walk through reference-introducing wrappers and tail-return blocks to
-/// find the source local that a let-binding actually aliases.
-///
-/// Handles:
-/// - `Local(y)` — direct
-/// - `&y` / `&mut y` — reference (the address backs the same heap object)
-/// - `LabeledBlock { label, block: { stmts; break label: V } }` — value-yielding
-///   labeled block, recurse into `V`
-/// - `Block { stmts; Expr(V) }` — plain block whose tail expression is `V`,
-///   produced by `branch_prune`'s C3 flatten of the above. Recurse into `V`.
-///
-/// The walk is alias-precision-only: missing an alias is a soundness bug
-/// (LICM may hoist a mutated field), but adding too many aliases is at
-/// worst a missed optimisation. The recursion stops on the first
-/// non-aliasing shape; it never traverses through `FieldAccess`, `Index`,
-/// `Call`, etc.
-fn extract_alias_source(expr: &NirExpr) -> Option<u32> {
-    match &expr.kind {
-        NirExprKind::Local { index, .. } => Some(*index),
-        NirExprKind::Unary {
+/// Walk through reference wrappers and tail-return blocks to find the source
+/// local a let-binding aliases. Alias-precision-only: missing an alias is a
+/// soundness bug, extra aliases are at worst a missed optimisation.
+fn extract_alias_source(body: &Body, e: ExprId) -> Option<u32> {
+    match &body.exprs[e].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
-        } => extract_alias_source(inner),
-        NirExprKind::Block(block) => {
-            let tail = block.stmts.last()?;
-            let NirStmtKind::Expr(tail_expr) = &tail.kind else {
+        } => extract_alias_source(body, *inner),
+        ExprKind::Block(block) => {
+            let tail = *body.blocks[*block].stmts.last()?;
+            let StmtKind::Expr(tail_expr) = &body.stmts[tail].kind else {
                 return None;
             };
-            extract_alias_source(tail_expr)
+            extract_alias_source(body, *tail_expr)
         }
-        NirExprKind::LabeledBlock { label, block, .. } => {
-            // Find the matching tail break and recurse on its value.
-            // Conservatively only accept the LAST stmt being the break;
-            // multi-break shapes don't have a single alias source.
-            let last = block.stmts.last()?;
-            let NirStmtKind::Break {
+        ExprKind::LabeledBlock { label, block, .. } => {
+            let last = *body.blocks[*block].stmts.last()?;
+            let StmtKind::Break {
                 label: Some(brk_label),
                 value: Some(brk_value),
-            } = &last.kind
+            } = &body.stmts[last].kind
             else {
                 return None;
             };
             if brk_label != label {
                 return None;
             }
-            extract_alias_source(brk_value)
+            extract_alias_source(body, *brk_value)
         }
         _ => None,
     }
@@ -490,36 +599,31 @@ fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     }
 }
 
-/// Mark a local as fully modified (e.g., passed as &mut, direct assignment).
-/// Traverses through unary ops and nested field accesses, always marking the root as fully modified.
-fn mark_local_as_fully_modified(expr: &NirExpr, modified: &mut ModifiedVars) {
-    match &expr.kind {
-        NirExprKind::Local { index, .. } => {
+/// Mark a local as fully modified, traversing through unary ops and nested
+/// field accesses to the root.
+fn mark_local_as_fully_modified(body: &Body, e: ExprId, modified: &mut ModifiedVars) {
+    match &body.exprs[e].kind {
+        ExprKind::Local { index, .. } => {
             modified.insert_full(*index);
         }
-        NirExprKind::FieldAccess { expr: inner, .. } => {
-            mark_local_as_fully_modified(inner, modified);
-        }
-        NirExprKind::Unary { expr: inner, .. } => {
-            mark_local_as_fully_modified(inner, modified);
+        ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Unary { expr: inner, .. } => {
+            mark_local_as_fully_modified(body, *inner, modified);
         }
         _ => {}
     }
 }
 
 /// A chain of field accesses bottoming out at a `Local` (`a`, `a.b`, `a.b.c`),
-/// with no `Index`, deref, or call. A write through such a chain mutates an
-/// inner object rather than reassigning a field of the root local.
-fn is_pure_field_chain(expr: &NirExpr) -> bool {
-    match &expr.kind {
-        NirExprKind::Local { .. } => true,
-        NirExprKind::FieldAccess { expr: inner, .. } => is_pure_field_chain(inner),
+/// with no `Index`, deref, or call.
+fn is_pure_field_chain(body: &Body, e: ExprId) -> bool {
+    match &body.exprs[e].kind {
+        ExprKind::Local { .. } => true,
+        ExprKind::FieldAccess { expr: inner, .. } => is_pure_field_chain(body, *inner),
         _ => false,
     }
 }
 
-/// Strip all `Ref`/`MutRef` wrappers, returning the pointee type — the key for
-/// type-based aliasing-write tracking (references to one pointee alias).
+/// Strip all `Ref`/`MutRef` wrappers, returning the pointee type.
 fn strip_references(type_id: TypeId, type_table: &TypeTable) -> TypeId {
     match type_table.get(type_id) {
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
@@ -530,13 +634,14 @@ fn strip_references(type_id: TypeId, type_table: &TypeTable) -> TypeId {
 }
 
 /// If `expr` is a `&mut`-reference to a struct passed to a call, record its
-/// pointee as clobbered: the callee may write any field of it, so no field of
-/// that struct type is loop-invariant. Immutable `&T` args cannot mutate, and
-/// by-value struct args are independent copies, so neither is recorded.
-fn record_mut_ref_clobber(expr: &NirExpr, modified: &mut ModifiedVars, type_table: &TypeTable) {
-    let mut ty = expr.type_id;
-    // Peel `Ref(MutRef(..))` etc.; a `&mut` anywhere in the wrapper chain means
-    // the callee can reach a mutable handle to the inner struct.
+/// pointee as clobbered.
+fn record_mut_ref_clobber(
+    body: &Body,
+    e: ExprId,
+    modified: &mut ModifiedVars,
+    type_table: &TypeTable,
+) {
+    let mut ty = body.exprs[e].type_id;
     let mut saw_mut = false;
     loop {
         match type_table.get(ty) {
@@ -554,577 +659,448 @@ fn record_mut_ref_clobber(expr: &NirExpr, modified: &mut ModifiedVars, type_tabl
 }
 
 /// Record a field-access write into `written_field_types`, keyed by the pointee
-/// type of the assigned object (`a.f`, `a.b.c`, `arr[i].c`, `(*p).c`).
+/// type of the assigned object.
 fn record_written_field_type(
-    target: &NirExpr,
+    body: &Body,
+    target: ExprId,
     modified: &mut ModifiedVars,
     type_table: &TypeTable,
 ) {
-    if let NirExprKind::FieldAccess {
+    if let ExprKind::FieldAccess {
         expr: inner,
         field_index,
         ..
-    } = &target.kind
+    } = &body.exprs[target].kind
     {
-        let pointee = strip_references(inner.type_id, type_table);
+        let pointee = strip_references(body.exprs[*inner].type_id, type_table);
         modified.insert_written_field_type(pointee, *field_index);
     }
 }
 
-/// Mark what is modified by an assignment target. Field assignments (`buf.len =
-/// x`) mark only that `(local, field)`, so LICM can still hoist `buf.repr`;
-/// deeper/direct assignments mark the root fully. Every field-access write also
-/// records its pointee-type key (`record_written_field_type`) so an aliasing
-/// reference hoist is blocked (see `is_reference_field_aliasing_written`).
+/// Mark what is modified by an assignment target.
 fn mark_assignment_target_as_modified(
-    expr: &NirExpr,
+    body: &Body,
+    e: ExprId,
     modified: &mut ModifiedVars,
     type_table: &TypeTable,
 ) {
-    match &expr.kind {
-        NirExprKind::Local { index, .. } => {
-            // Direct assignment: `buf = x` — fully modified
+    match &body.exprs[e].kind {
+        ExprKind::Local { index, .. } => {
             modified.insert_full(*index);
         }
-        NirExprKind::FieldAccess {
+        ExprKind::FieldAccess {
             expr: inner,
             field_index,
             ..
         } => {
-            // Type-keyed write for aliasing reference hoists, any chain shape.
-            record_written_field_type(expr, modified, type_table);
-            if let NirExprKind::Local { index, .. } = &inner.kind {
-                // `buf.field = x` — only that field is modified.
-                modified.insert_field(*index, *field_index);
-            } else if is_pure_field_chain(inner) {
-                // `a.b.c = x` mutates `*a.b`, not any field of the root `a`, so
-                // don't mark `a` fully (keeps sibling chains `a.b.d` hoistable).
-                // LICM peels one level per iteration; once `a.b` is a local the
-                // write becomes single-level. Cross-reference aliasing of `*a.b`
-                // is handled by the type-keyed write recorded above.
+            let inner = *inner;
+            let field_index = *field_index;
+            record_written_field_type(body, e, modified, type_table);
+            if let ExprKind::Local { index, .. } = &body.exprs[inner].kind {
+                modified.insert_field(*index, field_index);
+            } else if is_pure_field_chain(body, inner) {
+                // `a.b.c = x` mutates `*a.b`, not a field of the root `a`.
             } else {
-                // `a[i].c = x`, `(*p).c = x`: conservatively mark root fully.
-                mark_local_as_fully_modified(inner, modified);
+                mark_local_as_fully_modified(body, inner, modified);
             }
         }
-        NirExprKind::Unary { expr: inner, .. } => {
-            // E.g., `*ptr = x` — mark root local as fully modified
-            mark_local_as_fully_modified(inner, modified);
+        ExprKind::Unary { expr: inner, .. } => {
+            mark_local_as_fully_modified(body, *inner, modified);
         }
         _ => {}
     }
 }
 
 fn collect_modified_vars_in_stmt(
-    stmt: &NirStmt,
+    body: &Body,
+    s: StmtId,
     modified: &mut ModifiedVars,
     type_table: &TypeTable,
 ) {
-    match &stmt.kind {
-        NirStmtKind::Let {
+    match &body.stmts[s].kind {
+        StmtKind::Let {
             local_index, value, ..
         } => {
-            // Let statements define new variables, mark them as modified
-            // (they're not invariant within the loop where they're defined)
-            modified.insert_full(*local_index);
-            // Track GC aliases: `let a = b` (or `&b` / `&mut b` /
-            // labeled-block or plain-block tailing in `b`) where `b` is a
-            // local with GC type means `a` and `b` point to the same
-            // heap object — so a write through one is observable through
-            // the other.
-            if let Some(src_idx) = extract_alias_source(value)
-                && is_gc_heap_type(value.type_id, type_table)
+            let local_index = *local_index;
+            let value = *value;
+            modified.insert_full(local_index);
+            if let Some(src_idx) = extract_alias_source(body, value)
+                && is_gc_heap_type(body.exprs[value].type_id, type_table)
             {
-                modified.add_alias(*local_index, src_idx);
+                modified.add_alias(local_index, src_idx);
             }
-            // Also check the value expression for mutable references
-            collect_modified_vars_in_expr(value, modified, type_table);
+            collect_modified_vars_in_expr(body, value, modified, type_table);
         }
-        NirStmtKind::Expr(expr) => {
-            collect_modified_vars_in_expr(expr, modified, type_table);
+        StmtKind::Expr(expr) => {
+            collect_modified_vars_in_expr(body, *expr, modified, type_table);
         }
-        NirStmtKind::Return { value } => {
+        StmtKind::Return { value } => {
             if let Some(v) = value {
-                collect_modified_vars_in_expr(v, modified, type_table);
+                collect_modified_vars_in_expr(body, *v, modified, type_table);
             }
         }
-        NirStmtKind::If {
+        StmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            collect_modified_vars_in_expr(condition, modified, type_table);
-            collect_modified_vars_in_block(then_block, modified, type_table);
+            let condition = *condition;
+            let then_block = *then_block;
+            let else_block = *else_block;
+            collect_modified_vars_in_expr(body, condition, modified, type_table);
+            collect_modified_vars_in_block(body, then_block, modified, type_table);
             if let Some(eb) = else_block {
-                collect_modified_vars_in_block(eb, modified, type_table);
+                collect_modified_vars_in_block(body, eb, modified, type_table);
             }
         }
-        NirStmtKind::Loop { body } => {
-            collect_modified_vars_in_block(body, modified, type_table);
+        StmtKind::Loop { body: lb } => {
+            collect_modified_vars_in_block(body, *lb, modified, type_table);
         }
-        NirStmtKind::LabeledBlock { block, .. } => {
-            collect_modified_vars_in_block(block, modified, type_table);
+        StmtKind::LabeledBlock { block, .. } => {
+            collect_modified_vars_in_block(body, *block, modified, type_table);
         }
-        NirStmtKind::Break { value, .. } => {
+        StmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                collect_modified_vars_in_expr(v, modified, type_table);
+                collect_modified_vars_in_expr(body, *v, modified, type_table);
             }
         }
-        NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { pattern, value, .. } => {
-            // Collect pattern bindings as they are assigned
-            collect_pattern_bindings(pattern, modified);
-            // Also check the value expression for mutable references
-            collect_modified_vars_in_expr(value, modified, type_table);
+        StmtKind::Continue => {}
+        StmtKind::LetDestructure { pattern, value, .. } => {
+            let pattern = *pattern;
+            let value = *value;
+            collect_pattern_bindings(body, pattern, modified);
+            collect_modified_vars_in_expr(body, value, modified, type_table);
         }
     }
 }
 
 /// Collect all local variable indices bound by a pattern.
-/// These variables are assigned fresh each time the pattern matches.
-fn collect_pattern_bindings(pattern: &NirPattern, modified: &mut ModifiedVars) {
-    match pattern {
-        NirPattern::Binding { local_index, .. } => {
+fn collect_pattern_bindings(
+    body: &Body,
+    pat: crate::nir_arena::PatId,
+    modified: &mut ModifiedVars,
+) {
+    match &body.pats[pat].kind {
+        PatKind::Binding { local_index, .. } => {
             modified.insert_full(*local_index);
         }
-        NirPattern::Variant { bindings, .. } => {
-            for binding in bindings {
-                collect_pattern_bindings(binding, modified);
+        PatKind::Variant { bindings, .. } => {
+            let bindings = bindings.clone();
+            for b in bindings {
+                collect_pattern_bindings(body, b, modified);
             }
         }
-        NirPattern::Tuple(patterns, _) => {
+        PatKind::Tuple(patterns, _) => {
+            let patterns = patterns.clone();
             for p in patterns {
-                collect_pattern_bindings(p, modified);
+                collect_pattern_bindings(body, p, modified);
             }
         }
-        NirPattern::Struct { fields, .. } => {
-            for field in fields {
-                collect_pattern_bindings(&field.pattern, modified);
+        PatKind::Struct { fields, .. } => {
+            let fields: Vec<_> = fields.iter().map(|f| f.pattern).collect();
+            for p in fields {
+                collect_pattern_bindings(body, p, modified);
             }
         }
-        NirPattern::Wildcard
-        | NirPattern::Literal(_)
-        | NirPattern::Enum { .. }
-        | NirPattern::ConstantValue { .. }
-        | NirPattern::Range { .. } => {
-            // No bindings
-        }
-        NirPattern::Or(alternatives) => {
+        PatKind::Or(alternatives) => {
+            let alternatives = alternatives.clone();
             for p in alternatives {
-                collect_pattern_bindings(p, modified);
+                collect_pattern_bindings(body, p, modified);
             }
         }
+        PatKind::Wildcard
+        | PatKind::Literal(_)
+        | PatKind::Enum { .. }
+        | PatKind::ConstantValue { .. }
+        | PatKind::Range { .. } => {}
     }
 }
 
 fn collect_modified_vars_in_expr(
-    expr: &NirExpr,
+    body: &Body,
+    e: ExprId,
     modified: &mut ModifiedVars,
     type_table: &TypeTable,
 ) {
-    match &expr.kind {
-        NirExprKind::Assign { target, value } => {
-            // Mark the assignment target appropriately.
-            // Field assignment (buf.field = x) only marks that specific field as modified,
-            // enabling LICM to still hoist other fields of the same object.
-            mark_assignment_target_as_modified(target, modified, type_table);
-            collect_modified_vars_in_expr(target, modified, type_table);
-            collect_modified_vars_in_expr(value, modified, type_table);
+    match &body.exprs[e].kind {
+        ExprKind::Assign { target, value } => {
+            let target = *target;
+            let value = *value;
+            mark_assignment_target_as_modified(body, target, modified, type_table);
+            collect_modified_vars_in_expr(body, target, modified, type_table);
+            collect_modified_vars_in_expr(body, value, modified, type_table);
         }
-        NirExprKind::Binary { left, right, .. } => {
-            collect_modified_vars_in_expr(left, modified, type_table);
-            collect_modified_vars_in_expr(right, modified, type_table);
+        ExprKind::Binary { left, right, .. } => {
+            let left = *left;
+            let right = *right;
+            collect_modified_vars_in_expr(body, left, modified, type_table);
+            collect_modified_vars_in_expr(body, right, modified, type_table);
         }
-        NirExprKind::Unary { op, expr } => {
-            // &mut local: the local may be reassigned through the ref (boxed primitives).
-            // &mut local.field: in Wasm GC, this just reads the GC reference stored in the
-            // field — neither the parent local nor the field reference itself changes.
-            // Only mark the root as fully modified for a direct &mut local, not &mut local.field.
-            if matches!(op, NirUnaryOp::MutRef) && matches!(expr.kind, NirExprKind::Local { .. }) {
-                mark_local_as_fully_modified(expr, modified);
+        ExprKind::Unary { op, expr: inner } => {
+            let inner = *inner;
+            if matches!(op, NirUnaryOp::MutRef)
+                && matches!(body.exprs[inner].kind, ExprKind::Local { .. })
+            {
+                mark_local_as_fully_modified(body, inner, modified);
             }
-            collect_modified_vars_in_expr(expr, modified, type_table);
+            collect_modified_vars_in_expr(body, inner, modified, type_table);
         }
-        NirExprKind::Cast { expr, .. } => {
-            collect_modified_vars_in_expr(expr, modified, type_table);
+        ExprKind::Cast { expr: inner, .. } => {
+            collect_modified_vars_in_expr(body, *inner, modified, type_table);
         }
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                mark_gc_local_as_fully_modified(&arg.expr, modified, type_table);
-                record_mut_ref_clobber(&arg.expr, modified, type_table);
-                collect_modified_vars_in_expr(&arg.expr, modified, type_table);
-            }
-        }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            mark_gc_local_as_fully_modified(receiver, modified, type_table);
-            record_mut_ref_clobber(receiver, modified, type_table);
-            collect_modified_vars_in_expr(receiver, modified, type_table);
-            for arg in args {
-                mark_gc_local_as_fully_modified(&arg.expr, modified, type_table);
-                record_mut_ref_clobber(&arg.expr, modified, type_table);
-                collect_modified_vars_in_expr(&arg.expr, modified, type_table);
+        ExprKind::Call { args, .. } => {
+            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            for a in arg_ids {
+                mark_gc_local_as_fully_modified(body, a, modified, type_table);
+                record_mut_ref_clobber(body, a, modified, type_table);
+                collect_modified_vars_in_expr(body, a, modified, type_table);
             }
         }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                collect_modified_vars_in_expr(arg, modified, type_table);
+        ExprKind::MethodCall { receiver, args, .. } => {
+            let receiver = *receiver;
+            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            mark_gc_local_as_fully_modified(body, receiver, modified, type_table);
+            record_mut_ref_clobber(body, receiver, modified, type_table);
+            collect_modified_vars_in_expr(body, receiver, modified, type_table);
+            for a in arg_ids {
+                mark_gc_local_as_fully_modified(body, a, modified, type_table);
+                record_mut_ref_clobber(body, a, modified, type_table);
+                collect_modified_vars_in_expr(body, a, modified, type_table);
             }
         }
-        NirExprKind::FieldAccess { expr, .. } => {
-            collect_modified_vars_in_expr(expr, modified, type_table);
+        ExprKind::CmRawCall { args, .. } => {
+            let arg_ids = args.clone();
+            for a in arg_ids {
+                collect_modified_vars_in_expr(body, a, modified, type_table);
+            }
         }
-        NirExprKind::Index { expr, index } => {
-            collect_modified_vars_in_expr(expr, modified, type_table);
-            collect_modified_vars_in_expr(index, modified, type_table);
+        ExprKind::FieldAccess { expr: inner, .. } => {
+            collect_modified_vars_in_expr(body, *inner, modified, type_table);
         }
-        NirExprKind::Block(block) => {
-            collect_modified_vars_in_block(block, modified, type_table);
+        ExprKind::Index { expr: inner, index } => {
+            let inner = *inner;
+            let index = *index;
+            collect_modified_vars_in_expr(body, inner, modified, type_table);
+            collect_modified_vars_in_expr(body, index, modified, type_table);
         }
-        NirExprKind::If {
+        ExprKind::Block(block) => {
+            collect_modified_vars_in_block(body, *block, modified, type_table);
+        }
+        ExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            collect_modified_vars_in_expr(condition, modified, type_table);
-            collect_modified_vars_in_block(then_branch, modified, type_table);
+            let condition = *condition;
+            let then_branch = *then_branch;
+            let else_branch = *else_branch;
+            collect_modified_vars_in_expr(body, condition, modified, type_table);
+            collect_modified_vars_in_block(body, then_branch, modified, type_table);
             if let Some(eb) = else_branch {
-                collect_modified_vars_in_block(eb, modified, type_table);
+                collect_modified_vars_in_block(body, eb, modified, type_table);
             }
         }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                collect_modified_vars_in_expr(&field.value, modified, type_table);
+        ExprKind::StructLiteral { fields, .. } => {
+            let vals: Vec<ExprId> = fields.iter().map(|f| f.value).collect();
+            for v in vals {
+                collect_modified_vars_in_expr(body, v, modified, type_table);
             }
         }
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            for elem in elements {
-                collect_modified_vars_in_expr(elem, modified, type_table);
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+            let elements = elements.clone();
+            for el in elements {
+                collect_modified_vars_in_expr(body, el, modified, type_table);
             }
         }
-        NirExprKind::IndirectCall { callee, args, .. } => {
-            collect_modified_vars_in_expr(callee, modified, type_table);
-            for arg in args {
-                mark_gc_local_as_fully_modified(arg, modified, type_table);
-                collect_modified_vars_in_expr(arg, modified, type_table);
+        ExprKind::IndirectCall { callee, args } => {
+            let callee = *callee;
+            let arg_ids = args.clone();
+            collect_modified_vars_in_expr(body, callee, modified, type_table);
+            for a in arg_ids {
+                mark_gc_local_as_fully_modified(body, a, modified, type_table);
+                collect_modified_vars_in_expr(body, a, modified, type_table);
             }
         }
-        NirExprKind::ClosureToCanonical { functor, .. } => {
-            collect_modified_vars_in_expr(functor, modified, type_table);
+        ExprKind::ClosureToCanonical { functor, .. } => {
+            collect_modified_vars_in_expr(body, *functor, modified, type_table);
         }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                collect_modified_vars_in_expr(payload_expr, modified, type_table);
+        ExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                collect_modified_vars_in_expr(body, *p, modified, type_table);
             }
         }
-        NirExprKind::LabeledBlock { block, .. } => {
-            collect_modified_vars_in_block(block, modified, type_table);
+        ExprKind::LabeledBlock { block, .. } => {
+            collect_modified_vars_in_block(body, *block, modified, type_table);
         }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            collect_modified_vars_in_expr(value, modified, type_table);
+        ExprKind::GlobalVarSet { value, .. } => {
+            collect_modified_vars_in_expr(body, *value, modified, type_table);
         }
-        NirExprKind::VariantTag { expr } | NirExprKind::VariantTest { expr, .. } => {
-            collect_modified_vars_in_expr(expr, modified, type_table);
+        ExprKind::VariantTag { expr } | ExprKind::VariantTest { expr, .. } => {
+            collect_modified_vars_in_expr(body, *expr, modified, type_table);
         }
-        NirExprKind::VariantPayload { expr, .. } => {
-            collect_modified_vars_in_expr(expr, modified, type_table);
+        ExprKind::VariantPayload { expr, .. } => {
+            collect_modified_vars_in_expr(body, *expr, modified, type_table);
         }
-        NirExprKind::Switch {
+        ExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
         } => {
-            collect_modified_vars_in_expr(scrutinee, modified, type_table);
+            let scrutinee = *scrutinee;
+            let arms = arms.clone();
+            let default = *default;
+            collect_modified_vars_in_expr(body, scrutinee, modified, type_table);
             for arm in arms {
-                collect_modified_vars_in_block(arm, modified, type_table);
+                collect_modified_vars_in_block(body, arm, modified, type_table);
             }
-            collect_modified_vars_in_block(default, modified, type_table);
+            collect_modified_vars_in_block(body, default, modified, type_table);
         }
-        // Leaf nodes
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::Match { expr, arms } => {
-            collect_modified_vars_in_expr(expr, modified, type_table);
-            for arm in arms {
-                collect_pattern_bindings(&arm.pattern, modified);
-                if let Some(guard) = &arm.guard {
-                    collect_modified_vars_in_expr(guard, modified, type_table);
+        ExprKind::IntLiteral { .. }
+        | ExprKind::FloatLiteral { .. }
+        | ExprKind::BoolLiteral(_)
+        | ExprKind::CharLiteral(_)
+        | ExprKind::StringLiteral(_)
+        | ExprKind::BytesLiteral(_)
+        | ExprKind::Null
+        | ExprKind::Unit
+        | ExprKind::Local { .. }
+        | ExprKind::GlobalVarGet { .. }
+        | ExprKind::EnumConstruct { .. } => {}
+        ExprKind::Match { expr, arms } => {
+            let expr = *expr;
+            let arm_data: Vec<(crate::nir_arena::PatId, Option<ExprId>, ExprId)> =
+                arms.iter().map(|a| (a.pattern, a.guard, a.body)).collect();
+            collect_modified_vars_in_expr(body, expr, modified, type_table);
+            for (pattern, guard, body_expr) in arm_data {
+                collect_pattern_bindings(body, pattern, modified);
+                if let Some(g) = guard {
+                    collect_modified_vars_in_expr(body, g, modified, type_table);
                 }
-                collect_modified_vars_in_expr(&arm.body, modified, type_table);
+                collect_modified_vars_in_expr(body, body_expr, modified, type_table);
             }
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Immutable-reference binding collection
+// ---------------------------------------------------------------------------
 
 /// Information about an immutable reference binding: `let ref_var: &T = &source_var`
 #[derive(Debug, Clone)]
 struct LicmRefBinding {
-    /// The source local index that this reference points to
     source_index: u32,
-    /// The source local name (for creating hoist statements)
     source_name: String,
 }
 
-/// Collect immutable reference bindings in a block.
-/// These are patterns like: `let self: &T = &source_var`
-/// Returns a map from `ref_local_index` -> `source_local_index`
 fn collect_immutable_ref_bindings(
-    block: &NirBlock,
+    body: &Body,
+    block: BlockId,
     type_table: &TypeTable,
 ) -> IndexMap<u32, LicmRefBinding> {
     let mut bindings = IndexMap::default();
-    collect_licm_ref_bindings_in_block(block, type_table, &mut bindings);
+    collect_licm_ref_bindings_in_block(body, block, type_table, &mut bindings);
     bindings
 }
 
 fn collect_licm_ref_bindings_in_block(
-    block: &NirBlock,
+    body: &Body,
+    block: BlockId,
     type_table: &TypeTable,
     bindings: &mut IndexMap<u32, LicmRefBinding>,
 ) {
-    for stmt in &block.stmts {
-        collect_licm_ref_bindings_in_stmt(stmt, type_table, bindings);
+    for s in &body.blocks[block].stmts {
+        collect_licm_ref_bindings_in_stmt(body, *s, type_table, bindings);
     }
 }
 
 fn collect_licm_ref_bindings_in_stmt(
-    stmt: &NirStmt,
+    body: &Body,
+    s: StmtId,
     type_table: &TypeTable,
     bindings: &mut IndexMap<u32, LicmRefBinding>,
 ) {
-    match &stmt.kind {
-        NirStmtKind::Let {
-            local_index,
-            value,
-            type_id,
-            ..
-        } => {
-            // Check if this is: let x: &T = &y (immutable ref to a local)
-            if matches!(type_table.get(*type_id), ResolvedType::Ref(_))
-                && let NirExprKind::Unary {
-                    op: NirUnaryOp::Ref,
-                    expr: source,
-                } = &value.kind
-                && let NirExprKind::Local {
-                    index: source_idx,
-                    name: source_name,
-                } = &source.kind
-            {
-                bindings.insert(
-                    *local_index,
-                    LicmRefBinding {
-                        source_index: *source_idx,
-                        source_name: source_name.clone(),
-                    },
-                );
-            }
-            // Recurse into the value expression (for nested blocks)
-            collect_licm_ref_bindings_in_expr(value, type_table, bindings);
+    // `let x: &T = &y` (immutable ref to a local) records `x -> y`.
+    if let StmtKind::Let {
+        local_index,
+        value,
+        type_id,
+        ..
+    } = &body.stmts[s].kind
+    {
+        let local_index = *local_index;
+        let value = *value;
+        if matches!(type_table.get(*type_id), ResolvedType::Ref(_))
+            && let ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr: source,
+            } = &body.exprs[value].kind
+            && let ExprKind::Local {
+                index: source_idx,
+                name: source_name,
+            } = &body.exprs[*source].kind
+        {
+            bindings.insert(
+                local_index,
+                LicmRefBinding {
+                    source_index: *source_idx,
+                    source_name: source_name.clone(),
+                },
+            );
         }
-        NirStmtKind::Expr(expr) => {
-            collect_licm_ref_bindings_in_expr(expr, type_table, bindings);
-        }
-        NirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                collect_licm_ref_bindings_in_expr(v, type_table, bindings);
-            }
-        }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            collect_licm_ref_bindings_in_expr(condition, type_table, bindings);
-            collect_licm_ref_bindings_in_block(then_block, type_table, bindings);
-            if let Some(eb) = else_block {
-                collect_licm_ref_bindings_in_block(eb, type_table, bindings);
-            }
-        }
-        NirStmtKind::Loop { body } => {
-            collect_licm_ref_bindings_in_block(body, type_table, bindings);
-        }
-        NirStmtKind::LabeledBlock { block, .. } => {
-            collect_licm_ref_bindings_in_block(block, type_table, bindings);
-        }
-        NirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                collect_licm_ref_bindings_in_expr(v, type_table, bindings);
-            }
-        }
-        NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => {
-            collect_licm_ref_bindings_in_expr(value, type_table, bindings);
+    }
+    // Recurse into the statement's expression / block children.
+    for child in stmt_child_nodes(body, s) {
+        match child {
+            Child::Expr(e) => collect_licm_ref_bindings_in_expr(body, e, type_table, bindings),
+            Child::Block(b) => collect_licm_ref_bindings_in_block(body, b, type_table, bindings),
         }
     }
 }
 
 fn collect_licm_ref_bindings_in_expr(
-    expr: &NirExpr,
+    body: &Body,
+    e: ExprId,
     type_table: &TypeTable,
     bindings: &mut IndexMap<u32, LicmRefBinding>,
 ) {
-    // Recurse into all sub-expressions to find nested let bindings
-    match &expr.kind {
-        NirExprKind::Block(block) => {
-            collect_licm_ref_bindings_in_block(block, type_table, bindings);
-        }
-        NirExprKind::LabeledBlock { block, .. } => {
-            collect_licm_ref_bindings_in_block(block, type_table, bindings);
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            collect_licm_ref_bindings_in_expr(condition, type_table, bindings);
-            collect_licm_ref_bindings_in_block(then_branch, type_table, bindings);
-            if let Some(eb) = else_branch {
-                collect_licm_ref_bindings_in_block(eb, type_table, bindings);
-            }
-        }
-        NirExprKind::Binary { left, right, .. } => {
-            collect_licm_ref_bindings_in_expr(left, type_table, bindings);
-            collect_licm_ref_bindings_in_expr(right, type_table, bindings);
-        }
-        NirExprKind::Unary { expr: inner, .. } => {
-            collect_licm_ref_bindings_in_expr(inner, type_table, bindings);
-        }
-        NirExprKind::FieldAccess { expr: inner, .. } => {
-            collect_licm_ref_bindings_in_expr(inner, type_table, bindings);
-        }
-        NirExprKind::Index { expr: inner, index } => {
-            collect_licm_ref_bindings_in_expr(inner, type_table, bindings);
-            collect_licm_ref_bindings_in_expr(index, type_table, bindings);
-        }
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                collect_licm_ref_bindings_in_expr(&arg.expr, type_table, bindings);
-            }
-        }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            collect_licm_ref_bindings_in_expr(receiver, type_table, bindings);
-            for arg in args {
-                collect_licm_ref_bindings_in_expr(&arg.expr, type_table, bindings);
-            }
-        }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                collect_licm_ref_bindings_in_expr(arg, type_table, bindings);
-            }
-        }
-        NirExprKind::IndirectCall { callee, args, .. } => {
-            collect_licm_ref_bindings_in_expr(callee, type_table, bindings);
-            for arg in args {
-                collect_licm_ref_bindings_in_expr(arg, type_table, bindings);
-            }
-        }
-        NirExprKind::ClosureToCanonical { functor, .. } => {
-            collect_licm_ref_bindings_in_expr(functor, type_table, bindings);
-        }
-        NirExprKind::Assign { target, value } => {
-            collect_licm_ref_bindings_in_expr(target, type_table, bindings);
-            collect_licm_ref_bindings_in_expr(value, type_table, bindings);
-        }
-        NirExprKind::Cast { expr: inner, .. } => {
-            collect_licm_ref_bindings_in_expr(inner, type_table, bindings);
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                collect_licm_ref_bindings_in_expr(&field.value, type_table, bindings);
-            }
-        }
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            for elem in elements {
-                collect_licm_ref_bindings_in_expr(elem, type_table, bindings);
-            }
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                collect_licm_ref_bindings_in_expr(payload_expr, type_table, bindings);
-            }
-        }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            collect_licm_ref_bindings_in_expr(value, type_table, bindings);
-        }
-        NirExprKind::VariantTag { expr } | NirExprKind::VariantTest { expr, .. } => {
-            collect_licm_ref_bindings_in_expr(expr, type_table, bindings);
-        }
-        NirExprKind::VariantPayload { expr, .. } => {
-            collect_licm_ref_bindings_in_expr(expr, type_table, bindings);
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            collect_licm_ref_bindings_in_expr(scrutinee, type_table, bindings);
-            for arm in arms {
-                collect_licm_ref_bindings_in_block(arm, type_table, bindings);
-            }
-            collect_licm_ref_bindings_in_block(default, type_table, bindings);
-        }
-        // Leaf nodes - no nested expressions
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::Match { expr, arms } => {
-            collect_licm_ref_bindings_in_expr(expr, type_table, bindings);
-            for arm in arms {
-                collect_licm_ref_bindings_in_expr(&arm.body, type_table, bindings);
-                if let Some(guard) = &arm.guard {
-                    collect_licm_ref_bindings_in_expr(guard, type_table, bindings);
-                }
-            }
+    for child in expr_child_nodes(body, e) {
+        match child {
+            Child::Expr(c) => collect_licm_ref_bindings_in_expr(body, c, type_table, bindings),
+            Child::Block(b) => collect_licm_ref_bindings_in_block(body, b, type_table, bindings),
         }
     }
 }
 
-/// Represents a hoistable expression with its replacement info
+// ---------------------------------------------------------------------------
+// Hoist-candidate detection
+// ---------------------------------------------------------------------------
+
+/// Represents a hoistable expression with its replacement info.
 #[derive(Debug)]
 struct HoistCandidate {
-    /// The original expression pattern to match (field access on a local)
     local_index: u32,
-    /// The name of the local variable (for unparsing)
     local_name: String,
     field_index: u32,
     field_name: String,
-    /// The type of the field access result
     type_id: TypeId,
-    /// The new local index to use for the hoisted value
     new_local_index: u32,
 }
 
-/// Find field accesses on loop-invariant expressions that can be hoisted.
-/// Returns a list of candidates to hoist.
 fn find_hoist_candidates_in_block(
-    block: &NirBlock,
+    body: &Body,
+    block: BlockId,
     modified_vars: &ModifiedVars,
     ref_bindings: &IndexMap<u32, LicmRefBinding>,
     candidates: &mut Vec<HoistCandidate>,
-    seen: &mut IndexSet<(u32, u32)>, // (local_index, field_index) pairs already seen
+    seen: &mut IndexSet<(u32, u32)>,
     next_local: &mut u32,
 ) {
-    for stmt in &block.stmts {
+    for s in &body.blocks[block].stmts {
         find_hoist_candidates_in_stmt(
-            stmt,
+            body,
+            *s,
             modified_vars,
             ref_bindings,
             candidates,
@@ -1135,759 +1111,192 @@ fn find_hoist_candidates_in_block(
 }
 
 fn find_hoist_candidates_in_stmt(
-    stmt: &NirStmt,
+    body: &Body,
+    s: StmtId,
     modified_vars: &ModifiedVars,
     ref_bindings: &IndexMap<u32, LicmRefBinding>,
     candidates: &mut Vec<HoistCandidate>,
     seen: &mut IndexSet<(u32, u32)>,
     next_local: &mut u32,
 ) {
-    match &stmt.kind {
-        NirStmtKind::Let { value, .. } => {
-            find_hoist_candidates_in_expr(
-                value,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
-        NirStmtKind::Expr(expr) => {
-            find_hoist_candidates_in_expr(
-                expr,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
-        NirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                find_hoist_candidates_in_expr(
-                    v,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-            }
-        }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            find_hoist_candidates_in_expr(
-                condition,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-            find_hoist_candidates_in_block(
-                then_block,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-            if let Some(eb) = else_block {
-                find_hoist_candidates_in_block(
-                    eb,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-            }
-        }
-        NirStmtKind::Loop { body } => {
-            find_hoist_candidates_in_block(
+    for child in stmt_child_nodes(body, s) {
+        match child {
+            Child::Expr(e) => find_hoist_candidates_in_expr(
                 body,
+                e,
                 modified_vars,
                 ref_bindings,
                 candidates,
                 seen,
                 next_local,
-            );
-        }
-        NirStmtKind::LabeledBlock { block, .. } => {
-            find_hoist_candidates_in_block(
-                block,
+            ),
+            Child::Block(b) => find_hoist_candidates_in_block(
+                body,
+                b,
                 modified_vars,
                 ref_bindings,
                 candidates,
                 seen,
                 next_local,
-            );
-        }
-        NirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                find_hoist_candidates_in_expr(
-                    v,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-            }
-        }
-        NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => {
-            find_hoist_candidates_in_expr(
-                value,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
+            ),
         }
     }
 }
 
 fn find_hoist_candidates_in_expr(
-    expr: &NirExpr,
+    body: &Body,
+    e: ExprId,
     modified_vars: &ModifiedVars,
     ref_bindings: &IndexMap<u32, LicmRefBinding>,
     candidates: &mut Vec<HoistCandidate>,
     seen: &mut IndexSet<(u32, u32)>,
     next_local: &mut u32,
 ) {
-    match &expr.kind {
-        // This is the key pattern: field access on a loop-invariant local
-        NirExprKind::FieldAccess {
-            expr: inner,
-            field_index,
-            field_name,
-        } => {
-            if let NirExprKind::Local { index, name } = &inner.kind {
-                // Case 1: Direct access on a loop-invariant local.
-                // A field is hoistable if neither the whole local nor that specific field
-                // is modified (field-level tracking lets us hoist buf.repr even when buf.len
-                // is modified by assignment).
-                if modified_vars.is_field_hoistable(*index, *field_index) {
-                    let key = (*index, *field_index);
-                    if !seen.contains(&key) {
-                        seen.insert(key);
-                        candidates.push(HoistCandidate {
-                            local_index: *index,
-                            local_name: name.clone(),
-                            field_index: *field_index,
-                            field_name: field_name.clone(),
-                            type_id: expr.type_id,
-                            new_local_index: *next_local,
-                        });
-                        *next_local += 1;
-                    }
-                }
-                // Case 2: Access through an immutable reference to a loop-invariant local
-                // e.g., `let self: &T = &source; ... self.field ...`
-                // Since &T guarantees immutability, self.field == source.field
-                else if let Some(ref_binding) = ref_bindings.get(index)
-                    && modified_vars.is_field_hoistable(ref_binding.source_index, *field_index)
-                {
-                    let key = (ref_binding.source_index, *field_index);
-                    if !seen.contains(&key) {
-                        seen.insert(key);
-                        candidates.push(HoistCandidate {
-                            local_index: ref_binding.source_index,
-                            local_name: ref_binding.source_name.clone(),
-                            field_index: *field_index,
-                            field_name: field_name.clone(),
-                            type_id: expr.type_id,
-                            new_local_index: *next_local,
-                        });
-                        *next_local += 1;
-                    }
-                }
-            }
-            // Still recurse into inner expression
-            find_hoist_candidates_in_expr(
-                inner,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
-        NirExprKind::Binary { left, right, .. } => {
-            find_hoist_candidates_in_expr(
-                left,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-            find_hoist_candidates_in_expr(
-                right,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
-        NirExprKind::Unary { expr, .. } => {
-            find_hoist_candidates_in_expr(
-                expr,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
-        NirExprKind::Assign { target, value } => {
-            find_hoist_candidates_in_expr(
-                target,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-            find_hoist_candidates_in_expr(
-                value,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
-        NirExprKind::Cast { expr, .. } => {
-            find_hoist_candidates_in_expr(
-                expr,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                find_hoist_candidates_in_expr(
-                    &arg.expr,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
+    // The key pattern: field access on a loop-invariant local.
+    if let ExprKind::FieldAccess {
+        expr: inner,
+        field_index,
+        field_name,
+    } = &body.exprs[e].kind
+        && let ExprKind::Local { index, name } = &body.exprs[*inner].kind
+    {
+        let field_index = *field_index;
+        // Case 1: direct access on a loop-invariant local.
+        if modified_vars.is_field_hoistable(*index, field_index) {
+            let key = (*index, field_index);
+            if !seen.contains(&key) {
+                seen.insert(key);
+                candidates.push(HoistCandidate {
+                    local_index: *index,
+                    local_name: name.clone(),
+                    field_index,
+                    field_name: field_name.clone(),
+                    type_id: body.exprs[e].type_id,
+                    new_local_index: *next_local,
+                });
+                *next_local += 1;
             }
         }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            find_hoist_candidates_in_expr(
-                receiver,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-            for arg in args {
-                find_hoist_candidates_in_expr(
-                    &arg.expr,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
+        // Case 2: access through an immutable reference to a loop-invariant local.
+        else if let Some(ref_binding) = ref_bindings.get(index)
+            && modified_vars.is_field_hoistable(ref_binding.source_index, field_index)
+        {
+            let key = (ref_binding.source_index, field_index);
+            if !seen.contains(&key) {
+                seen.insert(key);
+                candidates.push(HoistCandidate {
+                    local_index: ref_binding.source_index,
+                    local_name: ref_binding.source_name.clone(),
+                    field_index,
+                    field_name: field_name.clone(),
+                    type_id: body.exprs[e].type_id,
+                    new_local_index: *next_local,
+                });
+                *next_local += 1;
             }
         }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                find_hoist_candidates_in_expr(
-                    arg,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-            }
-        }
-        NirExprKind::Index { expr, index } => {
-            find_hoist_candidates_in_expr(
-                expr,
+    }
+    // Recurse into children.
+    for child in expr_child_nodes(body, e) {
+        match child {
+            Child::Expr(c) => find_hoist_candidates_in_expr(
+                body,
+                c,
                 modified_vars,
                 ref_bindings,
                 candidates,
                 seen,
                 next_local,
-            );
-            find_hoist_candidates_in_expr(
-                index,
+            ),
+            Child::Block(b) => find_hoist_candidates_in_block(
+                body,
+                b,
                 modified_vars,
                 ref_bindings,
                 candidates,
                 seen,
                 next_local,
-            );
-        }
-        NirExprKind::Block(block) => {
-            find_hoist_candidates_in_block(
-                block,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            find_hoist_candidates_in_expr(
-                condition,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-            find_hoist_candidates_in_block(
-                then_branch,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-            if let Some(eb) = else_branch {
-                find_hoist_candidates_in_block(
-                    eb,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-            }
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                find_hoist_candidates_in_expr(
-                    &field.value,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-            }
-        }
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            for elem in elements {
-                find_hoist_candidates_in_expr(
-                    elem,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-            }
-        }
-        NirExprKind::IndirectCall { callee, args, .. } => {
-            find_hoist_candidates_in_expr(
-                callee,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-            for arg in args {
-                find_hoist_candidates_in_expr(
-                    arg,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-            }
-        }
-        NirExprKind::ClosureToCanonical { functor, .. } => {
-            find_hoist_candidates_in_expr(
-                functor,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                find_hoist_candidates_in_expr(
-                    payload_expr,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-            }
-        }
-        NirExprKind::LabeledBlock { block, .. } => {
-            find_hoist_candidates_in_block(
-                block,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            find_hoist_candidates_in_expr(
-                value,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
-        NirExprKind::VariantTag { expr } | NirExprKind::VariantTest { expr, .. } => {
-            find_hoist_candidates_in_expr(
-                expr,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
-        NirExprKind::VariantPayload { expr, .. } => {
-            find_hoist_candidates_in_expr(
-                expr,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            find_hoist_candidates_in_expr(
-                scrutinee,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-            for arm in arms {
-                find_hoist_candidates_in_block(
-                    arm,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-            }
-            find_hoist_candidates_in_block(
-                default,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
-        // Leaf nodes
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::Match { expr, arms } => {
-            find_hoist_candidates_in_expr(
-                expr,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-            for arm in arms {
-                find_hoist_candidates_in_expr(
-                    &arm.body,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-                if let Some(guard) = &arm.guard {
-                    find_hoist_candidates_in_expr(
-                        guard,
-                        modified_vars,
-                        ref_bindings,
-                        candidates,
-                        seen,
-                        next_local,
-                    );
-                }
-            }
+            ),
         }
     }
 }
 
-/// Replace field accesses with references to hoisted locals
+// ---------------------------------------------------------------------------
+// Replace hoisted field accesses with the hoisted locals
+// ---------------------------------------------------------------------------
+
 fn replace_hoisted_in_block(
-    block: &mut NirBlock,
+    body: &mut Body,
+    block: BlockId,
     candidates: &[HoistCandidate],
     ref_bindings: &IndexMap<u32, LicmRefBinding>,
 ) {
-    for stmt in &mut block.stmts {
-        replace_hoisted_in_stmt(stmt, candidates, ref_bindings);
+    for s in body.blocks[block].stmts.clone() {
+        replace_hoisted_in_stmt(body, s, candidates, ref_bindings);
     }
 }
 
 fn replace_hoisted_in_stmt(
-    stmt: &mut NirStmt,
+    body: &mut Body,
+    s: StmtId,
     candidates: &[HoistCandidate],
     ref_bindings: &IndexMap<u32, LicmRefBinding>,
 ) {
-    match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } => {
-            replace_hoisted_in_expr(value, candidates, ref_bindings);
-        }
-        NirStmtKind::Expr(expr) => {
-            replace_hoisted_in_expr(expr, candidates, ref_bindings);
-        }
-        NirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                replace_hoisted_in_expr(v, candidates, ref_bindings);
-            }
-        }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            replace_hoisted_in_expr(condition, candidates, ref_bindings);
-            replace_hoisted_in_block(then_block, candidates, ref_bindings);
-            if let Some(eb) = else_block {
-                replace_hoisted_in_block(eb, candidates, ref_bindings);
-            }
-        }
-        NirStmtKind::Loop { body } => {
-            replace_hoisted_in_block(body, candidates, ref_bindings);
-        }
-        NirStmtKind::LabeledBlock { block, .. } => {
-            replace_hoisted_in_block(block, candidates, ref_bindings);
-        }
-        NirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                replace_hoisted_in_expr(v, candidates, ref_bindings);
-            }
-        }
-        NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => {
-            replace_hoisted_in_expr(value, candidates, ref_bindings);
+    for child in stmt_child_nodes(body, s) {
+        match child {
+            Child::Expr(e) => replace_hoisted_in_expr(body, e, candidates, ref_bindings),
+            Child::Block(b) => replace_hoisted_in_block(body, b, candidates, ref_bindings),
         }
     }
 }
 
 fn replace_hoisted_in_expr(
-    expr: &mut NirExpr,
+    body: &mut Body,
+    e: ExprId,
     candidates: &[HoistCandidate],
     ref_bindings: &IndexMap<u32, LicmRefBinding>,
 ) {
-    // First, check if this expression matches a hoist candidate
-    if let NirExprKind::FieldAccess {
+    // First, check if this expression matches a hoist candidate.
+    let matched = if let ExprKind::FieldAccess {
         expr: inner,
         field_index,
         ..
-    } = &expr.kind
-        && let NirExprKind::Local { index, .. } = &inner.kind
+    } = &body.exprs[e].kind
+        && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
     {
-        // Case 1: Direct match - local.field where local is the hoisted source
-        for candidate in candidates {
-            if candidate.local_index == *index && candidate.field_index == *field_index {
-                // Replace with a reference to the hoisted local
-                expr.kind = NirExprKind::Local {
-                    index: candidate.new_local_index,
-                    name: format!(
-                        "_licm_{}_{}",
-                        candidate.field_name, candidate.new_local_index
-                    ),
-                };
-                return;
-            }
+        let index = *index;
+        let field_index = *field_index;
+        // Case 1: direct match — local.field where local is the hoisted source.
+        let direct = candidates
+            .iter()
+            .find(|c| c.local_index == index && c.field_index == field_index);
+        if let Some(c) = direct {
+            Some((c.new_local_index, c.field_name.clone()))
+        } else if let Some(ref_binding) = ref_bindings.get(&index) {
+            // Case 2: look through immutable reference — ref_var.field.
+            candidates
+                .iter()
+                .find(|c| c.local_index == ref_binding.source_index && c.field_index == field_index)
+                .map(|c| (c.new_local_index, c.field_name.clone()))
+        } else {
+            None
         }
-        // Case 2: Look through immutable reference - ref_var.field where ref_var = &source
-        if let Some(ref_binding) = ref_bindings.get(index) {
-            for candidate in candidates {
-                if candidate.local_index == ref_binding.source_index
-                    && candidate.field_index == *field_index
-                {
-                    // Replace with a reference to the hoisted local
-                    expr.kind = NirExprKind::Local {
-                        index: candidate.new_local_index,
-                        name: format!(
-                            "_licm_{}_{}",
-                            candidate.field_name, candidate.new_local_index
-                        ),
-                    };
-                    return;
-                }
-            }
-        }
+    } else {
+        None
+    };
+    if let Some((new_local_index, field_name)) = matched {
+        body.exprs[e].kind = ExprKind::Local {
+            index: new_local_index,
+            name: format!("_licm_{field_name}_{new_local_index}"),
+        };
+        return;
     }
 
-    // Recurse into sub-expressions
-    match &mut expr.kind {
-        NirExprKind::FieldAccess { expr: inner, .. } => {
-            replace_hoisted_in_expr(inner, candidates, ref_bindings);
-        }
-        NirExprKind::Binary { left, right, .. } => {
-            replace_hoisted_in_expr(left, candidates, ref_bindings);
-            replace_hoisted_in_expr(right, candidates, ref_bindings);
-        }
-        NirExprKind::Unary { expr, .. } => {
-            replace_hoisted_in_expr(expr, candidates, ref_bindings);
-        }
-        NirExprKind::Assign { target, value } => {
-            replace_hoisted_in_expr(target, candidates, ref_bindings);
-            replace_hoisted_in_expr(value, candidates, ref_bindings);
-        }
-        NirExprKind::Cast { expr, .. } => {
-            replace_hoisted_in_expr(expr, candidates, ref_bindings);
-        }
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                replace_hoisted_in_expr(&mut arg.expr, candidates, ref_bindings);
-            }
-        }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            replace_hoisted_in_expr(receiver, candidates, ref_bindings);
-            for arg in args {
-                replace_hoisted_in_expr(&mut arg.expr, candidates, ref_bindings);
-            }
-        }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                replace_hoisted_in_expr(arg, candidates, ref_bindings);
-            }
-        }
-        NirExprKind::Index { expr, index } => {
-            replace_hoisted_in_expr(expr, candidates, ref_bindings);
-            replace_hoisted_in_expr(index, candidates, ref_bindings);
-        }
-        NirExprKind::Block(block) => {
-            replace_hoisted_in_block(block, candidates, ref_bindings);
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            replace_hoisted_in_expr(condition, candidates, ref_bindings);
-            replace_hoisted_in_block(then_branch, candidates, ref_bindings);
-            if let Some(eb) = else_branch {
-                replace_hoisted_in_block(eb, candidates, ref_bindings);
-            }
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                replace_hoisted_in_expr(&mut field.value, candidates, ref_bindings);
-            }
-        }
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            for elem in elements {
-                replace_hoisted_in_expr(elem, candidates, ref_bindings);
-            }
-        }
-        NirExprKind::IndirectCall { callee, args, .. } => {
-            replace_hoisted_in_expr(callee, candidates, ref_bindings);
-            for arg in args {
-                replace_hoisted_in_expr(arg, candidates, ref_bindings);
-            }
-        }
-        NirExprKind::ClosureToCanonical { functor, .. } => {
-            replace_hoisted_in_expr(functor, candidates, ref_bindings);
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                replace_hoisted_in_expr(payload_expr, candidates, ref_bindings);
-            }
-        }
-        NirExprKind::LabeledBlock { block, .. } => {
-            replace_hoisted_in_block(block, candidates, ref_bindings);
-        }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            replace_hoisted_in_expr(value, candidates, ref_bindings);
-        }
-        NirExprKind::VariantTag { expr } | NirExprKind::VariantTest { expr, .. } => {
-            replace_hoisted_in_expr(expr, candidates, ref_bindings);
-        }
-        NirExprKind::VariantPayload { expr, .. } => {
-            replace_hoisted_in_expr(expr, candidates, ref_bindings);
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            replace_hoisted_in_expr(scrutinee, candidates, ref_bindings);
-            for arm in arms {
-                replace_hoisted_in_block(arm, candidates, ref_bindings);
-            }
-            replace_hoisted_in_block(default, candidates, ref_bindings);
-        }
-        // Leaf nodes
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
-        NirExprKind::Match { expr, arms } => {
-            replace_hoisted_in_expr(expr, candidates, ref_bindings);
-            for arm in arms {
-                replace_hoisted_in_expr(&mut arm.body, candidates, ref_bindings);
-                if let Some(guard) = &mut arm.guard {
-                    replace_hoisted_in_expr(guard, candidates, ref_bindings);
-                }
-            }
+    // Recurse into sub-expressions / sub-blocks.
+    for child in expr_child_nodes(body, e) {
+        match child {
+            Child::Expr(c) => replace_hoisted_in_expr(body, c, candidates, ref_bindings),
+            Child::Block(b) => replace_hoisted_in_block(body, b, candidates, ref_bindings),
         }
     }
 }

@@ -1,62 +1,49 @@
 //! Copy propagation optimization for Wado NIR.
 //!
-//! This module eliminates trivial copy bindings like `let x = y`, `let x = 42`,
+//! Eliminates trivial copy bindings like `let x = y`, `let x = 42`,
 //! `let x = &y`, or `let x = &mut y` by propagating the source value to all
-//! uses of the target variable.
+//! uses of the target variable. See `can_propagate_copy` for the safety gates.
 //!
-//! The optimization is safe when:
-//! - The target variable is not assigned after initialization
-//! - The target variable does not have its address taken
-//! - For local-to-local copies: the source is not modified after the copy
-//! - For value types: the source is dead after the binding (`read_count` is 1)
-//! - For ref/mut-ref copies: the target is single-use and the source is not reassigned
-//!
-//! Closure captures: NIR materialises captures into `NirCapture` entries on
-//! a separate `ClosureFunctor`, evaluated at functor construction time.
-//! Substituting a copy-bound local's source through a `ClosureToCanonical`
-//! literal evaluates the source at the same program point the original
-//! local would have been read, so no closure-capture safety gate is
-//! needed.
+//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
+//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): the binding / usage
+//! analysis and the substitute-and-remove rewrite read and mutate the arena
+//! `Body` directly.
 
-use crate::hashmap::IndexMap;
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind, NirUnaryOp};
+use crate::nir::{NirFunction, NirUnaryOp};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-/// Information about a copy binding that may be eliminable.
-/// Pattern: `let x: T = y` where y is a local variable, simple literal, or `&y`/`&mut y`
 #[derive(Debug, Clone)]
 struct CopyBinding {
-    /// Local index of the target variable (x)
     target_local: u32,
-    /// The source expression (either a Local, simple literal, or Ref/MutRef of a Local)
     source: CopySource,
-    /// Type of the binding
     type_id: TypeId,
 }
 
-/// Source of a copy binding
 #[derive(Debug, Clone)]
 enum CopySource {
-    /// Copy from another local variable
-    Local { index: u32, name: String },
-    /// Copy from an integer literal
-    IntLiteral { value: u64, repr: String },
-    /// Copy from a float literal
-    FloatLiteral { value: f64, repr: String },
-    /// Copy from a bool literal
+    Local {
+        index: u32,
+        name: String,
+    },
+    IntLiteral {
+        value: u64,
+        repr: String,
+    },
+    FloatLiteral {
+        value: f64,
+        repr: String,
+    },
     BoolLiteral(bool),
-    /// Copy from a char literal
     CharLiteral(char),
-    /// Copy from `&local` — propagated as `&source` at use site
     Ref {
         index: u32,
         name: String,
         inner_type_id: TypeId,
     },
-    /// Copy from `&mut local` — propagated as `&mut source` at use site
     MutRef {
         index: u32,
         name: String,
@@ -64,92 +51,76 @@ enum CopySource {
     },
 }
 
-/// Usage information for a local variable
 #[derive(Debug, Default)]
 struct LocalUsage {
-    /// Number of times the local is read
     read_count: u32,
-    /// Whether the local is ever assigned to (after initialization)
     is_assigned: bool,
-    /// Whether a field of this local is ever assigned (e.g., `x.field = ...`),
-    /// or whether a `&mut` reference to the local was taken (which may mutate
-    /// the local through the reference, e.g. after inlining an `&mut self` method).
     has_field_mutation: bool,
-    /// Whether the local has its address taken
     address_taken: bool,
 }
 
-/// If `expr` is `builtin::copy_value::<T>(inner)`, return `inner`; otherwise
-/// return `expr` unchanged. Copy propagation treats the wrapper as
-/// transparent because its safety check at `can_propagate_copy` already
-/// refuses to eliminate bindings whose target receives field mutations on a
-/// value-semantic type — i.e. the cases where dropping the copy would be
-/// observable.
-fn unwrap_copy_value(expr: &NirExpr) -> &NirExpr {
-    if let NirExprKind::Call { func, args, .. } = &expr.kind
+/// If `expr` is `builtin::copy_value::<T>(inner)`, return `inner`; else `expr`.
+fn unwrap_copy_value(body: &Body, expr: ExprId) -> ExprId {
+    if let ExprKind::Call { func, args, .. } = &body.exprs[expr].kind
         && func.module_source.is_core_builtin()
         && func.name == "copy_value"
         && args.len() == 1
     {
-        return &args[0].expr;
+        return args[0].expr;
     }
     expr
 }
 
-/// Analyze a Let statement to see if it's a copy binding.
-fn analyze_copy_binding(stmt: &NirStmt) -> Option<CopyBinding> {
-    let NirStmtKind::Let {
+fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
+    let StmtKind::Let {
         local_index,
         value,
         skip_value_copy,
         ..
-    } = &stmt.kind
+    } = &body.stmts[stmt].kind
     else {
         return None;
     };
-
-    // skip_value_copy bindings (from tmpl_hoist, SROA, LICM, etc.) intentionally
-    // alias a hoisted buffer. Eliminating them would break that aliasing contract.
-    if *skip_value_copy {
+    let (local_index, value, skip_value_copy) = (*local_index, *value, *skip_value_copy);
+    if skip_value_copy {
         return None;
     }
+    let value = unwrap_copy_value(body, value);
+    let value_type = body.exprs[value].type_id;
 
-    // Look through `builtin::copy_value::<T>(x)` wrappers: when the safety
-    // check later in `can_propagate_copy` rules the binding eliminable, the
-    // semantic copy is also unnecessary so both go away together.
-    let value = unwrap_copy_value(value);
-
-    let source = match &value.kind {
-        NirExprKind::Local { index, name } => CopySource::Local {
+    let source = match &body.exprs[value].kind {
+        ExprKind::Local { index, name } => CopySource::Local {
             index: *index,
             name: name.clone(),
         },
-        NirExprKind::IntLiteral { value, repr } => CopySource::IntLiteral {
+        ExprKind::IntLiteral { value, repr } => CopySource::IntLiteral {
             value: *value,
             repr: repr.clone(),
         },
-        NirExprKind::FloatLiteral { value, repr } => CopySource::FloatLiteral {
+        ExprKind::FloatLiteral { value, repr } => CopySource::FloatLiteral {
             value: *value,
             repr: repr.clone(),
         },
-        NirExprKind::BoolLiteral(b) => CopySource::BoolLiteral(*b),
-        NirExprKind::CharLiteral(c) => CopySource::CharLiteral(*c),
-        // `let x = &y` or `let x = &mut y` where y is a local
-        NirExprKind::Unary { op, expr: inner }
+        ExprKind::BoolLiteral(b) => CopySource::BoolLiteral(*b),
+        ExprKind::CharLiteral(c) => CopySource::CharLiteral(*c),
+        ExprKind::Unary { op, expr: inner }
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef) =>
         {
-            if let NirExprKind::Local { index, name } = &inner.kind {
-                if matches!(op, NirUnaryOp::Ref) {
+            let inner = *inner;
+            let is_ref = matches!(op, NirUnaryOp::Ref);
+            if let ExprKind::Local { index, name } = &body.exprs[inner].kind {
+                let inner_type_id = body.exprs[inner].type_id;
+                if is_ref {
                     CopySource::Ref {
                         index: *index,
                         name: name.clone(),
-                        inner_type_id: inner.type_id,
+                        inner_type_id,
                     }
                 } else {
                     CopySource::MutRef {
                         index: *index,
                         name: name.clone(),
-                        inner_type_id: inner.type_id,
+                        inner_type_id,
                     }
                 }
             } else {
@@ -160,26 +131,21 @@ fn analyze_copy_binding(stmt: &NirStmt) -> Option<CopyBinding> {
     };
 
     Some(CopyBinding {
-        target_local: *local_index,
+        target_local: local_index,
         source,
-        type_id: value.type_id,
+        type_id: value_type,
     })
 }
 
-/// Combined analysis: collect both copy bindings and local usage in a single tree walk.
 struct AnalysisResult {
     bindings: Vec<CopyBinding>,
     usage: IndexMap<u32, LocalUsage>,
 }
 
-/// Map from `(ModuleSource, function_name)` to the first parameter's `TypeId`.
-/// Used to determine whether a non-inlined method call mutates its receiver
-/// (i.e., whether the first param is `&mut T` even when the receiver expression
-/// has type `T`).
 type FirstParamTypes = IndexMap<(ModuleSource, String), TypeId>;
 
 fn analyze_function_body(
-    body: &NirBlock,
+    body: &Body,
     type_table: &TypeTable,
     first_param_types: &FirstParamTypes,
 ) -> AnalysisResult {
@@ -187,332 +153,191 @@ fn analyze_function_body(
         bindings: Vec::new(),
         usage: IndexMap::default(),
     };
-    analyze_block(body, &mut result, type_table, first_param_types);
+    analyze_block(body, body.root, &mut result, type_table, first_param_types);
     result
 }
 
 fn analyze_block(
-    block: &NirBlock,
+    body: &Body,
+    block: BlockId,
     result: &mut AnalysisResult,
     type_table: &TypeTable,
-    first_param_types: &FirstParamTypes,
+    fpt: &FirstParamTypes,
 ) {
-    for stmt in &block.stmts {
-        // Check for copy bindings at statement level
-        if let Some(binding) = analyze_copy_binding(stmt) {
+    let stmts = body.blocks[block].stmts.clone();
+    for stmt in stmts {
+        if let Some(binding) = analyze_copy_binding(body, stmt) {
             result.bindings.push(binding);
         }
-        analyze_stmt(stmt, result, type_table, first_param_types);
+        analyze_stmt(body, stmt, result, type_table, fpt);
     }
 }
 
 fn analyze_stmt(
-    stmt: &NirStmt,
+    body: &Body,
+    stmt: StmtId,
     result: &mut AnalysisResult,
     type_table: &TypeTable,
-    first_param_types: &FirstParamTypes,
+    fpt: &FirstParamTypes,
 ) {
-    match &stmt.kind {
-        NirStmtKind::Let { value, .. } => {
-            analyze_expr(value, result, type_table, first_param_types);
-        }
-        NirStmtKind::Expr(expr) => {
-            analyze_expr(expr, result, type_table, first_param_types);
-        }
-        NirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                analyze_expr(v, result, type_table, first_param_types);
-            }
-        }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            analyze_expr(condition, result, type_table, first_param_types);
-            analyze_block(then_block, result, type_table, first_param_types);
-            if let Some(eb) = else_block {
-                analyze_block(eb, result, type_table, first_param_types);
-            }
-        }
-        NirStmtKind::Loop { body } => {
-            analyze_block(body, result, type_table, first_param_types);
-        }
-        NirStmtKind::LabeledBlock { block, .. } => {
-            analyze_block(block, result, type_table, first_param_types);
-        }
-        NirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                analyze_expr(v, result, type_table, first_param_types);
-            }
-        }
-        NirStmtKind::Continue => {}
-        NirStmtKind::LetDestructure { value, .. } => {
-            analyze_expr(value, result, type_table, first_param_types);
+    let mut kids = Vec::new();
+    body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
+    for c in kids {
+        match c {
+            NodeRef::Expr(e) => analyze_expr(body, e, result, type_table, fpt),
+            NodeRef::Block(b) => analyze_block(body, b, result, type_table, fpt),
+            _ => {}
         }
     }
 }
 
 fn analyze_expr(
-    expr: &NirExpr,
+    body: &Body,
+    id: ExprId,
     result: &mut AnalysisResult,
     type_table: &TypeTable,
-    first_param_types: &FirstParamTypes,
+    fpt: &FirstParamTypes,
 ) {
-    match &expr.kind {
-        NirExprKind::Local { index, .. } => {
+    match &body.exprs[id].kind {
+        ExprKind::Local { index, .. } => {
             result.usage.entry(*index).or_default().read_count += 1;
         }
-        NirExprKind::Assign { target, value } => {
-            if let NirExprKind::Local { index, .. } = &target.kind {
+        ExprKind::Assign { target, value } => {
+            let (target, value) = (*target, *value);
+            if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
                 result.usage.entry(*index).or_default().is_assigned = true;
             }
-            // Track field mutations: `x.field = ...` where x is a local
-            if let NirExprKind::FieldAccess { expr: inner, .. } = &target.kind
-                && let NirExprKind::Local { index, .. } = &inner.kind
+            if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[target].kind
+                && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
             {
                 result.usage.entry(*index).or_default().has_field_mutation = true;
             }
-            analyze_expr(target, result, type_table, first_param_types);
-            analyze_expr(value, result, type_table, first_param_types);
+            analyze_expr(body, target, result, type_table, fpt);
+            analyze_expr(body, value, result, type_table, fpt);
         }
-        NirExprKind::Unary { op, expr: inner } => {
+        ExprKind::Unary { op, expr: inner } => {
+            let (op, inner) = (*op, *inner);
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                && let NirExprKind::Local { index, .. } = &inner.kind
+                && let ExprKind::Local { index, .. } = &body.exprs[inner].kind
             {
-                result.usage.entry(*index).or_default().address_taken = true;
-                // Taking `&mut x` means `x` may be mutated through the reference
-                // (e.g. after inlining an `&mut self` method, the inlined body
-                // contains `let self = &mut c` — the mutation of `*self` is not
-                // visible as a direct field write on `c`, so we use the MutRef
-                // itself as the mutation signal).
+                let index = *index;
+                result.usage.entry(index).or_default().address_taken = true;
                 if matches!(op, NirUnaryOp::MutRef) {
-                    result.usage.entry(*index).or_default().has_field_mutation = true;
+                    result.usage.entry(index).or_default().has_field_mutation = true;
                 }
             }
-            analyze_expr(inner, result, type_table, first_param_types);
+            analyze_expr(body, inner, result, type_table, fpt);
         }
-        NirExprKind::Binary { left, right, .. } => {
-            analyze_expr(left, result, type_table, first_param_types);
-            analyze_expr(right, result, type_table, first_param_types);
-        }
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                if arg.is_mut && may_mutate_through_arg(&arg.expr, type_table) {
-                    mark_potentially_mutated_local(&arg.expr, result);
+        ExprKind::Call { args, .. } => {
+            let arg_data: Vec<(ExprId, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
+            for (arg, is_mut) in arg_data {
+                if is_mut && may_mutate_through_arg(body, arg, type_table) {
+                    mark_potentially_mutated_local(body, arg, result);
                 }
-                analyze_expr(&arg.expr, result, type_table, first_param_types);
+                analyze_expr(body, arg, result, type_table, fpt);
             }
         }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                analyze_expr(arg, result, type_table, first_param_types);
-            }
-        }
-        NirExprKind::MethodCall {
+        ExprKind::MethodCall {
             receiver,
             func,
             args,
             ..
         } => {
-            // A method call mutates its receiver when the method's first parameter
-            // is `&mut Self`. In NIR, auto-ref is implicit: the receiver expression
-            // has type `T` even when the method is declared as `fn f(&mut self)`.
-            // Check both the receiver type (already `&mut T`) and the function's
-            // first param type (for the case where receiver is still plain `T`).
-            let receiver_is_mut_ref = may_mutate_caller_state(receiver, type_table);
-            let func_first_param_is_mut_ref = first_param_types
-                .get(&(func.module_source.clone(), func.name.clone()))
+            let receiver = *receiver;
+            let func_key = (func.module_source.clone(), func.name.clone());
+            let arg_data: Vec<(ExprId, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
+            let receiver_is_mut_ref = may_mutate_caller_state(body, receiver, type_table);
+            let func_first_param_is_mut_ref = fpt
+                .get(&func_key)
                 .is_some_and(|&tp| matches!(type_table.get(tp), ResolvedType::MutRef(_)));
             if receiver_is_mut_ref || func_first_param_is_mut_ref {
-                mark_potentially_mutated_local(receiver, result);
+                mark_potentially_mutated_local(body, receiver, result);
             }
-            analyze_expr(receiver, result, type_table, first_param_types);
-            for arg in args {
-                if arg.is_mut && may_mutate_through_arg(&arg.expr, type_table) {
-                    mark_potentially_mutated_local(&arg.expr, result);
+            analyze_expr(body, receiver, result, type_table, fpt);
+            for (arg, is_mut) in arg_data {
+                if is_mut && may_mutate_through_arg(body, arg, type_table) {
+                    mark_potentially_mutated_local(body, arg, result);
                 }
-                analyze_expr(&arg.expr, result, type_table, first_param_types);
+                analyze_expr(body, arg, result, type_table, fpt);
             }
         }
-        NirExprKind::IndirectCall { callee, args, .. } => {
-            analyze_expr(callee, result, type_table, first_param_types);
-            for arg in args {
-                analyze_expr(arg, result, type_table, first_param_types);
-            }
-        }
-        NirExprKind::ClosureToCanonical { functor, .. } => {
-            analyze_expr(functor, result, type_table, first_param_types);
-        }
-        NirExprKind::FieldAccess { expr: inner, .. } => {
-            analyze_expr(inner, result, type_table, first_param_types);
-        }
-        NirExprKind::Index {
-            expr: inner, index, ..
-        } => {
-            analyze_expr(inner, result, type_table, first_param_types);
-            analyze_expr(index, result, type_table, first_param_types);
-        }
-        NirExprKind::Cast { expr: inner, .. } => {
-            analyze_expr(inner, result, type_table, first_param_types);
-        }
-        NirExprKind::Block(block) => {
-            analyze_block(block, result, type_table, first_param_types);
-        }
-        NirExprKind::LabeledBlock { block, .. } => {
-            analyze_block(block, result, type_table, first_param_types);
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            analyze_expr(condition, result, type_table, first_param_types);
-            analyze_block(then_branch, result, type_table, first_param_types);
-            if let Some(eb) = else_branch {
-                analyze_block(eb, result, type_table, first_param_types);
-            }
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                analyze_expr(&field.value, result, type_table, first_param_types);
-            }
-        }
-        NirExprKind::TupleLiteral { elements, .. } | NirExprKind::ArrayLiteral { elements, .. } => {
-            for elem in elements {
-                analyze_expr(elem, result, type_table, first_param_types);
-            }
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                analyze_expr(payload_expr, result, type_table, first_param_types);
-            }
-        }
-        NirExprKind::Match { expr: inner, arms } => {
-            analyze_expr(inner, result, type_table, first_param_types);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    analyze_expr(guard, result, type_table, first_param_types);
+        _ => {
+            let mut kids = Vec::new();
+            body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
+            for c in kids {
+                match c {
+                    NodeRef::Expr(e) => analyze_expr(body, e, result, type_table, fpt),
+                    NodeRef::Block(b) => analyze_block(body, b, result, type_table, fpt),
+                    _ => {}
                 }
-                analyze_expr(&arm.body, result, type_table, first_param_types);
             }
         }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            analyze_expr(value, result, type_table, first_param_types);
-        }
-        NirExprKind::VariantTag { expr } | NirExprKind::VariantTest { expr, .. } => {
-            analyze_expr(expr, result, type_table, first_param_types);
-        }
-        NirExprKind::VariantPayload { expr, .. } => {
-            analyze_expr(expr, result, type_table, first_param_types);
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            analyze_expr(scrutinee, result, type_table, first_param_types);
-            for arm in arms {
-                analyze_block(arm, result, type_table, first_param_types);
-            }
-            analyze_block(default, result, type_table, first_param_types);
-        }
-        // Leaf nodes
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
     }
 }
 
-fn mark_potentially_mutated_local(expr: &NirExpr, result: &mut AnalysisResult) {
-    match &expr.kind {
-        NirExprKind::Local { index, .. } => {
+fn mark_potentially_mutated_local(body: &Body, expr: ExprId, result: &mut AnalysisResult) {
+    match &body.exprs[expr].kind {
+        ExprKind::Local { index, .. } => {
             result.usage.entry(*index).or_default().has_field_mutation = true;
         }
-        NirExprKind::Unary { expr: inner, .. }
-        | NirExprKind::Cast { expr: inner, .. }
-        | NirExprKind::FieldAccess { expr: inner, .. } => {
-            mark_potentially_mutated_local(inner, result);
-        }
-        NirExprKind::Index { expr: inner, .. } => {
-            mark_potentially_mutated_local(inner, result);
+        ExprKind::Unary { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. }
+        | ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::Index { expr: inner, .. } => {
+            mark_potentially_mutated_local(body, *inner, result);
         }
         _ => {}
     }
 }
 
-fn may_mutate_caller_state(expr: &NirExpr, type_table: &TypeTable) -> bool {
-    matches!(type_table.get(expr.type_id), ResolvedType::MutRef(_))
+fn may_mutate_caller_state(body: &Body, expr: ExprId, type_table: &TypeTable) -> bool {
+    matches!(
+        type_table.get(body.exprs[expr].type_id),
+        ResolvedType::MutRef(_)
+    )
 }
 
-fn may_mutate_through_arg(expr: &NirExpr, type_table: &TypeTable) -> bool {
-    matches!(type_table.get(expr.type_id), ResolvedType::MutRef(_))
+fn may_mutate_through_arg(body: &Body, expr: ExprId, type_table: &TypeTable) -> bool {
+    matches!(
+        type_table.get(body.exprs[expr].type_id),
+        ResolvedType::MutRef(_)
+    )
 }
 
-/// Check if a type requires value copying (composite types with value semantics).
 fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
-    match type_table.get(type_id) {
-        ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
-        // References, primitives, etc. don't need copying
-        _ => false,
-    }
+    matches!(
+        type_table.get(type_id),
+        ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. }
+    )
 }
 
-/// Check if a binding can be safely eliminated via copy propagation.
 fn can_propagate_copy(
     binding: &CopyBinding,
     usage: &IndexMap<u32, LocalUsage>,
     type_table: &TypeTable,
 ) -> bool {
-    let target_usage = usage.get(&binding.target_local);
-
-    // If the target is never used, it can be eliminated (dead code)
-    let Some(target_usage) = target_usage else {
+    let Some(target_usage) = usage.get(&binding.target_local) else {
         return true;
     };
-
-    // Don't propagate if target is assigned to after initialization
     if target_usage.is_assigned {
         return false;
     }
-
-    // Don't propagate if target has field mutations and the type needs value copy.
-    // In Wasm GC, `let q = p` for a struct type creates a reference alias, not a
-    // value copy. The WIR translator inserts value_copy for mutable Let bindings.
-    // Eliminating the binding would lose this copy, causing field mutations on the
-    // target to incorrectly affect the source.
     if target_usage.has_field_mutation && needs_value_copy(binding.type_id, type_table) {
         return false;
     }
-
-    // Don't propagate if address is taken (could be modified through pointer)
     if target_usage.address_taken {
         return false;
     }
 
     match &binding.source {
         CopySource::Local { index, .. } => {
-            // For local-to-local copy:
-            // Safe if source is not modified after the copy
             let source_usage = usage.get(index);
-            if let Some(su) = source_usage {
-                // Source is assigned after initialization - not safe to propagate
-                // because uses of the target should see the pre-assignment value
-                if su.is_assigned {
-                    return false;
-                }
+            if let Some(su) = source_usage
+                && su.is_assigned
+            {
+                return false;
             }
-
             let is_value_type = needs_value_copy(binding.type_id, type_table);
-
             if is_value_type
                 && target_usage.read_count == 1
                 && let Some(su) = source_usage
@@ -520,26 +345,13 @@ fn can_propagate_copy(
             {
                 return false;
             }
-
-            // For value-type copies where the target is used exactly once,
-            // we can safely propagate even when the source's address was taken.
-            // The source is not reassigned (checked above), so reading it at the
-            // target's single use point yields the same value as the snapshot.
-            // This enables elimination of inlined builder patterns like:
-            //   __inline_build: { let self = __b; break: *self; }
             let single_use_value_copy = is_value_type && target_usage.read_count == 1;
-
             if let Some(su) = source_usage
                 && !single_use_value_copy
                 && su.address_taken
             {
-                // Source could be modified through a reference.
                 return false;
             }
-
-            // For value types (structs, arrays, tuples, strings), only propagate
-            // if the source is dead after this binding (read_count == 1),
-            // unless the target is single-use (already verified safe above).
             if is_value_type
                 && !single_use_value_copy
                 && let Some(su) = source_usage
@@ -547,26 +359,16 @@ fn can_propagate_copy(
             {
                 return false;
             }
-            // If no usage info, source is unused - safe to eliminate
-
             true
         }
-        // Literals are always safe to propagate
         CopySource::IntLiteral { .. }
         | CopySource::FloatLiteral { .. }
         | CopySource::BoolLiteral(_)
         | CopySource::CharLiteral(_) => true,
-        // `let x = &y` or `let x = &mut y`:
-        // Safe when target is single-use and source is not reassigned.
-        // We move the `&y`/`&mut y` expression from the definition to the use site.
-        // Multi-use is not allowed because each substitution creates a new `&mut`
-        // expression, which could change semantics in the presence of aliasing.
         CopySource::Ref { index, .. } | CopySource::MutRef { index, .. } => {
-            // Must be single-use
             if target_usage.read_count != 1 {
                 return false;
             }
-            // Source must not be reassigned
             if let Some(su) = usage.get(index)
                 && su.is_assigned
             {
@@ -577,283 +379,146 @@ fn can_propagate_copy(
     }
 }
 
-/// Combined substitute and remove: replaces local references and removes dead Let stmts in a single walk.
 fn apply_in_block(
-    block: &mut NirBlock,
+    body: &mut Body,
+    block: BlockId,
     substitutions: &IndexMap<u32, CopySource>,
     dead_locals: &IndexSet<u32>,
 ) {
-    block.stmts.retain(|stmt| {
-        if let NirStmtKind::Let { local_index, .. } = &stmt.kind {
-            !dead_locals.contains(local_index)
-        } else {
-            true
-        }
-    });
-    for stmt in &mut block.stmts {
-        apply_in_stmt(stmt, substitutions, dead_locals);
+    let kept: Vec<StmtId> = body.blocks[block]
+        .stmts
+        .iter()
+        .copied()
+        .filter(|s| match &body.stmts[*s].kind {
+            StmtKind::Let { local_index, .. } => !dead_locals.contains(local_index),
+            _ => true,
+        })
+        .collect();
+    body.blocks[block].stmts = kept;
+
+    let stmts = body.blocks[block].stmts.clone();
+    for stmt in stmts {
+        apply_in_node(body, NodeRef::Stmt(stmt), substitutions, dead_locals);
     }
 }
 
-fn apply_in_stmt(
-    stmt: &mut NirStmt,
+fn apply_in_node(
+    body: &mut Body,
+    node: NodeRef,
     substitutions: &IndexMap<u32, CopySource>,
     dead_locals: &IndexSet<u32>,
 ) {
-    match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
-            apply_in_expr(value, substitutions, dead_locals);
-        }
-        NirStmtKind::Expr(expr) => {
-            apply_in_expr(expr, substitutions, dead_locals);
-        }
-        NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                apply_in_expr(v, substitutions, dead_locals);
+    match node {
+        NodeRef::Expr(id) => apply_in_expr(body, id, substitutions, dead_locals),
+        NodeRef::Block(b) => apply_in_block(body, b, substitutions, dead_locals),
+        NodeRef::Stmt(s) => {
+            let mut kids = Vec::new();
+            body.for_each_child(NodeRef::Stmt(s), |c| kids.push(c));
+            for c in kids {
+                apply_in_node(body, c, substitutions, dead_locals);
             }
         }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            apply_in_expr(condition, substitutions, dead_locals);
-            apply_in_block(then_block, substitutions, dead_locals);
-            if let Some(eb) = else_block {
-                apply_in_block(eb, substitutions, dead_locals);
-            }
-        }
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            apply_in_block(body, substitutions, dead_locals);
-        }
-        NirStmtKind::Continue => {}
+        NodeRef::Pat(_) => {}
     }
 }
 
 fn apply_in_expr(
-    expr: &mut NirExpr,
+    body: &mut Body,
+    id: ExprId,
     substitutions: &IndexMap<u32, CopySource>,
     dead_locals: &IndexSet<u32>,
 ) {
-    if let NirExprKind::Local { index, .. } = &expr.kind
-        && let Some(source) = substitutions.get(index)
-    {
+    let sub = if let ExprKind::Local { index, .. } = &body.exprs[id].kind {
+        substitutions.get(index).cloned()
+    } else {
+        None
+    };
+    if let Some(source) = sub {
         match source {
-            CopySource::Local {
-                index: src_idx,
-                name: src_name,
-            } => {
-                expr.kind = NirExprKind::Local {
-                    index: *src_idx,
-                    name: src_name.clone(),
-                };
+            CopySource::Local { index, name } => {
+                body.exprs[id].kind = ExprKind::Local { index, name };
             }
             CopySource::IntLiteral { value, repr } => {
-                expr.kind = NirExprKind::IntLiteral {
-                    value: *value,
-                    repr: repr.clone(),
-                };
+                body.exprs[id].kind = ExprKind::IntLiteral { value, repr };
             }
             CopySource::FloatLiteral { value, repr } => {
-                expr.kind = NirExprKind::FloatLiteral {
-                    value: *value,
-                    repr: repr.clone(),
-                };
+                body.exprs[id].kind = ExprKind::FloatLiteral { value, repr };
             }
             CopySource::BoolLiteral(b) => {
-                expr.kind = NirExprKind::BoolLiteral(*b);
+                body.exprs[id].kind = ExprKind::BoolLiteral(b);
             }
             CopySource::CharLiteral(c) => {
-                expr.kind = NirExprKind::CharLiteral(*c);
+                body.exprs[id].kind = ExprKind::CharLiteral(c);
             }
             CopySource::Ref {
-                index: src_idx,
-                name: src_name,
+                index,
+                name,
                 inner_type_id,
-            }
-            | CopySource::MutRef {
-                index: src_idx,
-                name: src_name,
+            } => emit_ref(body, id, NirUnaryOp::Ref, index, name, inner_type_id),
+            CopySource::MutRef {
+                index,
+                name,
                 inner_type_id,
-            } => {
-                let op = if matches!(source, CopySource::Ref { .. }) {
-                    NirUnaryOp::Ref
-                } else {
-                    NirUnaryOp::MutRef
-                };
-                let inner = NirExpr::new(
-                    NirExprKind::Local {
-                        index: *src_idx,
-                        name: src_name.clone(),
-                    },
-                    *inner_type_id,
-                    expr.span,
-                );
-                expr.kind = NirExprKind::Unary {
-                    op,
-                    expr: Box::new(inner),
-                };
-            }
+            } => emit_ref(body, id, NirUnaryOp::MutRef, index, name, inner_type_id),
         }
         return;
     }
 
-    match &mut expr.kind {
-        NirExprKind::Local { .. } => {}
-        NirExprKind::Binary { left, right, .. } => {
-            apply_in_expr(left, substitutions, dead_locals);
-            apply_in_expr(right, substitutions, dead_locals);
-        }
-        NirExprKind::Unary { expr: inner, .. }
-        | NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::Cast { expr: inner, .. } => {
-            apply_in_expr(inner, substitutions, dead_locals);
-        }
-        NirExprKind::Assign { target, value } => {
-            apply_in_expr(target, substitutions, dead_locals);
-            apply_in_expr(value, substitutions, dead_locals);
-        }
-        NirExprKind::Index {
-            expr: inner, index, ..
-        } => {
-            apply_in_expr(inner, substitutions, dead_locals);
-            apply_in_expr(index, substitutions, dead_locals);
-        }
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                apply_in_expr(&mut arg.expr, substitutions, dead_locals);
-            }
-        }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                apply_in_expr(arg, substitutions, dead_locals);
-            }
-        }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            apply_in_expr(receiver, substitutions, dead_locals);
-            for arg in args {
-                apply_in_expr(&mut arg.expr, substitutions, dead_locals);
-            }
-        }
-        NirExprKind::IndirectCall { callee, args, .. } => {
-            apply_in_expr(callee, substitutions, dead_locals);
-            for arg in args {
-                apply_in_expr(arg, substitutions, dead_locals);
-            }
-        }
-        NirExprKind::ClosureToCanonical { functor, .. } => {
-            apply_in_expr(functor, substitutions, dead_locals);
-        }
-        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
-            apply_in_block(block, substitutions, dead_locals);
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            apply_in_expr(condition, substitutions, dead_locals);
-            apply_in_block(then_branch, substitutions, dead_locals);
-            if let Some(eb) = else_branch {
-                apply_in_block(eb, substitutions, dead_locals);
-            }
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                apply_in_expr(&mut field.value, substitutions, dead_locals);
-            }
-        }
-        NirExprKind::TupleLiteral { elements, .. } | NirExprKind::ArrayLiteral { elements, .. } => {
-            for elem in elements {
-                apply_in_expr(elem, substitutions, dead_locals);
-            }
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                apply_in_expr(p, substitutions, dead_locals);
-            }
-        }
-        NirExprKind::Match { expr: inner, arms } => {
-            apply_in_expr(inner, substitutions, dead_locals);
-            for arm in arms {
-                if let Some(guard) = &mut arm.guard {
-                    apply_in_expr(guard, substitutions, dead_locals);
-                }
-                apply_in_expr(&mut arm.body, substitutions, dead_locals);
-            }
-        }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            apply_in_expr(value, substitutions, dead_locals);
-        }
-        NirExprKind::VariantTag { expr }
-        | NirExprKind::VariantTest { expr, .. }
-        | NirExprKind::VariantPayload { expr, .. } => {
-            apply_in_expr(expr, substitutions, dead_locals);
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            apply_in_expr(scrutinee, substitutions, dead_locals);
-            for arm in arms {
-                apply_in_block(arm, substitutions, dead_locals);
-            }
-            apply_in_block(default, substitutions, dead_locals);
-        }
-        // Leaf nodes
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
+    let mut kids = Vec::new();
+    body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
+    for c in kids {
+        apply_in_node(body, c, substitutions, dead_locals);
     }
 }
 
-/// Eliminate trivial copy bindings in a function.
-/// Uses merged analysis (1 walk) and merged substitute+remove (1 walk) per iteration.
+/// Replace expression `id` with `&src` / `&mut src` (the propagated ref source),
+/// keeping `id`'s own `type_id` / span.
+fn emit_ref(
+    body: &mut Body,
+    id: ExprId,
+    op: NirUnaryOp,
+    index: u32,
+    name: String,
+    inner_type_id: TypeId,
+) {
+    let span = body.exprs[id].span;
+    let inner = body.exprs.push(ExprNode {
+        kind: ExprKind::Local { index, name },
+        type_id: inner_type_id,
+        span,
+    });
+    body.exprs[id].kind = ExprKind::Unary { op, expr: inner };
+}
+
 fn propagate_copies_in_function(
     func: &mut NirFunction,
     type_table: &TypeTable,
     first_param_types: &FirstParamTypes,
 ) -> bool {
-    let Some(body) = &mut func.body else {
+    if func.body.is_none() {
         return false;
-    };
-
+    }
     let mut ever_changed = false;
 
     loop {
-        // Step 1: Collect copy bindings and usage info in a single walk
-        let analysis = analyze_function_body(body, type_table, first_param_types);
-
+        let analysis = {
+            let body = func.body.as_ref().unwrap();
+            analyze_function_body(body, type_table, first_param_types)
+        };
         if analysis.bindings.is_empty() {
             break;
         }
-
-        // Step 2: Find all eliminable bindings
         let eliminable: Vec<CopyBinding> = analysis
             .bindings
             .into_iter()
             .filter(|b| can_propagate_copy(b, &analysis.usage, type_table))
             .collect();
-
         if eliminable.is_empty() {
             break;
         }
-
-        // Step 3: Build non-conflicting batch.
         let target_set: IndexSet<u32> = eliminable.iter().map(|b| b.target_local).collect();
-
         let mut substitutions: IndexMap<u32, CopySource> = IndexMap::default();
         let mut has_deferred = false;
-
         for binding in eliminable {
             let source_conflicts = match &binding.source {
                 CopySource::Local { index, .. }
@@ -867,16 +532,14 @@ fn propagate_copies_in_function(
                 substitutions.insert(binding.target_local, binding.source);
             }
         }
-
         if substitutions.is_empty() {
             break;
         }
-
-        // Step 4: Apply substitutions and remove dead bindings in a single walk
         let dead_locals: IndexSet<u32> = substitutions.keys().copied().collect();
-        apply_in_block(body, &substitutions, &dead_locals);
+        let body = func.body.as_mut().unwrap();
+        let root = body.root;
+        apply_in_block(body, root, &substitutions, &dead_locals);
         ever_changed = true;
-
         if !has_deferred {
             break;
         }
@@ -885,13 +548,9 @@ fn propagate_copies_in_function(
     ever_changed
 }
 
-/// Apply copy propagation to all functions in the project.
 pub fn propagate_copies(project: &mut NirPackage) -> bool {
     let mut changed = false;
     let type_table = project.type_table.borrow();
-    // Build a map from (module_source, function_name) → first-param TypeId so that
-    // MethodCall analysis can determine whether a call with an implicit-ref receiver
-    // (e.g. `c.increment()` where `increment` takes `&mut self`) mutates the receiver.
     let mut first_param_types: FirstParamTypes = IndexMap::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();

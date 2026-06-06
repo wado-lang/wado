@@ -43,16 +43,22 @@
 //! `trait_name` pin on the closure-functor's `^Inspect` /
 //! `^InspectAlt` impls, where the matching wrapper adapts to the
 //! shrunken signature. Everything else flows through the general path.
+//!
+//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
+//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): the function-body work
+//! (dead-param detection, call-site validation, local renumbering, call-site
+//! rewriting) reads and mutates the arena `Body` directly. Globals are
+//! tree-shaped NIR, so they are wrapped in a temporary `Body` to run the same
+//! arena routines rather than duplicating the logic.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{
-    FunctionKind, NirExpr, NirExprKind, NirFunction, NirPattern, NirStmt, NirStmtKind,
-};
+use crate::nir::{FunctionKind, NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::{NirMutVisitor, NirRefVisitor};
+use crate::tir::TypeTable;
 
-use super::elide_local::is_pure_expr;
+use super::arena_query;
 
 pub(super) type FnKey = (ModuleSource, String);
 
@@ -150,24 +156,9 @@ fn is_eligible(func: &NirFunction, pinned: &IndexSet<FnKey>, is_closure_dae_rela
     if func.body.is_none() {
         return false;
     }
-    // `is_export` and `is_async` are intentionally absent. Both flags
-    // describe the user's source-level intent (this is exported / this
-    // was originally `async`), not a real-call-shape constraint that
-    // DAE would have to honour:
-    //
-    // * Every `export fn` reaches the runtime through a synthesised
-    //   `is_cm_export` wrapper. The wrapper is the boundary; the user
-    //   function is internal-only, with the wrapper as its sole caller
-    //   — and the rewriter updates that call site. Pinning the user
-    //   function blocked DAE for arguments like an unused `request` on
-    //   `export async fn handle(request)`.
-    //
-    // * `is_async` propagates from desugar untouched, but the body is
-    //   already lowered to `cm_raw_call task-return(...)` and the call
-    //   shape from the `is_cm_export` wrapper is a regular `Call` —
-    //   the async ABI flattening (outptr / indirect params) only
-    //   applies to WASI imports inside `wir_build`, not to user
-    //   functions. The legacy WIR DAE did not check `is_async`.
+    // `is_export` and `is_async` are intentionally absent — both describe
+    // user source-level intent, not a real call-shape constraint (see the
+    // module doc).
     if func.is_cm_export || func.is_cm_binding || func.is_dispatch_wrapper || func.is_ambient {
         return false;
     }
@@ -177,26 +168,14 @@ fn is_eligible(func: &NirFunction, pinned: &IndexSet<FnKey>, is_closure_dae_rela
     if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
         return false;
     }
-    // Allocator entry points (`#[allocator(...)]`) are wired straight into
-    // the component's canonical ABI as the `realloc` core function. Unlike
-    // a user `export fn` — which reaches the boundary through an
-    // `is_cm_export` wrapper that absorbs a shrunken signature — the
-    // allocator function IS the boundary. Its 4-argument
-    // `(i32, i32, i32, i32) -> i32` realloc signature must survive verbatim,
-    // even when the chosen allocator never reads `oldsize` / `align`.
+    // Allocator entry points are wired straight into the canonical ABI as
+    // `realloc`; their signature must survive verbatim.
     if func.allocator_tag.is_some() {
         return false;
     }
-    // Trait methods have signature contracts shared with other impls
-    // (and reachable via vtable / trait dispatch). Removing a param from
-    // a single impl desynchronises the impl from the trait declaration
-    // and from sibling impls, which then trap on dispatch. Skip them.
-    //
-    // The closure-functor `^Inspect` / `^InspectAlt` impls are the
-    // exception: their only callers are the matching
-    // `__closure_inspect_wrapper_*` (vtable-shaped, but the wrapper body
-    // is generated per-functor and adapts to surviving impl params), so
-    // shrinking the impl signature is safe.
+    // Trait methods share a signature contract with sibling impls and the
+    // trait declaration; the closure-functor `^Inspect` / `^InspectAlt`
+    // impls are the relaxed exception.
     if !is_closure_dae_relaxed
         && func
             .method_info
@@ -211,14 +190,10 @@ fn is_eligible(func: &NirFunction, pinned: &IndexSet<FnKey>, is_closure_dae_rela
     true
 }
 
-/// Returns one bool per parameter: `true` means the parameter is unused
-/// and safe-to-remove. The receiver position (index 0 for methods) gets
-/// no special pin — `apply_dae` knows how to rewrite a method whose
-/// `self` is dead into a plain `Call(method_func, args)` at every call
-/// site (`MethodCall → Call` collapse, see `CallRewriter`). The
-/// validator (`CallSiteValidator`) gates this on receiver purity so
-/// that dropping the receiver evaluation cannot strip an observable
-/// effect.
+/// Returns one bool per parameter: `true` means the parameter is unused and
+/// safe-to-remove. The receiver position (index 0 for methods) gets no special
+/// pin — `apply_dae` rewrites a method whose `self` is dead into a plain
+/// `Call(method_func, args)`, gated on receiver purity by the validator.
 fn find_dead_params(func: &NirFunction) -> Vec<bool> {
     if func.params.is_empty() {
         return Vec::new();
@@ -226,7 +201,7 @@ fn find_dead_params(func: &NirFunction) -> Vec<bool> {
 
     let body = func.body.as_ref().unwrap();
     let mut reads: IndexSet<u32> = IndexSet::default();
-    super::elide_local::collect_reads_in_block(body, &mut reads);
+    arena_query::collect_reads(body, &mut reads);
     let kept_locals = &func.address_taken_locals;
     let stores_aliased = &func.stores_aliased_locals;
 
@@ -255,113 +230,125 @@ pub(super) fn collect_pinned(_project: &NirPackage) -> IndexSet<FnKey> {
     IndexSet::default()
 }
 
-/// Walk every call site once per validation. A single impure argument at a
-/// dead position drops the candidate completely so we never end up rewriting
-/// some sites and not others.
+// ──────────────────────────────────────────────────────────────────────────────
+// Call-site validation
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Walk every call site once. A single impure argument at a dead position
+/// drops the candidate completely so we never rewrite some sites and not
+/// others.
 fn validate_call_sites(
     project: &NirPackage,
     mut candidates: IndexMap<FnKey, Vec<bool>>,
 ) -> IndexMap<FnKey, Vec<bool>> {
-    let mut validator = CallSiteValidator {
-        candidates: &candidates,
-        rejected: IndexSet::default(),
-    };
+    let mut rejected: IndexSet<FnKey> = IndexSet::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         if let Some(body) = &func.body {
-            validator.visit_block(body);
+            validate_in_body(body, &candidates, &mut rejected);
         }
     }
     for global in &project.globals {
-        validator.visit_expr(&global.initializer);
+        let body = global_to_body(&global.initializer);
+        validate_in_body(&body, &candidates, &mut rejected);
     }
-    for r in validator.rejected {
+    for r in rejected {
         candidates.shift_remove(&r);
     }
     candidates
 }
 
-struct CallSiteValidator<'a> {
-    candidates: &'a IndexMap<FnKey, Vec<bool>>,
-    rejected: IndexSet<FnKey>,
-}
-
-impl NirRefVisitor for CallSiteValidator<'_> {
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        match &expr.kind {
-            NirExprKind::Call { func, args, .. } => {
-                let key = (func.module_source.clone(), func.name.clone());
-                if let Some(dead) = self.candidates.get(&key)
-                    && !self.rejected.contains(&key)
-                {
-                    // Call positions map 1:1 to params.
-                    for (i, dead_at_i) in dead.iter().enumerate() {
-                        if !*dead_at_i {
-                            continue;
-                        }
-                        match args.get(i) {
-                            Some(arg) if is_pure_expr(&arg.expr) => {}
-                            _ => {
-                                // Either an impure expr at a dead position,
-                                // or the caller doesn't supply this arg
-                                // (variadic / optional). Either way, bail.
-                                self.rejected.insert(key.clone());
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            NirExprKind::MethodCall {
-                func,
-                receiver,
-                args,
-                ..
-            } => {
-                let key = (func.module_source.clone(), func.name.clone());
-                if let Some(dead) = self.candidates.get(&key)
-                    && !self.rejected.contains(&key)
-                {
-                    // If the rewriter is going to drop the receiver, the
-                    // MethodCall collapses to a `Call` and the receiver
-                    // expression is discarded — it must be pure for that to
-                    // be observation-free.
-                    let drops_receiver = dead.first() == Some(&true);
-                    if drops_receiver && !is_pure_expr(receiver) {
-                        self.rejected.insert(key.clone());
-                    } else {
-                        // Higher-position dead args: params[i+1] maps to
-                        // args[i] regardless of whether position 0 was
-                        // dropped (the receiver is structural, the
-                        // argument-list shape is unchanged).
-                        for (i, dead_at_i) in dead.iter().enumerate().skip(1) {
-                            if !*dead_at_i {
-                                continue;
-                            }
-                            match args.get(i - 1) {
-                                Some(arg) if is_pure_expr(&arg.expr) => {}
-                                _ => {
-                                    self.rejected.insert(key.clone());
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            _ => {}
+/// Validate every `Call` / `MethodCall` in a body: at each dead parameter
+/// position the supplied argument (or the dropped receiver) must be pure.
+fn validate_in_body(
+    body: &Body,
+    candidates: &IndexMap<FnKey, Vec<bool>>,
+    rejected: &mut IndexSet<FnKey>,
+) {
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(id) = node {
+            validate_call(body, id, candidates, rejected);
         }
-        self.walk_expr(expr);
+        body.for_each_child(node, |c| stack.push(c));
     }
 }
+
+fn validate_call(
+    body: &Body,
+    id: ExprId,
+    candidates: &IndexMap<FnKey, Vec<bool>>,
+    rejected: &mut IndexSet<FnKey>,
+) {
+    match &body.exprs[id].kind {
+        ExprKind::Call { func, args, .. } => {
+            let key = (func.module_source.clone(), func.name.clone());
+            let Some(dead) = candidates.get(&key) else {
+                return;
+            };
+            if rejected.contains(&key) {
+                return;
+            }
+            // Call positions map 1:1 to params.
+            for (i, dead_at_i) in dead.iter().enumerate() {
+                if !*dead_at_i {
+                    continue;
+                }
+                match args.get(i) {
+                    Some(arg) if arena_query::is_pure_expr(body, arg.expr) => {}
+                    _ => {
+                        rejected.insert(key.clone());
+                        break;
+                    }
+                }
+            }
+        }
+        ExprKind::MethodCall {
+            func,
+            receiver,
+            args,
+            ..
+        } => {
+            let key = (func.module_source.clone(), func.name.clone());
+            let Some(dead) = candidates.get(&key) else {
+                return;
+            };
+            if rejected.contains(&key) {
+                return;
+            }
+            // If the rewriter drops the receiver, the MethodCall collapses to
+            // a `Call` and the receiver is discarded — it must be pure.
+            let drops_receiver = dead.first() == Some(&true);
+            if drops_receiver && !arena_query::is_pure_expr(body, *receiver) {
+                rejected.insert(key.clone());
+            } else {
+                // params[i+1] maps to args[i] regardless of whether position 0
+                // was dropped (the receiver is structural).
+                for (i, dead_at_i) in dead.iter().enumerate().skip(1) {
+                    if !*dead_at_i {
+                        continue;
+                    }
+                    match args.get(i - 1) {
+                        Some(arg) if arena_query::is_pure_expr(body, arg.expr) => {}
+                        _ => {
+                            rejected.insert(key.clone());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Application
+// ──────────────────────────────────────────────────────────────────────────────
 
 fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) {
     // Phase 3a: shrink the parameter list of every confirmed callee, then
     // renumber locals so `params[k].local_index == k` continues to hold.
-    // `wir_build/translate.rs` declares `locals[i] for i >= params.len()`
-    // as body locals; if the dead-param slot were left in place, its name
-    // would either alias a live param's name (duplicate WIR DeclareLocal)
-    // or shadow it.
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         let key = (func.module_source.clone(), func.name.clone());
@@ -371,90 +358,100 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) {
     }
 
     // Phase 3b: rewrite every call site.
-    let mut rewriter = CallRewriter { confirmed };
-    let funcs = project.functions.clone();
-    for func_rc in &funcs {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(body) = func.body.as_mut() {
-            rewriter.visit_block(body);
+            rewrite_calls_in_body(body, confirmed);
         }
     }
     for global in &mut project.globals {
-        rewriter.visit_expr(&mut global.initializer);
+        let mut body = take_global_to_body(&mut global.initializer);
+        rewrite_calls_in_body(&mut body, confirmed);
+        write_back_global(&mut global.initializer, &body);
     }
 }
 
-struct CallRewriter<'a> {
-    confirmed: &'a IndexMap<FnKey, Vec<bool>>,
+/// Rewrite every `Call` / `MethodCall` of a confirmed function in `body`:
+/// drop the dead-position arguments, collapsing a receiver-dropped
+/// `MethodCall` into a plain `Call`.
+fn rewrite_calls_in_body(body: &mut Body, confirmed: &IndexMap<FnKey, Vec<bool>>) {
+    let mut calls = Vec::new();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(id) = node
+            && matches!(
+                &body.exprs[id].kind,
+                ExprKind::Call { .. } | ExprKind::MethodCall { .. }
+            )
+        {
+            calls.push(id);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    // Each rewrite drops arguments / collapses by the callee's dead set,
+    // independent of the call's position, so processing order does not matter.
+    for id in calls {
+        rewrite_call(body, id, confirmed);
+    }
 }
 
-impl NirMutVisitor for CallRewriter<'_> {
-    fn visit_expr(&mut self, expr: &mut NirExpr) {
-        // First descend so nested calls are rewritten with the same rules
-        // before we mutate the current expression's shape.
-        self.walk_expr(expr);
-
-        match &mut expr.kind {
-            NirExprKind::Call { func, args, .. } => {
-                let key = (func.module_source.clone(), func.name.clone());
-                if let Some(dead) = self.confirmed.get(&key) {
-                    let mut i = 0;
-                    args.retain(|_| {
-                        let alive = !dead.get(i).copied().unwrap_or(false);
-                        i += 1;
-                        alive
-                    });
-                }
-            }
-            NirExprKind::MethodCall { func, args, .. } => {
-                let key = (func.module_source.clone(), func.name.clone());
-                let Some(dead) = self.confirmed.get(&key).cloned() else {
-                    return;
-                };
-                let drops_receiver = dead.first() == Some(&true);
-                if drops_receiver {
-                    // The callee's receiver was DAE'd: collapse
-                    // `MethodCall(recv, name, args)` to a plain
-                    // `Call(method_func, surviving_args)`. The receiver
-                    // expression has already been verified pure by
-                    // `CallSiteValidator`; dropping it is safe.
-                    let NirExprKind::MethodCall {
-                        func,
-                        type_args,
-                        args,
-                        ..
-                    } = std::mem::replace(&mut expr.kind, NirExprKind::Unit)
-                    else {
-                        unreachable!();
-                    };
-                    let mut new_args = Vec::with_capacity(args.len());
-                    for (idx, arg) in args.into_iter().enumerate() {
-                        // dead[idx + 1] corresponds to args[idx] (params[i+1]).
-                        if dead.get(idx + 1).copied().unwrap_or(false) {
-                            continue;
-                        }
-                        new_args.push(arg);
-                    }
-                    expr.kind = NirExprKind::Call {
-                        func,
-                        type_args,
-                        args: new_args,
-                    };
-                } else {
-                    // Dead positions are indexed against the callee's
-                    // params; shift by one to skip the receiver position
-                    // (kept here either because it is alive or because the
-                    // function is not a closure `__call`).
-                    let mut i = 0;
-                    args.retain(|_| {
-                        let alive = !dead.get(i + 1).copied().unwrap_or(false);
-                        i += 1;
-                        alive
-                    });
-                }
-            }
-            _ => {}
+fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<bool>>) {
+    let key = match &body.exprs[id].kind {
+        ExprKind::Call { func, .. } | ExprKind::MethodCall { func, .. } => {
+            (func.module_source.clone(), func.name.clone())
         }
+        _ => return,
+    };
+    let Some(dead) = confirmed.get(&key).cloned() else {
+        return;
+    };
+    match &mut body.exprs[id].kind {
+        ExprKind::Call { args, .. } => {
+            let mut i = 0;
+            args.retain(|_| {
+                let alive = !dead.get(i).copied().unwrap_or(false);
+                i += 1;
+                alive
+            });
+        }
+        ExprKind::MethodCall { .. } => {
+            let drops_receiver = dead.first() == Some(&true);
+            if drops_receiver {
+                // Collapse `MethodCall(recv, name, args)` to `Call(method_func,
+                // surviving_args)`. The receiver was verified pure, so dropping
+                // it (along with the dead `args`) is observation-free.
+                let ExprKind::MethodCall {
+                    func,
+                    type_args,
+                    args,
+                    ..
+                } = std::mem::replace(&mut body.exprs[id].kind, ExprKind::Unit)
+                else {
+                    unreachable!();
+                };
+                let mut new_args = Vec::with_capacity(args.len());
+                for (idx, arg) in args.into_iter().enumerate() {
+                    // dead[idx + 1] corresponds to args[idx] (params[i+1]).
+                    if dead.get(idx + 1).copied().unwrap_or(false) {
+                        continue;
+                    }
+                    new_args.push(arg);
+                }
+                body.exprs[id].kind = ExprKind::Call {
+                    func,
+                    type_args,
+                    args: new_args,
+                };
+            } else if let ExprKind::MethodCall { args, .. } = &mut body.exprs[id].kind {
+                let mut i = 0;
+                args.retain(|_| {
+                    let alive = !dead.get(i + 1).copied().unwrap_or(false);
+                    i += 1;
+                    alive
+                });
+            }
+        }
+        _ => {}
     }
 }
 
@@ -517,48 +514,77 @@ fn shrink_params_and_renumber(func: &mut NirFunction, dead: &[bool]) {
         .filter_map(|i| remap[*i as usize])
         .collect();
 
-    // Apply the remap to every Local / Capture reference in the body via a
-    // generic `NirMutVisitor` walk, overriding only the leaves that carry
-    // local indices. The `Closure` arm explicitly stops the walk before
-    // entering the closure body — closure-locals live in a separate index
-    // namespace and the outer remap must not touch them.
+    // Apply the remap to every `Local` / `Let` / `Binding` local index in the
+    // body. Closures are functor structs in NIR, so there is no nested-body
+    // local namespace to skip.
     if let Some(body) = func.body.as_mut() {
-        LocalRemap { remap: &remap }.visit_block(body);
+        remap_locals(body, &remap);
     }
 }
 
-struct LocalRemap<'a> {
-    remap: &'a [Option<u32>],
+fn remap_locals(body: &mut Body, remap: &[Option<u32>]) {
+    let lookup = |idx: u32| remap[idx as usize].expect("dead local referenced after DAE rewrite");
+
+    let mut exprs = Vec::new();
+    let mut stmts = Vec::new();
+    let mut pats = Vec::new();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        match node {
+            NodeRef::Expr(id) => exprs.push(id),
+            NodeRef::Stmt(id) => stmts.push(id),
+            NodeRef::Pat(id) => pats.push(id),
+            NodeRef::Block(_) => {}
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    for id in exprs {
+        if let ExprKind::Local { index, .. } = &mut body.exprs[id].kind {
+            *index = lookup(*index);
+        }
+    }
+    for id in stmts {
+        if let StmtKind::Let { local_index, .. } = &mut body.stmts[id].kind {
+            *local_index = lookup(*local_index);
+        }
+    }
+    for id in pats {
+        if let PatKind::Binding { local_index, .. } = &mut body.pats[id].kind {
+            *local_index = lookup(*local_index);
+        }
+    }
 }
 
-impl LocalRemap<'_> {
-    fn lookup(&self, idx: u32) -> u32 {
-        self.remap[idx as usize].expect("dead local referenced after DAE rewrite")
-    }
+// ──────────────────────────────────────────────────────────────────────────────
+// Global initializer ↔ temporary Body
+// ──────────────────────────────────────────────────────────────────────────────
+
+fn global_to_body(expr: &NirExpr) -> Body {
+    let span = expr.span;
+    Body::from_block(&NirBlock::new(
+        vec![NirStmt::new(NirStmtKind::Expr(expr.clone()), span)],
+        span,
+    ))
 }
 
-impl NirMutVisitor for LocalRemap<'_> {
-    fn visit_expr(&mut self, expr: &mut NirExpr) {
-        match &mut expr.kind {
-            NirExprKind::Local { index, .. } => *index = self.lookup(*index),
-            _ => self.walk_expr(expr),
-        }
-    }
+fn take_global_to_body(expr: &mut NirExpr) -> Body {
+    let span = expr.span;
+    let owned = std::mem::replace(expr, NirExpr::new(NirExprKind::Unit, TypeTable::UNIT, span));
+    Body::from_block(&NirBlock::new(
+        vec![NirStmt::new(NirStmtKind::Expr(owned), span)],
+        span,
+    ))
+}
 
-    fn visit_stmt(&mut self, stmt: &mut NirStmt) {
-        match &mut stmt.kind {
-            NirStmtKind::Let { local_index, .. } => {
-                *local_index = self.lookup(*local_index);
-                self.walk_stmt(stmt);
-            }
-            _ => self.walk_stmt(stmt),
-        }
-    }
-
-    fn visit_pattern(&mut self, pattern: &mut NirPattern) {
-        if let NirPattern::Binding { local_index, .. } = pattern {
-            *local_index = self.lookup(*local_index);
-        }
-        self.walk_pattern(pattern);
-    }
+fn write_back_global(expr: &mut NirExpr, body: &Body) {
+    let block = body.to_block();
+    let stmt = block
+        .stmts
+        .into_iter()
+        .next()
+        .expect("wrapper block has one statement");
+    let NirStmtKind::Expr(e) = stmt.kind else {
+        unreachable!("wrapper statement is an expression statement");
+    };
+    *expr = e;
 }

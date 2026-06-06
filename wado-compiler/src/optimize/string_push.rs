@@ -22,13 +22,20 @@
 //! literal containing a non-ASCII byte.
 //!
 //! Empty literals are also skipped: `push_str("")` is a no-op already.
+//!
+//! Ported to the worklist rewrite engine (Phase 4 stage C; see
+//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a block-level
+//! [`Rule`]: `push_str` is a `&mut self` method whose result is dropped, so it
+//! always appears as a statement, and expanding it produces N statements — a
+//! statement-list edit (`set_block_stmts`). Nested blocks are separate worklist
+//! nodes, so the rule only ever rewrites one block's direct statement list,
+//! matching the old visitor's recurse-then-rewrite order.
 
 use crate::compiler_item::CompilerItem;
-use crate::nir::{
-    CallArg, FunctionRef, NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind, NirUnaryOp,
-};
+use crate::nir::{FunctionRef, NirUnaryOp};
+use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::{NirOptVisitor, opt_walk_block};
 use crate::tir::TypeTable;
 
 /// Maximum byte length of the literal that triggers the rewrite.
@@ -41,12 +48,13 @@ pub fn simplify_short_push_str(project: &mut NirPackage) -> bool {
     let Some(ctx) = Ctx::resolve(project) else {
         return false;
     };
-    let mut visitor = ShortPushStrVisitor { ctx };
+    let rule = ShortPushStrRule { ctx };
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        if let Some(body) = &mut func.body {
-            changed |= visitor.visit_block(body);
+        if let Some(body) = func.body.as_mut() {
+            let mut engine = Engine::new(body);
+            changed |= engine.run(&[&rule]);
         }
     }
     changed
@@ -84,84 +92,99 @@ fn func_matches(func: &FunctionRef, target: &FunctionRef) -> bool {
     func.module_source == target.module_source && func.name == target.name
 }
 
-struct ShortPushStrVisitor {
+struct ShortPushStrRule {
     ctx: Ctx,
 }
 
-impl NirOptVisitor for ShortPushStrVisitor {
-    /// A statement-level visitor is the natural fit: `push_str` is a
-    /// `&mut self` method whose result is dropped, so source-level call
-    /// sites always appear as `NirStmtKind::Expr(MethodCall(...))`.
-    /// `opt_walk_block` lets us return a fresh statement list when we
-    /// expand one `push_str` into N `push` statements.
-    fn visit_block(&mut self, block: &mut NirBlock) -> bool {
-        // First recurse into nested blocks so inner candidates are
-        // handled before we restructure the outer statement vector.
-        let mut changed = opt_walk_block(self, block);
-
-        let mut new_stmts: Vec<NirStmt> = Vec::with_capacity(block.stmts.len());
-        for stmt in std::mem::take(&mut block.stmts) {
-            if let NirStmtKind::Expr(expr) = &stmt.kind
-                && let Some(replacements) = try_split_stmt(expr, &self.ctx)
-            {
+impl Rule for ShortPushStrRule {
+    fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
+        let stmts = engine.body.blocks[id].stmts.clone();
+        let mut new_stmts: Vec<StmtId> = Vec::with_capacity(stmts.len());
+        let mut changed = false;
+        for stmt in stmts {
+            if let Some(replacements) = try_split_stmt(engine, stmt, &self.ctx) {
                 new_stmts.extend(replacements);
                 changed = true;
             } else {
                 new_stmts.push(stmt);
             }
         }
-        block.stmts = new_stmts;
+        if changed {
+            engine.set_block_stmts(id, new_stmts);
+        }
         changed
     }
 }
 
-fn try_split_stmt(expr: &NirExpr, ctx: &Ctx) -> Option<Vec<NirStmt>> {
-    let NirExprKind::MethodCall {
-        receiver,
-        func,
-        args,
-        ..
-    } = &expr.kind
-    else {
+/// If `stmt` is a `place.push_str("short")` statement with a duplicable
+/// receiver and a short ASCII literal, build the equivalent per-byte
+/// `place.push(ch)` statements and return them; otherwise `None`.
+fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<StmtId>> {
+    let StmtKind::Expr(expr_id) = engine.body.stmts[stmt].kind else {
         return None;
     };
-    if !func_matches(func, &ctx.push_str) || args.len() != 1 {
+
+    let (receiver, arg0) = {
+        let ExprKind::MethodCall {
+            receiver,
+            func,
+            args,
+            ..
+        } = &engine.body.exprs[expr_id].kind
+        else {
+            return None;
+        };
+        if !func_matches(func, &ctx.push_str) || args.len() != 1 {
+            return None;
+        }
+        (*receiver, args[0].expr)
+    };
+
+    if !is_duplicable_receiver(&*engine.body, receiver) {
         return None;
     }
-    if !is_duplicable_receiver(receiver) {
-        return None;
-    }
+
     // `push_str` takes `&String`, so every call site — source-level
     // `push_str(&"...")` and template lowering alike — passes the literal
     // through an explicit `Ref`. Match through it to reach the
     // `StringLiteral`.
-    let NirExprKind::Unary {
-        op: NirUnaryOp::Ref,
-        expr: inner,
-    } = &args[0].expr.kind
-    else {
-        return None;
-    };
-    let NirExprKind::StringLiteral(s) = &inner.kind else {
-        return None;
+    let s = {
+        let ExprKind::Unary {
+            op: NirUnaryOp::Ref,
+            expr: inner,
+        } = &engine.body.exprs[arg0].kind
+        else {
+            return None;
+        };
+        let ExprKind::StringLiteral(s) = &engine.body.exprs[*inner].kind else {
+            return None;
+        };
+        s.clone()
     };
     if s.is_empty() || s.len() > MAX_SHORT_PUSH_STR_LEN || !s.is_ascii() {
         return None;
     }
 
-    let span = expr.span;
+    let span = engine.body.exprs[expr_id].span;
     let mut stmts = Vec::with_capacity(s.len());
     for byte in s.bytes() {
         let ch = char::from(byte);
-        let char_arg = NirExpr::new(NirExprKind::CharLiteral(ch), TypeTable::CHAR, span);
-        let kind = NirExprKind::method_call(
-            Box::new((**receiver).clone()),
-            ctx.push_char.clone(),
-            Vec::new(),
-            vec![CallArg::new(char_arg, false)],
+        let recv_clone = engine.clone_expr(receiver);
+        let char_arg = engine.alloc_expr(ExprKind::CharLiteral(ch), TypeTable::CHAR, span);
+        let call = engine.alloc_expr(
+            ExprKind::MethodCall {
+                receiver: recv_clone,
+                func: ctx.push_char.clone(),
+                type_args: Vec::new(),
+                args: vec![ArenaCallArg {
+                    expr: char_arg,
+                    is_mut: false,
+                }],
+            },
+            TypeTable::UNIT,
+            span,
         );
-        let call_expr = NirExpr::new(kind, TypeTable::UNIT, span);
-        stmts.push(NirStmt::new(NirStmtKind::Expr(call_expr), span));
+        stmts.push(engine.alloc_stmt(StmtKind::Expr(call), span));
     }
     Some(stmts)
 }
@@ -174,48 +197,17 @@ fn try_split_stmt(expr: &NirExpr, ctx: &Ctx) -> Option<Vec<NirStmt>> {
 /// `MethodCall` receiver can syntactically be: it must be a place, so
 /// in practice we only ever see `Local`, an `&mut`-wrapped `Local`, or
 /// a `FieldAccess` chain rooted at a `Local`. The broader leaves
-/// (`Capture`, `GlobalVarGet`) are accepted defensively because they
-/// are pure reads with no observable side effects of their own — were
-/// they to appear here, cloning them would still be sound.
-fn is_duplicable_receiver(e: &NirExpr) -> bool {
-    match &e.kind {
-        NirExprKind::Local { .. } | NirExprKind::GlobalVarGet { .. } => true,
-        NirExprKind::FieldAccess { expr: inner, .. } => is_duplicable_receiver(inner),
-        NirExprKind::Unary {
+/// (`GlobalVarGet`) are accepted defensively because they are pure reads
+/// with no observable side effects of their own — were they to appear
+/// here, cloning them would still be sound.
+fn is_duplicable_receiver(body: &Body, id: ExprId) -> bool {
+    match &body.exprs[id].kind {
+        ExprKind::Local { .. } | ExprKind::GlobalVarGet { .. } => true,
+        ExprKind::FieldAccess { expr: inner, .. } => is_duplicable_receiver(body, *inner),
+        ExprKind::Unary {
             op: NirUnaryOp::Deref | NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
-        } => is_duplicable_receiver(inner),
-        NirExprKind::Unary { .. }
-        | NirExprKind::Binary { .. }
-        | NirExprKind::Cast { .. }
-        | NirExprKind::Assign { .. }
-        | NirExprKind::Index { .. }
-        | NirExprKind::Call { .. }
-        | NirExprKind::MethodCall { .. }
-        | NirExprKind::CmRawCall { .. }
-        | NirExprKind::IndirectCall { .. }
-        | NirExprKind::ClosureToCanonical { .. }
-        | NirExprKind::Block(_)
-        | NirExprKind::LabeledBlock { .. }
-        | NirExprKind::If { .. }
-        | NirExprKind::Match { .. }
-        | NirExprKind::Switch { .. }
-        | NirExprKind::StructLiteral { .. }
-        | NirExprKind::TupleLiteral { .. }
-        | NirExprKind::ArrayLiteral { .. }
-        | NirExprKind::VariantConstruct { .. }
-        | NirExprKind::VariantTag { .. }
-        | NirExprKind::VariantTest { .. }
-        | NirExprKind::VariantPayload { .. }
-        | NirExprKind::GlobalVarSet { .. }
-        | NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::EnumConstruct { .. } => false,
+        } => is_duplicable_receiver(body, *inner),
+        _ => false,
     }
 }

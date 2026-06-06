@@ -59,17 +59,54 @@ One change, three wins:
   whole-tree passes and a global fixed point; phase-ordering hazards mostly
   disappear because the rules co-exist rather than run in a fixed sequence.
 
+## IR substrate
+
+The engine needs what the current owned `Box<NirExpr>` tree lacks: stable node
+handles, parent edges, and a per-local use index to drive the worklist. The
+substrate is two layers, split on the only distinction rewriting cares about —
+whether a node is a referentially-transparent value or an ordered effect.
+
+- Layer 1 — effect skeleton: a flat per-function arena (`NodeId` + parent +
+  use index) for statements, control flow, places, memory writes, and
+  effectful expressions. Parent is unique; the worklist is the classic tree
+  walk. This is the only layer the engine strictly requires.
+- Layer 2 — pure-value e-graph: a hash-consed acyclic e-graph for
+  referentially-transparent expressions, whose value ids the skeleton's leaf
+  operands reference. Rewrites are non-destructive (add an equivalence), CSE /
+  GVN fall out for free, and "rewrite to canonical" is O(1); a final extraction
+  picks the best form. This is the acyclic e-graph / equality-saturation step
+  the engine does not depend on.
+
+Keeping them as two layers rather than one uniform arena is deliberate:
+identity differs (skeleton = ordered position keyed by `NodeId`, carrying
+`span`; e-graph = structure keyed by hash-cons, span-free) and so does the
+re-enqueue discipline (skeleton: a node's unique parent; e-graph: the
+congruence parents of a merged class). Wado's aliasing, places, and value-copy
+semantics keep the pure partition small — a `FieldAccess` read is not pure
+across an intervening write — so the boundary is gated by the existing
+`optimize/mod_ref.rs` referential-transparency check, not by node kind alone.
+The reference design is Cranelift's aegraph mid-end (side-effecting skeleton +
+pure e-graph + elaboration). SSA / sea-of-nodes is rejected for the same reason
+NIR keeps its tree shape (see [NIR Layer](./wep-2026-05-11-nir.md)): it
+dissolves the structured control flow Wasm re-emits directly.
+
+Layer 1 is the NIR representation itself, not a conversion boundary wrapped
+around the tree — a boundary is overhead the engine cannot see across,
+justified only by saved work, which this WEP does not trade for. Sequencing:
+
+- [ ] Layer 1 — land the effect-skeleton arena as the NIR representation.
+- [ ] The rewrite engine on top of Layer 1.
+- [ ] Layer 2 (the e-graph) — revisited and re-decided only after the engine
+      lands and its effect is measured; not a prerequisite.
+
 ## Consequences
 
 Deferred, to avoid prejudging the detailed design:
 
-- The IR representation. An arena / `NodeId` form with hash-consing is a
-  separate proposal. It is not strictly required by this WEP, but it is the
-  natural substrate: a worklist wants stable node handles and use/parent edges,
-  and hash-consing makes "rewrite to an existing canonical node" O(1) and folds
-  CSE in for free. The recommended sequencing is arena+hash-consing first, this
-  engine on top. An acyclic e-graph / equality-saturation extraction is a
-  further, more independent step beyond plain hash-consing.
+- The Layer 1 arena's field-level layout (`NodeId` space, parent / use-edge
+  storage) and where the Layer 1 / Layer 2 boundary sits in the type system.
+  The substrate's shape and sequencing are settled in
+  [IR substrate](#ir-substrate); only the detailed layout is open.
 - The exact worklist data structure, fairness, and rule-conflict policy.
 - The migration order, and how long the old pass loop and the new engine
   co-exist.

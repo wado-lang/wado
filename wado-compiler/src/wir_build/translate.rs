@@ -6,14 +6,12 @@
 use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{
-    NirBinaryOp, NirBlock, NirExpr, NirExprKind, NirFunction, NirParam, NirStmt, NirStmtKind,
-    NirUnaryOp,
-};
+use crate::nir::{NirBinaryOp, NirFunction, NirParam, NirStmt, NirStmtKind, NirUnaryOp};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{CanonicalIntrinsic, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
 use super::context::WirContext;
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
 
 /// Recursively collect variable names from Let statements.
 ///
@@ -866,7 +864,8 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
             for param in &tir_func.params {
                 local_names.insert(param.local_index, param.name.clone());
             }
-            collect_let_names(&mut local_names, &body.stmts);
+            let body_tree = body.to_block();
+            collect_let_names(&mut local_names, &body_tree.stmts);
             for (idx, local) in tir_func.locals.iter().enumerate() {
                 let key = u32::try_from(idx).unwrap();
                 local_names.entry(key).or_insert_with(|| local.name.clone());
@@ -880,6 +879,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     ctx: &mut *ctx,
                     type_table: &type_table,
                     tir_func: &tir_func,
+                    body,
                     label_stack: Vec::new(),
                     match_counter: 0,
                     local_counter: 0,
@@ -887,7 +887,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     immutable_locals: IndexSet::default(),
                     multi_value_split_locals: IndexMap::default(),
                 };
-                translator.translate_block(body)
+                translator.translate_block(body.root)
             };
             apply_cold_path_hints(&mut wir_body);
             let _ = type_table;
@@ -912,6 +912,7 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     pub(super) ctx: &'a mut WirContext<'b>,
     pub(super) type_table: &'a TypeTable,
     pub(super) tir_func: &'a NirFunction,
+    pub(super) body: &'a Body,
     /// Stack of Wasm block scopes for computing br depths.
     pub(super) label_stack: Vec<LabelEntry>,
     /// Counter for generating unique match scrutinee local names.
@@ -1037,7 +1038,7 @@ impl FunctionTranslator<'_, '_> {
     /// is the TIR local name. Subsequent
     /// `FieldAccess(LocalGet(local), name)` accesses read the matching
     /// split local directly via `multi_value_split_locals`.
-    fn try_emit_multi_value_let(&mut self, local_index: u32, value: &NirExpr) -> Option<WirInstr> {
+    fn try_emit_multi_value_let(&mut self, local_index: u32, value: ExprId) -> Option<WirInstr> {
         // Only fire on direct `Call(f)` / `MethodCall(f)` initialisers —
         // wrapped calls (e.g. inlined Block) should have been simplified
         // before this point. Wrapped calls would also break the
@@ -1045,8 +1046,8 @@ impl FunctionTranslator<'_, '_> {
         // expects. `MethodCall` lowers to a single `WirInstr::Call` after
         // receiver / arg translation, so it's interchangeable with `Call`
         // for the multi-value-bind purpose.
-        let func = match &value.kind {
-            NirExprKind::Call { func, .. } | NirExprKind::MethodCall { func, .. } => func,
+        let func = match &self.body.exprs[value].kind {
+            ExprKind::Call { func, .. } | ExprKind::MethodCall { func, .. } => func,
             _ => return None,
         };
         let key = (func.name.clone(), func.module_source.clone());
@@ -1095,8 +1096,12 @@ impl FunctionTranslator<'_, '_> {
     fn tuple_constructor_args(
         &mut self,
         tuple_type_id: crate::tir::TypeId,
-        elements: &[NirExpr],
+        elements: &[ExprId],
     ) -> (WirTypeId, Vec<WirInstr>) {
+        let elem_type_ids: Vec<crate::tir::TypeId> = elements
+            .iter()
+            .map(|e| self.body.exprs[*e].type_id)
+            .collect();
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, tuple_type_id);
         let wir_type_id = match &wir_type {
             WirType::Ref { type_id, .. } => Some(type_id.clone()),
@@ -1106,10 +1111,10 @@ impl FunctionTranslator<'_, '_> {
                 // `type_id_to_wir_type` to return I32 or AbstractRef instead
                 // of Ref. Fall back to matching by element WIR types.
                 self.ctx
-                    .find_tuple_type_for_elements(self.type_table, elements)
+                    .find_tuple_type_for_elements(self.type_table, &elem_type_ids)
                     .or_else(|| {
                         self.ctx
-                            .define_tuple_struct_for_elements(self.type_table, elements)
+                            .define_tuple_struct_for_elements(self.type_table, &elem_type_ids)
                     })
             }
             _ => None,
@@ -1123,11 +1128,13 @@ impl FunctionTranslator<'_, '_> {
         // Filter out unit-typed elements before borrowing self mutably to
         // translate them; chaining the filter into the iterator below would
         // double-borrow self.
-        let non_unit: Vec<&NirExpr> = elements
+        let non_unit: Vec<ExprId> = elements
             .iter()
+            .copied()
             .filter(|e| {
                 !matches!(
-                    self.ctx.type_id_to_wir_type(self.type_table, e.type_id),
+                    self.ctx
+                        .type_id_to_wir_type(self.type_table, self.body.exprs[*e].type_id),
                     WirType::Unit
                 )
             })
@@ -1140,7 +1147,7 @@ impl FunctionTranslator<'_, '_> {
         (type_id, fields)
     }
 
-    /// Lower a `NirExprKind::ArrayLiteral` to the `Array<T>` struct shape
+    /// Lower a `ExprKind::ArrayLiteral` to the `Array<T>` struct shape
     /// `struct.new List<T> { repr: array.new_fixed<T>(e0, …, eN-1), used: N }`.
     ///
     /// `List<T>` is `{ repr: builtin::array<T>, used: i32 }` (see
@@ -1153,7 +1160,7 @@ impl FunctionTranslator<'_, '_> {
     fn build_array_literal(
         &mut self,
         array_type_id: crate::tir::TypeId,
-        elements: &[NirExpr],
+        elements: &[ExprId],
     ) -> WirInstr {
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, array_type_id);
         let WirType::Ref { type_id, .. } = wir_type else {
@@ -1170,7 +1177,7 @@ impl FunctionTranslator<'_, '_> {
             panic!("[WIR] ArrayLiteral: List<T> struct {type_id:?} has no `repr` array field");
         };
         let element_instrs: Vec<WirInstr> =
-            elements.iter().map(|e| self.translate_expr(e)).collect();
+            elements.iter().map(|e| self.translate_expr(*e)).collect();
         let used = i32::try_from(element_instrs.len())
             .unwrap_or_else(|_| panic!("[WIR] array literal has more than i32::MAX elements"));
         self.struct_new(
@@ -1255,7 +1262,9 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Translate the top-level function body: declares locals and translates statements.
-    fn translate_block(&mut self, block: &NirBlock) -> Vec<WirInstr> {
+    fn translate_block(&mut self, block_id: BlockId) -> Vec<WirInstr> {
+        let arena = self.body;
+        let block = &arena.blocks[block_id];
         let mut instrs = Vec::new();
 
         // Declare local variables.
@@ -1294,10 +1303,10 @@ impl FunctionTranslator<'_, '_> {
 
     /// Scan statements recursively to discover Let declarations and emit `DeclareLocal`.
     /// Used when `local_types` is empty (for functions from library modules).
-    fn declare_locals_from_stmts(&self, instrs: &mut Vec<WirInstr>, stmts: &[NirStmt]) {
-        for stmt in stmts {
-            match &stmt.kind {
-                NirStmtKind::Let {
+    fn declare_locals_from_stmts(&self, instrs: &mut Vec<WirInstr>, stmts: &[StmtId]) {
+        for stmt_id in stmts {
+            match &self.body.stmts[*stmt_id].kind {
+                StmtKind::Let {
                     local_index,
                     type_id,
                     ..
@@ -1316,21 +1325,21 @@ impl FunctionTranslator<'_, '_> {
                         }
                     }
                 }
-                NirStmtKind::Loop { body } => {
-                    self.declare_locals_from_stmts(instrs, &body.stmts);
+                StmtKind::Loop { body } => {
+                    self.declare_locals_from_stmts(instrs, &self.body.blocks[*body].stmts);
                 }
-                NirStmtKind::If {
+                StmtKind::If {
                     then_block,
                     else_block,
                     ..
                 } => {
-                    self.declare_locals_from_stmts(instrs, &then_block.stmts);
+                    self.declare_locals_from_stmts(instrs, &self.body.blocks[*then_block].stmts);
                     if let Some(eb) = else_block {
-                        self.declare_locals_from_stmts(instrs, &eb.stmts);
+                        self.declare_locals_from_stmts(instrs, &self.body.blocks[*eb].stmts);
                     }
                 }
-                NirStmtKind::LabeledBlock { block, .. } => {
-                    self.declare_locals_from_stmts(instrs, &block.stmts);
+                StmtKind::LabeledBlock { block, .. } => {
+                    self.declare_locals_from_stmts(instrs, &self.body.blocks[*block].stmts);
                 }
                 _ => {}
             }
@@ -1338,10 +1347,10 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Translate a list of TIR statements to WIR instructions (no local declarations).
-    pub(super) fn translate_stmts(&mut self, stmts: &[NirStmt]) -> Vec<WirInstr> {
+    pub(super) fn translate_stmts(&mut self, stmts: &[StmtId]) -> Vec<WirInstr> {
         let mut instrs = Vec::new();
-        for stmt in stmts {
-            if let Some(instr) = self.translate_stmt(stmt) {
+        for stmt_id in stmts {
+            if let Some(instr) = self.translate_stmt(*stmt_id) {
                 instrs.push(instr);
             }
         }
@@ -1354,29 +1363,19 @@ impl FunctionTranslator<'_, '_> {
     /// The last `Expr` statement is NOT dropped; it stays on the Wasm stack as the result.
     /// Also handles statement-level If/IfLet as value-producing when they're the
     /// last statement (TIR stores these as statements, not expressions).
-    pub(super) fn translate_stmts_as_value(&mut self, stmts: &[NirStmt]) -> Vec<WirInstr> {
+    pub(super) fn translate_stmts_as_value(&mut self, stmts: &[StmtId]) -> Vec<WirInstr> {
+        let arena = self.body;
         let mut instrs = Vec::new();
         let len = stmts.len();
-        for (i, stmt) in stmts.iter().enumerate() {
+        for (i, stmt_id) in stmts.iter().enumerate() {
             let is_last = i + 1 == len;
             if is_last {
                 // Last statement: if it's an Expr, translate without drop
-                if let NirStmtKind::Expr(expr) = &stmt.kind {
+                if let StmtKind::Expr(expr) = &arena.stmts[*stmt_id].kind {
+                    let expr = *expr;
                     let instr = self.translate_expr_as_value(expr);
                     instrs.push(instr);
-                    // Note: `translate_expr` already appends `unreachable` for
-                    // `never`-typed expressions, so no extra push is needed here.
-                    // For UNIT-typed expressions, all paths exit via break/return,
-                    // so the fall-through is dead code — mark it explicitly so the
-                    // Wasm validator knows the enclosing value-block's `end` is
-                    // unreachable (void intermediate blocks don't push the expected
-                    // typed result to the outer block's type stack).
-                    //
-                    // If the translated instruction already ends with an
-                    // unconditional branch / return / `unreachable`, the
-                    // polymorphic-stack rule covers the typed-block `end`
-                    // without a trailing `unreachable`.
-                    if expr.type_id == TypeTable::UNIT
+                    if arena.exprs[expr].type_id == TypeTable::UNIT
                         && !instrs.last().is_some_and(WirInstr::ends_with_terminator)
                     {
                         instrs.push(WirInstr::Unreachable);
@@ -1384,58 +1383,39 @@ impl FunctionTranslator<'_, '_> {
                     continue;
                 }
                 // Statement-level If with else can produce a value
-                if let NirStmtKind::If {
+                if let StmtKind::If {
                     condition,
                     then_block,
                     else_block: Some(else_block),
                     ..
-                } = &stmt.kind
-                    && let Some(result_type) = self.infer_stmts_result_type(&then_block.stmts)
+                } = &arena.stmts[*stmt_id].kind
                 {
-                    let cond = self.translate_expr(condition);
-                    self.label_stack.push(LabelEntry {
-                        label: None,
-                        is_loop_break: false,
-                        is_loop_continue: false,
-                    });
-                    let then_body = self.translate_stmts_as_value(&then_block.stmts);
-                    let else_body = Some(self.translate_stmts_as_value(&else_block.stmts));
-                    self.label_stack.pop();
-                    instrs.push(WirInstr::If {
-                        condition: Box::new(cond),
-                        result: Some(result_type),
-                        then_body,
-                        else_body,
-                    });
-                    continue;
+                    let condition = *condition;
+                    let then_block = *then_block;
+                    let else_block = *else_block;
+                    if let Some(result_type) = self.infer_stmts_result_type(then_block) {
+                        let cond = self.translate_expr(condition);
+                        self.label_stack.push(LabelEntry {
+                            label: None,
+                            is_loop_break: false,
+                            is_loop_continue: false,
+                        });
+                        let then_body =
+                            self.translate_stmts_as_value(&arena.blocks[then_block].stmts);
+                        let else_body =
+                            Some(self.translate_stmts_as_value(&arena.blocks[else_block].stmts));
+                        self.label_stack.pop();
+                        instrs.push(WirInstr::If {
+                            condition: Box::new(cond),
+                            result: Some(result_type),
+                            then_body,
+                            else_body,
+                        });
+                        continue;
+                    }
                 }
             }
-            if let Some(instr) = self.translate_stmt(stmt) {
-                // In a value-producing block, a final statement that does not push
-                // a value to the Wasm stack means the enclosing typed block must be
-                // exited exclusively via labeled `break`/`return` from inside the
-                // statement.  The normal fall-through at the block's `end` is therefore
-                // unreachable; append `unreachable` so the Wasm validator accepts the
-                // typed block even when it has no stack value at the `end`.
-                //
-                // When the instruction already ends with an
-                // unconditional branch / return / `unreachable`
-                // (`ends_with_terminator`), the Wasm validator's
-                // polymorphic stack rule accepts the implicit `end`
-                // without a trailing `unreachable`. Skipping it here
-                // trims the dead opcodes the issue calls "C1" (dead
-                // code after `break`). NOTE: do not widen this to
-                // `always_diverges` — Wasm validation does not treat
-                // `if` with both diverging arms as polymorphic, so
-                // skipping the trailing `unreachable` after such an
-                // `if` would produce an invalid module.
-                //
-                // This covers all non-value-producing last statements:
-                //  - explicit divergence (Return, Br, BrTable, Unreachable)
-                //  - void blocks / loops whose only exits are outer labeled breaks
-                //    (e.g. a TIR `loop {}` translated to `Block{result:None,[Loop{…}]}`)
-                //  - any other void WIR instruction that should never reach this point
-                //    in well-typed TIR
+            if let Some(instr) = self.translate_stmt(*stmt_id) {
                 let needs_unreachable =
                     is_last && !instr.produces_stack_value() && !instr.ends_with_terminator();
                 instrs.push(instr);
@@ -1447,54 +1427,62 @@ impl FunctionTranslator<'_, '_> {
         instrs
     }
 
-    /// Infer the WIR result type from the last statement in a list.
+    /// Infer the WIR result type from the last statement in a block.
     /// Returns `Some(type)` if the last statement can produce a value, `None` otherwise.
-    fn infer_stmts_result_type(&self, stmts: &[NirStmt]) -> Option<WirType> {
-        stmts.last().and_then(|stmt| match &stmt.kind {
-            NirStmtKind::Expr(expr) => {
-                if expr.type_id != TypeTable::UNIT && expr.type_id != TypeTable::NEVER {
-                    Some(self.ctx.type_id_to_wir_type(self.type_table, expr.type_id))
-                } else {
-                    None
+    fn infer_stmts_result_type(&self, block_id: BlockId) -> Option<WirType> {
+        let arena = self.body;
+        arena.blocks[block_id]
+            .stmts
+            .last()
+            .and_then(|stmt_id| match &arena.stmts[*stmt_id].kind {
+                StmtKind::Expr(expr) => {
+                    let ty = arena.exprs[*expr].type_id;
+                    if ty != TypeTable::UNIT && ty != TypeTable::NEVER {
+                        Some(self.ctx.type_id_to_wir_type(self.type_table, ty))
+                    } else {
+                        None
+                    }
                 }
-            }
-            NirStmtKind::If {
-                then_block,
-                else_block: Some(_),
-                ..
-            } => self.infer_stmts_result_type(&then_block.stmts),
-            _ => None,
-        })
+                StmtKind::If {
+                    then_block,
+                    else_block: Some(_),
+                    ..
+                } => self.infer_stmts_result_type(*then_block),
+                _ => None,
+            })
     }
 
     /// Translate an expression in "value position" — the result stays on the Wasm stack.
     ///
     /// Handles cases where TIR assigns UNIT type to expressions that actually produce
     /// values in a given context (e.g., nested if expressions, chained assignments).
-    pub(super) fn translate_expr_as_value(&mut self, expr: &NirExpr) -> WirInstr {
+    pub(super) fn translate_expr_as_value(&mut self, expr_id: ExprId) -> WirInstr {
+        let arena = self.body;
         // If the expression already has a non-UNIT type, translate normally
-        if expr.type_id != TypeTable::UNIT {
-            return self.translate_expr(expr);
+        if arena.exprs[expr_id].type_id != TypeTable::UNIT {
+            return self.translate_expr(expr_id);
         }
 
-        match &expr.kind {
+        match &arena.exprs[expr_id].kind {
             // If expression with UNIT type but value-producing branches
-            NirExprKind::If {
+            ExprKind::If {
                 condition,
                 then_branch,
                 else_branch,
             } => {
-                if let Some(result_type) = self.infer_stmts_result_type(&then_branch.stmts) {
+                let condition = *condition;
+                let then_branch = *then_branch;
+                let else_branch = *else_branch;
+                if let Some(result_type) = self.infer_stmts_result_type(then_branch) {
                     let cond = self.translate_expr(condition);
                     self.label_stack.push(LabelEntry {
                         label: None,
                         is_loop_break: false,
                         is_loop_continue: false,
                     });
-                    let then_body = self.translate_stmts_as_value(&then_branch.stmts);
-                    let else_body = else_branch
-                        .as_ref()
-                        .map(|b| self.translate_stmts_as_value(&b.stmts));
+                    let then_body = self.translate_stmts_as_value(&arena.blocks[then_branch].stmts);
+                    let else_body =
+                        else_branch.map(|b| self.translate_stmts_as_value(&arena.blocks[b].stmts));
                     self.label_stack.pop();
                     return WirInstr::If {
                         condition: Box::new(cond),
@@ -1503,25 +1491,27 @@ impl FunctionTranslator<'_, '_> {
                         else_body,
                     };
                 }
-                self.translate_expr(expr)
+                self.translate_expr(expr_id)
             }
             // Block with UNIT type but value-producing last expression
-            NirExprKind::Block(block) => {
-                if self.infer_stmts_result_type(&block.stmts).is_some() {
-                    let body = self.translate_stmts_as_value(&block.stmts);
+            ExprKind::Block(block) => {
+                let block = *block;
+                if self.infer_stmts_result_type(block).is_some() {
+                    let body = self.translate_stmts_as_value(&arena.blocks[block].stmts);
                     WirInstr::Seq(body)
                 } else {
-                    self.translate_expr(expr)
+                    self.translate_expr(expr_id)
                 }
             }
-            _ => self.translate_expr(expr),
+            _ => self.translate_expr(expr_id),
         }
     }
 
     /// Translate a TIR statement to a WIR instruction.
-    fn translate_stmt(&mut self, stmt: &NirStmt) -> Option<WirInstr> {
-        match &stmt.kind {
-            NirStmtKind::Let {
+    fn translate_stmt(&mut self, stmt_id: StmtId) -> Option<WirInstr> {
+        let arena = self.body;
+        match &arena.stmts[stmt_id].kind {
+            StmtKind::Let {
                 local_index,
                 value,
                 is_mut,
@@ -1539,17 +1529,17 @@ impl FunctionTranslator<'_, '_> {
                 // elements into N split locals via `MultiValueLocalBind`
                 // instead of trying to `LocalSet` the multi-value-Call
                 // result into a single local (which Wasm doesn't allow).
-                if let Some(instrs) = self.try_emit_multi_value_let(*local_index, value) {
+                if let Some(instrs) = self.try_emit_multi_value_let(*local_index, *value) {
                     return Some(instrs);
                 }
-                let value_instr = self.translate_expr(value);
+                let value_instr = self.translate_expr(*value);
                 // If the initializer diverges (`never`), no value reaches the stack,
                 // so LocalSet would be invalid. `translate_expr` already appends
                 // `unreachable` for `never`-typed expressions, so just emit the
                 // diverging instruction; the local is declared but never assigned.
-                if value.type_id == TypeTable::NEVER {
+                if arena.exprs[*value].type_id == TypeTable::NEVER {
                     Some(value_instr)
-                } else if value.type_id == TypeTable::UNIT {
+                } else if arena.exprs[*value].type_id == TypeTable::UNIT {
                     // Unit-type locals have no Wasm representation; just emit
                     // the init expression for its side effects (usually Nop).
                     Some(value_instr)
@@ -1565,27 +1555,27 @@ impl FunctionTranslator<'_, '_> {
                     })
                 }
             }
-            NirStmtKind::Expr(expr) => {
-                let instr = self.translate_expr(expr);
+            StmtKind::Expr(expr) => {
+                let instr = self.translate_expr(*expr);
                 // If the expression has a non-unit type, drop it.
                 // Exception: assignments and global-var-sets produce void WIR instructions
                 // (LocalSet/StructSet/ArraySet/GlobalSet), so don't wrap them in Drop.
                 let is_void_instr = matches!(
-                    &expr.kind,
-                    NirExprKind::Assign { .. } | NirExprKind::GlobalVarSet { .. }
+                    &arena.exprs[*expr].kind,
+                    ExprKind::Assign { .. } | ExprKind::GlobalVarSet { .. }
                 );
                 if !is_void_instr
-                    && expr.type_id != TypeTable::UNIT
-                    && expr.type_id != TypeTable::NEVER
+                    && arena.exprs[*expr].type_id != TypeTable::UNIT
+                    && arena.exprs[*expr].type_id != TypeTable::NEVER
                 {
                     Some(WirInstr::Drop(Box::new(instr)))
                 } else {
                     Some(instr)
                 }
             }
-            NirStmtKind::Return { value } => {
+            StmtKind::Return { value } => {
                 if let Some(expr) = value {
-                    let value_instr = self.translate_expr(expr);
+                    let value_instr = self.translate_expr(*expr);
                     // For multi-value-ABI functions, unwrap leaf
                     // `StructNew` aggregate-constructions inside the
                     // return value so the function pushes the N field
@@ -1628,7 +1618,7 @@ impl FunctionTranslator<'_, '_> {
                     Some(WirInstr::Return { value: None })
                 }
             }
-            NirStmtKind::Loop { body } => {
+            StmtKind::Loop { body } => {
                 // Generate: block { loop { <body>; br 0; } }
                 // The outer block is for break, the inner loop is for continue.
                 self.label_stack.push(LabelEntry {
@@ -1641,7 +1631,7 @@ impl FunctionTranslator<'_, '_> {
                     is_loop_break: false,
                     is_loop_continue: true,
                 });
-                let mut body_instrs = self.translate_stmts(&body.stmts);
+                let mut body_instrs = self.translate_stmts(&arena.blocks[*body].stmts);
                 // Unconditional back-edge: br 0 to loop header
                 body_instrs.push(WirInstr::Br { depth: 0 });
                 self.label_stack.pop(); // pop loop
@@ -1655,34 +1645,36 @@ impl FunctionTranslator<'_, '_> {
                     }],
                 })
             }
-            NirStmtKind::Break { label, value } => {
+            StmtKind::Break { label, value } => {
                 let depth = self.compute_break_depth(label.as_deref());
                 if let Some(val) = value {
-                    let val_instr = self.translate_expr(val);
+                    let val_instr = self.translate_expr(*val);
                     Some(WirInstr::Seq(vec![val_instr, WirInstr::Br { depth }]))
                 } else {
                     Some(WirInstr::Br { depth })
                 }
             }
-            NirStmtKind::Continue => {
+            StmtKind::Continue => {
                 let depth = self.compute_continue_depth();
                 Some(WirInstr::Br { depth })
             }
-            NirStmtKind::If {
+            StmtKind::If {
                 condition,
                 then_block,
                 else_block,
                 ..
             } => {
-                let cond = self.translate_expr(condition);
+                let cond = self.translate_expr(*condition);
                 // Push a label entry for the if block scope
                 self.label_stack.push(LabelEntry {
                     label: None,
                     is_loop_break: false,
                     is_loop_continue: false,
                 });
-                let then_body = self.translate_stmts(&then_block.stmts);
-                let else_body = else_block.as_ref().map(|b| self.translate_stmts(&b.stmts));
+                let then_body = self.translate_stmts(&arena.blocks[*then_block].stmts);
+                let else_body = else_block
+                    .as_ref()
+                    .map(|b| self.translate_stmts(&arena.blocks[*b].stmts));
                 self.label_stack.pop();
                 Some(WirInstr::If {
                     condition: Box::new(cond),
@@ -1691,13 +1683,13 @@ impl FunctionTranslator<'_, '_> {
                     else_body,
                 })
             }
-            NirStmtKind::LabeledBlock { label, block } => {
+            StmtKind::LabeledBlock { label, block } => {
                 self.label_stack.push(LabelEntry {
                     label: Some(label.clone()),
                     is_loop_break: false,
                     is_loop_continue: false,
                 });
-                let body_instrs = self.translate_stmts(&block.stmts);
+                let body_instrs = self.translate_stmts(&arena.blocks[*block].stmts);
                 self.label_stack.pop();
                 Some(WirInstr::Block {
                     label: Some(label.clone()),
@@ -1705,8 +1697,8 @@ impl FunctionTranslator<'_, '_> {
                     body: body_instrs,
                 })
             }
-            NirStmtKind::LetDestructure { pattern, value, .. } => {
-                self.translate_let_pattern(pattern, value)
+            StmtKind::LetDestructure { pattern, value, .. } => {
+                self.translate_let_pattern(*pattern, *value)
             }
         }
     }
@@ -1718,38 +1710,40 @@ impl FunctionTranslator<'_, '_> {
     /// that any subsequent type expectations in the same block are vacuously satisfied,
     /// so `never`-typed sub-expressions can appear in any value position (binary
     /// operands, struct fields, array elements, function arguments, …).
-    pub(super) fn translate_expr(&mut self, expr: &NirExpr) -> WirInstr {
-        let instr = self.translate_expr_inner(expr);
-        if expr.type_id == TypeTable::NEVER && !instr.ends_with_terminator() {
+    pub(super) fn translate_expr(&mut self, expr_id: ExprId) -> WirInstr {
+        let instr = self.translate_expr_inner(expr_id);
+        if self.body.exprs[expr_id].type_id == TypeTable::NEVER && !instr.ends_with_terminator() {
             WirInstr::Seq(vec![instr, WirInstr::Unreachable])
         } else {
             instr
         }
     }
 
-    fn translate_expr_inner(&mut self, expr: &NirExpr) -> WirInstr {
+    fn translate_expr_inner(&mut self, expr_id: ExprId) -> WirInstr {
+        let arena = self.body;
+        let expr = &arena.exprs[expr_id];
         match &expr.kind {
-            NirExprKind::IntLiteral { value, .. } => match self.type_table.get(expr.type_id) {
+            ExprKind::IntLiteral { value, .. } => match self.type_table.get(expr.type_id) {
                 ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
                     WirInstr::I64Const(*value as i64)
                 }
                 _ => WirInstr::I32Const(*value as i32),
             },
-            NirExprKind::FloatLiteral { value, .. } => match self.type_table.get(expr.type_id) {
+            ExprKind::FloatLiteral { value, .. } => match self.type_table.get(expr.type_id) {
                 ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(*value as f32),
                 _ => WirInstr::F64Const(*value),
             },
-            NirExprKind::BoolLiteral(value) => WirInstr::I32Const(i32::from(*value)),
-            NirExprKind::CharLiteral(c) => WirInstr::I32Const(*c as i32),
-            NirExprKind::StringLiteral(s) => {
+            ExprKind::BoolLiteral(value) => WirInstr::I32Const(i32::from(*value)),
+            ExprKind::CharLiteral(c) => WirInstr::I32Const(*c as i32),
+            ExprKind::StringLiteral(s) => {
                 // String literals are constructed from data segments
                 self.translate_string_literal(s)
             }
-            NirExprKind::BytesLiteral(b) => {
+            ExprKind::BytesLiteral(b) => {
                 // Bytes literals are constructed as List<u8> from data segments
                 self.translate_bytes_literal(b)
             }
-            NirExprKind::Null => {
+            ExprKind::Null => {
                 // For Option types, construct a None variant struct.
                 if let Some(inner) = self.type_table.as_option(expr.type_id) {
                     if matches!(self.type_table.get(inner), ResolvedType::Unknown) {
@@ -1773,12 +1767,12 @@ impl FunctionTranslator<'_, '_> {
                     }
                 }
             }
-            NirExprKind::Unit => {
+            ExprKind::Unit => {
                 // Unit has no value; use nop
                 WirInstr::Nop
             }
 
-            NirExprKind::Local { index, .. } => {
+            ExprKind::Local { index, .. } => {
                 // Unit and Never locals have no Wasm representation. For Unit
                 // there is nothing to push. For Never the local declaration
                 // was skipped (its initializer diverges); the surrounding
@@ -1790,7 +1784,7 @@ impl FunctionTranslator<'_, '_> {
                     self.local_get(*index)
                 }
             }
-            NirExprKind::GlobalVarGet {
+            ExprKind::GlobalVarGet {
                 module_source,
                 name,
             } => {
@@ -1800,20 +1794,21 @@ impl FunctionTranslator<'_, '_> {
                     result_ty: self.wir_type(expr.type_id),
                 }
             }
-            NirExprKind::GlobalVarSet {
+            ExprKind::GlobalVarSet {
                 module_source,
                 name,
                 value,
             } => {
                 let global_name = self.make_global_name(module_source, name);
-                let val = self.translate_expr(value);
+                let val = self.translate_expr(*value);
                 WirInstr::GlobalSet {
                     name: WirName { fq: global_name },
                     value: Box::new(val),
                 }
             }
 
-            NirExprKind::Binary { op, left, right } => {
+            ExprKind::Binary { op, left, right } => {
+                let (left, right) = (*left, *right);
                 // Short-circuit logical operators: defer right-side evaluation
                 if matches!(op, NirBinaryOp::And) {
                     let l = self.translate_expr(left);
@@ -1839,7 +1834,7 @@ impl FunctionTranslator<'_, '_> {
                 }
                 let l = Box::new(self.translate_expr(left));
                 let r = Box::new(self.translate_expr(right));
-                let result = self.translate_binary_op(op, l, r, left.type_id);
+                let result = self.translate_binary_op(op, l, r, arena.exprs[left].type_id);
                 // Truncate sub-i32 arithmetic/bitwise results to the correct width.
                 // Comparisons and logical ops return bool (i32 0/1), so skip those.
                 if !matches!(
@@ -1854,22 +1849,25 @@ impl FunctionTranslator<'_, '_> {
                         | NirBinaryOp::Or
                         | NirBinaryOp::RefEq
                         | NirBinaryOp::RefNotEq
-                ) && let ResolvedType::Primitive(prim) = self.type_table.get(left.type_id)
+                ) && let ResolvedType::Primitive(prim) =
+                    self.type_table.get(arena.exprs[left].type_id)
                 {
                     return Self::truncate_to_sub_i32(result, prim);
                 }
                 result
             }
 
-            NirExprKind::Unary { op, expr: inner } => match op {
-                NirUnaryOp::Ref | NirUnaryOp::MutRef => self.translate_expr(inner),
-                NirUnaryOp::Deref => self.translate_expr(inner),
+            ExprKind::Unary { op, expr: inner } => match op {
+                NirUnaryOp::Ref | NirUnaryOp::MutRef => self.translate_expr(*inner),
+                NirUnaryOp::Deref => self.translate_expr(*inner),
                 _ => {
+                    let inner = *inner;
                     let o = Box::new(self.translate_expr(inner));
-                    let result = self.translate_unary_op(op, o, inner.type_id);
+                    let result = self.translate_unary_op(op, o, arena.exprs[inner].type_id);
                     // Truncate sub-i32 results for Neg and BitNot.
                     if matches!(op, NirUnaryOp::Neg | NirUnaryOp::BitNot)
-                        && let ResolvedType::Primitive(prim) = self.type_table.get(inner.type_id)
+                        && let ResolvedType::Primitive(prim) =
+                            self.type_table.get(arena.exprs[inner].type_id)
                     {
                         return Self::truncate_to_sub_i32(result, prim);
                     }
@@ -1877,7 +1875,7 @@ impl FunctionTranslator<'_, '_> {
                 }
             },
 
-            NirExprKind::Call { func, args, .. } => {
+            ExprKind::Call { func, args, .. } => {
                 // Check for instruction-builtins first
                 let builtin = func
                     .builtin_name()
@@ -1903,8 +1901,8 @@ impl FunctionTranslator<'_, '_> {
 
                 let translated_args: Vec<WirInstr> = args
                     .iter()
-                    .filter(|a| a.expr.type_id != TypeTable::UNIT)
-                    .map(|a| self.translate_expr(&a.expr))
+                    .filter(|a| arena.exprs[a.expr].type_id != TypeTable::UNIT)
+                    .map(|a| self.translate_expr(a.expr))
                     .collect();
 
                 if let Some(func_id) = self.resolve_function_ref(func) {
@@ -1920,7 +1918,7 @@ impl FunctionTranslator<'_, '_> {
                     );
                 }
             }
-            NirExprKind::MethodCall {
+            ExprKind::MethodCall {
                 func,
                 receiver,
                 args,
@@ -1928,7 +1926,7 @@ impl FunctionTranslator<'_, '_> {
             } => {
                 // Canonical resource method dispatch: uses #[canonical("...")] from types.wado
                 if let Some(instr) =
-                    self.try_translate_canonical_method(receiver, func, args, expr.type_id)
+                    self.try_translate_canonical_method(*receiver, func, args, expr.type_id)
                 {
                     return instr;
                 }
@@ -1936,11 +1934,11 @@ impl FunctionTranslator<'_, '_> {
                 let mut translated_args: Vec<WirInstr> = Vec::new();
                 // Receiver is always included (self/&self/&mut self is never unit).
                 // Receivers are always reference types — do not copy them.
-                translated_args.push(self.translate_expr(receiver));
+                translated_args.push(self.translate_expr(*receiver));
                 // params[0] is self; args[i] corresponds to params[i+1]
                 for arg in args {
-                    if arg.expr.type_id != TypeTable::UNIT {
-                        translated_args.push(self.translate_expr(&arg.expr));
+                    if arena.exprs[arg.expr].type_id != TypeTable::UNIT {
+                        translated_args.push(self.translate_expr(arg.expr));
                     }
                 }
 
@@ -1960,7 +1958,7 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            NirExprKind::StructLiteral { fields, .. } => {
+            ExprKind::StructLiteral { fields, .. } => {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, expr.type_id);
                 let WirType::Ref { type_id, .. } = wir_type else {
                     let resolved = self.type_table.get(expr.type_id);
@@ -1975,19 +1973,19 @@ impl FunctionTranslator<'_, '_> {
                     .filter(|f| {
                         !matches!(
                             self.ctx
-                                .type_id_to_wir_type(self.type_table, f.value.type_id),
+                                .type_id_to_wir_type(self.type_table, arena.exprs[f.value].type_id),
                             WirType::Unit
                         )
                     })
                     .collect();
                 let field_instrs: Vec<WirInstr> = non_unit_fields
                     .iter()
-                    .map(|f| self.translate_expr(&f.value))
+                    .map(|f| self.translate_expr(f.value))
                     .collect();
                 self.struct_new(type_id, field_instrs)
             }
 
-            NirExprKind::FieldAccess {
+            ExprKind::FieldAccess {
                 expr: receiver,
                 field_name,
                 ..
@@ -1997,9 +1995,10 @@ impl FunctionTranslator<'_, '_> {
                 // local directly. The aggregate was never materialised
                 // as a struct ref — a `StructGet` here would read an
                 // uninitialised slot.
-                if let NirExprKind::Local {
+                let receiver = *receiver;
+                if let ExprKind::Local {
                     index: tir_local, ..
-                } = &receiver.kind
+                } = &arena.exprs[receiver].kind
                     && let Some(splits) = self.multi_value_split_locals.get(tir_local)
                     && let Some((name, ty)) = splits.get(field_name)
                 {
@@ -2017,11 +2016,11 @@ impl FunctionTranslator<'_, '_> {
                 let recv = self.translate_expr(receiver);
                 let wir_type = self
                     .ctx
-                    .type_id_to_wir_type(self.type_table, receiver.type_id);
+                    .type_id_to_wir_type(self.type_table, arena.exprs[receiver].type_id);
                 let WirType::Ref { type_id, .. } = wir_type else {
                     panic!(
                         "[WIR] FieldAccess receiver expected Ref WirType, got {wir_type:?} (field={field_name}, type_id={:?})",
-                        receiver.type_id
+                        arena.exprs[receiver].type_id
                     );
                 };
                 let result_ty = self.struct_field_wir_type(&type_id, field_name);
@@ -2033,12 +2032,13 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            NirExprKind::Assign { target, value } => {
+            ExprKind::Assign { target, value } => {
+                let (target, value) = (*target, *value);
                 let val = self.translate_expr(value);
-                match &target.kind {
-                    NirExprKind::Local { index, .. } => {
+                match &arena.exprs[target].kind {
+                    ExprKind::Local { index, .. } => {
                         // Unit-type locals have no Wasm representation
-                        if target.type_id == TypeTable::UNIT {
+                        if arena.exprs[target].type_id == TypeTable::UNIT {
                             return val;
                         }
                         // If the value is a LocalSet from nested chained assignment
@@ -2061,39 +2061,40 @@ impl FunctionTranslator<'_, '_> {
                             value: Box::new(val),
                         }
                     }
-                    NirExprKind::FieldAccess {
+                    ExprKind::FieldAccess {
                         expr: receiver,
                         field_name: _,
                         ..
-                    } if target.type_id == TypeTable::UNIT => {
+                    } if arena.exprs[target].type_id == TypeTable::UNIT => {
                         // Unit-typed field assignment: the field has no Wasm
                         // representation. Emit the receiver for side effects (then
                         // drop the ref), and emit val for side effects (it produces
                         // nothing because unit has no Wasm representation).
-                        let recv = self.translate_expr(receiver);
+                        let recv = self.translate_expr(*receiver);
                         WirInstr::Seq(vec![val, WirInstr::Drop(Box::new(recv))])
                     }
-                    NirExprKind::FieldAccess {
+                    ExprKind::FieldAccess {
                         expr: receiver,
                         field_name,
                         ..
                     } => {
+                        let receiver = *receiver;
                         let recv = self.translate_expr(receiver);
                         let wir_type = self
                             .ctx
-                            .type_id_to_wir_type(self.type_table, receiver.type_id);
+                            .type_id_to_wir_type(self.type_table, arena.exprs[receiver].type_id);
                         let WirType::Ref { type_id, .. } = wir_type else {
                             panic!(
                                 "[WIR] FieldAccess assignment expected Ref receiver, got {wir_type:?} (field={field_name}, type_id={:?})",
-                                receiver.type_id
+                                arena.exprs[receiver].type_id
                             );
                         };
                         self.struct_set(type_id, field_name.clone(), recv, val)
                     }
-                    NirExprKind::Index {
+                    ExprKind::Index {
                         expr: array_expr,
                         index: index_expr,
-                    } => self.translate_index_assign(array_expr, index_expr, val),
+                    } => self.translate_index_assign(*array_expr, *index_expr, val),
                     _ => {
                         // Unhandled assignment target
                         WirInstr::Drop(Box::new(val))
@@ -2101,29 +2102,29 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            NirExprKind::Cast {
+            ExprKind::Cast {
                 expr: inner,
                 target_type,
             } => {
                 // Type casts become appropriate conversion instructions
-                self.translate_cast(inner, inner.type_id, *target_type)
+                self.translate_cast(*inner, arena.exprs[*inner].type_id, *target_type)
             }
 
-            NirExprKind::Block(block) => {
+            ExprKind::Block(block) => {
                 let body = if expr.type_id == TypeTable::UNIT || expr.type_id == TypeTable::NEVER {
-                    self.translate_stmts(&block.stmts)
+                    self.translate_stmts(&arena.blocks[*block].stmts)
                 } else {
-                    self.translate_stmts_as_value(&block.stmts)
+                    self.translate_stmts_as_value(&arena.blocks[*block].stmts)
                 };
                 WirInstr::Seq(body)
             }
 
-            NirExprKind::If {
+            ExprKind::If {
                 condition,
                 then_branch,
                 else_branch,
             } => {
-                let cond = self.translate_expr(condition);
+                let cond = self.translate_expr(*condition);
                 let has_result = expr.type_id != TypeTable::UNIT;
                 self.label_stack.push(LabelEntry {
                     label: None,
@@ -2131,15 +2132,15 @@ impl FunctionTranslator<'_, '_> {
                     is_loop_continue: false,
                 });
                 let then_body = if has_result {
-                    self.translate_stmts_as_value(&then_branch.stmts)
+                    self.translate_stmts_as_value(&arena.blocks[*then_branch].stmts)
                 } else {
-                    self.translate_stmts(&then_branch.stmts)
+                    self.translate_stmts(&arena.blocks[*then_branch].stmts)
                 };
                 let else_body = else_branch.as_ref().map(|b| {
                     if has_result {
-                        self.translate_stmts_as_value(&b.stmts)
+                        self.translate_stmts_as_value(&arena.blocks[*b].stmts)
                     } else {
-                        self.translate_stmts(&b.stmts)
+                        self.translate_stmts(&arena.blocks[*b].stmts)
                     }
                 });
                 self.label_stack.pop();
@@ -2156,17 +2157,17 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            NirExprKind::Match {
+            ExprKind::Match {
                 expr: scrutinee,
                 arms,
-            } => self.translate_match(scrutinee, arms, expr.type_id),
+            } => self.translate_match(*scrutinee, arms, expr.type_id),
 
-            NirExprKind::Index {
+            ExprKind::Index {
                 expr: array_expr,
                 index: index_expr,
-            } => self.translate_index(array_expr, index_expr),
+            } => self.translate_index(*array_expr, *index_expr),
 
-            NirExprKind::TupleLiteral { elements } => {
+            ExprKind::TupleLiteral { elements } => {
                 // Lower to `struct.new` of the tuple struct type. The
                 // multi-value-return Return-arm rewrite later unwraps
                 // this back into a `Seq` of field initialisers when the
@@ -2177,21 +2178,22 @@ impl FunctionTranslator<'_, '_> {
                 WirInstr::StructNew { type_id, fields }
             }
 
-            NirExprKind::ArrayLiteral { elements } => {
-                self.build_array_literal(expr.type_id, elements)
-            }
+            ExprKind::ArrayLiteral { elements } => self.build_array_literal(expr.type_id, elements),
 
-            NirExprKind::Switch {
+            ExprKind::Switch {
                 scrutinee,
                 min_value,
                 arms,
                 default,
-            } => self.translate_switch(scrutinee, *min_value, arms, default, expr.type_id),
+            } => self.translate_switch(*scrutinee, *min_value, arms, *default, expr.type_id),
 
-            NirExprKind::VariantTag { expr: inner } => {
+            ExprKind::VariantTag { expr: inner } => {
                 // Get discriminant field from variant base type
+                let inner = *inner;
                 let val = self.translate_expr(inner);
-                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, inner.type_id);
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, arena.exprs[inner].type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     WirInstr::StructGet {
                         type_id,
@@ -2209,17 +2211,17 @@ impl FunctionTranslator<'_, '_> {
                     val
                 }
             }
-            NirExprKind::VariantTest {
+            ExprKind::VariantTest {
                 expr: inner,
                 case_index,
                 case_name: _,
-            } => self.translate_variant_test(inner, *case_index),
-            NirExprKind::VariantPayload {
+            } => self.translate_variant_test(*inner, *case_index),
+            ExprKind::VariantPayload {
                 expr: inner,
                 case_index,
                 payload_type: _,
-            } => self.translate_variant_payload(inner, *case_index),
-            NirExprKind::VariantConstruct {
+            } => self.translate_variant_payload(*inner, *case_index),
+            ExprKind::VariantConstruct {
                 variant_type,
                 case_index,
                 case_name,
@@ -2228,16 +2230,16 @@ impl FunctionTranslator<'_, '_> {
                 *variant_type,
                 *case_index,
                 case_name,
-                payload.as_deref(),
+                *payload,
                 expr.type_id,
             ),
-            NirExprKind::EnumConstruct { case_index, .. } => WirInstr::I32Const(*case_index as i32),
+            ExprKind::EnumConstruct { case_index, .. } => WirInstr::I32Const(*case_index as i32),
 
-            NirExprKind::CmRawCall {
+            ExprKind::CmRawCall {
                 local_name, args, ..
             } => {
                 let translated_args: Vec<WirInstr> =
-                    args.iter().map(|a| self.translate_expr(a)).collect();
+                    args.iter().map(|a| self.translate_expr(*a)).collect();
                 // Look up in WASI imports (registered by register_imports from TIR imports)
                 let func_id = if let Some(func_id) =
                     self.ctx.func_map.get(&format!("wasi/{local_name}"))
@@ -2249,7 +2251,10 @@ impl FunctionTranslator<'_, '_> {
                     // be in TIR imports but are needed by CM binding synthesis.
                     let params: Vec<WirType> = args
                         .iter()
-                        .map(|a| self.ctx.type_id_to_wir_type(self.type_table, a.type_id))
+                        .map(|a| {
+                            self.ctx
+                                .type_id_to_wir_type(self.type_table, arena.exprs[*a].type_id)
+                        })
                         .collect();
                     let results =
                         if expr.type_id == TypeTable::UNIT || expr.type_id == TypeTable::NEVER {
@@ -2283,22 +2288,22 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            NirExprKind::IndirectCall { callee, args } => {
-                self.translate_indirect_call(callee, args, expr.type_id)
+            ExprKind::IndirectCall { callee, args } => {
+                self.translate_indirect_call(*callee, args, expr.type_id)
             }
-            NirExprKind::ClosureToCanonical {
+            ExprKind::ClosureToCanonical {
                 functor,
                 functor_id,
                 target_fn_type,
                 closure_module,
             } => self.translate_closure_to_canonical(
-                functor,
+                *functor,
                 *functor_id,
                 *target_fn_type,
                 closure_module,
             ),
 
-            NirExprKind::LabeledBlock { label, block, .. } => {
+            ExprKind::LabeledBlock { label, block, .. } => {
                 let has_result = expr.type_id != TypeTable::UNIT;
                 self.label_stack.push(LabelEntry {
                     label: Some(label.clone()),
@@ -2306,9 +2311,9 @@ impl FunctionTranslator<'_, '_> {
                     is_loop_continue: false,
                 });
                 let body = if has_result {
-                    self.translate_stmts_as_value(&block.stmts)
+                    self.translate_stmts_as_value(&arena.blocks[*block].stmts)
                 } else {
-                    self.translate_stmts(&block.stmts)
+                    self.translate_stmts(&arena.blocks[*block].stmts)
                 };
                 self.label_stack.pop();
                 let result_type = if expr.type_id == TypeTable::UNIT {

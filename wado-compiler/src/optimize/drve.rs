@@ -23,15 +23,23 @@
 //!   ...))`); any nested or `Let`-bound use disqualifies the candidate.
 //! - Requires at least one observed call site (otherwise DCE will delete
 //!   the function anyway and there is nothing to optimise).
+//!
+//! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
+//! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): the function-body
+//! walks (purity check, call-site validation, void rewrite, call retype) read
+//! and mutate the arena `Body` directly. Globals are tree-shaped NIR (not part
+//! of the arena migration), so their use-scan and retype keep the tree
+//! visitors.
 
 use crate::hashmap::IndexSet;
-use crate::nir::{FunctionKind, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind};
+use crate::nir::{FunctionKind, NirExpr, NirExprKind, NirFunction};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::{NirMutVisitor, NirRefVisitor};
 use crate::tir::{ResolvedType, TypeTable};
 
+use super::arena_query;
 use super::dae;
-use super::elide_local::is_pure_expr;
 
 type FnKey = dae::FnKey;
 
@@ -45,7 +53,9 @@ pub fn eliminate_dead_return_values(project: &mut NirPackage) -> bool {
         if !is_eligible(&func, &pinned, &type_table) {
             continue;
         }
-        if has_only_pure_returns_with_explicit_tail(&func) {
+        if let Some(body) = &func.body
+            && has_only_pure_returns_with_explicit_tail(body)
+        {
             candidates.insert((func.module_source.clone(), func.name.clone()));
         }
     }
@@ -118,54 +128,47 @@ fn is_heap_alloc_return(type_id: crate::tir::TypeId, type_table: &TypeTable) -> 
     )
 }
 
-fn has_only_pure_returns_with_explicit_tail(func: &NirFunction) -> bool {
-    let body = func.body.as_ref().unwrap();
-    // The last stmt must be `Return { value: Some(_) }` so we never have to
-    // think about an implicit trailing-value return path.
-    let Some(last) = body.stmts.last() else {
+/// True when the body ends with an explicit `Return { value: Some(_) }` and
+/// every `Return` in the body (including the tail) carries a pure value.
+fn has_only_pure_returns_with_explicit_tail(body: &Body) -> bool {
+    let root = body.root;
+    let Some(&last) = body.blocks[root].stmts.last() else {
         return false;
     };
-    let NirStmtKind::Return { value: Some(_) } = &last.kind else {
+    if !matches!(&body.stmts[last].kind, StmtKind::Return { value: Some(_) }) {
         return false;
-    };
-    // Every return in the function (including the tail) must carry a pure
-    // value — `Return { value: None }` would mean the function already exits
-    // void via that path, which is structurally inconsistent for a non-void
-    // signature.
-    let mut checker = ReturnPurityChecker { ok: true };
-    checker.visit_block(body);
-    checker.ok
-}
-
-struct ReturnPurityChecker {
-    ok: bool,
-}
-
-impl NirRefVisitor for ReturnPurityChecker {
-    fn visit_stmt(&mut self, stmt: &NirStmt) {
-        if !self.ok {
-            return;
-        }
-        match &stmt.kind {
-            NirStmtKind::Return { value: None } => self.ok = false,
-            NirStmtKind::Return { value: Some(v) } if !is_pure_expr(v) => self.ok = false,
-            _ => self.walk_stmt(stmt),
-        }
     }
-
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        // Closures are lowered to functor `StructLiteral`s before NIR is
-        // built, so there is no longer a body to skip past at this level.
-        self.walk_expr(expr);
+    // Every return reachable in the body must carry a pure value — a
+    // `Return { value: None }` would mean a void exit path, structurally
+    // inconsistent for a non-void signature.
+    let mut stack = vec![NodeRef::Block(root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Stmt(s) = node {
+            match &body.stmts[s].kind {
+                StmtKind::Return { value: None } => return false,
+                StmtKind::Return { value: Some(v) } => {
+                    if !arena_query::is_pure_expr(body, *v) {
+                        return false;
+                    }
+                }
+                _ => {}
+            }
+        }
+        body.for_each_child(node, |c| stack.push(c));
     }
+    true
 }
 
 fn collect_pinned(project: &NirPackage) -> IndexSet<FnKey> {
     dae::collect_pinned(project)
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Call-site validation
+// ──────────────────────────────────────────────────────────────────────────────
+
 fn validate_call_sites(project: &NirPackage, mut candidates: IndexSet<FnKey>) -> IndexSet<FnKey> {
-    let mut validator = CallValidator {
+    let mut ctx = ValidateCtx {
         candidates: &candidates,
         rejected: IndexSet::default(),
         observed: IndexSet::default(),
@@ -173,22 +176,22 @@ fn validate_call_sites(project: &NirPackage, mut candidates: IndexSet<FnKey>) ->
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         if let Some(body) = &func.body {
-            validator.visit_block(body);
+            ctx.block(body, body.root);
         }
     }
+    // Globals are tree-shaped and can never be `_ = call(...)` drop sites —
+    // any appearance of a candidate in a global initializer consumes its
+    // result, disqualifying it.
     for global in &project.globals {
-        // Globals can never be `_ = call(...)` style — any appearance of a
-        // candidate function in a global initializer means its result is
-        // *consumed*, which disqualifies the candidate.
         UseScanner {
             candidates: &candidates,
-            rejected: &mut validator.rejected,
+            rejected: &mut ctx.rejected,
         }
         .visit_expr(&global.initializer);
     }
-    let CallValidator {
+    let ValidateCtx {
         rejected, observed, ..
-    } = validator;
+    } = ctx;
     for r in &rejected {
         candidates.shift_remove(r);
     }
@@ -196,89 +199,91 @@ fn validate_call_sites(project: &NirPackage, mut candidates: IndexSet<FnKey>) ->
     candidates
 }
 
-/// Walks blocks recognising the "top-level Expr(Call)" drop-position pattern.
-/// At a stmt boundary, `Expr(Call(f, args))` and `Expr(MethodCall(f, ...))`
-/// observe `f` as drop-position; everything inside `args` / receiver is then
-/// fed through `UseScanner`, which rejects any candidate appearing as a
-/// value. Outside drop-position stmts (Let value, return value, sub-expressions
-/// of any expression), the same `UseScanner` rule applies.
-struct CallValidator<'a> {
+/// Arena walk that recognises the "top-level Expr(Call)" drop-position pattern.
+/// At a statement boundary, `Expr(Call(f, args))` / `Expr(MethodCall(f, …))`
+/// observe `f` in drop position; their args / receiver are use-scanned.
+/// Everything else (Let values, return values, nested expression trees) is
+/// use-scanned, where any candidate appearance rejects it.
+struct ValidateCtx<'a> {
     candidates: &'a IndexSet<FnKey>,
     rejected: IndexSet<FnKey>,
     observed: IndexSet<FnKey>,
 }
 
-impl NirRefVisitor for CallValidator<'_> {
-    fn visit_stmt(&mut self, stmt: &NirStmt) {
-        if let NirStmtKind::Expr(expr) = &stmt.kind {
-            match &expr.kind {
-                NirExprKind::Call { func, args, .. } => {
-                    let key = (func.module_source.clone(), func.name.clone());
-                    if self.candidates.contains(&key) {
-                        self.observed.insert(key);
-                    }
-                    let mut scanner = UseScanner {
-                        candidates: self.candidates,
-                        rejected: &mut self.rejected,
-                    };
-                    for a in args {
-                        scanner.visit_expr(&a.expr);
-                    }
-                    return;
-                }
-                NirExprKind::MethodCall {
+impl ValidateCtx<'_> {
+    fn block(&mut self, body: &Body, block: BlockId) {
+        let stmts = body.blocks[block].stmts.clone();
+        for s in stmts {
+            self.stmt(body, s);
+        }
+    }
+
+    fn stmt(&mut self, body: &Body, stmt: StmtId) {
+        if let StmtKind::Expr(e) = &body.stmts[stmt].kind {
+            let e = *e;
+            let (call_key, scan): (Option<FnKey>, Vec<ExprId>) = match &body.exprs[e].kind {
+                ExprKind::Call { func, args, .. } => (
+                    Some((func.module_source.clone(), func.name.clone())),
+                    args.iter().map(|a| a.expr).collect(),
+                ),
+                ExprKind::MethodCall {
                     func,
                     receiver,
                     args,
                     ..
                 } => {
-                    let key = (func.module_source.clone(), func.name.clone());
-                    if self.candidates.contains(&key) {
-                        self.observed.insert(key);
-                    }
-                    let mut scanner = UseScanner {
-                        candidates: self.candidates,
-                        rejected: &mut self.rejected,
-                    };
-                    scanner.visit_expr(receiver);
-                    for a in args {
-                        scanner.visit_expr(&a.expr);
-                    }
-                    return;
+                    let mut scan = vec![*receiver];
+                    scan.extend(args.iter().map(|a| a.expr));
+                    (Some((func.module_source.clone(), func.name.clone())), scan)
                 }
-                _ => {
-                    let mut scanner = UseScanner {
-                        candidates: self.candidates,
-                        rejected: &mut self.rejected,
-                    };
-                    scanner.visit_expr(expr);
-                    return;
-                }
+                // Not a top-level call: the whole expression is a use.
+                _ => (None, vec![e]),
+            };
+            if let Some(key) = call_key
+                && self.candidates.contains(&key)
+            {
+                self.observed.insert(key);
+            }
+            for s in scan {
+                self.scan_node(body, NodeRef::Expr(s));
+            }
+            return;
+        }
+        // Non-Expr stmt: blocks re-enter the drop-position logic; expr / pattern
+        // children are use-scanned.
+        let mut kids = Vec::new();
+        body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
+        for c in kids {
+            match c {
+                NodeRef::Block(b) => self.block(body, b),
+                NodeRef::Expr(_) | NodeRef::Pat(_) => self.scan_node(body, c),
+                NodeRef::Stmt(_) => {}
             }
         }
-        // For non-Expr stmts, recurse normally — nested blocks (`If`,
-        // `Loop`, `LabeledBlock`, `IfLet`, `VariadicForOf`) re-enter
-        // `visit_stmt` here so their inner drop-position stmts are still
-        // recognised. Sub-expressions of the stmt that aren't blocks get
-        // routed through `UseScanner` via `visit_expr`.
-        self.walk_stmt(stmt);
     }
 
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        // Outside drop-position stmts, the value of every NirExpr is
-        // observable. Hand off to `UseScanner` so any nested candidate call
-        // is treated as a use.
-        let mut scanner = UseScanner {
-            candidates: self.candidates,
-            rejected: &mut self.rejected,
-        };
-        scanner.visit_expr(expr);
+    /// Reject every candidate that appears as a `Call` / `MethodCall` anywhere
+    /// in the subtree at `node` (value position).
+    fn scan_node(&mut self, body: &Body, node: NodeRef) {
+        if let NodeRef::Expr(id) = node
+            && let ExprKind::Call { func, .. } | ExprKind::MethodCall { func, .. } =
+                &body.exprs[id].kind
+        {
+            let key = (func.module_source.clone(), func.name.clone());
+            if self.candidates.contains(&key) {
+                self.rejected.insert(key);
+            }
+        }
+        let mut kids = Vec::new();
+        body.for_each_child(node, |c| kids.push(c));
+        for c in kids {
+            self.scan_node(body, c);
+        }
     }
 }
 
-/// Walks an expression tree and rejects every candidate that appears as a
-/// value (i.e. as a `Call` / `MethodCall` anywhere). Default-walks over
-/// blocks / control flow / nested expressions.
+/// Tree walk over a global initializer: rejects every candidate that appears
+/// as a `Call` / `MethodCall` (always a use in a global).
 struct UseScanner<'a> {
     candidates: &'a IndexSet<FnKey>,
     rejected: &'a mut IndexSet<FnKey>,
@@ -286,24 +291,24 @@ struct UseScanner<'a> {
 
 impl NirRefVisitor for UseScanner<'_> {
     fn visit_expr(&mut self, expr: &NirExpr) {
-        match &expr.kind {
-            NirExprKind::Call { func, .. } | NirExprKind::MethodCall { func, .. } => {
-                let key = (func.module_source.clone(), func.name.clone());
-                if self.candidates.contains(&key) {
-                    self.rejected.insert(key);
-                }
+        if let NirExprKind::Call { func, .. } | NirExprKind::MethodCall { func, .. } = &expr.kind {
+            let key = (func.module_source.clone(), func.name.clone());
+            if self.candidates.contains(&key) {
+                self.rejected.insert(key);
             }
-            _ => {}
         }
         self.walk_expr(expr);
     }
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Application
+// ──────────────────────────────────────────────────────────────────────────────
+
 fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) {
-    // Step A: convert each candidate to void return. The candidate filter
-    // guarantees every reachable `Return { value: Some(_) }` carries a pure
-    // expression, so dropping its value is observably equivalent.
-    let mut return_rewriter = ReturnVoidRewriter;
+    // Step A: convert each confirmed candidate to void return. The candidate
+    // filter guarantees every reachable `Return { value: Some(_) }` carries a
+    // pure expression, so dropping its value is observably equivalent.
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         let key = (func.module_source.clone(), func.name.clone());
@@ -312,58 +317,80 @@ fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) {
         }
         func.return_type = TypeTable::UNIT;
         if let Some(body) = func.body.as_mut() {
-            return_rewriter.visit_block(body);
+            void_returns(body);
         }
     }
 
-    // Step B: refresh `expr.type_id` at every call site that targets a
-    // converted function. Without this, `Expr(Call(f))` in stmt position
-    // still claims the old return type and `wir_build::translate.rs`
-    // (around line 1172) wraps the call in `Drop`, underflowing the
-    // Wasm stack.
-    let mut retyper = CallRetyper { confirmed };
-    let funcs = project.functions.clone();
-    for func_rc in &funcs {
+    // Step B: refresh `type_id` at every call site of a converted function.
+    // Without this, `Expr(Call(f))` in stmt position still claims the old
+    // return type and `wir_build::translate.rs` wraps the call in `Drop`,
+    // underflowing the Wasm stack.
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(body) = func.body.as_mut() {
-            retyper.visit_block(body);
+            retype_calls(body, confirmed);
         }
     }
+    let mut retyper = CallRetyper { confirmed };
     for global in &mut project.globals {
         retyper.visit_expr(&mut global.initializer);
     }
 }
 
+/// Rewrite every reachable `Return { value: Some(_) }` to `Return { value: None }`.
+fn void_returns(body: &mut Body) {
+    let mut returns = Vec::new();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Stmt(s) = node
+            && matches!(&body.stmts[s].kind, StmtKind::Return { value: Some(_) })
+        {
+            returns.push(s);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    for s in returns {
+        body.stmts[s].kind = StmtKind::Return { value: None };
+    }
+}
+
+/// Set `type_id` to `Unit` at every `Call` / `MethodCall` of a confirmed
+/// function in the body.
+fn retype_calls(body: &mut Body, confirmed: &IndexSet<FnKey>) {
+    let mut targets = Vec::new();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(id) = node
+            && let ExprKind::Call { func, .. } | ExprKind::MethodCall { func, .. } =
+                &body.exprs[id].kind
+        {
+            let key = (func.module_source.clone(), func.name.clone());
+            if confirmed.contains(&key) {
+                targets.push(id);
+            }
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    for id in targets {
+        body.exprs[id].type_id = TypeTable::UNIT;
+    }
+}
+
+/// Tree retyper for global initializers. (Confirmed candidates never appear in
+/// a global — any global appearance would have rejected them in validation —
+/// so this is effectively a no-op, kept for faithfulness with the body retype.)
 struct CallRetyper<'a> {
     confirmed: &'a IndexSet<FnKey>,
 }
 
 impl NirMutVisitor for CallRetyper<'_> {
     fn visit_expr(&mut self, expr: &mut NirExpr) {
-        match &expr.kind {
-            NirExprKind::Call { func, .. } | NirExprKind::MethodCall { func, .. } => {
-                let key = (func.module_source.clone(), func.name.clone());
-                if self.confirmed.contains(&key) {
-                    expr.type_id = TypeTable::UNIT;
-                }
+        if let NirExprKind::Call { func, .. } | NirExprKind::MethodCall { func, .. } = &expr.kind {
+            let key = (func.module_source.clone(), func.name.clone());
+            if self.confirmed.contains(&key) {
+                expr.type_id = TypeTable::UNIT;
             }
-            _ => {}
         }
         self.walk_expr(expr);
-    }
-}
-
-/// Rewrites every reachable `Return { value: Some(_) }` to `Return { value: None }`.
-/// Closures are lowered to functor structs before NIR is built, so there is no
-/// inner closure-body function scope to skip past here.
-struct ReturnVoidRewriter;
-
-impl NirMutVisitor for ReturnVoidRewriter {
-    fn visit_stmt(&mut self, stmt: &mut NirStmt) {
-        if let NirStmtKind::Return { value } = &mut stmt.kind {
-            *value = None;
-            return;
-        }
-        self.walk_stmt(stmt);
     }
 }

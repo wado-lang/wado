@@ -760,7 +760,7 @@ pub struct NirFunction {
     pub effects: Vec<EffectRef>,
     /// Parameter names declared in `stores[...]` — the function may store these references.
     pub stores: Vec<String>,
-    pub body: Option<NirBlock>,
+    pub body: Option<crate::nir_arena::Body>,
     pub span: Span,
     pub local_count: u32,
     /// Per-local metadata — `name`, `type_id`, `is_mut` — indexed by Wasm
@@ -917,6 +917,20 @@ pub enum InlineHint {
 }
 
 impl NirFunction {
+    /// Read-only tree view of the function body (`Body` → `NirBlock`). The
+    /// optimizer operates on the arena `Body` directly; the remaining callers
+    /// are the diagnostics that still walk a tree (`nir_unparse`, `remarks`).
+    pub fn body_block(&self) -> Option<NirBlock> {
+        self.body.as_ref().map(crate::nir_arena::Body::to_block)
+    }
+
+    /// Build the function body from a tree (`NirBlock` → `Body`). Counterpart
+    /// of [`Self::body_block`]; used by tests and tree-shaped body builders to
+    /// install an arena body from a constructed `NirBlock`.
+    pub fn set_body_block(&mut self, block: NirBlock) {
+        self.body = Some(crate::nir_arena::Body::from_block(&block));
+    }
+
     /// Returns true if this is a method (belongs to a struct)
     #[inline]
     pub fn is_method(&self) -> bool {

@@ -3243,7 +3243,10 @@ fn make_pure_fn(
         task_return_type: None,
         effects: Vec::new(),
         stores: Vec::new(),
-        body: Some(NirBlock::new(vec![NirStmt::new(body_stmt, span)], span)),
+        body: Some(wado_compiler::nir_arena::Body::from_block(&NirBlock::new(
+            vec![NirStmt::new(body_stmt, span)],
+            span,
+        ))),
         span,
         local_count,
         locals,
@@ -3476,7 +3479,7 @@ fn multi_stmt_body_left_intact() {
         TypeTable::I32,
         NirStmtKind::Return { value: None }, // placeholder, replaced below
     );
-    f.body = Some(body_block);
+    f.set_body_block(body_block);
     f.local_count = 2;
     f.locals.push(NirLocal {
         name: "y".to_string(),
@@ -3509,7 +3512,7 @@ fn recursive_call_bails_via_call_stack() {
     };
     let mut f = make_pure_fn("f", vec![("x", TypeTable::I32)], TypeTable::I32, body);
     let self_call = call_expr(&f, vec![local_expr(0, TypeTable::I32)]);
-    f.body = Some(NirBlock::new(
+    f.set_body_block(NirBlock::new(
         vec![NirStmt::new(
             NirStmtKind::Return {
                 value: Some(self_call),

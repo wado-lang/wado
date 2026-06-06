@@ -976,11 +976,11 @@ impl<'a> WirContext<'a> {
     pub fn find_tuple_type_for_elements(
         &self,
         type_table: &crate::tir::TypeTable,
-        elements: &[crate::nir::NirExpr],
+        elem_type_ids: &[crate::tir::TypeId],
     ) -> Option<WirTypeId> {
-        let elem_wir_types: Vec<WirType> = elements
+        let elem_wir_types: Vec<WirType> = elem_type_ids
             .iter()
-            .map(|e| self.type_id_to_wir_type(type_table, e.type_id))
+            .map(|tid| self.type_id_to_wir_type(type_table, *tid))
             .filter(|t| !matches!(t, WirType::Unit))
             .collect();
         // Search tuple_type_map for a matching tuple with same WIR field types
@@ -1005,24 +1005,19 @@ impl<'a> WirContext<'a> {
     pub fn define_tuple_struct_for_elements(
         &mut self,
         type_table: &crate::tir::TypeTable,
-        elements: &[crate::nir::NirExpr],
+        elem_type_ids: &[crate::tir::TypeId],
     ) -> Option<WirTypeId> {
-        let elem_wir_types: Vec<WirType> = elements
+        let elem_wir_types: Vec<WirType> = elem_type_ids
             .iter()
-            .map(|e| self.type_id_to_wir_type(type_table, e.type_id))
+            .map(|tid| self.type_id_to_wir_type(type_table, *tid))
             .filter(|t| !matches!(t, WirType::Unit))
             .collect();
         if elem_wir_types.is_empty() {
             return None;
         }
-        let elem_names: Vec<String> = elements
+        let elem_names: Vec<String> = elem_type_ids
             .iter()
-            .filter(|e| {
-                !matches!(
-                    self.type_id_to_wir_type(type_table, e.type_id),
-                    WirType::Unit
-                )
-            })
+            .filter(|tid| !matches!(self.type_id_to_wir_type(type_table, **tid), WirType::Unit))
             .enumerate()
             .map(|(i, _)| i.to_string())
             .collect();
@@ -1056,17 +1051,13 @@ impl<'a> WirContext<'a> {
         });
         let type_id = self.register_type(display, struct_def);
         // Register in tuple_type_map using the TIR element TypeIds
-        let elem_type_ids: Vec<crate::tir::TypeId> = elements
+        let filtered_type_ids: Vec<crate::tir::TypeId> = elem_type_ids
             .iter()
-            .filter(|e| {
-                !matches!(
-                    self.type_id_to_wir_type(type_table, e.type_id),
-                    WirType::Unit
-                )
-            })
-            .map(|e| e.type_id)
+            .copied()
+            .filter(|tid| !matches!(self.type_id_to_wir_type(type_table, *tid), WirType::Unit))
             .collect();
-        self.tuple_type_map.insert(elem_type_ids, type_id.clone());
+        self.tuple_type_map
+            .insert(filtered_type_ids, type_id.clone());
         Some(type_id)
     }
 

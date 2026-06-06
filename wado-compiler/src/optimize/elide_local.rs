@@ -11,218 +11,124 @@
 //! (`copy_prop` / `const_fold` / `dce`), which the WIR-level pass cannot.
 
 use crate::hashmap::IndexSet;
-use crate::nir::{NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind};
+use crate::nir_arena::{BlockId, ExprId, ExprKind, StmtId, StmtKind};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::{NirMutVisitor, NirRefVisitor};
+
+use super::arena_query;
 
 pub fn elide_write_only_locals(project: &mut NirPackage) -> bool {
     let mut changed = false;
-    let funcs = project.functions.clone();
-    for func_rc in &funcs {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        if elide_in_function(&mut func) {
-            changed = true;
+        // `stores_aliased_locals` — params whose reference escaped via a
+        // callee's `stores` declaration. The callee may retain that reference
+        // past its return, so writes through the local stay observable via the
+        // alias and the local must not be elided. Read it off the function
+        // before borrowing the body. The other "kept" source — every live read
+        // of a local, including `&local` / `&mut local` and closure-capture
+        // reads — is exactly what the engine use index records, so the rule
+        // reads it directly via `Engine::is_local_read` rather than a separate
+        // walk. (`address_taken_locals` is intentionally *not* a source: it is
+        // a stale static record after `inline` / `ref_elim`, and source-1 reads
+        // already cover every live `&local`.)
+        let stores_aliased = func.stores_aliased_locals.clone();
+        if let Some(body) = func.body.as_mut() {
+            let mut engine = Engine::new(body);
+            let rule = ElideRule {
+                stores_aliased: &stores_aliased,
+            };
+            changed |= engine.run(&[&rule]);
         }
     }
     changed
 }
 
-fn elide_in_function(func: &mut NirFunction) -> bool {
-    if func.body.is_none() {
-        return false;
-    }
-    // Collect locals that must NOT be elided. Three sources:
-    //
-    // 1. Every body read of `Local { index }`, including the inner `Local`
-    //    of `Unary { op: Ref / MutRef, expr: Local }` — `&local` and
-    //    `&mut local` count as reads, since their values can later be
-    //    dereferenced.
-    // 2. Closure captures' `outer_index` — over-mark relative to the
-    //    closure body's own local namespace, but always safe.
-    // 3. `stores_aliased_locals` — params whose reference escaped via a
-    //    callee's `stores` declaration. The callee may retain that
-    //    reference past its return, so writes through the local stay
-    //    observable via the alias.
-    //
-    // `address_taken_locals` is *not* used as a kept-set source. That
-    // field is set during `lower::plan::boxing` and reflects a static "address
-    // ever taken" property of the source NIR. After `inline` /
-    // `ref_elim` strip away `&local` references, the field is stale —
-    // including it would re-pin locals whose address-taking sites are
-    // no longer in the body. Source 1 already catches every live
-    // `&local`, so the static record is redundant.
-    let mut kept: IndexSet<u32> = IndexSet::default();
-    for &i in &func.stores_aliased_locals {
-        kept.insert(i);
-    }
-    let mut collector = ReadCollector { kept: &mut kept };
-    collector.visit_block(func.body.as_ref().unwrap());
-
-    let body = func.body.as_mut().unwrap();
-    let mut elider = Elider {
-        kept: &kept,
-        changed: false,
-    };
-    elider.visit_block(body);
-    elider.changed
+/// What to do with a statement that binds / assigns a write-only local.
+enum Action {
+    /// Keep the statement unchanged.
+    Keep,
+    /// Drop the statement entirely (its value is pure).
+    Drop,
+    /// Replace the statement with `Expr(value)` so the side effect still runs.
+    Demote(ExprId),
 }
 
-struct ReadCollector<'a> {
-    kept: &'a mut IndexSet<u32>,
+struct ElideRule<'a> {
+    stores_aliased: &'a IndexSet<u32>,
 }
 
-impl NirRefVisitor for ReadCollector<'_> {
-    fn visit_expr(&mut self, expr: &NirExpr) {
-        match &expr.kind {
-            NirExprKind::Local { index, .. } => {
-                self.kept.insert(*index);
-                return;
-            }
-            NirExprKind::Assign { target, value } => {
-                // The target's outer `Local` is a write, not a read. Recurse
-                // into nested writes (`a.field = ...`, `a[i] = ...`) to
-                // capture the read of `a`/`i`. Don't insert the bare
-                // `Local` target itself.
-                if !matches!(target.kind, NirExprKind::Local { .. }) {
-                    self.visit_expr(target);
-                }
-                self.visit_expr(value);
-                return;
-            }
-            _ => {}
-        }
-        self.walk_expr(expr);
-    }
-}
-
-struct Elider<'a> {
-    kept: &'a IndexSet<u32>,
-    changed: bool,
-}
-
-impl NirMutVisitor for Elider<'_> {
-    fn visit_block(&mut self, block: &mut NirBlock) {
-        let stmts = std::mem::take(&mut block.stmts);
+impl Rule for ElideRule<'_> {
+    fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
+        let stmts = engine.body.blocks[id].stmts.clone();
         let mut new_stmts = Vec::with_capacity(stmts.len());
-        for mut stmt in stmts {
-            // `let x = expr;` where `x` is unread.
-            if let NirStmtKind::Let {
-                local_index, value, ..
-            } = &mut stmt.kind
-                && !self.kept.contains(local_index)
-            {
-                let value = std::mem::replace(value, dummy_unit_expr());
-                self.changed = true;
-                if is_pure_expr(&value) {
-                    continue;
+        let mut changed = false;
+        for stmt in stmts {
+            match classify(engine, stmt, self.stores_aliased) {
+                Action::Keep => new_stmts.push(stmt),
+                Action::Drop => changed = true,
+                Action::Demote(value) => {
+                    let span = engine.body.stmts[stmt].span;
+                    new_stmts.push(engine.alloc_stmt(StmtKind::Expr(value), span));
+                    changed = true;
                 }
-                new_stmts.push(NirStmt::new(NirStmtKind::Expr(value), stmt.span));
-                continue;
             }
-            // `x = value;` (Assign at stmt position) where `x` is unread.
-            // This catches the SROA / variant-lowering shadow-temp pattern
-            // where a pass introduces a local and writes to it via Assign,
-            // then a downstream pass folds away the only read site. The
-            // matching `let x;` declaration falls out at WIR cleanup once
-            // every write to `x` is gone.
-            if let NirStmtKind::Expr(expr) = &mut stmt.kind
-                && let NirExprKind::Assign { target, value } = &mut expr.kind
-                && let NirExprKind::Local { index, .. } = &target.kind
-                && !self.kept.contains(index)
-            {
-                let value = std::mem::replace(value.as_mut(), dummy_unit_expr());
-                self.changed = true;
-                if is_pure_expr(&value) {
-                    continue;
-                }
-                new_stmts.push(NirStmt::new(NirStmtKind::Expr(value), stmt.span));
-                continue;
-            }
-            self.visit_stmt(&mut stmt);
-            new_stmts.push(stmt);
         }
-        block.stmts = new_stmts;
+        if changed {
+            engine.set_block_stmts(id, new_stmts);
+        }
+        changed
     }
 }
 
-/// Public helper used by `dae` to collect locals that the function body reads
-/// (or whose addresses escape via captures). Insertion is done by `ReadCollector`.
-pub(super) fn collect_reads_in_block(block: &NirBlock, out: &mut IndexSet<u32>) {
-    let mut collector = ReadCollector { kept: out };
-    collector.visit_block(block);
-}
-
-/// True when `expr` and every sub-expression has no observable effect.
-///
-/// Conservative — calls, global writes, assignments, closure construction,
-/// and control-flow constructs whose branches are themselves impure are
-/// treated as impure. Pure reads (`Local`, `GlobalVarGet`, `FieldAccess`,
-/// `Index`), arithmetic, and reference-taking (`&x` / `&mut x`) are pure
-/// since the *act* of taking a reference does not mutate; only writing
-/// through the resulting reference would, and that shows up as a separate
-/// `Assign` / call. Mirrors the WIR-level `is_side_effect_free` contract.
-pub(super) fn is_pure_expr(expr: &NirExpr) -> bool {
-    match &expr.kind {
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => true,
-        NirExprKind::Binary { left, right, .. } => is_pure_expr(left) && is_pure_expr(right),
-        NirExprKind::Unary { expr: inner, op } => {
-            // `&mut x` is a pure root by itself, but only meaningful when the
-            // resulting reference is used; an unused MutRef has no observable
-            // effect on the local because nothing reads/writes through it.
-            let _ = op;
-            is_pure_expr(inner)
-        }
-        NirExprKind::Cast { expr: inner, .. }
-        | NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::VariantTag { expr: inner }
-        | NirExprKind::VariantTest { expr: inner, .. }
-        | NirExprKind::VariantPayload { expr: inner, .. } => is_pure_expr(inner),
-        NirExprKind::Index { expr: e, index: i } => is_pure_expr(e) && is_pure_expr(i),
-        NirExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| is_pure_expr(&f.value)),
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            elements.iter().all(is_pure_expr)
-        }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            payload.as_ref().is_none_or(|p| is_pure_expr(p))
-        }
-        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => is_pure_block(block),
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
+/// Classify a statement for write-only-local elimination. Mirrors the former
+/// tree `Elider`: an unread `let x = value` or a bare `x = value` (assign at
+/// statement position) where `x` is unread is dropped when `value` is pure,
+/// otherwise demoted to `Expr(value)`.
+fn classify(engine: &Engine, stmt: StmtId, stores_aliased: &IndexSet<u32>) -> Action {
+    match &engine.body.stmts[stmt].kind {
+        StmtKind::Let {
+            local_index, value, ..
         } => {
-            is_pure_expr(condition)
-                && is_pure_block(then_branch)
-                && else_branch.as_ref().is_none_or(is_pure_block)
+            let (idx, value) = (*local_index, *value);
+            if is_kept(engine, idx, stores_aliased) {
+                Action::Keep
+            } else if arena_query::is_pure_expr(engine.body, value) {
+                Action::Drop
+            } else {
+                Action::Demote(value)
+            }
         }
-        // Calls, mutations, closures, control-flow exits, and anything that
-        // could suspend are conservatively impure.
-        _ => false,
+        // `x = value;` (Assign at stmt position) where `x` is unread. This
+        // catches the SROA / variant-lowering shadow-temp pattern where a pass
+        // introduces a local, writes to it via Assign, then a downstream pass
+        // folds away the only read site. The matching `let x;` declaration
+        // falls out once every write to `x` is gone.
+        StmtKind::Expr(e) => {
+            let assign = match &engine.body.exprs[*e].kind {
+                ExprKind::Assign { target, value } => Some((*target, *value)),
+                _ => None,
+            };
+            if let Some((target, value)) = assign
+                && let ExprKind::Local { index, .. } = &engine.body.exprs[target].kind
+            {
+                let index = *index;
+                if !is_kept(engine, index, stores_aliased) {
+                    return if arena_query::is_pure_expr(engine.body, value) {
+                        Action::Drop
+                    } else {
+                        Action::Demote(value)
+                    };
+                }
+            }
+            Action::Keep
+        }
+        _ => Action::Keep,
     }
 }
 
-fn is_pure_block(block: &NirBlock) -> bool {
-    block.stmts.iter().all(|s| match &s.kind {
-        NirStmtKind::Expr(e) | NirStmtKind::Let { value: e, .. } => is_pure_expr(e),
-        _ => false,
-    })
-}
-
-fn dummy_unit_expr() -> NirExpr {
-    use crate::tir::TypeTable;
-    NirExpr::new(
-        NirExprKind::Unit,
-        TypeTable::UNIT,
-        crate::token::Span::default(),
-    )
+/// A local is kept (not elidable) when its reference escaped via a `stores`
+/// alias, or it is read anywhere in the body.
+fn is_kept(engine: &Engine, local: u32, stores_aliased: &IndexSet<u32>) -> bool {
+    stores_aliased.contains(&local) || engine.is_local_read(local)
 }

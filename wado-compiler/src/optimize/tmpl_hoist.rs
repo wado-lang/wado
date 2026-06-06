@@ -33,16 +33,23 @@
 //! It is only applied when the template result does not escape the iteration:
 //! the result must be bound to a Let variable that is only used as a method
 //! receiver (`self`), never passed as a regular function argument.
+//!
+//! The pass reads and mutates the arena [`Body`] directly. New nodes (the
+//! hoisted `Let`, the field-reset `Assign`, the normalized Formatter literal)
+//! are pushed straight into the arena; the analysis and rename walks navigate
+//! by id.
 
 use crate::compiler_item::SeqField;
 use crate::hashmap::IndexSet;
-use crate::nir::{
-    NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind, NirUnaryOp,
+use crate::nir::{NirFunction, NirLocal, NirUnaryOp};
+use crate::nir_arena::{
+    ArenaStructField, BlockId, Body, ExprId, ExprKind, ExprNode, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::is_local;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
+
+use super::arena_query::is_local;
 
 /// Apply template string buffer hoisting to all functions in the project.
 pub fn hoist_template_buffers(project: &mut NirPackage) -> bool {
@@ -56,62 +63,69 @@ pub fn hoist_template_buffers(project: &mut NirPackage) -> bool {
 }
 
 fn hoist_in_function(func: &mut NirFunction, type_table: &std::cell::RefCell<TypeTable>) -> bool {
-    let Some(ref mut body) = func.body else {
+    if func.body.is_none() {
         return false;
-    };
+    }
     let mut local_count = func.local_count;
-    let mut locals = func.locals.clone();
-    let changed = hoist_in_block(body, &mut local_count, &mut locals, type_table);
+    // New locals are append-only, so collect them separately and extend the
+    // function's list once the body borrow ends (the body borrows `func` too).
+    let mut new_locals: Vec<NirLocal> = Vec::new();
+    let body = func.body.as_mut().unwrap();
+    let root = body.root;
+    let changed = hoist_in_block(body, root, &mut local_count, &mut new_locals, type_table);
     func.local_count = local_count;
-    func.locals = locals;
+    func.locals.extend(new_locals);
     changed
 }
 
 fn hoist_in_block(
-    block: &mut NirBlock,
+    body: &mut Body,
+    block: BlockId,
     local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
+    new_locals: &mut Vec<NirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
 ) -> bool {
     let mut changed = false;
-    let mut new_stmts = Vec::new();
+    let mut new_stmts: Vec<StmtId> = Vec::new();
 
-    for mut stmt in std::mem::take(&mut block.stmts) {
-        match &mut stmt.kind {
-            NirStmtKind::Loop { body } => {
-                // Recurse into loop body first (for nested loops)
-                changed |= hoist_in_block(body, local_count, locals, type_table);
-
-                // Try to hoist template buffers out of this loop
-                let hoist_stmts = hoist_tmpl_from_loop(body, local_count, locals, type_table);
-                if !hoist_stmts.is_empty() {
-                    changed = true;
-                    new_stmts.extend(hoist_stmts);
-                }
-                new_stmts.push(stmt);
-            }
-            NirStmtKind::If {
+    for s in body.blocks[block].stmts.clone() {
+        // Classify without holding the borrow across the mutable recursion.
+        let (loop_b, if_blocks, lab_b) = match &body.stmts[s].kind {
+            StmtKind::Loop { body } => (Some(*body), None, None),
+            StmtKind::If {
                 then_block,
                 else_block,
                 ..
-            } => {
-                changed |= hoist_in_block(then_block, local_count, locals, type_table);
-                if let Some(eb) = else_block {
-                    changed |= hoist_in_block(eb, local_count, locals, type_table);
-                }
-                new_stmts.push(stmt);
+            } => (None, Some((*then_block, *else_block)), None),
+            StmtKind::LabeledBlock { block, .. } => (None, None, Some(*block)),
+            _ => (None, None, None),
+        };
+
+        if let Some(lb) = loop_b {
+            // Recurse into loop body first (for nested loops).
+            changed |= hoist_in_block(body, lb, local_count, new_locals, type_table);
+            // Try to hoist template buffers out of this loop.
+            let hoist_stmts = hoist_tmpl_from_loop(body, lb, local_count, new_locals, type_table);
+            if !hoist_stmts.is_empty() {
+                changed = true;
+                new_stmts.extend(hoist_stmts);
             }
-            NirStmtKind::LabeledBlock { block: inner, .. } => {
-                changed |= hoist_in_block(inner, local_count, locals, type_table);
-                new_stmts.push(stmt);
+            new_stmts.push(s);
+        } else if let Some((tb, eb)) = if_blocks {
+            changed |= hoist_in_block(body, tb, local_count, new_locals, type_table);
+            if let Some(eb) = eb {
+                changed |= hoist_in_block(body, eb, local_count, new_locals, type_table);
             }
-            _ => {
-                new_stmts.push(stmt);
-            }
+            new_stmts.push(s);
+        } else if let Some(inner) = lab_b {
+            changed |= hoist_in_block(body, inner, local_count, new_locals, type_table);
+            new_stmts.push(s);
+        } else {
+            new_stmts.push(s);
         }
     }
 
-    block.stmts = new_stmts;
+    body.blocks[block].stmts = new_stmts;
     changed
 }
 
@@ -119,8 +133,10 @@ fn hoist_in_block(
 struct TmplCandidate {
     /// Index of the `__r` local in the `__tmpl` block
     buf_local_index: u32,
-    /// The initial value expression (e.g., `String { repr: array_new(N), used: 0 }`)
-    init_value: NirExpr,
+    /// The init-value expression node id (e.g. `String { repr: array_new(N),
+    /// used: 0 }`). Reused as the hoisted `Let`'s value — the original first
+    /// statement is replaced, so this subtree becomes the hoist's sole owner.
+    init_value: ExprId,
     /// The String type ID
     string_type: TypeId,
     /// The span of the original expression
@@ -133,8 +149,9 @@ struct FmtCandidate {
     stmt_index: usize,
     /// The local index being assigned to (e.g., `__local_13`)
     fmt_local_index: u32,
-    /// The Formatter struct literal expression
-    init_value: NirExpr,
+    /// The normalized Formatter struct-literal node id (`buf` pointing at the
+    /// hoisted buffer). Reused as the hoisted `Let`'s value.
+    init_value: ExprId,
     /// The Formatter type ID
     formatter_type: TypeId,
     /// Index of the `indent` field in the Formatter struct
@@ -146,23 +163,25 @@ struct FmtCandidate {
 /// Scan a loop body for `__tmpl` labeled blocks and hoist their buffer allocations.
 /// Returns hoisting statements to prepend before the loop.
 fn hoist_tmpl_from_loop(
-    loop_body: &mut NirBlock,
+    body: &mut Body,
+    loop_body: BlockId,
     local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
+    new_locals: &mut Vec<NirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
-) -> Vec<NirStmt> {
+) -> Vec<StmtId> {
     // Phase 1: Collect all Let bindings whose value is a __tmpl LabeledBlock,
     // and check if the bound variable escapes (used as a non-self argument).
-    let escaping_locals = collect_escaping_locals(loop_body);
+    let escaping_locals = collect_escaping_locals(body, loop_body);
 
     // Phase 2: Transform safe __tmpl blocks
     let mut hoist_stmts = Vec::new();
     transform_stmts_in_block(
+        body,
         loop_body,
         &escaping_locals,
         &mut hoist_stmts,
         local_count,
-        locals,
+        new_locals,
         type_table,
     );
     hoist_stmts
@@ -170,209 +189,241 @@ fn hoist_tmpl_from_loop(
 
 /// Collect local indices that "escape" — used as a non-receiver function argument
 /// or stored in a struct/array/collection.
-fn collect_escaping_locals(block: &NirBlock) -> IndexSet<u32> {
+fn collect_escaping_locals(body: &Body, block: BlockId) -> IndexSet<u32> {
     let mut escaping = IndexSet::default();
-    for stmt in &block.stmts {
-        collect_escaping_in_stmt(stmt, &mut escaping);
+    for s in &body.blocks[block].stmts {
+        collect_escaping_in_stmt(body, *s, &mut escaping);
     }
     escaping
 }
 
-fn collect_escaping_in_stmt(stmt: &NirStmt, escaping: &mut IndexSet<u32>) {
-    match &stmt.kind {
-        NirStmtKind::Let { value, .. } => {
-            collect_escaping_in_expr(value, escaping);
+fn collect_escaping_in_stmt(body: &Body, s: StmtId, escaping: &mut IndexSet<u32>) {
+    match &body.stmts[s].kind {
+        StmtKind::Let { value, .. } => {
+            collect_escaping_in_expr(body, *value, escaping);
         }
-        NirStmtKind::Expr(expr) => {
-            collect_escaping_in_expr(expr, escaping);
+        StmtKind::Expr(expr) => {
+            collect_escaping_in_expr(body, *expr, escaping);
         }
-        NirStmtKind::Return { value: Some(expr) } => {
+        StmtKind::Return { value: Some(expr) } => {
             // Returning a value means it escapes the loop
-            collect_local_refs(expr, escaping);
-            collect_escaping_in_expr(expr, escaping);
+            collect_local_refs(body, *expr, escaping);
+            collect_escaping_in_expr(body, *expr, escaping);
         }
-        NirStmtKind::If {
+        StmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            collect_escaping_in_expr(condition, escaping);
-            for s in &then_block.stmts {
-                collect_escaping_in_stmt(s, escaping);
+            let condition = *condition;
+            let then_block = *then_block;
+            let else_block = *else_block;
+            collect_escaping_in_expr(body, condition, escaping);
+            for s in &body.blocks[then_block].stmts {
+                collect_escaping_in_stmt(body, *s, escaping);
             }
             if let Some(eb) = else_block {
-                for s in &eb.stmts {
-                    collect_escaping_in_stmt(s, escaping);
+                for s in &body.blocks[eb].stmts {
+                    collect_escaping_in_stmt(body, *s, escaping);
                 }
             }
         }
-        NirStmtKind::LabeledBlock { block, .. } => {
-            for s in &block.stmts {
-                collect_escaping_in_stmt(s, escaping);
+        StmtKind::LabeledBlock { block, .. } => {
+            let block = *block;
+            for s in &body.blocks[block].stmts {
+                collect_escaping_in_stmt(body, *s, escaping);
             }
         }
-        NirStmtKind::Loop { body } => {
-            for s in &body.stmts {
-                collect_escaping_in_stmt(s, escaping);
+        StmtKind::Loop { body: lb } => {
+            let lb = *lb;
+            for s in &body.blocks[lb].stmts {
+                collect_escaping_in_stmt(body, *s, escaping);
             }
         }
-        NirStmtKind::Return { value: None } | NirStmtKind::Continue => {}
-        NirStmtKind::Break { value, .. } => {
+        StmtKind::Return { value: None } | StmtKind::Continue => {}
+        StmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                collect_local_refs(v, escaping);
-                collect_escaping_in_expr(v, escaping);
+                let v = *v;
+                collect_local_refs(body, v, escaping);
+                collect_escaping_in_expr(body, v, escaping);
             }
         }
-        NirStmtKind::LetDestructure { value, .. } => {
-            collect_escaping_in_expr(value, escaping);
+        StmtKind::LetDestructure { value, .. } => {
+            collect_escaping_in_expr(body, *value, escaping);
         }
     }
 }
 
 /// Mark all locals that appear as non-receiver function arguments as escaping.
-fn collect_escaping_in_expr(expr: &NirExpr, escaping: &mut IndexSet<u32>) {
-    match &expr.kind {
+fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>) {
+    match &body.exprs[e].kind {
         // Function call: args (not receiver) escape
-        NirExprKind::Call { args, .. } => {
+        ExprKind::Call { args, .. } => {
+            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
             for arg in args {
-                collect_local_refs(&arg.expr, escaping);
-                collect_escaping_in_expr(&arg.expr, escaping);
+                collect_local_refs(body, arg, escaping);
+                collect_escaping_in_expr(body, arg, escaping);
             }
         }
-        NirExprKind::MethodCall { receiver, args, .. } => {
+        ExprKind::MethodCall { receiver, args, .. } => {
             // Receiver (self) doesn't escape — only non-self args escape
-            collect_escaping_in_expr(receiver, escaping);
+            let receiver = *receiver;
+            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            collect_escaping_in_expr(body, receiver, escaping);
             for arg in args {
-                collect_local_refs(&arg.expr, escaping);
-                collect_escaping_in_expr(&arg.expr, escaping);
+                collect_local_refs(body, arg, escaping);
+                collect_escaping_in_expr(body, arg, escaping);
             }
         }
-        NirExprKind::IndirectCall { callee, args } => {
-            collect_escaping_in_expr(callee, escaping);
+        ExprKind::IndirectCall { callee, args } => {
+            let callee = *callee;
+            let args = args.clone();
+            collect_escaping_in_expr(body, callee, escaping);
             for arg in args {
-                collect_local_refs(arg, escaping);
-                collect_escaping_in_expr(arg, escaping);
+                collect_local_refs(body, arg, escaping);
+                collect_escaping_in_expr(body, arg, escaping);
             }
         }
         // Assignment: the value escapes (stored in target location)
-        NirExprKind::Assign { target, value } => {
-            collect_local_refs(value, escaping);
-            collect_escaping_in_expr(target, escaping);
-            collect_escaping_in_expr(value, escaping);
+        ExprKind::Assign { target, value } => {
+            let target = *target;
+            let value = *value;
+            collect_local_refs(body, value, escaping);
+            collect_escaping_in_expr(body, target, escaping);
+            collect_escaping_in_expr(body, value, escaping);
         }
         // Struct literal fields: all field values escape
-        NirExprKind::StructLiteral { fields, .. } => {
-            for f in fields {
-                collect_local_refs(&f.value, escaping);
-                collect_escaping_in_expr(&f.value, escaping);
+        ExprKind::StructLiteral { fields, .. } => {
+            let vals: Vec<ExprId> = fields.iter().map(|f| f.value).collect();
+            for v in vals {
+                collect_local_refs(body, v, escaping);
+                collect_escaping_in_expr(body, v, escaping);
             }
         }
         // Index expressions: the index value may escape (used in indexing)
-        NirExprKind::Index { expr: inner, index } => {
-            collect_escaping_in_expr(inner, escaping);
-            collect_escaping_in_expr(index, escaping);
+        ExprKind::Index { expr: inner, index } => {
+            let inner = *inner;
+            let index = *index;
+            collect_escaping_in_expr(body, inner, escaping);
+            collect_escaping_in_expr(body, index, escaping);
         }
         // Binary/unary: recurse
-        NirExprKind::Binary { left, right, .. } => {
-            collect_escaping_in_expr(left, escaping);
-            collect_escaping_in_expr(right, escaping);
+        ExprKind::Binary { left, right, .. } => {
+            let left = *left;
+            let right = *right;
+            collect_escaping_in_expr(body, left, escaping);
+            collect_escaping_in_expr(body, right, escaping);
         }
-        NirExprKind::Unary { expr: inner, .. } | NirExprKind::Cast { expr: inner, .. } => {
-            collect_escaping_in_expr(inner, escaping);
+        ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
+            collect_escaping_in_expr(body, *inner, escaping);
         }
-        NirExprKind::FieldAccess { expr: inner, .. } => {
-            collect_escaping_in_expr(inner, escaping);
+        ExprKind::FieldAccess { expr: inner, .. } => {
+            collect_escaping_in_expr(body, *inner, escaping);
         }
-        NirExprKind::If {
+        ExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            collect_escaping_in_expr(condition, escaping);
-            for s in &then_branch.stmts {
-                collect_escaping_in_stmt(s, escaping);
+            let condition = *condition;
+            let then_branch = *then_branch;
+            let else_branch = *else_branch;
+            collect_escaping_in_expr(body, condition, escaping);
+            for s in &body.blocks[then_branch].stmts {
+                collect_escaping_in_stmt(body, *s, escaping);
             }
             if let Some(eb) = else_branch {
-                for s in &eb.stmts {
-                    collect_escaping_in_stmt(s, escaping);
+                for s in &body.blocks[eb].stmts {
+                    collect_escaping_in_stmt(body, *s, escaping);
                 }
             }
         }
-        NirExprKind::LabeledBlock { block, .. } => {
-            for s in &block.stmts {
-                collect_escaping_in_stmt(s, escaping);
+        ExprKind::LabeledBlock { block, .. } => {
+            let block = *block;
+            for s in &body.blocks[block].stmts {
+                collect_escaping_in_stmt(body, *s, escaping);
             }
         }
-        NirExprKind::Block(block) => {
-            for s in &block.stmts {
-                collect_escaping_in_stmt(s, escaping);
+        ExprKind::Block(block) => {
+            let block = *block;
+            for s in &body.blocks[block].stmts {
+                collect_escaping_in_stmt(body, *s, escaping);
             }
         }
-        NirExprKind::Match { expr: inner, arms } => {
-            collect_escaping_in_expr(inner, escaping);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    collect_escaping_in_expr(guard, escaping);
-                }
-                collect_escaping_in_expr(&arm.body, escaping);
+        ExprKind::Match { expr: inner, arms } => {
+            let inner = *inner;
+            let arm_exprs: Vec<ExprId> = arms
+                .iter()
+                .flat_map(|arm| arm.guard.into_iter().chain(std::iter::once(arm.body)))
+                .collect();
+            collect_escaping_in_expr(body, inner, escaping);
+            for ae in arm_exprs {
+                collect_escaping_in_expr(body, ae, escaping);
             }
         }
-        NirExprKind::Switch {
+        ExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
         } => {
-            collect_escaping_in_expr(scrutinee, escaping);
+            let scrutinee = *scrutinee;
+            let arms = arms.clone();
+            let default = *default;
+            collect_escaping_in_expr(body, scrutinee, escaping);
             for arm in arms {
-                for s in &arm.stmts {
-                    collect_escaping_in_stmt(s, escaping);
+                for s in &body.blocks[arm].stmts {
+                    collect_escaping_in_stmt(body, *s, escaping);
                 }
             }
-            for s in &default.stmts {
-                collect_escaping_in_stmt(s, escaping);
+            for s in &body.blocks[default].stmts {
+                collect_escaping_in_stmt(body, *s, escaping);
             }
         }
-        NirExprKind::CmRawCall { args, .. } => {
+        ExprKind::CmRawCall { args, .. } => {
+            let args = args.clone();
             for arg in args {
-                collect_local_refs(arg, escaping);
-                collect_escaping_in_expr(arg, escaping);
+                collect_local_refs(body, arg, escaping);
+                collect_escaping_in_expr(body, arg, escaping);
             }
         }
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+            let elements = elements.clone();
             for elem in elements {
-                collect_local_refs(elem, escaping);
-                collect_escaping_in_expr(elem, escaping);
+                collect_local_refs(body, elem, escaping);
+                collect_escaping_in_expr(body, elem, escaping);
             }
         }
-        NirExprKind::VariantConstruct { payload, .. } => {
+        ExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
-                collect_local_refs(p, escaping);
-                collect_escaping_in_expr(p, escaping);
+                let p = *p;
+                collect_local_refs(body, p, escaping);
+                collect_escaping_in_expr(body, p, escaping);
             }
         }
-        NirExprKind::VariantTag { expr: inner }
-        | NirExprKind::VariantTest { expr: inner, .. }
-        | NirExprKind::VariantPayload { expr: inner, .. }
-        | NirExprKind::ClosureToCanonical { functor: inner, .. } => {
-            collect_escaping_in_expr(inner, escaping);
+        ExprKind::VariantTag { expr: inner }
+        | ExprKind::VariantTest { expr: inner, .. }
+        | ExprKind::VariantPayload { expr: inner, .. }
+        | ExprKind::ClosureToCanonical { functor: inner, .. } => {
+            collect_escaping_in_expr(body, *inner, escaping);
         }
-        NirExprKind::GlobalVarSet { value, .. } => {
-            collect_local_refs(value, escaping);
-            collect_escaping_in_expr(value, escaping);
+        ExprKind::GlobalVarSet { value, .. } => {
+            let value = *value;
+            collect_local_refs(body, value, escaping);
+            collect_escaping_in_expr(body, value, escaping);
         }
         // Leaf nodes
-        NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::EnumConstruct { .. } => {}
+        ExprKind::Local { .. }
+        | ExprKind::GlobalVarGet { .. }
+        | ExprKind::IntLiteral { .. }
+        | ExprKind::FloatLiteral { .. }
+        | ExprKind::StringLiteral(_)
+        | ExprKind::BytesLiteral(_)
+        | ExprKind::BoolLiteral(_)
+        | ExprKind::CharLiteral(_)
+        | ExprKind::Null
+        | ExprKind::Unit
+        | ExprKind::EnumConstruct { .. } => {}
     }
 }
 
@@ -380,24 +431,30 @@ fn collect_escaping_in_expr(expr: &NirExpr, escaping: &mut IndexSet<u32>) {
 /// Does NOT follow through `FieldAccess`: `s.repr` as a struct field value does
 /// not mark `s` as escaping, since field extraction is typically for temporary
 /// iterators/formatters consumed within the same scope.
-fn collect_local_refs(expr: &NirExpr, locals: &mut IndexSet<u32>) {
-    match &expr.kind {
-        NirExprKind::Local { index, .. } => {
+fn collect_local_refs(body: &Body, e: ExprId, locals: &mut IndexSet<u32>) {
+    match &body.exprs[e].kind {
+        ExprKind::Local { index, .. } => {
             locals.insert(*index);
         }
-        NirExprKind::LabeledBlock { block, .. } => {
+        ExprKind::LabeledBlock { block, .. } => {
             // The block result is the break value — check those
-            for s in &block.stmts {
-                if let NirStmtKind::Break {
-                    value: Some(val), ..
-                } = &s.kind
-                {
-                    collect_local_refs(val, locals);
-                }
+            let block = *block;
+            let break_vals: Vec<ExprId> = body.blocks[block]
+                .stmts
+                .iter()
+                .filter_map(|s| match &body.stmts[*s].kind {
+                    StmtKind::Break {
+                        value: Some(val), ..
+                    } => Some(*val),
+                    _ => None,
+                })
+                .collect();
+            for val in break_vals {
+                collect_local_refs(body, val, locals);
             }
         }
-        NirExprKind::Unary { expr: inner, .. } | NirExprKind::Cast { expr: inner, .. } => {
-            collect_local_refs(inner, locals);
+        ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
+            collect_local_refs(body, *inner, locals);
         }
         // FieldAccess (e.g., s.repr) — accessing a subfield doesn't mean the whole
         // local escapes. Skip to avoid false positives with iterator construction.
@@ -407,291 +464,251 @@ fn collect_local_refs(expr: &NirExpr, locals: &mut IndexSet<u32>) {
 
 /// Recursively transform statements, looking for Let bindings with __tmpl blocks.
 fn transform_stmts_in_block(
-    block: &mut NirBlock,
+    body: &mut Body,
+    block: BlockId,
     escaping_locals: &IndexSet<u32>,
-    hoist_stmts: &mut Vec<NirStmt>,
+    hoist_stmts: &mut Vec<StmtId>,
     local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
+    new_locals: &mut Vec<NirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
 ) {
-    for stmt in &mut block.stmts {
+    for s in body.blocks[block].stmts.clone() {
         transform_stmt(
-            stmt,
+            body,
+            s,
             escaping_locals,
             hoist_stmts,
             local_count,
-            locals,
+            new_locals,
             type_table,
         );
     }
 }
 
 fn transform_stmt(
-    stmt: &mut NirStmt,
+    body: &mut Body,
+    s: StmtId,
     escaping_locals: &IndexSet<u32>,
-    hoist_stmts: &mut Vec<NirStmt>,
+    hoist_stmts: &mut Vec<StmtId>,
     local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
+    new_locals: &mut Vec<NirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
 ) {
-    match &mut stmt.kind {
-        NirStmtKind::Let {
-            local_index,
-            value,
-            skip_value_copy,
-            ..
-        } => {
-            // Check if this Let binds a __tmpl block result
-            if let NirExprKind::LabeledBlock { label, block, .. } = &mut value.kind
-                && label == "__tmpl"
-                && !escaping_locals.contains(local_index)
-                && let Some(candidate) = extract_tmpl_candidate(block)
+    // `let x = __tmpl: { ... }` — the only statement shape that can hoist.
+    let let_info = if let StmtKind::Let {
+        local_index, value, ..
+    } = &body.stmts[s].kind
+    {
+        Some((*local_index, *value))
+    } else {
+        None
+    };
+    if let Some((local_index, value)) = let_info {
+        let tmpl_block = match &body.exprs[value].kind {
+            ExprKind::LabeledBlock { label, block, .. } if label == "__tmpl" => Some(*block),
+            _ => None,
+        };
+        if let Some(tb) = tmpl_block
+            && !escaping_locals.contains(&local_index)
+            && let Some(candidate) = extract_tmpl_candidate(body, tb)
+        {
+            transform_tmpl_block(
+                body,
+                tb,
+                &candidate,
+                hoist_stmts,
+                local_count,
+                new_locals,
+                type_table,
+            );
+            // The hoisted String is reused; skip deep copy so `s` aliases `__tmpl_buf`.
+            if let StmtKind::Let {
+                skip_value_copy, ..
+            } = &mut body.stmts[s].kind
             {
-                transform_tmpl_block(
-                    block,
-                    &candidate,
-                    hoist_stmts,
-                    local_count,
-                    locals,
-                    type_table,
-                );
-                // The hoisted String is reused; skip deep copy so `s` aliases `__tmpl_buf`.
                 *skip_value_copy = true;
-                return;
             }
-            // Recurse into the value expression
-            transform_expr(
-                value,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                locals,
-                type_table,
-            );
+            return;
         }
-        NirStmtKind::Expr(expr) => {
-            transform_expr(
-                expr,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                locals,
-                type_table,
-            );
-        }
-        NirStmtKind::If {
+        // Recurse into the value expression
+        transform_expr(
+            body,
+            value,
+            escaping_locals,
+            hoist_stmts,
+            local_count,
+            new_locals,
+            type_table,
+        );
+        return;
+    }
+
+    // Other statement shapes that carry transformable expressions / blocks.
+    enum Shape {
+        Expr(ExprId),
+        If(ExprId, BlockId, Option<BlockId>),
+        Labeled(BlockId),
+        Break(ExprId),
+        None,
+    }
+    let shape = match &body.stmts[s].kind {
+        StmtKind::Expr(e) => Shape::Expr(*e),
+        StmtKind::If {
             condition,
             then_block,
             else_block,
-        } => {
+        } => Shape::If(*condition, *then_block, *else_block),
+        StmtKind::LabeledBlock { block, .. } => Shape::Labeled(*block),
+        StmtKind::Break { value: Some(e), .. } => Shape::Break(*e),
+        // Don't recurse into nested loops.
+        _ => Shape::None,
+    };
+    match shape {
+        Shape::Expr(e) | Shape::Break(e) => transform_expr(
+            body,
+            e,
+            escaping_locals,
+            hoist_stmts,
+            local_count,
+            new_locals,
+            type_table,
+        ),
+        Shape::If(cond, tb, eb) => {
             transform_expr(
-                condition,
+                body,
+                cond,
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                locals,
+                new_locals,
                 type_table,
             );
             transform_stmts_in_block(
-                then_block,
+                body,
+                tb,
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                locals,
+                new_locals,
                 type_table,
             );
-            if let Some(eb) = else_block {
+            if let Some(eb) = eb {
                 transform_stmts_in_block(
+                    body,
                     eb,
                     escaping_locals,
                     hoist_stmts,
                     local_count,
-                    locals,
+                    new_locals,
                     type_table,
                 );
             }
         }
-        NirStmtKind::LabeledBlock { block, .. } => {
-            transform_stmts_in_block(
-                block,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                locals,
-                type_table,
-            );
-        }
-        NirStmtKind::Break {
-            value: Some(expr), ..
-        } => {
-            transform_expr(
-                expr,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                locals,
-                type_table,
-            );
-        }
-        // Don't recurse into nested loops
-        NirStmtKind::Loop { .. } => {}
-        _ => {}
+        Shape::Labeled(b) => transform_stmts_in_block(
+            body,
+            b,
+            escaping_locals,
+            hoist_stmts,
+            local_count,
+            new_locals,
+            type_table,
+        ),
+        Shape::None => {}
     }
 }
 
 fn transform_expr(
-    expr: &mut NirExpr,
+    body: &mut Body,
+    e: ExprId,
     escaping_locals: &IndexSet<u32>,
-    hoist_stmts: &mut Vec<NirStmt>,
+    hoist_stmts: &mut Vec<StmtId>,
     local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
+    new_locals: &mut Vec<NirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
 ) {
-    match &mut expr.kind {
-        // Recurse into sub-expressions
-        // Note: __tmpl in non-Let contexts (e.g. directly as function arguments like
-        // `map[\`key{i}\`] = v`) are NOT hoisted because we can't track if the result escapes.
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                transform_expr(
-                    &mut arg.expr,
-                    escaping_locals,
-                    hoist_stmts,
-                    local_count,
-                    locals,
-                    type_table,
-                );
-            }
+    // Mirror the original's restricted arm set: __tmpl in non-Let contexts is
+    // not hoisted, so only these shapes recurse.
+    enum Walk {
+        Exprs(Vec<ExprId>),
+        CondBlocks(ExprId, BlockId, Option<BlockId>),
+        Block(BlockId),
+        None,
+    }
+    let walk = match &body.exprs[e].kind {
+        ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr).collect()),
+        ExprKind::MethodCall { receiver, args, .. } => {
+            let mut v = vec![*receiver];
+            v.extend(args.iter().map(|a| a.expr));
+            Walk::Exprs(v)
         }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            transform_expr(
-                receiver,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                locals,
-                type_table,
-            );
-            for arg in args {
-                transform_expr(
-                    &mut arg.expr,
-                    escaping_locals,
-                    hoist_stmts,
-                    local_count,
-                    locals,
-                    type_table,
-                );
-            }
-        }
-        NirExprKind::Binary { left, right, .. } => {
-            transform_expr(
-                left,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                locals,
-                type_table,
-            );
-            transform_expr(
-                right,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                locals,
-                type_table,
-            );
-        }
-        NirExprKind::Unary { expr: inner, .. } | NirExprKind::Cast { expr: inner, .. } => {
-            transform_expr(
-                inner,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                locals,
-                type_table,
-            );
-        }
-        NirExprKind::Assign { target, value } => {
-            transform_expr(
-                target,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                locals,
-                type_table,
-            );
-            transform_expr(
-                value,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                locals,
-                type_table,
-            );
-        }
-        NirExprKind::If {
+        ExprKind::Binary { left, right, .. } => Walk::Exprs(vec![*left, *right]),
+        ExprKind::Unary { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. }
+        | ExprKind::FieldAccess { expr: inner, .. } => Walk::Exprs(vec![*inner]),
+        ExprKind::Assign { target, value } => Walk::Exprs(vec![*target, *value]),
+        ExprKind::If {
             condition,
             then_branch,
             else_branch,
-        } => {
+        } => Walk::CondBlocks(*condition, *then_branch, *else_branch),
+        ExprKind::LabeledBlock { block, .. } | ExprKind::Block(block) => Walk::Block(*block),
+        _ => Walk::None,
+    };
+    match walk {
+        Walk::Exprs(v) => {
+            for id in v {
+                transform_expr(
+                    body,
+                    id,
+                    escaping_locals,
+                    hoist_stmts,
+                    local_count,
+                    new_locals,
+                    type_table,
+                );
+            }
+        }
+        Walk::CondBlocks(cond, tb, eb) => {
             transform_expr(
-                condition,
+                body,
+                cond,
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                locals,
+                new_locals,
                 type_table,
             );
             transform_stmts_in_block(
-                then_branch,
+                body,
+                tb,
                 escaping_locals,
                 hoist_stmts,
                 local_count,
-                locals,
+                new_locals,
                 type_table,
             );
-            if let Some(eb) = else_branch {
+            if let Some(eb) = eb {
                 transform_stmts_in_block(
+                    body,
                     eb,
                     escaping_locals,
                     hoist_stmts,
                     local_count,
-                    locals,
+                    new_locals,
                     type_table,
                 );
             }
         }
-        NirExprKind::FieldAccess { expr: inner, .. } => {
-            transform_expr(
-                inner,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                locals,
-                type_table,
-            );
-        }
-        NirExprKind::LabeledBlock { block, .. } => {
-            transform_stmts_in_block(
-                block,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                locals,
-                type_table,
-            );
-        }
-        NirExprKind::Block(block) => {
-            transform_stmts_in_block(
-                block,
-                escaping_locals,
-                hoist_stmts,
-                local_count,
-                locals,
-                type_table,
-            );
-        }
-        _ => {}
+        Walk::Block(b) => transform_stmts_in_block(
+            body,
+            b,
+            escaping_locals,
+            hoist_stmts,
+            local_count,
+            new_locals,
+            type_table,
+        ),
+        Walk::None => {}
     }
 }
 
@@ -705,53 +722,59 @@ fn transform_expr(
 ///
 /// Both end with:
 ///   `break __tmpl: __r;`
-fn extract_tmpl_candidate(block: &NirBlock) -> Option<TmplCandidate> {
+fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> {
     // First statement must be: let mut __r = ...
-    let first_stmt = block.stmts.first()?;
-    let (buf_local_index, string_type, init_value, span) = match &first_stmt.kind {
-        NirStmtKind::Let {
+    let first_stmt = *body.blocks[block].stmts.first()?;
+    let (buf_local_index, string_type, init_value, span) = match &body.stmts[first_stmt].kind {
+        StmtKind::Let {
             name,
             local_index,
             value,
             type_id,
             ..
         } if name == "__r" => {
+            let local_index = *local_index;
+            let value = *value;
+            let type_id = *type_id;
+            let value_span = body.exprs[value].span;
             // Try pre-lowered form: String::with_capacity(N)
-            if let NirExprKind::Call { func, .. } = &value.kind
+            if let ExprKind::Call { func, .. } = &body.exprs[value].kind
                 && func.method_info.is_some()
-                && func.name.clone() == "String::with_capacity"
+                && func.name == "String::with_capacity"
             {
                 return Some(TmplCandidate {
-                    buf_local_index: *local_index,
-                    init_value: value.clone(),
-                    string_type: *type_id,
-                    span: value.span,
+                    buf_local_index: local_index,
+                    init_value: value,
+                    string_type: type_id,
+                    span: value_span,
                 });
             }
             // Try post-lowered form: String { repr: array_new<u8>(N), used: 0 }
-            if let NirExprKind::StructLiteral {
+            if let ExprKind::StructLiteral {
                 struct_name,
                 fields,
                 ..
-            } = &value.kind
+            } = &body.exprs[value].kind
             {
                 if struct_name == "String" {
                     // Verify the repr field contains an array_new call
                     let repr_field = fields
                         .iter()
                         .find(|f| f.name == SeqField::Backing.field_name())?;
-                    extract_array_new_capacity(&repr_field.value)?;
+                    if !array_new_has_capacity(body, repr_field.value) {
+                        return None;
+                    }
                     // Verify used field is 0
                     let used_field = fields
                         .iter()
                         .find(|f| f.name == SeqField::Len.field_name())?;
                     if !matches!(
-                        &used_field.value.kind,
-                        NirExprKind::IntLiteral { value: 0, .. }
+                        &body.exprs[used_field.value].kind,
+                        ExprKind::IntLiteral { value: 0, .. }
                     ) {
                         return None;
                     }
-                    (*local_index, *type_id, value.clone(), value.span)
+                    (local_index, type_id, value, value_span)
                 } else {
                     return None;
                 }
@@ -763,13 +786,13 @@ fn extract_tmpl_candidate(block: &NirBlock) -> Option<TmplCandidate> {
     };
 
     // Last statement must be: break __tmpl: __r
-    let last_stmt = block.stmts.last()?;
-    match &last_stmt.kind {
-        NirStmtKind::Break {
+    let last_stmt = *body.blocks[block].stmts.last()?;
+    match &body.stmts[last_stmt].kind {
+        StmtKind::Break {
             label: Some(label),
             value: Some(val),
-        } if label == "__tmpl" => match &val.kind {
-            NirExprKind::Local { index, .. } if *index == buf_local_index => {}
+        } if label == "__tmpl" => match &body.exprs[*val].kind {
+            ExprKind::Local { index, .. } if *index == buf_local_index => {}
             _ => return None,
         },
         _ => return None,
@@ -783,6 +806,16 @@ fn extract_tmpl_candidate(block: &NirBlock) -> Option<TmplCandidate> {
     })
 }
 
+/// Owned descriptor of a Formatter struct literal's fields, extracted from the
+/// arena so the candidacy decision needs no borrow held across construction.
+struct FmtFields {
+    struct_name: String,
+    fields: Vec<(String, u32, ExprId)>,
+    struct_type: TypeId,
+    value_type_id: TypeId,
+    value_span: Span,
+}
+
 /// Collect all Formatter struct literals in a `__tmpl` block that can be hoisted.
 ///
 /// Detects three patterns:
@@ -792,114 +825,140 @@ fn extract_tmpl_candidate(block: &NirBlock) -> Option<TmplCandidate> {
 ///      `let __f = label: { let buf = &mut __tmpl_buf; break: Formatter { ..., buf } }`
 ///      or `__local_N = label: { ... break: Formatter { ... } }`
 fn extract_fmt_candidates(
-    block: &NirBlock,
+    body: &mut Body,
+    block: BlockId,
     hoisted_buf_index: u32,
     type_table: &std::cell::RefCell<TypeTable>,
 ) -> Vec<FmtCandidate> {
-    let type_table = type_table.borrow();
-    let mut candidates = Vec::new();
-
-    for (i, stmt) in block.stmts.iter().enumerate() {
-        if i == 0 || i == block.stmts.len() - 1 {
-            continue;
-        }
-
-        // Try to extract (local_index, value_expr) from the statement
-        let (fmt_local_index, value_expr): (u32, &NirExpr) = match &stmt.kind {
-            NirStmtKind::Expr(expr) => {
-                let NirExprKind::Assign { target, value } = &expr.kind else {
-                    continue;
-                };
-                let NirExprKind::Local { index, .. } = &target.kind else {
-                    continue;
-                };
-                (*index, value)
+    // Phase A (read): decide candidacy without mutating the arena.
+    struct Raw {
+        stmt_index: usize,
+        fmt_local_index: u32,
+        ff: FmtFields,
+        indent_field_index: u32,
+    }
+    let mut raws: Vec<Raw> = Vec::new();
+    {
+        let type_table = type_table.borrow();
+        let stmts = body.blocks[block].stmts.clone();
+        let len = stmts.len();
+        for (i, s) in stmts.iter().enumerate() {
+            if i == 0 || i == len - 1 {
+                continue;
             }
-            NirStmtKind::Let {
-                local_index, value, ..
-            } => (*local_index, value),
-            _ => continue,
-        };
 
-        // Try to extract Formatter fields from the value expression
-        let Some(extracted) = extract_formatter_fields(value_expr, hoisted_buf_index) else {
-            continue;
-        };
-
-        let (struct_name, fields, struct_type, value_type_id, value_span) = extracted;
-
-        if struct_name != "Formatter" {
-            continue;
-        }
-
-        // Find the `indent` field index
-        let Some(indent_field) = fields.iter().find(|f| f.name == "indent") else {
-            continue;
-        };
-        let indent_field_index = indent_field.field_index;
-
-        // Verify all non-buf fields are constant (literals)
-        let all_const = fields.iter().all(|f| {
-            if f.name == "buf" {
-                return true;
-            }
-            is_constant_expr(&f.value)
-        });
-        if !all_const {
-            continue;
-        }
-
-        // Verify the Formatter type is a struct
-        let resolved = type_table.get(value_type_id);
-        if !matches!(resolved, crate::tir::ResolvedType::Struct { .. }) {
-            continue;
-        }
-
-        // Build init_value with buf pointing to hoisted buffer
-        let init_fields: Vec<_> = fields
-            .iter()
-            .map(|f| {
-                if f.name == "buf" {
-                    // Normalize buf to &mut __tmpl_buf
-                    crate::nir::NirStructField {
-                        name: f.name.clone(),
-                        value: NirExpr::new(
-                            NirExprKind::Unary {
-                                op: NirUnaryOp::MutRef,
-                                expr: Box::new(NirExpr::new(
-                                    NirExprKind::Local {
-                                        index: hoisted_buf_index,
-                                        name: format!("__tmpl_buf_{hoisted_buf_index}"),
-                                    },
-                                    f.value.type_id,
-                                    value_span,
-                                )),
-                            },
-                            f.value.type_id,
-                            value_span,
-                        ),
-                        field_index: f.field_index,
-                    }
-                } else {
-                    f.clone()
+            // Try to extract (local_index, value_expr_id) from the statement.
+            let (fmt_local_index, value_expr): (u32, ExprId) = match &body.stmts[*s].kind {
+                StmtKind::Expr(expr) => {
+                    let ExprKind::Assign { target, value } = &body.exprs[*expr].kind else {
+                        continue;
+                    };
+                    let ExprKind::Local { index, .. } = &body.exprs[*target].kind else {
+                        continue;
+                    };
+                    (*index, *value)
                 }
-            })
-            .collect();
+                StmtKind::Let {
+                    local_index, value, ..
+                } => (*local_index, *value),
+                _ => continue,
+            };
 
+            let Some(ff) = extract_formatter_fields(body, value_expr, hoisted_buf_index) else {
+                continue;
+            };
+
+            if ff.struct_name != "Formatter" {
+                continue;
+            }
+
+            // Find the `indent` field index
+            let Some((_, indent_field_index, _)) =
+                ff.fields.iter().find(|(name, _, _)| name == "indent")
+            else {
+                continue;
+            };
+            let indent_field_index = *indent_field_index;
+
+            // Verify all non-buf fields are constant (literals)
+            let all_const = ff.fields.iter().all(|(name, _, value)| {
+                if name == "buf" {
+                    return true;
+                }
+                is_constant_expr(body, *value)
+            });
+            if !all_const {
+                continue;
+            }
+
+            // Verify the Formatter type is a struct
+            let resolved = type_table.get(ff.value_type_id);
+            if !matches!(resolved, crate::tir::ResolvedType::Struct { .. }) {
+                continue;
+            }
+
+            raws.push(Raw {
+                stmt_index: i,
+                fmt_local_index,
+                ff,
+                indent_field_index,
+            });
+        }
+    }
+
+    // Phase B (build): synthesize the normalized Formatter literal per candidate.
+    let mut candidates = Vec::new();
+    for raw in raws {
+        let value_type_id = raw.ff.value_type_id;
+        let value_span = raw.ff.value_span;
+        let struct_type = raw.ff.struct_type;
+        let mut init_fields: Vec<ArenaStructField> = Vec::new();
+        for (name, field_index, value) in &raw.ff.fields {
+            let new_value = if name == "buf" {
+                // Normalize buf to &mut __tmpl_buf
+                let buf_ty = body.exprs[*value].type_id;
+                let local = body.exprs.push(ExprNode {
+                    kind: ExprKind::Local {
+                        index: hoisted_buf_index,
+                        name: format!("__tmpl_buf_{hoisted_buf_index}"),
+                    },
+                    type_id: buf_ty,
+                    span: value_span,
+                });
+                body.exprs.push(ExprNode {
+                    kind: ExprKind::Unary {
+                        op: NirUnaryOp::MutRef,
+                        expr: local,
+                    },
+                    type_id: buf_ty,
+                    span: value_span,
+                })
+            } else {
+                // A verified constant leaf — a shallow node copy is a full copy.
+                let node = body.exprs[*value].clone();
+                body.exprs.push(node)
+            };
+            init_fields.push(ArenaStructField {
+                name: name.clone(),
+                value: new_value,
+                field_index: *field_index,
+            });
+        }
+        let init_value = body.exprs.push(ExprNode {
+            kind: ExprKind::StructLiteral {
+                struct_type,
+                struct_name: raw.ff.struct_name.clone(),
+                fields: init_fields,
+            },
+            type_id: value_type_id,
+            span: value_span,
+        });
         candidates.push(FmtCandidate {
-            stmt_index: i,
-            fmt_local_index,
-            init_value: NirExpr::new(
-                NirExprKind::StructLiteral {
-                    struct_type,
-                    struct_name: struct_name.to_string(),
-                    fields: init_fields,
-                },
-                value_type_id,
-                value_span,
-            ),
+            stmt_index: raw.stmt_index,
+            fmt_local_index: raw.fmt_local_index,
+            init_value,
             formatter_type: struct_type,
-            indent_field_index,
+            indent_field_index: raw.indent_field_index,
             span: value_span,
         });
     }
@@ -913,38 +972,52 @@ fn extract_fmt_candidates(
 ///   - `LabeledBlock { let buf = ...; break: StructLiteral { ..., buf } }`
 ///     where the intermediate `buf` local traces back to the hoisted buffer
 fn extract_formatter_fields(
-    value: &NirExpr,
+    body: &Body,
+    value: ExprId,
     hoisted_buf_index: u32,
-) -> Option<(&str, &[crate::nir::NirStructField], TypeId, TypeId, Span)> {
-    match &value.kind {
-        NirExprKind::StructLiteral {
+) -> Option<FmtFields> {
+    let value_type_id = body.exprs[value].type_id;
+    let value_span = body.exprs[value].span;
+    match &body.exprs[value].kind {
+        ExprKind::StructLiteral {
             struct_name,
             fields,
             struct_type,
         } => {
             let buf_field = fields.iter().find(|f| f.name == "buf")?;
-            if !buf_field_references_local(&buf_field.value, hoisted_buf_index) {
+            if !buf_field_references_local(body, buf_field.value, hoisted_buf_index) {
                 return None;
             }
-            Some((struct_name, fields, *struct_type, value.type_id, value.span))
+            Some(FmtFields {
+                struct_name: struct_name.clone(),
+                fields: fields
+                    .iter()
+                    .map(|f| (f.name.clone(), f.field_index, f.value))
+                    .collect(),
+                struct_type: *struct_type,
+                value_type_id,
+                value_span,
+            })
         }
-        NirExprKind::LabeledBlock { block, .. } => {
+        ExprKind::LabeledBlock { block, .. } => {
             // Pattern: { let buf = &mut __tmpl_buf; break label: Formatter { ..., buf } }
             // or: { __local = __tmpl_buf; break: Formatter { ..., buf: ref.as_non_null(__local) } }
-            let break_stmt = block.stmts.last()?;
-            let break_value = match &break_stmt.kind {
-                NirStmtKind::Break { value: Some(v), .. } => v,
+            let block = *block;
+            let break_stmt = *body.blocks[block].stmts.last()?;
+            let break_value = match &body.stmts[break_stmt].kind {
+                StmtKind::Break { value: Some(v), .. } => *v,
                 _ => return None,
             };
             extract_formatter_fields_from_block(
+                body,
                 block,
                 break_value,
                 hoisted_buf_index,
-                value.type_id,
-                value.span,
+                value_type_id,
+                value_span,
             )
         }
-        NirExprKind::Block(block) => {
+        ExprKind::Block(block) => {
             // After `branch_prune`'s C3 rewrite flattens
             // `__inline_Formatter__new_*: { …; break: Formatter { … } }`
             // into a plain `Block { …; Expr(Formatter { … }) }`, the
@@ -953,16 +1026,18 @@ fn extract_formatter_fields(
             // shape here so a future change to the inliner (e.g. one that
             // leaves a multi-use `buf` binding `copy_prop` can't fold) does
             // not silently disable Formatter hoisting.
-            let tail_stmt = block.stmts.last()?;
-            let NirStmtKind::Expr(tail) = &tail_stmt.kind else {
+            let block = *block;
+            let tail_stmt = *body.blocks[block].stmts.last()?;
+            let StmtKind::Expr(tail) = &body.stmts[tail_stmt].kind else {
                 return None;
             };
             extract_formatter_fields_from_block(
+                body,
                 block,
-                tail,
+                *tail,
                 hoisted_buf_index,
-                value.type_id,
-                value.span,
+                value_type_id,
+                value_span,
             )
         }
         _ => None,
@@ -974,54 +1049,60 @@ fn extract_formatter_fields(
 /// (flattened version of the same shape) arms of
 /// `extract_formatter_fields`. `value_expr` is the producing expression —
 /// either the broken value or the trailing `Expr` stmt.
-fn extract_formatter_fields_from_block<'a>(
-    block: &'a NirBlock,
-    value_expr: &'a NirExpr,
+fn extract_formatter_fields_from_block(
+    body: &Body,
+    block: BlockId,
+    value_expr: ExprId,
     hoisted_buf_index: u32,
     value_type_id: TypeId,
     value_span: Span,
-) -> Option<(
-    &'a str,
-    &'a [crate::nir::NirStructField],
-    TypeId,
-    TypeId,
-    Span,
-)> {
-    let NirExprKind::StructLiteral {
+) -> Option<FmtFields> {
+    let ExprKind::StructLiteral {
         struct_name,
         fields,
         struct_type,
-    } = &value_expr.kind
+    } = &body.exprs[value_expr].kind
     else {
         return None;
     };
 
+    let make = || FmtFields {
+        struct_name: struct_name.clone(),
+        fields: fields
+            .iter()
+            .map(|f| (f.name.clone(), f.field_index, f.value))
+            .collect(),
+        struct_type: *struct_type,
+        value_type_id,
+        value_span,
+    };
+
     // Check if buf traces to hoisted buffer (directly or via intermediate local)
     let buf_field = fields.iter().find(|f| f.name == "buf")?;
-    if buf_field_references_local(&buf_field.value, hoisted_buf_index) {
-        return Some((struct_name, fields, *struct_type, value_type_id, value_span));
+    if buf_field_references_local(body, buf_field.value, hoisted_buf_index) {
+        return Some(make());
     }
 
     // Trace through intermediate local in the block
-    let buf_inner_local = extract_local_from_ref(&buf_field.value)?;
-    for stmt in &block.stmts {
-        match &stmt.kind {
-            NirStmtKind::Let {
+    let buf_inner_local = extract_local_from_ref(body, buf_field.value)?;
+    for s in &body.blocks[block].stmts {
+        match &body.stmts[*s].kind {
+            StmtKind::Let {
                 local_index,
                 value: let_value,
                 ..
             } if *local_index == buf_inner_local => {
-                if references_local(let_value, hoisted_buf_index) {
-                    return Some((struct_name, fields, *struct_type, value_type_id, value_span));
+                if references_local(body, *let_value, hoisted_buf_index) {
+                    return Some(make());
                 }
             }
-            NirStmtKind::Expr(expr) => {
-                if let NirExprKind::Assign { target, value: av } = &expr.kind
-                    && let NirExprKind::Local { index, .. } = &target.kind
+            StmtKind::Expr(expr) => {
+                if let ExprKind::Assign { target, value: av } = &body.exprs[*expr].kind
+                    && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
                     && *index == buf_inner_local
-                    && references_local(av, hoisted_buf_index)
+                    && references_local(body, *av, hoisted_buf_index)
                 {
-                    return Some((struct_name, fields, *struct_type, value_type_id, value_span));
+                    return Some(make());
                 }
             }
             _ => {}
@@ -1032,19 +1113,19 @@ fn extract_formatter_fields_from_block<'a>(
 
 /// Extract the local index from a reference expression.
 /// Handles `&mut Local(N)`, `Local(N)`, and `ref.as_non_null(Local(N))`.
-fn extract_local_from_ref(expr: &NirExpr) -> Option<u32> {
-    match &expr.kind {
-        NirExprKind::Local { index, .. } => Some(*index),
-        NirExprKind::Unary {
+fn extract_local_from_ref(body: &Body, e: ExprId) -> Option<u32> {
+    match &body.exprs[e].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::Unary {
             op: NirUnaryOp::MutRef | NirUnaryOp::Ref,
             expr: inner,
-        } => match &inner.kind {
-            NirExprKind::Local { index, .. } => Some(*index),
+        } => match &body.exprs[*inner].kind {
+            ExprKind::Local { index, .. } => Some(*index),
             _ => None,
         },
-        NirExprKind::Call { func, args, .. } if func.name.contains("ref.as_non_null") => {
-            args.first().and_then(|a| match &a.expr.kind {
-                NirExprKind::Local { index, .. } => Some(*index),
+        ExprKind::Call { func, args, .. } if func.name.contains("ref.as_non_null") => {
+            args.first().and_then(|a| match &body.exprs[a.expr].kind {
+                ExprKind::Local { index, .. } => Some(*index),
                 _ => None,
             })
         }
@@ -1060,59 +1141,52 @@ fn extract_local_from_ref(expr: &NirExpr) -> Option<u32> {
 /// miscompile — so this must not be widened to a "mentions anywhere" walk such
 /// as `expr_mentions_local`. Pinned by the `references_local_matches_only_aliases_not_mentions`
 /// unit test below.
-fn references_local(expr: &NirExpr, local_index: u32) -> bool {
-    match &expr.kind {
-        NirExprKind::Local { index, .. } => *index == local_index,
-        NirExprKind::Unary {
+fn references_local(body: &Body, e: ExprId, local_index: u32) -> bool {
+    match &body.exprs[e].kind {
+        ExprKind::Local { index, .. } => *index == local_index,
+        ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
-        } => references_local(inner, local_index),
+        } => references_local(body, *inner, local_index),
         _ => false,
     }
 }
 
 /// Check if a `buf` field expression references the given local (the hoisted String buffer).
 /// Handles both `&mut local` (NIR form) and `ref.as_non_null(local)` patterns.
-fn buf_field_references_local(expr: &NirExpr, local_index: u32) -> bool {
-    match &expr.kind {
+fn buf_field_references_local(body: &Body, e: ExprId, local_index: u32) -> bool {
+    match &body.exprs[e].kind {
         // &mut __tmpl_buf (NIR level)
-        NirExprKind::Unary {
+        ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
-        } => is_local(inner, local_index),
+        } => is_local(body, *inner, local_index),
         // ref.as_non_null(__tmpl_buf) (WIR level / after lowering)
-        NirExprKind::Call { func, args, .. } => {
+        ExprKind::Call { func, args, .. } => {
             func.name.contains("ref.as_non_null")
                 && args.len() == 1
-                && is_local(&args[0].expr, local_index)
+                && is_local(body, args[0].expr, local_index)
         }
         _ => false,
     }
 }
 
 /// Check if an expression is a compile-time constant (literal).
-fn is_constant_expr(expr: &NirExpr) -> bool {
+fn is_constant_expr(body: &Body, e: ExprId) -> bool {
     matches!(
-        &expr.kind,
-        NirExprKind::IntLiteral { .. }
-            | NirExprKind::BoolLiteral(_)
-            | NirExprKind::CharLiteral(_)
-            | NirExprKind::EnumConstruct { .. }
+        &body.exprs[e].kind,
+        ExprKind::IntLiteral { .. }
+            | ExprKind::BoolLiteral(_)
+            | ExprKind::CharLiteral(_)
+            | ExprKind::EnumConstruct { .. }
     )
 }
 
-/// Extract the capacity argument from an `array_new<u8>(N)` call.
-fn extract_array_new_capacity(expr: &NirExpr) -> Option<NirExpr> {
-    match &expr.kind {
-        NirExprKind::Call { func, args, .. } => {
-            let name = func.name.clone();
-            if name.contains("array_new") {
-                args.first().map(|a| a.expr.clone())
-            } else {
-                None
-            }
-        }
-        _ => None,
+/// Whether `expr` is an `array_new<u8>(N)` call carrying a capacity argument.
+fn array_new_has_capacity(body: &Body, e: ExprId) -> bool {
+    match &body.exprs[e].kind {
+        ExprKind::Call { func, args, .. } => func.name.contains("array_new") && !args.is_empty(),
+        _ => false,
     }
 }
 
@@ -1124,11 +1198,12 @@ fn extract_array_new_capacity(expr: &NirExpr) -> Option<NirExpr> {
 /// renamed to `__tmpl_buf`. The outer Let binding gets `skip_value_copy = true`
 /// so the bound variable aliases the hoisted String directly.
 fn transform_tmpl_block(
-    block: &mut NirBlock,
+    body: &mut Body,
+    block: BlockId,
     candidate: &TmplCandidate,
-    hoist_stmts: &mut Vec<NirStmt>,
+    hoist_stmts: &mut Vec<StmtId>,
     local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
+    new_locals: &mut Vec<NirLocal>,
     type_table: &std::cell::RefCell<TypeTable>,
 ) {
     let span = candidate.span;
@@ -1138,77 +1213,112 @@ fn transform_tmpl_block(
     let buf_local_index = *local_count;
     *local_count += 1;
     let buf_local_name = format!("__tmpl_buf_{buf_local_index}");
-    locals.push(NirLocal {
+    new_locals.push(NirLocal {
         name: buf_local_name.clone(),
         type_id: string_type,
         is_mut: true,
     });
 
     // Hoist statement: let mut __tmpl_buf_N = String { repr: array_new(N), used: 0 };
-    hoist_stmts.push(NirStmt::new(
-        NirStmtKind::Let {
+    // Reuse the original init-value subtree (its old `Let` is replaced below).
+    let hoist_let = body.stmts.push(StmtNode {
+        kind: StmtKind::Let {
             name: buf_local_name.clone(),
             local_index: buf_local_index,
             is_mut: true,
             is_reactive: false,
             type_id: string_type,
-            value: candidate.init_value.clone(),
+            value: candidate.init_value,
             skip_value_copy: false,
         },
         span,
-    ));
+    });
+    hoist_stmts.push(hoist_let);
 
     // Replace the first statement (let mut __r = String { ... }) with a field reset:
     // __tmpl_buf_N.used = 0;
-    let reset_stmt = NirStmt::new(
-        NirStmtKind::Expr(NirExpr::new(
-            NirExprKind::Assign {
-                target: Box::new(NirExpr::new(
-                    NirExprKind::FieldAccess {
-                        expr: Box::new(NirExpr::new(
-                            NirExprKind::Local {
-                                index: buf_local_index,
-                                name: buf_local_name.clone(),
-                            },
-                            string_type,
-                            span,
-                        )),
-                        field_index: 1,
-                        field_name: SeqField::Len.field_name().to_string(),
-                    },
-                    TypeTable::I32,
-                    span,
-                )),
-                value: Box::new(NirExpr::new(
-                    NirExprKind::IntLiteral {
-                        value: 0,
-                        repr: "0".to_string(),
-                    },
-                    TypeTable::I32,
-                    span,
-                )),
-            },
-            TypeTable::UNIT,
-            span,
-        )),
+    let reset_stmt = build_field_reset(
+        body,
+        buf_local_index,
+        &buf_local_name,
+        string_type,
+        1,
+        SeqField::Len.field_name(),
         span,
     );
-    block.stmts[0] = reset_stmt;
+    body.blocks[block].stmts[0] = reset_stmt;
 
     // Rename all references from __r (old local index) to __tmpl_buf_N (new local index)
     let old_index = candidate.buf_local_index;
-    for stmt in &mut block.stmts {
-        rename_local_in_stmt(stmt, old_index, buf_local_index, &buf_local_name);
+    for s in body.blocks[block].stmts.clone() {
+        rename_local_in_stmt(body, s, old_index, buf_local_index, &buf_local_name);
     }
 
     // Phase 2: Hoist Formatter struct literals as well.
     // After the String rename above, the block may contain one or more Formatter
     // creations (direct struct literals or inlined Formatter::new LabeledBlocks).
     // Each distinct Formatter is hoisted to its own local before the loop.
-    let fmt_candidates = extract_fmt_candidates(block, buf_local_index, type_table);
+    let fmt_candidates = extract_fmt_candidates(body, block, buf_local_index, type_table);
     if !fmt_candidates.is_empty() {
-        transform_fmts_in_tmpl_block(block, &fmt_candidates, hoist_stmts, local_count, locals);
+        transform_fmts_in_tmpl_block(
+            body,
+            block,
+            &fmt_candidates,
+            hoist_stmts,
+            local_count,
+            new_locals,
+        );
     }
+}
+
+/// Build a `target_local.<field> = 0` statement (an `Expr(Assign)` over a
+/// `FieldAccess`), returning its arena id.
+fn build_field_reset(
+    body: &mut Body,
+    local_index: u32,
+    local_name: &str,
+    local_type: TypeId,
+    field_index: u32,
+    field_name: &str,
+    span: Span,
+) -> StmtId {
+    let local = body.exprs.push(ExprNode {
+        kind: ExprKind::Local {
+            index: local_index,
+            name: local_name.to_string(),
+        },
+        type_id: local_type,
+        span,
+    });
+    let field = body.exprs.push(ExprNode {
+        kind: ExprKind::FieldAccess {
+            expr: local,
+            field_index,
+            field_name: field_name.to_string(),
+        },
+        type_id: TypeTable::I32,
+        span,
+    });
+    let zero = body.exprs.push(ExprNode {
+        kind: ExprKind::IntLiteral {
+            value: 0,
+            repr: "0".to_string(),
+        },
+        type_id: TypeTable::I32,
+        span,
+    });
+    let assign = body.exprs.push(ExprNode {
+        kind: ExprKind::Assign {
+            target: field,
+            value: zero,
+        },
+        type_id: TypeTable::UNIT,
+        span,
+    });
+    body.stmts.push(StmtNode {
+        kind: StmtKind::Expr(assign),
+        span,
+    })
 }
 
 /// Hoist Formatter struct literals out of a `__tmpl` block.
@@ -1219,11 +1329,12 @@ fn transform_tmpl_block(
 /// Processes candidates in reverse order so that `stmt_index` values remain valid
 /// as we replace statements.
 fn transform_fmts_in_tmpl_block(
-    block: &mut NirBlock,
+    body: &mut Body,
+    block: BlockId,
     candidates: &[FmtCandidate],
-    hoist_stmts: &mut Vec<NirStmt>,
+    hoist_stmts: &mut Vec<StmtId>,
     local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
+    new_locals: &mut Vec<NirLocal>,
 ) {
     // Sort by stmt_index ascending to compute rename ranges
     let mut sorted_candidates: Vec<_> = candidates.iter().collect();
@@ -1243,10 +1354,10 @@ fn transform_fmts_in_tmpl_block(
         old_fmt_index: u32,
         formatter_type: TypeId,
         indent_field_index: u32,
-        init_value: NirExpr,
+        init_value: ExprId,
         span: Span,
     }
-    let block_len = block.stmts.len();
+    let block_len = body.blocks[block].stmts.len();
     let mut hoist_infos = Vec::new();
 
     for (pos, candidate) in sorted_candidates.iter().enumerate() {
@@ -1257,7 +1368,7 @@ fn transform_fmts_in_tmpl_block(
         // `Let`s by local index, with `tir_func.locals[idx].name` used as a
         // fallback when no `Let` is found, so matching names mainly
         // improves fallback / debug output consistency.
-        locals.push(NirLocal {
+        new_locals.push(NirLocal {
             name: format!("__fmt_buf_{fmt_local_index}"),
             type_id: candidate.formatter_type,
             is_mut: true,
@@ -1279,25 +1390,27 @@ fn transform_fmts_in_tmpl_block(
             old_fmt_index: candidate.fmt_local_index,
             formatter_type: candidate.formatter_type,
             indent_field_index: candidate.indent_field_index,
-            init_value: candidate.init_value.clone(),
+            init_value: candidate.init_value,
             span: candidate.span,
         });
     }
 
     for info in &hoist_infos {
         // Hoist statement: let mut __fmt_buf_N = Formatter { fill: ..., buf: ... };
-        hoist_stmts.push(NirStmt::new(
-            NirStmtKind::Let {
+        // Reuse the normalized Formatter literal built during extraction.
+        let hoist_let = body.stmts.push(StmtNode {
+            kind: StmtKind::Let {
                 name: info.hoisted_name.clone(),
                 local_index: info.hoisted_index,
                 is_mut: true,
                 is_reactive: false,
                 type_id: info.formatter_type,
-                value: info.init_value.clone(),
+                value: info.init_value,
                 skip_value_copy: false,
             },
-            info.span,
-        ));
+            span: info.span,
+        });
+        hoist_stmts.push(hoist_let);
 
         // Replace the Formatter struct literal with an indent field reset:
         //   __fmt_buf_N.indent = 0;
@@ -1306,47 +1419,26 @@ fn transform_fmts_in_tmpl_block(
         // (especially pretty-print with `:#?`) may modify the `indent` field
         // during formatting. Without this reset, the indent value would
         // accumulate across loop iterations, causing incorrect indentation.
-        let indent_reset_stmt = NirStmt::new(
-            NirStmtKind::Expr(NirExpr::new(
-                NirExprKind::Assign {
-                    target: Box::new(NirExpr::new(
-                        NirExprKind::FieldAccess {
-                            expr: Box::new(NirExpr::new(
-                                NirExprKind::Local {
-                                    index: info.hoisted_index,
-                                    name: info.hoisted_name.clone(),
-                                },
-                                info.formatter_type,
-                                info.span,
-                            )),
-                            field_index: info.indent_field_index,
-                            field_name: "indent".to_string(),
-                        },
-                        TypeTable::I32,
-                        info.span,
-                    )),
-                    value: Box::new(NirExpr::new(
-                        NirExprKind::IntLiteral {
-                            value: 0,
-                            repr: "0".to_string(),
-                        },
-                        TypeTable::I32,
-                        info.span,
-                    )),
-                },
-                TypeTable::UNIT,
-                info.span,
-            )),
+        let indent_reset = build_field_reset(
+            body,
+            info.hoisted_index,
+            &info.hoisted_name,
+            info.formatter_type,
+            info.indent_field_index,
+            "indent",
             info.span,
         );
-        block.stmts[info.stmt_index] = indent_reset_stmt;
+        body.blocks[block].stmts[info.stmt_index] = indent_reset;
 
         // Rename references from the old Formatter local to the hoisted one,
         // only within [rename_start, rename_end) to avoid clobbering other
         // candidates that share the same original local.
-        for stmt in &mut block.stmts[info.rename_start..info.rename_end] {
+        let range_stmts: Vec<StmtId> =
+            body.blocks[block].stmts[info.rename_start..info.rename_end].to_vec();
+        for s in range_stmts {
             rename_local_in_stmt(
-                stmt,
+                body,
+                s,
                 info.old_fmt_index,
                 info.hoisted_index,
                 &info.hoisted_name,
@@ -1355,123 +1447,149 @@ fn transform_fmts_in_tmpl_block(
     }
 }
 
-fn rename_local_in_stmt(stmt: &mut NirStmt, old_index: u32, new_index: u32, new_name: &str) {
-    match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } => {
-            rename_local_in_expr(value, old_index, new_index, new_name);
-        }
-        NirStmtKind::Expr(expr) => {
-            rename_local_in_expr(expr, old_index, new_index, new_name);
-        }
-        NirStmtKind::Return { value: Some(expr) } => {
-            rename_local_in_expr(expr, old_index, new_index, new_name);
-        }
-        NirStmtKind::If {
+fn rename_local_in_stmt(
+    body: &mut Body,
+    s: StmtId,
+    old_index: u32,
+    new_index: u32,
+    new_name: &str,
+) {
+    enum Shape {
+        Expr(ExprId),
+        If(ExprId, BlockId, Option<BlockId>),
+        Block(BlockId),
+        None,
+    }
+    let shape = match &body.stmts[s].kind {
+        StmtKind::Let { value, .. } => Shape::Expr(*value),
+        StmtKind::Expr(expr) => Shape::Expr(*expr),
+        StmtKind::Return { value: Some(expr) } => Shape::Expr(*expr),
+        StmtKind::If {
             condition,
             then_block,
             else_block,
-        } => {
-            rename_local_in_expr(condition, old_index, new_index, new_name);
-            rename_local_in_block(then_block, old_index, new_index, new_name);
-            if let Some(eb) = else_block {
-                rename_local_in_block(eb, old_index, new_index, new_name);
-            }
-        }
-        NirStmtKind::LabeledBlock { block, .. } => {
-            rename_local_in_block(block, old_index, new_index, new_name);
-        }
-        NirStmtKind::Loop { body } => {
-            rename_local_in_block(body, old_index, new_index, new_name);
-        }
-        NirStmtKind::Break {
+        } => Shape::If(*condition, *then_block, *else_block),
+        StmtKind::LabeledBlock { block, .. } => Shape::Block(*block),
+        StmtKind::Loop { body } => Shape::Block(*body),
+        StmtKind::Break {
             value: Some(expr), ..
-        } => {
-            rename_local_in_expr(expr, old_index, new_index, new_name);
+        } => Shape::Expr(*expr),
+        _ => Shape::None,
+    };
+    match shape {
+        Shape::Expr(e) => rename_local_in_expr(body, e, old_index, new_index, new_name),
+        Shape::If(cond, tb, eb) => {
+            rename_local_in_expr(body, cond, old_index, new_index, new_name);
+            rename_local_in_block(body, tb, old_index, new_index, new_name);
+            if let Some(eb) = eb {
+                rename_local_in_block(body, eb, old_index, new_index, new_name);
+            }
         }
-        _ => {}
+        Shape::Block(b) => rename_local_in_block(body, b, old_index, new_index, new_name),
+        Shape::None => {}
     }
 }
 
-fn rename_local_in_block(block: &mut NirBlock, old_index: u32, new_index: u32, new_name: &str) {
-    for stmt in &mut block.stmts {
-        rename_local_in_stmt(stmt, old_index, new_index, new_name);
+fn rename_local_in_block(
+    body: &mut Body,
+    block: BlockId,
+    old_index: u32,
+    new_index: u32,
+    new_name: &str,
+) {
+    for s in body.blocks[block].stmts.clone() {
+        rename_local_in_stmt(body, s, old_index, new_index, new_name);
     }
 }
 
-fn rename_local_in_expr(expr: &mut NirExpr, old_index: u32, new_index: u32, new_name: &str) {
-    match &mut expr.kind {
-        NirExprKind::Local { index, name } if *index == old_index => {
-            *index = new_index;
-            *name = new_name.to_string();
+fn rename_local_in_expr(
+    body: &mut Body,
+    e: ExprId,
+    old_index: u32,
+    new_index: u32,
+    new_name: &str,
+) {
+    enum Walk {
+        Local,
+        Exprs(Vec<ExprId>),
+        CondBlocks(ExprId, BlockId, Option<BlockId>),
+        Block(BlockId),
+        None,
+    }
+    let walk = match &body.exprs[e].kind {
+        ExprKind::Local { index, .. } if *index == old_index => Walk::Local,
+        ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr).collect()),
+        ExprKind::MethodCall { receiver, args, .. } => {
+            let mut v = vec![*receiver];
+            v.extend(args.iter().map(|a| a.expr));
+            Walk::Exprs(v)
         }
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                rename_local_in_expr(&mut arg.expr, old_index, new_index, new_name);
-            }
+        ExprKind::IndirectCall { callee, args } => {
+            let mut v = vec![*callee];
+            v.extend(args.iter().copied());
+            Walk::Exprs(v)
         }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            rename_local_in_expr(receiver, old_index, new_index, new_name);
-            for arg in args {
-                rename_local_in_expr(&mut arg.expr, old_index, new_index, new_name);
-            }
+        ExprKind::Binary { left, right, .. } => Walk::Exprs(vec![*left, *right]),
+        ExprKind::Unary { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. }
+        | ExprKind::FieldAccess { expr: inner, .. } => Walk::Exprs(vec![*inner]),
+        ExprKind::Assign { target, value } => Walk::Exprs(vec![*target, *value]),
+        ExprKind::StructLiteral { fields, .. } => {
+            Walk::Exprs(fields.iter().map(|f| f.value).collect())
         }
-        NirExprKind::IndirectCall { callee, args } => {
-            rename_local_in_expr(callee, old_index, new_index, new_name);
-            for arg in args {
-                rename_local_in_expr(arg, old_index, new_index, new_name);
-            }
-        }
-        NirExprKind::Binary { left, right, .. } => {
-            rename_local_in_expr(left, old_index, new_index, new_name);
-            rename_local_in_expr(right, old_index, new_index, new_name);
-        }
-        NirExprKind::Unary { expr: inner, .. }
-        | NirExprKind::Cast { expr: inner, .. }
-        | NirExprKind::FieldAccess { expr: inner, .. } => {
-            rename_local_in_expr(inner, old_index, new_index, new_name);
-        }
-        NirExprKind::Assign { target, value } => {
-            rename_local_in_expr(target, old_index, new_index, new_name);
-            rename_local_in_expr(value, old_index, new_index, new_name);
-        }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for f in fields {
-                rename_local_in_expr(&mut f.value, old_index, new_index, new_name);
-            }
-        }
-        NirExprKind::Index {
-            expr: inner, index, ..
-        } => {
-            rename_local_in_expr(inner, old_index, new_index, new_name);
-            rename_local_in_expr(index, old_index, new_index, new_name);
-        }
-        NirExprKind::If {
+        ExprKind::Index { expr: inner, index } => Walk::Exprs(vec![*inner, *index]),
+        ExprKind::If {
             condition,
             then_branch,
             else_branch,
-        } => {
-            rename_local_in_expr(condition, old_index, new_index, new_name);
-            rename_local_in_block(then_branch, old_index, new_index, new_name);
-            if let Some(eb) = else_branch {
-                rename_local_in_block(eb, old_index, new_index, new_name);
+        } => Walk::CondBlocks(*condition, *then_branch, *else_branch),
+        ExprKind::LabeledBlock { block, .. } | ExprKind::Block(block) => Walk::Block(*block),
+        _ => Walk::None,
+    };
+    match walk {
+        Walk::Local => {
+            if let ExprKind::Local { index, name } = &mut body.exprs[e].kind {
+                *index = new_index;
+                *name = new_name.to_string();
             }
         }
-        NirExprKind::LabeledBlock { block, .. } => {
-            rename_local_in_block(block, old_index, new_index, new_name);
+        Walk::Exprs(v) => {
+            for id in v {
+                rename_local_in_expr(body, id, old_index, new_index, new_name);
+            }
         }
-        NirExprKind::Block(block) => {
-            rename_local_in_block(block, old_index, new_index, new_name);
+        Walk::CondBlocks(cond, tb, eb) => {
+            rename_local_in_expr(body, cond, old_index, new_index, new_name);
+            rename_local_in_block(body, tb, old_index, new_index, new_name);
+            if let Some(eb) = eb {
+                rename_local_in_block(body, eb, old_index, new_index, new_name);
+            }
         }
-        _ => {}
+        Walk::Block(b) => rename_local_in_block(body, b, old_index, new_index, new_name),
+        Walk::None => {}
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::module_source::ModuleSource;
-    use crate::nir::{CallArg, FunctionRef};
+    use crate::nir::{NirBlock, NirExpr, NirExprKind, NirStmt, NirStmtKind};
     use crate::tir::TypeId;
+
+    /// Lower a single tree expression into a `Body` and return its arena id so
+    /// the arena-side `references_local` can be exercised directly.
+    fn body_of(expr: NirExpr) -> (Body, ExprId) {
+        let block = NirBlock {
+            stmts: vec![NirStmt::new(NirStmtKind::Expr(expr), Span::default())],
+            span: Span::default(),
+        };
+        let body = Body::from_block(&block);
+        let s = body.blocks[body.root].stmts[0];
+        let StmtKind::Expr(e) = body.stmts[s].kind else {
+            panic!("expected Expr stmt");
+        };
+        (body, e)
+    }
 
     fn local(idx: u32) -> NirExpr {
         NirExpr::new(
@@ -1499,6 +1617,8 @@ mod tests {
     /// independent value, so the call only *mentions* `arg`, it is not an
     /// alias of it.
     fn call_with(arg: NirExpr) -> NirExpr {
+        use crate::module_source::ModuleSource;
+        use crate::nir::{CallArg, FunctionRef};
         NirExpr::new(
             NirExprKind::Call {
                 func: FunctionRef {
@@ -1534,28 +1654,29 @@ mod tests {
         const IDX: u32 = 7;
 
         // Genuine aliases — must match.
-        assert!(references_local(&local(IDX), IDX));
-        assert!(references_local(
-            &unary(NirUnaryOp::MutRef, local(IDX)),
-            IDX
+        let (b, e) = body_of(local(IDX));
+        assert!(references_local(&b, e, IDX));
+        let (b, e) = body_of(unary(NirUnaryOp::MutRef, local(IDX)));
+        assert!(references_local(&b, e, IDX));
+        let (b, e) = body_of(unary(
+            NirUnaryOp::MutRef,
+            unary(NirUnaryOp::MutRef, local(IDX)),
         ));
-        assert!(references_local(
-            &unary(NirUnaryOp::MutRef, unary(NirUnaryOp::MutRef, local(IDX))),
-            IDX
-        ));
+        assert!(references_local(&b, e, IDX));
 
         // A different local is unrelated.
-        assert!(!references_local(&local(IDX + 1), IDX));
+        let (b, e) = body_of(local(IDX + 1));
+        assert!(!references_local(&b, e, IDX));
 
         // Non-alias *mentions* — must NOT match (this is the guard against
         // `expr_mentions_local`, which would return true for all of these and
         // miscompile the Formatter buffer rewrite).
-        assert!(!references_local(&call_with(local(IDX)), IDX));
-        assert!(!references_local(
-            &unary(NirUnaryOp::MutRef, call_with(local(IDX))),
-            IDX
-        ));
+        let (b, e) = body_of(call_with(local(IDX)));
+        assert!(!references_local(&b, e, IDX));
+        let (b, e) = body_of(unary(NirUnaryOp::MutRef, call_with(local(IDX))));
+        assert!(!references_local(&b, e, IDX));
         // `&buf` (shared ref) is not the `&mut` alias shape the hoist normalizes.
-        assert!(!references_local(&unary(NirUnaryOp::Ref, local(IDX)), IDX));
+        let (b, e) = body_of(unary(NirUnaryOp::Ref, local(IDX)));
+        assert!(!references_local(&b, e, IDX));
     }
 }

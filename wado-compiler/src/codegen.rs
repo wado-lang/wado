@@ -58,12 +58,12 @@ fn validate_core_module(wasm: &[u8], entry_module: &ModuleSource) {
 /// Find the function whose body byte range contains `offset`, with its name
 /// from the custom `name` section. Debug aid for validation ICEs.
 fn locate_offset_function(wasm: &[u8], offset: usize) -> Option<(u32, Option<String>)> {
-    use std::collections::HashMap;
+    use crate::hashmap::IndexMap;
     use wasmparser::{Name, Parser, Payload};
     let mut import_funcs = 0u32;
     let mut defined = 0u32;
     let mut bodies: Vec<(u32, std::ops::Range<usize>)> = Vec::new();
-    let mut names: HashMap<u32, String> = HashMap::new();
+    let mut names: IndexMap<u32, String> = IndexMap::default();
     for payload in Parser::new(0).parse_all(wasm) {
         match payload.ok()? {
             Payload::ImportSection(reader) => {

@@ -20,6 +20,14 @@
 //! reuse the recursive immutability proof. The recursion guard at
 //! `is_element_immutable_method` returns `false` for any recursive
 //! call site, suppressing self-recursive and mutually-recursive helpers.
+//!
+//! ## Arena traversal
+//!
+//! The pass reads and mutates the arena [`Body`] directly. The two
+//! soundness-critical analyses (`ElementClean`, `ElementImmutable`) are
+//! recursive arena walks over [`Body::for_each_child`], so every nested node —
+//! including match-arm and destructure patterns, and `ConstantValue` pattern
+//! sub-expressions — is covered exactly as the canonical tree visitor was.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -28,13 +36,12 @@ use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::nir::{
-    FunctionKind, FunctionRef, NirBlock, NirExpr, NirExprKind, NirFunction, NirStmt, NirStmtKind,
-    NirUnaryOp,
-};
+use crate::nir::{FunctionKind, FunctionRef, NirFunction, NirParam, NirUnaryOp};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::{NirRefVisitor, expr_mentions_local, is_local, strip_refs};
 use crate::tir::{ResolvedType, TypeTable};
+
+use super::arena_query::{expr_mentions_local, is_local, strip_refs};
 
 type FuncKey = (ModuleSource, String);
 
@@ -93,11 +100,12 @@ pub fn demote_value_copies(project: &mut NirPackage) {
         if f.value_copy_type().is_some() {
             continue;
         }
-        let Some(body) = &f.body else { continue };
+        let Some(body) = &f.body else {
+            continue;
+        };
         collect_sites(
             body,
             &list_wrapper_copies,
-            body,
             &f.params,
             fi,
             &mut analyzer,
@@ -160,19 +168,51 @@ pub fn demote_value_copies(project: &mut NirPackage) {
 }
 
 // ---------------------------------------------------------------------------
+// Reachable-node enumeration
+// ---------------------------------------------------------------------------
+
+/// Every `BlockId` reachable from the body root, in arbitrary order. Dead
+/// blocks left by a prior in-place arena pass are skipped — matching the tree
+/// bridge, which only ever materialized reachable nodes.
+fn reachable_blocks(body: &Body) -> Vec<BlockId> {
+    let mut out = Vec::new();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Block(b) = node {
+            out.push(b);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    out
+}
+
+/// Every `ExprId` reachable from the body root, in arbitrary order.
+fn reachable_exprs(body: &Body) -> Vec<ExprId> {
+    let mut out = Vec::new();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(id) = node {
+            out.push(id);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
 // Helper-shape detection / rewrite
 // ---------------------------------------------------------------------------
 
-fn body_is_list_wrapper_copy(body: &NirBlock) -> bool {
+fn body_is_list_wrapper_copy(body: &Body) -> bool {
     // `return StructLiteral { fields: [.., repr: Call(array_clone, ..), ..] }`
-    for stmt in &body.stmts {
-        if let NirStmtKind::Return { value: Some(v) } = &stmt.kind
-            && let NirExprKind::StructLiteral { fields, .. } = &v.kind
+    for s in &body.blocks[body.root].stmts {
+        if let StmtKind::Return { value: Some(v) } = &body.stmts[*s].kind
+            && let ExprKind::StructLiteral { fields, .. } = &body.exprs[*v].kind
         {
             return fields.iter().any(|fld| {
                 fld.name == SeqField::Backing.field_name()
-                    && matches!(&fld.value.kind,
-                        NirExprKind::Call { func, .. }
+                    && matches!(&body.exprs[fld.value].kind,
+                        ExprKind::Call { func, .. }
                             if builtin_gname(func).as_deref() == Some("builtin::array_clone"))
             });
         }
@@ -180,50 +220,18 @@ fn body_is_list_wrapper_copy(body: &NirBlock) -> bool {
     false
 }
 
-fn rewrite_array_clone_to_shallow(body: &mut NirBlock) {
-    for stmt in &mut body.stmts {
-        rewrite_stmt(stmt);
-    }
-}
-
-fn rewrite_stmt(stmt: &mut NirStmt) {
-    match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } | NirStmtKind::Expr(value) => rewrite_expr(value),
-        NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                rewrite_expr(v);
+/// Rewrite every reachable `builtin::array_clone` call in `body` to its
+/// shallow sibling `array_clone_shallow`.
+fn rewrite_array_clone_to_shallow(body: &mut Body) {
+    for id in reachable_exprs(body) {
+        if let ExprKind::Call { func, .. } = &mut body.exprs[id].kind
+            && builtin_gname(func).as_deref() == Some("builtin::array_clone")
+        {
+            func.name = "array_clone_shallow".to_string();
+            if let Some(mi) = &mut func.monomorph_info {
+                mi.generic_name = "array_clone_shallow".to_string();
             }
         }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            rewrite_expr(condition);
-            rewrite_array_clone_to_shallow(then_block);
-            if let Some(eb) = else_block {
-                rewrite_array_clone_to_shallow(eb);
-            }
-        }
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            rewrite_array_clone_to_shallow(body);
-        }
-        NirStmtKind::LetDestructure { value, .. } => rewrite_expr(value),
-        NirStmtKind::Continue => {}
-    }
-}
-
-fn rewrite_expr(expr: &mut NirExpr) {
-    if let NirExprKind::Call { func, .. } = &mut expr.kind
-        && builtin_gname(func).as_deref() == Some("builtin::array_clone")
-    {
-        func.name = "array_clone_shallow".to_string();
-        if let Some(mi) = &mut func.monomorph_info {
-            mi.generic_name = "array_clone_shallow".to_string();
-        }
-    }
-    for child in expr_children_mut(expr) {
-        rewrite_expr(child);
     }
 }
 
@@ -231,10 +239,10 @@ fn rewrite_expr(expr: &mut NirExpr) {
 // Call-site collection / retargeting
 // ---------------------------------------------------------------------------
 
-/// If `value` is a one-argument call to an array-wrapper `$value_copy$T`
-/// helper, return that helper's key.
-fn wrapper_call_key(value: &NirExpr, wrappers: &IndexSet<FuncKey>) -> Option<FuncKey> {
-    if let NirExprKind::Call { func, args, .. } = &value.kind
+/// If the expression at `value` is a one-argument call to an array-wrapper
+/// `$value_copy$T` helper, return that helper's key.
+fn wrapper_call_key(body: &Body, value: ExprId, wrappers: &IndexSet<FuncKey>) -> Option<FuncKey> {
+    if let ExprKind::Call { func, args, .. } = &body.exprs[value].kind
         && args.len() == 1
     {
         let key = (func.module_source.clone(), func.name.clone());
@@ -247,16 +255,16 @@ fn wrapper_call_key(value: &NirExpr, wrappers: &IndexSet<FuncKey>) -> Option<Fun
 
 /// The `(value, target-local)` binding a statement establishes, when it is a
 /// `let x = …` or a `x = …` whose target is a plain local.
-fn stmt_binding(stmt: &NirStmt) -> Option<(&NirExpr, u32)> {
-    match &stmt.kind {
-        NirStmtKind::Let {
+fn stmt_binding(body: &Body, s: StmtId) -> Option<(ExprId, u32)> {
+    match &body.stmts[s].kind {
+        StmtKind::Let {
             local_index, value, ..
-        } => Some((value, *local_index)),
-        NirStmtKind::Expr(e) => {
-            if let NirExprKind::Assign { target, value } = &e.kind
-                && let NirExprKind::Local { index, .. } = target.kind
+        } => Some((*value, *local_index)),
+        StmtKind::Expr(e) => {
+            if let ExprKind::Assign { target, value } = &body.exprs[*e].kind
+                && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
             {
-                Some((value, index))
+                Some((*value, *index))
             } else {
                 None
             }
@@ -265,110 +273,36 @@ fn stmt_binding(stmt: &NirStmt) -> Option<(&NirExpr, u32)> {
     }
 }
 
-/// Walk `block`; for every `let x = $value_copy$T(arg)` (and `Assign` form)
-/// binding to a value-copy-wrapper helper, AND-combine its eligibility into
-/// `site_elig[(fi, x)]`. Every nested block is visited exactly once.
+/// For every `let x = $value_copy$T(arg)` (and `Assign` form) binding to a
+/// value-copy-wrapper helper, AND-combine its eligibility into
+/// `site_elig[(fi, x)]`. The per-`(fi, x)` key and the AND-combine are both
+/// order-independent (a local's value-copy wrapper is fixed by its type), so a
+/// flat sweep over every reachable statement matches the former depth-first
+/// descent exactly.
 fn collect_sites(
-    block: &NirBlock,
+    body: &Body,
     wrappers: &IndexSet<FuncKey>,
-    fn_body: &NirBlock,
-    params: &[crate::nir::NirParam],
+    params: &[NirParam],
     fi: usize,
     an: &mut Analyzer,
     site_elig: &mut IndexMap<(usize, u32), bool>,
     site_key: &mut IndexMap<(usize, u32), FuncKey>,
 ) {
-    for stmt in &block.stmts {
-        if let Some((value, target)) = stmt_binding(stmt)
-            && let Some(key) = wrapper_call_key(value, wrappers)
-        {
-            let elig = demote_candidate(value, target, fn_body, params, an);
-            let loc = (fi, target);
-            site_elig
-                .entry(loc)
-                .and_modify(|e| *e &= elig)
-                .or_insert(elig);
-            site_key.entry(loc).or_insert(key);
-        }
-        // Descend into every sub-block one level down, exactly once.
-        let mut subs: Vec<&NirBlock> = Vec::new();
-        match &stmt.kind {
-            NirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => {
-                subs.push(then_block);
-                if let Some(eb) = else_block {
-                    subs.push(eb);
-                }
+    for block in reachable_blocks(body) {
+        let stmts = body.blocks[block].stmts.clone();
+        for s in stmts {
+            if let Some((value, target)) = stmt_binding(body, s)
+                && let Some(key) = wrapper_call_key(body, value, wrappers)
+            {
+                let elig = demote_candidate(body, value, target, params, an);
+                let loc = (fi, target);
+                site_elig
+                    .entry(loc)
+                    .and_modify(|e| *e &= elig)
+                    .or_insert(elig);
+                site_key.entry(loc).or_insert(key);
             }
-            NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-                subs.push(body);
-            }
-            _ => {}
         }
-        for e in stmt_own_exprs(stmt) {
-            direct_blocks_in_expr(e, &mut subs);
-        }
-        for sub in subs {
-            collect_sites(sub, wrappers, fn_body, params, fi, an, site_elig, site_key);
-        }
-    }
-}
-
-/// The expressions a statement owns directly (not the contents of its
-/// sub-blocks).
-fn stmt_own_exprs(stmt: &NirStmt) -> Vec<&NirExpr> {
-    match &stmt.kind {
-        NirStmtKind::Let { value, .. }
-        | NirStmtKind::Expr(value)
-        | NirStmtKind::LetDestructure { value, .. } => vec![value],
-        NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => value.iter().collect(),
-        NirStmtKind::If { condition, .. } => vec![condition],
-        NirStmtKind::Loop { .. } | NirStmtKind::LabeledBlock { .. } | NirStmtKind::Continue => {
-            vec![]
-        }
-    }
-}
-
-/// Collect the top-most `NirBlock`s embedded in `expr` (an `if`/`block`/
-/// `match`/`switch` rvalue), without descending into the blocks themselves.
-fn direct_blocks_in_expr<'a>(expr: &'a NirExpr, out: &mut Vec<&'a NirBlock>) {
-    match &expr.kind {
-        NirExprKind::Block(b) | NirExprKind::LabeledBlock { block: b, .. } => {
-            out.push(b);
-            return;
-        }
-        NirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            direct_blocks_in_expr(condition, out);
-            out.push(then_branch);
-            if let Some(eb) = else_branch {
-                out.push(eb);
-            }
-            return;
-        }
-        NirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            direct_blocks_in_expr(scrutinee, out);
-            for a in arms {
-                out.push(a);
-            }
-            out.push(default);
-            return;
-        }
-        _ => {}
-    }
-    for child in expr_children(expr) {
-        direct_blocks_in_expr(child, out);
     }
 }
 
@@ -377,14 +311,14 @@ fn direct_blocks_in_expr<'a>(expr: &'a NirExpr, out: &mut Vec<&'a NirBlock>) {
 /// from. `None` for a genuinely fresh rvalue (call result, literal,
 /// constructor) — those are uniquely owned, so a shallow copy of them is
 /// always safe.
-fn arg_source_root(expr: &NirExpr) -> Option<u32> {
-    match &expr.kind {
-        NirExprKind::Local { index, .. } => Some(*index),
-        NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::Index { expr: inner, .. }
-        | NirExprKind::Cast { expr: inner, .. }
-        | NirExprKind::Unary { expr: inner, .. }
-        | NirExprKind::VariantPayload { expr: inner, .. } => arg_source_root(inner),
+fn arg_source_root(body: &Body, id: ExprId) -> Option<u32> {
+    match &body.exprs[id].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::Index { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. }
+        | ExprKind::Unary { expr: inner, .. }
+        | ExprKind::VariantPayload { expr: inner, .. } => arg_source_root(body, *inner),
         _ => None,
     }
 }
@@ -392,7 +326,7 @@ fn arg_source_root(expr: &NirExpr) -> Option<u32> {
 /// True when `idx` is a parameter declared as an immutable reference (`&T`):
 /// the body cannot mutate `*idx` at all, so its elements are element-clean.
 fn is_immutable_ref_param(
-    params: &[crate::nir::NirParam],
+    params: &[NirParam],
     type_table: &Rc<RefCell<TypeTable>>,
     idx: u32,
 ) -> bool {
@@ -405,16 +339,17 @@ fn is_immutable_ref_param(
 /// both element-clean — i.e. demoting `value` (an array-wrapper value copy)
 /// to a shallow copy is observably equivalent to the deep copy.
 fn demote_candidate(
-    value: &NirExpr,
+    body: &Body,
+    value: ExprId,
     target_idx: u32,
-    fn_body: &NirBlock,
-    params: &[crate::nir::NirParam],
+    params: &[NirParam],
     an: &mut Analyzer,
 ) -> bool {
-    let NirExprKind::Call { args, .. } = &value.kind else {
-        return false;
+    let arg0 = match &body.exprs[value].kind {
+        ExprKind::Call { args, .. } => args[0].expr,
+        _ => return false,
     };
-    if !an.handle_is_element_clean(fn_body, target_idx) {
+    if !an.handle_is_element_clean(body, target_idx) {
         crate::compiler_trace!(
             "demote",
             "target local {} not element-clean — skip",
@@ -425,11 +360,11 @@ fn demote_candidate(
     // The argument side: a fresh rvalue (`None` root) is uniquely owned;
     // an immutable-ref parameter cannot be mutated; otherwise every use of
     // the root local must itself be element-clean.
-    match arg_source_root(&args[0].expr) {
+    match arg_source_root(body, arg0) {
         None => true,
         Some(root) => {
             let clean = is_immutable_ref_param(params, an.type_table, root)
-                || an.arg_local_is_element_clean(fn_body, root);
+                || an.arg_local_is_element_clean(body, root);
             if !clean {
                 crate::compiler_trace!(
                     "demote",
@@ -442,48 +377,52 @@ fn demote_candidate(
     }
 }
 
-/// Phase 2b mechanical rewrite: visit every nested block, and for each
-/// `let x = …` / `x = …` binding whose `(fi, x)` is marked eligible, retarget
-/// the value-copy-wrapper call to its shallow sibling. Pure rewrite — no
-/// analysis, so it cannot conflict with the `&mut` borrow of the function.
+/// Phase 2b mechanical rewrite: for each `let x = …` / `x = …` binding whose
+/// `(fi, x)` is marked eligible, retarget the value-copy-wrapper call to its
+/// shallow sibling. Pure rewrite — no analysis, so it cannot conflict with the
+/// `&mut` borrow of the function. Targets are gathered first (an immutable
+/// sweep), then rewritten, since each retarget is independent.
 fn retarget_block(
-    block: &mut NirBlock,
+    body: &mut Body,
     fi: usize,
     site_elig: &IndexMap<(usize, u32), bool>,
     wrappers: &IndexSet<FuncKey>,
     shallow_name: &IndexMap<FuncKey, String>,
 ) {
-    for stmt in &mut block.stmts {
-        let target = match &stmt.kind {
-            NirStmtKind::Let { local_index, .. } => Some(*local_index),
-            NirStmtKind::Expr(e) => match &e.kind {
-                NirExprKind::Assign { target, .. } => match target.kind {
-                    NirExprKind::Local { index, .. } => Some(index),
+    let mut targets: Vec<ExprId> = Vec::new();
+    for block in reachable_blocks(body) {
+        for s in &body.blocks[block].stmts {
+            let target = match &body.stmts[*s].kind {
+                StmtKind::Let { local_index, .. } => Some(*local_index),
+                StmtKind::Expr(e) => match &body.exprs[*e].kind {
+                    ExprKind::Assign { target, .. } => match &body.exprs[*target].kind {
+                        ExprKind::Local { index, .. } => Some(*index),
+                        _ => None,
+                    },
                     _ => None,
                 },
                 _ => None,
-            },
-            _ => None,
-        };
-        if let Some(target) = target
-            && site_elig.get(&(fi, target)) == Some(&true)
-            && let Some(value) = stmt_binding_value_mut(stmt)
-        {
-            retarget_wrapper_call(value, wrappers, shallow_name);
+            };
+            if let Some(target) = target
+                && site_elig.get(&(fi, target)) == Some(&true)
+                && let Some(value) = stmt_binding_value(body, *s)
+            {
+                targets.push(value);
+            }
         }
-        for sub in stmt_subblocks_mut(stmt) {
-            retarget_block(sub, fi, site_elig, wrappers, shallow_name);
-        }
+    }
+    for id in targets {
+        retarget_wrapper_call(body, id, wrappers, shallow_name);
     }
 }
 
-/// The mutable binding value of a `let` / `Assign` statement.
-fn stmt_binding_value_mut(stmt: &mut NirStmt) -> Option<&mut NirExpr> {
-    match &mut stmt.kind {
-        NirStmtKind::Let { value, .. } => Some(value),
-        NirStmtKind::Expr(e) => {
-            if let NirExprKind::Assign { value, .. } = &mut e.kind {
-                Some(value)
+/// The binding value of a `let` / `Assign` statement.
+fn stmt_binding_value(body: &Body, s: StmtId) -> Option<ExprId> {
+    match &body.stmts[s].kind {
+        StmtKind::Let { value, .. } => Some(*value),
+        StmtKind::Expr(e) => {
+            if let ExprKind::Assign { value, .. } = &body.exprs[*e].kind {
+                Some(*value)
             } else {
                 None
             }
@@ -494,11 +433,12 @@ fn stmt_binding_value_mut(stmt: &mut NirStmt) -> Option<&mut NirExpr> {
 
 /// Rewrite a value-copy-wrapper call to its synthesized shallow sibling.
 fn retarget_wrapper_call(
-    value: &mut NirExpr,
+    body: &mut Body,
+    value: ExprId,
     wrappers: &IndexSet<FuncKey>,
     shallow_name: &IndexMap<FuncKey, String>,
 ) {
-    if let NirExprKind::Call { func, args, .. } = &mut value.kind
+    if let ExprKind::Call { func, args, .. } = &mut body.exprs[value].kind
         && args.len() == 1
     {
         let key = (func.module_source.clone(), func.name.clone());
@@ -506,84 +446,6 @@ fn retarget_wrapper_call(
             && let Some(new) = shallow_name.get(&key)
         {
             func.name.clone_from(new);
-        }
-    }
-}
-
-/// Every `NirBlock` one level down from `stmt` — statement-level branches
-/// and blocks embedded in the statement's own expressions.
-fn stmt_subblocks_mut(stmt: &mut NirStmt) -> Vec<&mut NirBlock> {
-    let mut out: Vec<&mut NirBlock> = Vec::new();
-    match &mut stmt.kind {
-        NirStmtKind::Let { value, .. }
-        | NirStmtKind::Expr(value)
-        | NirStmtKind::LetDestructure { value, .. } => blocks_in_expr_mut(value, &mut out),
-        NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                blocks_in_expr_mut(v, &mut out);
-            }
-        }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            blocks_in_expr_mut(condition, &mut out);
-            out.push(then_block);
-            if let Some(eb) = else_block {
-                out.push(eb);
-            }
-        }
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            out.push(body);
-        }
-        NirStmtKind::Continue => {}
-    }
-    out
-}
-
-/// `&mut` mirror of [`direct_blocks_in_expr`]. The classify-then-borrow split
-/// keeps `expr` borrowed mutably on exactly one path (the block-bearing match
-/// arms *or* the `expr_children_mut` recursion, never both).
-fn blocks_in_expr_mut<'a>(expr: &'a mut NirExpr, out: &mut Vec<&'a mut NirBlock>) {
-    let block_bearing = matches!(
-        &expr.kind,
-        NirExprKind::Block(_)
-            | NirExprKind::LabeledBlock { .. }
-            | NirExprKind::If { .. }
-            | NirExprKind::Switch { .. }
-    );
-    if block_bearing {
-        match &mut expr.kind {
-            NirExprKind::Block(b) | NirExprKind::LabeledBlock { block: b, .. } => out.push(b),
-            NirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                blocks_in_expr_mut(condition, out);
-                out.push(then_branch);
-                if let Some(eb) = else_branch {
-                    out.push(eb);
-                }
-            }
-            NirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                blocks_in_expr_mut(scrutinee, out);
-                for a in arms {
-                    out.push(a);
-                }
-                out.push(default);
-            }
-            _ => unreachable!("block_bearing checked above"),
-        }
-    } else {
-        for child in expr_children_mut(expr) {
-            blocks_in_expr_mut(child, out);
         }
     }
 }
@@ -643,7 +505,7 @@ impl Analyzer<'_> {
                     visiting,
                     clean: true,
                 };
-                v.visit_block(&body);
+                v.visit_node(&body, NodeRef::Block(body.root));
                 v.clean
             }
             None => false,
@@ -653,62 +515,95 @@ impl Analyzer<'_> {
         result
     }
 
-    /// True when every use of local `idx` in `fn_body` keeps the array's
+    /// True when every use of local `idx` in `body` keeps the array's
     /// elements immutable: spine-only methods, index/field reads, by-value
     /// or `&` argument passing.
-    fn handle_is_element_clean(&mut self, fn_body: &NirBlock, idx: u32) -> bool {
+    fn handle_is_element_clean(&mut self, body: &Body, idx: u32) -> bool {
         let mut v = ElementClean {
             analyzer: self,
             idx,
             clean: true,
         };
-        v.visit_block(fn_body);
+        v.visit_node(body, NodeRef::Block(body.root));
         v.clean
     }
 
     /// The `arg` of a value-copy: element-clean when it is an immutable-ref
     /// parameter (the body cannot mutate `*arg` at all) or when every use is
     /// element-clean.
-    fn arg_local_is_element_clean(&mut self, fn_body: &NirBlock, idx: u32) -> bool {
-        self.handle_is_element_clean(fn_body, idx)
+    fn arg_local_is_element_clean(&mut self, body: &Body, idx: u32) -> bool {
+        self.handle_is_element_clean(body, idx)
     }
 }
 
 /// Element-cleanliness check for a single handle local `idx`: every use of it
 /// must keep the array's elements immutable (spine-only methods, index/field
-/// reads, by-value or `&` argument passing). Drives the canonical
-/// [`NirRefVisitor`] so every nested node — including match-arm and
-/// destructure patterns — is covered; only the storage-sharing shapes are
-/// special-cased, the rest fall through to `walk_expr`.
+/// reads, by-value or `&` argument passing). Recurses through every nested
+/// node — including match-arm and destructure patterns — via the arena
+/// `for_each_child` walk; only the storage-sharing shapes are special-cased.
 struct ElementClean<'a, 'b> {
     analyzer: &'b mut Analyzer<'a>,
     idx: u32,
     clean: bool,
 }
 
-impl NirRefVisitor for ElementClean<'_, '_> {
-    fn visit_expr(&mut self, expr: &NirExpr) {
+impl ElementClean<'_, '_> {
+    /// Default walk: descend into every id-bearing child. Statement / block /
+    /// pattern nodes have no override, so they fall here; expression nodes
+    /// dispatch to the override.
+    fn visit_node(&mut self, body: &Body, node: NodeRef) {
+        if !self.clean {
+            return;
+        }
+        if let NodeRef::Expr(id) = node {
+            self.visit_expr(body, id);
+            return;
+        }
+        let mut kids = Vec::new();
+        body.for_each_child(node, |c| kids.push(c));
+        for c in kids {
+            self.visit_node(body, c);
+            if !self.clean {
+                return;
+            }
+        }
+    }
+
+    fn walk_expr(&mut self, body: &Body, id: ExprId) {
+        let mut kids = Vec::new();
+        body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
+        for c in kids {
+            self.visit_node(body, c);
+            if !self.clean {
+                return;
+            }
+        }
+    }
+
+    fn visit_expr(&mut self, body: &Body, id: ExprId) {
         if !self.clean {
             return;
         }
         let idx = self.idx;
-        match &expr.kind {
-            NirExprKind::Local { index, .. } => {
+        match &body.exprs[id].kind {
+            ExprKind::Local { index, .. } => {
                 if *index == idx {
                     self.clean = false;
                 }
             }
-            NirExprKind::MethodCall {
+            ExprKind::MethodCall {
                 receiver,
                 func,
                 args,
                 ..
             } => {
+                let receiver = *receiver;
+                let key = (func.module_source.clone(), func.name.clone());
+                let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
                 // The receiver auto-refs to `&self` / `&mut self`, so strip
                 // the wrapping reference before matching the handle.
-                let recv = strip_refs(receiver);
-                let key = (func.module_source.clone(), func.name.clone());
-                if is_local(recv, idx) {
+                let recv = strip_refs(body, receiver);
+                if is_local(body, recv, idx) {
                     // Receiver is the handle itself: `x.method()`.
                     let safe = match self.analyzer.callee_mutates_self(&key) {
                         Some(false) => true, // &self
@@ -719,7 +614,7 @@ impl NirRefVisitor for ElementClean<'_, '_> {
                         self.clean = false;
                         return;
                     }
-                } else if expr_mentions_local(receiver, idx) {
+                } else if expr_mentions_local(body, receiver, idx) {
                     // The handle appears inside the receiver — an element
                     // or field of it (`x[i].method()`, `x.get(i).method()`,
                     // `x.field.method()`). A `&mut self` method there may
@@ -732,117 +627,125 @@ impl NirRefVisitor for ElementClean<'_, '_> {
                         self.clean = false;
                         return;
                     }
-                    self.visit_expr(receiver);
+                    self.visit_expr(body, receiver);
                     if !self.clean {
                         return;
                     }
                 } else {
-                    self.visit_expr(receiver);
+                    self.visit_expr(body, receiver);
                     if !self.clean {
                         return;
                     }
                 }
                 for a in args {
-                    self.visit_call_arg(&a.expr);
+                    self.visit_call_arg(body, a);
                     if !self.clean {
                         return;
                     }
                 }
             }
-            NirExprKind::Call { args, .. } => {
+            ExprKind::Call { args, .. } => {
+                let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
                 for a in args {
-                    self.visit_call_arg(&a.expr);
+                    self.visit_call_arg(body, a);
                     if !self.clean {
                         return;
                     }
                 }
             }
-            NirExprKind::IndirectCall { callee, args } => {
-                self.visit_expr(callee);
+            ExprKind::IndirectCall { callee, args } => {
+                let callee = *callee;
+                let args = args.clone();
+                self.visit_expr(body, callee);
                 if !self.clean {
                     return;
                 }
                 for a in args {
-                    self.visit_call_arg(a);
+                    self.visit_call_arg(body, a);
                     if !self.clean {
                         return;
                     }
                 }
             }
-            NirExprKind::Unary {
+            ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
             } => {
                 // `&mut x`, `&mut x[i]`, `&mut x.field` — a mutable
                 // reference into the handle escapes our control.
-                if expr_mentions_local(inner, idx) {
+                let inner = *inner;
+                if expr_mentions_local(body, inner, idx) {
                     self.clean = false;
                 }
             }
-            NirExprKind::Index { expr: base, index } => {
+            ExprKind::Index { expr: base, index } => {
                 // Index read: `x[i]` produces an element copy.
-                if !is_local(base, idx) {
-                    self.visit_expr(base);
+                let base = *base;
+                let index = *index;
+                if !is_local(body, base, idx) {
+                    self.visit_expr(body, base);
                     if !self.clean {
                         return;
                     }
                 }
-                self.visit_expr(index);
+                self.visit_expr(body, index);
             }
-            NirExprKind::FieldAccess { expr: base, .. } => {
-                if !is_local(base, idx) {
-                    self.visit_expr(base);
+            ExprKind::FieldAccess { expr: base, .. } => {
+                let base = *base;
+                if !is_local(body, base, idx) {
+                    self.visit_expr(body, base);
                 }
             }
-            NirExprKind::Assign { target, value } => {
+            ExprKind::Assign { target, value } => {
                 // A write whose target touches `idx` escapes our control.
-                if expr_mentions_local(target, idx) {
+                let target = *target;
+                let value = *value;
+                if expr_mentions_local(body, target, idx) {
                     self.clean = false;
                     return;
                 }
-                self.visit_expr(value);
+                self.visit_expr(body, value);
             }
             // Every other shape — operators, casts, aggregates, control flow,
             // and the patterns reached through it — is a plain read; recurse
             // with the canonical walk.
-            _ => self.walk_expr(expr),
+            _ => self.walk_expr(body, id),
         }
     }
-}
 
-impl ElementClean<'_, '_> {
     /// `idx` passed as a call argument: by-value or `&` is element-clean;
     /// `&mut idx` is not.
-    fn visit_call_arg(&mut self, arg: &NirExpr) {
+    fn visit_call_arg(&mut self, body: &Body, arg: ExprId) {
         let idx = self.idx;
-        match &arg.kind {
+        match &body.exprs[arg].kind {
             // Passing the handle by value hands the callee an independent
             // (deep) copy, so it cannot reach our elements.
-            NirExprKind::Local { .. } => {}
-            NirExprKind::Unary {
+            ExprKind::Local { .. } => {}
+            ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
             } => {
-                if expr_mentions_local(inner, idx) {
+                let inner = *inner;
+                if expr_mentions_local(body, inner, idx) {
                     self.clean = false;
                 }
             }
-            NirExprKind::Unary {
+            ExprKind::Unary {
                 op: NirUnaryOp::Ref,
                 expr: inner,
             } => {
-                if !is_local(inner, idx) {
-                    self.visit_expr(inner);
+                let inner = *inner;
+                if !is_local(body, inner, idx) {
+                    self.visit_expr(body, inner);
                 }
             }
-            _ => self.visit_expr(arg),
+            _ => self.visit_expr(body, arg),
         }
     }
 }
 
 /// Element-immutability proof for a `&mut self` method: whether calling it can
-/// mutate any element of `self`. Drives the canonical [`NirRefVisitor`] while
-/// threading the analysis state as fields:
+/// mutate any element of `self`. Threads the analysis state as fields:
 ///
 /// - `tainted` — locals that alias `self`'s storage (local 0 is `self`). The
 ///   set grows in statement order: a `let x = <self-derived>` (or assignment)
@@ -854,11 +757,10 @@ impl ElementClean<'_, '_> {
 ///
 /// Only the storage-escaping shapes (`&mut` of self-derived, element
 /// field/index writes, unsafe calls on self-derived receivers/args, indirect
-/// calls of self-capturing closures) are special-cased; everything else falls
-/// through to `walk_expr`. Unlike the former hand-rolled `expr_children`
-/// enumeration, the canonical walk descends into match-arm and destructure
-/// patterns *and* threads taint through expression-position blocks (a `let`
-/// inside a block rvalue now taints correctly), closing two traversal gaps.
+/// calls of self-capturing closures) are special-cased; everything else
+/// recurses through the arena `for_each_child` walk, which descends into
+/// match-arm and destructure patterns *and* threads taint through
+/// expression-position blocks.
 struct ElementImmutable<'a, 'b, 'c> {
     analyzer: &'b mut Analyzer<'a>,
     tainted: IndexSet<u32>,
@@ -866,73 +768,128 @@ struct ElementImmutable<'a, 'b, 'c> {
     clean: bool,
 }
 
-impl NirRefVisitor for ElementImmutable<'_, '_, '_> {
-    fn visit_stmt(&mut self, stmt: &NirStmt) {
+impl ElementImmutable<'_, '_, '_> {
+    fn visit_node(&mut self, body: &Body, node: NodeRef) {
         if !self.clean {
             return;
         }
-        match &stmt.kind {
+        match node {
+            NodeRef::Stmt(s) => self.visit_stmt(body, s),
+            NodeRef::Expr(e) => self.visit_expr(body, e),
+            _ => {
+                let mut kids = Vec::new();
+                body.for_each_child(node, |c| kids.push(c));
+                for c in kids {
+                    self.visit_node(body, c);
+                    if !self.clean {
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    fn walk_stmt(&mut self, body: &Body, s: StmtId) {
+        let mut kids = Vec::new();
+        body.for_each_child(NodeRef::Stmt(s), |c| kids.push(c));
+        for c in kids {
+            self.visit_node(body, c);
+            if !self.clean {
+                return;
+            }
+        }
+    }
+
+    fn walk_expr(&mut self, body: &Body, id: ExprId) {
+        let mut kids = Vec::new();
+        body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
+        for c in kids {
+            self.visit_node(body, c);
+            if !self.clean {
+                return;
+            }
+        }
+    }
+
+    fn visit_stmt(&mut self, body: &Body, s: StmtId) {
+        if !self.clean {
+            return;
+        }
+        match &body.stmts[s].kind {
             // `let x = <self-derived>` makes `x` alias self's storage for
             // every later statement. Verify the value first, then taint —
             // this order-sensitivity is why the statement visit is overridden.
-            NirStmtKind::Let {
+            StmtKind::Let {
                 local_index, value, ..
             } => {
-                self.visit_expr(value);
-                if self.clean && is_self_derived(value, &self.tainted, self.analyzer.type_table) {
-                    self.tainted.insert(*local_index);
+                let local_index = *local_index;
+                let value = *value;
+                self.visit_expr(body, value);
+                if self.clean
+                    && is_self_derived(body, value, &self.tainted, self.analyzer.type_table)
+                {
+                    self.tainted.insert(local_index);
                 }
             }
-            NirStmtKind::Expr(e) => {
-                self.visit_expr(e);
+            StmtKind::Expr(e) => {
+                let e = *e;
+                self.visit_expr(body, e);
+                if !self.clean {
+                    return;
+                }
                 // Assign-form taint: `x = <self-derived>` aliases `x` to
                 // self's storage thereafter, just like a `let` binding.
-                if self.clean
-                    && let NirExprKind::Assign { target, value } = &e.kind
-                    && let NirExprKind::Local { index, .. } = target.kind
-                    && is_self_derived(value, &self.tainted, self.analyzer.type_table)
-                {
-                    self.tainted.insert(index);
+                if let ExprKind::Assign { target, value } = &body.exprs[e].kind {
+                    let target = *target;
+                    let value = *value;
+                    if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
+                        let index = *index;
+                        if is_self_derived(body, value, &self.tainted, self.analyzer.type_table) {
+                            self.tainted.insert(index);
+                        }
+                    }
                 }
             }
             // If / Loop / LabeledBlock / Return / Break / LetDestructure /
             // Continue carry no taint update of their own; the canonical walk
-            // recurses through the shared `tainted` field. (Visiting a
-            // destructure pattern is extra coverage relative to the old path
-            // and strictly conservative.)
-            _ => self.walk_stmt(stmt),
+            // recurses through the shared `tainted` field.
+            _ => self.walk_stmt(body, s),
         }
     }
 
-    fn visit_expr(&mut self, expr: &NirExpr) {
+    fn visit_expr(&mut self, body: &Body, id: ExprId) {
         if !self.clean {
             return;
         }
         let tt = self.analyzer.type_table;
-        match &expr.kind {
+        match &body.exprs[id].kind {
             // `&mut <self-derived>` would expose mutable element access.
-            NirExprKind::Unary {
+            ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
             } => {
-                if is_self_derived(inner, &self.tainted, tt) {
+                let inner = *inner;
+                if is_self_derived(body, inner, &self.tainted, tt) {
                     crate::compiler_trace!("demote", "verify reject: &mut of self-derived");
                     self.clean = false;
                     return;
                 }
-                self.walk_expr(expr);
+                self.walk_expr(body, id);
             }
             // Field/index write to a self-derived base other than `self`
             // itself (writing `self.repr`/`self.used` is a spine op; writing
             // `array_get(...).field` is an element mutation).
-            NirExprKind::Assign { target, value } => {
-                let bad = match &target.kind {
-                    NirExprKind::FieldAccess { expr: base, .. } => {
-                        is_self_derived(base, &self.tainted, tt)
-                            && !matches!(base.kind, NirExprKind::Local { index: 0, .. })
+            ExprKind::Assign { target, value } => {
+                let target = *target;
+                let value = *value;
+                let bad = match &body.exprs[target].kind {
+                    ExprKind::FieldAccess { expr: base, .. } => {
+                        let base = *base;
+                        is_self_derived(body, base, &self.tainted, tt)
+                            && !matches!(&body.exprs[base].kind, ExprKind::Local { index: 0, .. })
                     }
-                    NirExprKind::Index { expr: base, .. } => {
-                        is_self_derived(base, &self.tainted, tt)
+                    ExprKind::Index { expr: base, .. } => {
+                        is_self_derived(body, *base, &self.tainted, tt)
                     }
                     _ => false,
                 };
@@ -941,21 +898,26 @@ impl NirRefVisitor for ElementImmutable<'_, '_, '_> {
                     self.clean = false;
                     return;
                 }
-                self.visit_expr(target);
-                self.visit_expr(value);
+                self.visit_expr(body, target);
+                if !self.clean {
+                    return;
+                }
+                self.visit_expr(body, value);
             }
-            NirExprKind::MethodCall {
+            ExprKind::MethodCall {
                 receiver,
                 func,
                 args,
                 ..
             } => {
+                let receiver = *receiver;
                 let key = (func.module_source.clone(), func.name.clone());
+                let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
                 // A call whose receiver is self-derived may mutate an element
                 // unless the callee is known `&self` (cannot mutate) or a
                 // verified element-immutable `&mut self` method. An
                 // unresolvable callee is conservatively unsafe.
-                if is_self_derived(receiver, &self.tainted, tt) {
+                if is_self_derived(body, receiver, &self.tainted, tt) {
                     let ok = match self.analyzer.callee_mutates_self(&key) {
                         Some(false) => true,
                         Some(true) => self.analyzer.verify(&key, self.visiting),
@@ -971,12 +933,12 @@ impl NirRefVisitor for ElementImmutable<'_, '_, '_> {
                         return;
                     }
                 }
-                self.visit_expr(receiver);
+                self.visit_expr(body, receiver);
                 if !self.clean {
                     return;
                 }
                 for a in args {
-                    self.visit_call_arg(&a.expr);
+                    self.visit_call_arg(body, a);
                     if !self.clean {
                         crate::compiler_trace!(
                             "demote",
@@ -987,12 +949,14 @@ impl NirRefVisitor for ElementImmutable<'_, '_, '_> {
                     }
                 }
             }
-            NirExprKind::Call { func, args, .. } => {
+            ExprKind::Call { func, args, .. } => {
                 // No builtin intrinsic mutates an element's pointee
                 // (`array_set` rewrites a spine slot; `array_get` / `select`
                 // only forward values), so a self-derived arg to a builtin is
                 // harmless. Opaque (non-builtin) calls still gate.
                 let is_builtin = builtin_gname(func).is_some();
+                let fname = func.name.clone();
+                let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
                 for a in args {
                     if is_builtin {
                         // The `array_*` intrinsics take `&` / `&mut` first
@@ -1000,31 +964,33 @@ impl NirRefVisitor for ElementImmutable<'_, '_, '_> {
                         // self.repr` arg to a spine builtin is a spine
                         // handoff, not an element-mutating escape, so peel the
                         // reference wrapper before recursing.
-                        let inner = match &a.expr.kind {
-                            NirExprKind::Unary {
+                        let inner = match &body.exprs[a].kind {
+                            ExprKind::Unary {
                                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                                 expr,
-                            } => expr.as_ref(),
-                            _ => &a.expr,
+                            } => *expr,
+                            _ => a,
                         };
-                        self.visit_expr(inner);
+                        self.visit_expr(body, inner);
                     } else {
-                        self.visit_call_arg(&a.expr);
+                        self.visit_call_arg(body, a);
                     }
                     if !self.clean {
                         crate::compiler_trace!(
                             "demote",
                             "verify reject: self-derived arg to call {}",
-                            func.name
+                            fname
                         );
                         return;
                     }
                 }
             }
-            NirExprKind::IndirectCall { callee, args } => {
+            ExprKind::IndirectCall { callee, args } => {
                 // Invoking a closure that captured a self-derived value runs
                 // its (unverified) body with access to `self`'s elements.
-                if is_self_derived(callee, &self.tainted, tt) {
+                let callee = *callee;
+                let args = args.clone();
+                if is_self_derived(body, callee, &self.tainted, tt) {
                     crate::compiler_trace!(
                         "demote",
                         "verify reject: indirect call of self-capturing closure"
@@ -1032,12 +998,12 @@ impl NirRefVisitor for ElementImmutable<'_, '_, '_> {
                     self.clean = false;
                     return;
                 }
-                self.visit_expr(callee);
+                self.visit_expr(body, callee);
                 if !self.clean {
                     return;
                 }
                 for a in args {
-                    self.visit_call_arg(a);
+                    self.visit_call_arg(body, a);
                     if !self.clean {
                         crate::compiler_trace!(
                             "demote",
@@ -1050,295 +1016,80 @@ impl NirRefVisitor for ElementImmutable<'_, '_, '_> {
             // Every other shape — operators, casts, aggregates, control flow,
             // and the patterns reached through it — recurses via the canonical
             // walk, which descends into match-arm / destructure-pattern
-            // `ConstantValue` sub-expressions that `expr_children` skipped.
-            _ => self.walk_expr(expr),
+            // `ConstantValue` sub-expressions.
+            _ => self.walk_expr(body, id),
         }
     }
-}
 
-impl ElementImmutable<'_, '_, '_> {
     /// A self-derived value handed to an opaque (non-spine-builtin) call may
     /// only flow through an immutable `&` borrow.
-    fn visit_call_arg(&mut self, arg: &NirExpr) {
-        if let NirExprKind::Unary {
+    fn visit_call_arg(&mut self, body: &Body, arg: ExprId) {
+        if let ExprKind::Unary {
             op: NirUnaryOp::Ref,
             ..
-        } = &arg.kind
+        } = &body.exprs[arg].kind
         {
-            self.visit_expr(arg);
+            self.visit_expr(body, arg);
             return;
         }
-        if is_self_derived(arg, &self.tainted, self.analyzer.type_table) {
+        if is_self_derived(body, arg, &self.tainted, self.analyzer.type_table) {
             self.clean = false;
             return;
         }
-        self.visit_expr(arg);
+        self.visit_expr(body, arg);
     }
 }
 
-/// True when `expr` produces a value that may alias `self`'s storage — the
-/// tracked local itself, a projection of it, an `array_get` element read of a
-/// tracked spine, or an aggregate / closure that captures any such value.
+/// True when the expression at `id` produces a value that may alias `self`'s
+/// storage — the tracked local itself, a projection of it, an `array_get`
+/// element read of a tracked spine, or an aggregate / closure that captures
+/// any such value.
 ///
 /// A primitive-typed value is excluded: reading `self.used` (an `i32`)
 /// produces an independent copy, so passing it around cannot reach `self`.
-fn is_self_derived(expr: &NirExpr, tainted: &IndexSet<u32>, tt: &Rc<RefCell<TypeTable>>) -> bool {
-    if matches!(tt.borrow().get(expr.type_id), ResolvedType::Primitive(_)) {
+fn is_self_derived(
+    body: &Body,
+    id: ExprId,
+    tainted: &IndexSet<u32>,
+    tt: &Rc<RefCell<TypeTable>>,
+) -> bool {
+    if matches!(
+        tt.borrow().get(body.exprs[id].type_id),
+        ResolvedType::Primitive(_)
+    ) {
         return false;
     }
-    match &expr.kind {
-        NirExprKind::Local { index, .. } => tainted.contains(index),
-        NirExprKind::FieldAccess { expr: inner, .. }
-        | NirExprKind::Index { expr: inner, .. }
-        | NirExprKind::Cast { expr: inner, .. }
-        | NirExprKind::Unary { expr: inner, .. } => is_self_derived(inner, tainted, tt),
-        NirExprKind::Call { func, args, .. } => {
+    match &body.exprs[id].kind {
+        ExprKind::Local { index, .. } => tainted.contains(index),
+        ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::Index { expr: inner, .. }
+        | ExprKind::Cast { expr: inner, .. }
+        | ExprKind::Unary { expr: inner, .. } => is_self_derived(body, *inner, tainted, tt),
+        ExprKind::Call { func, args, .. } => {
             // `array_get(spine, _)` yields an element of the spine; other
             // array builtins (`array_clone`, `array_new`) produce fresh
             // storage and are not self-derived.
             builtin_gname(func).as_deref() == Some("builtin::array_get")
                 && args
                     .first()
-                    .is_some_and(|a| is_self_derived(&a.expr, tainted, tt))
+                    .is_some_and(|a| is_self_derived(body, a.expr, tainted, tt))
         }
         // An aggregate / closure that embeds a self-derived value carries
         // that aliasing storage. Tainting it lets the mutation checks below
         // (field write, `&mut`, `&mut self` call, indirect call) fire on the
         // aggregate / closure too.
-        NirExprKind::StructLiteral { fields, .. } => fields
+        ExprKind::StructLiteral { fields, .. } => fields
             .iter()
-            .any(|f| is_self_derived(&f.value, tainted, tt)),
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            elements.iter().any(|e| is_self_derived(e, tainted, tt))
-        }
-        NirExprKind::VariantConstruct { payload, .. } => payload
+            .any(|f| is_self_derived(body, f.value, tainted, tt)),
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
+            .iter()
+            .any(|e| is_self_derived(body, *e, tainted, tt)),
+        ExprKind::VariantConstruct { payload, .. } => payload
             .as_ref()
-            .is_some_and(|p| is_self_derived(p, tainted, tt)),
-        NirExprKind::ClosureToCanonical { functor, .. } => is_self_derived(functor, tainted, tt),
+            .is_some_and(|p| is_self_derived(body, *p, tainted, tt)),
+        ExprKind::ClosureToCanonical { functor, .. } => {
+            is_self_derived(body, *functor, tainted, tt)
+        }
         _ => false,
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Generic child traversal
-// ---------------------------------------------------------------------------
-
-fn expr_children(expr: &NirExpr) -> Box<dyn Iterator<Item = &NirExpr> + '_> {
-    use NirExprKind::{
-        ArrayLiteral, Assign, Binary, Block, BoolLiteral, BytesLiteral, Call, Cast, CharLiteral,
-        ClosureToCanonical, CmRawCall, EnumConstruct, FieldAccess, FloatLiteral, GlobalVarGet,
-        GlobalVarSet, If, Index, IndirectCall, IntLiteral, LabeledBlock, Local, Match, MethodCall,
-        Null, StringLiteral, StructLiteral, Switch, TupleLiteral, Unary, Unit, VariantConstruct,
-        VariantPayload, VariantTag, VariantTest,
-    };
-    match &expr.kind {
-        Binary { left, right, .. } => Box::new([left.as_ref(), right.as_ref()].into_iter()),
-        Unary { expr: e, .. }
-        | Cast { expr: e, .. }
-        | FieldAccess { expr: e, .. }
-        | VariantTag { expr: e }
-        | VariantTest { expr: e, .. }
-        | VariantPayload { expr: e, .. }
-        | GlobalVarSet { value: e, .. } => Box::new(std::iter::once(e.as_ref())),
-        Assign { target, value } => Box::new([target.as_ref(), value.as_ref()].into_iter()),
-        Index { expr: e, index } => Box::new([e.as_ref(), index.as_ref()].into_iter()),
-        Call { args, .. } => Box::new(args.iter().map(|a| &a.expr)),
-        CmRawCall { args, .. } => Box::new(args.iter()),
-        MethodCall { receiver, args, .. } => {
-            Box::new(std::iter::once(receiver.as_ref()).chain(args.iter().map(|a| &a.expr)))
-        }
-        IndirectCall { callee, args } => {
-            Box::new(std::iter::once(callee.as_ref()).chain(args.iter()))
-        }
-        ClosureToCanonical { functor, .. } => Box::new(std::iter::once(functor.as_ref())),
-        Block(b) | LabeledBlock { block: b, .. } => Box::new(block_exprs(b)),
-        If {
-            condition,
-            then_branch,
-            else_branch,
-        } => Box::new(
-            std::iter::once(condition.as_ref())
-                .chain(block_exprs(then_branch))
-                .chain(else_branch.iter().flat_map(block_exprs)),
-        ),
-        Match { expr: e, arms } => Box::new(
-            std::iter::once(e.as_ref()).chain(
-                arms.iter()
-                    .flat_map(|a| a.guard.iter().chain(std::iter::once(&a.body))),
-            ),
-        ),
-        StructLiteral { fields, .. } => Box::new(fields.iter().map(|f| &f.value)),
-        TupleLiteral { elements } | ArrayLiteral { elements } => Box::new(elements.iter()),
-        VariantConstruct { payload, .. } => {
-            Box::new(payload.iter().map(std::convert::AsRef::as_ref))
-        }
-        Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => Box::new(
-            std::iter::once(scrutinee.as_ref())
-                .chain(arms.iter().flat_map(block_exprs))
-                .chain(block_exprs(default)),
-        ),
-        IntLiteral { .. }
-        | FloatLiteral { .. }
-        | BoolLiteral(_)
-        | CharLiteral(_)
-        | StringLiteral(_)
-        | BytesLiteral(_)
-        | Null
-        | Unit
-        | Local { .. }
-        | GlobalVarGet { .. }
-        | EnumConstruct { .. } => Box::new(std::iter::empty()),
-    }
-}
-
-fn block_exprs(block: &NirBlock) -> impl Iterator<Item = &NirExpr> {
-    block.stmts.iter().flat_map(stmt_exprs)
-}
-
-fn stmt_exprs(stmt: &NirStmt) -> Box<dyn Iterator<Item = &NirExpr> + '_> {
-    match &stmt.kind {
-        NirStmtKind::Let { value, .. }
-        | NirStmtKind::Expr(value)
-        | NirStmtKind::LetDestructure { value, .. } => Box::new(std::iter::once(value)),
-        NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => Box::new(value.iter()),
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => Box::new(
-            std::iter::once(condition)
-                .chain(block_exprs(then_block))
-                .chain(else_block.iter().flat_map(block_exprs)),
-        ),
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            Box::new(block_exprs(body))
-        }
-        NirStmtKind::Continue => Box::new(std::iter::empty()),
-    }
-}
-
-fn expr_children_mut(expr: &mut NirExpr) -> Vec<&mut NirExpr> {
-    use NirExprKind::{
-        ArrayLiteral, Assign, Binary, Block, BoolLiteral, BytesLiteral, Call, Cast, CharLiteral,
-        ClosureToCanonical, CmRawCall, EnumConstruct, FieldAccess, FloatLiteral, GlobalVarGet,
-        GlobalVarSet, If, Index, IndirectCall, IntLiteral, LabeledBlock, Local, Match, MethodCall,
-        Null, StringLiteral, StructLiteral, Switch, TupleLiteral, Unary, Unit, VariantConstruct,
-        VariantPayload, VariantTag, VariantTest,
-    };
-    match &mut expr.kind {
-        Binary { left, right, .. }
-        | Assign {
-            target: left,
-            value: right,
-        }
-        | Index {
-            expr: left,
-            index: right,
-        } => vec![left.as_mut(), right.as_mut()],
-        Unary { expr: e, .. }
-        | Cast { expr: e, .. }
-        | FieldAccess { expr: e, .. }
-        | VariantTag { expr: e }
-        | VariantTest { expr: e, .. }
-        | VariantPayload { expr: e, .. }
-        | GlobalVarSet { value: e, .. }
-        | ClosureToCanonical { functor: e, .. } => vec![e.as_mut()],
-        Call { args, .. } => args.iter_mut().map(|a| &mut a.expr).collect(),
-        CmRawCall { args, .. } => args.iter_mut().collect(),
-        MethodCall { receiver, args, .. } => std::iter::once(receiver.as_mut())
-            .chain(args.iter_mut().map(|a| &mut a.expr))
-            .collect(),
-        IndirectCall { callee, args } => std::iter::once(callee.as_mut())
-            .chain(args.iter_mut())
-            .collect(),
-        Block(b) | LabeledBlock { block: b, .. } => block_exprs_mut(b),
-        If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            let mut v = vec![condition.as_mut()];
-            v.extend(block_exprs_mut(then_branch));
-            if let Some(eb) = else_branch {
-                v.extend(block_exprs_mut(eb));
-            }
-            v
-        }
-        Match { expr: e, arms } => {
-            let mut v = vec![e.as_mut()];
-            for a in arms {
-                if let Some(g) = &mut a.guard {
-                    v.push(g);
-                }
-                v.push(&mut a.body);
-            }
-            v
-        }
-        StructLiteral { fields, .. } => fields.iter_mut().map(|f| &mut f.value).collect(),
-        TupleLiteral { elements } | ArrayLiteral { elements } => elements.iter_mut().collect(),
-        VariantConstruct { payload, .. } => payload
-            .iter_mut()
-            .map(std::convert::AsMut::as_mut)
-            .collect(),
-        Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            let mut v = vec![scrutinee.as_mut()];
-            for a in arms {
-                v.extend(block_exprs_mut(a));
-            }
-            v.extend(block_exprs_mut(default));
-            v
-        }
-        IntLiteral { .. }
-        | FloatLiteral { .. }
-        | BoolLiteral(_)
-        | CharLiteral(_)
-        | StringLiteral(_)
-        | BytesLiteral(_)
-        | Null
-        | Unit
-        | Local { .. }
-        | GlobalVarGet { .. }
-        | EnumConstruct { .. } => vec![],
-    }
-}
-
-fn block_exprs_mut(block: &mut NirBlock) -> Vec<&mut NirExpr> {
-    block.stmts.iter_mut().flat_map(stmt_exprs_mut).collect()
-}
-
-fn stmt_exprs_mut(stmt: &mut NirStmt) -> Vec<&mut NirExpr> {
-    match &mut stmt.kind {
-        NirStmtKind::Let { value, .. }
-        | NirStmtKind::Expr(value)
-        | NirStmtKind::LetDestructure { value, .. } => vec![value],
-        NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
-            value.iter_mut().collect()
-        }
-        NirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            let mut v = vec![condition];
-            v.extend(block_exprs_mut(then_block));
-            if let Some(eb) = else_block {
-                v.extend(block_exprs_mut(eb));
-            }
-            v
-        }
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            block_exprs_mut(body)
-        }
-        NirStmtKind::Continue => vec![],
     }
 }
