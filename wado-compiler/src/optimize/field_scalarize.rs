@@ -1847,9 +1847,10 @@ type ScalarStates = Vec<CanonState>;
 
 /// The per-candidate loop-entry / back-edge state.
 ///
-/// A candidate whose field the loop body never reads through the GC
-/// reference (no call passes the local by `&`/`&mut`) is *call-clean*: its
-/// only field interaction is the scalar write-back. For such a candidate
+/// A candidate whose field the loop body never accesses through the GC
+/// reference — no call takes the local by `&`/`&mut`, and the field is never
+/// `&`/`&mut`-referenced directly — is *call-clean*: its only field
+/// interaction is the scalar write-back. For such a candidate
 /// the field can stay `ScalarOnly` across the back-edge — the per-iteration
 /// write-back the back-edge invariant would otherwise force is pure waste.
 /// Its write-back is deferred to the loop's escape points (`return`,
@@ -1871,11 +1872,13 @@ fn entry_states_for(candidates: &[ScalarizeCandidate], deferrable: &[bool]) -> S
         .collect()
 }
 
-/// Determine, per candidate, whether its field is never read through the GC
-/// reference anywhere in the loop body — i.e. no call inside the loop passes
-/// the candidate's local by `&`/`&mut` (such a callee could read the field).
-/// Direct field reads/writes don't count: the walker rewrites them to scalar
-/// ops, so they never require the field to be canonical.
+/// Determine, per candidate, whether its field is never accessed through the
+/// GC reference anywhere in the loop body — neither by a call that takes the
+/// candidate's local by `&`/`&mut` (such a callee could read the field), nor
+/// by a direct `&`/`&mut` of the field itself (`&mut self.f`, which lets a
+/// callee bypass the scalar). Plain field reads/writes don't count: the walker
+/// rewrites them to scalar ops, so they never require the field to be
+/// canonical.
 fn compute_deferrable_candidates(
     body: &NirBlock,
     candidates: &[ScalarizeCandidate],
@@ -2378,12 +2381,12 @@ fn walk_stmt(
                     // it escapes the HFS scope just like a `return` or an
                     // unlabeled break. Commit `ScalarOnly` candidates so the
                     // field is canonical for readers after the loop — this is
-                    // what makes deferring the per-iteration back-edge
-                    // write-back sound for guard-exit breaks. (No-op when the
-                    // state is already `Both`, so it cannot reintroduce the
-                    // commit-on-every-labeled-break regression: those breaks
-                    // target *registered* in-loop labels and take the branch
-                    // above.)
+                    // what keeps deferring the per-iteration back-edge
+                    // write-back sound for breaks that exit the loop. (No-op
+                    // when the state is already `Both`, so it cannot
+                    // reintroduce the commit-on-every-labeled-break regression:
+                    // those breaks target *registered* in-loop labels and take
+                    // the branch above.)
                     commit_scalar_for_escape(states, out, ctx, span);
                 }
             } else {

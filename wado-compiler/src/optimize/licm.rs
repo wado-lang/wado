@@ -1272,10 +1272,10 @@ fn is_hoistable_binop(op: crate::nir::NirBinaryOp) -> bool {
 
 /// Whether `e` is a pure-arithmetic tree whose every leaf is a loop-invariant
 /// scalar local or a numeric/bool/char literal. Such a tree evaluates to the
-/// same value on every iteration. A `Local` is invariant when it is neither
-/// reassigned nor `&mut`-borrowed in the loop (loop-body `let` bindings are
-/// recorded as fully-modified by `collect_modified_vars`, so they are
-/// correctly rejected).
+/// same value on every iteration. A `Local` is invariant when
+/// `collect_modified_vars` did not mark it fully modified — which covers
+/// reassignment, `&mut`/`&` borrows, by-reference call args, and loop-body
+/// `let`/pattern bindings.
 ///
 /// `Cast` is deliberately excluded: a float→int cast lowers to the trapping
 /// `i32.trunc_f64_s` family (not `trunc_sat`), so hoisting one to the
@@ -1363,7 +1363,8 @@ fn arith_exprs_equal(body: &Body, a: ExprId, b: ExprId) -> bool {
 /// Collect the maximal loop-invariant arithmetic subexpressions in `block`.
 /// "Maximal" means a hoistable expression whose parent is not itself
 /// hoistable, so each whole invariant tree is hoisted once. Nested loops are
-/// not descended into — their own `licm_loop` hoists one level at a time.
+/// skipped — the recursive `licm_loop` call hoists each nested loop's own
+/// invariants into that loop's pre-header.
 fn collect_invariant_arith_in_block(
     body: &Body,
     block: BlockId,
