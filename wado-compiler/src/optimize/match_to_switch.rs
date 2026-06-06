@@ -56,21 +56,9 @@ pub fn match_to_switch(project: &mut NirPackage) -> bool {
             let mut engine = Engine::new(body);
             changed |= engine.run(&[&rule]);
         }
-        for param in &mut func.params {
-            if let Some(ref mut default) = param.default_expr {
-                changed |= run_rule_on_tree_expr(default, &rule);
-            }
-        }
     }
     for global in &mut project.globals {
         changed |= run_rule_on_tree_expr(&mut global.initializer, &rule);
-    }
-    for s in &mut project.structs {
-        for field in &mut s.fields {
-            if let Some(ref mut default) = field.default_expr {
-                changed |= run_rule_on_tree_expr(default, &rule);
-            }
-        }
     }
     changed
 }

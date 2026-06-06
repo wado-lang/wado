@@ -1021,9 +1021,6 @@ pub struct NirParam {
     pub type_id: TypeId,
     pub local_index: u32,
     pub is_mut: bool,
-    /// Resolved default expression for trailing parameters with `= expr`.
-    /// Used by the elaborator to synthesize arguments at call sites.
-    pub default_expr: Option<Box<NirExpr>>,
     pub span: Span,
 }
 
@@ -1055,9 +1052,6 @@ pub struct NirField {
     pub serde_rename: Option<String>,
     /// `#[serde(default)]` — use default value when field is missing during deserialization.
     pub serde_default: bool,
-    /// Resolved default expression for `struct S { x: T = expr }`.
-    /// Inserted by the elaborator when the field is omitted in a struct literal.
-    pub default_expr: Option<Box<NirExpr>>,
 }
 
 #[derive(Debug, Clone)]

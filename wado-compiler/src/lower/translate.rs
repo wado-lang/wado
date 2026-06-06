@@ -1488,6 +1488,9 @@ impl FunctionTranslator<'_, '_> {
     }
 
     fn convert_field(&self, field: &TirField) -> NirField {
+        // NIR carries no field default: defaults are resolved into struct
+        // literals by the elaborator before lowering, so the NIR copy was
+        // write-only.
         NirField {
             name: field.name.clone(),
             is_pub: field.is_pub,
@@ -1497,23 +1500,18 @@ impl FunctionTranslator<'_, '_> {
             is_hidden: field.is_hidden,
             serde_rename: field.serde_rename.clone(),
             serde_default: field.serde_default,
-            default_expr: field
-                .default_expr
-                .as_ref()
-                .map(|e| Box::new(self.convert_expr_to_tree(e))),
         }
     }
 
     fn convert_param(&self, param: &TirParam) -> NirParam {
+        // NIR carries no param default: defaults are resolved into arguments
+        // at call sites by the elaborator before lowering, so the NIR copy
+        // was write-only.
         NirParam {
             name: param.name.clone(),
             type_id: param.type_id,
             local_index: param.local_index,
             is_mut: param.is_mut,
-            default_expr: param
-                .default_expr
-                .as_ref()
-                .map(|e| Box::new(self.convert_expr_to_tree(e))),
             span: param.span,
         }
     }
