@@ -311,6 +311,11 @@ impl Serializer for CborSerializer {
         return Result::Ok(());
     }
 
+    fn serialize_tag(&mut self, tag: u64) -> Result<(), SerializeError> {
+        write_head(self.buf, MAJOR_TAG, tag);
+        return Result::Ok(());
+    }
+
     fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError> {
         write_head(self.buf, MAJOR_BYTES, v.len() as u64);
         push_byte_slice(self.buf, v);
@@ -633,6 +638,11 @@ impl Serializer for CanonicalCborSerializer {
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
         write_head(self.buf, MAJOR_TEXT, v.len() as u64);
         push_text_bytes(self.buf, v);
+        return Result::Ok(());
+    }
+
+    fn serialize_tag(&mut self, tag: u64) -> Result<(), SerializeError> {
+        write_head(self.buf, MAJOR_TAG, tag);
         return Result::Ok(());
     }
 

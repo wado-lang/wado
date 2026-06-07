@@ -181,6 +181,12 @@ pub trait Serializer {
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError>;
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>;
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
+    /// Tag the next value with a CBOR semantic tag (major type 6, RFC 8949
+    /// §3.4). Formats with no tag concept ignore it; the default no-op means
+    /// only tag-aware serializers (CBOR) need to implement it.
+    fn serialize_tag(&mut self, _tag: u64) -> Result<(), SerializeError> {
+        return Result::Ok(());
+    }
     /// Serialize a byte string. Self-describing binary formats (CBOR) emit a
     /// native byte string; JSON emits base64. The default falls back to a
     /// sequence of `u8` (the historical `List<u8>` behaviour), so a format
@@ -198,9 +204,23 @@ pub trait Serializer {
     fn serialize_null(&mut self) -> Result<(), SerializeError>;
     fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError> with stores[self];
     fn begin_map(&mut self, len: i32) -> Result<Self::MapSerializer, SerializeError> with stores[self];
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<Self::StructSerializer, SerializeError> with stores[self];
-    fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>;
-    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<Self::VariantSerializer, SerializeError> with stores[self];
+    fn begin_struct(
+        &mut self,
+        name: &String,
+        fields: i32,
+    ) -> Result<Self::StructSerializer, SerializeError> with stores[self];
+    fn serialize_unit_variant(
+        &mut self,
+        type_name: &String,
+        variant_name: &String,
+        disc: i32,
+    ) -> Result<(), SerializeError>;
+    fn begin_variant(
+        &mut self,
+        type_name: &String,
+        variant_name: &String,
+        disc: i32,
+    ) -> Result<Self::VariantSerializer, SerializeError> with stores[self];
 }
 
 
@@ -340,8 +360,16 @@ pub trait Deserializer {
     fn is_null(&mut self) -> Result<bool, DeserializeError>;
     fn begin_seq(&mut self) -> Result<Self::SeqAccess, DeserializeError> with stores[self];
     fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError> with stores[self];
-    fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<Self::StructAccess, DeserializeError> with stores[self];
-    fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError> with stores[self];
+    fn begin_struct(
+        &mut self,
+        name: &String,
+        num_fields: i32,
+    ) -> Result<Self::StructAccess, DeserializeError> with stores[self];
+    fn begin_variant(
+        &mut self,
+        type_name: &String,
+        num_cases: i32,
+    ) -> Result<Self::VariantAccess, DeserializeError> with stores[self];
     fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>;
 }
 

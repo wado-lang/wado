@@ -1,6 +1,7 @@
 use { Instant, ZonedDateTime } from "core:temporal";
 use { Instant as ClockInstant } from "wasi:clocks";
 use { to_string, from_string } from "core:json";
+use { to_bytes, from_bytes } from "core:cbor";
 
 test "Instant construction and field access" {
     let i = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
@@ -423,4 +424,27 @@ test "Instant converts to and from the wasi:clocks instant" {
     // The pre-epoch boundary copies field-for-field too.
     let before = Instant::from(ClockInstant { seconds: -1, nanoseconds: 999_999_999 });
     assert before == Instant { seconds: -1, nanoseconds: 999_999_999 };
+}
+
+test "Instant serializes under CBOR datetime tag 0 and round-trips" {
+    let inst = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20Z").unwrap().instant;
+    let bytes = to_bytes::<Instant>(&inst).expect("serialize Instant to CBOR");
+    // Standard date/time string tag (RFC 8949 §3.4.1).
+    assert bytes[0] == 0xc0;
+    let back = from_bytes::<Instant, ByteList>(bytes).expect("decode Instant from CBOR");
+    assert back == inst;
+}
+
+test "ZonedDateTime round-trips through CBOR preserving its offset" {
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-15T07:13:20+09:00").unwrap();
+    let bytes = to_bytes::<ZonedDateTime>(&zdt).expect("serialize ZonedDateTime to CBOR");
+    let back = from_bytes::<ZonedDateTime, ByteList>(bytes).expect("decode ZonedDateTime from CBOR");
+    assert back.to_rfc3339() == zdt.to_rfc3339();
+}
+
+test "Instant decodes a CBOR epoch-seconds tag 1 number as UTC" {
+    // tag 1 (0xc1) wrapping the unsigned integer 1700000000.
+    let bytes: List<u8> = [0xc1, 0x1a, 0x65, 0x53, 0xf1, 0x00];
+    let inst = from_bytes::<Instant, ByteList>(bytes as ByteList).expect("decode epoch");
+    assert inst == Instant { seconds: 1_700_000_000, nanoseconds: 0 };
 }
