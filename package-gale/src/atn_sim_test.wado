@@ -14,7 +14,7 @@ use {
     ATN_BLOCK_START,
     ATN_BLOCK_END,
 } from "./atn.wado";
-use { atn_decode, atn_adaptive_predict, AtnSim, Token, LexerSlice, Span } from "./runtime.wado";
+use { atn_decode, atn_adaptive_predict, atn_predict_with_stack, AtnSim, Token, LexerSlice, Span } from "./runtime.wado";
 use { parse } from "./g4/parser.wado";
 
 fn mk(kind: i32) -> Token {
@@ -121,4 +121,34 @@ test "greedy ? picks the enter alt on the same conflict" {
     let alt = atn_adaptive_predict(&sim, d, &toks, 0, eof);
     // Greedy prefers ENTER: the chosen alt's edge must NOT go to BlockEnd.
     assert alt_target_kind(&atn, d, alt) != ATN_BLOCK_END, "greedy must choose the enter alt";
+}
+
+// Full-context: the SAME `??` decision binds differently depending on the
+// caller's rule stack. This is the IfIfElseNonGreedyBinding1 crux.
+// Rule indices: start=0, statement=1, ifStatement=2.
+
+test "full-context: inner ifStatement ?? skips the else (binds to outer)" {
+    let g = parse(NG_G4).unwrap();
+    let atn = build_atn(&g);
+    let eof = build_token_kinds(&g).0["TK_EOF"];
+    let sim = atn_decode(&serialize_atn(&atn));
+    let d = optional_decision(&atn);
+    // Inner ifStatement reached via start>statement>ifStatement>statement>ifStatement.
+    let stack: List<i32> = [0, 1, 2, 1, 2];
+    let toks: List<Token> = [mk(7), mk(4)];
+    let alt = atn_predict_with_stack(&sim, d, &stack, &toks, 0, eof);
+    assert alt_target_kind(&atn, d, alt) == ATN_BLOCK_END, "inner ?? must EXIT (let the outer take the else)";
+}
+
+test "full-context: outer ifStatement ?? consumes the else" {
+    let g = parse(NG_G4).unwrap();
+    let atn = build_atn(&g);
+    let eof = build_token_kinds(&g).0["TK_EOF"];
+    let sim = atn_decode(&serialize_atn(&atn));
+    let d = optional_decision(&atn);
+    // Outermost ifStatement: start>statement>ifStatement.
+    let stack: List<i32> = [0, 1, 2];
+    let toks: List<Token> = [mk(7), mk(4)];
+    let alt = atn_predict_with_stack(&sim, d, &stack, &toks, 0, eof);
+    assert alt_target_kind(&atn, d, alt) != ATN_BLOCK_END, "outer ?? must ENTER (consume the else)";
 }
