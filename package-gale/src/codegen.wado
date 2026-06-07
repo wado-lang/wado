@@ -226,7 +226,45 @@ fn gen_rule_cst_type(w: &mut CodeWriter, rule: &Rule, emitted: &mut List<String>
     };
 }
 
+/// Mirror of `gen_util::all_alts_are_single_token` on the lowered side:
+/// every alt is a single `Token`/`Literal` op. Such rules emit a compact
+/// `{ span, token }` struct instead of an N-arm variant; the parse and
+/// walk generators detect the same shape from the surface rule, so the
+/// three stay in lockstep (a mismatch would fail to compile and the
+/// driver tests would catch it immediately).
+fn lowered_alts_all_single_token(alts: &List<AltBody>) -> bool {
+    if alts.len() < 2 {
+        return false;
+    }
+    for let alt of alts {
+        if alt.ops.len() != 1 {
+            return false;
+        }
+        let is_token = match &alt.ops[0] {
+            Token(_) | Literal(_) => true,
+            _ => false,
+        };
+        if !is_token {
+            return false;
+        }
+    }
+    return true;
+}
+
 fn gen_multi_alt_cst(w: &mut CodeWriter, rule_name: &String, type_name: &String, alts: &List<AltBody>, emitted: &mut List<String>) {
+    if lowered_alts_all_single_token(alts) {
+        // Compact single-token node: the token's `kind` already records
+        // which alternative matched, so the N alt structs and the wrapping
+        // variant collapse to one struct. `walk_<rule>` / `_parse_<rule>`
+        // build and read `.token` accordingly.
+        let mut s = StructSpec::new(type_name);
+        s.set_pub();
+        s.add_pub_field(&"span", &"Span");
+        s.add_pub_field(&"token", &"Token");
+        s.emit(w);
+        w.blank();
+        return;
+    }
     let mut v = VariantSpec::new(type_name);
     v.set_pub();
     for let alt of alts {

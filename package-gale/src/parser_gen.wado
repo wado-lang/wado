@@ -27,6 +27,8 @@ use {
     peek_dedup_name,
     element_field_info,
     replay_element_names,
+    all_alts_are_single_token,
+    single_token_first,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, is_simple_token_group, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wado";
@@ -585,36 +587,6 @@ fn gen_scan_function_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: 
 
     w.end();
     w.blank();
-}
-
-/// Returns true if every alt in `alts` is a single TokenRef or Literal
-/// element. Such rules collapse to a one-token kind check at scan time.
-fn all_alts_are_single_token(alts: &List<Alternative>) -> bool {
-    for let alt of alts {
-        if alt.elements.len() != 1 {
-            return false;
-        }
-        let elem = &alt.elements[0];
-        let is_token = match elem {
-            TokenRef(_) | Literal(_) => true,
-            _ => false,
-        };
-        if !is_token {
-            return false;
-        }
-    }
-    return true;
-}
-
-/// Return the matched token-kind constant for a single TokenRef/Literal
-/// element. Caller is expected to have screened the element via
-/// `all_alts_are_single_token`.
-fn single_token_first(elem: &Element) -> String {
-    return match elem {
-        TokenRef(t) => `TK_{t.name}`,
-        Literal(l) => literal_const_name(&l.text),
-        _ => panic("single_token_first: unexpected element"),
-    };
 }
 
 /// Generate scan functions for a left-recursive rule. Mirrors the parse-side
@@ -1780,6 +1752,46 @@ fn gen_parse_fn_simple_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule
 /// emitted function. It is `true` for every live call site today;
 /// the parameter survives from the retired follow-variant pass, which
 /// emitted implementation-detail clones with it set `false`.
+/// Compact parser for an all-single-token multi-alt rule. The CST node
+/// is a `{ span, token }` struct (`gen_multi_alt_cst` single-token path),
+/// so parsing reduces to: confirm the lookahead is in the rule's first
+/// set, consume the one token, and build the struct. `gen_error_fallback`
+/// produces the same "expected one of ..." diagnostic the cascade would.
+fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext, fn_name: &String, emit_visibility: bool) {
+    let type_name = rule.type_name;
+    if emit_visibility {
+        gen_visibility_comment(w, &rule.visibility);
+    }
+    let mut f = FnSpec::new(fn_name);
+    f.add_param(&"p", &"&mut Parser");
+    if ctx.emit_follow() { add_follow_param(&mut f); }
+    f.set_return_type(&`Result<{type_name}, ParseError>`);
+    f.emit_begin(w);
+    w.line(&"let start = p.peek().span.start;");
+    w.line(&"let kind = p.peek_kind();");
+
+    let mut firsts: List<String> = [];
+    for let alt of &rule.alternatives {
+        let t = single_token_first(&alt.elements[0]);
+        if !first_contains(&firsts, &t) {
+            firsts.push(t);
+        }
+    }
+    let check = ctx.kind_check_str(&firsts, &"kind");
+    w.begin(&`if {check}`);
+    w.line(&"let token = p.expect(kind)?;");
+    w.line(&`return Result::<{type_name}, ParseError>::Ok({type_name} \{`);
+    w.indent();
+    emit_clamped_span_field(w);
+    w.line(&"token,");
+    w.dedent();
+    w.line(&"});");
+    w.end();
+    gen_error_fallback(w, rule, &type_name, ctx);
+    w.end();
+    w.blank();
+}
+
 fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext, fn_name: &String, scan_fn_name: &String, emit_visibility: bool) {
     // Variant emission and the shared dispatch path route through
     // here. Single-alt rules are handled by the dedicated
@@ -1787,6 +1799,17 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
     // below doesn't run for the trivial shape.
     if rule.alternatives.len() == 1 {
         gen_parse_fn_simple_named(w, rule, lowered_rule, ctx, fn_name, emit_visibility);
+        return;
+    }
+
+    // Rules whose alts are all a single token (e.g. SQLite's 122-keyword
+    // `keyword`) lower to a compact `{ span, token }` struct (see
+    // `gen_multi_alt_cst`); the parser is a single kind-set check plus one
+    // construction instead of an N-way `if kind == TK_X` cascade. The scan
+    // side already collapses these (`gen_scan_function_named`), and the
+    // result is faster than the cascade as well as far smaller.
+    if all_alts_are_single_token(&rule.alternatives) {
+        gen_parse_fn_single_token(w, rule, ctx, fn_name, emit_visibility);
         return;
     }
 
