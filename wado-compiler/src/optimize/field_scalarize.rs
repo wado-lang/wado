@@ -81,7 +81,9 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirLocal, NirUnaryOp};
-use crate::nir_arena::{ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind};
+use crate::nir_arena::{
+    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind,
+};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -854,7 +856,11 @@ fn field_access_expr(body: &mut Body, c: &ScalarizeCandidate, span: crate::token
 }
 
 /// `local.field = __hfs_F;` — commit the scalar back to the GC field.
-fn make_write_back_stmt(body: &mut Body, c: &ScalarizeCandidate, span: crate::token::Span) -> StmtId {
+fn make_write_back_stmt(
+    body: &mut Body,
+    c: &ScalarizeCandidate,
+    span: crate::token::Span,
+) -> StmtId {
     let target = field_access_expr(body, c, span);
     let value = scalar_local_expr(body, c, span);
     let assign = push_expr(body, ExprKind::Assign { target, value }, c.type_id, span);
@@ -1488,7 +1494,9 @@ fn count_field_accesses_in_expr(
             // Direct assignment targets are also exempt — writing TO
             // the local is handled separately by
             // `mark_local_fully_assigned`.
-            if !in_call_arg && !is_assign_target && is_gc_heap_type(body.exprs[e].type_id, type_table)
+            if !in_call_arg
+                && !is_assign_target
+                && is_gc_heap_type(body.exprs[e].type_id, type_table)
             {
                 mark_local_aliased(*index, counts);
             }
@@ -1960,7 +1968,10 @@ fn append_sync_preserving_block_value(
         body.blocks[block].stmts.extend(sync_stmts);
         return;
     }
-    let last_sid = body.blocks[block].stmts.pop().expect("checked non-empty above");
+    let last_sid = body.blocks[block]
+        .stmts
+        .pop()
+        .expect("checked non-empty above");
     let last_span = body.stmts[last_sid].span;
     let StmtKind::Expr(value_expr) = body.stmts[last_sid].kind else {
         unreachable!("checked Expr above")
@@ -2013,7 +2024,8 @@ fn build_convergence_block(
             stmts.push(stmt);
         }
     }
-    body.blocks.push(crate::nir_arena::BlockNode { stmts, span })
+    body.blocks
+        .push(crate::nir_arena::BlockNode { stmts, span })
 }
 
 /// True if any of the candidates' state in `from` differs from `to`.
@@ -2309,7 +2321,8 @@ fn walk_nested_loop(
     // iter 2+ starts at the same state the walker analyzed.
     for i in 0..ctx.candidates.len() {
         let c = ctx.candidates[i].clone();
-        if let Some(stmt) = state_transition_stmt(body, body_exit_states[i], entry_states[i], &c, span)
+        if let Some(stmt) =
+            state_transition_stmt(body, body_exit_states[i], entry_states[i], &c, span)
         {
             body.blocks[block].stmts.push(stmt);
         }
@@ -2541,7 +2554,14 @@ fn compute_call_field_effects(body: &Body, call: ExprId, ctx: &WalkCtx) -> CallF
         write_back: IndexSet::default(),
         re_read: IndexSet::default(),
     };
-    accumulate_call_sync(body, call, ctx.candidates, ctx.type_table, ctx.cache, &mut sync);
+    accumulate_call_sync(
+        body,
+        call,
+        ctx.candidates,
+        ctx.type_table,
+        ctx.cache,
+        &mut sync,
+    );
     let mut read_required = Vec::new();
     let mut mutated = Vec::new();
     for (i, c) in ctx.candidates.iter().enumerate() {
@@ -2695,7 +2715,16 @@ fn walk_other_expr_kinds(
         } => {
             let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
             walk_expr(body, condition, states, true, out, ctx);
-            walk_expr_branches_if(body, e, then_branch, else_branch, states, result_used, ctx, span);
+            walk_expr_branches_if(
+                body,
+                e,
+                then_branch,
+                else_branch,
+                states,
+                result_used,
+                ctx,
+                span,
+            );
         }
         ExprKind::StructLiteral { fields, .. } => {
             for fid in fields.iter().map(|f| f.value).collect::<Vec<_>>() {

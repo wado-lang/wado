@@ -172,33 +172,46 @@ commits); the compressed record:
 - [x] `nir_visitor` (the tree visitor) and `NirFunction::body_block` are
       deleted — no consumers remain.
 
-Remaining — two transform-core ports, then the deletions:
+Remaining — the deletions (both transform-core ports are done; production is
+now free of the `Body ↔ tree` bridge):
 
-- [ ] D2 — `field_scalarize` per-loop machinery → arena. `scalarize_loop` /
-      `process_loop_body` / `walk_block` are a dataflow state machine that
-      inserts write-back / re-read statements at canonical-side state
-      transitions; the loop body is still materialized via `to_tree_block` +
-      `lower_block`. This is the last production caller of the `to_tree`/`lower`
-      bridge.
-- [ ] E — niri tree interpreter + `const_folding` CTFE → arena.
-      `try_call_fold` evaluates a callee tail on a _materialized_ tree
-      (`reduce_to_lattice` → `reduce_in_place` → `expr_to_lattice` / `try_fold`
-      / …); port that path so the whole tree-interpreter cluster can go.
+- [x] D2 — `field_scalarize` per-loop machinery → arena. `scalarize_loop` /
+      `process_loop_body` / the `walk_block` / `walk_stmt` / `walk_expr` dataflow
+      walker, sync emission, branch/switch/match joins, escape commits, and temp
+      pooling all mutate `body.exprs` / `body.stmts` / `body.blocks` in place;
+      the `FieldUsageCache` builder (`collect_param_field_usage_*`) and the
+      call-sync analysis read arena ids directly. `scalarize_loop_at` no longer
+      round-trips through `to_tree_block` / `lower_block`. This was the last
+      production caller of the bridge.
+- [x] E — niri tree interpreter + `const_folding` CTFE → arena. `try_call_fold_a`
+      reads the callee tail id via `single_tail_expression_a` and reduces it on a
+      cloned scratch `Body` with `reduce_in_place_a` (the arena analogue of
+      `reduce_in_place` + `reduce_to_lattice`), removing the `Body::to_block`
+      materialization from the production CTFE path. The tree interpreter cluster
+      now survives only to back `tests/niri.rs`.
 - [ ] Delete the `Body ↔ tree` bridge (`Lower` / `from_block` / `to_block` /
-      `to_tree_*` / `lower_*`, `set_body_block`) once D2 / E and the unit-test
-      builders that still construct trees (`mod_ref`, `elide_box_local`,
-      `tmpl_hoist`, `nir_engine`, `tests/niri`) are migrated to arena builders.
+      `to_tree_*` / `lower_*`, `set_body_block`) once the unit-test builders that
+      still construct trees (`mod_ref`, `elide_box_local`, `tmpl_hoist`,
+      `nir_engine`, `tests/niri`) are migrated to arena builders, and the
+      now-test-only niri tree interpreter cluster (`reduce` / `reduce_to_lattice`
+      / `reduce_in_place` / `reduce_local` / `try_call_fold` / `expr_to_lattice`
+      / `try_fold` / `single_tail_expression` / …) is deleted with them.
 - [ ] Delete the tree enums (`NirExpr` / `NirExprKind` / `NirStmt` /
       `NirStmtKind` / `NirBlock` / `NirPattern` / `NirMatchArm` /
-      `NirStructField` / `NirStructPatternField` / `CallArg`) — tree retired.
+      `NirStructField` / `NirStructPatternField` / `CallArg`) and `nir_visitor`
+      — tree retired.
 
 Handoff notes:
 
-- D2 and E both want a reusable cross-`Body` deep-clone-with-remap primitive in
-  `nir_arena`; `inline`'s `splice_*` cluster is the working prototype to lift
-  there. (Intra-`Body` `clone_*` cannot be unified with it — `&mut self` vs
-  `&mut dst` + `&src` borrow shapes — but the two should live together so a new
-  IR variant updates both.)
+- D2 ported in place: the walker mutates the live arena `Body`, so it needs no
+  cross-`Body` clone — field rewrites flip the node kind on the stable `ExprId`,
+  and arm-body wrapping moves the original node to a fresh id so the parent's
+  `ExprId` still resolves. E reuses whole-`Body` `Clone` (the single-statement
+  callee body is tiny) rather than a subtree clone. A reusable cross-`Body`
+  deep-clone-with-remap is therefore still only wanted by `inline`'s `splice_*`
+  cluster; lifting it into `nir_arena` (next to the intra-`Body` `clone_*`, which
+  cannot share its `&mut self` vs `&mut dst` + `&src` borrow shape) remains a
+  cleanup, not a blocker.
 - Arena compaction is still open: in-place passes leave orphaned (dead) nodes in
   `Body`. Traversal is from `root` and `build_uses` ignores orphans, so it is
   correct, but a from-`root` re-lowering (or mark-sweep) at the end of optimize

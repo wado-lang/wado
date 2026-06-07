@@ -110,8 +110,8 @@ use crate::nir::{
     NirPattern, NirStmt, NirStmtKind, NirUnaryOp,
 };
 use crate::nir_arena::{
-    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, PatId, PatKind, StmtId, StmtKind,
-    StmtNode,
+    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, PatId, PatKind, StmtId,
+    StmtKind, StmtNode,
 };
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
