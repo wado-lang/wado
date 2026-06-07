@@ -947,11 +947,13 @@ impl JsonDeserializer {
             }
         }
         // A number token is ASCII (digits, sign, '.', 'e'/'E'), so it is valid
-        // UTF-8; build it in one bulk copy rather than char by char.
-        return match String::from_utf8_slice(self.input.slice(start, self.pos)) {
-            Ok(raw) => Result::Ok(raw),
-            Err(_) => Result::Err(DeserializeError::malformed("invalid number token", start as i64)),
-        };
+        // UTF-8 by construction. Build it in one bulk copy and skip the UTF-8
+        // validation that `from_utf8_slice` would do — number-heavy input makes
+        // that validation a measurable cost.
+        return Result::Ok(String::internal_from_utf8_raw(
+            self.input.slice(start, self.pos).to_array(),
+            self.pos - start,
+        ));
     }
 
     pub fn has_exp_or_dot(&self, raw: &String) -> bool {
