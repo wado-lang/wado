@@ -187,31 +187,20 @@ must not regress" requirement.
       `&[TypeId]`. `functions.rs`'s global-init path (`translate_global_init`)
       stays on the tree — globals are not part of the `FunctionTranslator`
       cluster.
-- [~] Phase 3 — make `Body` the canonical `NirFunction.body` and flow it
-  lower → optimize → wir_build. Stage 1 done; stage 2 overlaps Phase 4.
-  - Stage 1 (done). `NirFunction.body` is now `Option<Body>`. `lower` emits
-    `Body` (builds the tree, then `Body::from_block`); `wir_build` reads the
-    func's `Body` directly (its Phase 2 entry converter is gone); every
-    tree-based optimize pass bridges per function via
-    `NirFunction::body_block()` / `set_body_block()` (own a tree, mutate,
-    write the `Body` back — for split-borrow passes the tree is owned
-    separately from `func`'s `locals`/`local_count`; for the pointer-keyed
-    `store_load_forward` cache the read and the mutate share one owned
-    tree). `niri` stays tree-based and functional (`single_tail_expression`
-    returns an owned `NirExpr`). The obsolete Phase-1 round-trip oracle and
-    the dead `Body::from_function` were removed. Green: full e2e suite 2786
-    passed / 0 failed at O0/O2, clippy clean.
-  - Stage 2 (remaining). Port each pass's logic to arena traversal, removing
-    its `body_block()` bridge; when the last bridge is gone the per-pass
-    `Body ↔ tree` conversions vanish and the arena flows with no converter
-    (the Phase 3 goal). This is the same work as Phase 4 (the passes become
-    engine rules), so it is sequenced with it rather than done twice.
-- [ ] Phase 4 — port the peephole passes onto the edit API. This is where the
-      engine WEP begins. Flow-sensitive passes (`field_scalarize`, `licm`,
-      `tmpl_hoist`, `value_copy_demote`, `store_load_forward`) keep their own
-      walkers but read the arena.
-- [ ] Phase 5 — delete the tree enums (`NirExprKind` / `NirStmtKind` /
-      `NirBlock` / `NirPattern` as owned trees) once no consumer remains.
+- [x] Phase 3 — `Body` is the canonical `NirFunction.body`, flowing
+      lower → optimize → wir_build with no converter: `wir_build` reads the arena
+      directly, and the per-pass `body_block()` / `set_body_block()` bridges are
+      gone now that every pass is arena-native.
+- [x] Phase 4 — the peephole passes run on the edit API via the worklist rewrite
+      engine; see [NIR Rewrite Engine — Detailed Design](./wep-2026-06-05-nir-rewrite-engine-design.md).
+- [~] Phase 5 — delete the tree enums (`NirExprKind` / `NirStmtKind` /
+  `NirBlock` / `NirPattern` …) once no consumer remains. In progress: the
+  optimizer, diagnostics (`nir_unparse` / `remarks`), and global storage are
+  arena, and `nir_visitor` / `body_block` are deleted. The remaining tree
+  consumers (`field_scalarize`'s per-loop machinery, the niri CTFE tree
+  interpreter, and the unit-test builders) and the `Lower` / `to_tree_*`
+  bridge they keep alive are tracked under "Phase 5 — NIR tree retirement"
+  in [NIR Rewrite Engine — Detailed Design](./wep-2026-06-05-nir-rewrite-engine-design.md).
 
 ## Phase 1 implementation notes
 
