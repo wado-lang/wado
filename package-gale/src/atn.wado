@@ -1,0 +1,491 @@
+//! ATN (Augmented Transition Network) model and builder.
+//!
+//! This is the codegen-side representation of the grammar as an NFA, the
+//! foundation of the hybrid runtime ATN simulator (see the "ATN-class
+//! grammars" section of `TODO.md`). The simulator runs only at decision
+//! sites the static predictor (`prediction.wado`) marks `Ambiguous`; the
+//! ATN is the data it walks.
+//!
+//! Clean-room: the construction here follows the textbook Thompson-style
+//! NFA-for-a-grammar (rule-start/stop states, alternation block-start
+//! decision states, EBNF loop states). It does NOT read ANTLR4's
+//! implementation (License hygiene, `AGENTS.md`).
+//!
+//! Embedding (decided design): the ATN is serialized to one flat `i32`
+//! blob (`serialize_atn`) that the generated parser decodes once at
+//! construction (`deserialize_atn`) into SoA arrays. This module owns both
+//! ends of that format; `atn_test.wado` pins the round-trip.
+
+use {
+    Grammar,
+    ParserRule,
+    Alternative,
+    Element,
+    RepeatKind,
+} from "./ir.wado";
+use { collect_literal_tokens, LitToken } from "./lexer_gen.wado";
+use { literal_const_name } from "./gen_util.wado";
+use { TreeMap } from "core:collections";
+
+/// ATN state kinds. A state is a *decision* iff its `decision` field is
+/// >= 0 (the simulator keys on that, not on the kind), but the kind tells
+/// the closure how to traverse: `RuleStop` pops a return frame, loop-back
+/// states re-enter the decision, etc.
+pub global ATN_INVALID: i32 = 0;
+pub global ATN_BASIC: i32 = 1;
+pub global ATN_RULE_START: i32 = 2;
+pub global ATN_RULE_STOP: i32 = 3;
+pub global ATN_BLOCK_START: i32 = 4;
+pub global ATN_BLOCK_END: i32 = 5;
+pub global ATN_STAR_LOOP_ENTRY: i32 = 6;
+pub global ATN_STAR_LOOP_BACK: i32 = 7;
+pub global ATN_PLUS_LOOP_BACK: i32 = 8;
+pub global ATN_LOOP_END: i32 = 9;
+
+/// ATN transition kinds. `label`/`follow`/`prec` carry kind-specific data:
+///  - Epsilon: all -1.
+///  - Atom: `label` = token kind.
+///  - NotAtom: `label` = the single excluded token kind.
+///  - Wildcard: all -1 (matches any one token).
+///  - RuleRef: `label` = invoked rule index, `follow` = return state id,
+///    `prec` = precedence baked for an LR self-ref (0 otherwise).
+pub global ATN_TR_EPSILON: i32 = 0;
+pub global ATN_TR_ATOM: i32 = 1;
+pub global ATN_TR_NOT_ATOM: i32 = 2;
+pub global ATN_TR_WILDCARD: i32 = 3;
+pub global ATN_TR_RULE: i32 = 4;
+
+/// Serialization format magic + version. Bump VERSION on any layout change
+/// so a stale committed blob fails loudly instead of decoding to garbage.
+pub global ATN_MAGIC: i32 = 0x47_41_54_4e;
+pub global ATN_VERSION: i32 = 1;
+
+pub struct AtnTransition {
+    pub kind: i32,
+    pub target: i32,
+    pub label: i32 = -1,
+    pub follow: i32 = -1,
+    pub prec: i32 = 0,
+}
+
+pub struct AtnState {
+    pub kind: i32,
+    pub rule: i32 = -1,
+    pub decision: i32 = -1,
+    pub transitions: List<AtnTransition>,
+}
+
+/// A complete grammar ATN. `rule_start[r]` / `rule_stop[r]` index `states`
+/// for parser rule `r` (same order as `Grammar.parser_rules`).
+/// `decision_state[d]` is the state id of decision number `d`.
+pub struct Atn {
+    pub states: List<AtnState>,
+    pub rule_start: List<i32>,
+    pub rule_stop: List<i32>,
+    pub decision_state: List<i32>,
+    pub num_tokens: i32,
+}
+
+/// Mutable accumulator used during construction.
+struct AtnBuilder {
+    states: List<AtnState>,
+    rule_start: List<i32>,
+    rule_stop: List<i32>,
+    decision_state: List<i32>,
+    kinds: TreeMap<String, i32>,
+    num_tokens: i32,
+}
+
+impl AtnBuilder {
+    fn new_state(&mut self, kind: i32, rule: i32) -> i32 {
+        let id = self.states.len();
+        self.states.push(AtnState { kind, rule, decision: -1, transitions: [] });
+        return id;
+    }
+
+    /// Allocate a fresh decision number and bind it to `state`.
+    fn mark_decision(&mut self, state: i32) {
+        let d = self.decision_state.len();
+        self.decision_state.push(state);
+        self.states[state].decision = d;
+    }
+
+    fn add_eps(&mut self, from: i32, to: i32) {
+        self.states[from].transitions.push(AtnTransition { kind: ATN_TR_EPSILON, target: to });
+    }
+
+    fn add_trans(&mut self, from: i32, t: AtnTransition) {
+        self.states[from].transitions.push(t);
+    }
+
+    fn kind_of(&self, name: &String) -> i32 {
+        if let Some(k) = self.kinds.get(*name) {
+            return k;
+        }
+        return -1;
+    }
+}
+
+/// Build the name -> token-kind-id map, mirroring
+/// `lexer_gen::gen_token_constants` numbering exactly so ATN atom labels
+/// match the `TK_*` constants the generated parser uses: non-deferred
+/// lexer rules first (declaration order), then deferred (`more`/`type`)
+/// rules, then `TK_EOF`, then `TK_ERROR` (unless a rule named `ERROR`
+/// exists), then literal tokens. Returns the map and the total token
+/// count. Numeric `type(N)` overrides are not modelled yet (no fixture
+/// needs them in the ATN path).
+pub fn build_token_kinds(grammar: &Grammar) -> [TreeMap<String, i32>, i32] {
+    let mut map = TreeMap::<String, i32>::new();
+    let mut idx = 0;
+    for let want_deferred of [false, true] {
+        for let rule of &grammar.lexer_rules {
+            if rule.is_fragment {
+                continue;
+            }
+            let deferred = rule.more || rule.type_override matches { Some(_) };
+            if deferred != want_deferred {
+                continue;
+            }
+            map[`TK_{rule.name}`] = idx;
+            idx += 1;
+        }
+    }
+    map["TK_EOF"] = idx;
+    idx += 1;
+    let mut error_rule_exists = false;
+    for let rule of &grammar.lexer_rules {
+        if rule.name == "ERROR" {
+            error_rule_exists = true;
+            break;
+        }
+    }
+    if !error_rule_exists {
+        map["TK_ERROR"] = idx;
+        idx += 1;
+    }
+    let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
+    for let lit of &lit_tokens {
+        map[lit.const_name] = idx;
+        idx += 1;
+    }
+    return [map, idx];
+}
+
+/// Build the whole-grammar parser ATN from the surface IR (pre-LR-rewrite
+/// alternatives). LR precedence predicates are layered on later (P4).
+pub fn build_atn(grammar: &Grammar) -> Atn {
+    let tk = build_token_kinds(grammar);
+    let mut b = AtnBuilder {
+        states: [],
+        rule_start: [],
+        rule_stop: [],
+        decision_state: [],
+        kinds: tk.0,
+        num_tokens: tk.1,
+    };
+
+    let nrules = grammar.parser_rules.len();
+    // Pre-allocate start/stop states so RuleRef targets resolve regardless
+    // of definition order.
+    for let mut r = 0; r < nrules; r += 1 {
+        let start = b.new_state(ATN_RULE_START, r);
+        let stop = b.new_state(ATN_RULE_STOP, r);
+        b.rule_start.push(start);
+        b.rule_stop.push(stop);
+    }
+
+    let mut rule_index = TreeMap::<String, i32>::new();
+    for let mut r = 0; r < nrules; r += 1 {
+        rule_index[grammar.parser_rules[r].name] = r;
+    }
+
+    for let mut r = 0; r < nrules; r += 1 {
+        let rule = &grammar.parser_rules[r];
+        let body = build_alternation(&mut b, &rule.alternatives, r, &rule_index);
+        b.add_eps(b.rule_start[r], body.0);
+        b.add_eps(body.1, b.rule_stop[r]);
+    }
+
+    return Atn {
+        states: b.states,
+        rule_start: b.rule_start,
+        rule_stop: b.rule_stop,
+        decision_state: b.decision_state,
+        num_tokens: b.num_tokens,
+    };
+}
+
+/// Build an alternation (rule body or a parenthesised group) and return
+/// its `[entry, exit]` state pair. The entry is a `BlockStart`, marked as
+/// a decision iff there is more than one alternative. Alternatives are
+/// wired in source order so the simulator's min-alt conflict resolution
+/// matches ANTLR4.
+fn build_alternation(b: &mut AtnBuilder, alts: &List<Alternative>, rule: i32, rule_index: &TreeMap<String, i32>) -> [i32, i32] {
+    let start = b.new_state(ATN_BLOCK_START, rule);
+    let end = b.new_state(ATN_BLOCK_END, rule);
+    if alts.len() > 1 {
+        b.mark_decision(start);
+    }
+    for let alt of alts {
+        let seg = build_sequence(b, &alt.elements, rule, rule_index);
+        b.add_eps(start, seg.0);
+        b.add_eps(seg.1, end);
+    }
+    if alts.is_empty() {
+        // Empty alternation (vacuously nullable) — connect directly.
+        b.add_eps(start, end);
+    }
+    return [start, end];
+}
+
+/// Build a sequence of elements, threading each element's exit into the
+/// next element's entry. Returns `[entry, exit]`.
+fn build_sequence(b: &mut AtnBuilder, elements: &List<Element>, rule: i32, rule_index: &TreeMap<String, i32>) -> [i32, i32] {
+    let entry = b.new_state(ATN_BASIC, rule);
+    let mut cursor = entry;
+    for let elem of elements {
+        let seg = build_element(b, elem, rule, rule_index);
+        b.add_eps(cursor, seg.0);
+        cursor = seg.1;
+    }
+    return [entry, cursor];
+}
+
+/// Build a single element, returning its `[entry, exit]` state pair.
+fn build_element(b: &mut AtnBuilder, elem: &Element, rule: i32, rule_index: &TreeMap<String, i32>) -> [i32, i32] {
+    return match *elem {
+        TokenRef(t) => atom_segment(b, b.kind_of(&`TK_{t.name}`), rule),
+        Literal(l) => atom_segment(b, b.kind_of(&literal_const_name(&l.text)), rule),
+        Wildcard(_) => {
+            let from = b.new_state(ATN_BASIC, rule);
+            let to = b.new_state(ATN_BASIC, rule);
+            b.add_trans(from, AtnTransition { kind: ATN_TR_WILDCARD, target: to });
+            [from, to];
+        },
+        RuleRef(rr) => {
+            let from = b.new_state(ATN_BASIC, rule);
+            let to = b.new_state(ATN_BASIC, rule);
+            let ri = if let Some(idx) = rule_index.get(rr.name) { idx } else { -1 };
+            // `target` jumps to the invoked rule's start state; `label`
+            // keeps the rule index for dump/debug; `follow` is the return.
+            let tstart = if ri >= 0 { b.rule_start[ri] } else { -1 };
+            b.add_trans(from, AtnTransition { kind: ATN_TR_RULE, target: tstart, label: ri, follow: to });
+            [from, to];
+        },
+        Group(g) => build_alternation(b, &g.alternatives, rule, rule_index),
+        Label(lab) => build_element(b, &lab.element, rule, rule_index),
+        Not(n) => not_segment(b, &n.element, rule),
+        Repeat(rep) => build_repeat(b, rep.kind, rep.non_greedy, &rep.element, rule, rule_index),
+    };
+}
+
+/// `entry --Atom(kind)--> exit`. A `kind` of -1 (unresolved token) still
+/// produces a transition so the ATN stays structurally complete; the
+/// simulator simply never matches it.
+fn atom_segment(b: &mut AtnBuilder, kind: i32, rule: i32) -> [i32, i32] {
+    let from = b.new_state(ATN_BASIC, rule);
+    let to = b.new_state(ATN_BASIC, rule);
+    b.add_trans(from, AtnTransition { kind: ATN_TR_ATOM, target: to, label: kind });
+    return [from, to];
+}
+
+/// `~X`. Single-token inner becomes a `NotAtom`; anything richer falls
+/// back to a wildcard (conservative — matches the broadest set). Parser
+/// `~(...)` over multi-token sets is rare and tracked for later.
+fn not_segment(b: &mut AtnBuilder, inner: &Element, rule: i32) -> [i32, i32] {
+    let from = b.new_state(ATN_BASIC, rule);
+    let to = b.new_state(ATN_BASIC, rule);
+    let label = match *inner {
+        TokenRef(t) => b.kind_of(&`TK_{t.name}`),
+        Literal(l) => b.kind_of(&literal_const_name(&l.text)),
+        _ => -1,
+    };
+    if label >= 0 {
+        b.add_trans(from, AtnTransition { kind: ATN_TR_NOT_ATOM, target: to, label });
+    } else {
+        b.add_trans(from, AtnTransition { kind: ATN_TR_WILDCARD, target: to });
+    }
+    return [from, to];
+}
+
+/// Build an EBNF repeat. Greedy vs non-greedy is encoded purely by the
+/// ORDER of the decision state's epsilon transitions: the simulator's
+/// min-alt resolution prefers the earlier edge, so greedy puts
+/// enter/loop first and non-greedy puts exit first. This is what makes
+/// `(else stmt)??` bind the `else` to the outer rule.
+fn build_repeat(b: &mut AtnBuilder, kind: RepeatKind, non_greedy: bool, inner: &Element, rule: i32, rule_index: &TreeMap<String, i32>) -> [i32, i32] {
+    return match kind {
+        Optional => {
+            let start = b.new_state(ATN_BLOCK_START, rule);
+            let end = b.new_state(ATN_BLOCK_END, rule);
+            b.mark_decision(start);
+            let seg = build_element(b, inner, rule, rule_index);
+            if non_greedy {
+                b.add_eps(start, end);
+                b.add_eps(start, seg.0);
+            } else {
+                b.add_eps(start, seg.0);
+                b.add_eps(start, end);
+            }
+            b.add_eps(seg.1, end);
+            [start, end];
+        },
+        Star => {
+            let entry = b.new_state(ATN_STAR_LOOP_ENTRY, rule);
+            let end = b.new_state(ATN_LOOP_END, rule);
+            b.mark_decision(entry);
+            let seg = build_element(b, inner, rule, rule_index);
+            let back = b.new_state(ATN_STAR_LOOP_BACK, rule);
+            if non_greedy {
+                b.add_eps(entry, end);
+                b.add_eps(entry, seg.0);
+            } else {
+                b.add_eps(entry, seg.0);
+                b.add_eps(entry, end);
+            }
+            b.add_eps(seg.1, back);
+            b.add_eps(back, entry);
+            [entry, end];
+        },
+        Plus => {
+            let seg = build_element(b, inner, rule, rule_index);
+            let back = b.new_state(ATN_PLUS_LOOP_BACK, rule);
+            let end = b.new_state(ATN_LOOP_END, rule);
+            b.mark_decision(back);
+            b.add_eps(seg.1, back);
+            if non_greedy {
+                b.add_eps(back, end);
+                b.add_eps(back, seg.0);
+            } else {
+                b.add_eps(back, seg.0);
+                b.add_eps(back, end);
+            }
+            [seg.0, end];
+        },
+    };
+}
+
+/// Serialize the ATN to a flat `i32` blob (see module doc for the format).
+pub fn serialize_atn(atn: &Atn) -> List<i32> {
+    let mut out: List<i32> = [];
+    out.push(ATN_MAGIC);
+    out.push(ATN_VERSION);
+    out.push(atn.num_tokens);
+    out.push(atn.rule_start.len());
+    for let s of &atn.rule_start {
+        out.push(*s);
+    }
+    for let s of &atn.rule_stop {
+        out.push(*s);
+    }
+    out.push(atn.decision_state.len());
+    for let d of &atn.decision_state {
+        out.push(*d);
+    }
+    out.push(atn.states.len());
+    for let st of &atn.states {
+        out.push(st.kind);
+        out.push(st.rule);
+        out.push(st.decision);
+        out.push(st.transitions.len());
+        for let t of &st.transitions {
+            out.push(t.kind);
+            out.push(t.target);
+            out.push(t.label);
+            out.push(t.follow);
+            out.push(t.prec);
+        }
+    }
+    return out;
+}
+
+/// Decode a blob produced by `serialize_atn`. Panics on magic/version
+/// mismatch — a stale committed blob must fail loudly.
+pub fn deserialize_atn(data: &List<i32>) -> Atn {
+    let mut p = 0;
+    let magic = data[p]; p += 1;
+    let version = data[p]; p += 1;
+    assert magic == ATN_MAGIC, `ATN blob magic mismatch: {magic}`;
+    assert version == ATN_VERSION, `ATN blob version mismatch: {version}`;
+    let num_tokens = data[p]; p += 1;
+
+    let nrules = data[p]; p += 1;
+    let mut rule_start: List<i32> = [];
+    for let mut i = 0; i < nrules; i += 1 {
+        rule_start.push(data[p]); p += 1;
+    }
+    let mut rule_stop: List<i32> = [];
+    for let mut i = 0; i < nrules; i += 1 {
+        rule_stop.push(data[p]); p += 1;
+    }
+    let ndec = data[p]; p += 1;
+    let mut decision_state: List<i32> = [];
+    for let mut i = 0; i < ndec; i += 1 {
+        decision_state.push(data[p]); p += 1;
+    }
+    let nstates = data[p]; p += 1;
+    let mut states: List<AtnState> = [];
+    for let mut i = 0; i < nstates; i += 1 {
+        let kind = data[p]; p += 1;
+        let rule = data[p]; p += 1;
+        let decision = data[p]; p += 1;
+        let ntrans = data[p]; p += 1;
+        let mut transitions: List<AtnTransition> = [];
+        for let mut j = 0; j < ntrans; j += 1 {
+            let tkind = data[p]; p += 1;
+            let target = data[p]; p += 1;
+            let label = data[p]; p += 1;
+            let follow = data[p]; p += 1;
+            let prec = data[p]; p += 1;
+            transitions.push(AtnTransition { kind: tkind, target, label, follow, prec });
+        }
+        states.push(AtnState { kind, rule, decision, transitions });
+    }
+    return Atn { states, rule_start, rule_stop, decision_state, num_tokens };
+}
+
+fn state_kind_name(kind: i32) -> String {
+    if kind == ATN_BASIC { return "Basic"; }
+    if kind == ATN_RULE_START { return "RuleStart"; }
+    if kind == ATN_RULE_STOP { return "RuleStop"; }
+    if kind == ATN_BLOCK_START { return "BlockStart"; }
+    if kind == ATN_BLOCK_END { return "BlockEnd"; }
+    if kind == ATN_STAR_LOOP_ENTRY { return "StarLoopEntry"; }
+    if kind == ATN_STAR_LOOP_BACK { return "StarLoopBack"; }
+    if kind == ATN_PLUS_LOOP_BACK { return "PlusLoopBack"; }
+    if kind == ATN_LOOP_END { return "LoopEnd"; }
+    return "Invalid";
+}
+
+fn trans_kind_name(kind: i32) -> String {
+    if kind == ATN_TR_EPSILON { return "eps"; }
+    if kind == ATN_TR_ATOM { return "atom"; }
+    if kind == ATN_TR_NOT_ATOM { return "notatom"; }
+    if kind == ATN_TR_WILDCARD { return "wild"; }
+    if kind == ATN_TR_RULE { return "rule"; }
+    return "?";
+}
+
+/// Human-readable dump of the ATN, surfaced by `gale dump --atn`.
+pub fn dump_atn(atn: &Atn, grammar: &Grammar) -> String {
+    let mut out = String::with_capacity(1024);
+    out.push_str(&`ATN: {atn.states.len()} states, {atn.decision_state.len()} decisions, {atn.num_tokens} tokens\n`);
+    for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
+        out.push_str(&`rule {r} '{grammar.parser_rules[r].name}': start=s{atn.rule_start[r]} stop=s{atn.rule_stop[r]}\n`);
+    }
+    for let mut i = 0; i < atn.states.len(); i += 1 {
+        let st = &atn.states[i];
+        let dec = if st.decision >= 0 { ` decision={st.decision}` } else { String::from("") };
+        out.push_str(&`  s{i} {state_kind_name(st.kind)} rule={st.rule}{dec}\n`);
+        for let t of &st.transitions {
+            let mut detail = String::from("");
+            if t.kind == ATN_TR_ATOM || t.kind == ATN_TR_NOT_ATOM {
+                detail = ` tk={t.label}`;
+            } else if t.kind == ATN_TR_RULE {
+                detail = ` rule={t.label} follow=s{t.follow} prec={t.prec}`;
+            }
+            out.push_str(&`    -{trans_kind_name(t.kind)}-> s{t.target}{detail}\n`);
+        }
+    }
+    return out;
+}

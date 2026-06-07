@@ -1,0 +1,115 @@
+//! Tests for the ATN model, builder, and serialization (P1).
+//!
+//! These pin three things the runtime simulator (P2/P3) will depend on:
+//!   1. the serialize/deserialize round-trip is exact;
+//!   2. token-kind numbering matches the generated `TK_*` constants;
+//!   3. non-greedy repeats put the EXIT edge first at the decision state
+//!      (the invariant that makes `(else stmt)??` bind to the outer rule).
+
+use {
+    build_atn,
+    build_token_kinds,
+    serialize_atn,
+    deserialize_atn,
+    Atn,
+    AtnState,
+    ATN_BLOCK_START,
+    ATN_BLOCK_END,
+    ATN_RULE_START,
+    ATN_TR_EPSILON,
+} from "./atn.wado";
+use { parse } from "./g4/parser.wado";
+
+global NON_GREEDY_G4: String = "
+grammar T;
+start : statement+ ;
+statement : 'x' | ifStatement;
+ifStatement : 'if' 'y' statement ('else' statement)?? ;
+ID : 'a'..'z'+ ;
+WS : (' '|'\\n') -> channel(HIDDEN);
+";
+
+global GREEDY_G4: String = "
+grammar T;
+start : statement+ ;
+statement : 'x' | ifStatement;
+ifStatement : 'if' 'y' statement ('else' statement)? ;
+ID : 'a'..'z'+ ;
+WS : (' '|'\\n') -> channel(HIDDEN);
+";
+
+/// Find a BlockStart decision state whose FIRST outgoing epsilon edge
+/// targets a BlockEnd — i.e. an optional/loop whose decision prefers to
+/// EXIT before entering. Returns the state id, or -1.
+fn find_exit_first_decision(atn: &Atn) -> i32 {
+    for let mut i = 0; i < atn.states.len(); i += 1 {
+        let st = &atn.states[i];
+        if st.kind != ATN_BLOCK_START || st.decision < 0 {
+            continue;
+        }
+        if st.transitions.len() < 1 {
+            continue;
+        }
+        let first = &st.transitions[0];
+        if first.kind != ATN_TR_EPSILON {
+            continue;
+        }
+        if atn.states[first.target].kind == ATN_BLOCK_END {
+            return i;
+        }
+    }
+    return -1;
+}
+
+test "ATN round-trips through serialize/deserialize exactly" {
+    let g = parse(NON_GREEDY_G4).unwrap();
+    let atn = build_atn(&g);
+    let blob = serialize_atn(&atn);
+    let back = deserialize_atn(&blob);
+    assert atn == back, "ATN did not survive the serialize/deserialize round-trip";
+}
+
+test "ATN has one start/stop per parser rule" {
+    let g = parse(NON_GREEDY_G4).unwrap();
+    let atn = build_atn(&g);
+    assert atn.rule_start.len() == g.parser_rules.len();
+    assert atn.rule_stop.len() == g.parser_rules.len();
+    // Every rule_start id points at an actual RuleStart state.
+    for let mut r = 0; r < g.parser_rules.len(); r += 1 {
+        assert atn.states[atn.rule_start[r]].kind == ATN_RULE_START;
+    }
+}
+
+test "token kinds mirror gen_token_constants numbering" {
+    let g = parse(NON_GREEDY_G4).unwrap();
+    let tk = build_token_kinds(&g);
+    let map = tk.0;
+    // Non-deferred lexer rules first, in declaration order: ID=0, WS=1.
+    assert map["TK_ID"] == 0;
+    assert map["TK_WS"] == 1;
+    // Then TK_EOF, then TK_ERROR (no ERROR rule here).
+    assert map["TK_EOF"] == 2;
+    assert map["TK_ERROR"] == 3;
+    // Literal tokens follow, in first-seen order across rules:
+    // 'x', 'if', 'y', 'else'.
+    assert map.get("TK_LIT_X") matches { Some(_) };
+    // num_tokens accounts for every assigned id.
+    assert tk.1 >= 8;
+}
+
+test "non-greedy optional puts the exit edge first" {
+    let g = parse(NON_GREEDY_G4).unwrap();
+    let atn = build_atn(&g);
+    let d = find_exit_first_decision(&atn);
+    assert d >= 0, "non-greedy `??` should produce an exit-first decision state";
+}
+
+test "greedy optional puts the enter edge first" {
+    let g = parse(GREEDY_G4).unwrap();
+    let atn = build_atn(&g);
+    // The greedy `?` enters before exiting, so no decision is exit-first
+    // *into a BlockEnd as its very first edge* from an optional. (The 2-alt
+    // `statement` block starts with sequence entries, not a BlockEnd.)
+    let d = find_exit_first_decision(&atn);
+    assert d < 0, "greedy `?` must not be exit-first";
+}

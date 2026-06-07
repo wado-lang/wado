@@ -7,6 +7,7 @@ use { lower_with_ctx } from "./lower.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
 use { GenContext } from "./gen_context.wado";
 use { render_dump } from "./dump.wado";
+use { build_atn, dump_atn } from "./atn.wado";
 
 export fn run() with Stdout, Stderr, Environment, Preopens {
     let arguments = args();
@@ -29,15 +30,20 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
 
     if arguments.len() >= 2 && arguments[0] == "dump" {
         let mut paths: List<String> = [];
+        let mut atn = false;
         for let mut i = 1; i < arguments.len(); i += 1 {
-            paths.push(arguments[i]);
+            if arguments[i] == "--atn" {
+                atn = true;
+            } else {
+                paths.push(arguments[i]);
+            }
         }
-        cmd_dump(paths);
+        cmd_dump(paths, atn);
         return;
     }
 
     eprintln("Usage: gale gen [--highlight] [--trace] <grammar.g4> [grammar2.g4 ...]");
-    eprintln("       gale dump <grammar.g4> [grammar2.g4 ...]");
+    eprintln("       gale dump [--atn] <grammar.g4> [grammar2.g4 ...]");
 }
 
 fn cmd_gen(paths: List<String>, options: &GenerateOptions) with Stdout, Stderr, Preopens {
@@ -105,7 +111,7 @@ fn cmd_gen(paths: List<String>, options: &GenerateOptions) with Stdout, Stderr, 
     print(generated.source);
 }
 
-fn cmd_dump(paths: List<String>) with Stdout, Stderr, Preopens {
+fn cmd_dump(paths: List<String>, atn: bool) with Stdout, Stderr, Preopens {
     if paths.len() == 0 {
         eprintln("gale dump: no grammar files given");
         return;
@@ -150,6 +156,15 @@ fn cmd_dump(paths: List<String>) with Stdout, Stderr, Preopens {
     synthesize_implicit_tokens(&mut merged);
     if let Err(e) = check_references(&merged) {
         eprintln(`gale: {e.message}`);
+        return;
+    }
+
+    // `--atn` short-circuits the GIR dump: build the surface-IR ATN (the
+    // data the runtime simulator walks) and print it.
+    if atn {
+        normalize_caches(&mut merged);
+        let built = build_atn(&merged);
+        print(dump_atn(&built, &merged));
         return;
     }
 
