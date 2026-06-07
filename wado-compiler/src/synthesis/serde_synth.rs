@@ -229,9 +229,9 @@ impl SerdeStdlibNames {
 }
 
 use super::common::{
-    alloc_local, block, break_stmt, cast, deref_expr, expr_stmt, field_access, i32_const, if_stmt,
-    let_mut_stmt, local_ref, loop_stmt, null_expr, option_none, option_some, param_local, ref_expr,
-    return_stmt, string_lit, synth_span,
+    alloc_local, assign, block, break_stmt, cast, deref_expr, expr_stmt, field_access, i32_const,
+    if_stmt, let_mut_stmt, local_ref, loop_stmt, null_expr, option_none, option_some, param_local,
+    ref_expr, return_stmt, string_lit, synth_span,
 };
 
 /// Wire-form name for a struct field.
@@ -1084,10 +1084,24 @@ fn generate_struct_deserialize(
     let mut next_local: u32 = 1;
     let result_tmp = alloc_local(&mut next_local, &mut locals, result_sa_err);
     let sd_local = alloc_local(&mut next_local, &mut locals, struct_access_type);
-    let seen_local = alloc_local(&mut next_local, &mut locals, TypeTable::U32);
     let field_locals: Vec<u32> = fields
         .iter()
         .map(|(_, _, type_id, _)| alloc_local(&mut next_local, &mut locals, *type_id))
+        .collect();
+    // Per-field "seen" flags for required (non-default) fields. Each required
+    // field gets its own bool local rather than a shared u32 bitmask, so structs
+    // with more than 32 fields are supported (a u32 bitmask overflowed at
+    // `1 << field_index` once a struct had 33+ fields).
+    let seen_locals: Vec<Option<u32>> = struct_def
+        .fields
+        .iter()
+        .map(|f| {
+            if f.serde_default {
+                None
+            } else {
+                Some(alloc_local(&mut next_local, &mut locals, TypeTable::BOOL))
+            }
+        })
         .collect();
 
     let mut stmts = Vec::new();
@@ -1120,19 +1134,14 @@ fn generate_struct_deserialize(
 
     let mut then_stmts = Vec::new();
 
-    then_stmts.push(let_mut_stmt(
-        "seen",
-        seen_local,
-        TypeTable::U32,
-        TirExpr::new(
-            TirExprKind::IntLiteral {
-                value: 0,
-                repr: "0".to_string(),
-            },
-            TypeTable::U32,
-            span,
-        ),
-    ));
+    for seen in seen_locals.iter().flatten() {
+        then_stmts.push(let_mut_stmt(
+            "seen",
+            *seen,
+            TypeTable::BOOL,
+            TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, span),
+        ));
+    }
 
     {
         let tt = module.type_table.borrow();
@@ -1184,7 +1193,6 @@ fn generate_struct_deserialize(
     // Build match arms
     let mut match_arms = Vec::new();
     for (i, (field_name, _, type_id, _)) in fields.iter().enumerate() {
-        let bit = 1u32 << i;
         let value_call = type_param_method_call(
             local_ref(sd_local, "sd", mut_ref_sa),
             &names.d_struct_access_proj,
@@ -1200,39 +1208,22 @@ fn generate_struct_deserialize(
         let val_result_local = alloc_local(&mut next_local, &mut locals, field_result_types[i]);
         let val_ok_local = alloc_local(&mut next_local, &mut locals, *type_id);
 
-        let assign_block = block(vec![
-            expr_stmt(TirExpr::new(
-                TirExprKind::Assign {
-                    target: Box::new(local_ref(field_locals[i], field_name, *type_id)),
-                    value: Box::new(local_ref(val_ok_local, "__val", *type_id)),
-                },
-                TypeTable::UNIT,
-                span,
-            )),
-            expr_stmt(TirExpr::new(
-                TirExprKind::Assign {
-                    target: Box::new(local_ref(seen_local, "seen", TypeTable::U32)),
-                    value: Box::new(TirExpr::new(
-                        TirExprKind::Binary {
-                            op: crate::tir::TirBinaryOp::BitOr,
-                            left: Box::new(local_ref(seen_local, "seen", TypeTable::U32)),
-                            right: Box::new(TirExpr::new(
-                                TirExprKind::IntLiteral {
-                                    value: u64::from(bit),
-                                    repr: bit.to_string(),
-                                },
-                                TypeTable::U32,
-                                span,
-                            )),
-                        },
-                        TypeTable::U32,
-                        span,
-                    )),
-                },
-                TypeTable::UNIT,
-                span,
-            )),
-        ]);
+        let mut assign_stmts = vec![expr_stmt(TirExpr::new(
+            TirExprKind::Assign {
+                target: Box::new(local_ref(field_locals[i], field_name, *type_id)),
+                value: Box::new(local_ref(val_ok_local, "__val", *type_id)),
+            },
+            TypeTable::UNIT,
+            span,
+        ))];
+        // Mark required fields as seen; default fields need no tracking.
+        if let Some(seen) = seen_locals[i] {
+            assign_stmts.push(expr_stmt(assign(
+                local_ref(seen, "seen", TypeTable::BOOL),
+                TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span),
+            )));
+        }
+        let assign_block = block(assign_stmts);
 
         let arm_stmts = vec![
             let_mut_stmt("__vr", val_result_local, field_result_types[i], value_call),
@@ -1332,67 +1323,37 @@ fn generate_struct_deserialize(
 
     then_stmts.push(loop_stmt(block(loop_stmts.clone())));
 
-    // Check seen mask — only require non-default fields
-    if field_count > 0 {
-        let mut required_mask = 0u32;
-        for (i, f) in struct_def.fields.iter().enumerate() {
-            if !f.serde_default {
-                required_mask |= 1u32 << i;
-            }
-        }
-        if required_mask != 0 {
-            let ne_check = TirExpr::new(
-                TirExprKind::Binary {
-                    op: crate::tir::TirBinaryOp::NotEq,
-                    left: Box::new(TirExpr::new(
-                        TirExprKind::Binary {
-                            op: crate::tir::TirBinaryOp::BitAnd,
-                            left: Box::new(local_ref(seen_local, "seen", TypeTable::U32)),
-                            right: Box::new(TirExpr::new(
-                                TirExprKind::IntLiteral {
-                                    value: u64::from(required_mask),
-                                    repr: required_mask.to_string(),
-                                },
-                                TypeTable::U32,
-                                span,
-                            )),
-                        },
-                        TypeTable::U32,
-                        span,
-                    )),
-                    right: Box::new(TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: u64::from(required_mask),
-                            repr: required_mask.to_string(),
-                        },
-                        TypeTable::U32,
-                        span,
-                    )),
-                },
-                TypeTable::BOOL,
-                span,
-            );
-            let missing_err = deserialize_error_literal(
-                deser_error_type,
-                deser_error_kind_type,
-                &names.deser_err_missing_field_name,
-                names.deser_err_missing_field_index,
-                "required field missing",
-                string_type,
+    // Require every non-default field: a required field that was never seen
+    // (its flag is still false) means the input was missing it.
+    for seen in seen_locals.iter().flatten() {
+        let not_seen = TirExpr::new(
+            TirExprKind::Unary {
+                op: crate::tir::TirUnaryOp::Not,
+                expr: Box::new(local_ref(*seen, "seen", TypeTable::BOOL)),
+            },
+            TypeTable::BOOL,
+            span,
+        );
+        let missing_err = deserialize_error_literal(
+            deser_error_type,
+            deser_error_kind_type,
+            &names.deser_err_missing_field_name,
+            names.deser_err_missing_field_index,
+            "required field missing",
+            string_type,
+            span,
+            names,
+        );
+        then_stmts.push(if_stmt(
+            not_seen,
+            block(vec![return_stmt(Some(variant_err(
+                missing_err,
+                result_struct_err,
                 span,
                 names,
-            );
-            then_stmts.push(if_stmt(
-                ne_check,
-                block(vec![return_stmt(Some(variant_err(
-                    missing_err,
-                    result_struct_err,
-                    span,
-                    names,
-                )))]),
-                None,
-            ));
-        }
+            )))]),
+            None,
+        ));
     }
 
     // sd.end()
