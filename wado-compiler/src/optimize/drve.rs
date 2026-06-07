@@ -182,7 +182,10 @@ fn validate_call_sites(project: &NirPackage, mut candidates: IndexSet<FnKey>) ->
     // appearance of a candidate there consumes its result, disqualifying it.
     // `scan_node` rejects every candidate used as a `Call` / `MethodCall`.
     for global in &project.globals {
-        ctx.scan_node(&global.initializer, NodeRef::Block(global.initializer.root));
+        ctx.scan_node(
+            global.initializer.body(),
+            NodeRef::Block(global.initializer.body().root),
+        );
     }
     let ValidateCtx {
         rejected, observed, ..
@@ -308,7 +311,7 @@ fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) {
         }
     }
     for global in &mut project.globals {
-        retype_calls(&mut global.initializer, confirmed);
+        retype_calls(global.initializer.body_mut(), confirmed);
     }
 }
 

@@ -41,7 +41,7 @@ use std::rc::Rc;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirGlobal, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprBody, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -122,7 +122,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         project.globals.push(NirGlobal {
             name,
             ty: cand.ty,
-            initializer: Body::wrapping_expr(
+            initializer: ExprBody::wrapping(
                 ExprKind::Null,
                 cand.ty,
                 crate::token::Span::new(0, 0, 1, 1),

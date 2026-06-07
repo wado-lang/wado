@@ -26,7 +26,7 @@ use crate::nir::{
 };
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
-    ExprId, ExprKind, ExprNode, PatId, PatKind, PatNode, StmtId, StmtKind, StmtNode,
+    ExprBody, ExprId, ExprKind, ExprNode, PatId, PatKind, PatNode, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
 use crate::tir;
@@ -384,11 +384,11 @@ impl Translator<'_> {
         let init_id = fctx.convert_expr(&global.initializer);
         let init_stmt = fctx.alloc_stmt(StmtKind::Expr(init_id), span);
         let init_root = fctx.alloc_block(vec![init_stmt], span);
-        let initializer = {
+        let initializer = ExprBody::from_body({
             let mut body = fctx.arena.into_inner();
             body.root = init_root;
             body
-        };
+        });
         NirGlobal {
             name: global.name.clone(),
             ty: global.ty,

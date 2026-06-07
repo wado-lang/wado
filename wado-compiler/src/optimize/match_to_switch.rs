@@ -57,7 +57,7 @@ pub fn match_to_switch(project: &mut NirPackage) -> bool {
     }
     for global in &mut project.globals {
         // Global initializers are arena bodies; run the rule on each directly.
-        let mut engine = Engine::new(&mut global.initializer);
+        let mut engine = Engine::new(global.initializer.body_mut());
         changed |= engine.run(&[&rule]);
     }
     changed

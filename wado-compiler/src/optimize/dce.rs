@@ -1566,7 +1566,7 @@ fn populate_type_reachability(
             }
             collect_type_transitive(global.ty, &type_table, &mut analysis.types);
             let mut walker = DceWalker::new(&type_table, &global.module_source);
-            let init_body = &global.initializer;
+            let init_body = global.initializer.body();
             walker.walk_node(init_body, NodeRef::Block(init_body.root));
             for id in walker.analysis.used_types {
                 analysis.types.insert(id);

@@ -248,7 +248,7 @@ fn validate_call_sites(
         }
     }
     for global in &project.globals {
-        validate_in_body(&global.initializer, &candidates, &mut rejected);
+        validate_in_body(global.initializer.body(), &candidates, &mut rejected);
     }
     for r in rejected {
         candidates.shift_remove(&r);
@@ -363,7 +363,7 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) {
         }
     }
     for global in &mut project.globals {
-        rewrite_calls_in_body(&mut global.initializer, confirmed);
+        rewrite_calls_in_body(global.initializer.body_mut(), confirmed);
     }
 }
 

@@ -447,7 +447,7 @@ fn rewrite_call_sites(project: &mut NirPackage, candidates: &IndexMap<(FnKey, us
     }
     let empty = IndexMap::default();
     for global in &mut project.globals {
-        let body = &mut global.initializer;
+        let body = global.initializer.body_mut();
         let root = body.root;
         let type_table = type_table_rc.borrow();
         rewrite_calls_node(

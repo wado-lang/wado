@@ -13,11 +13,9 @@
 //! The visitor mutates the arena `Body` directly: the per-node rewrites
 //! (`reduce_local_a`) and the block-level branch splice
 //! (`reduce_local_block_a`) operate on arena ids, so const-fold no longer
-//! round-trips the body through the `body_block()` / `set_body_block()`
-//! tree bridge. Globals and the per-function alias / value-copy maps are
-//! still tree-shaped NIR; the alias map is computed from a read-only
-//! materialization of the arena body, and the global env/field env are
-//! read from the (tree) global initializers.
+//! round-trips the body through a tree bridge. Global initializers are arena
+//! `ExprBody`s too, so the global env / field env are read from them via the
+//! arena interpreter path.
 //!
 //! The field-knowledge bookkeeping was originally a separate pass
 //! (`optimize::field_forward`); merging it into const-fold breaks the
@@ -137,8 +135,8 @@ fn build_callee_map(project: &NirPackage) -> CalleeMap {
 /// `Unevaluated`. Globals whose initializer doesn't reduce are left
 /// out of the map (absent → `Lattice::Unevaluated` by default).
 ///
-/// Global initializers are tree-shaped NIR, so this stays on the tree
-/// [`Interpreter::reduce_to_lattice`] path.
+/// Global initializers are arena `ExprBody`s, so this reduces them on the
+/// arena [`Interpreter::reduce_to_lattice_a`] path.
 fn build_global_env(
     project: &NirPackage,
     type_table: &TypeTable,
@@ -157,8 +155,7 @@ fn build_global_env(
             let mut interp = Interpreter::new(type_table);
             interp.with_callees(callees);
             interp.with_globals(&env);
-            let init = &global.initializer;
-            interp.reduce_to_lattice_a(init, init.sole_expr())
+            interp.reduce_to_lattice_a(global.initializer.body(), global.initializer.expr())
         };
         if !matches!(lattice, Lattice::Unevaluated) {
             env.insert(key, lattice);
@@ -223,7 +220,7 @@ fn build_global_field_env(project: &NirPackage) -> GlobalFieldEnv {
     // direct source.
     for global in &project.globals {
         if !global.wado_mutable
-            && let Some(n) = const_seq_len_a(&global.initializer, global.initializer.sole_expr())
+            && let Some(n) = const_seq_len_a(global.initializer.body(), global.initializer.expr())
         {
             record_seq_len(
                 &mut env,

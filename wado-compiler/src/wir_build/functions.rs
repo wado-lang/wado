@@ -574,8 +574,8 @@ fn register_globals(ctx: &mut WirContext<'_>) {
         }
 
         // Convert the initializer to a WIR constant instruction
-        let init_body = &global.initializer;
-        let init_id = init_body.sole_expr();
+        let init_body = global.initializer.body();
+        let init_id = global.initializer.expr();
         let init = translate_global_init(
             init_body,
             init_id,

@@ -445,6 +445,58 @@ impl Body {
     }
 }
 
+/// A NIR expression stored as an arena [`Body`] whose root block holds exactly
+/// one `Expr` statement. This is how single-expression NIR positions (global
+/// initializers) are represented so the optimizer engine and the arena passes
+/// can operate on them uniformly, while the wrapped expression stays directly
+/// reachable via [`ExprBody::expr`].
+///
+/// The newtype localizes the "root block = one `Expr` statement" invariant:
+/// it is established at construction (`from_body` / `wrapping`) and read
+/// through `expr()`, instead of every consumer rediscovering it via a bare
+/// `Body::sole_expr` on a plain `Body`. Passes that need to run the rewrite
+/// engine or mutate the body in place go through `body_mut()`, which keeps the
+/// single-`Expr`-statement shape (engine rules at a global are expr-local).
+#[derive(Debug, Clone)]
+pub struct ExprBody {
+    body: Body,
+}
+
+impl ExprBody {
+    /// Wrap a `Body` that is already in single-`Expr`-statement form.
+    pub fn from_body(body: Body) -> Self {
+        debug_assert_eq!(
+            body.blocks[body.root].stmts.len(),
+            1,
+            "ExprBody requires a single-statement root block"
+        );
+        Self { body }
+    }
+
+    /// Build an `ExprBody` from a single fresh expression node of `kind`.
+    pub fn wrapping(kind: ExprKind, type_id: TypeId, span: Span) -> Self {
+        Self {
+            body: Body::wrapping_expr(kind, type_id, span),
+        }
+    }
+
+    /// The wrapped expression's id.
+    pub fn expr(&self) -> ExprId {
+        self.body.sole_expr()
+    }
+
+    /// The underlying `Body` (for read-only arena traversal / lattice eval).
+    pub fn body(&self) -> &Body {
+        &self.body
+    }
+
+    /// The underlying `Body` for in-place rewrites (engine runs, call-site
+    /// rewriting). Callers must preserve the single-`Expr`-statement root.
+    pub fn body_mut(&mut self) -> &mut Body {
+        &mut self.body
+    }
+}
+
 /// Tree -> arena lowering. Pushes children before parents so ids are dense and
 /// well-formed. Borrows the target body's maps so `from_block` (fresh body) and
 /// `Body::lower_expr` (append into a live body) share one lowering.
