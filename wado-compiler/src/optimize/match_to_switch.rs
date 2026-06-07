@@ -15,9 +15,8 @@
 //! it runs as a [`Rule`] over each function's arena `Body`. The arm bodies are
 //! deep-cloned via the engine's edit API because the same arm can appear at
 //! multiple `br_table` offsets, and the arena is a tree (one parent per node).
-//! Param defaults, globals, and struct-field defaults are still tree-shaped
-//! NIR, so they reuse the same rule through a wrap-in-`Body` helper rather than
-//! a second copy of the logic. The rule is confluent under the worklist's
+//! Global initializers are arena `ExprBody`s, so the same rule runs on each
+//! global's body directly. The rule is confluent under the worklist's
 //! bottom-up order: nested `Match`es in arm bodies are converted before the
 //! outer one, so the cloned bodies hold `Switch`es and re-processing them is a
 //! no-op.

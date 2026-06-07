@@ -23,8 +23,9 @@
 //!
 //! Ported off the `Body ↔ tree` bridge (Phase 4 stage C; see
 //! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`): the validation walk and
-//! both rewrite phases read and mutate the arena `Body` directly; globals run
-//! the call-site rewrite through a wrap-in-`Body` helper.
+//! both rewrite phases read and mutate the arena `Body` directly; global
+//! initializers are arena bodies too, so the call-site rewrite runs on them
+//! directly.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;

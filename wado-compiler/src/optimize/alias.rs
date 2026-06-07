@@ -38,9 +38,8 @@ use crate::niri::{AliasInfo, LocalSet};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Apply `f` to every node reachable from the body root, parents before
-/// children. The arena counterpart of the tree [`crate::nir_visitor`] walk the
-/// alias collectors used; visiting every node and matching on `Stmt` / `Expr`
-/// gives the same coverage.
+/// children. Visiting every node and matching on `Stmt` / `Expr` gives the
+/// alias collectors the coverage they need.
 fn walk_all(body: &Body, node: NodeRef, f: &mut impl FnMut(&Body, NodeRef)) {
     f(body, node);
     let mut kids = Vec::new();

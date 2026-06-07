@@ -601,11 +601,10 @@ impl ConstFoldVisitor<'_> {
         self.walk_children(body, NodeRef::Pat(p))
     }
 
-    /// Recurse into every id-bearing child of `node`, dispatching by
-    /// category. Mirrors `nir_visitor::opt_walk_*`: the const-fold
-    /// special cases (control flow, `Assign`) are handled by the
-    /// callers before they reach this generic walk, so the only nodes
-    /// routed here are the straight-line ones.
+    /// Recurse into every id-bearing child of `node`. The const-fold special
+    /// cases (control flow, `Assign`) are handled by the callers before they
+    /// reach this generic walk, so the only nodes routed here are the
+    /// straight-line ones.
     fn walk_children(&mut self, body: &mut Body, node: NodeRef) -> bool {
         let mut kids = Vec::new();
         body.for_each_child(node, |c| kids.push(c));

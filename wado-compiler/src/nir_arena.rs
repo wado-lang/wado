@@ -1238,14 +1238,15 @@ impl Body {
         }
     }
 
-    /// Materialize a single expression subtree to its tree form. Used by passes
-    /// whose leaf analyses (e.g. `mod_ref::ModRef`) are still tree-shaped and
-    /// are invoked on a materialized subtree pending a full arena port.
+    /// Materialize a single expression subtree to its tree form (the per-node
+    /// counterpart of [`Body::to_block`]). Part of the `to_tree` bridge that
+    /// remains for the not-yet-ported tree-shaped passes; currently unused.
     pub fn to_tree_expr(&self, id: ExprId) -> NirExpr {
         self.expr_to_tree(id)
     }
 
-    /// Materialize a single statement subtree to its tree form.
+    /// Materialize a single statement subtree to its tree form; currently
+    /// unused (see [`Body::to_tree_expr`]).
     pub fn to_tree_stmt(&self, id: StmtId) -> NirStmt {
         self.stmt_to_tree(id)
     }
