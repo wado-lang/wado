@@ -255,32 +255,6 @@ fn collect_resource_refs(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_effect_error_display() {
-        let error = EffectError {
-            callee: "println".to_string(),
-            missing_effect: "Stdout".to_string(),
-            kind: EffectKind::Effect,
-            span: Span {
-                start: 100,
-                end: 107,
-                line: 10,
-                column: 5,
-                end_line: 10,
-                end_column: 12,
-            },
-        };
-        assert_eq!(
-            error.to_string(),
-            "10:5: missing effect 'Stdout' required by 'println'"
-        );
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Semantics-based effect checking (Design B, Phase 1b)
 // ---------------------------------------------------------------------------
@@ -1300,7 +1274,12 @@ pub fn check_default_purity_semantic(sem: &Semantics) -> Vec<DefaultPurityError>
                         for param in &method.params {
                             if let Some(default) = &param.default {
                                 purity_walk_default(
-                                    sem, src, annotations, &index, default, &mut out,
+                                    sem,
+                                    src,
+                                    annotations,
+                                    &index,
+                                    default,
+                                    &mut out,
                                 );
                             }
                         }
@@ -1419,5 +1398,31 @@ impl AstVisitor for PurityWalker<'_> {
             _ => {}
         }
         ast::walk_expr(self, expr);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_effect_error_display() {
+        let error = EffectError {
+            callee: "println".to_string(),
+            missing_effect: "Stdout".to_string(),
+            kind: EffectKind::Effect,
+            span: Span {
+                start: 100,
+                end: 107,
+                line: 10,
+                column: 5,
+                end_line: 10,
+                end_column: 12,
+            },
+        };
+        assert_eq!(
+            error.to_string(),
+            "10:5: missing effect 'Stdout' required by 'println'"
+        );
     }
 }

@@ -43,7 +43,8 @@ export fn run() {}
     let v = violations(source);
     assert!(
         v.iter()
-            .any(|m| m.contains("returning reference parameter 'data'") && m.contains("stores[data]")),
+            .any(|m| m.contains("returning reference parameter 'data'")
+                && m.contains("stores[data]")),
         "expected a returning-ref violation for `bad_return`, got {v:?}"
     );
 }
@@ -67,9 +68,10 @@ export fn run() {}
 "#;
     let v = violations(source);
     assert!(
-        v.iter().any(|m| m
-            .contains("storing reference parameter 'data' in struct field")
-            && m.contains("stores[data]")),
+        v.iter().any(
+            |m| m.contains("storing reference parameter 'data' in struct field")
+                && m.contains("stores[data]")
+        ),
         "expected a struct-field stores violation, got {v:?}"
     );
 }
@@ -91,8 +93,10 @@ export fn run() {}
 "#;
     let v = violations(source);
     assert!(
-        v.iter().any(|m| m.contains("storing reference parameter 'data' in global 'SAVED'")
-            && m.contains("stores[data]")),
+        v.iter().any(
+            |m| m.contains("storing reference parameter 'data' in global 'SAVED'")
+                && m.contains("stores[data]")
+        ),
         "expected a global stores violation, got {v:?}"
     );
 }

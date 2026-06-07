@@ -288,8 +288,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                     ));
                 }
 
-                let user_func_rc =
-                    found_exported.expect("required export presence verified above");
+                let user_func_rc = found_exported.expect("required export presence verified above");
                 let binding_name = export_binding_func_name(&export.name);
                 let adapter = {
                     // Validate parameter count matches world declaration
