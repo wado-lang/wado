@@ -295,6 +295,13 @@ pub trait Visitor {
     fn visit_unknown(&mut self, _raw: ByteList) -> Result<Self::Value, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("unexpected opaque value", -1));
     }
+    /// The CBOR `undefined` simple value (major 7, value 23). Distinct from
+    /// `null`: a dynamic value model (`core:value`) keeps its own `Undefined`
+    /// arm. The default collapses it to `null` so visitors that do not model
+    /// the distinction (e.g. JSON) keep working.
+    fn visit_undefined(&mut self) -> Result<Self::Value, DeserializeError> {
+        return self.visit_null();
+    }
 }
 
 #[compiler_item("deserializer")]

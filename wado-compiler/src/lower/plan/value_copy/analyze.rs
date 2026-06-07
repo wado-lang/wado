@@ -145,6 +145,7 @@ fn is_fresh_in_context(expr: &TirExpr, fresh_locals: &IndexSet<u32>) -> bool {
         | TirExprKind::TupleLiteral { .. }
         | TirExprKind::TupleSpread { .. }
         | TirExprKind::TupleZip { .. }
+        | TirExprKind::TupleLen { .. }
         | TirExprKind::TypePackExpansion { .. }
         | TirExprKind::Null => true,
         TirExprKind::Call { .. }

@@ -928,11 +928,21 @@ fn check_return_variant_struct_new(
             all_returns_are_variant_struct_new(body, valid_type_indices, tail_call_candidates)
         }
         WirInstr::If {
+            condition,
             then_body,
             else_body,
             ..
         } => {
-            all_returns_are_variant_struct_new(then_body, valid_type_indices, tail_call_candidates)
+            // The condition is an expression that may embed a `Return` (e.g.
+            // `if expr? == x { … }`). Validate those returns too, so the apply
+            // phase (which now rewrites condition returns) never finds a return
+            // shape it cannot lower.
+            condition_returns_compatible(condition, valid_type_indices, tail_call_candidates)
+                && all_returns_are_variant_struct_new(
+                    then_body,
+                    valid_type_indices,
+                    tail_call_candidates,
+                )
                 && else_body.as_ref().is_none_or(|eb| {
                     all_returns_are_variant_struct_new(eb, valid_type_indices, tail_call_candidates)
                 })
@@ -945,6 +955,30 @@ fn check_return_variant_struct_new(
         }
         _ => true,
     }
+}
+
+/// Validate every `Return` embedded anywhere in an expression subtree (e.g. an
+/// `if`/`while` condition that contains a `?`-desugared `return Err(…)`). Each
+/// must be a shape the apply phase can lower to the multi-value return; if any
+/// is not, the function is rejected as an SROA candidate so its signature is
+/// never rewritten out from under a boxed return.
+fn condition_returns_compatible(
+    instr: &WirInstr,
+    valid_type_indices: &IndexSet<u32>,
+    tail_call_candidates: &IndexSet<u32>,
+) -> bool {
+    if let WirInstr::Return { value: Some(v) } = instr
+        && !top_return_value_compatible(v, valid_type_indices, tail_call_candidates)
+    {
+        return false;
+    }
+    let mut ok = true;
+    instr.for_each_child(&mut |child| {
+        if ok && !condition_returns_compatible(child, valid_type_indices, tail_call_candidates) {
+            ok = false;
+        }
+    });
+    ok
 }
 
 /// Check if an instruction contains `Unreachable` (indicating dead code).
@@ -1935,10 +1969,21 @@ fn rewrite_variant_returns_to_multi_value(
                 rewrite_variant_returns_to_multi_value(body, vi, result_types);
             }
             WirInstr::If {
+                condition,
                 then_body,
                 else_body,
                 ..
             } => {
+                // The condition is an expression that can itself contain a
+                // `Return` — e.g. `if expr? == x { … }`, where the `?` desugar
+                // puts a `return Err(…)` inside the condition. Those returns
+                // must be rewritten to the multi-value shape too, or the
+                // function's signature and a stray boxed return disagree.
+                rewrite_variant_returns_to_multi_value(
+                    std::slice::from_mut(condition.as_mut()),
+                    vi,
+                    result_types,
+                );
                 rewrite_variant_returns_to_multi_value(then_body, vi, result_types);
                 if let Some(eb) = else_body {
                     rewrite_variant_returns_to_multi_value(eb, vi, result_types);

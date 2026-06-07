@@ -1,0 +1,1658 @@
+#![stdlib("core:cbor")]
+//! CBOR serialization and deserialization (RFC 8949, STD 94).
+//!
+//! Implements the `core:serde` `Serializer` and `Deserializer` traits for the
+//! Concise Binary Object Representation. The data model is a strict superset of
+//! JSON's, so any type that serializes to `core:json` serializes to CBOR with no
+//! source changes — the derived `Serialize`/`Deserialize` impls drive both.
+//!
+//! The API is bytes-only (CBOR is binary):
+//!
+//!   use { to_bytes, from_bytes } from "core:cbor";
+//!
+//!   let bytes = to_bytes::<i32>(&42)?;            // [0x18, 0x2a]
+//!   let v: i32 = from_bytes(bytes)?;              // 42
+//!
+//! Encoding uses preferred (shortest) serialization (RFC 8949 §4.1). Decoding is
+//! variation-tolerant (§4.1): it accepts any well-formed encoding, preferred or
+//! not, definite or indefinite length. `to_bytes_canonical` emits the Core
+//! Deterministic Encoding profile (§4.2.1) for COSE-style signing, with the
+//! documented float caveat (Wado has no `f16`, so the canonical float ladder
+//! stops at binary32).
+//!
+//! The spec is vendored verbatim at `wado-compiler/ref/rfc8949.txt`; comments
+//! cite section numbers from it.
+
+
+use {
+    Serialize,
+    Deserialize,
+    Serializer,
+    Deserializer,
+    SerializeSeq,
+    SerializeMap,
+    SerializeStruct,
+    SerializeVariant,
+    DeserializeSeq,
+    DeserializeMap,
+    DeserializeStruct,
+    DeserializeVariant,
+    FieldSchema,
+    Visitor,
+    SerializeError,
+    SerializeErrorKind,
+    DeserializeError,
+    DeserializeErrorKind,
+} from "core:serde";
+
+global SERIALIZE_BUFFER_CAPACITY: i32 = 64;
+
+// Major types (RFC 8949 §3): the high 3 bits of the initial byte.
+global MAJOR_UINT: u8 = 0;       // unsigned integer
+global MAJOR_NINT: u8 = 1;       // negative integer (encodes -1 - n)
+global MAJOR_BYTES: u8 = 2;      // byte string
+global MAJOR_TEXT: u8 = 3;       // text string (UTF-8)
+global MAJOR_ARRAY: u8 = 4;      // array
+global MAJOR_MAP: u8 = 5;        // map
+global MAJOR_TAG: u8 = 6;        // tagged item
+global MAJOR_SIMPLE: u8 = 7;     // simple value / float
+
+/// Write a CBOR head — a major type (0..7) plus its argument in preferred
+/// (shortest) form (RFC 8949 §3). Shared by integers, string/array/map
+/// lengths, and tag numbers.
+fn write_head(buf: &mut List<u8>, major: u8, arg: u64) {
+    let mt: u64 = (major as u64) << 5;
+    if arg < 24 {
+        buf.push((mt | arg) as u8);
+    } else if arg <= 0xff {
+        buf.push((mt | 24) as u8);
+        buf.push(arg as u8);
+    } else if arg <= 0xffff {
+        buf.push((mt | 25) as u8);
+        push_be(buf, arg, 2);
+    } else if arg <= 0xffffffff {
+        buf.push((mt | 26) as u8);
+        push_be(buf, arg, 4);
+    } else {
+        buf.push((mt | 27) as u8);
+        push_be(buf, arg, 8);
+    }
+}
+
+/// Append the low `nbytes` of `value` in big-endian (network) order.
+fn push_be(buf: &mut List<u8>, value: u64, nbytes: i32) {
+    let mut i = nbytes - 1;
+    while i >= 0 {
+        buf.push((value >> ((i * 8) as u64)) as u8);
+        i -= 1;
+    }
+}
+
+/// Append the UTF-8 bytes of `s` (a `String` is already valid UTF-8, so the
+/// text string is emitted verbatim — RFC 8949 §3.1).
+fn push_text_bytes(buf: &mut List<u8>, s: &String) {
+    let n = s.len();
+    let mut i = 0;
+    while i < n {
+        buf.push(s.get_byte_unchecked(i));
+        i += 1;
+    }
+}
+
+/// Append a byte string's contents.
+fn push_byte_slice(buf: &mut List<u8>, v: ByteSlice) {
+    let n = v.len();
+    let mut i = 0;
+    while i < n {
+        buf.push(v.get_unchecked(i));
+        i += 1;
+    }
+}
+
+/// Emit a non-negative `u128` magnitude as a CBOR bignum (RFC 8949 §3.4.3):
+/// `tag` (2 for non-negative, 3 for negative) wrapping a byte string holding
+/// the minimal big-endian magnitude (no leading zero bytes; a zero magnitude
+/// is a single `0x00`).
+fn write_bignum(buf: &mut List<u8>, tag: u64, mag: u128) {
+    // Collect the 16 big-endian bytes, then strip leading zeros.
+    let hi = mag.high();
+    let lo = mag.low();
+    let mut bytes: List<u8> = List::with_capacity(16);
+    let mut i = 7;
+    while i >= 0 {
+        bytes.push((hi >> ((i * 8) as u64)) as u8);
+        i -= 1;
+    }
+    i = 7;
+    while i >= 0 {
+        bytes.push((lo >> ((i * 8) as u64)) as u8);
+        i -= 1;
+    }
+    let mut start = 0;
+    while start < 15 && bytes[start] == 0 {
+        start += 1;
+    }
+    let len = 16 - start;
+    write_head(buf, MAJOR_TAG, tag);
+    write_head(buf, MAJOR_BYTES, len as u64);
+    let mut j = start;
+    while j < 16 {
+        buf.push(bytes[j]);
+        j += 1;
+    }
+}
+
+struct CborSeqSerializer {
+    buf: &mut List<u8>,
+}
+
+struct CborMapSerializer {
+    buf: &mut List<u8>,
+}
+
+struct CborStructSerializer {
+    buf: &mut List<u8>,
+}
+
+struct CborVariantSerializer {
+    buf: &mut List<u8>,
+}
+
+pub struct CborSerializer {
+    buf: &mut List<u8>,
+}
+
+impl SerializeSeq for CborSeqSerializer {
+    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        let mut ser = CborSerializer { buf: self.buf };
+        let r = value.serialize::<CborSerializer>(&mut ser);
+        self.buf = ser.buf;
+        return r;
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        // Definite-length array: the count was written up front, nothing to close.
+        return Result::Ok(());
+    }
+}
+
+impl SerializeMap for CborMapSerializer {
+    fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
+        let mut ser = CborSerializer { buf: self.buf };
+        let r = key.serialize::<CborSerializer>(&mut ser);
+        self.buf = ser.buf;
+        return r;
+    }
+
+    fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        let mut ser = CborSerializer { buf: self.buf };
+        let r = value.serialize::<CborSerializer>(&mut ser);
+        self.buf = ser.buf;
+        return r;
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return Result::Ok(());
+    }
+}
+
+impl SerializeStruct for CborStructSerializer {
+    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
+        write_head(self.buf, MAJOR_TEXT, name.len() as u64);
+        push_text_bytes(self.buf, name);
+        let mut ser = CborSerializer { buf: self.buf };
+        let r = value.serialize::<CborSerializer>(&mut ser);
+        self.buf = ser.buf;
+        return r;
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return Result::Ok(());
+    }
+}
+
+impl SerializeVariant for CborVariantSerializer {
+    fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        let mut ser = CborSerializer { buf: self.buf };
+        let r = value.serialize::<CborSerializer>(&mut ser);
+        self.buf = ser.buf;
+        return r;
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return Result::Ok(());
+    }
+}
+
+impl Serializer for CborSerializer {
+    type SeqSerializer = CborSeqSerializer;
+    type MapSerializer = CborMapSerializer;
+    type StructSerializer = CborStructSerializer;
+    type VariantSerializer = CborVariantSerializer;
+
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
+        return self.serialize_i64(v as i64);
+    }
+
+    fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
+        if v >= 0 {
+            write_head(self.buf, MAJOR_UINT, v as u64);
+        } else {
+            write_head(self.buf, MAJOR_NINT, (-1 - v) as u64);
+        }
+        return Result::Ok(());
+    }
+
+    fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
+        write_head(self.buf, MAJOR_UINT, v as u64);
+        return Result::Ok(());
+    }
+
+    fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
+        write_head(self.buf, MAJOR_UINT, v);
+        return Result::Ok(());
+    }
+
+    fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
+        let u64_max: u128 = 18446744073709551615;
+        if v >= 0 {
+            let mag = u128::from_pair(v.low(), v.high() as u64);
+            if mag <= u64_max {
+                write_head(self.buf, MAJOR_UINT, mag.low());
+            } else {
+                write_bignum(self.buf, 2, mag);
+            }
+        } else {
+            // mag = -1 - v, computed via the two's-complement identity
+            // -1 - v == ~v over the 128-bit pattern.
+            let mag = u128::from_pair(~v.low(), ~(v.high() as u64));
+            if mag <= u64_max {
+                write_head(self.buf, MAJOR_NINT, mag.low());
+            } else {
+                write_bignum(self.buf, 3, mag);
+            }
+        }
+        return Result::Ok(());
+    }
+
+    fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
+        let u64_max: u128 = 18446744073709551615;
+        if v <= u64_max {
+            write_head(self.buf, MAJOR_UINT, v.low());
+        } else {
+            write_bignum(self.buf, 2, v);
+        }
+        return Result::Ok(());
+    }
+
+    fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
+        // binary32 head (additional info 26). Wado has no f16, so the preferred
+        // encoder never uses the 16-bit form. NaN/Inf encode natively.
+        self.buf.push(0xfa);
+        push_be(self.buf, (v.to_bits() as u32) as u64, 4);
+        return Result::Ok(());
+    }
+
+    fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
+        self.buf.push(0xfb);
+        push_be(self.buf, v.to_bits() as u64, 8);
+        return Result::Ok(());
+    }
+
+    fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
+        if v {
+            self.buf.push(0xf5);
+        } else {
+            self.buf.push(0xf4);
+        }
+        return Result::Ok(());
+    }
+
+    fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
+        let s = `{v}`;
+        write_head(self.buf, MAJOR_TEXT, s.len() as u64);
+        push_text_bytes(self.buf, &s);
+        return Result::Ok(());
+    }
+
+    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
+        write_head(self.buf, MAJOR_TEXT, v.len() as u64);
+        push_text_bytes(self.buf, v);
+        return Result::Ok(());
+    }
+
+    fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError> {
+        write_head(self.buf, MAJOR_BYTES, v.len() as u64);
+        push_byte_slice(self.buf, v);
+        return Result::Ok(());
+    }
+
+    fn serialize_null(&mut self) -> Result<(), SerializeError> {
+        self.buf.push(0xf6);
+        return Result::Ok(());
+    }
+
+    fn begin_seq(&mut self, len: i32) -> Result<CborSeqSerializer, SerializeError> {
+        write_head(self.buf, MAJOR_ARRAY, len as u64);
+        return Result::Ok(CborSeqSerializer { buf: self.buf });
+    }
+
+    fn begin_map(&mut self, len: i32) -> Result<CborMapSerializer, SerializeError> {
+        write_head(self.buf, MAJOR_MAP, len as u64);
+        return Result::Ok(CborMapSerializer { buf: self.buf });
+    }
+
+    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<CborStructSerializer, SerializeError> {
+        write_head(self.buf, MAJOR_MAP, fields as u64);
+        return Result::Ok(CborStructSerializer { buf: self.buf });
+    }
+
+    fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError> {
+        // External tagging: a unit variant is just its name as a text string.
+        write_head(self.buf, MAJOR_TEXT, variant_name.len() as u64);
+        push_text_bytes(self.buf, variant_name);
+        return Result::Ok(());
+    }
+
+    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<CborVariantSerializer, SerializeError> {
+        // External tagging: a single-pair map `{ name: payload }`.
+        write_head(self.buf, MAJOR_MAP, 1);
+        write_head(self.buf, MAJOR_TEXT, variant_name.len() as u64);
+        push_text_bytes(self.buf, variant_name);
+        return Result::Ok(CborVariantSerializer { buf: self.buf });
+    }
+}
+
+/// Serialize a value to CBOR using preferred (shortest) serialization.
+///
+/// Not guaranteed to be deterministic across equal values whose maps were built
+/// in different orders; use `to_bytes_canonical` when byte-exact reproducibility
+/// matters (e.g. COSE/CWT signing).
+pub fn to_bytes<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
+    let mut buf: List<u8> = List::with_capacity(SERIALIZE_BUFFER_CAPACITY);
+    let mut ser = CborSerializer { buf: &mut buf };
+    value.serialize::<CborSerializer>(&mut ser)?;
+    return Result::Ok(buf as ByteList);
+}
+
+// Canonical (deterministic) CBOR serializer — RFC 8949 §4.2.1 Core
+// Deterministic Encoding. Integers, lengths, and tags already use the
+// preferred (shortest) form via `write_head`, and every container is
+// definite-length. The two canonical-specific behaviours are:
+//
+//   1. Map and struct keys are emitted in ascending bytewise order of their
+//      *encoded* form: entries are encoded into side buffers and sorted before
+//      emission.
+//   2. Floats use the shortest form that preserves the value, but — since Wado
+//      has no `f16` — the ladder stops at binary32. `to_bytes_canonical` is thus
+//      byte-identical to a reference deterministic encoder for integers, map
+//      order, and lengths, but may differ on float-bearing values (a documented
+//      COSE/CWT interoperability caveat; see the WEP).
+
+fn write_canonical_f64(buf: &mut List<u8>, v: f64) {
+    if v.is_nan() {
+        // One canonical NaN (quiet, binary32) since there is no f16.
+        buf.push(0xfa);
+        push_be(buf, 0x7fc00000, 4);
+        return;
+    }
+    let n32 = v as f32;
+    if (n32 as f64) == v {
+        buf.push(0xfa);
+        push_be(buf, (n32.to_bits() as u32) as u64, 4);
+    } else {
+        buf.push(0xfb);
+        push_be(buf, v.to_bits() as u64, 8);
+    }
+}
+
+fn write_canonical_f32(buf: &mut List<u8>, v: f32) {
+    // binary32 is already the shortest form available (no f16).
+    if v.is_nan() {
+        buf.push(0xfa);
+        push_be(buf, 0x7fc00000, 4);
+        return;
+    }
+    buf.push(0xfa);
+    push_be(buf, (v.to_bits() as u32) as u64, 4);
+}
+
+fn append_all(buf: &mut List<u8>, src: &ByteList) {
+    let mut i = 0;
+    while i < src.len() {
+        buf.push(src[i]);
+        i += 1;
+    }
+}
+
+/// Bytewise lexicographic comparison of two encoded keys (RFC 8949 §4.2.1
+/// orders map keys by the bytewise order of their encoded form).
+fn cmp_bytes(a: &ByteList, b: &ByteList) -> Ordering {
+    let n = if a.len() < b.len() { a.len() } else { b.len() };
+    let mut i = 0;
+    while i < n {
+        let x = a[i];
+        let y = b[i];
+        if x < y {
+            return Ordering::Less;
+        }
+        if x > y {
+            return Ordering::Greater;
+        }
+        i += 1;
+    }
+    if a.len() < b.len() {
+        return Ordering::Less;
+    }
+    if a.len() > b.len() {
+        return Ordering::Greater;
+    }
+    return Ordering::Equal;
+}
+
+fn emit_sorted_map(buf: &mut List<u8>, entries: &mut List<[ByteList, ByteList]>) {
+    entries.sort_by(|a: &[ByteList, ByteList], b: &[ByteList, ByteList]| cmp_bytes(&a.0, &b.0));
+    write_head(buf, MAJOR_MAP, entries.len() as u64);
+    for let mut i = 0; i < entries.len(); i += 1 {
+        append_all(buf, &entries[i].0);
+        append_all(buf, &entries[i].1);
+    }
+}
+
+fn canonical_encode<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
+    let mut buf: List<u8> = List::with_capacity(16);
+    let mut ser = CanonicalCborSerializer { buf: &mut buf };
+    value.serialize::<CanonicalCborSerializer>(&mut ser)?;
+    return Result::Ok(buf as ByteList);
+}
+
+struct CanonicalCborSeqSerializer {
+    buf: &mut List<u8>,
+}
+
+struct CanonicalCborMapSerializer {
+    buf: &mut List<u8>,
+    entries: List<[ByteList, ByteList]>,
+    pending_key: ByteList,
+}
+
+struct CanonicalCborStructSerializer {
+    buf: &mut List<u8>,
+    entries: List<[ByteList, ByteList]>,
+}
+
+struct CanonicalCborVariantSerializer {
+    buf: &mut List<u8>,
+}
+
+pub struct CanonicalCborSerializer {
+    buf: &mut List<u8>,
+}
+
+impl SerializeSeq for CanonicalCborSeqSerializer {
+    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        let mut ser = CanonicalCborSerializer { buf: self.buf };
+        let r = value.serialize::<CanonicalCborSerializer>(&mut ser);
+        self.buf = ser.buf;
+        return r;
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return Result::Ok(());
+    }
+}
+
+impl SerializeMap for CanonicalCborMapSerializer {
+    fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
+        self.pending_key = canonical_encode::<T>(key)?;
+        return Result::Ok(());
+    }
+
+    fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        let vbuf = canonical_encode::<T>(value)?;
+        self.entries.push([self.pending_key, vbuf]);
+        return Result::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        emit_sorted_map(self.buf, &mut self.entries);
+        return Result::Ok(());
+    }
+}
+
+impl SerializeStruct for CanonicalCborStructSerializer {
+    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
+        let mut kbuf: List<u8> = List::with_capacity(name.len() + 1);
+        write_head(&mut kbuf, MAJOR_TEXT, name.len() as u64);
+        push_text_bytes(&mut kbuf, name);
+        let vbuf = canonical_encode::<T>(value)?;
+        self.entries.push([kbuf as ByteList, vbuf]);
+        return Result::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        emit_sorted_map(self.buf, &mut self.entries);
+        return Result::Ok(());
+    }
+}
+
+impl SerializeVariant for CanonicalCborVariantSerializer {
+    fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        let mut ser = CanonicalCborSerializer { buf: self.buf };
+        let r = value.serialize::<CanonicalCborSerializer>(&mut ser);
+        self.buf = ser.buf;
+        return r;
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return Result::Ok(());
+    }
+}
+
+impl Serializer for CanonicalCborSerializer {
+    type SeqSerializer = CanonicalCborSeqSerializer;
+    type MapSerializer = CanonicalCborMapSerializer;
+    type StructSerializer = CanonicalCborStructSerializer;
+    type VariantSerializer = CanonicalCborVariantSerializer;
+
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
+        return self.serialize_i64(v as i64);
+    }
+
+    fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
+        if v >= 0 {
+            write_head(self.buf, MAJOR_UINT, v as u64);
+        } else {
+            write_head(self.buf, MAJOR_NINT, (-1 - v) as u64);
+        }
+        return Result::Ok(());
+    }
+
+    fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
+        write_head(self.buf, MAJOR_UINT, v as u64);
+        return Result::Ok(());
+    }
+
+    fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
+        write_head(self.buf, MAJOR_UINT, v);
+        return Result::Ok(());
+    }
+
+    fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
+        let u64_max: u128 = 18446744073709551615;
+        if v >= 0 {
+            let mag = u128::from_pair(v.low(), v.high() as u64);
+            if mag <= u64_max {
+                write_head(self.buf, MAJOR_UINT, mag.low());
+            } else {
+                write_bignum(self.buf, 2, mag);
+            }
+        } else {
+            let mag = u128::from_pair(~v.low(), ~(v.high() as u64));
+            if mag <= u64_max {
+                write_head(self.buf, MAJOR_NINT, mag.low());
+            } else {
+                write_bignum(self.buf, 3, mag);
+            }
+        }
+        return Result::Ok(());
+    }
+
+    fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
+        let u64_max: u128 = 18446744073709551615;
+        if v <= u64_max {
+            write_head(self.buf, MAJOR_UINT, v.low());
+        } else {
+            write_bignum(self.buf, 2, v);
+        }
+        return Result::Ok(());
+    }
+
+    fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
+        write_canonical_f32(self.buf, v);
+        return Result::Ok(());
+    }
+
+    fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
+        write_canonical_f64(self.buf, v);
+        return Result::Ok(());
+    }
+
+    fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
+        if v {
+            self.buf.push(0xf5);
+        } else {
+            self.buf.push(0xf4);
+        }
+        return Result::Ok(());
+    }
+
+    fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
+        let s = `{v}`;
+        write_head(self.buf, MAJOR_TEXT, s.len() as u64);
+        push_text_bytes(self.buf, &s);
+        return Result::Ok(());
+    }
+
+    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
+        write_head(self.buf, MAJOR_TEXT, v.len() as u64);
+        push_text_bytes(self.buf, v);
+        return Result::Ok(());
+    }
+
+    fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError> {
+        write_head(self.buf, MAJOR_BYTES, v.len() as u64);
+        push_byte_slice(self.buf, v);
+        return Result::Ok(());
+    }
+
+    fn serialize_null(&mut self) -> Result<(), SerializeError> {
+        self.buf.push(0xf6);
+        return Result::Ok(());
+    }
+
+    fn begin_seq(&mut self, len: i32) -> Result<CanonicalCborSeqSerializer, SerializeError> {
+        write_head(self.buf, MAJOR_ARRAY, len as u64);
+        return Result::Ok(CanonicalCborSeqSerializer { buf: self.buf });
+    }
+
+    fn begin_map(&mut self, len: i32) -> Result<CanonicalCborMapSerializer, SerializeError> {
+        return Result::Ok(CanonicalCborMapSerializer {
+            buf: self.buf,
+            entries: [],
+            pending_key: [],
+        });
+    }
+
+    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<CanonicalCborStructSerializer, SerializeError> {
+        return Result::Ok(CanonicalCborStructSerializer {
+            buf: self.buf,
+            entries: [],
+        });
+    }
+
+    fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError> {
+        write_head(self.buf, MAJOR_TEXT, variant_name.len() as u64);
+        push_text_bytes(self.buf, variant_name);
+        return Result::Ok(());
+    }
+
+    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<CanonicalCborVariantSerializer, SerializeError> {
+        write_head(self.buf, MAJOR_MAP, 1);
+        write_head(self.buf, MAJOR_TEXT, variant_name.len() as u64);
+        push_text_bytes(self.buf, variant_name);
+        return Result::Ok(CanonicalCborVariantSerializer { buf: self.buf });
+    }
+}
+
+/// Serialize a value to CBOR using the Core Deterministic Encoding profile
+/// (RFC 8949 §4.2.1): preferred integer/length/tag forms, definite-length
+/// containers, and map keys sorted by the bytewise order of their encoded form.
+/// Equal values produce byte-identical output regardless of map insertion order
+/// — use this for COSE/CWT signing or content addressing.
+///
+/// Float caveat: Wado has no `f16`, so the canonical float ladder stops at
+/// binary32. Output is byte-identical to a reference deterministic encoder for
+/// integers, lengths, and map order, but may differ on float-bearing values.
+pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
+    let mut buf: List<u8> = List::with_capacity(SERIALIZE_BUFFER_CAPACITY);
+    let mut ser = CanonicalCborSerializer { buf: &mut buf };
+    value.serialize::<CanonicalCborSerializer>(&mut ser)?;
+    return Result::Ok(buf as ByteList);
+}
+
+// Maximum nesting depth for arrays/maps/tags. A bounded recursion guard
+// (RFC 8949 §10): a small header can claim deeply nested structure, so the
+// decoder caps the depth rather than exhausting the native stack.
+global MAX_DEPTH: i32 = 256;
+
+/// Reconstruct `2^e` exactly as an `f64` by writing its IEEE-754 exponent
+/// field directly. Used by the binary16 widening path; `e` stays within the
+/// normal `f64` exponent range there, so the result is exact.
+fn exp2(e: i32) -> f64 {
+    return f64::from_bits(((e + 1023) as i64) << 52);
+}
+
+/// Widen a CBOR binary16 (half-precision) bit pattern to `f64` (exact: every
+/// binary16 value is representable in `f64`). Wado has no `f16`, so a decoded
+/// half maps onto `f32`/`f64` (RFC 8949 §3, half-precision in major type 7).
+fn decode_half(bits: u64) -> f64 {
+    let h = (bits & 0xffff) as i32;
+    let sign = (h >> 15) & 1;
+    let exp = (h >> 10) & 0x1f;
+    let mant = h & 0x3ff;
+    let mut val: f64 = 0.0;
+    if exp == 0 {
+        // Subnormal: mant * 2^-24.
+        val = (mant as f64) * exp2(-24);
+    } else if exp == 31 {
+        if mant == 0 {
+            val = f64::INFINITY;
+        } else {
+            val = f64::NAN;
+        }
+    } else {
+        val = (1.0 + (mant as f64) / 1024.0) * exp2(exp - 15);
+    }
+    if sign == 1 {
+        return -val;
+    }
+    return val;
+}
+
+fn is_passthrough_tag(tag: u64) -> bool {
+    // Tags whose content is decoded directly, ignoring the tag number
+    // (RFC 8949 §6.1): date/time text (0) / epoch (1), base64url/base64/base16
+    // hints (21/22/23), and the self-described CBOR marker (55799).
+    return tag == 0 || tag == 1 || tag == 21 || tag == 22 || tag == 23 || tag == 55799;
+}
+
+pub struct CborDeserializer {
+    input: ByteSlice,
+    pos: i32,
+    depth: i32,
+    strict: bool,
+}
+
+impl CborDeserializer {
+    fn next_byte(&mut self) -> Result<u8, DeserializeError> {
+        if self.pos >= self.input.len() {
+            return Result::Err(DeserializeError::eof(self.pos as i64));
+        }
+        let b = self.input.get_unchecked(self.pos);
+        self.pos += 1;
+        return Result::Ok(b);
+    }
+
+    fn peek_byte(&self) -> Result<u8, DeserializeError> {
+        if self.pos >= self.input.len() {
+            return Result::Err(DeserializeError::eof(self.pos as i64));
+        }
+        return Result::Ok(self.input.get_unchecked(self.pos));
+    }
+
+    fn enter(&mut self) -> Result<(), DeserializeError> {
+        self.depth += 1;
+        if self.depth > MAX_DEPTH {
+            return Result::Err(DeserializeError::malformed(
+                "maximum nesting depth exceeded",
+                self.pos as i64,
+            ));
+        }
+        return Result::Ok(());
+    }
+
+    /// Read `n` big-endian bytes into a `u64` (the argument of a head).
+    fn read_be(&mut self, n: i32) -> Result<u64, DeserializeError> {
+        let mut v: u64 = 0;
+        let mut i = 0;
+        while i < n {
+            let b = self.next_byte()?;
+            v = (v << 8) | (b as u64);
+            i += 1;
+        }
+        return Result::Ok(v);
+    }
+
+    /// Read a CBOR head: returns `[major, additional_info, argument, indefinite]`
+    /// (RFC 8949 §3). For floats and 1-byte simple values, `argument` carries
+    /// the raw following bytes. `indefinite` is true for additional info 31.
+    fn read_head(&mut self) -> Result<[u8, u8, u64, bool], DeserializeError> {
+        let ib = self.next_byte()?;
+        let major = ib >> 5;
+        let ai = ib & 0x1f;
+        if ai < 24 {
+            return Result::Ok([major, ai, ai as u64, false]);
+        } else if ai == 24 {
+            let b = self.next_byte()?;
+            return Result::Ok([major, ai, b as u64, false]);
+        } else if ai == 25 {
+            let v = self.read_be(2)?;
+            return Result::Ok([major, ai, v, false]);
+        } else if ai == 26 {
+            let v = self.read_be(4)?;
+            return Result::Ok([major, ai, v, false]);
+        } else if ai == 27 {
+            let v = self.read_be(8)?;
+            return Result::Ok([major, ai, v, false]);
+        } else if ai == 31 {
+            // Indefinite length is only well-formed for byte/text strings,
+            // arrays, maps, and the major-7 break (RFC 8949 §3, Appendix F).
+            // For unsigned/negative integers (0/1) and tags (6) it is reserved.
+            if major == MAJOR_UINT || major == MAJOR_NINT || major == MAJOR_TAG {
+                return Result::Err(DeserializeError::malformed(
+                    "indefinite length not allowed for this major type",
+                    (self.pos - 1) as i64,
+                ));
+            }
+            return Result::Ok([major, ai, 0, true]);
+        }
+        // Additional info 28, 29, 30 are reserved (RFC 8949 §3, Appendix F).
+        return Result::Err(DeserializeError::malformed(
+            "reserved additional info",
+            (self.pos - 1) as i64,
+        ));
+    }
+
+    /// Advance past `n` bytes, checking they exist (no allocation; bounds-only).
+    fn advance(&mut self, n: u64) -> Result<(), DeserializeError> {
+        let avail = (self.input.len() - self.pos) as u64;
+        if n > avail {
+            return Result::Err(DeserializeError::eof(self.pos as i64));
+        }
+        self.pos += n as i32;
+        return Result::Ok(());
+    }
+
+    /// Read a definite-length text string body (head already consumed),
+    /// validating UTF-8 (RFC 8949 §3.1: invalid UTF-8 is well-formed but
+    /// invalid, reported as `MalformedInput`).
+    fn read_definite_text(&mut self, len: u64) -> Result<String, DeserializeError> {
+        let avail = (self.input.len() - self.pos) as u64;
+        if len > avail {
+            return Result::Err(DeserializeError::eof(self.pos as i64));
+        }
+        let n = len as i32;
+        let slice = self.input.slice(self.pos, self.pos + n);
+        let s = match String::from_utf8_slice(slice) {
+            Ok(v) => v,
+            Err(_) => {
+                return Result::Err(DeserializeError::malformed(
+                    "invalid UTF-8 in text string",
+                    self.pos as i64,
+                ));
+            },
+        };
+        self.pos += n;
+        return Result::Ok(s);
+    }
+
+    /// Read a text string body (definite or indefinite), with the head already
+    /// consumed.
+    fn read_text_body(&mut self, arg: u64, indef: bool) -> Result<String, DeserializeError> {
+        if !indef {
+            return self.read_definite_text(arg);
+        }
+        let mut s = String::with_capacity(16);
+        loop {
+            if self.peek_byte()? == 0xff {
+                self.pos += 1;
+                return Result::Ok(s);
+            }
+            let [m, ai, len, in2] = self.read_head()?;
+            if m != MAJOR_TEXT || in2 {
+                return Result::Err(DeserializeError::malformed(
+                    "invalid chunk in indefinite text string",
+                    self.pos as i64,
+                ));
+            }
+            let chunk = self.read_definite_text(len)?;
+            s.push_str(&chunk);
+        }
+    }
+
+    /// Read a byte string body (definite or indefinite), with the head already
+    /// consumed. Grows incrementally; never preallocates from the declared
+    /// length (RFC 8949 §10).
+    fn read_bytes_body(&mut self, arg: u64, indef: bool) -> Result<ByteList, DeserializeError> {
+        let mut out: ByteList = [];
+        if !indef {
+            self.append_bytes(&mut out, arg)?;
+            return Result::Ok(out);
+        }
+        loop {
+            if self.peek_byte()? == 0xff {
+                self.pos += 1;
+                return Result::Ok(out);
+            }
+            let [m, ai, len, in2] = self.read_head()?;
+            if m != MAJOR_BYTES || in2 {
+                return Result::Err(DeserializeError::malformed(
+                    "invalid chunk in indefinite byte string",
+                    self.pos as i64,
+                ));
+            }
+            self.append_bytes(&mut out, len)?;
+        }
+    }
+
+    fn append_bytes(&mut self, out: &mut ByteList, len: u64) -> Result<(), DeserializeError> {
+        let avail = (self.input.len() - self.pos) as u64;
+        if len > avail {
+            return Result::Err(DeserializeError::eof(self.pos as i64));
+        }
+        let n = len as i32;
+        let mut i = 0;
+        while i < n {
+            out.push(self.input.get_unchecked(self.pos + i));
+            i += 1;
+        }
+        self.pos += n;
+        return Result::Ok(());
+    }
+
+    /// Read a bignum magnitude (RFC 8949 §3.4.3): a byte string of big-endian
+    /// bytes, into a `u128`. Errors with `Overflow` beyond 128 bits.
+    fn read_bignum_mag(&mut self) -> Result<u128, DeserializeError> {
+        let [m, ai, arg, indef] = self.read_head()?;
+        if m != MAJOR_BYTES {
+            return Result::Err(DeserializeError::malformed(
+                "bignum must wrap a byte string",
+                self.pos as i64,
+            ));
+        }
+        let bytes = self.read_bytes_body(arg, indef)?;
+        let n = bytes.len();
+        if n > 16 {
+            return Result::Err(DeserializeError::overflow(
+                "bignum exceeds 128 bits",
+                self.pos as i64,
+            ));
+        }
+        let mut hi: u64 = 0;
+        let mut lo: u64 = 0;
+        let mut i = 0;
+        while i < n {
+            let b = bytes[i] as u64;
+            let pr = n - 1 - i;
+            if pr < 8 {
+                lo = lo | (b << ((pr * 8) as u64));
+            } else {
+                hi = hi | (b << (((pr - 8) * 8) as u64));
+            }
+            i += 1;
+        }
+        return Result::Ok(u128::from_pair(lo, hi));
+    }
+
+    /// Read an integer item as `i128`, handling major 0/1 and bignum tags 2/3
+    /// (RFC 8949 §3.4.3). Unwraps self-described tag 55799.
+    fn read_signed_i128(&mut self) -> Result<i128, DeserializeError> {
+        let i128_max: u128 = 170141183460469231731687303715884105727;
+        loop {
+            let [major, ai, arg, indef] = self.read_head()?;
+            if major == MAJOR_UINT {
+                return Result::Ok(i128::from_pair(arg, 0));
+            }
+            if major == MAJOR_NINT {
+                // value = -1 - arg; the 128-bit two's-complement pattern is
+                // (~arg) in the low word, all-ones (-1) in the high word.
+                return Result::Ok(i128::from_pair(~arg, -1));
+            }
+            if major == MAJOR_TAG {
+                if arg == 55799 {
+                    continue;
+                }
+                if arg == 2 {
+                    let mag = self.read_bignum_mag()?;
+                    if mag <= i128_max {
+                        return Result::Ok(i128::from_pair(mag.low(), mag.high() as i64));
+                    }
+                    return Result::Err(DeserializeError::overflow("bignum exceeds i128", self.pos as i64));
+                }
+                if arg == 3 {
+                    let mag = self.read_bignum_mag()?;
+                    if mag <= i128_max {
+                        return Result::Ok(i128::from_pair(~mag.low(), (~mag.high()) as i64));
+                    }
+                    return Result::Err(DeserializeError::overflow("bignum exceeds i128", self.pos as i64));
+                }
+            }
+            return Result::Err(DeserializeError::unexpected_type("expected integer", self.pos as i64));
+        }
+    }
+
+    /// Read a non-negative integer item as `u128`, handling major 0 and bignum
+    /// tag 2. Unwraps self-described tag 55799.
+    fn read_unsigned_u128(&mut self) -> Result<u128, DeserializeError> {
+        loop {
+            let [major, ai, arg, indef] = self.read_head()?;
+            if major == MAJOR_UINT {
+                return Result::Ok(u128::from_u64(arg));
+            }
+            if major == MAJOR_TAG {
+                if arg == 55799 {
+                    continue;
+                }
+                if arg == 2 {
+                    return self.read_bignum_mag();
+                }
+            }
+            return Result::Err(DeserializeError::overflow("expected unsigned integer", self.pos as i64));
+        }
+    }
+
+    /// Read a definite-length text-string map key, returning its `[start, len]`
+    /// byte range in `input` and advancing past it. Kept non-generic so the
+    /// generic `next_field` only does the schema lookup.
+    fn read_text_key_range(&mut self) -> Result<[i32, i32], DeserializeError> {
+        let [major, ai, arg, indef] = self.read_head()?;
+        if major != MAJOR_TEXT || indef {
+            return Result::Err(DeserializeError::unexpected_type(
+                "expected text-string map key",
+                self.pos as i64,
+            ));
+        }
+        let len = arg as i32;
+        let avail = self.input.len() - self.pos;
+        if len > avail {
+            return Result::Err(DeserializeError::eof(self.pos as i64));
+        }
+        let start = self.pos;
+        self.pos += len;
+        return Result::Ok([start, len]);
+    }
+
+    fn slice_to_bytelist(&self, start: i32, end: i32) -> ByteList {
+        let mut out: ByteList = [];
+        let mut i = start;
+        while i < end {
+            out.push(self.input.get_unchecked(i));
+            i += 1;
+        }
+        return out;
+    }
+
+    /// Skip one well-formed item (RFC 8949 §4.1), for unknown struct fields and
+    /// for capturing the raw bytes of an unrepresentable item. Skipping checks
+    /// only well-formedness, never validity (so it does not UTF-8-validate).
+    fn skip_item(&mut self) -> Result<(), DeserializeError> {
+        let [major, ai, arg, indef] = self.read_head()?;
+        if major == MAJOR_UINT || major == MAJOR_NINT || major == MAJOR_SIMPLE {
+            return Result::Ok(());
+        }
+        if major == MAJOR_BYTES || major == MAJOR_TEXT {
+            return self.skip_string_raw(arg, indef, major);
+        }
+        if major == MAJOR_TAG {
+            return self.skip_item();
+        }
+        if major == MAJOR_ARRAY {
+            self.enter()?;
+            if indef {
+                loop {
+                    if self.peek_byte()? == 0xff {
+                        self.pos += 1;
+                        break;
+                    }
+                    self.skip_item()?;
+                }
+            } else {
+                let mut i: u64 = 0;
+                while i < arg {
+                    self.skip_item()?;
+                    i += 1;
+                }
+            }
+            self.depth -= 1;
+            return Result::Ok(());
+        }
+        if major == MAJOR_MAP {
+            self.enter()?;
+            if indef {
+                loop {
+                    if self.peek_byte()? == 0xff {
+                        self.pos += 1;
+                        break;
+                    }
+                    self.skip_item()?;
+                    self.skip_item()?;
+                }
+            } else {
+                let mut i: u64 = 0;
+                while i < arg {
+                    self.skip_item()?;
+                    self.skip_item()?;
+                    i += 1;
+                }
+            }
+            self.depth -= 1;
+            return Result::Ok(());
+        }
+        return Result::Err(DeserializeError::malformed("unskippable item", self.pos as i64));
+    }
+
+    fn skip_string_raw(&mut self, arg: u64, indef: bool, major: u8) -> Result<(), DeserializeError> {
+        if !indef {
+            return self.advance(arg);
+        }
+        loop {
+            if self.peek_byte()? == 0xff {
+                self.pos += 1;
+                return Result::Ok(());
+            }
+            let [m, ai, len, in2] = self.read_head()?;
+            if m != major || in2 {
+                return Result::Err(DeserializeError::malformed(
+                    "invalid chunk in indefinite string",
+                    self.pos as i64,
+                ));
+            }
+            self.advance(len)?;
+        }
+    }
+}
+
+struct CborSeqAccess {
+    de: &mut CborDeserializer,
+    remaining: i64,
+    indef: bool,
+}
+
+struct CborMapAccess {
+    de: &mut CborDeserializer,
+    remaining: i64,
+    indef: bool,
+}
+
+struct CborStructAccess {
+    de: &mut CborDeserializer,
+    remaining: i64,
+    indef: bool,
+}
+
+struct CborVariantAccess {
+    de: &mut CborDeserializer,
+    variant: String,
+    is_map: bool,
+    indef: bool,
+}
+
+impl CborSeqAccess {
+    fn at_end(&mut self) -> Result<bool, DeserializeError> {
+        if self.indef {
+            if self.de.peek_byte()? == 0xff {
+                self.de.pos += 1;
+                self.de.depth -= 1;
+                return Result::Ok(true);
+            }
+            return Result::Ok(false);
+        }
+        if self.remaining <= 0 {
+            self.de.depth -= 1;
+            return Result::Ok(true);
+        }
+        self.remaining -= 1;
+        return Result::Ok(false);
+    }
+}
+
+impl DeserializeSeq for CborSeqAccess {
+    fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
+        if self.at_end()? {
+            return Result::Ok(null);
+        }
+        let v = T::deserialize::<CborDeserializer>(&mut self.de)?;
+        return Result::Ok(Option::Some(v));
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Ok(());
+    }
+}
+
+impl DeserializeMap for CborMapAccess {
+    fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
+        if self.indef {
+            if self.de.peek_byte()? == 0xff {
+                self.de.pos += 1;
+                self.de.depth -= 1;
+                return Result::Ok(null);
+            }
+        } else {
+            if self.remaining <= 0 {
+                self.de.depth -= 1;
+                return Result::Ok(null);
+            }
+            self.remaining -= 1;
+        }
+        let key = self.de.deserialize_string()?;
+        return Result::Ok(Option::Some(key));
+    }
+
+    fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
+        return V::deserialize::<CborDeserializer>(&mut self.de);
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Ok(());
+    }
+}
+
+impl DeserializeStruct for CborStructAccess {
+    fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
+        if self.indef {
+            if self.de.peek_byte()? == 0xff {
+                self.de.pos += 1;
+                self.de.depth -= 1;
+                return Result::Ok(null);
+            }
+        } else {
+            if self.remaining <= 0 {
+                self.de.depth -= 1;
+                return Result::Ok(null);
+            }
+            self.remaining -= 1;
+        }
+        // The key is a text string; match its byte range against the field
+        // schema without allocating a String (RFC 8949 §6.1: text-string keys).
+        let key_range = self.de.read_text_key_range()?;
+        let idx = match S::lookup(self.de.input.slice(key_range.0, key_range.0 + key_range.1)) {
+            Some(i) => i,
+            None => -1,
+        };
+        return Result::Ok(Option::Some(idx));
+    }
+
+    fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        return T::deserialize::<CborDeserializer>(&mut self.de);
+    }
+
+    fn skip(&mut self) -> Result<(), DeserializeError> {
+        return self.de.skip_item();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Ok(());
+    }
+}
+
+impl DeserializeVariant for CborVariantAccess {
+    fn variant_name(&mut self) -> Result<String, DeserializeError> {
+        return Result::Ok(self.variant);
+    }
+
+    fn disc(&mut self) -> Result<i32, DeserializeError> {
+        return Result::Err(DeserializeError {
+            kind: DeserializeErrorKind::Custom,
+            message: "CBOR encodes variants by name, not discriminant",
+            offset: -1,
+        });
+    }
+
+    fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        return T::deserialize::<CborDeserializer>(&mut self.de);
+    }
+
+    fn is_unit(&mut self) -> Result<bool, DeserializeError> {
+        return Result::Ok(!self.is_map);
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        if self.is_map && self.indef {
+            if self.de.peek_byte()? == 0xff {
+                self.de.pos += 1;
+            }
+        }
+        return Result::Ok(());
+    }
+}
+
+impl Deserializer for CborDeserializer {
+    type SeqAccess = CborSeqAccess;
+    type MapAccess = CborMapAccess;
+    type StructAccess = CborStructAccess;
+    type VariantAccess = CborVariantAccess;
+
+    fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
+        let start = self.pos as i64;
+        let v = self.read_signed_i128()?;
+        let lo: i128 = -2147483648;
+        let hi: i128 = 2147483647;
+        if v < lo || v > hi {
+            return Result::Err(DeserializeError::overflow("value out of range for i32", start));
+        }
+        return Result::Ok(v.low() as i32);
+    }
+
+    fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
+        let start = self.pos as i64;
+        let v = self.read_signed_i128()?;
+        let lo: i128 = -9223372036854775808;
+        let hi: i128 = 9223372036854775807;
+        if v < lo || v > hi {
+            return Result::Err(DeserializeError::overflow("value out of range for i64", start));
+        }
+        return Result::Ok(v.low() as i64);
+    }
+
+    fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
+        let start = self.pos as i64;
+        let v = self.read_unsigned_u128()?;
+        let hi: u128 = 4294967295;
+        if v > hi {
+            return Result::Err(DeserializeError::overflow("value out of range for u32", start));
+        }
+        return Result::Ok(v.low() as u32);
+    }
+
+    fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
+        let start = self.pos as i64;
+        let v = self.read_unsigned_u128()?;
+        let hi: u128 = 18446744073709551615;
+        if v > hi {
+            return Result::Err(DeserializeError::overflow("value out of range for u64", start));
+        }
+        return Result::Ok(v.low());
+    }
+
+    fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
+        return self.read_signed_i128();
+    }
+
+    fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
+        return self.read_unsigned_u128();
+    }
+
+    fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
+        let [major, ai, arg, indef] = self.read_head()?;
+        if major == MAJOR_SIMPLE {
+            if ai == 27 {
+                return Result::Ok(f64::from_bits(arg as i64) as f32);
+            }
+            if ai == 26 {
+                return Result::Ok(f32::from_bits(arg as i32));
+            }
+            if ai == 25 {
+                return Result::Ok(decode_half(arg) as f32);
+            }
+        }
+        if major == MAJOR_UINT {
+            return Result::Ok(arg as f32);
+        }
+        if major == MAJOR_NINT {
+            return Result::Ok(-1.0 - (arg as f32));
+        }
+        return Result::Err(DeserializeError::unexpected_type("expected float", self.pos as i64));
+    }
+
+    fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
+        let [major, ai, arg, indef] = self.read_head()?;
+        if major == MAJOR_SIMPLE {
+            if ai == 27 {
+                return Result::Ok(f64::from_bits(arg as i64));
+            }
+            if ai == 26 {
+                return Result::Ok(f32::from_bits(arg as i32) as f64);
+            }
+            if ai == 25 {
+                return Result::Ok(decode_half(arg));
+            }
+        }
+        if major == MAJOR_UINT {
+            return Result::Ok(arg as f64);
+        }
+        if major == MAJOR_NINT {
+            return Result::Ok(-1.0 - (arg as f64));
+        }
+        return Result::Err(DeserializeError::unexpected_type("expected float", self.pos as i64));
+    }
+
+    fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
+        let [major, ai, arg, indef] = self.read_head()?;
+        // Gate on `ai`, not `arg`: for a float head (ai 25/26/27) `arg` holds the
+        // float bits, which could coincidentally equal 20/21.
+        if major == MAJOR_SIMPLE {
+            if ai == 20 {
+                return Result::Ok(false);
+            }
+            if ai == 21 {
+                return Result::Ok(true);
+            }
+        }
+        return Result::Err(DeserializeError::unexpected_type("expected bool", self.pos as i64));
+    }
+
+    fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
+        let s = self.deserialize_string()?;
+        let mut iter = s.chars();
+        return match iter.next() {
+            Some(c) => {
+                if iter.next() matches { Some(_) } {
+                    Result::Err(DeserializeError::invalid_value("expected single char", self.pos as i64));
+                } else {
+                    Result::Ok(c);
+                }
+            },
+            None => Result::Err(DeserializeError::invalid_value("empty string for char", self.pos as i64)),
+        };
+    }
+
+    fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
+        loop {
+            let [major, ai, arg, indef] = self.read_head()?;
+            if major == MAJOR_TAG {
+                if is_passthrough_tag(arg) {
+                    continue;
+                }
+                return Result::Err(DeserializeError::unexpected_type("expected text string", self.pos as i64));
+            }
+            if major != MAJOR_TEXT {
+                return Result::Err(DeserializeError::unexpected_type("expected text string", self.pos as i64));
+            }
+            return self.read_text_body(arg, indef);
+        }
+    }
+
+    fn deserialize_bytes(&mut self) -> Result<ByteList, DeserializeError> {
+        loop {
+            let [major, ai, arg, indef] = self.read_head()?;
+            if major == MAJOR_TAG {
+                // An unknown tag wrapping a byte string passes through (the
+                // content is the byte sequence); self-described too.
+                continue;
+            }
+            if major != MAJOR_BYTES {
+                return Result::Err(DeserializeError::unexpected_type("expected byte string", self.pos as i64));
+            }
+            return self.read_bytes_body(arg, indef);
+        }
+    }
+
+    fn is_null(&mut self) -> Result<bool, DeserializeError> {
+        let b = self.peek_byte()?;
+        // null (0xf6) and undefined (0xf7) both map to the absent value.
+        if b == 0xf6 || b == 0xf7 {
+            self.pos += 1;
+            return Result::Ok(true);
+        }
+        return Result::Ok(false);
+    }
+
+    fn begin_seq(&mut self) -> Result<CborSeqAccess, DeserializeError> with stores[self] {
+        loop {
+            let [major, ai, arg, indef] = self.read_head()?;
+            if major == MAJOR_TAG && arg == 55799 {
+                continue;
+            }
+            if major != MAJOR_ARRAY {
+                return Result::Err(DeserializeError::unexpected_type("expected array", self.pos as i64));
+            }
+            self.enter()?;
+            let remaining: i64 = if indef { -1 } else { arg as i64 };
+            return Result::Ok(CborSeqAccess { de: self, remaining, indef });
+        }
+    }
+
+    fn begin_map(&mut self) -> Result<CborMapAccess, DeserializeError> with stores[self] {
+        loop {
+            let [major, ai, arg, indef] = self.read_head()?;
+            if major == MAJOR_TAG && arg == 55799 {
+                continue;
+            }
+            if major != MAJOR_MAP {
+                return Result::Err(DeserializeError::unexpected_type("expected map", self.pos as i64));
+            }
+            self.enter()?;
+            let remaining: i64 = if indef { -1 } else { arg as i64 };
+            return Result::Ok(CborMapAccess { de: self, remaining, indef });
+        }
+    }
+
+    fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<CborStructAccess, DeserializeError> with stores[self] {
+        loop {
+            let [major, ai, arg, indef] = self.read_head()?;
+            if major == MAJOR_TAG && arg == 55799 {
+                continue;
+            }
+            if major != MAJOR_MAP {
+                return Result::Err(DeserializeError::unexpected_type("expected map for struct", self.pos as i64));
+            }
+            self.enter()?;
+            let remaining: i64 = if indef { -1 } else { arg as i64 };
+            return Result::Ok(CborStructAccess { de: self, remaining, indef });
+        }
+    }
+
+    fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<CborVariantAccess, DeserializeError> with stores[self] {
+        loop {
+            let [major, ai, arg, indef] = self.read_head()?;
+            if major == MAJOR_TAG && arg == 55799 {
+                continue;
+            }
+            if major == MAJOR_TEXT {
+                let name = self.read_text_body(arg, indef)?;
+                return Result::Ok(CborVariantAccess { de: self, variant: name, is_map: false, indef: false });
+            }
+            if major == MAJOR_MAP {
+                let key = self.deserialize_string()?;
+                return Result::Ok(CborVariantAccess { de: self, variant: key, is_map: true, indef });
+            }
+            return Result::Err(DeserializeError::unexpected_type("expected text or map for variant", self.pos as i64));
+        }
+    }
+
+    fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
+        let i64_max: u64 = 9223372036854775807;
+        let u64_max: u128 = 18446744073709551615;
+        let i128_max: u128 = 170141183460469231731687303715884105727;
+        let i64_min128: i128 = -9223372036854775808;
+        loop {
+            // Peek the major type without consuming, so the container paths can
+            // delegate to `begin_seq` / `begin_map` (which carry `stores[self]`).
+            let major = self.peek_byte()? >> 5;
+            if major == MAJOR_UINT {
+                let m = self.read_unsigned_u128()?;
+                if m.low() <= i64_max {
+                    return visitor.visit_i64(m.low() as i64);
+                }
+                return visitor.visit_u64(m.low());
+            }
+            if major == MAJOR_NINT {
+                let v = self.read_signed_i128()?;
+                if v >= i64_min128 {
+                    return visitor.visit_i64(v.low() as i64);
+                }
+                return visitor.visit_i128(v);
+            }
+            if major == MAJOR_BYTES {
+                let bytes = self.deserialize_bytes()?;
+                return visitor.visit_bytes(bytes);
+            }
+            if major == MAJOR_TEXT {
+                let s = self.deserialize_string()?;
+                return visitor.visit_string(s);
+            }
+            if major == MAJOR_ARRAY {
+                let mut seq = self.begin_seq()?;
+                return visitor.visit_seq::<CborSeqAccess>(&mut seq);
+            }
+            if major == MAJOR_MAP {
+                let mut map = self.begin_map()?;
+                return visitor.visit_map::<CborMapAccess>(&mut map);
+            }
+            if major == MAJOR_TAG {
+                let start = self.pos;
+                let [tmajor, tai, tag, tindef] = self.read_head()?;
+                if tag == 2 {
+                    let m = self.read_bignum_mag()?;
+                    if m <= u64_max {
+                        if m.low() <= i64_max {
+                            return visitor.visit_i64(m.low() as i64);
+                        }
+                        return visitor.visit_u64(m.low());
+                    }
+                    if m <= i128_max {
+                        return visitor.visit_i128(i128::from_pair(m.low(), m.high() as i64));
+                    }
+                    return visitor.visit_u128(m);
+                }
+                if tag == 3 {
+                    let m = self.read_bignum_mag()?;
+                    if m.low() <= i64_max && m <= u64_max {
+                        return visitor.visit_i64(-1 - (m.low() as i64));
+                    }
+                    if m <= i128_max {
+                        return visitor.visit_i128(i128::from_pair(~m.low(), (~m.high()) as i64));
+                    }
+                    return Result::Err(DeserializeError::overflow("negative bignum exceeds i128", self.pos as i64));
+                }
+                if is_passthrough_tag(tag) {
+                    // Use the tag's content, ignoring the number (RFC 8949 §6.1).
+                    continue;
+                }
+                // Genuinely unknown tag.
+                if self.strict {
+                    return Result::Err(DeserializeError::unexpected_type("unknown CBOR tag", start as i64));
+                }
+                self.skip_item()?;
+                return visitor.visit_unknown(self.slice_to_bytelist(start, self.pos));
+            }
+            // major == MAJOR_SIMPLE
+            let start = self.pos;
+            let [smajor, ai, arg, indef] = self.read_head()?;
+            // Gate the false/true/null/undefined cases on `ai` (a simple value
+            // < 24 has `arg == ai`); for a float head (ai 25/26/27) `arg` holds
+            // the float bits, which must not be mistaken for a simple value.
+            if ai == 20 {
+                return visitor.visit_bool(false);
+            }
+            if ai == 21 {
+                return visitor.visit_bool(true);
+            }
+            if ai == 22 {
+                return visitor.visit_null();
+            }
+            if ai == 23 {
+                return visitor.visit_undefined();
+            }
+            if ai == 25 {
+                return visitor.visit_f64(decode_half(arg));
+            }
+            if ai == 26 {
+                return visitor.visit_f64(f32::from_bits(arg as i32) as f64);
+            }
+            if ai == 27 {
+                return visitor.visit_f64(f64::from_bits(arg as i64));
+            }
+            // Unassigned simple value or reserved.
+            if self.strict {
+                return Result::Err(DeserializeError::unexpected_type("unassigned simple value", start as i64));
+            }
+            return visitor.visit_unknown(self.slice_to_bytelist(start, self.pos));
+        }
+    }
+}
+
+/// Deserialize a value from CBOR — the primary entry point.
+///
+/// Accepts any byte source via `AsByteSlice` (`ByteList`, `ByteArray`,
+/// `ByteSlice`, or a `String`'s bytes), scanned directly with no copy. Decoding
+/// is variation-tolerant (RFC 8949 §4.1): any well-formed encoding is accepted.
+///
+/// `strict` (default `true`) rejects items the target cannot represent; set
+/// `strict = false` only when deserializing into `core:value`'s `Value`, where
+/// unrepresentable items fall to `Value::Unknown` instead of erroring.
+pub fn from_bytes<T: Deserialize, B: AsByteSlice>(input: B, strict: bool = true) -> Result<T, DeserializeError> {
+    let mut de = CborDeserializer {
+        input: input.as_byte_slice(),
+        pos: 0,
+        depth: 0,
+        strict,
+    };
+    let v = T::deserialize::<CborDeserializer>(&mut de)?;
+    if de.pos < de.input.len() {
+        return Result::Err(DeserializeError::trailing(de.pos as i64));
+    }
+    return Result::Ok(v);
+}

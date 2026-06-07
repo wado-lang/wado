@@ -679,6 +679,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             }
             TirExprKind::TupleSpread { expr }
             | TirExprKind::TupleZip { expr }
+            | TirExprKind::TupleLen { expr }
             | TirExprKind::TypePackExpansion {
                 call_expr: expr, ..
             } => {
@@ -1209,6 +1210,7 @@ fn check_pure_expr<H: CompilerHost>(
         }
         TirExprKind::TupleSpread { expr: e }
         | TirExprKind::TupleZip { expr: e }
+        | TirExprKind::TupleLen { expr: e }
         | TirExprKind::TypePackExpansion { call_expr: e, .. } => {
             check_pure_expr(checker, e, logger);
         }

@@ -1194,6 +1194,9 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::TupleZip { .. } => unreachable!(
                 "TirExprKind::TupleZip should be expanded by monomorphize before lower::translate runs"
             ),
+            TirExprKind::TupleLen { .. } => unreachable!(
+                "TirExprKind::TupleLen should be expanded by monomorphize before lower::translate runs"
+            ),
             TirExprKind::TypePackExpansion { .. } => unreachable!(
                 "TirExprKind::TypePackExpansion should be expanded by monomorphize before lower::translate runs"
             ),

@@ -52,6 +52,7 @@ pub const CORE_SERDE: &str = include_str!("../lib/core/serde.wado");
 pub const CORE_JSON: &str = include_str!("../lib/core/json.wado");
 pub const CORE_JSON_NSD: &str = include_str!("../lib/core/json_nsd.wado");
 pub const CORE_VALUE: &str = include_str!("../lib/core/value.wado");
+pub const CORE_CBOR: &str = include_str!("../lib/core/cbor.wado");
 pub const CORE_SIMD: &str = include_str!("../lib/core/simd.wado");
 pub const CORE_KILN: &str = include_str!("../lib/core/kiln.wado");
 pub const CORE_KILN_KILN_HOST: &str = include_str!("../lib/core/kiln/kiln_host.wado");
@@ -152,6 +153,7 @@ pub const ALL_CORE_MODULES: &[(&str, &str)] = &[
     ("core:json", CORE_JSON),
     ("core:json_nsd", CORE_JSON_NSD),
     ("core:value", CORE_VALUE),
+    ("core:cbor", CORE_CBOR),
     ("core:simd", CORE_SIMD),
     ("core:url", CORE_URL),
     ("core:router", CORE_ROUTER),

@@ -421,8 +421,9 @@ already share code.
 
 ## TODO
 
-The groundwork below is complete; the `core:cbor` encoder/decoder and its
-tags/tests remain (the format itself, a follow-up).
+The groundwork and the `core:cbor` format itself (encoder, decoder, canonical
+encoding) are complete. The remaining items are the typed `core:temporal`
+date/time mapping and lossy CBOR↔JSON conversion.
 
 - [x] Vendor RFC 8949 at `wado-compiler/ref/rfc8949.txt`
 - [x] prelude: `AsByteSlice` trait — new, since Wado has only `From`/`TryFrom`
@@ -442,9 +443,34 @@ tags/tests remain (the format itself, a follow-up).
       as thin convenience wrappers rather than removed.
 - [x] `core:value` (replacing `core:json_value`)
 - [x] `to_bytes_canonical` for JSON (sorted keys, RFC 8785-style)
-- [ ] `core:cbor` encoder (preferred serialization)
-- [ ] `core:cbor` decoder (variation-tolerant, definite + indefinite)
-- [ ] `to_bytes_canonical` for CBOR (sorted keys, shortest forms)
-- [ ] tags: bignum (2/3); date/time (0/1) via `core:temporal`
-- [ ] tests: RFC 8949 Appendix A vectors, round-trip, canonical determinism,
+- [x] serde: `visit_undefined` (default → `visit_null`) so `core:value` can
+      realize `Value::Undefined` from CBOR simple value 23 — a gap in the
+      original `Visitor` completion, found while implementing the decoder.
+- [x] `core:cbor` encoder (preferred serialization) in `lib/core/cbor.wado`
+- [x] `core:cbor` decoder (variation-tolerant, definite + indefinite, bounded
+      recursion, no length-driven preallocation, duplicate/trailing/UTF-8
+      checks)
+- [x] `to_bytes_canonical` for CBOR (encoded-key bytewise sort, shortest forms;
+      float ladder stops at binary32 — documented `f16` caveat)
+- [x] tags: bignum (2/3, encode + decode); self-described (55799) unwrap;
+      date/time tag 0 (RFC 3339 text) unwraps on decode so a tag-0-wrapped
+      `ZonedDateTime`/`Instant` decodes via its string `Deserialize`. In
+      `core:value`, tags 0/1/21/22/23/55799 decode by their content per
+      RFC 8949 §6.1.
+- [x] tests: RFC 8949 Appendix A vectors, round-trip, canonical determinism,
       well-formedness/Appendix F rejection, security limits
+      (`lib/core/cbor_test.wado`)
+- [x] compiler fixes uncovered by the format work (CBOR is the first
+      length-prefixed serde format, so it exercised paths JSON never did):
+      (1) variant-return SROA now rewrites `Return`s hidden inside an `if`/
+      `while` condition (the `?`-in-condition shape in synthesized
+      `next_field`), instead of changing the signature and leaving a boxed
+      return; (2) `[..T].len()` in a generic body now yields the monomorphized
+      arity rather than the unsubstituted pack count of 1 (deferred via a new
+      `TirExprKind::TupleLen`, mirroring `TupleZip`).
+- [ ] typed date/time mapping: emit tag 0/1 on encode and read CBOR tag 1
+      (numeric epoch) into `Instant` — needs a tag hook on `Serializer` and a
+      numeric path in `Instant`'s `Deserialize`; deferred (the format layer is
+      tag-tolerant on decode today).
+- [ ] lossy CBOR→JSON via `Value` (RFC 8949 §6.1 substitution: bytes→base64,
+      `undefined`/non-finite→`null`); the default still errors.

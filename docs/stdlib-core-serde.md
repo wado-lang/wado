@@ -238,6 +238,13 @@ Opaque passthrough for a format item the value model cannot represent
 (e.g. an unassigned CBOR simple value or an uninterpreted tag). Only
 self-describing binary formats call this; defaults to an error.
 
+#### `fn visit_undefined(&mut self) -> Result<Self::Value, DeserializeError>`
+
+The CBOR `undefined` simple value (major 7, value 23). Distinct from
+`null`: a dynamic value model (`core:value`) keeps its own `Undefined`
+arm. The default collapses it to `null` so visitors that do not model
+the distinction (e.g. JSON) keep working.
+
 ### `pub trait Deserializer`
 
 #### `fn deserialize_i32(&mut self) -> Result<i32, DeserializeError>`

@@ -4596,7 +4596,9 @@ impl<'a> TirUnparser<'a> {
             TirExprKind::TupleLiteral { elements } => {
                 self.delimited("[", "]", elements, TirUnparser::unparse_expr);
             }
-            TirExprKind::TupleSpread { expr } | TirExprKind::TupleZip { expr } => {
+            TirExprKind::TupleSpread { expr }
+            | TirExprKind::TupleZip { expr }
+            | TirExprKind::TupleLen { expr } => {
                 self.output.push_str("[..");
                 self.unparse_expr(expr);
                 self.output.push(']');

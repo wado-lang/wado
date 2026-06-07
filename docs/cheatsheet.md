@@ -1181,6 +1181,7 @@ For full API reference, see:
   - [`core:json`](./stdlib-core-json.md) - JSON and its serde integration
   - [`core:json_nsd`](./stdlib-core-json_nsd.md) - non-self-describing JSON and its serde integration
   - [`core:value`](./stdlib-core-value.md) - dynamic, format-agnostic value and its serde integration
+  - [`core:cbor`](./stdlib-core-cbor.md) - CBOR (RFC 8949) binary serialization and its serde integration
   - [`core:base64`](./stdlib-core-base64.md) - base64 encoding and decoding
   - [`core:digest`](./stdlib-core-digest.md) - cryptographic hash functions (SHA-256)
   - [`core:zlib`](./stdlib-core-zlib.md) - zlib/gzip compression and decompression

@@ -223,6 +223,10 @@ impl Visitor for ValueVisitor {
     fn visit_unknown(&mut self, raw: ByteList) -> Result<Value, DeserializeError> {
         return Result::Ok(Value::Unknown(raw));
     }
+
+    fn visit_undefined(&mut self) -> Result<Value, DeserializeError> {
+        return Result::Ok(Value::Undefined);
+    }
 }
 
 impl Inspect for Value {

@@ -1,0 +1,42 @@
+// Regression: `.len()` on a variadic tuple `[..T]` inside a generic function
+// must yield the monomorphized arity, not the unsubstituted pack count (1).
+// Previously the elaborator folded `tuple.len()` to a literal at TIR-build time
+// using the pack's pre-substitution arity, so `arity([3, 4])` returned 1. This
+// was invisible to JSON (whose `begin_seq` ignores the length) but corrupted any
+// length-prefixed serde format (CBOR encoded a 2-tuple as a 1-element array).
+
+fn arity<..T>(x: [..T]) -> i32 {
+    return x.len();
+}
+
+fn arity_ref<..T>(x: &[..T]) -> i32 {
+    return x.len();
+}
+
+fn count_through<..T>(x: [..T]) -> i32 {
+    // The pack length must also flow through nested generic calls.
+    return arity(x);
+}
+
+test "pack len yields the monomorphized arity" {
+    assert arity([3, 4]) == 2;
+    assert arity([1, 2, 3]) == 3;
+    assert arity([42]) == 1;
+    assert arity(["a", "b", "c", "d"]) == 4;
+    assert arity([1, "two", true]) == 3;
+}
+
+test "pack len through a reference receiver" {
+    let pair: [i32, i32] = [3, 4];
+    assert arity_ref(&pair) == 2;
+    let trip: [i32, i32, i32] = [1, 2, 3];
+    assert arity_ref(&trip) == 3;
+}
+
+test "pack len through a forwarding generic call" {
+    assert count_through([3, 4]) == 2;
+    assert count_through([1, 2, 3, 4, 5]) == 5;
+}
+
+__DATA__
+{"test": {}}
