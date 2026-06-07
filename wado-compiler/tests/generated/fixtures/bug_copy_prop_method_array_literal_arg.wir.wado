@@ -455,6 +455,7 @@ fn "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Sta
     let repr: ref Array<i32>;
     let end: i32;
     let index_13: i32;
+    let _licm_arith_14: bool;
     k = index_7 = self.pos; if @unlikely(index_7 >= self.tokens.used) {
         cold_path;
         "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });
@@ -463,6 +464,7 @@ fn "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Sta
     repr = included.repr;
     end = included.used;
     __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: end };
+    _licm_arith_14 = k == 0;
     b28: block {
         l29: loop {
             let __sroa___match_5_discriminant: i32;
@@ -470,7 +472,7 @@ fn "wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Sta
             multivalue_bind [__sroa___match_5_discriminant, __sroa___match_5_payload_0] = "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(__iter_3);
             if __sroa___match_5_discriminant == 0 {
                 if __sroa___match_5_payload_0 == k {
-                    if k == 0 {
+                    if _licm_arith_14 {
                         return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Token,wado-compiler/tests/fixtures/bug_copy_prop_method_array_literal_arg.wado/Err>::Ok" { discriminant: 0, payload_0: ref.as_non_null(index_13 = self.pos; if @unlikely(index_13 >= self.tokens.used) {
                             cold_path;
                             "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 });

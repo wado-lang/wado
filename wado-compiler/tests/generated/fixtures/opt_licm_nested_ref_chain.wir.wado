@@ -116,12 +116,12 @@ fn "wado-compiler/tests/fixtures/opt_licm_nested_ref_chain.wado/drain"(cur) {
     b0: block {
         l1: loop {
             if __hfs_pos_3 >= _licm_limit_2 {
+                _licm_inner_1.pos = __hfs_pos_3;
                 break b0;
             }
             _licm_inner_1.acc = _licm_inner_1.acc + __hfs_pos_3;
             __hfs_pos_3 = __hfs_pos_3 + 1;
             cur.started = 1;
-            _licm_inner_1.pos = __hfs_pos_3;
             continue l1;
         };
     };
