@@ -904,13 +904,6 @@ pub enum InlineHint {
 }
 
 impl NirFunction {
-    /// Build the function body from a tree (`NirBlock` → `Body`). Used only by
-    /// tests to install an arena body from a constructed `NirBlock`; production
-    /// code builds the `Body` directly in `lower`.
-    pub fn set_body_block(&mut self, block: NirBlock) {
-        self.body = Some(crate::nir_arena::Body::from_block(&block));
-    }
-
     /// Returns true if this is a method (belongs to a struct)
     #[inline]
     pub fn is_method(&self) -> bool {
