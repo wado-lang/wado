@@ -1745,8 +1745,8 @@ fn gen_parse_fn_simple_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule
 /// Compact parser for an all-single-token multi-alt rule. The CST node
 /// is a `{ span, token }` struct (`gen_multi_alt_cst` single-token path),
 /// so parsing reduces to: confirm the lookahead is in the rule's first
-/// set, consume the one token, and build the struct. `gen_error_fallback`
-/// produces the same "expected one of ..." diagnostic the cascade would.
+/// set, consume the one token, and build the struct. The no-match path is
+/// the shared `gen_error_fallback`, so the diagnostic matches the cascade's.
 fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut GenContext, fn_name: &String, emit_visibility: bool) {
     let type_name = rule.type_name;
     if emit_visibility {
@@ -1803,11 +1803,11 @@ fn gen_parse_fn_named(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
     }
 
     // Rules whose alts are all a single token (e.g. SQLite's 122-keyword
-    // `keyword`) lower to a compact `{ span, token }` struct (see
-    // `gen_multi_alt_cst`); the parser is a single kind-set check plus one
+    // `keyword`) use a compact `{ span, token }` struct (see
+    // `gen_multi_alt_cst`); the parser is a single first-set check plus one
     // construction instead of an N-way `if kind == TK_X` cascade. The scan
-    // side already collapses these (`gen_scan_function_named`), and the
-    // result is faster than the cascade as well as far smaller.
+    // side already collapses these (`gen_scan_function_named`); the result is
+    // far smaller and no slower than the cascade.
     if all_alts_are_single_token(&rule.alternatives) {
         gen_parse_fn_single_token(w, rule, ctx, fn_name, emit_visibility);
         return;

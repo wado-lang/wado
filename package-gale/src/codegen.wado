@@ -235,11 +235,8 @@ fn gen_multi_alt_cst(w: &mut CodeWriter, rule_name: &String, type_name: &String,
     if all_alts_are_single_token(surface_alts) {
         // Compact single-token node: the token's `kind` already records
         // which alternative matched, so the N alt structs and the wrapping
-        // variant collapse to one struct. `walk_<rule>` / `_parse_<rule>`
-        // build and read `.token` accordingly. Detection uses the same
-        // surface predicate as the parse and walk generators (it screens out
-        // labelled tokens, whose per-alt field name the compaction would
-        // drop), keeping all three in lockstep.
+        // variant collapse to one struct that `walk_<rule>` / `_parse_<rule>`
+        // build and read as `.token`. (Detection screen: see `gen_cst_types`.)
         let mut s = StructSpec::new(type_name);
         s.set_pub();
         s.add_pub_field(&"span", &"Span");

@@ -1043,11 +1043,11 @@ C : 'c' ;
 
 test "labeled single-token alts stay a variant (CST/parse/walk in lockstep)" {
     // `sign : p='+' | m='-'` carries element labels, so the compaction
-    // (which drops the per-alt field name) must NOT fire: the parse and
-    // walk generators screen labels out via the surface `all_alts_are_single_token`,
-    // and the CST type generator must agree or the emitted parser won't
-    // compile (struct node vs `SignNode::Alt0(...)` construction). Regression
-    // for the surface/lowered detection divergence.
+    // (which drops the per-alt field name) must NOT fire. All three emitters
+    // screen labels out via the one surface `all_alts_are_single_token`
+    // predicate; if the CST type generator disagreed it would emit a struct
+    // node while parse/walk emit `SignNode::Alt0(...)`, and the generated
+    // parser would not compile.
     let input = "grammar T;
 sign : p='+' | m='-' ;
 WS : [ \\t]+ -> skip ;
