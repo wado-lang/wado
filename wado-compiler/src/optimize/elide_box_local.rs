@@ -772,7 +772,13 @@ mod tests {
         )
     }
     fn index(body: &mut Body, arr: ExprId, idx: ExprId) -> ExprId {
-        push(body, ExprKind::Index { expr: arr, index: idx })
+        push(
+            body,
+            ExprKind::Index {
+                expr: arr,
+                index: idx,
+            },
+        )
     }
     fn binary(body: &mut Body, op: NirBinaryOp, lhs: ExprId, rhs: ExprId) -> ExprId {
         push(

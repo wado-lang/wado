@@ -1053,20 +1053,6 @@ impl<'a> Interpreter<'a> {
         self.field_env.clear();
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     // ───────────────────────────────────────────────────────────────────────
     // Arena evaluator (read-only). The arena counterparts of `expr_to_lattice`
     // / `try_fold` / `block_lattice` / `match_lattice` / `pattern_matches`,
@@ -1820,9 +1806,7 @@ impl<'a> Interpreter<'a> {
             .copied()
             .unwrap_or(Lattice::Unevaluated)
     }
-
 }
-
 
 /// Arena counterpart of `single_tail_expression`: the callee body's
 /// single-statement tail expression id, read directly from the arena without
@@ -1875,8 +1859,6 @@ fn bool_to_match(b: bool) -> PatternMatch {
         PatternMatch::No
     }
 }
-
-
 
 /// Join a slice of lattice values via [`Lattice::join`]. Empty input
 /// returns [`Lattice::Unevaluated`] (the join's identity).
@@ -1992,11 +1974,9 @@ fn arm_lattice_for_feasible_join(lat: Lattice) -> Lattice {
     }
 }
 
-
 // ──────────────────────────────────────────────────────────────────────────────
 // NirExpr <-> Value bridge
 // ──────────────────────────────────────────────────────────────────────────────
-
 
 /// Arena counterpart of [`value_to_expr_kind`].
 fn value_to_arena_kind(v: Value) -> ExprKind {
@@ -2112,7 +2092,6 @@ fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
     }
 }
 
-
 // ──────────────────────────────────────────────────────────────────────────────
 // `match X { Pat => true, _ => false }` discriminator collapse
 // ──────────────────────────────────────────────────────────────────────────────
@@ -2135,9 +2114,7 @@ struct EnumEqReplacement {
     span: crate::token::Span,
 }
 
-impl EnumEqReplacement {
-}
-
+impl EnumEqReplacement {}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Pure value evaluation (Bool / Int / Float)

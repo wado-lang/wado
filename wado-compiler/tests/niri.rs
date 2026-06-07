@@ -92,7 +92,15 @@ fn binary(op: NirBinaryOp, left: Build, right: Build, result_ty: TypeId) -> Buil
     Rc::new(move |b| {
         let l = left(b);
         let r = right(b);
-        pe(b, ExprKind::Binary { left: l, op, right: r }, result_ty)
+        pe(
+            b,
+            ExprKind::Binary {
+                left: l,
+                op,
+                right: r,
+            },
+            result_ty,
+        )
     })
 }
 
@@ -2611,10 +2619,7 @@ fn reduce_local_collapses_enum_match_true_false_to_eq() {
     let expr = match_expr(
         local_expr(0, enum_ty),
         vec![
-            arm(
-                enum_pat(enum_ty, "Case", 3),
-                bool_lit(true),
-            ),
+            arm(enum_pat(enum_ty, "Case", 3), bool_lit(true)),
             arm(wildcard_pat(), bool_lit(false)),
         ],
         TypeTable::BOOL,
@@ -2707,14 +2712,8 @@ fn reduce_local_leaves_match_with_three_arms_alone() {
     let expr = match_expr(
         local_expr(0, scrut_ty),
         vec![
-            arm(
-                enum_pat(scrut_ty, "A", 0),
-                bool_lit(true),
-            ),
-            arm(
-                enum_pat(scrut_ty, "B", 1),
-                bool_lit(true),
-            ),
+            arm(enum_pat(scrut_ty, "A", 0), bool_lit(true)),
+            arm(enum_pat(scrut_ty, "B", 1), bool_lit(true)),
             arm(wildcard_pat(), bool_lit(false)),
         ],
         TypeTable::BOOL,
@@ -3534,11 +3533,11 @@ fn pure_call_const_args_folds_via_return() {
     // fn double(x: i32) -> i32 { return x * 2; }
     // double(5) → 10
     let body = return_stmt(binary(
-            NirBinaryOp::Mul,
-            local_expr(0, TypeTable::I32),
-            int_lit(2, TypeTable::I32, "2"),
-            TypeTable::I32,
-        ));
+        NirBinaryOp::Mul,
+        local_expr(0, TypeTable::I32),
+        int_lit(2, TypeTable::I32, "2"),
+        TypeTable::I32,
+    ));
     let double = make_pure_fn("double", vec![("x", TypeTable::I32)], TypeTable::I32, body);
     let callees = build_callee_map_test(std::slice::from_ref(&double));
 
@@ -3597,11 +3596,11 @@ fn pure_call_chained_folds_two_levels() {
     // We test bottom-up chaining: fold the inner call first, then
     // the outer wraps the now-literal arg and folds again.
     let body = return_stmt(binary(
-            NirBinaryOp::Mul,
-            local_expr(0, TypeTable::I32),
-            int_lit(2, TypeTable::I32, "2"),
-            TypeTable::I32,
-        ));
+        NirBinaryOp::Mul,
+        local_expr(0, TypeTable::I32),
+        int_lit(2, TypeTable::I32, "2"),
+        TypeTable::I32,
+    ));
     let double = make_pure_fn("double", vec![("x", TypeTable::I32)], TypeTable::I32, body);
     let callees = build_callee_map_test(std::slice::from_ref(&double));
 
@@ -3626,11 +3625,11 @@ fn pure_call_nonconst_arg_left_intact() {
     // double(x) where x has no env binding — arg is Unevaluated, so
     // the call must not be folded.
     let body = return_stmt(binary(
-            NirBinaryOp::Mul,
-            local_expr(0, TypeTable::I32),
-            int_lit(2, TypeTable::I32, "2"),
-            TypeTable::I32,
-        ));
+        NirBinaryOp::Mul,
+        local_expr(0, TypeTable::I32),
+        int_lit(2, TypeTable::I32, "2"),
+        TypeTable::I32,
+    ));
     let double = make_pure_fn("double", vec![("x", TypeTable::I32)], TypeTable::I32, body);
     let callees = build_callee_map_test(std::slice::from_ref(&double));
 
@@ -3765,11 +3764,11 @@ fn body_traps_at_ctfe_left_intact() {
     // The body folds to NonConst (div-by-zero), which try_call_fold
     // downgrades to Unevaluated to keep the runtime trap intact.
     let body = return_stmt(binary(
-            NirBinaryOp::Div,
-            int_lit(1, TypeTable::I32, "1"),
-            int_lit(0, TypeTable::I32, "0"),
-            TypeTable::I32,
-        ));
+        NirBinaryOp::Div,
+        int_lit(1, TypeTable::I32, "1"),
+        int_lit(0, TypeTable::I32, "0"),
+        TypeTable::I32,
+    ));
     let bad = make_pure_fn("bad", vec![], TypeTable::I32, body);
     let callees = build_callee_map_test(std::slice::from_ref(&bad));
 
@@ -3854,11 +3853,11 @@ fn pure_call_in_if_arm_folds_via_outer_walk() {
     // With the visitor's bottom-up walk, double(5) folds to 10
     // first; then the if collapses to the then-arm.
     let body = return_stmt(binary(
-            NirBinaryOp::Mul,
-            local_expr(0, TypeTable::I32),
-            int_lit(2, TypeTable::I32, "2"),
-            TypeTable::I32,
-        ));
+        NirBinaryOp::Mul,
+        local_expr(0, TypeTable::I32),
+        int_lit(2, TypeTable::I32, "2"),
+        TypeTable::I32,
+    ));
     let double = make_pure_fn("double", vec![("x", TypeTable::I32)], TypeTable::I32, body);
     let callees = build_callee_map_test(std::slice::from_ref(&double));
 
@@ -3870,7 +3869,10 @@ fn pure_call_in_if_arm_folds_via_outer_walk() {
     let five = int_lit(5, TypeTable::I32, "5")(&mut body);
     let inner = call_into(&mut body, &double, vec![five]);
     assert!(interp.reduce_local_a(&mut body, inner));
-    assert!(matches!(body.exprs[inner].kind, ExprKind::IntLiteral { .. }));
+    assert!(matches!(
+        body.exprs[inner].kind,
+        ExprKind::IntLiteral { .. }
+    ));
 
     let condition = bool_lit(true)(&mut body);
     let then_stmt = ps(&mut body, StmtKind::Expr(inner));
@@ -3997,7 +3999,10 @@ fn global_mut_recorded_as_nonconst_blocks_fold() {
     let mut interp = Interpreter::new(&table);
     interp.with_globals(&globals);
 
-    let lat = reduce_lat(&mut interp, &global_get(module.clone(), "X", TypeTable::I32));
+    let lat = reduce_lat(
+        &mut interp,
+        &global_get(module.clone(), "X", TypeTable::I32),
+    );
     assert_eq!(lat, Lattice::NonConst);
 
     let expr = binary(
@@ -4018,7 +4023,10 @@ fn global_absent_stays_unevaluated() {
     let table = TypeTable::new();
     let module = ModuleSource::default();
     let mut interp = Interpreter::new(&table);
-    let lat = reduce_lat(&mut interp, &global_get(module.clone(), "MISSING", TypeTable::I32));
+    let lat = reduce_lat(
+        &mut interp,
+        &global_get(module.clone(), "MISSING", TypeTable::I32),
+    );
     assert_eq!(lat, Lattice::Unevaluated);
 
     // With an empty `GlobalEnv` installed, an unknown key still reports

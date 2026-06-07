@@ -2305,8 +2305,7 @@ fn walk_nested_loop(
     // reads (and a nested HFS's pre-load) observe an up-to-date field.
     for i in 0..ctx.candidates.len() {
         if states[i] == CanonState::ScalarOnly {
-            let c = &ctx.candidates[i];
-            let stmt = make_write_back_stmt(body, &c.clone(), span);
+            let stmt = make_write_back_stmt(body, &ctx.candidates[i], span);
             out.push(stmt);
             states[i] = CanonState::Both;
         }
@@ -2320,10 +2319,13 @@ fn walk_nested_loop(
     // Restore back-edge invariant: drive body_exit back to entry so
     // iter 2+ starts at the same state the walker analyzed.
     for i in 0..ctx.candidates.len() {
-        let c = ctx.candidates[i].clone();
-        if let Some(stmt) =
-            state_transition_stmt(body, body_exit_states[i], entry_states[i], &c, span)
-        {
+        if let Some(stmt) = state_transition_stmt(
+            body,
+            body_exit_states[i],
+            entry_states[i],
+            &ctx.candidates[i],
+            span,
+        ) {
             body.blocks[block].stmts.push(stmt);
         }
     }

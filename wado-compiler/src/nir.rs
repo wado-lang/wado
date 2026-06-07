@@ -22,8 +22,6 @@ use crate::name::LocalMethodName;
 use crate::tir::{EffectRef, TypeId, TypeTable};
 use crate::token::Span;
 
-
-
 #[derive(Debug, Clone)]
 pub struct FunctionRef {
     pub module_source: ModuleSource,
@@ -127,10 +125,6 @@ impl FunctionRef {
     }
 }
 
-
-
-
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NirBinaryOp {
     Add,
@@ -165,9 +159,6 @@ pub enum NirUnaryOp {
     Deref,
 }
 
-
-
-
 #[derive(Debug, Clone)]
 pub enum NirLiteralPattern {
     /// Signed integer literal (covers i8, i16, i32, i64, i128)
@@ -180,7 +171,6 @@ pub enum NirLiteralPattern {
     Null,
 }
 
-
 #[derive(Debug, Clone)]
 pub struct NirCapture {
     pub name: String,
@@ -188,11 +178,6 @@ pub struct NirCapture {
     pub type_id: TypeId,
     pub is_mut: bool,
 }
-
-
-
-
-
 
 /// Generic type parameter in NIR (from AST `GenericParam`)
 #[derive(Debug, Clone)]

@@ -361,12 +361,6 @@ impl Body {
         }
     }
 
-
-
-
-
-
-
     /// Build a global-initializer-shaped body: one fresh expression node of
     /// `kind`, wrapped in a root block holding a single `Expr` statement.
     pub fn wrapping_expr(kind: ExprKind, type_id: TypeId, span: Span) -> Self {
@@ -455,8 +449,6 @@ impl ExprBody {
         &mut self.body
     }
 }
-
-
 
 /// Arena -> tree lowering.
 impl Body {
@@ -794,18 +786,6 @@ impl Body {
             leaf => leaf,
         }
     }
-
-
-
-
-
-
-
-
-
-
-
-
 }
 
 /// Structural navigation used by the rewrite engine (parent map + worklist).
