@@ -904,16 +904,9 @@ pub enum InlineHint {
 }
 
 impl NirFunction {
-    /// Read-only tree view of the function body (`Body` → `NirBlock`). The
-    /// optimizer operates on the arena `Body` directly; the remaining callers
-    /// are the diagnostics that still walk a tree (`nir_unparse`, `remarks`).
-    pub fn body_block(&self) -> Option<NirBlock> {
-        self.body.as_ref().map(crate::nir_arena::Body::to_block)
-    }
-
-    /// Build the function body from a tree (`NirBlock` → `Body`). Counterpart
-    /// of [`Self::body_block`]; used by tests and tree-shaped body builders to
-    /// install an arena body from a constructed `NirBlock`.
+    /// Build the function body from a tree (`NirBlock` → `Body`). Used only by
+    /// tests to install an arena body from a constructed `NirBlock`; production
+    /// code builds the `Body` directly in `lower`.
     pub fn set_body_block(&mut self, block: NirBlock) {
         self.body = Some(crate::nir_arena::Body::from_block(&block));
     }
