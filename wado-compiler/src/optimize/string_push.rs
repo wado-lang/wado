@@ -44,23 +44,15 @@ use crate::tir::TypeTable;
 /// avoiding the string allocation outweighs the per-`push` overhead.
 const MAX_SHORT_PUSH_STR_LEN: usize = 8;
 
-pub fn simplify_short_push_str(project: &mut NirPackage) -> bool {
-    let Some(ctx) = Ctx::resolve(project) else {
-        return false;
-    };
-    let rule = ShortPushStrRule { ctx };
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        if let Some(body) = func.body.as_mut() {
-            let mut engine = Engine::new(body);
-            changed |= engine.run(&[&rule]);
-        }
-    }
-    changed
+/// Resolve the whole-package context for the short-`push_str` rule, or `None`
+/// when the `String::push_str` / `push` markers are absent. Public to the
+/// `optimize` module so the unified [`super::peephole`] pass can build the rule
+/// alongside the other peephole rules over one shared engine session.
+pub(super) fn resolve_ctx(project: &NirPackage) -> Option<Ctx> {
+    Ctx::resolve(project)
 }
 
-struct Ctx {
+pub(super) struct Ctx {
     push_str: FunctionRef,
     push_char: FunctionRef,
 }
@@ -92,8 +84,14 @@ fn func_matches(func: &FunctionRef, target: &FunctionRef) -> bool {
     func.module_source == target.module_source && func.name == target.name
 }
 
-struct ShortPushStrRule {
+pub(super) struct ShortPushStrRule {
     ctx: Ctx,
+}
+
+impl ShortPushStrRule {
+    pub(super) fn new(ctx: Ctx) -> Self {
+        Self { ctx }
+    }
 }
 
 impl Rule for ShortPushStrRule {

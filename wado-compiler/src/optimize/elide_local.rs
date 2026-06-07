@@ -13,36 +13,8 @@
 use crate::hashmap::IndexSet;
 use crate::nir_arena::{BlockId, ExprId, ExprKind, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
-use crate::nir_package::NirPackage;
 
 use super::arena_query;
-
-pub fn elide_write_only_locals(project: &mut NirPackage) -> bool {
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        // `stores_aliased_locals` — params whose reference escaped via a
-        // callee's `stores` declaration. The callee may retain that reference
-        // past its return, so writes through the local stay observable via the
-        // alias and the local must not be elided. Read it off the function
-        // before borrowing the body. The other "kept" source — every live read
-        // of a local, including `&local` / `&mut local` and closure-capture
-        // reads — is exactly what the engine use index records, so the rule
-        // reads it directly via `Engine::is_local_read` rather than a separate
-        // walk. (`address_taken_locals` is intentionally *not* a source: it is
-        // a stale static record after `inline` / `ref_elim`, and source-1 reads
-        // already cover every live `&local`.)
-        let stores_aliased = func.stores_aliased_locals.clone();
-        if let Some(body) = func.body.as_mut() {
-            let mut engine = Engine::new(body);
-            let rule = ElideRule {
-                stores_aliased: &stores_aliased,
-            };
-            changed |= engine.run(&[&rule]);
-        }
-    }
-    changed
-}
 
 /// What to do with a statement that binds / assigns a write-only local.
 enum Action {
@@ -54,8 +26,25 @@ enum Action {
     Demote(ExprId),
 }
 
-struct ElideRule<'a> {
+pub(super) struct ElideRule<'a> {
     stores_aliased: &'a IndexSet<u32>,
+}
+
+impl<'a> ElideRule<'a> {
+    /// Build the rule for one function. `stores_aliased` lists params whose
+    /// reference escaped via a callee's `stores` declaration: the callee may
+    /// retain that reference past its return, so writes through the local stay
+    /// observable via the alias and the local must not be elided. It is read
+    /// off the function before its body is borrowed for the engine. The other
+    /// "kept" source — every live read of a local, including `&local` /
+    /// `&mut local` and closure-capture reads — is exactly what the engine use
+    /// index records, so the rule reads it directly via `Engine::is_local_read`
+    /// rather than a separate walk. (`address_taken_locals` is intentionally
+    /// *not* a source: it is a stale static record after `inline` / `ref_elim`,
+    /// and source-1 reads already cover every live `&local`.)
+    pub(super) fn new(stores_aliased: &'a IndexSet<u32>) -> Self {
+        Self { stores_aliased }
+    }
 }
 
 impl Rule for ElideRule<'_> {

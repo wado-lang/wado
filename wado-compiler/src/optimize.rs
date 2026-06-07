@@ -11,15 +11,19 @@
 //!     bindings.
 //! 4.  `value_copy_demote` — demote deep `$value_copy$T` to a shallow spine
 //!     copy when elements are provably immutable through the binding.
-//! 5.  `string_push` — `buf.push_str("short")` → per-byte `push`.
+//! 5.  `peephole` (pre-inline) — unified engine pass: `string_push`
+//!     (`buf.push_str("short")` → per-byte `push`) + `elide_local` (write-only
+//!     local elimination). See `optimize/peephole.rs`.
 //! 6.  `inline` — function inlining.
-//! 7.  `labeled_block_fusion` — collapse inlined-helper `Option<T>` allocations.
-//! 8.  `ref_elim` — drop unnecessary reference bindings exposed by inlining.
-//! 9.  `sroa` — Scalar Replacement of Aggregates.
-//! 10. `copy_prop` — copy propagation.
-//! 11. `dae` — Dead Argument Elimination.
-//! 12. `drve` — Dead Return Value Elimination.
-//! 13. `elide_local` — Write-Only Local Elimination.
+//! 7.  `peephole` (post-inline) — unified engine pass: `array_literal`
+//!     (materialize `ArrayLiteral` from the `array_new + push` window) +
+//!     `elide_local`.
+//! 8.  `labeled_block_fusion` — collapse inlined-helper `Option<T>` allocations.
+//! 9.  `ref_elim` — drop unnecessary reference bindings exposed by inlining.
+//! 10. `sroa` — Scalar Replacement of Aggregates.
+//! 11. `copy_prop` — copy propagation.
+//! 12. `dae` — Dead Argument Elimination.
+//! 13. `drve` — Dead Return Value Elimination.
 //! 14. `cse` — Loop-level Common Subexpression Elimination.
 //! 15. `store_load_forward` — store-to-load forwarding.
 //! 16. `const_folding` — partial evaluation via [`crate::niri`] (also drives
@@ -63,6 +67,7 @@ mod licm;
 mod match_to_switch;
 mod mod_ref;
 mod multi_value_return;
+mod peephole;
 mod ref_elim;
 mod select_lowering;
 mod sroa;
@@ -73,7 +78,6 @@ mod tmpl_hoist;
 mod value_copy_demote;
 mod value_copy_elide;
 
-use array_literal::collapse_array_literals;
 use condition_implication::eliminate_implied_conditions;
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
 use const_folding::fold_constants;
@@ -89,7 +93,6 @@ use dce::{
 };
 use drve::eliminate_dead_return_values;
 use elide_box_local::elide_adjacent_box_locals;
-use elide_local::elide_write_only_locals;
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use labeled_block_fusion::fuse_labeled_blocks;
@@ -99,7 +102,6 @@ use ref_elim::eliminate_unnecessary_refs;
 use sroa::scalar_replace_aggregates;
 use sroa_param::sroa_single_field_parameters;
 use store_load_forward::forward_stores_to_loads;
-use string_push::simplify_short_push_str;
 use tmpl_hoist::hoist_template_buffers;
 use value_copy_demote::demote_value_copies;
 use value_copy_elide::elide_synthesized_value_copies;
@@ -538,12 +540,17 @@ fn run_optimization_passes(
             demote_value_copies(p);
             false
         });
-        // Run short-`push_str` simplification *before* inline. Once the
-        // inliner expands `String::push_str`'s body the `MethodCall` node is
-        // gone and the literal-recognising rewrite can no longer match,
-        // leaving short-string formatting paths (e.g. `fpfmt.wado`'s
-        // `buf.push_str("0.")`) paying full per-call allocation cost.
-        step!("nir/string_push", simplify_short_push_str);
+        // Unified peephole engine pass, pre-inline run. Folds short
+        // `push_str` literals, elides write-only locals, and (post-inline only)
+        // materializes array literals — all three rules over one shared
+        // worklist; see `optimize/peephole.rs`. Runs *before* inline so
+        // `string_push` still sees the `buf.push_str("0.")` `MethodCall` shape:
+        // once the inliner expands `String::push_str`'s body that node is gone
+        // and the literal-recognising rewrite can no longer match, leaving
+        // short-string formatting paths (e.g. `fpfmt.wado`) paying full
+        // per-call allocation cost. Also after value-copy elision/demotion so
+        // the duplicable-receiver check sees the stripped receiver.
+        step!("nir/peephole", peephole::run_peephole);
         // Single-field parameter SROA: rewrite functions whose parameter type
         // is `&S` for a single-field struct (`Box<T>` being the canonical
         // case) to take the inner scalar directly. Runs before `nir/inline`
@@ -552,14 +559,16 @@ fn run_optimization_passes(
         // `optimize/sroa_param.rs`.
         step!("nir/sroa_param", sroa_single_field_parameters);
         step!("nir/inline", |p| inline_functions(p, threshold));
-        // Materialize `ArrayLiteral` from the `List<T> { array_new(N) } +
-        // N × List::push` builder window. Runs *after* inline: the
-        // `SequenceLiteralBuilder` methods (and, for wrapper builders such
-        // as `SeqVec { items: List<T> }`, the `push_literal → self.field.push`
-        // delegation) must be inlined first so the raw `array_new + push`
-        // window — direct or field-rooted — is exposed. Later `cse` /
-        // `const_fold` in this same loop then see the normalized literal.
-        step!("nir/array_literal", collapse_array_literals);
+        // Unified peephole engine pass, post-inline run. Now `array_literal`
+        // fires: it materializes `ArrayLiteral` from the `List<T> {
+        // array_new(N) } + N × List::push` builder window, which inline must
+        // expose first — the `SequenceLiteralBuilder` methods (and, for wrapper
+        // builders such as `SeqVec { items: List<T> }`, the `push_literal →
+        // self.field.push` delegation) are inlined into the raw `array_new +
+        // push` window, direct or field-rooted. Later `cse` / `const_fold` in
+        // this same loop then see the normalized literal. `elide_local` runs
+        // again here over inline's freshly dead bindings.
+        step!("nir/peephole", peephole::run_peephole);
         // Adjacent-use Box-local elision. After `sroa_param` reshapes
         // `Box<T>` parameters into scalars and `inline` propagates the
         // resulting `FieldAccess(Local(x), "value")` shape into call
@@ -570,15 +579,14 @@ fn run_optimization_passes(
         step!("nir/ref_elim", eliminate_unnecessary_refs);
         step!("nir/sroa", scalar_replace_aggregates);
         step!("nir/copy_prop", propagate_copies);
-        // DAE / DRVE / write-only local elimination after `copy_prop` shrinks
-        // signatures and discards unused let-bindings before `cse` /
-        // `const_fold` revisit the simplified body. Running here (rather
-        // than at WIR level) lets `inline` see the slimmer signatures on
-        // the next iteration and lets `dce` clean up the freshly dead
-        // computation in the same fixed-point loop.
+        // DAE / DRVE after `copy_prop` shrinks signatures and discards unused
+        // let-bindings before `cse` / `const_fold` revisit the simplified body.
+        // Running here (rather than at WIR level) lets `inline` see the slimmer
+        // signatures on the next iteration and lets `dce` clean up the freshly
+        // dead computation in the same fixed-point loop. (Write-only local
+        // elimination moved into the unified `nir/peephole` pass above.)
         step!("nir/dae", eliminate_dead_arguments);
         step!("nir/drve", eliminate_dead_return_values);
-        step!("nir/elide_local", elide_write_only_locals);
         step!("nir/cse", eliminate_common_subexprs);
         step!("nir/store_load_forward", forward_stores_to_loads);
         // `field_forward`'s rewrite responsibilities are absorbed by

@@ -58,31 +58,12 @@ const ARRAY_NEW: &str = "array_new";
 const REPR_FIELD: &str = SeqField::Backing.field_name();
 const USED_FIELD: &str = SeqField::Len.field_name();
 
-pub fn collapse_array_literals(project: &mut NirPackage) -> bool {
-    let push_names = resolve_array_push_names(project);
-    if push_names.is_empty() {
-        return false;
-    }
-    let rule = Collapser {
-        push_names: &push_names,
-    };
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        if let Some(body) = func.body.as_mut() {
-            let mut engine = Engine::new(body);
-            changed |= engine.run(&[&rule]);
-        }
-    }
-    changed
-}
-
 /// Collect the mangled names of every `List<T>::push` monomorphization by
 /// their shared [`CompilerItem::ListPush`] marker. Each element type produces
 /// a distinct `NirFunction` (`List<i32>::push`, `List<String>::push`, …), so
 /// call sites are matched by membership in this set rather than against one
 /// reference.
-fn resolve_array_push_names(project: &NirPackage) -> IndexSet<String> {
+pub(super) fn resolve_array_push_names(project: &NirPackage) -> IndexSet<String> {
     project
         .functions
         .iter()
@@ -93,8 +74,14 @@ fn resolve_array_push_names(project: &NirPackage) -> IndexSet<String> {
         .collect()
 }
 
-struct Collapser<'a> {
+pub(super) struct Collapser<'a> {
     push_names: &'a IndexSet<String>,
+}
+
+impl<'a> Collapser<'a> {
+    pub(super) fn new(push_names: &'a IndexSet<String>) -> Self {
+        Self { push_names }
+    }
 }
 
 impl Rule for Collapser<'_> {
