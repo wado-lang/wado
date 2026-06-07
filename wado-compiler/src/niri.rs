@@ -110,7 +110,7 @@ use crate::nir::{
     NirPattern, NirStmt, NirStmtKind, NirUnaryOp,
 };
 use crate::nir_arena::{
-    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, PatId, PatKind, StmtKind,
+    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, PatId, PatKind, StmtId, StmtKind,
     StmtNode,
 };
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
@@ -2288,6 +2288,113 @@ impl<'a> Interpreter<'a> {
         true
     }
 
+    /// Arena counterpart of [`Self::reduce_in_place`]. Bottom-up reduces the
+    /// subtree rooted at `e` over the kinds the engine understands (Binary /
+    /// Unary / Cast / If / Match), applying [`Self::reduce_local_a`] at each
+    /// node so a child fold is observable at its parent. Used by CTFE
+    /// (`try_call_fold_a`) to evaluate a callee tail on a cloned scratch body,
+    /// where — unlike the const-fold visitor path — no outer walk has
+    /// pre-reduced the children.
+    fn reduce_in_place_a(&mut self, body: &mut Body, e: ExprId) -> bool {
+        let mut changed = match &body.exprs[e].kind {
+            ExprKind::Binary { left, right, .. } => {
+                let (l, r) = (*left, *right);
+                let a = self.reduce_in_place_a(body, l);
+                let b = self.reduce_in_place_a(body, r);
+                a || b
+            }
+            ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
+                let i = *inner;
+                self.reduce_in_place_a(body, i)
+            }
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let (c, t, e2) = (*condition, *then_branch, *else_branch);
+                let mut ch = self.reduce_in_place_a(body, c);
+                ch |= self.reduce_in_place_block_a(body, t);
+                if let Some(eb) = e2 {
+                    ch |= self.reduce_in_place_block_a(body, eb);
+                }
+                ch
+            }
+            ExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                let scrutinee = *scrutinee;
+                let arm_data: Vec<(Option<ExprId>, ExprId)> =
+                    arms.iter().map(|a| (a.guard, a.body)).collect();
+                let mut ch = self.reduce_in_place_a(body, scrutinee);
+                for (guard, arm_body) in arm_data {
+                    if let Some(g) = guard {
+                        ch |= self.reduce_in_place_a(body, g);
+                    }
+                    ch |= self.reduce_in_place_a(body, arm_body);
+                }
+                ch
+            }
+            _ => false,
+        };
+        changed |= self.reduce_local_a(body, e);
+        changed
+    }
+
+    /// Block-level counterpart of [`Self::reduce_in_place_a`], mirroring the
+    /// tree `reduce_in_place_block`.
+    fn reduce_in_place_block_a(&mut self, body: &mut Body, block: BlockId) -> bool {
+        let stmts = body.blocks[block].stmts.clone();
+        let mut changed = false;
+        for s in stmts {
+            changed |= self.reduce_in_place_stmt_a(body, s);
+        }
+        changed |= self.reduce_local_block_a(body, block);
+        changed
+    }
+
+    /// Statement-level counterpart of [`Self::reduce_in_place_a`], mirroring
+    /// the tree `reduce_in_place_stmt`.
+    fn reduce_in_place_stmt_a(&mut self, body: &mut Body, s: StmtId) -> bool {
+        match &body.stmts[s].kind {
+            StmtKind::Expr(e) => {
+                let e = *e;
+                self.reduce_in_place_a(body, e)
+            }
+            StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
+                let v = *value;
+                self.reduce_in_place_a(body, v)
+            }
+            StmtKind::Return { value } | StmtKind::Break { value, .. } => match *value {
+                Some(v) => self.reduce_in_place_a(body, v),
+                None => false,
+            },
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                let (c, t, e2) = (*condition, *then_block, *else_block);
+                let mut ch = self.reduce_in_place_a(body, c);
+                ch |= self.reduce_in_place_block_a(body, t);
+                if let Some(eb) = e2 {
+                    ch |= self.reduce_in_place_block_a(body, eb);
+                }
+                ch
+            }
+            StmtKind::Loop { body: b } => {
+                let b = *b;
+                self.reduce_in_place_block_a(body, b)
+            }
+            StmtKind::LabeledBlock { block, .. } => {
+                let b = *block;
+                self.reduce_in_place_block_a(body, b)
+            }
+            StmtKind::Continue => false,
+        }
+    }
+
     /// Arena counterpart of [`Self::reduce_to_lattice`]. Unlike the tree
     /// version, the const-fold visitor has already reduced every child of
     /// `e` bottom-up before this is called, so there is no separate
@@ -2495,7 +2602,10 @@ impl<'a> Interpreter<'a> {
         if bound.len() != callee.params.len() {
             return Lattice::Unevaluated;
         }
-        let Some(tail) = single_tail_expression(&callee) else {
+        let Some(callee_body) = callee.body.as_ref() else {
+            return Lattice::Unevaluated;
+        };
+        let Some(tail) = single_tail_expression_a(callee_body) else {
             return Lattice::Unevaluated;
         };
         if self.step_budget == 0 {
@@ -2508,7 +2618,14 @@ impl<'a> Interpreter<'a> {
             #[allow(clippy::cast_possible_truncation)]
             self.env.insert(i as u32, Lattice::Const(*v));
         }
-        let result = self.reduce_to_lattice(&tail);
+        // Reduce the tail on a cloned scratch body so the shared callee body
+        // (held under an immutable `Ref`) is not mutated. The callee passed the
+        // single-tail-expression shape check, so its body is one statement and
+        // the clone is small. `reduce_in_place_a` then folds children bottom-up
+        // — the arena analogue of the tree path's `reduce_to_lattice`.
+        let mut scratch = callee_body.clone();
+        self.reduce_in_place_a(&mut scratch, tail);
+        let result = self.reduce_to_lattice_a(&scratch, tail);
         self.env = saved_env;
         self.call_stack.pop();
         match result {
@@ -2682,6 +2799,20 @@ fn single_tail_expression(func: &NirFunction) -> Option<NirExpr> {
     };
     match &single.kind {
         NirStmtKind::Return { value: Some(e) } | NirStmtKind::Expr(e) => Some(e.clone()),
+        _ => None,
+    }
+}
+
+/// Arena counterpart of [`single_tail_expression`]: the callee body's
+/// single-statement tail expression id, read directly from the arena without
+/// materializing a tree. Recognizes the same shapes (`Return { Some(e) }` or
+/// `Expr(e)`); anything else reports `None`.
+fn single_tail_expression_a(body: &Body) -> Option<ExprId> {
+    let [single] = body.blocks[body.root].stmts.as_slice() else {
+        return None;
+    };
+    match body.stmts[*single].kind {
+        StmtKind::Return { value: Some(e) } | StmtKind::Expr(e) => Some(e),
         _ => None,
     }
 }
