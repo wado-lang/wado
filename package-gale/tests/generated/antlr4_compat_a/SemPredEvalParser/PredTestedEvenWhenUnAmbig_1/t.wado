@@ -755,19 +755,9 @@ pub enum TokenKind {
     Error,
 }
 
-pub variant PrimaryNode {
-    Alt0(PrimaryAlt0),
-    Alt1(PrimaryAlt1),
-}
-
-pub struct PrimaryAlt0 {
+pub struct PrimaryNode {
     pub span: Span,
-    pub id: Token,
-}
-
-pub struct PrimaryAlt1 {
-    pub span: Span,
-    pub lit_enum: Token,
+    pub token: Token,
 }
 
 global TK_ID: i32 = 0;
@@ -1037,19 +1027,12 @@ fn scan_primary(tokens: &List<Token>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn _parse_primary__inner(p: &mut Parser) -> Result<PrimaryNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if kind == TK_ID {
-        let id = p.expect(TK_ID)?;
-        return Result::<PrimaryNode, ParseError>::Ok(PrimaryNode::Alt0(PrimaryAlt0 {
+    if _gale_kind_set_0(kind) {
+        let token = p.expect(kind)?;
+        return Result::<PrimaryNode, ParseError>::Ok(PrimaryNode {
             span: Span::new(start, i32::max(start, p.last_end())),
-            id,
-        }));
-    }
-    if kind == TK_LIT_ENUM {
-        let lit_enum = p.expect(TK_LIT_ENUM)?;
-        return Result::<PrimaryNode, ParseError>::Ok(PrimaryNode::Alt1(PrimaryAlt1 {
-            span: Span::new(start, i32::max(start, p.last_end())),
-            lit_enum,
-        }));
+            token,
+        });
     }
     return Result::<PrimaryNode, ParseError>::Err(p.error(
         "expected primary",
@@ -1067,18 +1050,26 @@ fn _parse_primary(p: &mut Parser) -> Result<PrimaryNode, ParseError> {
     return r;
 }
 
-pub fn parse_primary(input: &String) -> Result<PrimaryNode, ParseError> {
+fn _gale_new_parser(input: &String) -> Parser {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    return Parser::new(tokens, chars);
+}
+
+fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
+    if let Some(_d) = &parser.pending {
+        if _d.span.start >= e.span.start {
+            return *_d;
+        }
+    }
+    return e;
+}
+
+pub fn parse_primary(input: &String) -> Result<PrimaryNode, ParseError> {
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_primary(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<PrimaryNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<PrimaryNode, ParseError>::Err(_e);
+        return Result::<PrimaryNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
@@ -1088,18 +1079,9 @@ pub fn parse(input: &String) -> Result<PrimaryNode, ParseError> {
 }
 
 pub fn walk_primary<V: Visitor>(v: &mut V, node: &PrimaryNode) {
-    match node {
-        Alt0(n) => {
-            v.enter_rule(0, &"primary", &n.span);
-            v.visit_token(&n.id);
-            v.exit_rule(0, &"primary", &n.span);
-        }
-        Alt1(n) => {
-            v.enter_rule(0, &"primary", &n.span);
-            v.visit_token(&n.lit_enum);
-            v.exit_rule(0, &"primary", &n.span);
-        }
-    }
+    v.enter_rule(0, &"primary", &node.span);
+    v.visit_token(&node.token);
+    v.exit_rule(0, &"primary", &node.span);
 }
 
 pub fn to_tree(node: &PrimaryNode) -> CstNode {

@@ -1326,50 +1326,44 @@ fn _parse_b(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<
     return r;
 }
 
-pub fn parse_r(input: &String) -> Result<RNode, ParseError> {
+fn _gale_new_parser(input: &String) -> Parser {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    return Parser::new(tokens, chars);
+}
+
+fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
+    if let Some(_d) = &parser.pending {
+        if _d.span.start >= e.span.start {
+            return *_d;
+        }
+    }
+    return e;
+}
+
+pub fn parse_r(input: &String) -> Result<RNode, ParseError> {
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_r(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<RNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<RNode, ParseError>::Err(_e);
+        return Result::<RNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_a(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ANode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ANode, ParseError>::Err(_e);
+        return Result::<ANode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_b(input: &String) -> Result<BNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_b(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<BNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<BNode, ParseError>::Err(_e);
+        return Result::<BNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }

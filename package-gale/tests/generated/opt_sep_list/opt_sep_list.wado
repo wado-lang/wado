@@ -1496,98 +1496,71 @@ fn _parse_arm(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Resul
     return r;
 }
 
-pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
+fn _gale_new_parser(input: &String) -> Parser {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    return Parser::new(tokens, chars);
+}
+
+fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
+    if let Some(_d) = &parser.pending {
+        if _d.span.start >= e.span.start {
+            return *_d;
+        }
+    }
+    return e;
+}
+
+pub fn parse_prog(input: &String) -> Result<ProgNode, ParseError> {
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_prog(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ProgNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ProgNode, ParseError>::Err(_e);
+        return Result::<ProgNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_list(input: &String) -> Result<ListNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_list(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ListNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ListNode, ParseError>::Err(_e);
+        return Result::<ListNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_stmt(input: &String) -> Result<StmtNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_stmt(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<StmtNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<StmtNode, ParseError>::Err(_e);
+        return Result::<StmtNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_wrapped(input: &String) -> Result<WrappedNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_wrapped(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<WrappedNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<WrappedNode, ParseError>::Err(_e);
+        return Result::<WrappedNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_braced(input: &String) -> Result<BracedNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_braced(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<BracedNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<BracedNode, ParseError>::Err(_e);
+        return Result::<BracedNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_arm(input: &String) -> Result<ArmNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_arm(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ArmNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ArmNode, ParseError>::Err(_e);
+        return Result::<ArmNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }

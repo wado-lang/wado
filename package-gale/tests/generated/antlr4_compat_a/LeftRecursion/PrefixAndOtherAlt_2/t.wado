@@ -788,19 +788,9 @@ pub struct LiteralNode {
     pub integer: Token,
 }
 
-pub variant OpNode {
-    Alt0(OpAlt0),
-    Alt1(OpAlt1),
-}
-
-pub struct OpAlt0 {
+pub struct OpNode {
     pub span: Span,
-    pub plus: Token,
-}
-
-pub struct OpAlt1 {
-    pub span: Span,
-    pub minus: Token,
+    pub token: Token,
 }
 
 global TK_Integer: i32 = 0;
@@ -1336,19 +1326,12 @@ fn _parse_literal(p: &mut Parser) -> Result<LiteralNode, ParseError> {
 fn _parse_op__inner(p: &mut Parser) -> Result<OpNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if kind == TK_LIT_PLUS {
-        let plus = p.expect(TK_LIT_PLUS)?;
-        return Result::<OpNode, ParseError>::Ok(OpNode::Alt0(OpAlt0 {
+    if _gale_kind_set_0(kind) {
+        let token = p.expect(kind)?;
+        return Result::<OpNode, ParseError>::Ok(OpNode {
             span: Span::new(start, i32::max(start, p.last_end())),
-            plus,
-        }));
-    }
-    if kind == TK_LIT_MINUS {
-        let minus = p.expect(TK_LIT_MINUS)?;
-        return Result::<OpNode, ParseError>::Ok(OpNode::Alt1(OpAlt1 {
-            span: Span::new(start, i32::max(start, p.last_end())),
-            minus,
-        }));
+            token,
+        });
     }
     return Result::<OpNode, ParseError>::Err(p.error(
         "expected op",
@@ -1366,66 +1349,53 @@ fn _parse_op(p: &mut Parser) -> Result<OpNode, ParseError> {
     return r;
 }
 
-pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
+fn _gale_new_parser(input: &String) -> Parser {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    return Parser::new(tokens, chars);
+}
+
+fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
+    if let Some(_d) = &parser.pending {
+        if _d.span.start >= e.span.start {
+            return *_d;
+        }
+    }
+    return e;
+}
+
+pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_s(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<SNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<SNode, ParseError>::Err(_e);
+        return Result::<SNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_expr(input: &String) -> Result<ExprNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_expr(&mut parser, 0);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ExprNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ExprNode, ParseError>::Err(_e);
+        return Result::<ExprNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_literal(input: &String) -> Result<LiteralNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_literal(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<LiteralNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<LiteralNode, ParseError>::Err(_e);
+        return Result::<LiteralNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_op(input: &String) -> Result<OpNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_op(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<OpNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<OpNode, ParseError>::Err(_e);
+        return Result::<OpNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
@@ -1474,18 +1444,9 @@ pub fn walk_literal<V: Visitor>(v: &mut V, node: &LiteralNode) {
 }
 
 pub fn walk_op<V: Visitor>(v: &mut V, node: &OpNode) {
-    match node {
-        Alt0(n) => {
-            v.enter_rule(3, &"op", &n.span);
-            v.visit_token(&n.plus);
-            v.exit_rule(3, &"op", &n.span);
-        }
-        Alt1(n) => {
-            v.enter_rule(3, &"op", &n.span);
-            v.visit_token(&n.minus);
-            v.exit_rule(3, &"op", &n.span);
-        }
-    }
+    v.enter_rule(3, &"op", &node.span);
+    v.visit_token(&node.token);
+    v.exit_rule(3, &"op", &node.span);
 }
 
 pub fn to_tree(node: &SNode) -> CstNode {

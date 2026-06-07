@@ -1202,66 +1202,53 @@ fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<
     return r;
 }
 
-pub fn parse_file_(input: &String) -> Result<FileNode, ParseError> {
+fn _gale_new_parser(input: &String) -> Parser {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    return Parser::new(tokens, chars);
+}
+
+fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
+    if let Some(_d) = &parser.pending {
+        if _d.span.start >= e.span.start {
+            return *_d;
+        }
+    }
+    return e;
+}
+
+pub fn parse_file_(input: &String) -> Result<FileNode, ParseError> {
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_file_(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<FileNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<FileNode, ParseError>::Err(_e);
+        return Result::<FileNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_para(input: &String) -> Result<ParaNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_para(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ParaNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ParaNode, ParseError>::Err(_e);
+        return Result::<ParaNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_para_content(input: &String) -> Result<ParaContentNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_para_content(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ParaContentNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ParaContentNode, ParseError>::Err(_e);
+        return Result::<ParaContentNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_s(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<SNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<SNode, ParseError>::Err(_e);
+        return Result::<SNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }

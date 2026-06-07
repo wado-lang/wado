@@ -761,19 +761,9 @@ pub struct SNode {
     pub a_list: List<ANode>,
 }
 
-pub variant ANode {
-    Alt0(AAlt0),
-    Alt1(AAlt1),
-}
-
-pub struct AAlt0 {
+pub struct ANode {
     pub span: Span,
-    pub id: Token,
-}
-
-pub struct AAlt1 {
-    pub span: Span,
-    pub id: Token,
+    pub token: Token,
 }
 
 global TK_ID: i32 = 0;
@@ -1106,63 +1096,15 @@ fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<
     return r;
 }
 
-fn _parse_a__inner_bt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
-    let start = p.peek().span.start;
-    let id = p.expect(TK_ID)?;
-    return Result::<ANode, ParseError>::Ok(ANode::Alt0(AAlt0 {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        id,
-    }));
-}
-
-fn _parse_a__inner_scan_0(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn _parse_a__inner_bt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
-    let start = p.peek().span.start;
-    let id = p.expect(TK_ID)?;
-    return Result::<ANode, ParseError>::Ok(ANode::Alt1(AAlt1 {
-        span: Span::new(start, i32::max(start, p.last_end())),
-        id,
-    }));
-}
-
-fn _parse_a__inner_scan_1(tokens: &List<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_ID { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
     if kind == TK_ID {
-        let _sd_tokens = &p.tokens;
-        let _sd_pos = p.pos;
-        let _sd_p_0 = _parse_a__inner_scan_0(_sd_tokens, _sd_pos);
-        let _sd_p_1 = _parse_a__inner_scan_1(_sd_tokens, _sd_pos);
-        let mut _sd_best_i: i32 = -1;
-        let mut _sd_best_p: i32 = -1;
-        if _sd_p_0 > _sd_best_p {
-            _sd_best_p = _sd_p_0;
-            _sd_best_i = 0;
-        }
-        if _sd_p_1 > _sd_best_p {
-            _sd_best_p = _sd_p_1;
-            _sd_best_i = 1;
-        }
-        if _sd_best_i == 0 {
-            return _parse_a__inner_bt_0(p, follow);
-        }
-        if _sd_best_i == 1 {
-            return _parse_a__inner_bt_1(p, follow);
-        }
-        return _parse_a__inner_bt_1(p, follow);
+        let token = p.expect(kind)?;
+        return Result::<ANode, ParseError>::Ok(ANode {
+            span: Span::new(start, i32::max(start, p.last_end())),
+            token,
+        });
     }
     return Result::<ANode, ParseError>::Err(p.error(
         "expected a",
@@ -1180,34 +1122,35 @@ fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<
     return r;
 }
 
-pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
+fn _gale_new_parser(input: &String) -> Parser {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    return Parser::new(tokens, chars);
+}
+
+fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
+    if let Some(_d) = &parser.pending {
+        if _d.span.start >= e.span.start {
+            return *_d;
+        }
+    }
+    return e;
+}
+
+pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_s(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<SNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<SNode, ParseError>::Err(_e);
+        return Result::<SNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_a(input: &String) -> Result<ANode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_a(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ANode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ANode, ParseError>::Err(_e);
+        return Result::<ANode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
@@ -1225,18 +1168,9 @@ pub fn walk_s<V: Visitor>(v: &mut V, node: &SNode) {
 }
 
 pub fn walk_a<V: Visitor>(v: &mut V, node: &ANode) {
-    match node {
-        Alt0(n) => {
-            v.enter_rule(1, &"a", &n.span);
-            v.visit_token(&n.id);
-            v.exit_rule(1, &"a", &n.span);
-        }
-        Alt1(n) => {
-            v.enter_rule(1, &"a", &n.span);
-            v.visit_token(&n.id);
-            v.exit_rule(1, &"a", &n.span);
-        }
-    }
+    v.enter_rule(1, &"a", &node.span);
+    v.visit_token(&node.token);
+    v.exit_rule(1, &"a", &node.span);
 }
 
 pub fn to_tree(node: &SNode) -> CstNode {

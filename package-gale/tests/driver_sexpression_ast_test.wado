@@ -17,10 +17,6 @@ use {
     ItemAlt2,
     ListNode,
     AtomNode,
-    AtomAlt0,
-    AtomAlt1,
-    AtomAlt2,
-    AtomAlt3,
     TK_STRING,
     TK_WHITESPACE,
     TK_NUMBER,
@@ -54,10 +50,13 @@ test "parse single symbol atom" {
         item_list: [
             ItemNode::Alt0(ItemAlt0 {
                 span: s(0, 5),
-                atom: AtomNode::Alt1(AtomAlt1 {
+                // `atom` is an all-single-token rule, so its node is the
+                // compact `{ span, token }` struct (the token's kind records
+                // which alt matched) rather than an N-arm variant.
+                atom: AtomNode {
                     span: s(0, 5),
-                    symbol: tok(TK_SYMBOL, "hello", 0, 5),
-                }),
+                    token: tok(TK_SYMBOL, "hello", 0, 5),
+                },
             }),
         ] as List<ItemNode>,
         eof: tok(TK_EOF, "", 5, 5),
@@ -74,10 +73,10 @@ test "parse number atom" {
         item_list: [
             ItemNode::Alt0(ItemAlt0 {
                 span: s(0, 2),
-                atom: AtomNode::Alt2(AtomAlt2 {
+                atom: AtomNode {
                     span: s(0, 2),
-                    number: tok(TK_NUMBER, "42", 0, 2),
-                }),
+                    token: tok(TK_NUMBER, "42", 0, 2),
+                },
             }),
         ] as List<ItemNode>,
         eof: tok(TK_EOF, "", 2, 2),

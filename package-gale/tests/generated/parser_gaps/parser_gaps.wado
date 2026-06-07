@@ -1514,82 +1514,62 @@ fn _parse_any_stmt(p: &mut Parser) -> Result<AnyStmtNode, ParseError> {
     return r;
 }
 
-pub fn parse_program(input: &String) -> Result<ProgramNode, ParseError> {
+fn _gale_new_parser(input: &String) -> Parser {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    return Parser::new(tokens, chars);
+}
+
+fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
+    if let Some(_d) = &parser.pending {
+        if _d.span.start >= e.span.start {
+            return *_d;
+        }
+    }
+    return e;
+}
+
+pub fn parse_program(input: &String) -> Result<ProgramNode, ParseError> {
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_program(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ProgramNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ProgramNode, ParseError>::Err(_e);
+        return Result::<ProgramNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_stmt(input: &String) -> Result<StmtNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_stmt(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<StmtNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<StmtNode, ParseError>::Err(_e);
+        return Result::<StmtNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_list_stmt(input: &String) -> Result<ListStmtNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_list_stmt(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ListStmtNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ListStmtNode, ParseError>::Err(_e);
+        return Result::<ListStmtNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_not_stmt(input: &String) -> Result<NotStmtNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_not_stmt(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<NotStmtNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<NotStmtNode, ParseError>::Err(_e);
+        return Result::<NotStmtNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_any_stmt(input: &String) -> Result<AnyStmtNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_any_stmt(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<AnyStmtNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<AnyStmtNode, ParseError>::Err(_e);
+        return Result::<AnyStmtNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }

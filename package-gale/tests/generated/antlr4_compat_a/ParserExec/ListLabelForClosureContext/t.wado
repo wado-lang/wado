@@ -1347,82 +1347,62 @@ fn _parse_else_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     return r;
 }
 
-pub fn parse_if_statement(input: &String) -> Result<IfStatementNode, ParseError> {
+fn _gale_new_parser(input: &String) -> Parser {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    return Parser::new(tokens, chars);
+}
+
+fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
+    if let Some(_d) = &parser.pending {
+        if _d.span.start >= e.span.start {
+            return *_d;
+        }
+    }
+    return e;
+}
+
+pub fn parse_if_statement(input: &String) -> Result<IfStatementNode, ParseError> {
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_if_statement(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<IfStatementNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<IfStatementNode, ParseError>::Err(_e);
+        return Result::<IfStatementNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_else_if_statement(input: &String) -> Result<ElseIfStatementNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_else_if_statement(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ElseIfStatementNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ElseIfStatementNode, ParseError>::Err(_e);
+        return Result::<ElseIfStatementNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_expression(input: &String) -> Result<ExpressionNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_expression(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ExpressionNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ExpressionNode, ParseError>::Err(_e);
+        return Result::<ExpressionNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_executable_statement(input: &String) -> Result<ExecutableStatementNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_executable_statement(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ExecutableStatementNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ExecutableStatementNode, ParseError>::Err(_e);
+        return Result::<ExecutableStatementNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_else_statement(input: &String) -> Result<ElseStatementNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_else_statement(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ElseStatementNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ElseStatementNode, ParseError>::Err(_e);
+        return Result::<ElseStatementNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }

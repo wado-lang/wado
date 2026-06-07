@@ -756,25 +756,9 @@ pub struct ProgramNode {
     pub eof: Token,
 }
 
-pub variant StateNode {
-    Alt0(StateAlt0),
-    Alt1(StateAlt1),
-    Alt2(StateAlt2),
-}
-
-pub struct StateAlt0 {
+pub struct StateNode {
     pub span: Span,
-    pub lit_breaksemicolon: Token,
-}
-
-pub struct StateAlt1 {
-    pub span: Span,
-    pub lit_continuesemicolon: Token,
-}
-
-pub struct StateAlt2 {
-    pub span: Span,
-    pub lit_returnsemicolon: Token,
+    pub token: Token,
 }
 
 global TK_EOF: i32 = 0;
@@ -1083,26 +1067,12 @@ fn _parse_program(p: &mut Parser) -> Result<ProgramNode, ParseError> {
 fn _parse_state__inner(p: &mut Parser) -> Result<StateNode, ParseError> {
     let start = p.peek().span.start;
     let kind = p.peek_kind();
-    if kind == TK_LIT_BREAKSEMI {
-        let lit_breaksemicolon = p.expect(TK_LIT_BREAKSEMI)?;
-        return Result::<StateNode, ParseError>::Ok(StateNode::Alt0(StateAlt0 {
+    if _gale_kind_set_0(kind) {
+        let token = p.expect(kind)?;
+        return Result::<StateNode, ParseError>::Ok(StateNode {
             span: Span::new(start, i32::max(start, p.last_end())),
-            lit_breaksemicolon,
-        }));
-    }
-    if kind == TK_LIT_CONTINUESEMI {
-        let lit_continuesemicolon = p.expect(TK_LIT_CONTINUESEMI)?;
-        return Result::<StateNode, ParseError>::Ok(StateNode::Alt1(StateAlt1 {
-            span: Span::new(start, i32::max(start, p.last_end())),
-            lit_continuesemicolon,
-        }));
-    }
-    if kind == TK_LIT_RETURNSEMI {
-        let lit_returnsemicolon = p.expect(TK_LIT_RETURNSEMI)?;
-        return Result::<StateNode, ParseError>::Ok(StateNode::Alt2(StateAlt2 {
-            span: Span::new(start, i32::max(start, p.last_end())),
-            lit_returnsemicolon,
-        }));
+            token,
+        });
     }
     return Result::<StateNode, ParseError>::Err(p.error(
         "expected state",
@@ -1120,34 +1090,35 @@ fn _parse_state(p: &mut Parser) -> Result<StateNode, ParseError> {
     return r;
 }
 
-pub fn parse_program(input: &String) -> Result<ProgramNode, ParseError> {
+fn _gale_new_parser(input: &String) -> Parser {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    return Parser::new(tokens, chars);
+}
+
+fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
+    if let Some(_d) = &parser.pending {
+        if _d.span.start >= e.span.start {
+            return *_d;
+        }
+    }
+    return e;
+}
+
+pub fn parse_program(input: &String) -> Result<ProgramNode, ParseError> {
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_program(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ProgramNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ProgramNode, ParseError>::Err(_e);
+        return Result::<ProgramNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_state(input: &String) -> Result<StateNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_state(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<StateNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<StateNode, ParseError>::Err(_e);
+        return Result::<StateNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
@@ -1166,23 +1137,9 @@ pub fn walk_program<V: Visitor>(v: &mut V, node: &ProgramNode) {
 }
 
 pub fn walk_state<V: Visitor>(v: &mut V, node: &StateNode) {
-    match node {
-        Alt0(n) => {
-            v.enter_rule(1, &"state", &n.span);
-            v.visit_token(&n.lit_breaksemicolon);
-            v.exit_rule(1, &"state", &n.span);
-        }
-        Alt1(n) => {
-            v.enter_rule(1, &"state", &n.span);
-            v.visit_token(&n.lit_continuesemicolon);
-            v.exit_rule(1, &"state", &n.span);
-        }
-        Alt2(n) => {
-            v.enter_rule(1, &"state", &n.span);
-            v.visit_token(&n.lit_returnsemicolon);
-            v.exit_rule(1, &"state", &n.span);
-        }
-    }
+    v.enter_rule(1, &"state", &node.span);
+    v.visit_token(&node.token);
+    v.exit_rule(1, &"state", &node.span);
 }
 
 pub fn to_tree(node: &ProgramNode) -> CstNode {

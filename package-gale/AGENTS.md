@@ -1,6 +1,6 @@
 # Gale Development Guide
 
-Immutable knowledge and standing rules for developing Gale. Volatile state (current pass/fail numbers, test inventory) lives in CI and the source tree; open work is tracked in [`TODO.md`](./TODO.md); the antlr4 compatibility contract, descriptor-test pipeline, and regeneration commands live in [`antlr4-compatibility.md`](./antlr4-compatibility.md).
+Immutable knowledge and standing rules for developing Gale. Volatile state (current pass/fail numbers, test inventory) lives in CI and the source tree; open work is tracked in [`TODO.md`](./TODO.md); the antlr4 compatibility contract, descriptor-test pipeline, and regeneration commands live in [`antlr4-compatibility.md`](./antlr4-compatibility.md); performance findings and measured dead-end spikes (e.g. data-driven scan) live in [`perf.md`](./perf.md).
 
 ## First: initialize the ANTLR4 submodule
 
@@ -435,6 +435,12 @@ its runtime; do not read it — see "License hygiene" above).
 Remaining gaps are tracked in [`TODO.md`](./TODO.md).
 
 ## Failed Approaches (Do Not Repeat)
+
+Performance dead-ends (measured) are recorded separately in
+[`perf.md`](./perf.md) — notably **data-driven (bytecode VM) scan**,
+which regressed parse time ~+24 % from converting just the leaf
+scanners (implied slowdown factor K ≈ 5.9; full conversion projected
++30–60 %). The compiled scanner stays.
 
 ### RuleRef Expansion via Return Stack (2026-03)
 
