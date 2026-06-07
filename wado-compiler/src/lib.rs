@@ -76,7 +76,8 @@ pub use semantics::{
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
 pub use effect_check::{
-    EffectError, check_default_purity, check_effects, check_effects_semantic, check_stores,
+    DefaultPurityError, EffectError, StoresError, check_default_purity, check_default_purity_semantic,
+    check_effects, check_effects_semantic, check_stores, check_stores_semantic,
 };
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
@@ -438,18 +439,26 @@ fn compile_after_load<H: CompilerHost>(
         emit_unused_diagnostics(&sem, logger);
     }
 
-    // === Phase 6b: Effect Check (Design B) ===
-    // Produced from `Semantics` (AST + recorded facts), not the emitted TIR,
-    // so it sees every source function regardless of what reify emits and
-    // shares its logic with the LSP.
+    // === Phase 6b: Effect, Stores, and Default-Purity Checks (Design B) ===
+    // All three are produced from `Semantics` (AST + recorded facts), not the
+    // emitted TIR, so they see every source function regardless of what reify
+    // emits and share their logic with the LSP.
     {
         let _span = logger.span("effect-check");
-        let mut had_effect_error = false;
+        let mut had_error = false;
         for error in effect_check::check_effects_semantic(&sem) {
-            had_effect_error = true;
+            had_error = true;
             let _ = logger.error(error);
         }
-        if had_effect_error {
+        for error in effect_check::check_stores_semantic(&sem) {
+            had_error = true;
+            let _ = logger.error(error);
+        }
+        for error in effect_check::check_default_purity_semantic(&sem) {
+            had_error = true;
+            let _ = logger.error(error);
+        }
+        if had_error {
             return Err(Bail);
         }
     }
@@ -646,17 +655,6 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
-    // === Phase 7b: Default-Value Purity Check ===
-    // Every `param: T = expr` and `field: T = expr` must be pure. Runs before
-    // synthesis so that auto-derived `Default::default()` bodies (which clone
-    // the field default expressions) are only emitted for structs whose
-    // defaults have already cleared the purity gate — otherwise the effect
-    // checker would fire on the synthetic body with a misleading location.
-    {
-        let _span = logger.span("default-purity-check");
-        check_default_purity(&package.tir_modules, logger)?;
-    }
-
     // === Phase 8: Synthesis (Package -> Package) ===
     let package = {
         let _span = logger.span("synthesis");
@@ -670,14 +668,6 @@ fn compile_after_load<H: CompilerHost>(
             Bail
         })?
     };
-
-    // === Phase 8b: Stores Check ===
-    // Runs after synthesis so synthesized functions are also checked.
-    // Runs before monomorphize/optimize so stores info is available for escape analysis.
-    {
-        let _span = logger.span("stores-check");
-        check_stores(&package.tir_modules, logger)?;
-    }
 
     // === Phase 8c: Effect Dispatch Synthesis ===
     // Lowers `WithHandler` / `Resume` and generates per-effect dispatch

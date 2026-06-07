@@ -20,7 +20,7 @@ use crate::token::Span;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::ast::{self, AstVisitor, Expr, Function, Item};
+use crate::ast::{self, AstVisitor, Expr, Function, Item, Stmt};
 use crate::semantics::Semantics;
 use crate::symbol::SymbolKey;
 
@@ -1599,94 +1599,8 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
         return out;
     };
 
-    // Resolved effect lists, indexed two ways: by the function's declaration
-    // key (free calls resolve through `references`) and by `(module, mangled
-    // name)` (method dispatch carries a `FunctionRef`).
-    let mut fn_effects: IndexMap<SymbolKey, Vec<EffectRef>> = IndexMap::default();
-    let mut fn_params: IndexMap<SymbolKey, Vec<TypeId>> = IndexMap::default();
-    let mut mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>> = IndexMap::default();
-    let mut mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
-    for (src, module_sem) in &state.module_semantics {
-        let types = &module_sem.types;
-        for (key, effects) in &types.function_effects {
-            fn_effects.insert(key.clone(), effects.clone());
-        }
-        for (key, params) in &types.fn_param_types {
-            fn_params.insert(key.clone(), params.clone());
-        }
-        for (key, names) in &types.method_names {
-            if let Some(effects) = types.function_effects.get(key) {
-                mangled_index.insert((src.clone(), names.mangled.clone()), effects.clone());
-            }
-            if let Some(params) = types.fn_param_types.get(key) {
-                mangled_params.insert((src.clone(), names.mangled.clone()), params.clone());
-            }
-        }
-    }
-
-    let mut resource_names: IndexSet<(ModuleSource, String)> = IndexSet::default();
-    // `(module, struct name)` → field type ids, so resource detection follows
-    // resources nested in struct fields of a signature / operation type.
-    let mut struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
-    for (src, module) in &sem.modules {
-        let annotations = state.module_semantics.get(src).map(|m| &m.types);
-        for item in &module.items {
-            match item {
-                Item::Resource(resource) => {
-                    resource_names.insert((src.clone(), resource.name.clone()));
-                }
-                Item::Struct(struct_decl) => {
-                    if let Some(field_types) = annotations.and_then(|ann| {
-                        ann.struct_field_types
-                            .get(&SymbolKey::new(src.clone(), struct_decl.id))
-                    }) {
-                        struct_fields
-                            .insert((src.clone(), struct_decl.name.clone()), field_types.clone());
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
-    // `(module, variant name)` → case payload type ids, so resource detection
-    // descends into variant case payloads (e.g. `Maybe::Just(Future<i32>)`).
-    let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
-    for (module, variants) in state.tysys.all_variant_cases.iter() {
-        for (variant_name, info) in variants {
-            variant_payloads.insert(
-                (module.clone(), variant_name.clone()),
-                info.cases.iter().map(|case| case.payload).collect(),
-            );
-        }
-    }
-
-    // Effect / resource propagation closure: holding effect `E` admits the
-    // resources `E`'s operations reference (e.g. `Stdout` → `Stream`).
-    let closure = build_propagation_closure_sem(sem, state, &struct_fields, &variant_payloads);
-
-    // Name → resolved `EffectRef` for every declared effect / resource, used to
-    // resolve `#[benign(E)]` names (the closure has a key per declaration).
-    let mut effect_by_name: IndexMap<String, EffectRef> = IndexMap::default();
-    for key in closure.keys() {
-        if let EffectRef::Concrete { name, .. } = key {
-            effect_by_name
-                .entry(name.clone())
-                .or_insert_with(|| key.clone());
-        }
-    }
-
-    let index = EffectIndex {
-        fn_effects: &fn_effects,
-        fn_params: &fn_params,
-        mangled_index: &mangled_index,
-        mangled_params: &mangled_params,
-        resource_names: &resource_names,
-        struct_fields: &struct_fields,
-        variant_payloads: &variant_payloads,
-        closure: &closure,
-        effect_by_name: &effect_by_name,
-    };
+    let data = OwnedEffectData::build(sem, state);
+    let index = data.index();
 
     for (src, module) in &sem.modules {
         if !crate::elaborator::liveness::is_user_authored(src) {
@@ -1712,6 +1626,132 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
         }
     }
     out
+}
+
+/// Owns the cross-module effect maps so multiple checks (effects, default
+/// purity) can borrow a single [`EffectIndex`] view over them. Assembled once
+/// from [`Semantics`] + [`AnnotateState`].
+struct OwnedEffectData {
+    fn_effects: IndexMap<SymbolKey, Vec<EffectRef>>,
+    fn_params: IndexMap<SymbolKey, Vec<TypeId>>,
+    mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>>,
+    mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    resource_names: IndexSet<(ModuleSource, String)>,
+    struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
+    effect_by_name: IndexMap<String, EffectRef>,
+}
+
+impl OwnedEffectData {
+    fn build(sem: &Semantics, state: &crate::elaborator::orchestration::AnnotateState) -> Self {
+        // Resolved effect lists, indexed two ways: by the function's
+        // declaration key (free calls resolve through `references`) and by
+        // `(module, mangled name)` (method dispatch carries a `FunctionRef`).
+        let mut fn_effects: IndexMap<SymbolKey, Vec<EffectRef>> = IndexMap::default();
+        let mut fn_params: IndexMap<SymbolKey, Vec<TypeId>> = IndexMap::default();
+        let mut mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>> =
+            IndexMap::default();
+        let mut mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
+        for (src, module_sem) in &state.module_semantics {
+            let types = &module_sem.types;
+            for (key, effects) in &types.function_effects {
+                fn_effects.insert(key.clone(), effects.clone());
+            }
+            for (key, params) in &types.fn_param_types {
+                fn_params.insert(key.clone(), params.clone());
+            }
+            for (key, names) in &types.method_names {
+                if let Some(effects) = types.function_effects.get(key) {
+                    mangled_index.insert((src.clone(), names.mangled.clone()), effects.clone());
+                }
+                if let Some(params) = types.fn_param_types.get(key) {
+                    mangled_params.insert((src.clone(), names.mangled.clone()), params.clone());
+                }
+            }
+        }
+
+        let mut resource_names: IndexSet<(ModuleSource, String)> = IndexSet::default();
+        // `(module, struct name)` → field type ids, so resource detection
+        // follows resources nested in struct fields of a signature / op type.
+        let mut struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
+        for (src, module) in &sem.modules {
+            let annotations = state.module_semantics.get(src).map(|m| &m.types);
+            for item in &module.items {
+                match item {
+                    Item::Resource(resource) => {
+                        resource_names.insert((src.clone(), resource.name.clone()));
+                    }
+                    Item::Struct(struct_decl) => {
+                        if let Some(field_types) = annotations.and_then(|ann| {
+                            ann.struct_field_types
+                                .get(&SymbolKey::new(src.clone(), struct_decl.id))
+                        }) {
+                            struct_fields.insert(
+                                (src.clone(), struct_decl.name.clone()),
+                                field_types.clone(),
+                            );
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // `(module, variant name)` → case payload type ids, so resource
+        // detection descends into variant case payloads.
+        let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> =
+            IndexMap::default();
+        for (module, variants) in state.tysys.all_variant_cases.iter() {
+            for (variant_name, info) in variants {
+                variant_payloads.insert(
+                    (module.clone(), variant_name.clone()),
+                    info.cases.iter().map(|case| case.payload).collect(),
+                );
+            }
+        }
+
+        // Effect / resource propagation closure: holding effect `E` admits the
+        // resources `E`'s operations reference (e.g. `Stdout` → `Stream`).
+        let closure = build_propagation_closure_sem(sem, state, &struct_fields, &variant_payloads);
+
+        // Name → resolved `EffectRef` for every declared effect / resource,
+        // used to resolve `#[benign(E)]` names and to canonicalise.
+        let mut effect_by_name: IndexMap<String, EffectRef> = IndexMap::default();
+        for key in closure.keys() {
+            if let EffectRef::Concrete { name, .. } = key {
+                effect_by_name
+                    .entry(name.clone())
+                    .or_insert_with(|| key.clone());
+            }
+        }
+
+        Self {
+            fn_effects,
+            fn_params,
+            mangled_index,
+            mangled_params,
+            resource_names,
+            struct_fields,
+            variant_payloads,
+            closure,
+            effect_by_name,
+        }
+    }
+
+    fn index(&self) -> EffectIndex<'_> {
+        EffectIndex {
+            fn_effects: &self.fn_effects,
+            fn_params: &self.fn_params,
+            mangled_index: &self.mangled_index,
+            mangled_params: &self.mangled_params,
+            resource_names: &self.resource_names,
+            struct_fields: &self.struct_fields,
+            variant_payloads: &self.variant_payloads,
+            closure: &self.closure,
+            effect_by_name: &self.effect_by_name,
+        }
+    }
 }
 
 /// The cross-module effect data the body walk consults, assembled once.
@@ -2040,12 +2080,11 @@ struct SemEffectWalker<'a> {
     out: &'a mut Vec<EffectError>,
 }
 
-impl SemEffectWalker<'_> {
+impl EffectIndex<'_> {
     /// Effects a method dispatch requires: the callee's declared effects plus,
     /// for a direct (non-trait) method on a `resource`, the resource effect.
     fn method_effects(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
         let mut effects = self
-            .index
             .mangled_index
             .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
             .cloned()
@@ -2057,7 +2096,7 @@ impl SemEffectWalker<'_> {
                 func_ref.module_source.clone(),
                 method_info.base_struct_name.clone(),
             );
-            if self.index.resource_names.contains(&resource_key) {
+            if self.resource_names.contains(&resource_key) {
                 let resource_effect = EffectRef::Concrete {
                     name: method_info.base_struct_name.clone(),
                     module_source: func_ref.module_source.clone(),
@@ -2068,6 +2107,20 @@ impl SemEffectWalker<'_> {
             }
         }
         effects
+    }
+
+    /// Parameter type ids for a method / static dispatch target.
+    fn method_param_types(&self, func_ref: &FunctionRef) -> Vec<TypeId> {
+        self.mangled_params
+            .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
+            .cloned()
+            .unwrap_or_default()
+    }
+}
+
+impl SemEffectWalker<'_> {
+    fn method_effects(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
+        self.index.method_effects(func_ref)
     }
 
     /// Resolve `EffectRef::Param` effects to concrete effects by matching the
@@ -2303,11 +2356,7 @@ impl AstVisitor for SemEffectWalker<'_> {
 
 impl SemEffectWalker<'_> {
     fn method_param_types(&self, func_ref: &FunctionRef) -> Vec<TypeId> {
-        self.index
-            .mangled_params
-            .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
-            .cloned()
-            .unwrap_or_default()
+        self.index.method_param_types(func_ref)
     }
 
     /// Type of an indirect call's callee. When the callee is an identifier
@@ -2336,5 +2385,337 @@ impl SemEffectWalker<'_> {
             .expression_types
             .get(&SymbolKey::new(self.module.clone(), call.callee.id()))
             .copied()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Semantics-based stores checking (Design B)
+// ---------------------------------------------------------------------------
+
+/// Stores checking over [`Semantics`] — the Design B replacement for the
+/// TIR-based [`check_stores`]. A function that lets a reference parameter
+/// escape — by returning it, storing it in a struct field, or assigning it to
+/// a global — must declare `stores[param]`. Walks the source AST, so it sees
+/// every function regardless of what reify emits and is immune to dead-code
+/// gating. Violations are returned for the caller to route.
+#[must_use]
+pub fn check_stores_semantic(sem: &Semantics) -> Vec<StoresError> {
+    let mut out = Vec::new();
+    let Some(state) = sem.state.as_ref() else {
+        return out;
+    };
+
+    for (src, module) in &sem.modules {
+        if !crate::elaborator::liveness::is_user_authored(src) {
+            continue;
+        }
+        let annotations = state.module_semantics.get(src).map(|m| &m.types);
+        for item in &module.items {
+            match item {
+                Item::Function(func) => {
+                    check_function_stores_sem(sem, src, func, annotations, &mut out);
+                }
+                Item::Impl(impl_block) => {
+                    for method in &impl_block.methods {
+                        check_function_stores_sem(sem, src, method, annotations, &mut out);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
+fn check_function_stores_sem(
+    sem: &Semantics,
+    module: &ModuleSource,
+    func: &Function,
+    annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
+    out: &mut Vec<StoresError>,
+) {
+    let Some(body) = &func.body else {
+        return;
+    };
+    // `#[ambient]` bypasses the reference discipline; test helpers are exempt.
+    if func.attrs.iter().any(|attr| attr.name == "ambient") || func.name.starts_with("__test_") {
+        return;
+    }
+    if func.params.is_empty() {
+        return;
+    }
+    let Some(annotations) = annotations else {
+        return;
+    };
+    let key = SymbolKey::new(module.clone(), func.id);
+    let Some(param_types) = annotations.fn_param_types.get(&key) else {
+        return;
+    };
+
+    // Reference parameters: only `&T` / `&mut T` parameters can be stored, so
+    // only they can produce a stores violation.
+    let type_table = &sem.types;
+    let mut ref_params: IndexSet<String> = IndexSet::default();
+    for (param, &type_id) in func.params.iter().zip(param_types.iter()) {
+        if matches!(
+            type_table.get(type_id),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        ) {
+            ref_params.insert(param.name.clone());
+        }
+    }
+    if ref_params.is_empty() {
+        return;
+    }
+
+    let stores: IndexSet<String> = func.stores.iter().cloned().collect();
+    let mut walker = StoresWalker {
+        module,
+        annotations,
+        ref_params,
+        stores,
+        out,
+    };
+    ast::walk_block(&mut walker, body);
+}
+
+/// Walks a function body flagging reference parameters that escape without a
+/// matching `stores[param]` declaration.
+struct StoresWalker<'a> {
+    module: &'a ModuleSource,
+    annotations: &'a crate::elaborator::sem::types::TypeAnnotations,
+    /// Reference (`&T` / `&mut T`) parameter names of the enclosing function.
+    ref_params: IndexSet<String>,
+    /// `stores[...]`-declared parameter names — escapes of these are allowed.
+    stores: IndexSet<String>,
+    out: &'a mut Vec<StoresError>,
+}
+
+impl StoresWalker<'_> {
+    /// If `expr` is a bare reference to a reference parameter that is *not*
+    /// declared in `stores[...]`, return its name. Only a direct identifier
+    /// counts — `&x.field` and the like do not store the parameter itself.
+    fn unstored_ref_param<'e>(&self, expr: &'e Expr) -> Option<&'e str> {
+        if let Expr::Ident(ident) = expr
+            && self.ref_params.contains(&ident.name)
+            && !self.stores.contains(&ident.name)
+        {
+            return Some(&ident.name);
+        }
+        None
+    }
+}
+
+impl AstVisitor for StoresWalker<'_> {
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        if let Stmt::Return(ret) = stmt
+            && let Some(value) = &ret.value
+            && let Some(param) = self.unstored_ref_param(value)
+        {
+            self.out.push(StoresError {
+                message: format!(
+                    "returning reference parameter '{param}' requires `stores[{param}]` declaration"
+                ),
+                span: value.span(),
+            });
+        }
+        ast::walk_stmt(self, stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &Expr) {
+        match expr {
+            Expr::StructLiteral(lit) => {
+                for field in &lit.fields {
+                    if let Some(param) = self.unstored_ref_param(&field.value) {
+                        self.out.push(StoresError {
+                            message: format!(
+                                "storing reference parameter '{param}' in struct field requires `stores[{param}]` declaration"
+                            ),
+                            span: field.value.span(),
+                        });
+                    }
+                }
+            }
+            Expr::Assign(assign) => {
+                // A reference parameter assigned to a module global escapes; the
+                // assign place recorded by the elaborator (the same fact reify
+                // reads to build `GlobalVarSet`) identifies the global by name.
+                if let Some(param) = self.unstored_ref_param(&assign.value)
+                    && let Some(place) = self
+                        .annotations
+                        .assign_places
+                        .get(&SymbolKey::new(self.module.clone(), assign.target.id()))
+                    && let crate::elaborator::sem::types::AssignPlace::Global { name, .. } = place
+                {
+                    self.out.push(StoresError {
+                        message: format!(
+                            "storing reference parameter '{param}' in global '{name}' requires `stores[{param}]` declaration"
+                        ),
+                        span: assign.value.span(),
+                    });
+                }
+            }
+            _ => {}
+        }
+        ast::walk_expr(self, expr);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Semantics-based default-value purity checking (Design B)
+// ---------------------------------------------------------------------------
+
+/// Default-value purity over [`Semantics`] — the Design B replacement for the
+/// TIR-based [`check_default_purity`]. Every `param: T = expr` and
+/// `field: T = expr` default must be pure: it may not call any function that
+/// declares effects, nor install an effect handler. Walks the source default
+/// expressions directly. Violations are returned for the caller to route.
+#[must_use]
+pub fn check_default_purity_semantic(sem: &Semantics) -> Vec<DefaultPurityError> {
+    let mut out = Vec::new();
+    let Some(state) = sem.state.as_ref() else {
+        return out;
+    };
+    let data = OwnedEffectData::build(sem, state);
+    let index = data.index();
+
+    for (src, module) in &sem.modules {
+        if !crate::elaborator::liveness::is_user_authored(src) {
+            continue;
+        }
+        let annotations = state.module_semantics.get(src).map(|m| &m.types);
+        for item in &module.items {
+            match item {
+                Item::Function(func) => {
+                    for param in &func.params {
+                        if let Some(default) = &param.default {
+                            purity_walk_default(sem, src, annotations, &index, default, &mut out);
+                        }
+                    }
+                }
+                Item::Impl(impl_block) => {
+                    for method in &impl_block.methods {
+                        for param in &method.params {
+                            if let Some(default) = &param.default {
+                                purity_walk_default(
+                                    sem, src, annotations, &index, default, &mut out,
+                                );
+                            }
+                        }
+                    }
+                }
+                Item::Struct(struct_decl) => {
+                    for field in &struct_decl.fields {
+                        if let Some(default) = &field.default {
+                            purity_walk_default(sem, src, annotations, &index, default, &mut out);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
+fn purity_walk_default(
+    sem: &Semantics,
+    module: &ModuleSource,
+    annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
+    index: &EffectIndex,
+    default: &Expr,
+    out: &mut Vec<DefaultPurityError>,
+) {
+    let mut walker = PurityWalker {
+        module,
+        sem,
+        annotations,
+        index,
+        out,
+    };
+    walker.visit_expr(default);
+}
+
+/// Walks a default expression flagging any call to an effectful function (or an
+/// effect-handler install), which would make the default impure.
+struct PurityWalker<'a> {
+    module: &'a ModuleSource,
+    sem: &'a Semantics,
+    annotations: Option<&'a crate::elaborator::sem::types::TypeAnnotations>,
+    index: &'a EffectIndex<'a>,
+    out: &'a mut Vec<DefaultPurityError>,
+}
+
+impl PurityWalker<'_> {
+    fn flag_if_effectful(&mut self, effects: &[EffectRef], callee: &str, span: Span) {
+        if !effects.is_empty() {
+            self.out.push(DefaultPurityError {
+                callee: callee.to_string(),
+                span,
+            });
+        }
+    }
+}
+
+impl AstVisitor for PurityWalker<'_> {
+    fn visit_expr(&mut self, expr: &Expr) {
+        match expr {
+            Expr::Call(call) => {
+                let free = if let Expr::Ident(ident) = &call.callee {
+                    self.sem
+                        .references
+                        .get(&SymbolKey::new(self.module.clone(), ident.id))
+                        .and_then(|def| self.index.fn_effects.get(def))
+                        .map(|effects| (effects.clone(), ident.name.clone()))
+                } else {
+                    None
+                };
+                if let Some((effects, name)) = free {
+                    self.flag_if_effectful(&effects, &name, call.span);
+                } else if let Some(func_ref) = self
+                    .annotations
+                    .and_then(|ann| {
+                        ann.static_method_dispatch
+                            .get(&SymbolKey::new(self.module.clone(), call.id))
+                    })
+                    .map(|dispatch| dispatch.function_ref.clone())
+                {
+                    let effects = self.index.method_effects(&func_ref);
+                    self.flag_if_effectful(&effects, callee_name(&call.callee), call.span);
+                }
+            }
+            Expr::MethodCall(method_call) => {
+                if let Some(dispatch) = self
+                    .sem
+                    .method_dispatch
+                    .get(&SymbolKey::new(self.module.clone(), method_call.id))
+                {
+                    let effects = self.index.method_effects(&dispatch.function_ref);
+                    self.flag_if_effectful(&effects, &method_call.method, method_call.span);
+                }
+            }
+            Expr::StaticMethodCall(static_call) => {
+                if let Some(func_ref) = self
+                    .annotations
+                    .and_then(|ann| {
+                        ann.static_method_dispatch
+                            .get(&SymbolKey::new(self.module.clone(), static_call.id))
+                    })
+                    .map(|dispatch| dispatch.function_ref.clone())
+                {
+                    let effects = self.index.method_effects(&func_ref);
+                    self.flag_if_effectful(&effects, &static_call.method, static_call.span);
+                }
+            }
+            Expr::WithHandler(with_handler) => {
+                // Installing a handler touches the dispatch global — impure.
+                self.out.push(DefaultPurityError {
+                    callee: "<with-handler>".to_string(),
+                    span: with_handler.span,
+                });
+            }
+            _ => {}
+        }
+        ast::walk_expr(self, expr);
     }
 }
