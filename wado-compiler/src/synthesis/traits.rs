@@ -741,8 +741,8 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
 ///   `monomorph_info.is_some()`).
 ///
 /// Effect purity of the default expressions is already enforced by
-/// `check_default_purity` before synthesis runs; if it had failed the pipeline
-/// would have bailed, so every `default_expr` reaching here is pure.
+/// `check_default_purity_semantic` before synthesis runs; if it had failed the
+/// pipeline would have bailed, so every `default_expr` reaching here is pure.
 fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>) {
     if module.structs.is_empty() {
         return;

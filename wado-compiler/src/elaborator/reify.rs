@@ -428,7 +428,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Re-intern a resolved `fn(...) with E` type carrying its effects: the
     /// shared static resolver has no effect-resolution context and leaves
     /// `effects` empty, so a `fn`-typed parameter loses its `with` clause.
-    /// `check_effects` then can't see that, e.g., `f: fn() with Stdout`
+    /// the effect check then can't see that, e.g., `f: fn() with Stdout`
     /// requires `Stdout` at an indirect call site. Resolves effects through
     /// the same [`Self::reify_effects`] used for declared effects (so the
     /// `EffectRef`s stay canonically consistent across the module). Handles a
