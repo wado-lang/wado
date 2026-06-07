@@ -172,8 +172,8 @@ commits); the compressed record:
 - [x] `nir_visitor` (the tree visitor) and `NirFunction::body_block` are
       deleted — no consumers remain.
 
-Remaining — the deletions (both transform-core ports are done; production is
-now free of the `Body ↔ tree` bridge):
+Phase 5 is complete: both transform-core ports landed, the test builders moved
+to the arena, and the tree representation is gone. NIR is now arena-only.
 
 - [x] D2 — `field_scalarize` per-loop machinery → arena. `scalarize_loop` /
       `process_loop_body` / the `walk_block` / `walk_stmt` / `walk_expr` dataflow
@@ -189,17 +189,21 @@ now free of the `Body ↔ tree` bridge):
       `reduce_in_place` + `reduce_to_lattice`), removing the `Body::to_block`
       materialization from the production CTFE path. The tree interpreter cluster
       now survives only to back `tests/niri.rs`.
-- [ ] Delete the `Body ↔ tree` bridge (`Lower` / `from_block` / `to_block` /
-      `to_tree_*` / `lower_*`, `set_body_block`) once the unit-test builders that
-      still construct trees (`mod_ref`, `elide_box_local`, `tmpl_hoist`,
-      `nir_engine`, `tests/niri`) are migrated to arena builders, and the
+- [x] The unit-test builders that still constructed trees (`mod_ref`,
+      `elide_box_local`, `tmpl_hoist`, `nir_engine`, `tests/niri`) are migrated to
+      arena builders — `tests/niri` via `Rc`-thunk builders (`Build` /
+      `BlockBuild` / `PatBuild` / `ArmBuild` / `StmtBuild`) over a `Body`. The
       now-test-only niri tree interpreter cluster (`reduce` / `reduce_to_lattice`
       / `reduce_in_place` / `reduce_local` / `try_call_fold` / `expr_to_lattice`
-      / `try_fold` / `single_tail_expression` / …) is deleted with them.
-- [ ] Delete the tree enums (`NirExpr` / `NirExprKind` / `NirStmt` /
-      `NirStmtKind` / `NirBlock` / `NirPattern` / `NirMatchArm` /
-      `NirStructField` / `NirStructPatternField` / `CallArg`) and `nir_visitor`
-      — tree retired.
+      / `try_fold` / `single_tail_expression` / …) and `set_body_block` are
+      deleted.
+- [x] The `Body ↔ tree` bridge is deleted (`Lower` + the `from_block` /
+      `to_block` / `to_tree_*` / `lower_*` Body methods).
+- [x] The tree enums (`NirExpr` / `NirExprKind` / `NirStmt` / `NirStmtKind` /
+      `NirBlock` / `NirPattern` / `NirMatchArm` / `NirStructField` /
+      `NirStructPatternField` / `CallArg`) and `nir_visitor` are deleted. NIR is
+      now arena-only; `nir.rs` keeps the function/global metadata and the shared
+      leaf enums (`NirBinaryOp` / `NirUnaryOp` / `NirLiteralPattern`).
 
 Handoff notes:
 
