@@ -954,8 +954,8 @@ impl SemEffectWalker<'_> {
 
 impl AstVisitor for SemEffectWalker<'_> {
     fn visit_stmt(&mut self, stmt: &Stmt) {
-        // `for v of iterable { … }` desugars to synthetic `.into_iter()` /
-        // `.next()` calls that carry `method_id == None`, so they leave no
+        // `for let v of iterable { … }` desugars to synthetic `.into_iter()` /
+        // `.next()` calls that have no source call id, so they record no
         // `method_dispatch` fact for `visit_expr` to consult. Check their
         // declared effects here from the recorded `for_of_iterator` fact.
         if let Stmt::ForOf(for_of) = stmt

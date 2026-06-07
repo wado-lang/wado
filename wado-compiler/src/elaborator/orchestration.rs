@@ -1430,14 +1430,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         modules,
                         logger,
                         Rc::clone(&state.interner),
-                        // Gate free-function / global emission on the live set.
-                        // The semantic diagnostics (effect / stores / purity)
-                        // are produced from `Semantics`, not the emitted TIR
-                        // (Design B), so dropping a dead item no longer
-                        // suppresses any diagnostic. The liveness graph traces
-                        // bodies, global initializers, parameter defaults, and
-                        // struct field defaults so every reify-emitted call site
-                        // keeps its callee live.
+                        // Gate dead free-function emission on the live set
+                        // (globals are emitted unconditionally; see
+                        // `reify_module`). The semantic diagnostics (effect /
+                        // stores / purity) are produced from `Semantics`, not
+                        // the emitted TIR (Design B), so dropping a dead
+                        // function no longer suppresses any diagnostic. The
+                        // liveness graph traces bodies, global initializers,
+                        // parameter defaults, and struct field defaults so every
+                        // reify-emitted call site keeps its callee live.
                         Some(&state.liveness.live_items),
                     );
                     if let Ok(reified) = reify.reify_module(module, module_source.clone()) {
