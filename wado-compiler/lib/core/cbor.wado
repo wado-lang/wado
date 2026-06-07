@@ -91,22 +91,12 @@ fn push_be(buf: &mut List<u8>, value: u64, nbytes: i32) {
 /// Append the UTF-8 bytes of `s` (a `String` is already valid UTF-8, so the
 /// text string is emitted verbatim — RFC 8949 §3.1).
 fn push_text_bytes(buf: &mut List<u8>, s: &String) {
-    let n = s.len();
-    let mut i = 0;
-    while i < n {
-        buf.push(s.get_byte_unchecked(i));
-        i += 1;
-    }
+    buf.extend_from_slice(s.as_bytes());
 }
 
 /// Append a byte string's contents.
 fn push_byte_slice(buf: &mut List<u8>, v: ByteSlice) {
-    let n = v.len();
-    let mut i = 0;
-    while i < n {
-        buf.push(v.get_unchecked(i));
-        i += 1;
-    }
+    buf.extend_from_slice(v as ArraySlice<u8>);
 }
 
 /// Emit a non-negative `u128` magnitude as a CBOR bignum (RFC 8949 §3.4.3):
@@ -428,11 +418,7 @@ fn write_canonical_f32(buf: &mut List<u8>, v: f32) {
 }
 
 fn append_all(buf: &mut List<u8>, src: &ByteList) {
-    let mut i = 0;
-    while i < src.len() {
-        buf.push(src[i]);
-        i += 1;
-    }
+    buf.extend_from_slice(src.as_slice());
 }
 
 /// Bytewise lexicographic comparison of two encoded keys (RFC 8949 §4.2.1
@@ -942,11 +928,7 @@ impl CborDeserializer {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         let n = len as i32;
-        let mut i = 0;
-        while i < n {
-            out.push(self.input.get_unchecked(self.pos + i));
-            i += 1;
-        }
+        out.extend_from_slice(self.input.slice(self.pos, self.pos + n) as ArraySlice<u8>);
         self.pos += n;
         return Result::Ok(());
     }
