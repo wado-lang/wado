@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780827549812,
+  "lastUpdate": 1780833904506,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31165,6 +31165,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/69537e9be2ecb660dd794274805f9d5a9053af44"
         },
         "date": 1780827549262,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8792,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15896,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437254,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "77a93b5e4dccc67cf3b016e9040c82892ebe1c86",
+          "message": "Merge pull request #1326 from wado-lang/claude/wado-unused-diagnostics-x0CeD\n\nUnused diagnostics: Design-B semantic checks, reify gating, and 3-way liveness",
+          "timestamp": "2026-06-07T20:56:01+09:00",
+          "tree_id": "138ef34935055381a73cda9751ff31919e5a2d40",
+          "url": "https://github.com/wado-lang/wado/commit/77a93b5e4dccc67cf3b016e9040c82892ebe1c86"
+        },
+        "date": 1780833904042,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
