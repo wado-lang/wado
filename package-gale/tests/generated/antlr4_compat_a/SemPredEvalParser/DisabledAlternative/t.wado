@@ -1144,50 +1144,44 @@ fn _parse_anything(p: &mut Parser) -> Result<AnythingNode, ParseError> {
     return r;
 }
 
-pub fn parse_cpp_compilation_unit(input: &String) -> Result<CppCompilationUnitNode, ParseError> {
+fn _gale_new_parser(input: &String) -> Parser {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    return Parser::new(tokens, chars);
+}
+
+fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
+    if let Some(_d) = &parser.pending {
+        if _d.span.start >= e.span.start {
+            return *_d;
+        }
+    }
+    return e;
+}
+
+pub fn parse_cpp_compilation_unit(input: &String) -> Result<CppCompilationUnitNode, ParseError> {
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_cpp_compilation_unit(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<CppCompilationUnitNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<CppCompilationUnitNode, ParseError>::Err(_e);
+        return Result::<CppCompilationUnitNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_content(input: &String) -> Result<ContentNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_content(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ContentNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ContentNode, ParseError>::Err(_e);
+        return Result::<ContentNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_anything(input: &String) -> Result<AnythingNode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_anything(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<AnythingNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<AnythingNode, ParseError>::Err(_e);
+        return Result::<AnythingNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }

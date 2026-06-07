@@ -1416,34 +1416,35 @@ fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> Result<ENode, ParseError> {
     return r;
 }
 
-pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
+fn _gale_new_parser(input: &String) -> Parser {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    return Parser::new(tokens, chars);
+}
+
+fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
+    if let Some(_d) = &parser.pending {
+        if _d.span.start >= e.span.start {
+            return *_d;
+        }
+    }
+    return e;
+}
+
+pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_s(&mut parser);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<SNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<SNode, ParseError>::Err(_e);
+        return Result::<SNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
 
 pub fn parse_e(input: &String) -> Result<ENode, ParseError> {
-    let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_e(&mut parser, 0);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ENode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ENode, ParseError>::Err(_e);
+        return Result::<ENode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }

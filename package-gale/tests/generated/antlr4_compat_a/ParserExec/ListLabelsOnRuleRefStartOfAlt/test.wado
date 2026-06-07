@@ -1360,18 +1360,26 @@ fn _parse_expression(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, m
     return r;
 }
 
-pub fn parse_expression(input: &String) -> Result<ExpressionNode, ParseError> {
+fn _gale_new_parser(input: &String) -> Parser {
     let tokens = tokenize(input);
     let chars: List<char> = input.chars().collect();
-    let mut parser = Parser::new(tokens, chars);
+    return Parser::new(tokens, chars);
+}
+
+fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
+    if let Some(_d) = &parser.pending {
+        if _d.span.start >= e.span.start {
+            return *_d;
+        }
+    }
+    return e;
+}
+
+pub fn parse_expression(input: &String) -> Result<ExpressionNode, ParseError> {
+    let mut parser = _gale_new_parser(input);
     let _result = _parse_expression(&mut parser, &EMPTY_FOLLOW, 0);
     if let Err(_e) = _result {
-        if let Some(_d) = parser.pending {
-            if _d.span.start >= _e.span.start {
-                return Result::<ExpressionNode, ParseError>::Err(_d);
-            }
-        }
-        return Result::<ExpressionNode, ParseError>::Err(_e);
+        return Result::<ExpressionNode, ParseError>::Err(_gale_pick_error(&parser, _e));
     }
     return _result;
 }
