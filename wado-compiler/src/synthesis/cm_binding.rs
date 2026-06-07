@@ -31,7 +31,7 @@ use crate::tir::{ResolvedType, TirFunction, TirModule, TypeTable};
 pub use export_adapter::export_binding_func_name;
 use export_adapter::{
     synthesize_async_export_binding, synthesize_general_export_binding,
-    synthesize_result_export_binding, synthesize_void_export_binding, synthesize_void_stub_adapter,
+    synthesize_result_export_binding, synthesize_void_export_binding,
 };
 pub use import_adapter::binding_func_name;
 use import_adapter::synthesize_adapter;
@@ -276,8 +276,22 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                     ));
                 }
 
+                // A world export with no function at all is a missing entry
+                // point. The test world handles `test` blocks separately and
+                // never reaches this loop, so in CLI / HTTP / other worlds the
+                // entry must be defined — never silently stubbed.
+                if found_exported.is_none() {
+                    return Err(format!(
+                        "function `{}` is required as a world entry point but is not defined. \
+                         Define it with: `export fn {}(...)`",
+                        export.name, export.name
+                    ));
+                }
+
+                let user_func_rc =
+                    found_exported.expect("required export presence verified above");
                 let binding_name = export_binding_func_name(&export.name);
-                let adapter = if let Some(user_func_rc) = found_exported {
+                let adapter = {
                     // Validate parameter count matches world declaration
                     {
                         let user_func = user_func_rc.borrow();
@@ -451,9 +465,6 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             }
                         }
                     }
-                } else {
-                    // No user function: stub that just calls task-return(0)
-                    synthesize_void_stub_adapter(&export.name)
                 };
                 export_adapters.push((export.name.clone(), binding_name, adapter));
             }
