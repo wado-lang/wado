@@ -1088,10 +1088,8 @@ fn generate_struct_deserialize(
         .iter()
         .map(|(_, _, type_id, _)| alloc_local(&mut next_local, &mut locals, *type_id))
         .collect();
-    // Per-field "seen" flags for required (non-default) fields. Each required
-    // field gets its own bool local rather than a shared u32 bitmask, so structs
-    // with more than 32 fields are supported (a u32 bitmask overflowed at
-    // `1 << field_index` once a struct had 33+ fields).
+    // One `seen` bool local per required (non-default) field; default fields are
+    // not tracked. A flag per field supports structs of any size.
     let seen_locals: Vec<Option<u32>> = struct_def
         .fields
         .iter()
@@ -1323,8 +1321,7 @@ fn generate_struct_deserialize(
 
     then_stmts.push(loop_stmt(block(loop_stmts.clone())));
 
-    // Require every non-default field: a required field that was never seen
-    // (its flag is still false) means the input was missing it.
+    // A required field whose flag is still false was absent from the input.
     for seen in seen_locals.iter().flatten() {
         let not_seen = TirExpr::new(
             TirExprKind::Unary {

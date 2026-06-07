@@ -1,7 +1,5 @@
-// Regression: structs with more than 32 fields.
-// The synthesized Deserialize used a single u32 bitmask to track seen fields,
-// so `1u32 << field_index` overflowed (and panicked) at field index 32. Each
-// required field now tracks its own seen flag, so any field count works.
+// Deserialize for a struct with more than 32 fields, covering a required field
+// past index 31, a `#[serde(default)]` field, and a missing required field.
 use { Serialize, Deserialize } from "core:serde";
 use { to_string, from_string } from "core:json";
 
