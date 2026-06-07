@@ -30,7 +30,6 @@ pub mod nir_arena;
 pub mod nir_engine;
 pub mod nir_package;
 pub mod nir_unparse;
-pub mod nir_visitor;
 pub mod optimize;
 pub mod package;
 pub mod parser;

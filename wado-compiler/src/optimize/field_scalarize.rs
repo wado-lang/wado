@@ -81,10 +81,12 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{
-    FunctionRef, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirPattern, NirStmt,
-    NirStmtKind, NirUnaryOp,
+    FunctionRef, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirStmt, NirStmtKind,
+    NirUnaryOp,
 };
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
+use crate::nir_arena::{
+    BlockId, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind,
+};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -894,9 +896,14 @@ fn scalarize_loop_at(
     cache: &FieldUsageCache,
     analysis: &HfsAnalysis<'_>,
 ) -> (Vec<StmtId>, Vec<StmtId>) {
+    // Collect the locals introduced inside the loop on the arena before
+    // materializing, so the (otherwise tree-shaped) scalarize machinery does
+    // not need a tree walker for it.
+    let inside_loop_locals = collect_locals_introduced_in_block(body, lb);
     let mut tree_lb = body.to_tree_block(lb);
     let result = scalarize_loop(
         &mut tree_lb,
+        &inside_loop_locals,
         local_count,
         locals,
         type_table,
@@ -942,6 +949,7 @@ struct ScalarizeCandidate {
 
 fn scalarize_loop(
     loop_body: &mut NirBlock,
+    inside_loop_locals: &IndexSet<u32>,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
@@ -952,13 +960,13 @@ fn scalarize_loop(
     let mut access_counts: IndexMap<(u32, u32), FieldAccessInfo> = IndexMap::default();
     count_field_accesses_in_block(loop_body, &mut access_counts, type_table);
 
-    // Step 1b: Collect locals introduced inside the loop body. These cannot
-    // be safely scalarized at this loop level — their owning storage (the
-    // GC struct ref) is unbound at the loop's pre-header where the
-    // hoisted `let __hfs_field = local.field;` would run, producing a
-    // null-reference trap. Locals declared in the parent scope (i.e., not
-    // listed here) are fine to scalarize.
-    let inside_loop_locals = collect_locals_introduced_in_block(loop_body);
+    // Step 1b: `inside_loop_locals` lists locals introduced inside the loop
+    // body (computed on the arena by the caller). These cannot be safely
+    // scalarized at this loop level — their owning storage (the GC struct ref)
+    // is unbound at the loop's pre-header where the hoisted
+    // `let __hfs_field = local.field;` would run, producing a null-reference
+    // trap. Locals declared in the parent scope (i.e., not listed here) are
+    // fine to scalarize.
 
     // Step 2: Select candidates - fields accessed frequently enough,
     // where the field is modified only by direct assignment (not by the whole local being reassigned)
@@ -1418,80 +1426,74 @@ fn visit_expr_for_alias(
 /// locals whose owning storage is unbound at the loop's pre-header — those
 /// locals must not be scalarized at this loop level, otherwise the hoisted
 /// `let __hfs_field = local.field;` null-derefs at runtime.
-fn collect_locals_introduced_in_block(block: &NirBlock) -> IndexSet<u32> {
-    struct Collector {
-        out: IndexSet<u32>,
-    }
+fn collect_locals_introduced_in_block(body: &Body, block: BlockId) -> IndexSet<u32> {
+    let mut out = IndexSet::default();
+    collect_locals_introduced_node(body, NodeRef::Block(block), &mut out);
+    out
+}
 
-    impl Collector {
-        fn visit_pattern(&mut self, pattern: &NirPattern) {
-            match pattern {
-                NirPattern::Wildcard
-                | NirPattern::Literal(_)
-                | NirPattern::Enum { .. }
-                | NirPattern::ConstantValue { .. }
-                | NirPattern::Range { .. } => {}
-                NirPattern::Binding { local_index, .. } => {
-                    self.out.insert(*local_index);
+fn collect_locals_introduced_node(body: &Body, node: NodeRef, out: &mut IndexSet<u32>) {
+    match node {
+        NodeRef::Stmt(s) => match &body.stmts[s].kind {
+            StmtKind::Let { local_index, .. } => {
+                out.insert(*local_index);
+            }
+            // Skip nested loops: their locals are processed by their own
+            // scalarize_loop pass and are not visible at *this* loop's
+            // pre-header anyway.
+            StmtKind::Loop { .. } => return,
+            _ => {}
+        },
+        NodeRef::Expr(e) => match &body.exprs[e].kind {
+            // Closure bodies live in a separate local-index namespace from the
+            // enclosing function; recursing in would mistake closure-local
+            // indices for outer-function locals.
+            ExprKind::ClosureToCanonical { .. } => return,
+            // Match-arm pattern bindings introduce locals. Other patterns
+            // (e.g. `LetDestructure`) are intentionally not collected, matching
+            // the previous visitor.
+            ExprKind::Match { arms, .. } => {
+                for pid in arms.iter().map(|a| a.pattern).collect::<Vec<_>>() {
+                    collect_pattern_bindings(body, pid, out);
                 }
-                NirPattern::Tuple(patterns, _) | NirPattern::Or(patterns) => {
-                    for p in patterns {
-                        self.visit_pattern(p);
-                    }
-                }
-                NirPattern::Variant { bindings, .. } => {
-                    for p in bindings {
-                        self.visit_pattern(p);
-                    }
-                }
-                NirPattern::Struct { fields, .. } => {
-                    for f in fields {
-                        self.visit_pattern(&f.pattern);
-                    }
-                }
+            }
+            _ => {}
+        },
+        NodeRef::Block(_) | NodeRef::Pat(_) => {}
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    for c in kids {
+        collect_locals_introduced_node(body, c, out);
+    }
+}
+
+fn collect_pattern_bindings(body: &Body, pid: PatId, out: &mut IndexSet<u32>) {
+    match &body.pats[pid].kind {
+        PatKind::Binding { local_index, .. } => {
+            out.insert(*local_index);
+        }
+        PatKind::Tuple(ps, _) | PatKind::Or(ps) => {
+            for p in ps.clone() {
+                collect_pattern_bindings(body, p, out);
             }
         }
-    }
-
-    impl crate::nir_visitor::NirRefVisitor for Collector {
-        fn visit_stmt(&mut self, stmt: &NirStmt) {
-            match &stmt.kind {
-                NirStmtKind::Let { local_index, .. } => {
-                    self.out.insert(*local_index);
-                }
-                NirStmtKind::Loop { .. } => {
-                    // Skip nested loops: their locals are processed by their
-                    // own scalarize_loop pass and are not visible at *this*
-                    // loop's pre-header anyway.
-                    return;
-                }
-                _ => {}
+        PatKind::Variant { bindings, .. } => {
+            for p in bindings.clone() {
+                collect_pattern_bindings(body, p, out);
             }
-            self.walk_stmt(stmt);
         }
-
-        fn visit_expr(&mut self, expr: &NirExpr) {
-            // Closure bodies live in a separate local-index namespace from
-            // the enclosing function. Recursing into them would mistake
-            // closure-local indices for outer-function locals and over-
-            // exclude unrelated outer locals from scalarization.
-            if matches!(expr.kind, NirExprKind::ClosureToCanonical { .. }) {
-                return;
+        PatKind::Struct { fields, .. } => {
+            for p in fields.iter().map(|f| f.pattern).collect::<Vec<_>>() {
+                collect_pattern_bindings(body, p, out);
             }
-            if let NirExprKind::Match { arms, .. } = &expr.kind {
-                for arm in arms {
-                    self.visit_pattern(&arm.pattern);
-                }
-            }
-            self.walk_expr(expr);
         }
+        PatKind::Wildcard
+        | PatKind::Literal(_)
+        | PatKind::Enum { .. }
+        | PatKind::ConstantValue { .. }
+        | PatKind::Range { .. } => {}
     }
-
-    let mut c = Collector {
-        out: IndexSet::default(),
-    };
-    crate::nir_visitor::NirRefVisitor::visit_block(&mut c, block);
-    c.out
 }
 
 fn count_field_accesses_in_stmt(
