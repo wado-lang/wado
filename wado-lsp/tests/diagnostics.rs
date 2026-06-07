@@ -174,3 +174,54 @@ export fn run() with Stdout {
         );
     });
 }
+
+/// Stores violations are also produced from `Semantics`, so they surface in the
+/// editor (the LSP runs `check_semantics`, which covers all three Design-B
+/// checks — not just effects).
+#[test]
+fn stores_violation_is_reported() {
+    futures::executor::block_on(async {
+        let source = r#"
+struct Data {
+    value: i32,
+}
+
+fn bad_return(data: &Data) -> &Data {
+    return data;
+}
+
+export fn run() {}
+"#;
+        let diags = diagnostics_for("/work/stores.wado", source).await;
+        assert!(
+            diags.iter().any(|d| d.message.contains("stores[data]")),
+            "expected a stores diagnostic, got {diags:#?}"
+        );
+    });
+}
+
+/// Default-value purity violations likewise surface in the editor.
+#[test]
+fn purity_violation_is_reported() {
+    futures::executor::block_on(async {
+        let source = r#"
+use { println, Stdout } from "core:cli";
+
+fn noisy() -> i32 with Stdout {
+    println("x");
+    return 1;
+}
+
+fn greet(value: i32 = noisy()) -> i32 {
+    return value;
+}
+
+export fn run() {}
+"#;
+        let diags = diagnostics_for("/work/purity.wado", source).await;
+        assert!(
+            diags.iter().any(|d| d.message.contains("must be pure")),
+            "expected a default-purity diagnostic, got {diags:#?}"
+        );
+    });
+}

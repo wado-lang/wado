@@ -187,11 +187,19 @@ impl Engine {
         // InvocationIndex through without the LSP having to know the
         // loader's source-based entry point.
         let sem = build_semantics(&doc.text, &filename, &collecting_host).await;
-        // Effect diagnostics are produced from `Semantics` (the LSP builds no
-        // TIR, so the batch-only TIR effect check never runs here). Appending
-        // them to the collected set surfaces effect errors in the editor.
+        // The Design-B semantic diagnostics (effect / stores / default-purity)
+        // are produced from `Semantics`; the LSP builds no TIR, so this is the
+        // only place they surface in the editor. `check_semantics` builds the
+        // shared effect index once and runs all three.
         let mut diagnostics = collecting_host.take_diagnostics();
-        for error in wado_compiler::check_effects_semantic(&sem) {
+        let semantic = wado_compiler::check_semantics(&sem);
+        for error in semantic.effects {
+            diagnostics.push(error.into());
+        }
+        for error in semantic.stores {
+            diagnostics.push(error.into());
+        }
+        for error in semantic.purity {
             diagnostics.push(error.into());
         }
         let snapshot = Rc::new(Snapshot { sem, diagnostics });

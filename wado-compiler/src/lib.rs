@@ -76,8 +76,8 @@ pub use semantics::{
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
 pub use effect_check::{
-    DefaultPurityError, EffectError, StoresError, check_default_purity_semantic,
-    check_effects_semantic, check_stores_semantic,
+    DefaultPurityError, EffectError, SemanticDiagnostics, StoresError,
+    check_default_purity_semantic, check_effects_semantic, check_semantics, check_stores_semantic,
 };
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
@@ -474,17 +474,15 @@ fn compile_after_load<H: CompilerHost>(
     // emits and share their logic with the LSP.
     {
         let _span = logger.span("effect-check");
-        let mut had_error = false;
-        for error in effect_check::check_effects_semantic(&sem) {
-            had_error = true;
+        let diags = effect_check::check_semantics(&sem);
+        let had_error = !diags.is_empty();
+        for error in diags.effects {
             let _ = logger.error(error);
         }
-        for error in effect_check::check_stores_semantic(&sem) {
-            had_error = true;
+        for error in diags.stores {
             let _ = logger.error(error);
         }
-        for error in effect_check::check_default_purity_semantic(&sem) {
-            had_error = true;
+        for error in diags.purity {
             let _ = logger.error(error);
         }
         if had_error {

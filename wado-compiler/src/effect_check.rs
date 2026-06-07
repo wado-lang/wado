@@ -275,10 +275,47 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
     let Some(state) = sem.state.as_ref() else {
         return out;
     };
+    let data = OwnedEffectData::build(sem, state);
+    run_effect_checks(sem, &data.index(), &mut out);
+    out
+}
 
+/// All three Design-B semantic diagnostics, computed in one pass that builds the
+/// shared [`OwnedEffectData`] once. Used by the batch driver and the LSP so
+/// effect / stores / purity stay in lockstep across both.
+#[must_use]
+pub fn check_semantics(sem: &Semantics) -> SemanticDiagnostics {
+    let mut diags = SemanticDiagnostics::default();
+    let Some(state) = sem.state.as_ref() else {
+        return diags;
+    };
     let data = OwnedEffectData::build(sem, state);
     let index = data.index();
+    run_effect_checks(sem, &index, &mut diags.effects);
+    run_purity_checks(sem, &index, &mut diags.purity);
+    diags.stores = check_stores_semantic(sem);
+    diags
+}
 
+/// Bundle of the Design-B semantic diagnostics returned by [`check_semantics`].
+#[derive(Default)]
+pub struct SemanticDiagnostics {
+    pub effects: Vec<EffectError>,
+    pub stores: Vec<StoresError>,
+    pub purity: Vec<DefaultPurityError>,
+}
+
+impl SemanticDiagnostics {
+    /// Whether any check produced a violation.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.effects.is_empty() && self.stores.is_empty() && self.purity.is_empty()
+    }
+}
+
+/// Walk every user-authored function / method / trait method, appending effect
+/// violations. Shared by [`check_effects_semantic`] and [`check_semantics`].
+fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectError>) {
     for (src, module) in &sem.modules {
         if !crate::elaborator::liveness::is_user_authored(src) {
             continue;
@@ -286,23 +323,22 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
         for item in &module.items {
             match item {
                 Item::Function(func) => {
-                    check_function_effects_sem(sem, src, func, &index, &mut out);
+                    check_function_effects_sem(sem, src, func, index, out);
                 }
                 Item::Impl(impl_block) => {
                     for method in &impl_block.methods {
-                        check_function_effects_sem(sem, src, method, &index, &mut out);
+                        check_function_effects_sem(sem, src, method, index, out);
                     }
                 }
                 Item::Trait(trait_decl) => {
                     for method in &trait_decl.methods {
-                        check_function_effects_sem(sem, src, method, &index, &mut out);
+                        check_function_effects_sem(sem, src, method, index, out);
                     }
                 }
                 _ => {}
             }
         }
     }
-    out
 }
 
 /// Owns the cross-module effect maps so multiple checks (effects, default
@@ -917,6 +953,29 @@ impl SemEffectWalker<'_> {
 }
 
 impl AstVisitor for SemEffectWalker<'_> {
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        // `for v of iterable { … }` desugars to synthetic `.into_iter()` /
+        // `.next()` calls that carry `method_id == None`, so they leave no
+        // `method_dispatch` fact for `visit_expr` to consult. Check their
+        // declared effects here from the recorded `for_of_iterator` fact.
+        if let Stmt::ForOf(for_of) = stmt
+            && let Some(info) = self.annotations.and_then(|ann| {
+                ann.for_of_iterator
+                    .get(&SymbolKey::new(self.module.clone(), for_of.id))
+            })
+        {
+            for func_ref in [&info.into_iter, &info.next] {
+                let effects = self.index.method_effects(func_ref);
+                let callee = func_ref
+                    .method_info
+                    .as_ref()
+                    .map_or(func_ref.name.as_str(), |m| m.method_name.as_str());
+                self.report_missing(&effects, callee, for_of.span);
+            }
+        }
+        ast::walk_stmt(self, stmt);
+    }
+
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Call(call) => {
@@ -1253,7 +1312,27 @@ pub fn check_default_purity_semantic(sem: &Semantics) -> Vec<DefaultPurityError>
         return out;
     };
     let data = OwnedEffectData::build(sem, state);
-    let index = data.index();
+    run_purity_checks(sem, &data.index(), &mut out);
+    out
+}
+
+/// Walk every user-authored parameter / field default, appending impurity
+/// violations. Shared by [`check_default_purity_semantic`] and
+/// [`check_semantics`].
+fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<DefaultPurityError>) {
+    let Some(state) = sem.state.as_ref() else {
+        return;
+    };
+    let walk = |src: &ModuleSource,
+                annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
+                params: &[crate::ast::Param],
+                out: &mut Vec<DefaultPurityError>| {
+        for param in params {
+            if let Some(default) = &param.default {
+                purity_walk_default(sem, src, annotations, index, default, out);
+            }
+        }
+    };
 
     for (src, module) in &sem.modules {
         if !crate::elaborator::liveness::is_user_authored(src) {
@@ -1262,33 +1341,27 @@ pub fn check_default_purity_semantic(sem: &Semantics) -> Vec<DefaultPurityError>
         let annotations = state.module_semantics.get(src).map(|m| &m.types);
         for item in &module.items {
             match item {
-                Item::Function(func) => {
-                    for param in &func.params {
-                        if let Some(default) = &param.default {
-                            purity_walk_default(sem, src, annotations, &index, default, &mut out);
-                        }
-                    }
-                }
+                Item::Function(func) => walk(src, annotations, &func.params, out),
                 Item::Impl(impl_block) => {
                     for method in &impl_block.methods {
-                        for param in &method.params {
-                            if let Some(default) = &param.default {
-                                purity_walk_default(
-                                    sem,
-                                    src,
-                                    annotations,
-                                    &index,
-                                    default,
-                                    &mut out,
-                                );
-                            }
-                        }
+                        walk(src, annotations, &method.params, out);
+                    }
+                }
+                Item::Trait(trait_decl) => {
+                    // Parity with the effect checker's trait coverage. Note the
+                    // trait/effect method signature path does not yet resolve
+                    // param defaults (item.rs builds them with `default_expr:
+                    // None` and no expression context), so a trait-method
+                    // default's calls leave no `references` edge for the walker
+                    // to flag until that annotation lands.
+                    for method in &trait_decl.methods {
+                        walk(src, annotations, &method.params, out);
                     }
                 }
                 Item::Struct(struct_decl) => {
                     for field in &struct_decl.fields {
                         if let Some(default) = &field.default {
-                            purity_walk_default(sem, src, annotations, &index, default, &mut out);
+                            purity_walk_default(sem, src, annotations, index, default, out);
                         }
                     }
                 }
@@ -1296,7 +1369,6 @@ pub fn check_default_purity_semantic(sem: &Semantics) -> Vec<DefaultPurityError>
             }
         }
     }
-    out
 }
 
 fn purity_walk_default(
