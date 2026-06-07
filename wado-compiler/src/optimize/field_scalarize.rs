@@ -84,7 +84,7 @@ use crate::nir::{
     FunctionRef, NirBlock, NirExpr, NirExprKind, NirFunction, NirLocal, NirPattern, NirStmt,
     NirStmtKind, NirUnaryOp,
 };
-use crate::nir_arena::{BlockId, Body, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -760,13 +760,11 @@ fn scalarize_function(
     // `tmpl_hoist`-style passes hoist a local's `&mut` capture out of
     // the loop, where the alias is *live* across the loop and writes
     // through it bypass any HFS scalar. Collect every GC-heap local
-    // whose address is taken anywhere in the function (read-only; on a
-    // materialized whole-body tree) so loop-level scalarization can
-    // refuse those candidates.
-    let aliased_in_function = {
-        let tree = func.body.as_ref().unwrap().to_block();
-        collect_function_aliased_locals(&tree, type_table)
-    };
+    // whose address is taken anywhere in the function (read-only, over
+    // the arena body) so loop-level scalarization can refuse those
+    // candidates.
+    let aliased_in_function =
+        collect_function_aliased_locals(func.body.as_ref().unwrap(), type_table);
     let analysis = HfsAnalysis {
         aliased_in_function: &aliased_in_function,
     };
@@ -1208,178 +1206,208 @@ fn count_field_accesses_in_block(
 /// Direct call arguments are excluded from the set because the call's
 /// write-back/re-read mechanism synchronises HFS scalars around the
 /// call, bounding the alias's lifetime to that single call.
-fn collect_function_aliased_locals(body: &NirBlock, type_table: &TypeTable) -> IndexSet<u32> {
+fn collect_function_aliased_locals(body: &Body, type_table: &TypeTable) -> IndexSet<u32> {
     let mut out: IndexSet<u32> = IndexSet::default();
-    visit_block_for_alias(body, type_table, &mut out);
+    visit_block_for_alias(body, body.root, type_table, &mut out);
     out
 }
 
-fn visit_block_for_alias(block: &NirBlock, type_table: &TypeTable, out: &mut IndexSet<u32>) {
-    for stmt in &block.stmts {
-        visit_stmt_for_alias(stmt, type_table, out);
+fn visit_block_for_alias(
+    body: &Body,
+    block: BlockId,
+    type_table: &TypeTable,
+    out: &mut IndexSet<u32>,
+) {
+    for i in 0..body.blocks[block].stmts.len() {
+        let sid = body.blocks[block].stmts[i];
+        visit_stmt_for_alias(body, sid, type_table, out);
     }
 }
 
-fn visit_stmt_for_alias(stmt: &NirStmt, type_table: &TypeTable, out: &mut IndexSet<u32>) {
-    match &stmt.kind {
-        NirStmtKind::Let { value, .. } | NirStmtKind::LetDestructure { value, .. } => {
-            visit_expr_for_alias(value, false, type_table, out);
+fn visit_stmt_for_alias(
+    body: &Body,
+    stmt: StmtId,
+    type_table: &TypeTable,
+    out: &mut IndexSet<u32>,
+) {
+    match &body.stmts[stmt].kind {
+        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
+            visit_expr_for_alias(body, *value, false, type_table, out);
         }
-        NirStmtKind::Expr(expr) => {
-            visit_expr_for_alias(expr, false, type_table, out);
+        StmtKind::Expr(expr) => {
+            visit_expr_for_alias(body, *expr, false, type_table, out);
         }
-        NirStmtKind::Return { value } | NirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                visit_expr_for_alias(v, false, type_table, out);
+        StmtKind::Return { value } | StmtKind::Break { value, .. } => {
+            if let Some(v) = *value {
+                visit_expr_for_alias(body, v, false, type_table, out);
             }
         }
-        NirStmtKind::If {
+        StmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            visit_expr_for_alias(condition, false, type_table, out);
-            visit_block_for_alias(then_block, type_table, out);
+            let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
+            visit_expr_for_alias(body, condition, false, type_table, out);
+            visit_block_for_alias(body, then_block, type_table, out);
             if let Some(eb) = else_block {
-                visit_block_for_alias(eb, type_table, out);
+                visit_block_for_alias(body, eb, type_table, out);
             }
         }
-        NirStmtKind::Loop { body } | NirStmtKind::LabeledBlock { block: body, .. } => {
-            visit_block_for_alias(body, type_table, out);
+        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
+            let b = *b;
+            visit_block_for_alias(body, b, type_table, out);
         }
-        NirStmtKind::Continue => {}
+        StmtKind::Continue => {}
     }
 }
 
 fn visit_expr_for_alias(
-    expr: &NirExpr,
+    body: &Body,
+    id: ExprId,
     in_call_arg: bool,
     type_table: &TypeTable,
     out: &mut IndexSet<u32>,
 ) {
-    match &expr.kind {
-        NirExprKind::Unary { op, expr: inner } => {
+    match &body.exprs[id].kind {
+        ExprKind::Unary { op, expr: inner } => {
+            let (op, inner) = (*op, *inner);
             // `&local` / `&mut local`: record the alias if we are not in a
             // call-argument position (where write-back/re-read synchronises
             // around the call), then stop — the inner `Local` is the place
             // we take the address of, not a value-position read.
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                && matches!(&inner.kind, NirExprKind::Local { .. })
+                && matches!(&body.exprs[inner].kind, ExprKind::Local { .. })
             {
                 if !in_call_arg
-                    && is_gc_heap_type(inner.type_id, type_table)
-                    && let NirExprKind::Local { index, .. } = &inner.kind
+                    && is_gc_heap_type(body.exprs[inner].type_id, type_table)
+                    && let ExprKind::Local { index, .. } = &body.exprs[inner].kind
                 {
                     out.insert(*index);
                 }
                 return;
             }
-            visit_expr_for_alias(inner, false, type_table, out);
+            visit_expr_for_alias(body, inner, false, type_table, out);
         }
-        NirExprKind::Call { args, .. } => {
-            for arg in args {
-                visit_expr_for_alias(&arg.expr, true, type_table, out);
+        ExprKind::Call { args, .. } => {
+            for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
+                visit_expr_for_alias(body, aid, true, type_table, out);
             }
         }
-        NirExprKind::MethodCall { receiver, args, .. } => {
-            visit_expr_for_alias(receiver, true, type_table, out);
-            for arg in args {
-                visit_expr_for_alias(&arg.expr, true, type_table, out);
+        ExprKind::MethodCall { receiver, args, .. } => {
+            let receiver = *receiver;
+            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            visit_expr_for_alias(body, receiver, true, type_table, out);
+            for aid in arg_ids {
+                visit_expr_for_alias(body, aid, true, type_table, out);
             }
         }
-        NirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                visit_expr_for_alias(arg, true, type_table, out);
+        ExprKind::CmRawCall { args, .. } => {
+            for aid in args.clone() {
+                visit_expr_for_alias(body, aid, true, type_table, out);
             }
         }
-        NirExprKind::IndirectCall { callee, args, .. } => {
-            visit_expr_for_alias(callee, false, type_table, out);
-            for arg in args {
-                visit_expr_for_alias(arg, true, type_table, out);
+        ExprKind::IndirectCall { callee, args, .. } => {
+            let callee = *callee;
+            let arg_ids = args.clone();
+            visit_expr_for_alias(body, callee, false, type_table, out);
+            for aid in arg_ids {
+                visit_expr_for_alias(body, aid, true, type_table, out);
             }
         }
-        NirExprKind::Binary { left, right, .. } => {
-            visit_expr_for_alias(left, false, type_table, out);
-            visit_expr_for_alias(right, false, type_table, out);
+        ExprKind::Binary { left, right, .. } => {
+            let (left, right) = (*left, *right);
+            visit_expr_for_alias(body, left, false, type_table, out);
+            visit_expr_for_alias(body, right, false, type_table, out);
         }
-        NirExprKind::Assign { target, value } => {
-            visit_expr_for_alias(target, false, type_table, out);
-            visit_expr_for_alias(value, false, type_table, out);
+        ExprKind::Assign { target, value } => {
+            let (target, value) = (*target, *value);
+            visit_expr_for_alias(body, target, false, type_table, out);
+            visit_expr_for_alias(body, value, false, type_table, out);
         }
-        NirExprKind::Index { expr, index } => {
-            visit_expr_for_alias(expr, false, type_table, out);
-            visit_expr_for_alias(index, false, type_table, out);
+        ExprKind::Index { expr, index } => {
+            let (expr, index) = (*expr, *index);
+            visit_expr_for_alias(body, expr, false, type_table, out);
+            visit_expr_for_alias(body, index, false, type_table, out);
         }
-        NirExprKind::Cast { expr, .. }
-        | NirExprKind::FieldAccess { expr, .. }
-        | NirExprKind::VariantTag { expr }
-        | NirExprKind::VariantTest { expr, .. }
-        | NirExprKind::VariantPayload { expr, .. }
-        | NirExprKind::GlobalVarSet { value: expr, .. }
-        | NirExprKind::ClosureToCanonical { functor: expr, .. } => {
-            visit_expr_for_alias(expr, false, type_table, out);
+        ExprKind::Cast { expr, .. }
+        | ExprKind::FieldAccess { expr, .. }
+        | ExprKind::VariantTag { expr }
+        | ExprKind::VariantTest { expr, .. }
+        | ExprKind::VariantPayload { expr, .. }
+        | ExprKind::GlobalVarSet { value: expr, .. }
+        | ExprKind::ClosureToCanonical { functor: expr, .. } => {
+            let expr = *expr;
+            visit_expr_for_alias(body, expr, false, type_table, out);
         }
-        NirExprKind::Block(block) | NirExprKind::LabeledBlock { block, .. } => {
-            visit_block_for_alias(block, type_table, out);
+        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
+            let block = *block;
+            visit_block_for_alias(body, block, type_table, out);
         }
-        NirExprKind::If {
+        ExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            visit_expr_for_alias(condition, false, type_table, out);
-            visit_block_for_alias(then_branch, type_table, out);
+            let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
+            visit_expr_for_alias(body, condition, false, type_table, out);
+            visit_block_for_alias(body, then_branch, type_table, out);
             if let Some(eb) = else_branch {
-                visit_block_for_alias(eb, type_table, out);
+                visit_block_for_alias(body, eb, type_table, out);
             }
         }
-        NirExprKind::Match { expr, arms } => {
-            visit_expr_for_alias(expr, false, type_table, out);
-            for arm in arms {
-                if let Some(g) = &arm.guard {
-                    visit_expr_for_alias(g, false, type_table, out);
+        ExprKind::Match { expr, arms } => {
+            let expr = *expr;
+            let arms = arms.clone();
+            visit_expr_for_alias(body, expr, false, type_table, out);
+            for arm in &arms {
+                if let Some(g) = arm.guard {
+                    visit_expr_for_alias(body, g, false, type_table, out);
                 }
-                visit_expr_for_alias(&arm.body, false, type_table, out);
+                visit_expr_for_alias(body, arm.body, false, type_table, out);
             }
         }
-        NirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                visit_expr_for_alias(&field.value, false, type_table, out);
+        ExprKind::StructLiteral { fields, .. } => {
+            for fid in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
+                visit_expr_for_alias(body, fid, false, type_table, out);
             }
         }
-        NirExprKind::TupleLiteral { elements } | NirExprKind::ArrayLiteral { elements } => {
-            for elem in elements {
-                visit_expr_for_alias(elem, false, type_table, out);
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+            for eid in elements.clone() {
+                visit_expr_for_alias(body, eid, false, type_table, out);
             }
         }
-        NirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                visit_expr_for_alias(p, false, type_table, out);
+        ExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = *payload {
+                visit_expr_for_alias(body, p, false, type_table, out);
             }
         }
-        NirExprKind::Switch {
+        ExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
         } => {
-            visit_expr_for_alias(scrutinee, false, type_table, out);
+            let scrutinee = *scrutinee;
+            let default = *default;
+            let arms = arms.clone();
+            visit_expr_for_alias(body, scrutinee, false, type_table, out);
             for arm in arms {
-                visit_block_for_alias(arm, type_table, out);
+                visit_block_for_alias(body, arm, type_table, out);
             }
-            visit_block_for_alias(default, type_table, out);
+            visit_block_for_alias(body, default, type_table, out);
         }
-        NirExprKind::IntLiteral { .. }
-        | NirExprKind::FloatLiteral { .. }
-        | NirExprKind::BoolLiteral(_)
-        | NirExprKind::CharLiteral(_)
-        | NirExprKind::StringLiteral(_)
-        | NirExprKind::BytesLiteral(_)
-        | NirExprKind::Null
-        | NirExprKind::Unit
-        | NirExprKind::Local { .. }
-        | NirExprKind::GlobalVarGet { .. }
-        | NirExprKind::EnumConstruct { .. } => {}
+        ExprKind::IntLiteral { .. }
+        | ExprKind::FloatLiteral { .. }
+        | ExprKind::BoolLiteral(_)
+        | ExprKind::CharLiteral(_)
+        | ExprKind::StringLiteral(_)
+        | ExprKind::BytesLiteral(_)
+        | ExprKind::Null
+        | ExprKind::Unit
+        | ExprKind::Local { .. }
+        | ExprKind::GlobalVarGet { .. }
+        | ExprKind::EnumConstruct { .. } => {}
     }
 }
 
