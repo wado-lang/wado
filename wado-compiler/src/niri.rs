@@ -1048,8 +1048,8 @@ impl<'a> Interpreter<'a> {
         self.field_env.clear();
     }
 
-    /// Project an expression to its lattice value, consulting the bound env
-    /// for locals/fields and taking the SCCP join over `if` / `match` arms.
+    /// Reads the bound env for locals/fields and takes the SCCP join over
+    /// `if` / `match` arms.
     pub fn expr_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
         let node = &body.exprs[e];
         match &node.kind {
@@ -1236,7 +1236,6 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Whether `value` matches `pat` (`Yes` / `No` / `Unknown`).
     fn pattern_matches_a(&self, body: &Body, value: &Value, pat: PatId) -> PatternMatch {
         match &body.pats[pat].kind {
             PatKind::Wildcard => PatternMatch::Yes,
@@ -1320,7 +1319,7 @@ impl<'a> Interpreter<'a> {
     // `try_call_fold`, mutating the `Body` the const-fold visitor walks.
     // ───────────────────────────────────────────────────────────────────────
 
-    /// Apply every single-node rewrite at `e`; returns whether it changed.
+    /// The single-node rewrites at `e` (no recursion into children).
     pub fn reduce_local_a(&mut self, body: &mut Body, e: ExprId) -> bool {
         if let Lattice::Const(v) = self.try_fold_a(body, e) {
             body.exprs[e].kind = value_to_arena_kind(v);
@@ -1961,7 +1960,6 @@ fn arm_lattice_for_feasible_join(lat: Lattice) -> Lattice {
 // Value <-> ExprKind bridge
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Build the literal `ExprKind` for a constant `Value`.
 fn value_to_arena_kind(v: Value) -> ExprKind {
     match v {
         Value::Int { value, prim } => ExprKind::IntLiteral {

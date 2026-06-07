@@ -358,14 +358,10 @@ impl Body {
         }
     }
 
-    /// A working copy that clones the node maps (`exprs` / `stmts` / `blocks` /
-    /// `pats`) and `root` but drops the function-level metadata (`locals`,
-    /// `address_taken_locals`, `stores_aliased_locals`). For read-only or
-    /// in-place-reduce scratch use where that metadata is never consulted — e.g.
-    /// niri's CTFE evaluator, which mutates the cloned node maps but reads only
-    /// nodes. Node ids are preserved, so an id taken from `self` stays valid in
-    /// the returned body. Cheaper than a full `clone()` when the dropped
-    /// metadata is non-trivial (a real function body's `locals`) and unused.
+    /// A working copy of the node maps and `root` only — the function-level
+    /// metadata (`locals`, the alias sets) is dropped, not cloned. For scratch
+    /// use that mutates the nodes but never reads that metadata, e.g. niri's
+    /// CTFE evaluator. Node ids are preserved, so ids from `self` stay valid.
     pub fn nodes_only_clone(&self) -> Self {
         Self {
             exprs: self.exprs.clone(),

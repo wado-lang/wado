@@ -205,14 +205,10 @@ struct ParamUsageCtx<'a> {
     type_table: &'a TypeTable,
 }
 
-/// Walk every node under `node`, recording which fields of each struct
-/// parameter the function accesses. Only a handful of node shapes carry
-/// param-usage signal — a `local.field` access, a whole-`param` assignment or
-/// pass-to-callee — so those are special-cased and every other node falls
-/// through to a generic `for_each_child` descent (the same shape as
-/// `arena_query::collect_reads_node`). Patterns are not descended into: the old
-/// scan never looked inside them, and a `param.field` cannot appear in pattern
-/// position anyway.
+/// Record which fields of each struct parameter the function accesses. Only a
+/// few node shapes carry signal (`local.field` access, a whole-`param` assign
+/// or pass-to-callee); the rest descend via `for_each_child`. Patterns are not
+/// entered — a `param.field` cannot appear there.
 fn collect_param_field_usage_node(body: &Body, node: NodeRef, cx: &mut ParamUsageCtx) {
     if let NodeRef::Expr(e) = node {
         match &body.exprs[e].kind {
