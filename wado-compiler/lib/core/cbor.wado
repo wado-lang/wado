@@ -763,6 +763,7 @@ pub struct CborDeserializer {
 impl CborDeserializer {
     fn next_byte(&mut self) -> Result<u8, DeserializeError> {
         if self.pos >= self.input.len() {
+            builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         let b = self.input.get_unchecked(self.pos);
@@ -772,6 +773,7 @@ impl CborDeserializer {
 
     fn peek_byte(&self) -> Result<u8, DeserializeError> {
         if self.pos >= self.input.len() {
+            builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         return Result::Ok(self.input.get_unchecked(self.pos));
@@ -780,6 +782,7 @@ impl CborDeserializer {
     fn enter(&mut self) -> Result<(), DeserializeError> {
         self.depth += 1;
         if self.depth > MAX_DEPTH {
+            builtin::cold_path();
             return Result::Err(DeserializeError::malformed(
                 "maximum nesting depth exceeded",
                 self.pos as i64,
@@ -826,6 +829,7 @@ impl CborDeserializer {
             // arrays, maps, and the major-7 break (RFC 8949 §3, Appendix F).
             // For unsigned/negative integers (0/1) and tags (6) it is reserved.
             if major == MAJOR_UINT || major == MAJOR_NINT || major == MAJOR_TAG {
+                builtin::cold_path();
                 return Result::Err(DeserializeError::malformed(
                     "indefinite length not allowed for this major type",
                     (self.pos - 1) as i64,
@@ -834,6 +838,7 @@ impl CborDeserializer {
             return Result::Ok([major, ai, 0, true]);
         }
         // Additional info 28, 29, 30 are reserved (RFC 8949 §3, Appendix F).
+        builtin::cold_path();
         return Result::Err(DeserializeError::malformed(
             "reserved additional info",
             (self.pos - 1) as i64,
@@ -844,6 +849,7 @@ impl CborDeserializer {
     fn advance(&mut self, n: u64) -> Result<(), DeserializeError> {
         let avail = (self.input.len() - self.pos) as u64;
         if n > avail {
+            builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         self.pos += n as i32;
@@ -856,6 +862,7 @@ impl CborDeserializer {
     fn read_definite_text(&mut self, len: u64) -> Result<String, DeserializeError> {
         let avail = (self.input.len() - self.pos) as u64;
         if len > avail {
+            builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         let n = len as i32;
@@ -863,6 +870,7 @@ impl CborDeserializer {
         let s = match String::from_utf8_slice(slice) {
             Ok(v) => v,
             Err(_) => {
+                builtin::cold_path();
                 return Result::Err(DeserializeError::malformed(
                     "invalid UTF-8 in text string",
                     self.pos as i64,
@@ -887,6 +895,7 @@ impl CborDeserializer {
             }
             let [m, ai, len, in2] = self.read_head()?;
             if m != MAJOR_TEXT || in2 {
+                builtin::cold_path();
                 return Result::Err(DeserializeError::malformed(
                     "invalid chunk in indefinite text string",
                     self.pos as i64,
@@ -913,6 +922,7 @@ impl CborDeserializer {
             }
             let [m, ai, len, in2] = self.read_head()?;
             if m != MAJOR_BYTES || in2 {
+                builtin::cold_path();
                 return Result::Err(DeserializeError::malformed(
                     "invalid chunk in indefinite byte string",
                     self.pos as i64,
@@ -925,6 +935,7 @@ impl CborDeserializer {
     fn append_bytes(&mut self, out: &mut ByteList, len: u64) -> Result<(), DeserializeError> {
         let avail = (self.input.len() - self.pos) as u64;
         if len > avail {
+            builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         let n = len as i32;
@@ -938,6 +949,7 @@ impl CborDeserializer {
     fn read_bignum_mag(&mut self) -> Result<u128, DeserializeError> {
         let [m, ai, arg, indef] = self.read_head()?;
         if m != MAJOR_BYTES {
+            builtin::cold_path();
             return Result::Err(DeserializeError::malformed(
                 "bignum must wrap a byte string",
                 self.pos as i64,
@@ -946,6 +958,7 @@ impl CborDeserializer {
         let bytes = self.read_bytes_body(arg, indef)?;
         let n = bytes.len();
         if n > 16 {
+            builtin::cold_path();
             return Result::Err(DeserializeError::overflow(
                 "bignum exceeds 128 bits",
                 self.pos as i64,
@@ -990,6 +1003,7 @@ impl CborDeserializer {
                     if mag <= i128_max {
                         return Result::Ok(i128::from_pair(mag.low(), mag.high() as i64));
                     }
+                    builtin::cold_path();
                     return Result::Err(DeserializeError::overflow("bignum exceeds i128", self.pos as i64));
                 }
                 if arg == 3 {
@@ -997,9 +1011,11 @@ impl CborDeserializer {
                     if mag <= i128_max {
                         return Result::Ok(i128::from_pair(~mag.low(), ~mag.high() as i64));
                     }
+                    builtin::cold_path();
                     return Result::Err(DeserializeError::overflow("bignum exceeds i128", self.pos as i64));
                 }
             }
+            builtin::cold_path();
             return Result::Err(DeserializeError::unexpected_type("expected integer", self.pos as i64));
         }
     }
@@ -1020,6 +1036,7 @@ impl CborDeserializer {
                     return self.read_bignum_mag();
                 }
             }
+            builtin::cold_path();
             return Result::Err(DeserializeError::overflow("expected unsigned integer", self.pos as i64));
         }
     }
@@ -1030,6 +1047,7 @@ impl CborDeserializer {
     fn read_text_key_range(&mut self) -> Result<[i32, i32], DeserializeError> {
         let [major, ai, arg, indef] = self.read_head()?;
         if major != MAJOR_TEXT || indef {
+            builtin::cold_path();
             return Result::Err(DeserializeError::unexpected_type(
                 "expected text-string map key",
                 self.pos as i64,
@@ -1038,6 +1056,7 @@ impl CborDeserializer {
         let len = arg as i32;
         let avail = self.input.len() - self.pos;
         if len > avail {
+            builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         let start = self.pos;
@@ -1111,6 +1130,7 @@ impl CborDeserializer {
             self.depth -= 1;
             return Result::Ok(());
         }
+        builtin::cold_path();
         return Result::Err(DeserializeError::malformed("unskippable item", self.pos as i64));
     }
 
@@ -1125,6 +1145,7 @@ impl CborDeserializer {
             }
             let [m, ai, len, in2] = self.read_head()?;
             if m != major || in2 {
+                builtin::cold_path();
                 return Result::Err(DeserializeError::malformed(
                     "invalid chunk in indefinite string",
                     self.pos as i64,
@@ -1265,6 +1286,7 @@ impl DeserializeVariant for CborVariantAccess {
     }
 
     fn disc(&mut self) -> Result<i32, DeserializeError> {
+        builtin::cold_path();
         return Result::Err(DeserializeError {
             kind: DeserializeErrorKind::Custom,
             message: "CBOR encodes variants by name, not discriminant",
@@ -1306,6 +1328,7 @@ impl Deserializer for CborDeserializer {
         let lo: i128 = -2147483648;
         let hi: i128 = 2147483647;
         if v < lo || v > hi {
+            builtin::cold_path();
             return Result::Err(DeserializeError::overflow("value out of range for i32", start));
         }
         return Result::Ok(v.low() as i32);
@@ -1317,6 +1340,7 @@ impl Deserializer for CborDeserializer {
         let lo: i128 = -9223372036854775808;
         let hi: i128 = 9223372036854775807;
         if v < lo || v > hi {
+            builtin::cold_path();
             return Result::Err(DeserializeError::overflow("value out of range for i64", start));
         }
         return Result::Ok(v.low() as i64);
@@ -1327,6 +1351,7 @@ impl Deserializer for CborDeserializer {
         let v = self.read_unsigned_u128()?;
         let hi: u128 = 4294967295;
         if v > hi {
+            builtin::cold_path();
             return Result::Err(DeserializeError::overflow("value out of range for u32", start));
         }
         return Result::Ok(v.low() as u32);
@@ -1337,6 +1362,7 @@ impl Deserializer for CborDeserializer {
         let v = self.read_unsigned_u128()?;
         let hi: u128 = 18446744073709551615;
         if v > hi {
+            builtin::cold_path();
             return Result::Err(DeserializeError::overflow("value out of range for u64", start));
         }
         return Result::Ok(v.low());
@@ -1369,6 +1395,7 @@ impl Deserializer for CborDeserializer {
         if major == MAJOR_NINT {
             return Result::Ok(-1.0 - arg as f32);
         }
+        builtin::cold_path();
         return Result::Err(DeserializeError::unexpected_type("expected float", self.pos as i64));
     }
 
@@ -1391,6 +1418,7 @@ impl Deserializer for CborDeserializer {
         if major == MAJOR_NINT {
             return Result::Ok(-1.0 - arg as f64);
         }
+        builtin::cold_path();
         return Result::Err(DeserializeError::unexpected_type("expected float", self.pos as i64));
     }
 
@@ -1406,6 +1434,7 @@ impl Deserializer for CborDeserializer {
                 return Result::Ok(true);
             }
         }
+        builtin::cold_path();
         return Result::Err(DeserializeError::unexpected_type("expected bool", self.pos as i64));
     }
 
@@ -1415,12 +1444,16 @@ impl Deserializer for CborDeserializer {
         return match iter.next() {
             Some(c) => {
                 if iter.next() matches { Some(_) } {
+                    builtin::cold_path();
                     Result::Err(DeserializeError::invalid_value("expected single char", self.pos as i64));
                 } else {
                     Result::Ok(c);
                 }
             },
-            None => Result::Err(DeserializeError::invalid_value("empty string for char", self.pos as i64)),
+            None => {
+                builtin::cold_path();
+                Result::Err(DeserializeError::invalid_value("empty string for char", self.pos as i64));
+            },
         };
     }
 
@@ -1431,9 +1464,11 @@ impl Deserializer for CborDeserializer {
                 if is_passthrough_tag(arg) {
                     continue;
                 }
+                builtin::cold_path();
                 return Result::Err(DeserializeError::unexpected_type("expected text string", self.pos as i64));
             }
             if major != MAJOR_TEXT {
+                builtin::cold_path();
                 return Result::Err(DeserializeError::unexpected_type("expected text string", self.pos as i64));
             }
             return self.read_text_body(arg, indef);
@@ -1449,6 +1484,7 @@ impl Deserializer for CborDeserializer {
                 continue;
             }
             if major != MAJOR_BYTES {
+                builtin::cold_path();
                 return Result::Err(DeserializeError::unexpected_type("expected byte string", self.pos as i64));
             }
             return self.read_bytes_body(arg, indef);
@@ -1472,6 +1508,7 @@ impl Deserializer for CborDeserializer {
                 continue;
             }
             if major != MAJOR_ARRAY {
+                builtin::cold_path();
                 return Result::Err(DeserializeError::unexpected_type("expected array", self.pos as i64));
             }
             self.enter()?;
@@ -1487,6 +1524,7 @@ impl Deserializer for CborDeserializer {
                 continue;
             }
             if major != MAJOR_MAP {
+                builtin::cold_path();
                 return Result::Err(DeserializeError::unexpected_type("expected map", self.pos as i64));
             }
             self.enter()?;
@@ -1506,6 +1544,7 @@ impl Deserializer for CborDeserializer {
                 continue;
             }
             if major != MAJOR_MAP {
+                builtin::cold_path();
                 return Result::Err(DeserializeError::unexpected_type("expected map for struct", self.pos as i64));
             }
             self.enter()?;
@@ -1536,6 +1575,7 @@ impl Deserializer for CborDeserializer {
                 let key = self.deserialize_string()?;
                 return Result::Ok(CborVariantAccess { de: self, variant: key, is_map: true, indef });
             }
+            builtin::cold_path();
             return Result::Err(DeserializeError::unexpected_type("expected text or map for variant", self.pos as i64));
         }
     }
@@ -1603,6 +1643,7 @@ impl Deserializer for CborDeserializer {
                     if m <= i128_max {
                         return visitor.visit_i128(i128::from_pair(~m.low(), ~m.high() as i64));
                     }
+                    builtin::cold_path();
                     return Result::Err(DeserializeError::overflow("negative bignum exceeds i128", self.pos as i64));
                 }
                 if is_passthrough_tag(tag) {
@@ -1611,6 +1652,7 @@ impl Deserializer for CborDeserializer {
                 }
                 // Genuinely unknown tag.
                 if self.strict {
+                    builtin::cold_path();
                     return Result::Err(DeserializeError::unexpected_type("unknown CBOR tag", start as i64));
                 }
                 self.skip_item()?;
@@ -1645,6 +1687,7 @@ impl Deserializer for CborDeserializer {
             }
             // Unassigned simple value or reserved.
             if self.strict {
+                builtin::cold_path();
                 return Result::Err(DeserializeError::unexpected_type("unassigned simple value", start as i64));
             }
             return visitor.visit_unknown(self.slice_to_bytelist(start, self.pos));
@@ -1670,6 +1713,7 @@ pub fn from_bytes<T: Deserialize, B: AsByteSlice>(input: B, strict: bool = true)
     };
     let v = T::deserialize::<CborDeserializer>(&mut de)?;
     if de.pos < de.input.len() {
+        builtin::cold_path();
         return Result::Err(DeserializeError::trailing(de.pos as i64));
     }
     return Result::Ok(v);
