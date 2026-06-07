@@ -31,7 +31,15 @@ fn unused_for_with(source: &str, unused_diagnostics: bool) -> Vec<(Code, String)
     ));
     host.diagnostics()
         .into_iter()
-        .filter(|d| matches!(d.code, Code::DeadFunction | Code::DeadGlobal))
+        .filter(|d| {
+            matches!(
+                d.code,
+                Code::DeadFunction
+                    | Code::DeadGlobal
+                    | Code::TestOnlyFunction
+                    | Code::TestOnlyGlobal
+            )
+        })
         .map(|d| (d.code, d.message))
         .collect()
 }
@@ -46,6 +54,12 @@ fn has_dead_global(diags: &[(Code, String)], name: &str) -> bool {
     diags
         .iter()
         .any(|(code, msg)| matches!(code, Code::DeadGlobal) && msg.contains(name))
+}
+
+fn has_test_only_function(diags: &[(Code, String)], name: &str) -> bool {
+    diags
+        .iter()
+        .any(|(code, msg)| matches!(code, Code::TestOnlyFunction) && msg.contains(name))
 }
 
 #[test]
@@ -156,5 +170,72 @@ export fn run() {}
     assert!(
         diags.is_empty(),
         "`--no-unused` must silence the lints, got {diags:?}"
+    );
+}
+
+#[test]
+fn function_used_only_by_test_is_test_only_not_dead() {
+    // `helper` is reachable from a `test` block but never from production
+    // (`run`), so it is `TestOnly`, not `DeadFunction` (and not silent).
+    let diags = unused_for(
+        r#"
+fn helper() -> i32 { return 1; }
+
+export fn run() {}
+
+test "uses helper" {
+    assert helper() == 1;
+}
+"#,
+    );
+    assert!(
+        has_test_only_function(&diags, "helper"),
+        "`helper` is reached only by a test → TestOnly, got {diags:?}"
+    );
+    assert!(
+        !has_dead_function(&diags, "helper"),
+        "`helper` must not also be reported dead, got {diags:?}"
+    );
+}
+
+#[test]
+fn function_used_by_production_and_test_is_not_reported() {
+    // Reached from `run` (production) as well as a test → live, no diagnostic.
+    let diags = unused_for(
+        r#"
+fn helper() -> i32 { return 1; }
+
+export fn run() {
+    let _ = helper();
+}
+
+test "also uses helper" {
+    assert helper() == 1;
+}
+"#,
+    );
+    assert!(
+        !has_test_only_function(&diags, "helper") && !has_dead_function(&diags, "helper"),
+        "`helper` is used by production, so it is live: {diags:?}"
+    );
+}
+
+#[test]
+fn function_used_by_neither_is_dead_not_test_only() {
+    // No production and no test reference → `DeadFunction`.
+    let diags = unused_for(
+        r#"
+fn helper() -> i32 { return 1; }
+
+export fn run() {}
+
+test "unrelated" {
+    assert 1 == 1;
+}
+"#,
+    );
+    assert!(
+        has_dead_function(&diags, "helper") && !has_test_only_function(&diags, "helper"),
+        "`helper` is used by neither → Dead, got {diags:?}"
     );
 }

@@ -140,6 +140,10 @@ pub enum Code {
     DeadFunction,
     /// A global is never reached from the export boundary.
     DeadGlobal,
+    /// A function is reached only from `test` blocks, never from production.
+    TestOnlyFunction,
+    /// A global is reached only from `test` blocks, never from production.
+    TestOnlyGlobal,
 
     // Kiln errors
     /// A generator's `Options` struct uses a shape not supported by Kiln.
@@ -200,6 +204,8 @@ impl std::fmt::Display for Code {
             Code::Remark => "REMARK",
             Code::DeadFunction => "DEAD_FUNCTION",
             Code::DeadGlobal => "DEAD_GLOBAL",
+            Code::TestOnlyFunction => "TEST_ONLY_FUNCTION",
+            Code::TestOnlyGlobal => "TEST_ONLY_GLOBAL",
             Code::GeneratorOptionsUnsupported => "GENERATOR_OPTIONS_UNSUPPORTED",
             Code::GeneratorOptionsInvalid => "GENERATOR_OPTIONS_INVALID",
             Code::KilnStaleCache => "KILN_STALE_CACHE",

@@ -267,36 +267,64 @@ pub async fn compile_with_host<H: CompilerHost>(
 /// This is the main compilation entry point with all options. It runs the full compilation pipeline:
 /// lexer -> parser -> binder -> loader -> analyzer -> elaborator -> lower -> optimize -> `tir_to_wir`
 ///
-/// Emit `DeadFunction` / `DeadGlobal` warnings for the user-authored items
-/// the liveness pass found unreachable from the export boundary.
-fn emit_unused_diagnostics<H: CompilerHost>(sem: &semantics::Semantics, logger: &Logger<'_, H>) {
+/// Emit unused-item warnings for the user-authored items the liveness pass
+/// classified: `DeadFunction` / `DeadGlobal` for items reachable from neither
+/// production nor tests, and `TestOnlyFunction` / `TestOnlyGlobal` for items
+/// reachable only from `test` blocks.
+fn emit_unused_diagnostics<H: CompilerHost>(
+    sem: &semantics::Semantics,
+    logger: &Logger<'_, H>,
+    is_test_world: bool,
+) {
     use crate::ast::Item;
     use crate::compiler_host::{Code, DiagnosticSpan};
 
-    for key in &sem.liveness.dead_items {
-        let Some(module) = sem.modules.get(&key.module) else {
-            continue;
-        };
-        let filename = key.module.diagnostic_filename();
-        for item in &module.items {
-            match item {
-                Item::Function(func) if func.id == key.ast_id => {
-                    logger.warn_at(
-                        Code::DeadFunction,
-                        format!("function `{}` is never used", func.name),
-                        DiagnosticSpan::from_span(&func.name_span, Some(filename.as_str())),
-                    );
+    let emit = |keys: &[crate::symbol::SymbolKey], fn_code: Code, global_code: Code, reason: &str| {
+        for key in keys {
+            let Some(module) = sem.modules.get(&key.module) else {
+                continue;
+            };
+            let filename = key.module.diagnostic_filename();
+            for item in &module.items {
+                match item {
+                    Item::Function(func) if func.id == key.ast_id => {
+                        logger.warn_at(
+                            fn_code,
+                            format!("function `{}` {reason}", func.name),
+                            DiagnosticSpan::from_span(&func.name_span, Some(filename.as_str())),
+                        );
+                    }
+                    Item::Global(global) if global.id == key.ast_id => {
+                        logger.warn_at(
+                            global_code,
+                            format!("global `{}` {reason}", global.name),
+                            DiagnosticSpan::from_span(&global.name_span, Some(filename.as_str())),
+                        );
+                    }
+                    _ => {}
                 }
-                Item::Global(global) if global.id == key.ast_id => {
-                    logger.warn_at(
-                        Code::DeadGlobal,
-                        format!("global `{}` is never used", global.name),
-                        DiagnosticSpan::from_span(&global.name_span, Some(filename.as_str())),
-                    );
-                }
-                _ => {}
             }
         }
+    };
+
+    emit(
+        &sem.liveness.dead_items,
+        Code::DeadFunction,
+        Code::DeadGlobal,
+        "is never used",
+    );
+
+    // A test-only item is production dead code, but flagging it during a
+    // `wado test` run — where the `test` blocks that reach it are the whole
+    // point — would be noise. Report it only in non-test builds (`wado
+    // compile` / `wado check`).
+    if !is_test_world {
+        emit(
+            &sem.liveness.test_only_items,
+            Code::TestOnlyFunction,
+            Code::TestOnlyGlobal,
+            "is only used by tests",
+        );
     }
 }
 
@@ -436,7 +464,8 @@ fn compile_after_load<H: CompilerHost>(
     // Source-level unused diagnostics. Reads the liveness computed during
     // `semantics_with_logger`; gated on the option (CLI `--no-unused`).
     if options.unused_diagnostics {
-        emit_unused_diagnostics(&sem, logger);
+        let is_test_world = options.target_world.as_deref() == Some("test");
+        emit_unused_diagnostics(&sem, logger, is_test_world);
     }
 
     // === Phase 6b: Effect, Stores, and Default-Purity Checks (Design B) ===

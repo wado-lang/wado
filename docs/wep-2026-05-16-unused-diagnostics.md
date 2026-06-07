@@ -73,13 +73,15 @@ optimize-time and silent.
 
 ### What is in scope (MVP)
 
-| Lint              | Pass      | Code              |
-| ----------------- | --------- | ----------------- |
-| `UnusedImport`    | Reference | `UnusedImport`    |
-| `UnusedVariable`  | Reference | `UnusedVariable`  |
-| `UnusedParameter` | Reference | `UnusedParameter` |
-| `DeadFunction`    | Liveness  | `DeadFunction`    |
-| `DeadGlobal`      | Liveness  | `DeadGlobal`      |
+| Lint               | Pass      | Code               |
+| ------------------ | --------- | ------------------ |
+| `UnusedImport`     | Reference | `UnusedImport`     |
+| `UnusedVariable`   | Reference | `UnusedVariable`   |
+| `UnusedParameter`  | Reference | `UnusedParameter`  |
+| `DeadFunction`     | Liveness  | `DeadFunction`     |
+| `DeadGlobal`       | Liveness  | `DeadGlobal`       |
+| `TestOnlyFunction` | Liveness  | `TestOnlyFunction` |
+| `TestOnlyGlobal`   | Liveness  | `TestOnlyGlobal`   |
 
 ### What is out of scope (deferred to follow-up WEPs / PRs)
 
@@ -92,16 +94,32 @@ optimize-time and silent.
 
 ### Reachability roots (package-external boundary)
 
-The liveness pass treats these source-level items as always-live:
+The pass runs two independent reachability closures over the same call graph:
 
-| Root                                      | Source                                                                                                                  |
+- `E` — the **production** closure, seeded by the roots below.
+- `T` — the **test** closure, seeded by `test` blocks only.
+
+| Production root (seeds `E`)               | Source                                                                                                                  |
 | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Items satisfying world-export contracts   | Functions whose name and signature satisfy a world export (`command` / `service` / `lib`); identified during `annotate` |
 | `#[export]`-attributed items              | Raw Wasm exports                                                                                                        |
 | Items in `wasm_module_sources` re-exports | Bridged Wasm module exports                                                                                             |
-| `test` items in the test world            | Test discovery roots                                                                                                    |
+| impl / trait methods                      | Seeded live as call-graph intermediaries (method-level dead detection deferred)                                          |
 
-The root set matches the existing optimize-time DCE root set in
+Each user-authored free function / global is classified by membership:
+
+- `∈ E` → **live** (no diagnostic).
+- `∈ T \ E` → **test-only**: used by tests but not production → `TestOnlyFunction` /
+  `TestOnlyGlobal`. Reported in non-test builds only (during `wado test` the
+  reaching `test` blocks are the point, so it would be noise).
+- `∉ E ∧ ∉ T` → **dead** → `DeadFunction` / `DeadGlobal`.
+
+`test` blocks are world-independent roots of `T`, never `E`: a function reached
+only from a test is therefore reported, not silently kept alive — the behaviour
+Rust's test-build masks. Reify still gates emission on `live_items = E ∪ T`, so
+test-reachable code compiles (in non-test worlds the optimize-time DCE drops it).
+
+The production root set matches the existing optimize-time DCE root set in
 `optimize/dce.rs` (`compute_reachable_from_entries`); the liveness
 pass restates them at the source level so reachability can be
 computed before TIR is emitted. Synthesised items — CM binding
@@ -284,9 +302,17 @@ land with stage 6 of the rearchitecture (see
       for-of dispatch edges).
 - [x] Implement the emitter (`DeadFunction`, `DeadGlobal`) consuming
       `Liveness::dead_items`; tests in `tests/unused_diagnostics.rs`.
-- [ ] E2E `dead_fn_*` / `dead_global_*` fixtures — blocked on a
-      fixture-spec field for asserting warnings (the harness surfaces only
-      runtime output and errors today).
+- [x] Two-closure 3-way classification (`live` / `test-only` / `dead`): test
+      blocks seed `T` only, never `E`; `live_items = E ∪ T` (reify gating
+      unchanged). Adds `TestOnlyFunction` / `TestOnlyGlobal`, emitted in
+      non-test builds. Unit tests in `tests/unused_diagnostics.rs`.
+- [x] E2E warning assertions: `warnings_contains` / `warnings_not_contains`
+      fixture-spec fields (`compile_capturing_warnings` in the harness);
+      `dead_fn_*` / `dead_global_*` fixtures cover dead and test-only.
+- [ ] Package-wide analysis so `T` is populated outside the entry module
+      (load the whole package via `wado test` discovery; `wado check`
+      package mode). Until then `test-only` only surfaces for `test` blocks
+      in the compiled entry's own module graph.
 
 #### Phase 3b — reify gating (Design B)
 

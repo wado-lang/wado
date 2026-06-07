@@ -9,14 +9,16 @@
 //!
 //! # Current scope
 //!
-//! The pass reports `DeadFunction` / `DeadGlobal` for **free functions and
-//! globals** only, and reify gates the emission of exactly those two item
-//! kinds on `live_items`. Every impl/trait method is seeded as live, so it
-//! serves as a live intermediary in the call graph without itself being a
-//! dead-report or gating candidate. This keeps the analysis sound against
-//! false positives (the failure the WEP optimises against) while deferring
-//! method-level dead detection — which needs the operator / `?` / for-of
-//! dispatch edges that leave no `references` entry — to a follow-up slice.
+//! The pass classifies **free functions and globals** as live / test-only /
+//! dead (see [`Liveness`]) and reports `DeadFunction` / `DeadGlobal` /
+//! `TestOnlyFunction` / `TestOnlyGlobal` accordingly. Reify gates emission of
+//! those two item kinds on `live_items` (`E ∪ T`). Every impl/trait method is
+//! seeded as a production root, so it serves as a live intermediary in the call
+//! graph without itself being a report or gating candidate. This keeps the
+//! analysis sound against false positives (the failure the WEP optimises
+//! against) while deferring method-level dead detection — which needs the
+//! operator / `?` / for-of dispatch edges that leave no `references` entry — to
+//! a follow-up slice.
 //!
 //! The graph traces every site where reify can emit a call: function and
 //! method bodies, global initializers, parameter defaults, and struct field
@@ -30,18 +32,29 @@ use crate::token::Span;
 
 /// Result of the source-level liveness analysis.
 ///
-/// `live_items` is the set reify will eventually gate emission on; in
-/// slice 1 it is over-approximated (every method is seeded live) and used
-/// only to derive `dead_items`. `dead_items` is the user-authored
-/// free-function / global complement, in source order, consumed by the
-/// diagnostic emitter.
+/// Reachability is computed from two independent root sets over the same call
+/// graph: `E` = reachable from production roots (world exports, `#[export]`,
+/// methods, struct-field defaults), `T` = reachable from `test` blocks. Each
+/// user-authored free function / global is then classified:
+///
+/// - **live** (`∈ E`): used by production. Not reported.
+/// - **test-only** (`∈ T \ E`): used by tests but not production → `test_only_items`.
+/// - **dead** (`∉ E ∧ ∉ T`): used by neither → `dead_items`.
+///
+/// `live_items = E ∪ T` is the set reify gates emission on (a test-reachable
+/// item is still kept so test code compiles); the split only affects which
+/// diagnostic the emitter raises.
 #[derive(Default, Clone)]
 pub(crate) struct Liveness {
-    /// Reachable items. Reify gates free-function / global emission on this
-    /// set: an item absent from it is dead source that reify drops. The
-    /// diagnostic emitter reads its complement (`dead_items`).
+    /// Reachable from production roots ∪ tests (`E ∪ T`). Reify gates
+    /// free-function / global emission on this set.
     pub(crate) live_items: IndexSet<SymbolKey>,
+    /// Candidates reachable from neither production nor tests (`∉ E ∧ ∉ T`),
+    /// in source order. `DeadFunction` / `DeadGlobal`.
     pub(crate) dead_items: Vec<SymbolKey>,
+    /// Candidates reachable from tests but not production (`∈ T \ E`), in
+    /// source order. `TestOnlyFunction` / `TestOnlyGlobal`.
+    pub(crate) test_only_items: Vec<SymbolKey>,
 }
 
 /// Compute liveness over every loaded module.
@@ -68,7 +81,7 @@ pub(crate) fn compute(
                         || has_export_attr(func)
                         || world_export_names.contains(&func.name)
                     {
-                        graph.seed(key.clone());
+                        graph.seed_export(key.clone());
                     }
                     // Bodyless functions are compiler builtins / imports, not
                     // user-authored code that could be "dead".
@@ -101,15 +114,15 @@ pub(crate) fn compute(
                         }
                     }
                     if has_default {
-                        graph.seed(key);
+                        graph.seed_export(key);
                     }
                 }
                 Item::Impl(impl_block) => {
                     for method in &impl_block.methods {
                         let key = SymbolKey::new(source.clone(), method.id);
                         graph.add_function_edges(source, method, references, &key);
-                        // Slice 1: methods are live intermediaries.
-                        graph.seed(key);
+                        // Slice 1: methods are live production intermediaries.
+                        graph.seed_export(key);
                     }
                 }
                 Item::Trait(trait_decl) => {
@@ -119,16 +132,18 @@ pub(crate) fn compute(
                         }
                         let key = SymbolKey::new(source.clone(), method.id);
                         graph.add_function_edges(source, method, references, &key);
-                        graph.seed(key);
+                        graph.seed_export(key);
                     }
                 }
                 Item::Test(test) => {
-                    // Test blocks are export-boundary roots in the test world.
-                    // Treated as roots in every world so functions used only by
-                    // tests are never falsely reported dead.
+                    // Test blocks are roots of the `T` (test-reachable) closure
+                    // only — never the production `E` closure. A function reached
+                    // solely from a test is therefore classified `test-only`
+                    // rather than live, so genuinely dead production code is not
+                    // masked by a lingering test reference.
                     let key = SymbolKey::new(source.clone(), test.id);
                     graph.add_block_edges(source, &test.body, references, &key);
-                    graph.seed(key);
+                    graph.seed_test(key);
                 }
                 _ => {}
             }
@@ -138,21 +153,29 @@ pub(crate) fn compute(
     graph.finish()
 }
 
-/// Call graph plus seeds and report candidates, assembled in one walk.
+/// Call graph plus the two root sets and report candidates, assembled in one
+/// walk.
 #[derive(Default)]
 struct Graph {
     /// `owner -> called items`.
     edges: IndexMap<SymbolKey, Vec<SymbolKey>>,
-    /// Always-live roots (export functions, methods, tests).
-    seeds: Vec<SymbolKey>,
+    /// Production roots (world exports, `#[export]`, methods, struct-field
+    /// defaults) — seeds of the `E` closure.
+    export_seeds: Vec<SymbolKey>,
+    /// `test` block roots — seeds of the `T` closure.
+    test_seeds: Vec<SymbolKey>,
     /// User-authored free functions / globals eligible for dead reporting,
     /// in source order.
     report_candidates: Vec<SymbolKey>,
 }
 
 impl Graph {
-    fn seed(&mut self, key: SymbolKey) {
-        self.seeds.push(key);
+    fn seed_export(&mut self, key: SymbolKey) {
+        self.export_seeds.push(key);
+    }
+
+    fn seed_test(&mut self, key: SymbolKey) {
+        self.test_seeds.push(key);
     }
 
     fn add_function_edges(
@@ -220,33 +243,53 @@ impl Graph {
         }
     }
 
-    /// Run the reachability closure and collect the dead set.
+    /// Run both reachability closures and classify each report candidate.
     fn finish(self) -> Liveness {
-        let mut live: IndexSet<SymbolKey> = IndexSet::default();
-        let mut work = self.seeds;
+        let production = self.closure(&self.export_seeds);
+        let tests = self.closure(&self.test_seeds);
+
+        let mut live_items = production.clone();
+        for key in &tests {
+            live_items.insert(key.clone());
+        }
+
+        let mut dead_items = Vec::new();
+        let mut test_only_items = Vec::new();
+        for key in &self.report_candidates {
+            if production.contains(key) {
+                continue;
+            }
+            if tests.contains(key) {
+                test_only_items.push(key.clone());
+            } else {
+                dead_items.push(key.clone());
+            }
+        }
+
+        Liveness {
+            live_items,
+            dead_items,
+            test_only_items,
+        }
+    }
+
+    /// BFS reachability from `seeds` over the call-graph edges.
+    fn closure(&self, seeds: &[SymbolKey]) -> IndexSet<SymbolKey> {
+        let mut reached: IndexSet<SymbolKey> = IndexSet::default();
+        let mut work: Vec<SymbolKey> = seeds.to_vec();
         while let Some(key) = work.pop() {
-            if !live.insert(key.clone()) {
+            if !reached.insert(key.clone()) {
                 continue;
             }
             if let Some(targets) = self.edges.get(&key) {
                 for target in targets {
-                    if !live.contains(target) {
+                    if !reached.contains(target) {
                         work.push(target.clone());
                     }
                 }
             }
         }
-
-        let dead_items = self
-            .report_candidates
-            .into_iter()
-            .filter(|key| !live.contains(key))
-            .collect();
-
-        Liveness {
-            live_items: live,
-            dead_items,
-        }
+        reached
     }
 }
 
