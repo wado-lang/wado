@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780808953311,
+  "lastUpdate": 1780827549812,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31121,6 +31121,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/87daa297226c346af82c1a52d1d28b445ad04855"
         },
         "date": 1780808952850,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8792,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15896,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437254,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "69537e9be2ecb660dd794274805f9d5a9053af44",
+          "message": "Merge pull request #1325 from wado-lang/claude/nir-rewrite-engine-wep-gNSsE\n\nrefactor(nir): retire the NIR tree representation (arena-only)",
+          "timestamp": "2026-06-07T19:09:59+09:00",
+          "tree_id": "9c3f8b5d09407bd6720d6decc00e4e84a5f87aa0",
+          "url": "https://github.com/wado-lang/wado/commit/69537e9be2ecb660dd794274805f9d5a9053af44"
+        },
+        "date": 1780827549262,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
