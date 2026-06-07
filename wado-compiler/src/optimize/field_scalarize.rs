@@ -86,6 +86,7 @@ use crate::nir::{
 };
 use crate::nir_arena::{BlockId, Body, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
+use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 const MIN_ACCESS_COUNT: usize = 4;
@@ -1844,8 +1845,108 @@ impl CanonState {
 /// Map from candidate index (into `WalkCtx::candidates`) to its state.
 type ScalarStates = Vec<CanonState>;
 
-fn init_states(candidates: &[ScalarizeCandidate]) -> ScalarStates {
-    vec![CanonState::Both; candidates.len()]
+/// The per-candidate loop-entry / back-edge state.
+///
+/// A candidate whose field the loop body never accesses through the GC
+/// reference — no call takes the local by `&`/`&mut`, and the field is never
+/// `&`/`&mut`-referenced directly — is *call-clean*: its only field
+/// interaction is the scalar write-back. For such a candidate
+/// the field can stay `ScalarOnly` across the back-edge — the per-iteration
+/// write-back the back-edge invariant would otherwise force is pure waste.
+/// Its write-back is deferred to the loop's escape points (`return`,
+/// `break`), which `commit_scalar_for_escape` already covers, so the field
+/// is canonical for any reader after the loop. Candidates that *are* read
+/// through the reference inside the loop keep the `Both` entry / body-end
+/// force so the read observes an up-to-date field.
+fn entry_states_for(candidates: &[ScalarizeCandidate], deferrable: &[bool]) -> ScalarStates {
+    candidates
+        .iter()
+        .enumerate()
+        .map(|(i, _)| {
+            if deferrable[i] {
+                CanonState::ScalarOnly
+            } else {
+                CanonState::Both
+            }
+        })
+        .collect()
+}
+
+/// Determine, per candidate, whether its field is never accessed through the
+/// GC reference anywhere in the loop body — neither by a call that takes the
+/// candidate's local by `&`/`&mut` (such a callee could read the field), nor
+/// by a direct `&`/`&mut` of the field itself (`&mut self.f`, which lets a
+/// callee bypass the scalar). Plain field reads/writes don't count: the walker
+/// rewrites them to scalar ops, so they never require the field to be
+/// canonical.
+fn compute_deferrable_candidates(
+    body: &NirBlock,
+    candidates: &[ScalarizeCandidate],
+    type_table: &TypeTable,
+    cache: &FieldUsageCache,
+) -> Vec<bool> {
+    struct CallTouchVisitor<'a> {
+        candidates: &'a [ScalarizeCandidate],
+        type_table: &'a TypeTable,
+        cache: &'a FieldUsageCache,
+        touched: IndexSet<(u32, u32)>,
+    }
+    impl NirRefVisitor for CallTouchVisitor<'_> {
+        fn visit_expr(&mut self, expr: &NirExpr) {
+            if matches!(
+                expr.kind,
+                NirExprKind::Call { .. }
+                    | NirExprKind::MethodCall { .. }
+                    | NirExprKind::IndirectCall { .. }
+                    | NirExprKind::CmRawCall { .. }
+            ) {
+                let mut sync = SyncFields {
+                    write_back: IndexSet::default(),
+                    re_read: IndexSet::default(),
+                };
+                accumulate_call_sync(
+                    expr,
+                    self.candidates,
+                    self.type_table,
+                    self.cache,
+                    &mut sync,
+                );
+                self.touched.extend(sync.write_back.iter().copied());
+                self.touched.extend(sync.re_read.iter().copied());
+            }
+            // Taking a reference to the candidate's exact field — `&self.f` /
+            // `&mut self.f` — lets a callee read or write the field through the
+            // reference, bypassing the scalar. `accumulate_call_sync` only
+            // tracks whole-local `&`/`&mut` args, so guard the field-ref shape
+            // here: such a candidate must NOT be deferred (its field is not
+            // call-clean). Conservative — at worst it forgoes the deferral.
+            if let NirExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                expr: inner,
+            } = &expr.kind
+                && let NirExprKind::FieldAccess {
+                    expr: base,
+                    field_index,
+                    ..
+                } = &inner.kind
+                && let NirExprKind::Local { index, .. } = &base.kind
+            {
+                self.touched.insert((*index, *field_index));
+            }
+            self.walk_expr(expr);
+        }
+    }
+    let mut v = CallTouchVisitor {
+        candidates,
+        type_table,
+        cache,
+        touched: IndexSet::default(),
+    };
+    v.visit_block(body);
+    candidates
+        .iter()
+        .map(|c| !v.touched.contains(&(c.local_index, c.field_index)))
+        .collect()
 }
 
 /// Mutable context threaded through the walker.
@@ -1901,9 +2002,16 @@ impl WalkCtx<'_> {
     }
 }
 
-/// Top-level entry: walk the loop body with state initialized to `Both`,
-/// then force every candidate's state back to `Both` at body end so the
-/// loop's back-edge invariant holds.
+/// Top-level entry: walk the loop body with each candidate's state
+/// initialized to its loop-entry state, then converge body-exit back to that
+/// same entry state so the loop's back-edge invariant holds.
+///
+/// Call-clean candidates (`deferrable`) enter as `ScalarOnly` and stay
+/// `ScalarOnly` across the back-edge, so the body-end converge is a no-op
+/// for them — the per-iteration write-back is eliminated and the field is
+/// instead committed at the loop's escape points (`return` / `break`, via
+/// `commit_scalar_for_escape`). All other candidates keep the classic
+/// `Both` entry / body-end force-`Both` discipline.
 fn process_loop_body(
     body: &mut NirBlock,
     candidates: &[ScalarizeCandidate],
@@ -1912,7 +2020,9 @@ fn process_loop_body(
     type_table: &TypeTable,
     cache: &FieldUsageCache,
 ) {
-    let mut states = init_states(candidates);
+    let deferrable = compute_deferrable_candidates(body, candidates, type_table, cache);
+    let entry = entry_states_for(candidates, &deferrable);
+    let mut states = entry.clone();
     let mut ctx = WalkCtx {
         candidates,
         type_table,
@@ -1924,10 +2034,11 @@ fn process_loop_body(
     };
     walk_block(body, &mut states, &mut ctx);
     let span = crate::token::Span::new(0, 0, 0, 0);
-    // Body-end: converge every candidate back to `Both` so the loop's
-    // back-edge state matches the entry state established by the
-    // pre-load. Insert one sync per candidate that diverged.
-    let body_end = sync_to_target(&mut states, CanonState::Both, &ctx, span);
+    // Body-end: converge every candidate back to its loop-entry state so the
+    // loop's back-edge state matches the entry established by the pre-load.
+    // For deferrable (`ScalarOnly`-entry) candidates this is a no-op; for the
+    // rest it forces `Both`. Insert one sync per candidate that diverged.
+    let body_end = sync_to_targets(&mut states, &entry, &ctx, span);
     body.stmts.extend(body_end);
 }
 
@@ -1950,6 +2061,25 @@ fn sync_to_target(
             out.push(stmt);
         }
         states[i] = target;
+    }
+    out
+}
+
+/// Like `sync_to_target`, but each candidate converges to its own target
+/// state (used for the per-candidate back-edge invariant: deferrable
+/// candidates target `ScalarOnly`, the rest `Both`).
+fn sync_to_targets(
+    states: &mut ScalarStates,
+    targets: &[CanonState],
+    ctx: &WalkCtx,
+    span: crate::token::Span,
+) -> Vec<NirStmt> {
+    let mut out = Vec::new();
+    for (i, c) in ctx.candidates.iter().enumerate() {
+        if let Some(stmt) = state_transition_stmt(states[i], targets[i], c, span) {
+            out.push(stmt);
+        }
+        states[i] = targets[i];
     }
     out
 }
@@ -2245,6 +2375,19 @@ fn walk_stmt(
             if let Some(l) = label {
                 if let Some(bucket) = ctx.label_break_states.get_mut(l) {
                     bucket.push(states.clone());
+                } else {
+                    // A labeled break to a label not registered during this
+                    // loop-body walk targets a block *enclosing* the loop, so
+                    // it escapes the HFS scope just like a `return` or an
+                    // unlabeled break. Commit `ScalarOnly` candidates so the
+                    // field is canonical for readers after the loop — this is
+                    // what keeps deferring the per-iteration back-edge
+                    // write-back sound for breaks that exit the loop. (No-op
+                    // when the state is already `Both`, so it cannot
+                    // reintroduce the commit-on-every-labeled-break regression:
+                    // those breaks target *registered* in-loop labels and take
+                    // the branch above.)
+                    commit_scalar_for_escape(states, out, ctx, span);
                 }
             } else {
                 commit_scalar_for_escape(states, out, ctx, span);
@@ -2696,12 +2839,12 @@ fn accumulate_call_sync(
             // CmRawCall is a lowered Wasm import — its args are primitive
             // Wasm types, never struct refs.
         }
-        // The remaining NirExprKind variants are not call sites. The
-        // single caller (`compute_call_field_effects`) is reached only
-        // from `walk_call_expr`, which dispatches exclusively for
-        // `Call` / `MethodCall` / `IndirectCall`. Fail loud if a future
-        // refactor pushes a different shape into here, rather than
-        // silently producing no sync.
+        // The remaining NirExprKind variants are not call sites. Both callers
+        // (`compute_call_field_effects` via `walk_call_expr`, and
+        // `compute_deferrable_candidates`' `CallTouchVisitor`) gate on the
+        // `Call` / `MethodCall` / `IndirectCall` / `CmRawCall` shape before
+        // dispatching here. Fail loud if a future refactor pushes a different
+        // shape into here, rather than silently producing no sync.
         _ => unreachable!("accumulate_call_sync called on non-call expression"),
     }
 }

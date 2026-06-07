@@ -1593,12 +1593,12 @@ fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
     b180: block {
         l181: loop {
             if __hfs_index_12 >= _licm_used_10 {
+                self.index = __hfs_index_12;
                 break b180;
             }
             byte = builtin::array_get_u8(_licm_repr_11, __hfs_index_12);
             __hfs_index_12 = __hfs_index_12 + 1;
             "core:prelude/list.wado/List<u8>::push"(__b, byte);
-            self.index = __hfs_index_12;
             continue l181;
         };
     };
@@ -1831,6 +1831,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let self_10: ref "core:prelude/string.wado//StrCharIter";
     let s: ref "core:prelude/string.wado//String";
     let _licm_buf_38: ref "core:prelude/string.wado//String";
+    let _licm_arith_39: bool;
     limit = (if f.precision == -2 -> i32 {
         256;
     } else {
@@ -1841,13 +1842,14 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     truncated = 0;
     self_10 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 };
     _licm_buf_38 = f.buf;
+    _licm_arith_39 = limit >= 0;
     b218: block {
         l219: loop {
             let __sroa___match_7_discriminant: i32;
             let __sroa___match_7_payload_0: char;
             multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(self_10);
             if __sroa___match_7_discriminant == 0 {
-                if (if limit >= 0 -> i32 {
+                if (if _licm_arith_39 -> i32 {
                     count >= limit;
                 } else {
                     0;

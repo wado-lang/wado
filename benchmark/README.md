@@ -2,8 +2,8 @@
 
 Performance comparison of Wado (Wasm/wasmtime) against native compilers.
 
-Environment: Wado 2026-06-05, wasmtime 46.0.0, gcc 13.3.0, rustc 1.95.0,
-Node.js v24.14.1, Bun 1.3.11, Linux x86_64.
+Environment: Wado 2026-06-06, wasmtime 46.0.0, gcc 13.3.0, rustc 1.95.0,
+Node.js v24.14.1, Bun 1.3.14, Linux x86_64.
 
 All figures report **throughput** (work per second; higher is better) with
 the per-iteration time in parentheses. Each phase warms up once, then
@@ -24,9 +24,9 @@ Count primes up to 1M (integer arithmetic, trial division).
 
 | Implementation |    Throughput |    ms/iter | vs best |
 | -------------- | ------------: | ---------: | ------: |
-| C              | 5.86 M nums/s | 170.749 ms |   1.00x |
-| **Wado**       | 4.67 M nums/s | 214.280 ms |   1.25x |
-| JavaScript     | 3.90 M nums/s | 256.630 ms |   1.50x |
+| C              | 7.96 M nums/s | 125.674 ms |   1.00x |
+| **Wado**       | 7.82 M nums/s | 127.945 ms |   1.02x |
+| JavaScript     | 7.64 M nums/s | 130.938 ms |   1.04x |
 
 ## Mandelbrot
 
@@ -34,9 +34,9 @@ Count primes up to 1M (integer arithmetic, trial division).
 
 | Implementation |  Throughput |    ms/iter | vs best |
 | -------------- | ----------: | ---------: | ------: |
-| JavaScript     | 4.21 M px/s | 187.019 ms |   1.00x |
-| **Wado**       | 4.17 M px/s | 188.618 ms |   1.01x |
-| C              | 4.17 M px/s | 188.738 ms |   1.01x |
+| JavaScript     | 4.07 M px/s | 193.077 ms |   1.00x |
+| **Wado**       | 4.06 M px/s | 193.652 ms |   1.00x |
+| C              | 3.99 M px/s | 196.978 ms |   1.02x |
 
 ## Sieve
 
@@ -45,11 +45,11 @@ allocated once and reset each iteration, so allocation and first-touch page
 faults stay out of the timed region — the loop measures steady-state array
 traffic, which keeps run-to-run spread within ~1-2%.
 
-| Implementation |      Throughput |    ms/iter | vs best |
-| -------------- | --------------: | ---------: | ------: |
-| C              | 229.33 M nums/s |  43.606 ms |   1.00x |
-| JavaScript     | 172.04 M nums/s |  58.127 ms |   1.33x |
-| **Wado**       |  64.96 M nums/s | 153.947 ms |   3.53x |
+| Implementation |      Throughput |   ms/iter | vs best |
+| -------------- | --------------: | --------: | ------: |
+| C              | 288.29 M nums/s | 34.687 ms |   1.00x |
+| JavaScript     | 197.33 M nums/s | 50.676 ms |   1.46x |
+| **Wado**       | 115.36 M nums/s | 86.683 ms |   2.50x |
 
 ## Float-to-String
 
@@ -57,9 +57,9 @@ traffic, which keeps run-to-run spread within ~1-2%.
 
 | Implementation   |     Throughput |    ms/iter | vs best |
 | ---------------- | -------------: | ---------: | ------: |
-| Rust (core::fmt) | 10.21 M conv/s |  97.950 ms |   1.00x |
-| **Wado** (fpfmt) |  7.17 M conv/s | 139.416 ms |   1.42x |
-| C (printf)       |  5.86 M conv/s | 170.772 ms |   1.74x |
+| Rust (core::fmt) | 13.58 M conv/s |  73.619 ms |   1.00x |
+| **Wado** (fpfmt) |  9.53 M conv/s | 104.933 ms |   1.42x |
+| C (printf)       |  7.56 M conv/s | 132.236 ms |   1.80x |
 
 ## Compression: compress
 
@@ -67,9 +67,9 @@ zlib compression of twitter.json (631514 bytes).
 
 | Implementation         |  Throughput |   ms/iter | vs best |
 | ---------------------- | ----------: | --------: | ------: |
-| Rust (zlib-rs)         | 158.49 MB/s |  3.985 ms |   1.00x |
-| JavaScript (node:zlib) | 132.86 MB/s |  4.753 ms |   1.19x |
-| **Wado** (core:zlib)   |  23.57 MB/s | 26.788 ms |   6.72x |
+| Rust (zlib-rs)         | 225.50 MB/s |  2.801 ms |   1.00x |
+| JavaScript (node:zlib) | 157.15 MB/s |  4.019 ms |   1.43x |
+| **Wado** (core:zlib)   |  32.86 MB/s | 19.216 ms |   6.86x |
 
 ## Compression: decompress
 
@@ -77,9 +77,9 @@ zlib decompression of twitter.json (631514 bytes).
 
 | Implementation         |  Throughput |  ms/iter | vs best |
 | ---------------------- | ----------: | -------: | ------: |
-| Rust (zlib-rs)         |   1.40 GB/s | 0.450 ms |   1.00x |
-| JavaScript (node:zlib) | 787.15 MB/s | 0.802 ms |   1.78x |
-| **Wado** (core:zlib)   | 119.52 MB/s | 5.283 ms |  11.74x |
+| Rust (zlib-rs)         |   2.04 GB/s | 0.310 ms |   1.00x |
+| JavaScript (node:zlib) |   1.09 GB/s | 0.581 ms |   1.87x |
+| **Wado** (core:zlib)   | 196.06 MB/s | 3.221 ms |  10.40x |
 
 ## JSON: twitter
 
@@ -87,9 +87,9 @@ Deserialize twitter.json (631514 bytes).
 
 | Implementation          |  Throughput |  ms/iter | vs best |
 | ----------------------- | ----------: | -------: | ------: |
-| Rust (serde_json)       | 700.26 MB/s | 0.902 ms |   1.00x |
-| JavaScript (JSON.parse) | 279.30 MB/s | 2.033 ms |   2.51x |
-| **Wado** (core:json)    | 141.31 MB/s | 4.469 ms |   4.96x |
+| Rust (serde_json)       | 970.33 MB/s | 0.651 ms |   1.00x |
+| JavaScript (JSON.parse) | 449.03 MB/s | 1.265 ms |   2.16x |
+| **Wado** (core:json)    | 180.00 MB/s | 3.508 ms |   5.39x |
 
 ## JSON: canada
 
@@ -97,9 +97,9 @@ Deserialize canada.json (2251051 bytes, geographic coordinates).
 
 | Implementation          |  Throughput |   ms/iter | vs best |
 | ----------------------- | ----------: | --------: | ------: |
-| Rust (serde_json)       | 210.48 MB/s | 10.695 ms |   1.00x |
-| JavaScript (JSON.parse) | 208.08 MB/s | 10.818 ms |   1.01x |
-| **Wado** (core:json)    |  51.32 MB/s | 43.863 ms |   4.10x |
+| Rust (serde_json)       | 296.21 MB/s |  7.600 ms |   1.00x |
+| JavaScript (JSON.parse) | 286.09 MB/s |  7.868 ms |   1.04x |
+| **Wado** (core:json)    |  77.62 MB/s | 29.000 ms |   3.82x |
 
 ## JSON: catalog
 
@@ -107,10 +107,10 @@ Deserialize citm_catalog.json (1727204 bytes, event catalog).
 
 | Implementation              |  Throughput |   ms/iter | vs best |
 | --------------------------- | ----------: | --------: | ------: |
-| Rust (serde_json)           | 630.95 MB/s |  2.737 ms |   1.00x |
-| JavaScript (JSON.parse)     | 427.21 MB/s |  4.043 ms |   1.48x |
-| **Wado** (v2, hand-rolled¹) | 160.04 MB/s | 10.792 ms |   3.94x |
-| **Wado** (core:json)        |  89.67 MB/s | 19.261 ms |   7.04x |
+| Rust (serde_json)           | 810.01 MB/s |  2.132 ms |   1.00x |
+| JavaScript (JSON.parse)     | 576.70 MB/s |  2.995 ms |   1.40x |
+| **Wado** (v2, hand-rolled¹) | 273.65 MB/s |  6.311 ms |   2.96x |
+| **Wado** (core:json)        | 154.42 MB/s | 11.184 ms |   5.25x |
 
 ¹ `json_catalog/json_catalog_v2.wado` is a hand-rolled CitmCatalog parser
 PoC (no `core:json` / `core:serde`). Kept as a marker of the upper bound
@@ -123,8 +123,8 @@ Parse 81 SQL statements (13366 bytes). Gale-generated parser vs sqlparser-rs.
 
 | Implementation      | Throughput |  ms/iter | vs best |
 | ------------------- | ---------: | -------: | ------: |
-| Rust (sqlparser-rs) |  6.73 MB/s | 1.985 ms |   1.00x |
-| **Wado** (Gale)     |  4.39 MB/s | 3.045 ms |   1.53x |
+| Rust (sqlparser-rs) |  7.83 MB/s | 1.706 ms |   1.00x |
+| **Wado** (Gale)     |  4.43 MB/s | 3.017 ms |   1.77x |
 
 ## Syntax Highlight
 
@@ -142,12 +142,12 @@ four reference SQL highlighters:
 
 | Implementation               |  Throughput |   ms/iter | vs best |
 | ---------------------------- | ----------: | --------: | ------: |
-| JavaScript (Prism)           |   6.68 MB/s |  2.002 ms |   1.00x |
-| JavaScript (Lezer)           |   2.24 MB/s |  5.959 ms |   2.98x |
-| Rust (tree-sitter)           |   2.19 MB/s |  6.104 ms |   3.05x |
-| **Wado** (Gale)              |   2.08 MB/s |  6.432 ms |   3.21x |
-| JavaScript (web-tree-sitter) |   1.34 MB/s |  9.944 ms |   4.99x |
-| JavaScript (Shiki)           | 558.04 KB/s | 23.952 ms |  11.97x |
+| JavaScript (Prism)           |   9.35 MB/s |  1.429 ms |   1.00x |
+| Rust (tree-sitter)           |   2.72 MB/s |  4.905 ms |   3.44x |
+| JavaScript (Lezer)           |   2.68 MB/s |  4.985 ms |   3.49x |
+| **Wado** (Gale)              |   2.61 MB/s |  5.130 ms |   3.58x |
+| JavaScript (web-tree-sitter) |   1.62 MB/s |  8.271 ms |   5.77x |
+| JavaScript (Shiki)           | 675.59 KB/s | 19.784 ms |  13.84x |
 
 Notes:
 

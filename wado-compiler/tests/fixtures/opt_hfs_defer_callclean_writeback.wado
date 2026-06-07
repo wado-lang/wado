@@ -1,0 +1,52 @@
+// A call-clean hot field (`self.pos`, never read through the `&mut Cursor`
+// reference inside the loop) defers its field write-back out of the loop.
+//
+// This mirrors `core:json`'s `skip_whitespace`: a hot scan loop with a guard
+// `break` and an early `return`, where the only field interaction is the
+// scalar bump `self.pos += 1`. The write-back must land at each loop exit
+// (the guard `break` and the `return`) so the post-loop reader observes the
+// final position — but NOT on the `continue` back-edge, which would store to
+// the GC field on every scanned byte.
+
+struct Cursor {
+    data: ByteList,
+    pos: i32,
+}
+
+impl Cursor {
+    fn skip_spaces(&mut self) {
+        while self.pos < self.data.len() {
+            let b = self.data[self.pos] as i32;
+            if b > 32 {
+                return;
+            }
+            if b == 32 {
+                self.pos += 1;
+            } else {
+                return;
+            }
+        }
+    }
+}
+
+export fn run() {
+    let bytes: ByteList = [32, 32, 32, 65, 66, 32, 67] as ByteList;
+    let mut c = Cursor { data: bytes, pos: 0 };
+    c.skip_spaces();
+    // Three leading spaces skipped; stops at 'A' (65).
+    assert c.pos == 3, `expected 3, got {c.pos}`;
+    c.pos += 2;
+    c.skip_spaces();
+    // Skips the single space at index 5; stops at 'C' (67).
+    assert c.pos == 6, `expected 6, got {c.pos}`;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "self.pos = __hfs_pos_8;\n                break",
+        "self.pos = __hfs_pos_8;\n                return"
+    ],
+    "wir_not_expect:O2": ["self.pos = __hfs_pos_8;\n            continue"]
+}

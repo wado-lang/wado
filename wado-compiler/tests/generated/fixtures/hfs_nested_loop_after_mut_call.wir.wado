@@ -126,37 +126,39 @@ fn "wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado/run"() {
     let f_37: ref "core:prelude/format.wado//Formatter";
     let f_48: ref "core:prelude/format.wado//Formatter";
     let __sroa_self_value_55: i32;
-    let __hfs_a_57: i32;
+    let _licm_arith_57: i32;
+    let __hfs_a_58: i32;
     s = struct.new "wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado//S" { a: 0, b: 0 };
     sink = 0;
     o = 0;
-    __hfs_a_57 = 0;
+    __hfs_a_58 = 0;
     b0: block {
         l1: loop {
             if o >= 3 {
                 break b0;
             }
-            sink = sink + __hfs_a_57;
-            __hfs_a_57 = __hfs_a_57 + 1;
-            s.a = __hfs_a_57;
+            sink = sink + __hfs_a_58;
+            __hfs_a_58 = __hfs_a_58 + 1;
+            s.a = __hfs_a_58;
             "wado-compiler/tests/fixtures/hfs_nested_loop_after_mut_call.wado/touch"(s);
             k = 0;
+            _licm_arith_57 = o - o;
             b3: block {
                 l4: loop {
-                    if k >= (o - o) {
+                    if k >= _licm_arith_57 {
                         break b3;
                     }
-                    __hfs_a_57 = local.tee __hfs_a_57(s.a) + 9;
+                    __hfs_a_58 = local.tee __hfs_a_58(s.a) + 9;
                     k = k + 1;
-                    s.a = __hfs_a_57;
+                    s.a = __hfs_a_58;
                     continue l4;
                 };
             };
-            __hfs_a_57 = s.a;
-            sink = sink + __hfs_a_57;
-            __hfs_a_57 = __hfs_a_57 + 2;
+            __hfs_a_58 = s.a;
+            sink = sink + __hfs_a_58;
+            __hfs_a_58 = __hfs_a_58 + 2;
             o = o + 1;
-            s.a = __hfs_a_57;
+            s.a = __hfs_a_58;
             continue l1;
         };
     };

@@ -360,6 +360,7 @@ fn "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/Scanner::ski
     b26: block {
         l27: loop {
             if __hfs_pos_8 >= _licm_used_6 {
+                self.pos = __hfs_pos_8;
                 break b26;
             }
             index = __hfs_pos_8;
@@ -367,9 +368,9 @@ fn "wado-compiler/tests/fixtures/hfs_inline_break_no_writeback.wado/Scanner::ski
             if b == 32 {
                 __hfs_pos_8 = __hfs_pos_8 + 1;
             } else {
+                self.pos = __hfs_pos_8;
                 return;
             }
-            self.pos = __hfs_pos_8;
             continue l27;
         };
     };
