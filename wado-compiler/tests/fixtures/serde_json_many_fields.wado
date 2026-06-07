@@ -25,14 +25,8 @@ test "wide struct roundtrip preserves fields past index 31" {
         f32: 320,
         f33: 330,
     };
-    let json = match to_string::<Wide>(&w) {
-        Ok(s) => s,
-        Err(_) => panic("serialize failed"),
-    };
-    let parsed = match from_string::<Wide>(json) {
-        Ok(p) => p,
-        Err(_) => panic("deserialize failed"),
-    };
+    let json = to_string::<Wide>(&w).expect("serialize failed");
+    let parsed = from_string::<Wide>(json).expect("deserialize failed");
     assert parsed.f0 == 0;
     assert parsed.f31 == 31;
     assert parsed.f32 == 320;
@@ -40,10 +34,7 @@ test "wide struct roundtrip preserves fields past index 31" {
 }
 
 test "wide struct default applies to omitted field past index 31" {
-    let parsed = match from_string::<Wide>("{\"f0\":0,\"f1\":1,\"f2\":2,\"f3\":3,\"f4\":4,\"f5\":5,\"f6\":6,\"f7\":7,\"f8\":8,\"f9\":9,\"f10\":10,\"f11\":11,\"f12\":12,\"f13\":13,\"f14\":14,\"f15\":15,\"f16\":16,\"f17\":17,\"f18\":18,\"f19\":19,\"f20\":20,\"f21\":21,\"f22\":22,\"f23\":23,\"f24\":24,\"f25\":25,\"f26\":26,\"f27\":27,\"f28\":28,\"f29\":29,\"f30\":30,\"f31\":31,\"f32\":32}") {
-        Ok(p) => p,
-        Err(_) => panic("deserialize failed"),
-    };
+    let parsed = from_string::<Wide>("{\"f0\":0,\"f1\":1,\"f2\":2,\"f3\":3,\"f4\":4,\"f5\":5,\"f6\":6,\"f7\":7,\"f8\":8,\"f9\":9,\"f10\":10,\"f11\":11,\"f12\":12,\"f13\":13,\"f14\":14,\"f15\":15,\"f16\":16,\"f17\":17,\"f18\":18,\"f19\":19,\"f20\":20,\"f21\":21,\"f22\":22,\"f23\":23,\"f24\":24,\"f25\":25,\"f26\":26,\"f27\":27,\"f28\":28,\"f29\":29,\"f30\":30,\"f31\":31,\"f32\":32}").expect("deserialize failed");
     assert parsed.f32 == 32;
     assert parsed.f33 == 0;
 }
