@@ -491,9 +491,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// item; only the per-Item dispatch shape is reproduced here, the
     /// body of each branch is delegated to a `reify_*` helper.
     /// True when liveness gating is active and `(module, id)` is a
-    /// user-authored source item unreachable from the export boundary. Skips
-    /// dead free functions and globals so they never reach monomorphization
-    /// (WEP 2026-05-16, reify gating).
+    /// user-authored free function unreachable from the export boundary. Skips
+    /// dead free functions so they never reach monomorphization (WEP
+    /// 2026-05-16, reify gating). Globals are intentionally not gated here.
     ///
     /// Only user-authored modules are gated. Stdlib functions can be reached
     /// solely through compiler synthesis (e.g. `memory_to_gc_string` from CM
@@ -562,9 +562,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                 }
                 Item::Global(global_decl) => {
-                    if self.is_dead_item(&module_source, global_decl.id) {
-                        continue;
-                    }
+                    // Globals are not gated: a global initializer can trap or
+                    // perform effects at module-init time (`global _X = panic(…)`
+                    // must still trap even if `_X` is never read), and purity
+                    // analysis cannot see divergence through ambient `panic`.
+                    // The optimize-time DCE removes genuinely pure dead globals
+                    // instead. A dead global is still reported as a warning.
                     if let Some(tir_global) = self.reify_global(global_decl) {
                         tir_module.globals.push(tir_global);
                     }

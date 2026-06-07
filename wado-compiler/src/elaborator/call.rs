@@ -932,6 +932,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // only the result type.
                     return return_type;
                 }
+                // `ns::func` — a plain free-function call through a namespace
+                // import (the `suffix.find("::")` arm above always returns for
+                // the `Type::method` / `Variant::Case` shapes). Record a use→def
+                // edge to the target function in the namespace module so
+                // liveness sees it reached (and LSP can jump to it); codegen
+                // still resolves it through the namespace `CalleeRef` below.
+                let def_key = self
+                    .symbols
+                    .lookup_in_module(&ns_source, suffix)
+                    .map(|sym| sym.defined_at.clone());
+                if let Some(def_key) = def_key {
+                    let use_id = ident.segments.get(1).map_or(ident.id, |seg| seg.id);
+                    self.record_reference_to_key(use_id, def_key);
+                }
                 (
                     Some(CalleeRef::new(ns_source, suffix)),
                     effective_name.to_string(),

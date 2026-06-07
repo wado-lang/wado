@@ -7,16 +7,20 @@
 //! reachability from the export boundary over the call graph the elaborator
 //! recorded in `references`.
 //!
-//! # Slice 1 (this module's current scope)
+//! # Current scope
 //!
-//! This first slice reports `DeadFunction` / `DeadGlobal` for **free
-//! functions and globals** only. Every impl/trait method is seeded as live,
-//! so it serves as a live intermediary in the call graph without itself
-//! being a dead-report candidate. This makes the analysis sound against
+//! The pass reports `DeadFunction` / `DeadGlobal` for **free functions and
+//! globals** only, and reify gates the emission of exactly those two item
+//! kinds on `live_items`. Every impl/trait method is seeded as live, so it
+//! serves as a live intermediary in the call graph without itself being a
+//! dead-report or gating candidate. This keeps the analysis sound against
 //! false positives (the failure the WEP optimises against) while deferring
 //! method-level dead detection — which needs the operator / `?` / for-of
-//! dispatch edges that leave no `references` entry — and reify gating to a
-//! follow-up slice.
+//! dispatch edges that leave no `references` entry — to a follow-up slice.
+//!
+//! The graph traces every site where reify can emit a call: function and
+//! method bodies, global initializers, parameter defaults, and struct field
+//! defaults. A callee reachable only through one of those still stays live.
 
 use crate::ast::{self, AstId, AstVisitor, Block, Expr, Function, Item, Module};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -33,19 +37,23 @@ use crate::token::Span;
 /// diagnostic emitter.
 #[derive(Default, Clone)]
 pub(crate) struct Liveness {
-    /// Reachable items, used internally to derive `dead_items`. Reify will
-    /// gate free-function / global emission on this once the semantic
-    /// diagnostics move to `Semantics` (Design B, Phase 1) and the graph is
-    /// complete (Phase 2); gating is disabled until then.
-    #[expect(dead_code, reason = "reify gating re-enabled after Design B Phase 1/2")]
+    /// Reachable items. Reify gates free-function / global emission on this
+    /// set: an item absent from it is dead source that reify drops. The
+    /// diagnostic emitter reads its complement (`dead_items`).
     pub(crate) live_items: IndexSet<SymbolKey>,
     pub(crate) dead_items: Vec<SymbolKey>,
 }
 
 /// Compute liveness over every loaded module.
+///
+/// `world_export_names` holds every export name across all registered worlds; a
+/// function whose name matches is a potential world entry point and is seeded
+/// as a root, so a misdeclared entry (`fn run()` without `export`) survives
+/// reify gating and still reaches the world-conformance check.
 pub(crate) fn compute(
     modules: &IndexMap<ModuleSource, Module>,
     references: &IndexMap<SymbolKey, SymbolKey>,
+    world_export_names: &IndexSet<String>,
 ) -> Liveness {
     let mut graph = Graph::default();
 
@@ -56,7 +64,10 @@ pub(crate) fn compute(
                 Item::Function(func) => {
                     let key = SymbolKey::new(source.clone(), func.id);
                     graph.add_function_edges(source, func, references, &key);
-                    if func.is_export || has_export_attr(func) {
+                    if func.is_export
+                        || has_export_attr(func)
+                        || world_export_names.contains(&func.name)
+                    {
                         graph.seed(key.clone());
                     }
                     // Bodyless functions are compiler builtins / imports, not
@@ -70,6 +81,27 @@ pub(crate) fn compute(
                     graph.add_expr_edges(source, &global.initializer, references, &key);
                     if user {
                         graph.report_candidates.push(key);
+                    }
+                }
+                Item::Struct(struct_decl) => {
+                    // A field default is materialized by reify wherever the
+                    // struct is built with the field omitted (and by the
+                    // auto-derived `Default::default`), so any function it
+                    // references must stay live. We cannot cheaply tell whether
+                    // the struct is ever constructed, so seed the struct as a
+                    // root and edge it to its field defaults — sound against
+                    // dropping a reachable callee. Structs are not report
+                    // candidates, so the extra live entry is harmless.
+                    let mut has_default = false;
+                    let key = SymbolKey::new(source.clone(), struct_decl.id);
+                    for field in &struct_decl.fields {
+                        if let Some(default) = &field.default {
+                            graph.add_expr_edges(source, default, references, &key);
+                            has_default = true;
+                        }
+                    }
+                    if has_default {
+                        graph.seed(key);
                     }
                 }
                 Item::Impl(impl_block) => {
@@ -132,6 +164,15 @@ impl Graph {
     ) {
         if let Some(body) = &func.body {
             self.add_block_edges(source, body, references, owner);
+        }
+        // A parameter default is materialized by reify at every call site that
+        // omits the argument, so anything it references is reachable whenever
+        // the function itself is. Edge from the function (not a seed) keeps that
+        // precise: a dead function's defaults stay dead too.
+        for param in &func.params {
+            if let Some(default) = &param.default {
+                self.add_expr_edges(source, default, references, owner);
+            }
         }
     }
 

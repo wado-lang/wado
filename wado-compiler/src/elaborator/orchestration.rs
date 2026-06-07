@@ -1389,7 +1389,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     references.insert(use_key.clone(), def_key.clone());
                 }
             }
-            state.liveness = super::liveness::compute(modules, &references);
+            let export_names: crate::hashmap::IndexSet<String> = state
+                .world_registry
+                .all_export_names()
+                .map(str::to_string)
+                .collect();
+            state.liveness = super::liveness::compute(modules, &references, &export_names);
         }
 
         // Phase 2 — `reify`: rehydrate stdlib TIR from the snapshot and reify
@@ -1425,14 +1430,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         modules,
                         logger,
                         Rc::clone(&state.interner),
-                        // Gating disabled until the semantic diagnostics
-                        // (effect / stores / purity / world-conformance) are
-                        // produced from `Semantics` rather than the emitted
-                        // TIR (Design B, Phase 1) and the liveness graph is
-                        // complete for cross-module reachability (Phase 2).
-                        // Dropping a dead function before then suppresses its
-                        // diagnostics or drops a reachable one (ICE).
-                        None,
+                        // Gate free-function / global emission on the live set.
+                        // The semantic diagnostics (effect / stores / purity)
+                        // are produced from `Semantics`, not the emitted TIR
+                        // (Design B), so dropping a dead item no longer
+                        // suppresses any diagnostic. The liveness graph traces
+                        // bodies, global initializers, parameter defaults, and
+                        // struct field defaults so every reify-emitted call site
+                        // keeps its callee live.
+                        Some(&state.liveness.live_items),
                     );
                     if let Ok(reified) = reify.reify_module(module, module_source.clone()) {
                         result.insert(module_source.clone(), reified);
