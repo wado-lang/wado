@@ -8,8 +8,8 @@
 //   ser: TwitterResponse -> CBOR bytes  (core:cbor to_bytes)
 //   de:  CBOR bytes -> TwitterResponse  (core:cbor from_bytes)
 //
-// Field names match the wire keys, so no `rename` is needed except for the
-// reserved word `type`.
+// Field names match the wire keys, so no `rename` is needed (`type` is a
+// contextual keyword and works directly as a field name).
 //
 // Data source: https://github.com/miloyip/nativejson-benchmark
 // License: MIT
@@ -95,8 +95,7 @@ struct Media {
     url: String,
     display_url: String,
     expanded_url: String,
-    #[serde(rename = "type")]
-    kind: String,
+    type: String,
     sizes: MediaSizes,
     #[serde(default)]
     source_status_id: Option<i64>,
