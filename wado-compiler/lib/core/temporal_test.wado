@@ -2,6 +2,7 @@ use { Instant, ZonedDateTime } from "core:temporal";
 use { Instant as ClockInstant } from "wasi:clocks";
 use { to_string, from_string } from "core:json";
 use { to_bytes, from_bytes } from "core:cbor";
+use { DeserializeErrorKind } from "core:serde";
 
 test "Instant construction and field access" {
     let i = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
@@ -447,4 +448,53 @@ test "Instant decodes a CBOR epoch-seconds tag 1 number as UTC" {
     let bytes: List<u8> = [0xc1, 0x1a, 0x65, 0x53, 0xf1, 0x00];
     let inst = from_bytes::<Instant, ByteList>(bytes as ByteList).expect("decode epoch");
     assert inst == Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+}
+
+test "Instant decoded from an offset-bearing string collapses to the same instant" {
+    // An RFC 3339 string with an offset denotes the same exact instant as its
+    // UTC form; deserializing into an Instant applies the offset and drops it.
+    let utc = ZonedDateTime::parse_rfc3339("2023-11-14T22:13:20Z").unwrap().instant;
+    let zdt = ZonedDateTime::parse_rfc3339("2023-11-15T07:13:20+09:00").unwrap();
+    let bytes = to_bytes::<ZonedDateTime>(&zdt).expect("serialize ZonedDateTime");
+    let inst = from_bytes::<Instant, ByteList>(bytes).expect("decode Instant from offset string");
+    assert inst == utc;
+}
+
+test "Instant decodes a negative epoch number (before 1970)" {
+    let inst = from_string::<Instant>("-5").expect("decode negative epoch");
+    assert inst == Instant { seconds: -5, nanoseconds: 0 };
+}
+
+test "Instant decodes a fractional epoch number" {
+    let inst = from_string::<Instant>("1700000000.5").expect("decode fractional epoch");
+    assert inst == Instant { seconds: 1_700_000_000, nanoseconds: 500_000_000 };
+}
+
+test "Instant decodes a negative fractional epoch with a forward-moving borrow" {
+    // -1.5s before the epoch is seconds:-2 plus 0.5s, since nanoseconds always
+    // move time forward.
+    let inst = from_string::<Instant>("-1.5").expect("decode negative fractional epoch");
+    assert inst == Instant { seconds: -2, nanoseconds: 500_000_000 };
+}
+
+test "Instant keeps full i64 precision from a CBOR integer epoch" {
+    // 2^53 + 1 cannot be represented exactly by f64; the CBOR integer path
+    // (visit_i64) preserves it where a number routed through f64 would not.
+    let bytes: List<u8> = [0xc1, 0x1b, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01];
+    let inst = from_bytes::<Instant, ByteList>(bytes as ByteList).expect("decode large epoch");
+    assert inst.seconds == 9_007_199_254_740_993;
+}
+
+test "Instant rejects an epoch bignum beyond i64/u64 instead of truncating" {
+    // CBOR tag 2 (positive bignum) wrapping 2^64.
+    let bytes: List<u8> = [0xc2, 0x49, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+    let r = from_bytes::<Instant, ByteList>(bytes as ByteList);
+    match r {
+        Err(e) => {
+            assert e.kind matches { DeserializeErrorKind::Overflow };
+        },
+        Ok(_) => {
+            assert false;
+        },
+    }
 }
