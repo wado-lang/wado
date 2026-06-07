@@ -1,0 +1,108 @@
+// CBOR ser/de benchmark over twitter.json (core:cbor + core:value).
+//
+// To keep the three implementations comparable, all of them work on the *full*
+// document via a dynamic value (no typed struct subset), and all report
+// throughput over the original JSON source size. The JSON is parsed once into a
+// dynamic `Value` (core:json), then encoded to a CBOR byte payload. Both phases
+// operate on byte buffers:
+//   ser: Value      -> CBOR bytes  (core:cbor to_bytes)
+//   de:  CBOR bytes -> Value       (core:cbor from_bytes)
+//
+// Data source: https://github.com/miloyip/nativejson-benchmark
+// License: MIT
+
+use { Stdout } from "core:cli";
+use { Value } from "core:value";
+use { from_bytes as json_from_bytes } from "core:json";
+use { to_bytes as cbor_to_bytes, from_bytes as cbor_from_bytes } from "core:cbor";
+use { MonotonicClock } from "wasi:clocks";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { Benchmark } from "core:benchmark";
+
+fn read_file_bytes(path: String) -> ByteList with Preopens {
+    let dirs = Preopens::get_directories();
+    let root = dirs[0].0;
+    let open_result = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait();
+    if let Err(_) = open_result {
+        panic(`failed to open {path}`);
+    }
+    let file = match open_result {
+        Ok(f) => f,
+        Err(_) => unreachable(),
+    };
+    let [stream, _done] = file.read_via_stream(0 as Filesize);
+    let mut buf: List<u8> = [];
+    loop {
+        let chunk = stream.read(4096);
+        if chunk.len() == 0 {
+            break;
+        }
+        buf.extend(&chunk);
+    }
+    stream.drop();
+    return buf as ByteList;
+}
+
+fn parse_json<B: AsByteSlice>(json_data: B) -> Value {
+    return match json_from_bytes::<Value, B>(json_data) {
+        Ok(v) => v,
+        Err(e) => panic(`JSON parse error: {e.message}`),
+    };
+}
+
+fn encode_cbor(value: &Value) -> ByteList {
+    return match cbor_to_bytes::<Value>(value) {
+        Ok(b) => b,
+        Err(e) => panic(`CBOR encode error: {e.message}`),
+    };
+}
+
+fn decode_cbor(bytes: ByteSlice) -> Value {
+    return match cbor_from_bytes::<Value, ByteSlice>(bytes) {
+        Ok(v) => v,
+        Err(e) => panic(`CBOR decode error: {e.message}`),
+    };
+}
+
+/// Length of the top-level `"statuses"` array, or -1 if absent. Used to verify
+/// a decode actually materialized the document.
+fn statuses_count(v: &Value) -> i32 {
+    if let Object(m) = v {
+        if let Some(s) = m.get("statuses") {
+            if let List(arr) = s {
+                return arr.len();
+            }
+        }
+    }
+    return -1;
+}
+
+test "smoke" {
+    // Tiny in-memory round-trip; no Preopens needed.
+    let json = "{\"statuses\":[],\"search_metadata\":{\"count\":0}}";
+    let value = parse_json(json);
+    let cbor = encode_cbor(&value);
+    let back = decode_cbor(cbor.as_byte_slice());
+    assert statuses_count(&back) == 0;
+}
+
+export fn run() with Stdout, MonotonicClock, Preopens {
+    let json_data = read_file_bytes("json_twitter/twitter.json");
+    let json_size = json_data.len();
+    let value = parse_json(json_data);
+
+    // Encode once for the payload-size report and the decode input.
+    let cbor = encode_cbor(&value);
+    let cbor_view = cbor.as_byte_slice();
+
+    let mut b = Benchmark {
+        name: "cbor-twitter",
+        input_size: Option::Some(json_size),
+    };
+    b.println(`{json_size} bytes JSON -> {cbor.len()} bytes CBOR payload`);
+
+    b.run("ser", || encode_cbor(&value).len());
+    let count = b.run("de", || statuses_count(&decode_cbor(cbor_view)));
+    assert count == 100;
+    b.println(`round-tripped {count} total statuses`);
+}
