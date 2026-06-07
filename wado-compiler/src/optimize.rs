@@ -554,10 +554,9 @@ fn run_optimization_passes(
         // per-call allocation cost. Also after value-copy elision/demotion so
         // the duplicable-receiver check sees the stripped receiver. This run
         // also hosts `const_branch_prune` (trivial-block / dead-statement
-        // cleanup): the pre-inline session sees each body after the previous
-        // iteration's `ref_elim`/`copy_prop`, so the inliner's `__inline:`
-        // wrappers are already cleaned enough for the parameter-copy folds.
-        step!("nir/peephole", peephole::run_peephole_pre_inline);
+        // cleanup); it keys only on block structure, so `copy_prop` — not pass
+        // ordering — is what folds the inliner's parameter copies.
+        step!("nir/peephole", peephole::run_peephole);
         // Single-field parameter SROA: rewrite functions whose parameter type
         // is `&S` for a single-field struct (`Box<T>` being the canonical
         // case) to take the inner scalar directly. Runs before `nir/inline`
@@ -574,11 +573,8 @@ fn run_optimization_passes(
         // self.field.push` delegation) are inlined into the raw `array_new +
         // push` window, direct or field-rooted. Later `cse` / `const_fold` in
         // this same loop then see the normalized literal. `elide_local` runs
-        // again here over inline's freshly dead bindings. `const_branch_prune`
-        // is excluded from this post-inline run (it would strip `__inline:`
-        // wrappers before their parameter copies are folded); the next
-        // iteration's pre-inline run handles them.
-        step!("nir/peephole", peephole::run_peephole_post_inline);
+        // again here over inline's freshly dead bindings.
+        step!("nir/peephole", peephole::run_peephole);
         // Adjacent-use Box-local elision. After `sroa_param` reshapes
         // `Box<T>` parameters into scalars and `inline` propagates the
         // resulting `FieldAccess(Local(x), "value")` shape into call

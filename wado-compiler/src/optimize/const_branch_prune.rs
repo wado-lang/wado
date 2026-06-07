@@ -3,35 +3,30 @@
 //! Simplifies trivial blocks left over after other passes:
 //! - `{ expr; }` → `expr`
 //! - `label: { break label: val; }` → `val`
-//! - `label: { let x = y; ... }` → substitute x with y in remaining stmts
 //! - Empty blocks → `()`
 //!
 //! Constant-condition `if` folding is handled by `niri` via the `const_folding`
-//! pass; this pass intentionally does *not* duplicate that logic.
+//! pass; this pass intentionally does *not* duplicate that logic. Copy
+//! propagation (including the in-block copies of loop-mutated locals the
+//! inliner leaves behind) is `copy_prop`'s job — this pass keys only on block
+//! and control-flow *structure*, never on labels or variable names.
 //!
 //! Runs on the worklist rewrite engine (see
 //! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: the
 //! expression simplifications are an `apply_expr` peephole and the
 //! statement-list flattening / dead-code elimination is an `apply_block`
-//! rewrite. The break-target and mutation queries are read-only walks over the
-//! arena (`arena_query::has_break_to`, [`node_mutates`]). All edits go through
-//! the engine API (`become_expr`, `replace_expr_kind`, `set_block_stmts`,
-//! `alloc_stmt`) so the parent map and use index stay coherent.
+//! rewrite. The break-target queries are read-only walks over the arena
+//! (`arena_query::has_break_to`). All edits go through the engine API
+//! (`become_expr`, `replace_expr_kind`, `set_block_stmts`, `alloc_stmt`) so the
+//! parent map and use index stay coherent.
 //!
-//! Phase ordering: the rule depends on `ref_elim`/`copy_prop`/`sroa` having
-//! removed the inliner's leading `let self = &recv` / scalar bindings, so the
-//! `let index = arg` parameter copies become *leading* copies that
-//! [`inline_labeled_block_copies`] can fold before the label-stripping rules
-//! collapse the `__inline:` wrapper. Accordingly the in-loop run is the
-//! *pre-inline* peephole session ([`super::peephole`], `PruneMode::Fixpoint`),
-//! which sees each body after the previous iteration's cleanup passes — not the
-//! post-inline session, where those bindings are still present. Two standalone
-//! entry points keep their own engine session for the callers outside that
-//! session: [`prune_constant_branches`] (`Fixpoint`, used by the
-//! post-globalization cleanup) and [`prune_template_block_wrappers`]
-//! (`PostFixpoint`, the final `__tmpl:` flatten after the fixpoint converges).
+//! The in-loop run rides the unified [`super::peephole`] session
+//! (`PruneMode::Fixpoint`). Two standalone entry points keep their own engine
+//! session for the callers outside that session: [`prune_constant_branches`]
+//! (`Fixpoint`, used by the post-globalization cleanup) and
+//! [`prune_template_block_wrappers`] (`PostFixpoint`, the final `__tmpl:`
+//! flatten after the fixpoint converges).
 
-use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
@@ -87,9 +82,6 @@ impl BranchPruneRule {
 
 impl Rule for BranchPruneRule {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
-        if inline_labeled_block_copies(engine, id) {
-            return true;
-        }
         prune_expr_local(engine, id, self.mode)
     }
 
@@ -393,155 +385,4 @@ fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) ->
         engine.set_block_stmts(inner, Vec::new());
     }
     true
-}
-
-// ---------------------------------------------------------------------------
-// Leading copy-binding inlining inside labeled blocks
-// ---------------------------------------------------------------------------
-
-fn inline_labeled_block_copies(engine: &mut Engine, id: ExprId) -> bool {
-    let ExprKind::LabeledBlock { block, .. } = &engine.body.exprs[id].kind else {
-        return false;
-    };
-    let block = *block;
-
-    // Collect leading copy bindings: `let x = y` (y a Local, x immutable).
-    let mut copies: Vec<(u32, u32, String)> = Vec::new();
-    for &stmt in &engine.body.blocks[block].stmts {
-        if let StmtKind::Let {
-            local_index,
-            is_mut,
-            value,
-            ..
-        } = &engine.body.stmts[stmt].kind
-            && !*is_mut
-            && let ExprKind::Local { index, name } = &engine.body.exprs[*value].kind
-        {
-            copies.push((*local_index, *index, name.clone()));
-        } else {
-            break;
-        }
-    }
-    if copies.is_empty() {
-        return false;
-    }
-
-    // Verify safety: neither target nor source is mutated in the remaining stmts.
-    let copy_count = copies.len();
-    let remaining: Vec<StmtId> = engine.body.blocks[block].stmts[copy_count..].to_vec();
-    let mut locals: IndexSet<u32> = IndexSet::default();
-    for (target, source, _) in &copies {
-        locals.insert(*target);
-        locals.insert(*source);
-    }
-    if remaining
-        .iter()
-        .any(|&s| node_mutates(engine.body, NodeRef::Stmt(s), &locals))
-    {
-        return false;
-    }
-
-    // Build substitution map with transitive resolution.
-    let mut subs: IndexMap<u32, (u32, String)> = IndexMap::default();
-    for (target, source, source_name) in copies {
-        let (final_source, final_name) = if let Some((resolved, resolved_name)) = subs.get(&source)
-        {
-            (*resolved, resolved_name.clone())
-        } else {
-            (source, source_name)
-        };
-        subs.insert(target, (final_source, final_name));
-    }
-
-    let mut stmts = engine.body.blocks[block].stmts.clone();
-    stmts.drain(..copy_count);
-    engine.set_block_stmts(block, stmts);
-    substitute_locals(engine, block, &subs);
-    true
-}
-
-/// Whether any local in `locals` is assigned or mutably referenced within the
-/// subtree at `node`. Mirrors the tree `MutationChecker`.
-fn node_mutates(body: &Body, node: NodeRef, locals: &IndexSet<u32>) -> bool {
-    if let NodeRef::Expr(id) = node {
-        match &body.exprs[id].kind {
-            ExprKind::Assign { target, .. } => {
-                if let ExprKind::Local { index, .. } = &body.exprs[*target].kind
-                    && locals.contains(index)
-                {
-                    return true;
-                }
-                if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[*target].kind
-                    && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
-                    && locals.contains(index)
-                {
-                    return true;
-                }
-            }
-            ExprKind::Unary {
-                op: crate::nir::NirUnaryOp::MutRef,
-                expr: inner,
-            } => {
-                if let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
-                    && locals.contains(index)
-                {
-                    return true;
-                }
-            }
-            ExprKind::MethodCall { receiver, .. } => {
-                if let ExprKind::Local { index, .. } = &body.exprs[*receiver].kind
-                    && locals.contains(index)
-                {
-                    return true;
-                }
-            }
-            ExprKind::Call { args, .. } => {
-                for arg in args {
-                    if arg.is_mut
-                        && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
-                        && locals.contains(index)
-                    {
-                        return true;
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    let mut found = false;
-    body.for_each_child(node, |c| {
-        if !found {
-            found = node_mutates(body, c, locals);
-        }
-    });
-    found
-}
-
-/// Replace `Local { index: target }` with `Local { index: source, … }`
-/// throughout the subtree of `block`, routing each rewrite through the engine
-/// so the use index follows the renamed reads.
-fn substitute_locals(engine: &mut Engine, block: BlockId, subs: &IndexMap<u32, (u32, String)>) {
-    let mut targets = Vec::new();
-    let mut stack = vec![NodeRef::Block(block)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Expr(id) = node
-            && let ExprKind::Local { index, .. } = &engine.body.exprs[id].kind
-            && subs.contains_key(index)
-        {
-            targets.push(id);
-        }
-        engine.body.for_each_child(node, |c| stack.push(c));
-    }
-    for id in targets {
-        let ExprKind::Local { index, .. } = &engine.body.exprs[id].kind else {
-            continue;
-        };
-        if let Some((src_idx, src_name)) = subs.get(index) {
-            let new_kind = ExprKind::Local {
-                index: *src_idx,
-                name: src_name.clone(),
-            };
-            engine.replace_expr_kind(id, new_kind);
-        }
-    }
 }

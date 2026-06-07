@@ -21,6 +21,27 @@ struct CopyBinding {
     target_local: u32,
     source: CopySource,
     type_id: TypeId,
+    /// Whether the source value is stable across the target's scope: the source
+    /// local is never *mutated* (re-assigned, field-mutated, `&mut`-borrowed, or
+    /// passed as a mutable argument) anywhere in the binding block's statements
+    /// after the binding. The target's uses are confined to that scope, so a
+    /// stable source can be propagated even when the source is reassigned
+    /// elsewhere in the function (e.g. a loop counter copied inside the loop
+    /// body). Always `true` for literal sources.
+    source_scope_stable: bool,
+}
+
+impl CopySource {
+    /// The source local index for the index-bearing sources; `None` for
+    /// literals (which are always stable).
+    fn local_index(&self) -> Option<u32> {
+        match self {
+            CopySource::Local { index, .. }
+            | CopySource::Ref { index, .. }
+            | CopySource::MutRef { index, .. } => Some(*index),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -134,7 +155,68 @@ fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
         target_local: local_index,
         source,
         type_id: value_type,
+        // Filled in by `analyze_block`, which knows the binding's position.
+        source_scope_stable: false,
     })
+}
+
+/// Whether `local`'s value is mutated anywhere in the subtree at `node`:
+/// re-assignment, field assignment, `&mut` borrow, mutable method receiver, or
+/// a mutable call argument. Conservative (treats any method call on `local` as
+/// a mutation), matching the in-block copy-inlining check this subsumes.
+fn subtree_mutates_local(body: &Body, node: NodeRef, local: u32) -> bool {
+    if let NodeRef::Expr(id) = node {
+        match &body.exprs[id].kind {
+            ExprKind::Assign { target, .. } => {
+                if let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+                    && *index == local
+                {
+                    return true;
+                }
+                if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[*target].kind
+                    && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
+                    && *index == local
+                {
+                    return true;
+                }
+            }
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: inner,
+            } => {
+                if let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
+                    && *index == local
+                {
+                    return true;
+                }
+            }
+            ExprKind::MethodCall { receiver, .. } => {
+                if let ExprKind::Local { index, .. } = &body.exprs[*receiver].kind
+                    && *index == local
+                {
+                    return true;
+                }
+            }
+            ExprKind::Call { args, .. } => {
+                for arg in args {
+                    if arg.is_mut
+                        && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
+                        && *index == local
+                    {
+                        return true;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut found = false;
+    body.for_each_child(node, |c| {
+        if !found {
+            found = subtree_mutates_local(body, c, local);
+        }
+    });
+    found
 }
 
 struct AnalysisResult {
@@ -165,8 +247,17 @@ fn analyze_block(
     fpt: &FirstParamTypes,
 ) {
     let stmts = body.blocks[block].stmts.clone();
-    for stmt in stmts {
-        if let Some(binding) = analyze_copy_binding(body, stmt) {
+    for (k, &stmt) in stmts.iter().enumerate() {
+        if let Some(mut binding) = analyze_copy_binding(body, stmt) {
+            // The target's uses are confined to this block from `k` onward, so
+            // the source is stable for the propagation iff it is not mutated in
+            // those statements (literals are unconditionally stable).
+            binding.source_scope_stable = match binding.source.local_index() {
+                Some(src) => !stmts[k + 1..]
+                    .iter()
+                    .any(|&s| subtree_mutates_local(body, NodeRef::Stmt(s), src)),
+                None => true,
+            };
             result.bindings.push(binding);
         }
         analyze_stmt(body, stmt, result, type_table, fpt);
@@ -331,6 +422,16 @@ fn can_propagate_copy(
 
     match &binding.source {
         CopySource::Local { index, .. } => {
+            // A scope-stable source is provably unchanged across every use of
+            // the target (the target's reads are confined to the binding's
+            // scope), so the coarse whole-function source gates below — which
+            // would otherwise reject e.g. a loop counter copied inside the loop
+            // — do not apply. This is the precise in-block check that the former
+            // `const_branch_prune::inline_labeled_block_copies` performed,
+            // folded into copy propagation and no longer keyed on a block label.
+            if binding.source_scope_stable {
+                return true;
+            }
             let source_usage = usage.get(index);
             if let Some(su) = source_usage
                 && su.is_assigned
