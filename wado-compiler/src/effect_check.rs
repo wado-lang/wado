@@ -1751,6 +1751,15 @@ fn check_function_effects_sem(
     if func.attrs.iter().any(|attr| attr.name == "ambient") || func.name.starts_with("__test_") {
         return;
     }
+    // Async functions are restructured by synthesis (the async/CM lowering),
+    // so the source AST seen here does not match the effect semantics the
+    // (post-synthesis) TIR check validated — e.g. CM async handlers create
+    // `WaitableSet` / `Subtask` locally without a `with` capability. Until the
+    // checker models the async lowering, skip them rather than false-positive.
+    // Trade-off: effect errors inside async bodies are not reported here.
+    if func.is_async {
+        return;
+    }
     let caller_key = SymbolKey::new(module.clone(), func.id);
 
     // Per-module annotations carry the dispatch facts and signature types that
@@ -1927,9 +1936,10 @@ fn canonicalize_effect(
     effect_by_name: &IndexMap<String, EffectRef>,
 ) -> EffectRef {
     match effect {
-        EffectRef::Concrete { name, .. } => {
-            effect_by_name.get(name).cloned().unwrap_or_else(|| effect.clone())
-        }
+        EffectRef::Concrete { name, .. } => effect_by_name
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| effect.clone()),
         EffectRef::Param { .. } => effect.clone(),
     }
 }
@@ -2232,7 +2242,8 @@ impl AstVisitor for SemEffectWalker<'_> {
                     // Indirect call: the callee is a function-typed value (a
                     // closure or `fn(...)` parameter). Its type carries the
                     // effects it performs when invoked.
-                    if let ResolvedType::Function { effects, .. } = self.sem.types.get(callee_type) {
+                    if let ResolvedType::Function { effects, .. } = self.sem.types.get(callee_type)
+                    {
                         let effects = effects.to_vec();
                         self.report_missing(&effects, "(indirect call)", call.span);
                     }

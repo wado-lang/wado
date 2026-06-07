@@ -331,50 +331,52 @@ Gating is therefore disabled until both are addressed:
       so there is nothing to retire — it stays as silent cleanup as
       designed.
 
-Batch switch — attempted twice, reverted; remaining gaps mapped:
+Batch switch — landed (Semantics effect check), 3 fixtures still red:
 
-Replacing the batch TIR `check_effects` with `check_effects_semantic`
-was attempted over the full E2E suite. Two root causes are now fixed:
+`compile_with_options` now runs `check_effects_semantic` on the whole
+program and the TIR `check_effects` is removed. The full E2E suite is at
+**2836 / 2842** (6 failures = 3 fixtures × 2 opt levels). Resolved on the
+way (each was also an LSP false positive / under-report):
 
-- [x] Stdlib `effect_ops` (and the other non-drained per-module facts)
-      were not seeded from the snapshot, so the propagation closure
-      missed stdlib effect→resource propagation (`Stdout → Stream`,
-      `Stream → StreamWritable`). The snapshot now clones each stdlib
-      module's `types`. This removed 26 of 36 effect-fixture failures
-      (and fixes the same false positives in the LSP).
+- [x] Stdlib per-module facts (`effect_ops`, `function_effects`,
+      `fn_param_types`, …) were not seeded from the snapshot, so the
+      propagation closure missed stdlib effect→resource propagation
+      (`Stdout → Stream → StreamWritable`). The snapshot now clones each
+      stdlib module's `types`.
 - [x] Bundled stdlib `.wado` files load as `ModuleSource::Local` with a
-      `wasi:` / `core:` scheme path, so `is_user_authored` wrongly
-      treated them as user code. Now excluded.
+      `wasi:` / `core:` scheme path; `is_user_authored` now excludes them.
+- [x] Effect identity is non-canonical: `EffectRef::Concrete.module_source`
+      reflects the recording module's import perspective (user `with
+      Stdout` → entry module; stdlib → `wasi:cli`). Effects are now
+      canonicalised by name through the declaration index before
+      comparison / closure lookup.
+- [x] Effect-handler scopes: `with H => … do { … }` grants `H` to the
+      do-block body (pushed / popped around the body walk).
+- [x] Indirect calls through a function-typed parameter resolve the
+      callee via the enclosing function's parameter types.
+- [x] Variant-payload-nested resources: a `(module, variant) → payload
+      types` map feeds the closure and `signature_resources`.
+- [x] Default-expression purity was a side effect of the non-canonical
+      bug, fixed by canonicalisation (`check_default_purity` stays on
+      TIR and fires again).
 
-Five effect fixtures still fail with the switch on (so it stays
-reverted; batch keeps the TIR check). Each is a real gap in the
-Semantics checker that also limits the LSP feature:
+Known limitation — async functions are skipped:
 
-- [ ] Effect-handler scopes. `with H => … do { … }` installs a handler
-      that grants effect `H` to calls inside the block (directly or via
-      helpers). The Semantics walker does not model handler scopes, so
-      it false-positives inside them (`effect_handler_cross_function`).
-      Needs `handler_bindings` + scope tracking in the walk.
-- [ ] Variant-payload-nested resources. `signature_resources` /
-      the closure follow struct fields but not variant case payloads, so
-      a resource nested in a variant payload is missed
-      (`effect_propagation_variant_payload`). Build a `variant_payloads`
-      map like `struct_fields`.
-- [ ] Indirect calls through a function-typed _parameter_. The callee
-      ident resolves via `references` to a local/param whose type is in
-      `local_types`, not `expression_types`; the indirect branch must
-      consult `local_types` first (`effect_indirect_call_error`).
-- [ ] Default-expression purity. Parameter / field default expressions
-      live in the signature, not a function body, so the Semantics
-      walker never visits them; the expected "default must be pure"
-      error is lost (`default_arg_effectful_default_error`,
-      `default_field_effectful_default_error`). `check_default_purity`
-      must move to `Semantics` too (Phase 1d) or the defaults must be
-      walked here.
+`export async fn handle` CM handlers call CM async-coordination resource
+constructors (`WaitableSet::new()`, …) the Semantics checker flagged as
+`missing resource`, while the TIR check did not. Async functions are
+restructured by synthesis (the async / CM lowering), so the source AST
+the Semantics checker walks does not match the effect semantics the
+post-synthesis TIR check validated. Until the checker models the async
+lowering (or treats locally-created CM async resources as
+capability-free), the Semantics effect check skips `async` functions —
+their bodies are not effect-checked. This keeps every valid program
+compiling (no false positives) at the cost of under-reporting effect
+errors inside `async` bodies; it is the one remaining correctness debt
+of the switch.
 
-Until these land, batch effect-checking stays on the TIR `check_effects`
-(complete), and the LSP carries these as known false-positive /
-under-report limitations on advanced effect code.
+- [ ] Effect-check `async` function bodies (model the async lowering, or
+      a capability-free rule for locally-created CM async resources).
 
 #### Phase 1b design — effect check on `Semantics`
 
