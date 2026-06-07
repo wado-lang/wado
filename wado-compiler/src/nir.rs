@@ -1,10 +1,11 @@
 //! Normalized Intermediate Representation (NIR) for Wado.
 //!
-//! NIR is the post-lower body IR consumed by `optimize` and `wir_build`.
-//! At the moment NIR lands, its expression / statement / pattern / container
-//! shapes are structurally identical to their TIR counterparts; they are
-//! distinct Rust types — separate enums, separate visitor — so the type
-//! system enforces the "lower has run" precondition.
+//! NIR is the post-lower body IR consumed by `optimize` and `wir_build`. The
+//! body itself lives in the skeleton arena (`crate::nir_arena`); this module
+//! holds the surrounding NIR metadata — functions, globals, parameters,
+//! locals, captures, function references, and the shared leaf enums
+//! (`NirBinaryOp` / `NirUnaryOp` / `NirLiteralPattern`) the arena nodes
+//! reference.
 //!
 //! Type identity (`TypeId`, `TypeTable`, `ResolvedType`, …) and effect
 //! references (`EffectRef`) are shared with TIR.
@@ -21,22 +22,7 @@ use crate::name::LocalMethodName;
 use crate::tir::{EffectRef, TypeId, TypeTable};
 use crate::token::Span;
 
-#[derive(Debug, Clone)]
-pub struct NirExpr {
-    pub kind: NirExprKind,
-    pub type_id: TypeId,
-    pub span: Span,
-}
 
-impl NirExpr {
-    pub fn new(kind: NirExprKind, type_id: TypeId, span: Span) -> Self {
-        Self {
-            kind,
-            type_id,
-            span,
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct FunctionRef {
@@ -141,295 +127,9 @@ impl FunctionRef {
     }
 }
 
-/// A function argument bundled with its parameter mutability metadata.
-///
-/// `is_mut` reflects whether the callee declares this parameter as `mut`.
-/// It controls value-copy semantics at the call site in the WIR translation phase.
-/// An empty `args` list or missing metadata defaults to conservative (copy).
-#[derive(Debug, Clone)]
-pub struct CallArg {
-    pub expr: NirExpr,
-    /// Whether the callee declares this parameter as `mut`.
-    pub is_mut: bool,
-}
 
-impl CallArg {
-    pub fn new(expr: NirExpr, is_mut: bool) -> Self {
-        Self { expr, is_mut }
-    }
-}
 
-/// Zero-sized witness that a [`NirExprKind::MethodCall`] was constructed
-/// through [`NirExprKind::method_call`], the sole constructor.  The inner
-/// `()` is private to this module so no code outside `tir` can build one —
-/// this makes direct struct-literal construction of `NirExprKind::MethodCall`
-/// impossible and channels every elaborator-side emission through the
-/// single checkpoint maintained in `Elaborator::build_tir_method_call`,
-/// which in turn guarantees arguments were typechecked against the
-/// callee's declared parameter types.
-///
-/// Post-resolve phases (monomorphize / lower / optimize / codegen) still
-/// rebuild `MethodCall` nodes legitimately; they do so via the same
-/// constructor, which is pub(crate) and therefore available only inside
-/// the compiler.
-#[derive(Debug, Clone)]
-pub struct MethodCallInvariant(());
 
-impl NirExprKind {
-    /// Sole constructor of [`NirExprKind::MethodCall`].
-    ///
-    /// Callers are expected to have typechecked `args` against the callee's
-    /// declared parameter types before reaching here.  Elaborator-side
-    /// constructions flow through `Elaborator::build_tir_method_call`;
-    /// post-resolve rewriters thread already-checked NIR through this
-    /// function too so the variant's `invariant` field stays coherent.
-    pub(crate) fn method_call(
-        receiver: Box<NirExpr>,
-        func: FunctionRef,
-        type_args: Vec<TypeId>,
-        args: Vec<CallArg>,
-    ) -> Self {
-        Self::MethodCall {
-            receiver,
-            func,
-            type_args,
-            args,
-            invariant: MethodCallInvariant(()),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum NirExprKind {
-    IntLiteral {
-        value: u64,
-        repr: String,
-    },
-    FloatLiteral {
-        value: f64,
-        repr: String,
-    },
-    BoolLiteral(bool),
-    CharLiteral(char),
-    StringLiteral(String),
-    /// Byte array literal from `#include_bytes`. Lowered to `List<u8>` via data segment.
-    BytesLiteral(Vec<u8>),
-    Null,
-    Unit,
-
-    Local {
-        index: u32,
-        name: String,
-    },
-    /// Read a global variable
-    GlobalVarGet {
-        module_source: ModuleSource,
-        name: String,
-    },
-    /// Write to a global variable
-    GlobalVarSet {
-        module_source: ModuleSource,
-        name: String,
-        value: Box<NirExpr>,
-    },
-
-    Binary {
-        left: Box<NirExpr>,
-        op: NirBinaryOp,
-        right: Box<NirExpr>,
-    },
-    Unary {
-        op: NirUnaryOp,
-        expr: Box<NirExpr>,
-    },
-    Assign {
-        target: Box<NirExpr>,
-        value: Box<NirExpr>,
-    },
-    Cast {
-        expr: Box<NirExpr>,
-        target_type: TypeId,
-    },
-
-    /// Free function call (`foo(args)`) or static method call (`Type::method(args)`).
-    ///
-    /// Whether this is a static method call is encoded in `func.method_info`:
-    /// `None` → free function, `Some(_)` → static method.
-    /// Both map to the same `WirInstr::Call` and share identical semantics.
-    Call {
-        /// Function reference (resolved NIR function or external)
-        func: FunctionRef,
-        /// Explicit type arguments for generic functions: `identity::<i32>(x)`
-        type_args: Vec<TypeId>,
-        args: Vec<CallArg>,
-    },
-    /// Raw Component Model call to a lowered WASI import.
-    ///
-    /// Used inside synthesized CM binding functions to call the flat-ABI WASI function
-    /// directly, bypassing the normal effect call mechanism. Args are already lowered
-    /// to flat CM types (i32, i64, f32, f64).
-    CmRawCall {
-        /// Full WASI local alias name (e.g., "wasi:cli/stdout@0.3.0/write-via-stream")
-        local_name: String,
-        /// Flat ABI arguments (already lowered to core Wasm types)
-        args: Vec<NirExpr>,
-    },
-    MethodCall {
-        receiver: Box<NirExpr>,
-        /// Method reference (resolved NIR function or external)
-        func: FunctionRef,
-        /// Explicit type arguments for generic methods: `obj.method::<i32>()`
-        type_args: Vec<TypeId>,
-        args: Vec<CallArg>,
-        /// Witness that this node was constructed through
-        /// [`NirExprKind::method_call`], which is the sole public
-        /// constructor.  Its inner field is private to this module, so
-        /// code outside `tir` cannot build a `MethodCall` struct literal
-        /// directly and must route through the constructor.  Pattern
-        /// matches elsewhere in the crate use `..` to ignore this field.
-        invariant: MethodCallInvariant,
-    },
-
-    FieldAccess {
-        expr: Box<NirExpr>,
-        field_index: u32,
-        field_name: String,
-    },
-    Index {
-        expr: Box<NirExpr>,
-        index: Box<NirExpr>,
-    },
-
-    Block(NirBlock),
-    If {
-        condition: Box<NirExpr>,
-        then_branch: NirBlock,
-        else_branch: Option<NirBlock>,
-    },
-    Match {
-        expr: Box<NirExpr>,
-        arms: Vec<NirMatchArm>,
-    },
-
-    StructLiteral {
-        struct_type: TypeId,
-        struct_name: String,
-        fields: Vec<NirStructField>,
-    },
-    TupleLiteral {
-        elements: Vec<NirExpr>,
-    },
-    /// A fixed-length `List<T>` value materialized by
-    /// `optimize::array_literal` from an inlined `SequenceLiteralBuilder`
-    /// push sequence. `lower` never emits this; it is an
-    /// optimizer-materialized normalization, like `Switch`. The `List<T>`
-    /// struct type is carried by the enclosing `NirExpr::type_id`, exactly
-    /// as `TupleLiteral` relies on `type_id` for the tuple's struct type.
-    /// `wir_build` lowers it to the `List<T>` `{ repr, used }` `StructNew`
-    /// whose `repr` field is a `WirInstr::ArrayNewFixed` of the elements.
-    ArrayLiteral {
-        elements: Vec<NirExpr>,
-    },
-
-    /// Indirect call through a callable value (closure or funcref)
-    IndirectCall {
-        /// The callee expression (closure struct or funcref)
-        callee: Box<NirExpr>,
-        /// Arguments to pass to the callee
-        args: Vec<NirExpr>,
-    },
-
-    /// Convert a functor struct to canonical closure representation.
-    /// Generated by lower phase for closures that need fn-type compatibility
-    /// but weren't handled by fn-param specialization.
-    ClosureToCanonical {
-        /// The functor struct expression (`__Closure_N` literal)
-        functor: Box<NirExpr>,
-        /// Functor ID for looking up the `__call` method
-        functor_id: u32,
-        /// Target function type (for canonical closure type lookup)
-        target_fn_type: TypeId,
-        /// Module where the closure was defined (needed for cross-module DCE)
-        closure_module: ModuleSource,
-    },
-
-    /// Custom variant construction: `Shape::Circle(5.0)` or `MyVariant::Unit`
-    VariantConstruct {
-        /// The variant type (e.g., `ResolvedType::Variant` { name: "Shape", ... })
-        variant_type: TypeId,
-        /// The case index (0-based position in variant declaration)
-        case_index: u32,
-        /// The case name (for debugging/error messages)
-        case_name: String,
-        /// Payload value (None for unit variants constructed without explicit payload)
-        payload: Option<Box<NirExpr>>,
-    },
-
-    /// Enum construction: `Color::Red`
-    /// Enums have no payload, just a discriminant value.
-    EnumConstruct {
-        /// The enum type (e.g., `ResolvedType::Enum` { name: "Color", ... })
-        enum_type: TypeId,
-        /// The case index (0-based position in enum declaration)
-        case_index: u32,
-        /// The case name (for debugging/error messages)
-        case_name: String,
-    },
-
-    /// Labeled block expression: `label: { ... }` that produces a value
-    /// The value must be returned via `break label: expr;`
-    LabeledBlock {
-        label: String,
-        block: NirBlock,
-        /// The type of value this block produces (from break expressions)
-        result_type: TypeId,
-    },
-
-    /// Get the discriminant (tag) of a variant value.
-    /// Generated from match expressions on variants.
-    /// Result type is i32.
-    VariantTag {
-        expr: Box<NirExpr>,
-    },
-
-    /// Test if a variant value is of a specific case.
-    /// Generated from if-let patterns on custom variants.
-    /// For unit variants: checks discriminator == `case_index`
-    /// For payload variants: uses ref.test on the case type
-    /// Result type is bool.
-    VariantTest {
-        expr: Box<NirExpr>,
-        /// The case index to test for
-        case_index: u32,
-        /// The case name (for error messages)
-        case_name: String,
-    },
-
-    /// Extract the payload from a variant value at a specific case index.
-    /// Generated from match expressions on variants.
-    VariantPayload {
-        expr: Box<NirExpr>,
-        /// The case index to extract payload from
-        case_index: u32,
-        /// The payload type for this case
-        payload_type: TypeId,
-    },
-
-    /// Switch expression for O(1) dispatch using `br_table`.
-    /// Generated by lower phase for dense integer match expressions.
-    /// Each arm index corresponds to (`scrutinee_value` - `min_value`).
-    Switch {
-        /// The scrutinee expression (must be integer type)
-        scrutinee: Box<NirExpr>,
-        /// Minimum value in the switch range
-        min_value: i64,
-        /// Arms in order: arm[i] handles value (`min_value` + i)
-        /// Length determines the range: `[min_value, min_value + arms.len() - 1]`
-        arms: Vec<NirBlock>,
-        /// Default arm for values outside the range
-        default: NirBlock,
-    },
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NirBinaryOp {
@@ -465,66 +165,8 @@ pub enum NirUnaryOp {
     Deref,
 }
 
-#[derive(Debug, Clone)]
-pub struct NirMatchArm {
-    pub pattern: NirPattern,
-    /// Optional guard expression (the condition after `&&`)
-    pub guard: Option<NirExpr>,
-    pub body: NirExpr,
-    pub span: Span,
-}
 
-#[derive(Debug, Clone)]
-pub enum NirPattern {
-    Wildcard,
-    Binding {
-        name: String,
-        local_index: u32,
-        type_id: TypeId,
-    },
-    Literal(NirLiteralPattern),
-    Tuple(Vec<NirPattern>, /* has_rest */ bool),
-    Variant {
-        enum_type: TypeId,
-        variant_name: String,
-        bindings: Vec<NirPattern>,
-        /// Payload type for the matched variant case (unit for no-payload cases)
-        payload_type: TypeId,
-    },
-    /// Enum case pattern (enums are simple i32 discriminants with no payload)
-    Enum {
-        enum_type: TypeId,
-        case_name: String,
-        case_index: u32,
-    },
-    /// Struct destructuring pattern: `{ x, y }` or `Point { x, y }`
-    Struct {
-        struct_type: TypeId,
-        fields: Vec<NirStructPatternField>,
-        has_rest: bool,
-    },
-    /// Or pattern: matches if any alternative matches
-    Or(Vec<NirPattern>),
-    /// Constant value pattern: compares scrutinee against a constant expression
-    /// (immutable global variable or associated constant like `i32::MAX`)
-    ConstantValue {
-        expr: Box<NirExpr>,
-    },
-    /// Range pattern: `0..<10` or `'a'..='z'`
-    Range {
-        start: i128,
-        end: i128,
-        inclusive: bool,
-        is_unsigned: bool,
-    },
-}
 
-#[derive(Debug, Clone)]
-pub struct NirStructPatternField {
-    pub field_name: String,
-    pub field_index: u32,
-    pub pattern: NirPattern,
-}
 
 #[derive(Debug, Clone)]
 pub enum NirLiteralPattern {
@@ -538,12 +180,6 @@ pub enum NirLiteralPattern {
     Null,
 }
 
-#[derive(Debug, Clone)]
-pub struct NirStructField {
-    pub name: String,
-    pub value: NirExpr,
-    pub field_index: u32,
-}
 
 #[derive(Debug, Clone)]
 pub struct NirCapture {
@@ -553,92 +189,10 @@ pub struct NirCapture {
     pub is_mut: bool,
 }
 
-#[derive(Debug, Clone)]
-pub struct NirBlock {
-    pub stmts: Vec<NirStmt>,
-    pub span: Span,
-}
 
-impl NirBlock {
-    pub fn new(stmts: Vec<NirStmt>, span: Span) -> Self {
-        Self { stmts, span }
-    }
 
-    pub fn empty(span: Span) -> Self {
-        Self {
-            stmts: Vec::new(),
-            span,
-        }
-    }
-}
 
-#[derive(Debug, Clone)]
-pub struct NirStmt {
-    pub kind: NirStmtKind,
-    pub span: Span,
-}
 
-impl NirStmt {
-    pub fn new(kind: NirStmtKind, span: Span) -> Self {
-        Self { kind, span }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum NirStmtKind {
-    Let {
-        name: String,
-        local_index: u32,
-        is_mut: bool,
-        is_reactive: bool,
-        type_id: TypeId,
-        value: NirExpr,
-        /// When true, the WIR builder skips deep value-copy for this binding.
-        /// Set by LICM for hoisted variables whose source field is verified
-        /// non-mutated in the loop, making aliasing safe.
-        skip_value_copy: bool,
-    },
-    Expr(NirExpr),
-    Return {
-        value: Option<NirExpr>,
-    },
-    If {
-        condition: NirExpr,
-        then_block: NirBlock,
-        else_block: Option<NirBlock>,
-    },
-    /// Canonical loop: `loop { ... }` - infinite loop exited via break
-    Loop {
-        body: NirBlock,
-    },
-    /// Break statement: `break;`, `break label;`, or `break label: expr;`
-    Break {
-        /// Optional label to break to (for labeled blocks)
-        label: Option<String>,
-        /// Optional value to return from the labeled block
-        value: Option<NirExpr>,
-    },
-    Continue,
-    /// Labeled block: `LABEL: { ... }` - creates a new scope with local bindings
-    LabeledBlock {
-        label: String,
-        block: NirBlock,
-    },
-    /// Tuple destructuring let statement: `let [a, b] = tuple_expr;`
-    ///
-    /// Preserved post-lower only when `lower::translate::pattern` detects a tuple-shaped
-    /// pattern whose value is a core-builtin Call (multi-value return).
-    /// Codegen has a special optimization for that case; all other shapes are
-    /// rewritten by `lower::translate::pattern` before reaching NIR.
-    LetDestructure {
-        /// The pattern to bind (e.g., [a, b, c] or [x, [y, z]])
-        pattern: NirPattern,
-        /// Whether bindings are mutable
-        is_mut: bool,
-        /// The value expression (must be a tuple)
-        value: NirExpr,
-    },
-}
 
 /// Generic type parameter in NIR (from AST `GenericParam`)
 #[derive(Debug, Clone)]

@@ -1,7 +1,7 @@
 //! NIR Interpreter (niri).
 //!
 //! Compile-time partial evaluator for Wado NIR. The public entry point is
-//! [`Interpreter::reduce`], which takes a [`NirExpr`] and returns the most
+//! [`Interpreter::reduce`], which takes a `NirExpr` and returns the most
 //! reduced form possible (a literal node when the expression is fully
 //! known, the original tree otherwise). Constant folding is the first
 //! consumer; future passes (branch pruning, constant propagation,
@@ -715,7 +715,7 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
 // Interpreter
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Partial evaluator over [`NirExpr`].
+/// Partial evaluator over `NirExpr`.
 ///
 /// Holds the type table needed to resolve operand widths, a per-function
 /// `env` mapping local indices to lattice values, an optional
@@ -1074,7 +1074,7 @@ impl<'a> Interpreter<'a> {
     // keeps using the tree path on a materialized callee tail.
     // ───────────────────────────────────────────────────────────────────────
 
-    /// Arena counterpart of [`Self::expr_to_lattice`].
+    /// Arena counterpart of `expr_to_lattice`.
     pub fn expr_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
         let node = &body.exprs[e];
         match &node.kind {
@@ -1164,7 +1164,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Arena counterpart of [`Self::try_fold`].
+    /// Arena counterpart of `try_fold`.
     pub fn try_fold_a(&self, body: &Body, e: ExprId) -> Lattice {
         let node = &body.exprs[e];
         match &node.kind {
@@ -1199,7 +1199,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Arena counterpart of [`Self::block_lattice`].
+    /// Arena counterpart of `block_lattice`.
     fn block_lattice_a(&self, body: &Body, b: BlockId) -> Lattice {
         match body.blocks[b].stmts.as_slice() {
             [] => Lattice::Unevaluated,
@@ -1211,7 +1211,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Arena counterpart of [`Self::match_lattice`].
+    /// Arena counterpart of `match_lattice`.
     fn match_lattice_a(&self, body: &Body, scrutinee: ExprId, arms: &[ArmData]) -> Lattice {
         let scrut_const = self.expr_to_lattice_a(body, scrutinee).as_const();
         if arms.is_empty() {
@@ -1259,7 +1259,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Arena counterpart of [`Self::pattern_matches`].
+    /// Arena counterpart of `pattern_matches`.
     fn pattern_matches_a(&self, body: &Body, value: &Value, pat: PatId) -> PatternMatch {
         match &body.pats[pat].kind {
             PatKind::Wildcard => PatternMatch::Yes,
@@ -1343,7 +1343,7 @@ impl<'a> Interpreter<'a> {
     // `try_call_fold`, mutating the `Body` the const-fold visitor walks.
     // ───────────────────────────────────────────────────────────────────────
 
-    /// Arena counterpart of [`Self::reduce_local`].
+    /// Arena counterpart of `reduce_local`.
     pub fn reduce_local_a(&mut self, body: &mut Body, e: ExprId) -> bool {
         if let Lattice::Const(v) = self.try_fold_a(body, e) {
             body.exprs[e].kind = value_to_arena_kind(v);
@@ -1401,7 +1401,7 @@ impl<'a> Interpreter<'a> {
         self.rewrite_match_expr_a(body, e)
     }
 
-    /// Arena counterpart of [`Self::reduce_local_block`].
+    /// Arena counterpart of `reduce_local_block`.
     pub fn reduce_local_block_a(&mut self, body: &mut Body, block: BlockId) -> bool {
         let has_constant_if = body.blocks[block].stmts.iter().any(|s| {
             matches!(
@@ -1444,7 +1444,7 @@ impl<'a> Interpreter<'a> {
         true
     }
 
-    /// Arena counterpart of [`Self::reduce_in_place`]. Bottom-up reduces the
+    /// Arena counterpart of `reduce_in_place`. Bottom-up reduces the
     /// subtree rooted at `e` over the kinds the engine understands (Binary /
     /// Unary / Cast / If / Match), applying [`Self::reduce_local_a`] at each
     /// node so a child fold is observable at its parent. Used by CTFE
@@ -1551,7 +1551,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Arena counterpart of [`Self::reduce_to_lattice`]. Unlike the tree
+    /// Arena counterpart of `reduce_to_lattice`. Unlike the tree
     /// version, the const-fold visitor has already reduced every child of
     /// `e` bottom-up before this is called, so there is no separate
     /// `reduce_in_place` step: `try_fold_a` sees the already-folded
@@ -1564,7 +1564,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Full arena analogue of the tree [`Self::reduce_to_lattice`]: reduce the
+    /// Full arena analogue of the tree `reduce_to_lattice`: reduce the
     /// subtree bottom-up in place (so multi-level constant operands fold), then
     /// project the result to a lattice. The standalone entry point used by the
     /// `niri` unit tests, which evaluate a freshly-built expression that no
@@ -1574,7 +1574,7 @@ impl<'a> Interpreter<'a> {
         self.reduce_to_lattice_a(body, e)
     }
 
-    /// Arena counterpart of [`Self::rewrite_if_expr`].
+    /// Arena counterpart of `rewrite_if_expr`.
     fn rewrite_if_expr_a(&mut self, body: &mut Body, e: ExprId) -> bool {
         let (condition, then_branch, else_branch) = match &body.exprs[e].kind {
             ExprKind::If {
@@ -1636,7 +1636,7 @@ impl<'a> Interpreter<'a> {
         true
     }
 
-    /// Arena counterpart of [`Self::rewrite_match_expr`].
+    /// Arena counterpart of `rewrite_match_expr`.
     fn rewrite_match_expr_a(&mut self, body: &mut Body, e: ExprId) -> bool {
         let scrutinee = match &body.exprs[e].kind {
             ExprKind::Match { expr, arms } if !arms.is_empty() => *expr,
@@ -1736,7 +1736,7 @@ impl<'a> Interpreter<'a> {
         true
     }
 
-    /// Arena counterpart of [`Self::try_call_fold`]: reads the caller's args
+    /// Arena counterpart of `try_call_fold`: reads the caller's args
     /// from the arena and evaluates the callee's tail on a materialized tree.
     fn try_call_fold_a(&mut self, body: &Body, e: ExprId) -> Lattice {
         let Some(callees) = self.callees else {
@@ -1824,7 +1824,7 @@ impl<'a> Interpreter<'a> {
 }
 
 
-/// Arena counterpart of [`single_tail_expression`]: the callee body's
+/// Arena counterpart of `single_tail_expression`: the callee body's
 /// single-statement tail expression id, read directly from the arena without
 /// materializing a tree. Recognizes the same shapes (`Return { Some(e) }` or
 /// `Expr(e)`); anything else reports `None`.
@@ -1849,7 +1849,7 @@ fn option_to_lattice(opt: Option<Value>) -> Lattice {
     }
 }
 
-/// Outcome of testing a [`NirPattern`] against a constant scrutinee
+/// Outcome of testing a `NirPattern` against a constant scrutinee
 /// [`Value`]. The three states mirror the pattern's contribution to
 /// SCCP feasibility in [`Interpreter::match_lattice`]:
 ///
