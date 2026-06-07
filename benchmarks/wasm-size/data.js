@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780780445580,
+  "lastUpdate": 1780793434529,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31009,6 +31009,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 469113,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7016eb1e61b70a8a5a9182a512111fd8823c99d2",
+          "message": "Merge pull request #1322 from wado-lang/claude/benchmark-json-catalog-perf-jABaw\n\nopt: speed up JSON deserialization via HFS deferred write-back and LICM arithmetic hoisting",
+          "timestamp": "2026-06-07T09:42:25+09:00",
+          "tree_id": "6797821a0637e88a4cc97131ba16c75ed58254a9",
+          "url": "https://github.com/wado-lang/wado/commit/7016eb1e61b70a8a5a9182a512111fd8823c99d2"
+        },
+        "date": 1780793434101,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8792,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15896,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 469240,
             "unit": "bytes"
           }
         ]
