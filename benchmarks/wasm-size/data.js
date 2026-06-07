@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780793434529,
+  "lastUpdate": 1780801468015,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -31053,6 +31053,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 469240,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6a78b8c2678874972eb9705da341d4cde33bd684",
+          "message": "Merge pull request #1323 from wado-lang/claude/package-gale-perf-2LFOa\n\nGale: shrink generated parsers ~10% (parse-entry helpers + single-token CST compaction)",
+          "timestamp": "2026-06-07T11:55:13+09:00",
+          "tree_id": "55682a1fd6174ac3b2bdd1fb653303dfe2e1e80e",
+          "url": "https://github.com/wado-lang/wado/commit/6a78b8c2678874972eb9705da341d4cde33bd684"
+        },
+        "date": 1780801467471,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1765,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8792,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15896,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 437254,
             "unit": "bytes"
           }
         ]
