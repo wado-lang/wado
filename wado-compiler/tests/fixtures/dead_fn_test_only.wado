@@ -1,0 +1,19 @@
+// A function reached only from a `test` block — never from production (`run`)
+// — is reported `TestOnly` ("only used by tests"), not dead. It is still
+// compiled (the test could run), so `run` executes normally.
+fn helper() -> i32 {
+    return 1;
+}
+
+export fn run() {}
+
+test "uses helper" {
+    assert helper() == 1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "warnings_contains": ["function `helper` is only used by tests"],
+    "warnings_not_contains": ["function `helper` is never used"]
+}

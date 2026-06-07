@@ -1,0 +1,12 @@
+// A namespace-imported free function `helper::noisy()` carries `with Stdout`.
+// `run` calls it without declaring `with Stdout`, so the Design-B effect
+// checker must report the missing effect — namespace free calls are resolved
+// via the use->def edge recorded under the callee identifier id.
+use helper from "./sub/ns_effect_helper.wado";
+
+export fn run() {
+    helper::noisy();
+}
+
+__DATA__
+{"compile_error": "Stdout"}

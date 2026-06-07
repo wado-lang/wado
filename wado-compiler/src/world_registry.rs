@@ -350,6 +350,16 @@ impl WorldRegistry {
             .and_then(|w| w.exports.iter().find(|e| e.name == export_name))
     }
 
+    /// Every export name across all registered worlds. A user function whose
+    /// name matches one is a potential world entry point — liveness seeds it so
+    /// a misdeclared entry (e.g. `fn run()` without `export`) survives reify
+    /// gating and reaches the world-conformance check.
+    pub fn all_export_names(&self) -> impl Iterator<Item = &str> {
+        self.worlds
+            .values()
+            .flat_map(|w| w.exports.iter().map(|e| e.name.as_str()))
+    }
+
     /// Check if a world is registered
     pub fn has_world(&self, fq_name: &str) -> bool {
         self.worlds.contains_key(fq_name)

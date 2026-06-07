@@ -125,6 +125,10 @@ pub struct Semantics {
     /// The batch compiler consumes these directly; LSP queries ignore them.
     /// Empty when `build_tir` did not run or bailed.
     pub(crate) tir_modules: IndexMap<ModuleSource, TirModule>,
+    /// Source-level liveness produced between `annotate_bodies` and `reify`.
+    /// `dead_items` feeds the unused-diagnostics emitter; `live_items` is the
+    /// set reify will gate emission on. Empty when annotate did not complete.
+    pub(crate) liveness: crate::elaborator::liveness::Liveness,
     /// True when every analysis phase ran to completion without bailing.
     /// Batch compilation refuses to continue when this is false; LSP queries
     /// proceed with whatever partial state the phases managed to produce.
@@ -230,6 +234,7 @@ impl Semantics {
             coercions,
             desugars,
             tir_modules,
+            liveness: crate::elaborator::liveness::Liveness::default(),
             is_complete: false,
         }
     }
@@ -1020,6 +1025,11 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // so the result is never "complete" even if later phases ran clean.
     let no_syntax_errors = load_result.modules.values().all(|m| !m.has_syntax_errors());
 
+    // Source-level liveness was computed inside `build_tir_from_state`
+    // (between `annotate_bodies` and `reify`, so reify can gate on it). Move
+    // it onto `Semantics` for the diagnostic emitter and LSP.
+    let liveness = std::mem::take(&mut state.liveness);
+
     Semantics {
         entry_module_source: load_result.entry_module_source,
         modules: load_result.modules,
@@ -1036,6 +1046,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         coercions,
         desugars,
         tir_modules,
+        liveness,
         is_complete: lower_ok && no_syntax_errors,
     }
 }

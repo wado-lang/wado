@@ -1,0 +1,43 @@
+// A `for v of c` loop drives a user iterator whose `next()` carries `with
+// Stdout`. The synthetic `.into_iter()` / `.next()` calls leave no
+// method_dispatch fact, so the effect checker consults the `for_of_iterator`
+// fact; `consume` lacks `with Stdout`, so the missing effect must be reported.
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    n: i32,
+}
+
+impl Iterator for Counter {
+    type Item = i32;
+
+    fn next(&mut self) -> Option<i32> with Stdout {
+        println("tick");
+        if self.n <= 0 {
+            return null;
+        }
+        self.n = self.n - 1;
+        return Option::Some(self.n);
+    }
+}
+
+impl IntoIterator for Counter {
+    type Item = i32;
+    type Iter = Counter;
+
+    fn into_iter(&self) -> Counter {
+        return *self;
+    }
+}
+
+fn consume(c: Counter) {
+    for let v of c {
+    }
+}
+
+export fn run() with Stdout {
+    consume(Counter { n: 2 });
+}
+
+__DATA__
+{"compile_error": "Stdout"}

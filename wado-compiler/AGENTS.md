@@ -47,23 +47,25 @@ The target world is indicated by the top-level key in the JSON:
 - `"test": {}` → test world (runs test block exports)
 - `"wasi:http/service": {...}` → HTTP service world
 
-| Field                 | Type                 | Description                                                 |
-| --------------------- | -------------------- | ----------------------------------------------------------- |
-| `"test"`              | `{}`                 | Run as test world (`wasi:test`), executing test exports     |
-| `"wasi:http/service"` | `object`             | Run as HTTP service (see HTTP sub-fields below)             |
-| `stdout`              | `string`             | Expected stdout (exact match)                               |
-| `stderr`              | `string`             | Expected stderr (exact match)                               |
-| `stdout_contains`     | `string[]`           | Strings that must appear in stdout                          |
-| `stderr_contains`     | `string[]`           | Strings that must appear in stderr                          |
-| `trapped`             | `bool`               | Whether the program should trap                             |
-| `compile_error`       | `string`             | Expected compile error (substring match)                    |
-| `skip_os`             | `bool`               | Skip this test under `-Os` (e.g. tests relying on names)    |
-| `preopened_dirs`      | `[string, string][]` | Preopened dirs `[template, guest_path]` (see note below)    |
-| `allocator`           | `string`             | Override allocator: `"bump"` (default) or `"debug"`         |
-| `wir_expect:Ox`       | `string[]`           | Patterns that must appear in WIR at `-Ox` (substring match) |
-| `wir_not_expect:Ox`   | `string[]`           | Patterns that must NOT appear in WIR at `-Ox`               |
-| `outgoing_mocks`      | `object`             | Mock responses for outgoing HTTP requests (see below)       |
-| `tls_mocks`           | `object`             | Mock responses for `wasi:tls` handshakes (see below)        |
+| Field                   | Type                 | Description                                                 |
+| ----------------------- | -------------------- | ----------------------------------------------------------- |
+| `"test"`                | `{}`                 | Run as test world (`wasi:test`), executing test exports     |
+| `"wasi:http/service"`   | `object`             | Run as HTTP service (see HTTP sub-fields below)             |
+| `stdout`                | `string`             | Expected stdout (exact match)                               |
+| `stderr`                | `string`             | Expected stderr (exact match)                               |
+| `stdout_contains`       | `string[]`           | Strings that must appear in stdout                          |
+| `stderr_contains`       | `string[]`           | Strings that must appear in stderr                          |
+| `warnings_contains`     | `string[]`           | Substrings each appearing in some compile-time warning      |
+| `warnings_not_contains` | `string[]`           | Substrings appearing in no compile-time warning (FP guard)  |
+| `trapped`               | `bool`               | Whether the program should trap                             |
+| `compile_error`         | `string`             | Expected compile error (substring match)                    |
+| `skip_os`               | `bool`               | Skip this test under `-Os` (e.g. tests relying on names)    |
+| `preopened_dirs`        | `[string, string][]` | Preopened dirs `[template, guest_path]` (see note below)    |
+| `allocator`             | `string`             | Override allocator: `"bump"` (default) or `"debug"`         |
+| `wir_expect:Ox`         | `string[]`           | Patterns that must appear in WIR at `-Ox` (substring match) |
+| `wir_not_expect:Ox`     | `string[]`           | Patterns that must NOT appear in WIR at `-Ox`               |
+| `outgoing_mocks`        | `object`             | Mock responses for outgoing HTTP requests (see below)       |
+| `tls_mocks`             | `object`             | Mock responses for `wasi:tls` handshakes (see below)        |
 
 Every `preopened_dirs` entry is backed by a fresh temp directory (deleted when
 the test finishes), keeping filesystem tests hermetic across the parallel

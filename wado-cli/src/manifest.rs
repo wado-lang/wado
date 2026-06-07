@@ -67,7 +67,10 @@ pub enum EntryPointKind {
     Command,
     /// `[package].service` — for `wado serve`.
     Service,
-    /// `[package].lib` — for `wado compile --lib`.
+    /// `[package].lib` — library entry. Pending: the `--lib` compile path is
+    /// abolished until a world model that fits libraries lands (a library has
+    /// no command entry, so it does not map onto `wasi:cli/command`). The
+    /// manifest field and this resolution are retained as the data model.
     Lib,
 }
 

@@ -18,6 +18,7 @@ mod expr;
 mod handlers;
 mod infer;
 mod item;
+pub(crate) mod liveness;
 mod matches;
 mod method_call;
 mod method_lookup;

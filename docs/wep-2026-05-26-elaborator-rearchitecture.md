@@ -311,18 +311,138 @@ construction.
 
 ### DCE / Liveness
 
-The `liveness` pass is documented in
-[`wep-2026-05-16-unused-diagnostics.md`](./wep-2026-05-16-unused-diagnostics.md);
-that WEP is rewritten to consume the new architecture (its current
-content places the analysis in `optimize/dce.rs`, which moves to the
-elaborator under this WEP). The contract on the elaborator side is
-narrow:
+The `liveness` pass computes source-level reachability between
+`annotate_bodies` and `reify`. Its policy surface — roots, stdlib
+exclusion, suppression, severity — is owned by
+[`wep-2026-05-16-unused-diagnostics.md`](./wep-2026-05-16-unused-diagnostics.md)
+(rewritten to consume this architecture instead of `optimize/dce.rs`).
+This WEP owns the pass mechanism: the data it produces, the graph it
+walks, and the contract reify holds against it.
 
-- `liveness::compute(&Semantics) → Liveness` runs after every
-  `ModuleSemantics` is fully populated.
-- The result is stored on `Semantics` as a new field.
-- `reify_all` gates item emission on `liveness.live_items`.
-- LSP exposes unused diagnostics by reading `Liveness` directly.
+#### Result type and ownership
+
+`Liveness` is a non-optional field on `Semantics`, computed by
+`semantics_of` immediately after every `ModuleSemantics` is populated
+and before reify:
+
+```rust
+pub(crate) struct Liveness {
+    /// Top-level source items (free functions, impl/trait methods
+    /// including defaults, globals) reachable from the export boundary.
+    pub live_items: IndexSet<SymbolKey>,
+    /// User-authored items absent from `live_items`, in source order.
+    /// Consumed by the unused-diagnostics emitter.
+    pub dead_items: Vec<SymbolKey>,
+}
+```
+
+The diagnostic emitter and reify read the same `live_items`. There is
+no separate "conservative for reify, precise for diagnostics" set: one
+reachability result feeds both consumers. `liveness::compute` runs
+regardless of `CompilerOptions::unused_diagnostics`; that flag gates
+only whether `dead_items` is emitted as warnings, never the reify gate
+(the input-shrinking win is correctness-neutral and always taken).
+
+#### Fail-loud, not fail-safe
+
+`reify` skips any item whose `SymbolKey` is absent from `live_items`.
+If the graph is wrong and drops a live item, the missing symbol
+surfaces as an ICE in `monomorphize` / `lower` / `codegen` — never as
+silently miscompiled output. A dropped-live item is therefore a graph
+bug caught by the E2E / WIR golden suite and fixed at the source (a
+missing edge kind), per the project's "a compiler bug is always P0"
+rule. The pass is built for precision; the loud failure mode is the
+safety property that lets it be.
+
+The dual failure — an item that is unused but not reported — is what
+this design optimises against. The graph resolves every edge precisely
+rather than over-approximating reachability when a target is hard to
+resolve; an unresolved edge is a graph bug, not a licence to mark
+candidates live.
+
+#### Node set and enclosing-item index
+
+Nodes are the top-level code items of every loaded module: free
+functions, impl methods, trait methods (including default bodies), and
+globals, each keyed by its defining `SymbolKey`. Stdlib items are
+nodes too — user code reaches them — but only user-authored nodes are
+eligible for `dead_items` (the stdlib-exclusion policy is the
+unused-diagnostics WEP's).
+
+`liveness::compute` builds, locally, an `AstId → enclosing-item
+SymbolKey` map per module in one structural walk. A use-site anywhere
+in a function/global body — including inside closures, which lower to
+synthesised functors later and are not source items — maps to its
+enclosing top-level item. `AstIndex` is not extended; the map is
+private to the pass.
+
+#### Edges
+
+Each recorded use-site becomes an edge `enclosing-item(use) → target`:
+
+- `ModuleBindings.references` — edges whose def-side is a node
+  (free-function calls, global reads, method calls that record a decl
+  reference, variant-case construction). Edges to locals fall out
+  because their def-side is not in the node set.
+- Dispatch facts in `TypeAnnotations` — `method_dispatch`,
+  `static_method_dispatch`, `operator_dispatch`,
+  `index_assign_dispatch`, `from_call_facts` — resolved through the
+  `FunctionRef → defining SymbolKey` resolver reify already uses
+  (`find_impl_method_ast_id`). These cover the paths that leave no
+  `references` edge: operator overloading, the `?` / `From`
+  conversion, `for`-of `into_iter` / `next`, index assignment.
+
+A dispatch fact that cannot be resolved to a defining `SymbolKey` is a
+graph bug (fail-loud), not an over-approximation site.
+
+#### Generic trait dispatch
+
+One path is undecidable at the source level: a trait method reached
+only through a generic type parameter
+(`fn show<T: Display>(x: T) { x.fmt() }`). `annotate` records the edge
+to the trait method (`Display::fmt`); the concrete impl
+(`Foo^Display::fmt`) is selected during monomorphization, which the
+source graph does not run. This is resolved fail-loud: the concrete
+impl is left dead at the source level, surfaces as an ICE if actually
+instantiated, and the fix is a graph edge — "a trait method reachable
+in a generic context makes the corresponding method on every reachable
+impl reachable." The edge is added as the rule the language feature
+requires; there is no blanket over-approximation.
+
+#### Reachability and reify
+
+Reachability is a single BFS from the root set over the edges — no
+fixed-point loop, the node set and edges are static. `live_items` is
+the reachable closure; `dead_items` is the user-node complement in
+source order.
+
+`reify_module` consults `live_items` in its per-`Item` loop and emits
+nothing for an absent item. The TIR handed to `monomorphize` is the
+reachable closure of the program, not the full source. `optimize/dce.rs`
+stays in place: it removes the post-monomorphization population
+(monomorph clones, synthesised CM bindings, effect-dispatch helpers,
+inlined-away code) that never passes through `Semantics`. It retires
+only from diagnostic emission.
+
+#### Prerequisite: diagnostics come from `Semantics`, not TIR
+
+Gating reify is sound only once every semantic diagnostic that can fire
+on dead code is produced from `Semantics` (AST + recorded facts), not
+from the emitted TIR. Wado reports errors in unreachable code (the
+effect, stores, purity, and world-export-conformance checks), and those
+checks historically ran on the `TirModule`s _after_ reify — so dropping
+a dead function silently suppressed its error (proven by
+`effect_check_missing`, `export_required_for_run`,
+`stores_violation_*`). The checks therefore move to the post-`annotate`
+analysis layer alongside `liveness`, reading the same facts
+(`function_effects`, `effect_ops`, `method_dispatch`, …). This is the
+same TIR→AST+facts move Stage 7 made for control-flow / missing-return,
+and it lets the LSP surface effect and stores diagnostics too (it builds
+no TIR). Until that move lands, reify passes `None` as its live set
+(gating off); `liveness` is still computed and feeds the
+`DeadFunction` / `DeadGlobal` diagnostics. The policy is owned by
+[`wep-2026-05-16-unused-diagnostics.md`](./wep-2026-05-16-unused-diagnostics.md)
+(Phase 3b).
 
 The roots, suppression rules, stdlib exclusion, and severity policy
 remain owned by the unused-diagnostics WEP and are not duplicated
@@ -348,10 +468,15 @@ Stages 1–5 and 7a are DONE:
 Remaining:
 
 **Stage 6 — Liveness and DCE.** `liveness::compute(&Semantics)` is
-added, its result stored on `Semantics`, and reify gates item emission
-on it. The user-facing unused diagnostics land per the
-unused-diagnostics WEP; `optimize/dce.rs` retires from that role. Not
-started. Independent of Stage 7 — either may land first.
+added (see the DCE / Liveness section above), its result stored on
+`Semantics` as a non-optional `Liveness`, and reify gates item emission
+on `live_items`. A single reachability result feeds both the reify gate
+and the user-facing unused diagnostics (per the unused-diagnostics
+WEP); `optimize/dce.rs` retires from the diagnostic role but stays as
+silent post-monomorphization cleanup. The pass is fail-loud: a
+dropped-live item ICEs downstream and is fixed as a graph bug, never
+masked by over-approximation. Not started. Independent of Stage 7 —
+either may land first.
 
 **Stage 7 — Make reify mechanical, then `annotate` TIR-free.** This is
 the structural completion of the annotate/reify split, in two sub-steps
@@ -510,7 +635,14 @@ block-result-type reader.
       of every `TirFunction`, including default methods.
 - [x] **Stage 7a** — routing removed; the combined walk survives only as the
       (still TIR-building) `annotate` fact-recorder.
-- [ ] **Stage 6** — Liveness / DCE. Not started; independent of Stage 7.
+- [~] **Stage 6** — Liveness / DCE. Landed: `elaborator/liveness.rs`
+  and the `Liveness` field on `Semantics`, computed in the WEP phase
+  order (`build_tir_from_state` runs all `annotate_bodies` →
+  `liveness::compute` → all `reify`); the `DeadFunction` /
+  `DeadGlobal` diagnostics consume `dead_items`. Reify gating is
+  wired but disabled (`None` live set) pending the
+  diagnostics-from-`Semantics` move (see "Prerequisite" above) and
+  cross-module graph completeness. Independent of Stage 7.
 - [x] **Stage 7-A** — reify is mechanical. Every decision-bearing read goes
       through a recorded fact:
   - [x] Function / method signatures — params, return, type params, impl
