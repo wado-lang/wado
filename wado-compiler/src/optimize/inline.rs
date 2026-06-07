@@ -1958,8 +1958,21 @@ fn inline_calls_in_expr(
                 if !inlined_funcs.contains(&inlined_key) {
                     inlined_funcs.push(inlined_key);
                 }
-                let node = body.exprs[new_id].clone();
-                body.exprs[e] = node;
+                // Move the inlined labeled-block node into the call slot and
+                // null out the now-dead `new_id`, so the inner block is owned
+                // by exactly one node (`e`). Cloning would leave `new_id` as an
+                // orphan sharing the same `BlockId`, violating the arena's
+                // one-parent-per-node invariant.
+                let span = body.exprs[new_id].span;
+                let moved = std::mem::replace(
+                    &mut body.exprs[new_id],
+                    ExprNode {
+                        kind: ExprKind::Unit,
+                        type_id: TypeTable::UNIT,
+                        span,
+                    },
+                );
+                body.exprs[e] = moved;
             }
         }
         Call::Method => {
@@ -2006,8 +2019,21 @@ fn inline_calls_in_expr(
                 if !inlined_funcs.contains(&inlined_key) {
                     inlined_funcs.push(inlined_key);
                 }
-                let node = body.exprs[new_id].clone();
-                body.exprs[e] = node;
+                // Move the inlined labeled-block node into the call slot and
+                // null out the now-dead `new_id`, so the inner block is owned
+                // by exactly one node (`e`). Cloning would leave `new_id` as an
+                // orphan sharing the same `BlockId`, violating the arena's
+                // one-parent-per-node invariant.
+                let span = body.exprs[new_id].span;
+                let moved = std::mem::replace(
+                    &mut body.exprs[new_id],
+                    ExprNode {
+                        kind: ExprKind::Unit,
+                        type_id: TypeTable::UNIT,
+                        span,
+                    },
+                );
+                body.exprs[e] = moved;
             }
         }
         Call::Other => {
