@@ -104,7 +104,7 @@ The pass runs two independent reachability closures over the same call graph:
 | Items satisfying world-export contracts   | Functions whose name and signature satisfy a world export (`command` / `service` / `lib`); identified during `annotate` |
 | `#[export]`-attributed items              | Raw Wasm exports                                                                                                        |
 | Items in `wasm_module_sources` re-exports | Bridged Wasm module exports                                                                                             |
-| impl / trait methods                      | Seeded live as call-graph intermediaries (method-level dead detection deferred)                                          |
+| impl / trait methods                      | Seeded live as call-graph intermediaries (method-level dead detection deferred)                                         |
 
 Each user-authored free function / global is classified by membership:
 

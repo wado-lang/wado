@@ -279,7 +279,10 @@ fn emit_unused_diagnostics<H: CompilerHost>(
     use crate::ast::Item;
     use crate::compiler_host::{Code, DiagnosticSpan};
 
-    let emit = |keys: &[crate::symbol::SymbolKey], fn_code: Code, global_code: Code, reason: &str| {
+    let emit = |keys: &[crate::symbol::SymbolKey],
+                fn_code: Code,
+                global_code: Code,
+                reason: &str| {
         for key in keys {
             let Some(module) = sem.modules.get(&key.module) else {
                 continue;
