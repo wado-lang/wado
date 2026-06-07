@@ -1377,6 +1377,37 @@ impl<'a> Interpreter<'a> {
         self.rewrite_match_expr_a(body, e)
     }
 
+    /// The environment-free constant value of `e`, as the literal [`ExprKind`]
+    /// that should replace it, or `None` when `e` does not fold without
+    /// per-function state.
+    ///
+    /// This is the subset of [`reduce_local_a`](Self::reduce_local_a) that
+    /// depends only on the node and its (already-folded) children plus the
+    /// program-wide [`CalleeMap`]: literal `Binary` / `Unary` / `Cast`
+    /// arithmetic and pure compile-time function evaluation. It deliberately
+    /// excludes the `env` / `field_env` / `globals` paths — local-bound
+    /// constants, forwarded struct fields, and immutable-global reads — which
+    /// require the driving visitor's per-function dataflow state and so stay
+    /// with [`crate::optimize`]'s flow-sensitive const-fold walker.
+    ///
+    /// Because the interpreter's `env` is empty here, `try_fold_a` and
+    /// `try_call_fold_a` only succeed when every operand / argument is already
+    /// a literal; the children a fold discards are therefore literal-only,
+    /// never `Local` mentions. That lets the rewrite engine apply the result
+    /// through its coherent edit API without the use index going stale.
+    ///
+    /// Unlike `reduce_local_a`, this does **not** mutate `body`: the engine
+    /// rule installs the returned kind via `Engine::replace_expr_kind`.
+    pub fn const_fold_kind_a(&mut self, body: &Body, e: ExprId) -> Option<ExprKind> {
+        if let Lattice::Const(v) = self.try_fold_a(body, e) {
+            return Some(value_to_arena_kind(v));
+        }
+        if let Lattice::Const(v) = self.try_call_fold_a(body, e) {
+            return Some(value_to_arena_kind(v));
+        }
+        None
+    }
+
     /// Splice a constant-condition `if` statement into its parent block.
     pub fn reduce_local_block_a(&mut self, body: &mut Body, block: BlockId) -> bool {
         let has_constant_if = body.blocks[block].stmts.iter().any(|s| {

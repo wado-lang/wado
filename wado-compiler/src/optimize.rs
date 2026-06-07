@@ -12,12 +12,13 @@
 //! 4.  `value_copy_demote` — demote deep `$value_copy$T` to a shallow spine
 //!     copy when elements are provably immutable through the binding.
 //! 5.  `peephole` (pre-inline) — unified engine pass: `string_push`
-//!     (`buf.push_str("short")` → per-byte `push`) + `elide_local` (write-only
-//!     local elimination). See `optimize/peephole.rs`.
+//!     (`buf.push_str("short")` → per-byte `push`), `elide_local` (write-only
+//!     local elimination), and env-free `const_fold` (literal arithmetic +
+//!     pure CTFE). See `optimize/peephole.rs`.
 //! 6.  `inline` — function inlining.
 //! 7.  `peephole` (post-inline) — unified engine pass: `array_literal`
-//!     (materialize `ArrayLiteral` from the `array_new + push` window) +
-//!     `elide_local`.
+//!     (materialize `ArrayLiteral` from the `array_new + push` window),
+//!     `elide_local`, and env-free `const_fold`.
 //! 8.  `labeled_block_fusion` — collapse inlined-helper `Option<T>` allocations.
 //! 9.  `ref_elim` — drop unnecessary reference bindings exposed by inlining.
 //! 10. `sroa` — Scalar Replacement of Aggregates.
@@ -589,6 +590,12 @@ fn run_optimization_passes(
         step!("nir/drve", eliminate_dead_return_values);
         step!("nir/cse", eliminate_common_subexprs);
         step!("nir/store_load_forward", forward_stores_to_loads);
+        // The flow-sensitive half of constant folding. The env-free half
+        // (literal arithmetic + pure CTFE) already ran on the worklist in the
+        // `nir/peephole` passes above; this walker handles the folds that need
+        // per-function dataflow state — env-bound locals, forwarded struct
+        // fields, immutable-global reads, and constant-branch collapse.
+        //
         // `field_forward`'s rewrite responsibilities are absorbed by
         // `const_fold` (see `optimize::const_folding::ConstFoldVisitor`).
         // Both passes used to alternate one statement at a time on

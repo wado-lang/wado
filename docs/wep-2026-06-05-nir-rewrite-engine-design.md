@@ -221,6 +221,45 @@ Handoff notes:
   correct, but a from-`root` re-lowering (or mark-sweep) at the end of optimize
   would reclaim them if memory becomes a concern.
 
+## Phase 6 — Engine consolidation
+
+Phases 4–5 made the arena canonical and ported every pass off the tree, but the
+engine-rule peepholes still each rebuilt their own session and ran one rule in
+isolation inside the global fixed-point loop — the worklist-engine win (visit a
+node when it changes, not ~80× a body) was unrealized. Phase 6 collapses the
+local rewrites onto one shared session and starts pulling the remaining local
+work out of the per-iteration whole-body passes.
+
+- [x] Unified peephole session (`optimize/peephole.rs`): `string_push`,
+      `array_literal`, and `elide_local` now run together over one
+      `Engine::new` per function, interleaving on a single worklist instead of
+      three separate sessions. Invoked twice per iteration — pre-inline (so
+      `string_push` sees the `push_str` `MethodCall`, after value-copy so the
+      receiver is stripped) and post-inline (so `array_literal` sees the
+      exposed `array_new + push` window). `match_to_switch` (must run first /
+      also at `-O0`) and `select_lowering` (terminal post-loop lowering) keep
+      their standalone sessions.
+- [x] Constant folding split. The environment-free subset — literal
+      `Binary` / `Unary` / `Cast` arithmetic and pure CTFE
+      (`niri::Interpreter::const_fold_kind_a`) — joined the unified session as
+      `const_folding::ConstFoldRule`, applied through `Engine::replace_expr_kind`
+      so the worklist and use index stay coherent. Because the rule's `env`
+      stays empty, only operands/arguments that are already literals fold, so the
+      discarded children are literal-only (never `Local` mentions) and the edit
+      API needs no deep-unregister. The flow-sensitive folds — env-bound locals,
+      forwarded struct fields, immutable-global reads, constant-branch collapse —
+      need the driving visitor's per-function dataflow (snapshot / restore /
+      join) and stay in the standalone `const_folding::fold_constants` walker,
+      which still runs once per iteration. This matches the worklist-engine WEP's
+      partition: flow-sensitive passes keep their own dataflow walkers.
+- [ ] Migrate the remaining local peephole passes into engine rules joining the
+      unified session: `ref_elim`, `labeled_block_fusion`, `condition_implication`,
+      and `const_branch_prune` (the natural co-migration with const-fold's
+      constant-branch handling).
+- [ ] Per-function dirty-set gating so the interprocedural / flow-sensitive
+      passes only re-trigger the engine on functions they touched, shrinking the
+      global fixed-point loop.
+
 ## Out of scope
 
 - Layer 2 (the hash-consed value e-graph / GVN). Re-decided after the engine

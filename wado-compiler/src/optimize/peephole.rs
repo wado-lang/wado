@@ -2,15 +2,26 @@
 //!
 //! Runs the position-flexible local peephole rewrite rules — short `push_str`
 //! simplification (`string_push`), array-literal materialization
-//! (`array_literal`), and write-only local elimination (`elide_local`) —
-//! together over one shared worklist per function. The engine session (parent
-//! map, use index, post-order seed) is built once for the three rules instead
-//! of once per rule, and the rules interleave on a single worklist rather than
-//! running as three independent whole-body sweeps.
+//! (`array_literal`), write-only local elimination (`elide_local`), and the
+//! environment-free subset of constant folding (`const_folding::ConstFoldRule`
+//! — literal arithmetic and pure CTFE) — together over one shared worklist per
+//! function. The engine session (parent map, use index, post-order seed) is
+//! built once for all the rules instead of once per rule, and the rules
+//! interleave on a single worklist rather than running as independent whole-body
+//! sweeps.
 //!
-//! This is the first consolidation step of the worklist rewrite engine: the
-//! three rules already ran on the engine, but each rebuilt its own session and
-//! ran in isolation. See `docs/wep-2026-06-05-nir-rewrite-engine-design.md`.
+//! This is the consolidation step of the worklist rewrite engine: these rules
+//! already ran on the engine, but each rebuilt its own session and ran in
+//! isolation. See `docs/wep-2026-06-05-nir-rewrite-engine-design.md`.
+//!
+//! Constant folding is only partly here. Its flow-sensitive folds — env-bound
+//! locals, forwarded struct fields, immutable-global reads, and constant-branch
+//! collapse — need the driving visitor's per-function dataflow state and stay
+//! with the standalone `const_folding::fold_constants` walker, which still runs
+//! once per fixed-point iteration. The engine rule handles only the folds that
+//! depend on a node and its (already-folded) children plus the program-wide
+//! CTFE callee map, applied through the engine's edit API so the worklist and
+//! use index stay coherent.
 //!
 //! Two rules keep their own standalone engine passes:
 //!
@@ -30,6 +41,7 @@ use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 
 use super::array_literal::{Collapser, resolve_array_push_names};
+use super::const_folding::{ConstFoldRule, build_callee_map};
 use super::elide_local::ElideRule;
 use super::string_push::{ShortPushStrRule, resolve_ctx};
 
@@ -40,6 +52,13 @@ pub(super) fn run_peephole(project: &mut NirPackage) -> bool {
     let push_names = resolve_array_push_names(project);
     let array_rule = Collapser::new(&push_names);
     let push_rule = resolve_ctx(project).map(ShortPushStrRule::new);
+    // Environment-free constant folding shares the session. It needs the
+    // program-wide CTFE callee map and the type table; the per-function `env`
+    // stays empty so only literal arithmetic and pure CTFE fold here, leaving
+    // the flow-sensitive folds to the standalone `const_folding` walker.
+    let type_table = project.type_table.borrow();
+    let callees = build_callee_map(project);
+    let const_fold_rule = ConstFoldRule::new(&type_table, &callees);
 
     let mut changed = false;
     for func_rc in &project.functions {
@@ -51,7 +70,7 @@ pub(super) fn run_peephole(project: &mut NirPackage) -> bool {
         let Some(body) = func.body.as_mut() else {
             continue;
         };
-        let mut rules: Vec<&dyn Rule> = vec![&array_rule, &elide_rule];
+        let mut rules: Vec<&dyn Rule> = vec![&array_rule, &elide_rule, &const_fold_rule];
         if let Some(push_rule) = push_rule.as_ref() {
             rules.push(push_rule);
         }

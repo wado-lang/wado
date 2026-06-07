@@ -30,6 +30,8 @@
 //! [`super::alias::build_value_copy_helpers`] for the per-function
 //! alias / helper computations the visitor consumes.
 
+use std::cell::RefCell;
+
 use crate::compiler_item::SeqField;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
@@ -38,6 +40,7 @@ use crate::nir::{FunctionRef, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, StmtId, StmtKind,
 };
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
     Arm, CalleeMap, FieldSnapshot, GlobalEnv, GlobalFieldEnv, GlobalKey, Interpreter, Lattice,
@@ -104,13 +107,54 @@ pub fn fold_constants(project: &mut NirPackage) -> bool {
     changed
 }
 
+/// Engine rule: environment-free constant folding.
+///
+/// Runs the [`Interpreter::const_fold_kind_a`] subset — literal arithmetic and
+/// pure CTFE — over the worklist rewrite engine, applying each fold through the
+/// engine's edit API so the parent map and use index stay coherent. The
+/// program-wide [`CalleeMap`] is installed; the per-function `env` / `field_env`
+/// stay empty, so the flow-sensitive folds (env-bound locals, forwarded fields,
+/// immutable globals, constant-branch collapse) remain with the standalone
+/// [`fold_constants`] walker that still runs once per fixed-point iteration.
+///
+/// `const_fold_kind_a` needs `&mut Interpreter` (CTFE advances the call stack
+/// and step budget), but [`Rule::apply_expr`] is `&self`, so the interpreter
+/// lives behind a [`RefCell`].
+pub(super) struct ConstFoldRule<'a> {
+    interpreter: RefCell<Interpreter<'a>>,
+}
+
+impl<'a> ConstFoldRule<'a> {
+    pub(super) fn new(type_table: &'a TypeTable, callees: &'a CalleeMap) -> Self {
+        let mut interpreter = Interpreter::new(type_table);
+        interpreter.with_callees(callees);
+        Self {
+            interpreter: RefCell::new(interpreter),
+        }
+    }
+}
+
+impl Rule for ConstFoldRule<'_> {
+    fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
+        let Some(kind) = self
+            .interpreter
+            .borrow_mut()
+            .const_fold_kind_a(engine.body, id)
+        else {
+            return false;
+        };
+        engine.replace_expr_kind(id, kind);
+        true
+    }
+}
+
 /// Pre-build the [`CalleeMap`] from every CTFE-eligible function in
 /// `project`. The map stores `Rc<RefCell<NirFunction>>` handles
 /// aliased with `project.functions`, so rebuilding the map every
 /// optimizer iteration costs only refcount bumps. The key shape
 /// `(module_source, full_name)` mirrors what `try_call_fold`
 /// synthesises from a `Call` node's `FunctionRef`.
-fn build_callee_map(project: &NirPackage) -> CalleeMap {
+pub(super) fn build_callee_map(project: &NirPackage) -> CalleeMap {
     let mut map = CalleeMap::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
